@@ -11,6 +11,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
+READINESS_PROPOSAL_ARGS = (
+    ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
+    ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
+    ' --proposal-ttl-seconds 3600'
+)
 
 
 def load_validator():
@@ -247,24 +252,78 @@ def test_repo_prod_cloud_run_workflows_match_manifest(monkeypatch):
     assert errors == []
 
 
-def test_firestore_index_reconciliation_must_target_the_runtime_project(tmp_path):
+@pytest.mark.parametrize(
+    ('run', 'message'),
+    [
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS,
+            'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py ' '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only'
+            + READINESS_PROPOSAL_ARGS.replace('3600', '7200'),
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only --provision-missing',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only --dry-run',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS + '\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            '# readiness check\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS + '\n'
+            '# the writer below must remain visible\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'npx firebase deploy --only firestore:indexes',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'npx firebase deploy',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'npx firebase deploy --project prod --only=firestore:indexes',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'gcloud --project=prod firestore indexes composite create --collection-group=memories',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+    ],
+)
+def test_firestore_index_reconciliation_preserves_the_read_only_runtime_boundary(tmp_path, run, message):
     validator = load_validator()
     workflow_path = tmp_path / 'deploy.yml'
     manifest_path = tmp_path / 'runtime_env.yaml'
-    workflow = {
-        'jobs': {
-            'deploy': {
-                'steps': [
-                    {
-                        'run': (
-                            'python3 backend/scripts/reconcile_firestore_indexes.py '
-                            '--project "${{ vars.GCP_PROJECT_ID }}"'
-                        )
-                    }
-                ]
-            }
-        }
-    }
+    workflow = {'jobs': {'deploy': {'steps': [{'run': run}]}}}
     manifest = {
         'schema_version': 1,
         'environments': {
@@ -289,16 +348,64 @@ def test_firestore_index_reconciliation_must_target_the_runtime_project(tmp_path
     assert errors == [
         validator.ValidationError(
             f'cloud_run_workflow/{workflow_path}',
-            'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+            message,
         )
     ]
 
     workflow['jobs']['deploy']['steps'][0]['run'] = (
-        'python3 backend/scripts/reconcile_firestore_indexes.py ' '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"'
+        'python3 backend/scripts/reconcile_firestore_indexes.py '
+        '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS
     )
     write_yaml(workflow_path, workflow)
 
     assert validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path) == []
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_requires_isolated_job_dependency(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    workflow['jobs']['deploy'].pop('needs')
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('deploy must depend on the isolated Firestore readiness job' in error.message for error in errors)
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    steps = workflow['jobs']['firestore_readiness']['steps']
+    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v4')
+    upload = steps.pop(upload_index)
+    validation_index = next(
+        index for index, step in enumerate(steps) if step.get('id') == 'validate_firestore_proposal'
+    )
+    steps.insert(validation_index, upload)
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('only a successfully validated bounded proposal may be uploaded' in error.message for error in errors)
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_rejects_backend_deployment_credentials(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    auth = next(
+        step
+        for step in workflow['jobs']['firestore_readiness']['steps']
+        if step.get('uses') == 'google-github-actions/auth@v2'
+    )
+    auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('must not receive backend deployment credentials' in error.message for error in errors)
 
 
 def test_repo_prod_rendered_cloud_run_state_matches_manifest():

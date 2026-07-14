@@ -99,7 +99,94 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
+  firestore_readiness:
+    if: ${{ github.event.inputs.mode == 'deploy' }}
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    outputs:
+      candidate_sha: ${{ steps.approved_source.outputs.candidate_sha }}
+    steps:
+      - name: Validate Firestore readiness inputs
+        env:
+          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          git check-ref-format "refs/heads/${DEPLOY_BRANCH}"
+
+      - name: Checkout approved Firestore control plane
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Bind candidate to approved Firestore source
+        id: approved_source
+        env:
+          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          approved_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin \
+            "refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate"
+          candidate_sha="$(git rev-parse refs/remotes/origin/firestore-candidate)"
+          if ! git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json; then
+            echo "ERROR: branch Firestore schema differs from main; merge and approve it before deployment."
+            exit 1
+          fi
+          printf 'approved_sha=%s\n' "$approved_sha" >> "$GITHUB_OUTPUT"
+          printf 'candidate_sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Google Auth for read-only Firestore inventory
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify serving Firestore indexes
+        id: firestore_readiness
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only \
+            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Validate blocked Firestore schema proposal
+        id: validate_firestore_proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Preserve blocked Firestore schema proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        with:
+          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: firestore_readiness
     if: ${{ github.event.inputs.mode == 'deploy' }}
     environment: ${{ github.event.inputs.environment }}
     permissions:
@@ -126,7 +213,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}
 
       - name: Google Auth
         id: auth
@@ -137,14 +224,6 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Set up Node for Firebase index deployment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install locked Firebase tooling
-        run: npm ci --ignore-scripts
-
       - name: Verify serving sync ledger fence mode before deploy
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
@@ -153,12 +232,6 @@ jobs:
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --desired-mode="$SYNC_LEDGER_FENCE_MODE"
-
-      - name: Reconcile generated Firestore indexes before backend deploy
-        run: |
-          # Serving data can live outside the Cloud Run deployment project.
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"
 
       - name: Login to GCR
         run: gcloud auth configure-docker

@@ -162,6 +162,8 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 
 Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes.
 
+Firestore index boundary: backend deploy workflows run `reconcile_firestore_indexes.py --check-only` against `RUNTIME_GCP_PROJECT_ID` in an isolated approved-source job using dedicated read-only credentials. Manual deploys must keep `firestore.indexes.json` identical to `main` and deploy the exact checked candidate SHA. A failed gate writes and locally revalidates a short-lived, redacted create-only proposal before upload; backend deployment must never mutate the serving schema.
+
 Keep this map up to date. When adding, removing, or changing inter-service calls, update this section. If a PR changes audio streaming, transcription, conversation lifecycle, speaker identification, or the listen/pusher WebSocket protocol — update `docs/doc/developer/backend/listen_pusher_pipeline.mdx` in the same PR.
 
 ## Import Rules

@@ -7,6 +7,8 @@ on:
     paths:
       - '.gitignore'
       - 'backend/**'
+      - 'config/deployment-setting-classification.json'
+      - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
       - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
@@ -18,6 +20,7 @@ on:
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
       - '.github/workflows/gcp_backend.yml'
+      - '.github/workflows/gcp_backend_auto_dev.yml'
       - '.github/workflows/gcp_backend*.yml'
       - '.github/workflows/gcp_llm_gateway.yml'
       - '.github/workflows/gcp_memory_maintenance_job.yml'
@@ -33,6 +36,8 @@ on:
     paths:
       - '.gitignore'
       - 'backend/**'
+      - 'config/deployment-setting-classification.json'
+      - 'firestore.indexes.json'
       - '.github/actions/detect-changes/**'
       - '.github/actions/transcription-release-candidate-probe/**'
       - '.github/workflows/backend-checks.yml'
@@ -44,6 +49,7 @@ on:
       - '.github/workflows/desktop_promote_beta.yml'
       - '.github/workflows/desktop_promote_prod.yml'
       - '.github/workflows/gcp_backend.yml'
+      - '.github/workflows/gcp_backend_auto_dev.yml'
       - '.github/workflows/gcp_backend*.yml'
       - '.github/workflows/gcp_llm_gateway.yml'
       - '.github/workflows/gcp_memory_maintenance_job.yml'

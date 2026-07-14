@@ -18,6 +18,10 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from scripts.firestore_workflow_policy import (  # noqa: E402
+    has_direct_firestore_mutation,
+    reconciliation_invocations,
+)
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
 ConfigDict = dict[str, Any]
@@ -781,7 +785,7 @@ def _validate_cloud_run_workflows(
             continue
         workflow_path = ROOT / workflow_file
         workflow = _load_yaml(workflow_path)
-        errors.extend(_validate_firestore_index_reconciliation_project(workflow_file, workflow))
+        errors.extend(_validate_firestore_index_reconciliation_boundary(workflow_file, workflow))
         extracted = _extract_workflow_cloud_run_targets(workflow, env=env, manifest=manifest)
         errors.extend(_validate_sync_backfill_co_deploy(workflow_file, extracted['services']))
         workflow_services.update(extracted['services'])
@@ -852,8 +856,136 @@ def _validate_cloud_run_workflows(
     return errors
 
 
-def _validate_firestore_index_reconciliation_project(workflow_file: str, workflow: ConfigDict) -> list[ValidationError]:
-    """Keep index readiness aligned with the project used by serving clients."""
+def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow: ConfigDict) -> list[ValidationError]:
+    if Path(workflow_file).name not in {'gcp_backend.yml', 'gcp_backend_auto_dev.yml'}:
+        return []
+
+    scope = f'cloud_run_workflow/{workflow_file}'
+    errors: list[ValidationError] = []
+    jobs = _as_config_dict(workflow.get('jobs')) or {}
+    readiness_job = _as_config_dict(jobs.get('firestore_readiness'))
+    deploy_job = _as_config_dict(jobs.get('deploy'))
+    if readiness_job is None:
+        return [ValidationError(scope, 'Firestore readiness must run in an isolated firestore_readiness job')]
+    if deploy_job is None:
+        return [ValidationError(scope, 'Firestore readiness contract requires the backend deploy job')]
+
+    needs = deploy_job.get('needs')
+    normalized_needs = {needs} if isinstance(needs, str) else set(needs) if isinstance(needs, list) else set()
+    if 'firestore_readiness' not in normalized_needs:
+        errors.append(ValidationError(scope, 'backend deploy must depend on the isolated Firestore readiness job'))
+
+    expected_path = (
+        '${{ runner.temp }}/firestore-schema-proposal-' '${{ github.run_id }}-${{ github.run_attempt }}.json'
+    )
+    permissions = _as_config_dict(readiness_job.get('permissions')) or {}
+    if permissions != {'contents': 'read'}:
+        errors.append(ValidationError(scope, 'Firestore readiness job permissions must be contents: read only'))
+
+    steps = _as_config_list(readiness_job.get('steps')) or []
+    parsed_steps = [_as_config_dict(step) or {} for step in steps]
+    serialized_readiness_job = json.dumps(readiness_job, sort_keys=True)
+    if 'secrets.GCP_CREDENTIALS' in serialized_readiness_job:
+        errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
+    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v2']
+    if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
+        '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
+    ):
+        errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
+    expected_readiness_ref = 'main' if Path(workflow_file).name == 'gcp_backend.yml' else '${{ github.sha }}'
+    checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v4']
+    if len(checkout_steps) != 1 or (_as_config_dict(checkout_steps[0].get('with')) or {}).get('ref') != (
+        expected_readiness_ref
+    ):
+        errors.append(ValidationError(scope, 'Firestore readiness must check out only the approved source commit'))
+    deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
+    deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v4']
+    expected_deploy_ref = (
+        '${{ needs.firestore_readiness.outputs.candidate_sha }}'
+        if Path(workflow_file).name == 'gcp_backend.yml'
+        else '${{ github.sha }}'
+    )
+    if len(deploy_checkout) != 1 or (_as_config_dict(deploy_checkout[0].get('with')) or {}).get('ref') != (
+        expected_deploy_ref
+    ):
+        errors.append(
+            ValidationError(scope, 'backend deploy checkout must remain bound to the readiness-approved commit')
+        )
+    if Path(workflow_file).name == 'gcp_backend.yml':
+        outputs = _as_config_dict(readiness_job.get('outputs')) or {}
+        if outputs.get('candidate_sha') != '${{ steps.approved_source.outputs.candidate_sha }}':
+            errors.append(
+                ValidationError(scope, 'manual deploy must export the exact readiness-approved candidate SHA')
+            )
+
+    readiness_steps: list[tuple[int, ConfigDict, Any]] = []
+    validation_steps: list[tuple[int, ConfigDict, Any]] = []
+    for index, step in enumerate(parsed_steps):
+        run = step.get('run')
+        if not isinstance(run, str):
+            continue
+        for invocation in reconciliation_invocations(run):
+            if invocation.is_readiness_check:
+                readiness_steps.append((index, step, invocation))
+            elif invocation.is_proposal_validation:
+                validation_steps.append((index, step, invocation))
+    if len(readiness_steps) != 1:
+        errors.append(
+            ValidationError(scope, 'Firestore readiness job must contain exactly one bounded readiness check')
+        )
+        return errors
+    readiness_index, readiness_step, readiness_invocation = readiness_steps[0]
+    if readiness_step.get('id') != 'firestore_readiness':
+        errors.append(ValidationError(scope, 'Firestore readiness step must expose the firestore_readiness outcome'))
+    readiness_env = _as_config_dict(readiness_step.get('env')) or {}
+    if readiness_env.get('FIRESTORE_PROPOSAL_PATH') != expected_path:
+        errors.append(ValidationError(scope, 'Firestore proposal path must be unique to the workflow run and attempt'))
+    if readiness_invocation.option_values('--proposal-output') != ('$FIRESTORE_PROPOSAL_PATH',):
+        errors.append(ValidationError(scope, 'Firestore readiness must write only to FIRESTORE_PROPOSAL_PATH'))
+
+    expected_validation_if = "${{ failure() && steps.firestore_readiness.outcome == 'failure' }}"
+    if len(validation_steps) != 1:
+        errors.append(ValidationError(scope, 'failed Firestore readiness must run exactly one proposal validator'))
+        return errors
+    validation_index, validation_step, validation_invocation = validation_steps[0]
+    if (
+        validation_index <= readiness_index
+        or validation_step.get('id') != 'validate_firestore_proposal'
+        or validation_step.get('if') != expected_validation_if
+        or (_as_config_dict(validation_step.get('env')) or {}).get('FIRESTORE_PROPOSAL_PATH') != expected_path
+        or validation_invocation.option_values('--validate-proposal') != ('$FIRESTORE_PROPOSAL_PATH',)
+        or validation_invocation.project_values != ('${{ vars.RUNTIME_GCP_PROJECT_ID }}',)
+    ):
+        errors.append(ValidationError(scope, 'proposal validation must bind the failed gate path, target, and outcome'))
+
+    upload_steps = [
+        (index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == 'actions/upload-artifact@v4'
+    ]
+    expected_upload_if = (
+        "${{ failure() && steps.firestore_readiness.outcome == 'failure' "
+        "&& steps.validate_firestore_proposal.outcome == 'success' }}"
+    )
+    if len(upload_steps) != 1:
+        errors.append(ValidationError(scope, 'Firestore readiness must upload exactly one validated proposal artifact'))
+        return errors
+    upload_index, upload_step = upload_steps[0]
+    upload_with = _as_config_dict(upload_step.get('with')) or {}
+    if (
+        upload_index <= validation_index
+        or upload_step.get('if') != expected_upload_if
+        or (_as_config_dict(upload_step.get('env')) or {}).get('FIRESTORE_PROPOSAL_PATH') != expected_path
+        or upload_with.get('path') != '${{ env.FIRESTORE_PROPOSAL_PATH }}'
+        or upload_with.get('if-no-files-found') != 'error'
+        or upload_with.get('retention-days') != 1
+    ):
+        errors.append(ValidationError(scope, 'only a successfully validated bounded proposal may be uploaded'))
+    return errors
+
+
+def _validate_firestore_index_reconciliation_boundary(
+    workflow_file: str, workflow: ConfigDict
+) -> list[ValidationError]:
+    """Keep backend deploys read-only against the serving Firestore project."""
 
     runtime_project_refs = {
         '${{ vars.RUNTIME_GCP_PROJECT_ID }}',
@@ -865,19 +997,38 @@ def _validate_firestore_index_reconciliation_project(workflow_file: str, workflo
         if step_dict is None:
             continue
         run = step_dict.get('run')
-        if not isinstance(run, str) or 'reconcile_firestore_indexes.py' not in run:
+        if not isinstance(run, str):
+            continue
+        if has_direct_firestore_mutation(run):
+            errors.append(
+                ValidationError(
+                    f'cloud_run_workflow/{workflow_file}',
+                    'backend deploy Firestore operations must be read-only (--check-only)',
+                )
+            )
+        invocations = tuple(
+            invocation for invocation in reconciliation_invocations(run) if not invocation.is_proposal_validation
+        )
+        if not invocations:
             continue
         if any(
-            '--project' in line and any(reference in line for reference in runtime_project_refs)
-            for line in run.splitlines()
+            len(invocation.project_values) != 1 or invocation.project_values[0] not in runtime_project_refs
+            for invocation in invocations
         ):
-            continue
-        errors.append(
-            ValidationError(
-                f'cloud_run_workflow/{workflow_file}',
-                'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+            errors.append(
+                ValidationError(
+                    f'cloud_run_workflow/{workflow_file}',
+                    'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+                )
             )
-        )
+        if len(invocations) != 1 or not invocations[0].is_readiness_check:
+            errors.append(
+                ValidationError(
+                    f'cloud_run_workflow/{workflow_file}',
+                    'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+                )
+            )
+    errors.extend(_validate_firestore_readiness_workflow_contract(workflow_file, workflow))
     return errors
 
 
