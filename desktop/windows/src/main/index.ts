@@ -79,6 +79,7 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
+import { registerAgentControlIpc } from './ipc/agentControl'
 import { registerAudioMuteHandlers } from './ipc/audioMute'
 import { systemAudioMuteBridge } from './audio/systemAudioMute'
 import { automationBridge } from './automation/bridge'
@@ -679,6 +680,10 @@ app.whenReady().then(async () => {
   // better-sqlite3 driver path that unit tests can't cover. Logs and continues
   // on failure — the kernel is not yet wired to any caller.
   probeAgentStoreRuntimeAtStartup()
+  // Agent control plane (trusted direct control). Handler registration only —
+  // the kernel is constructed lazily on the first control call, and user-facing
+  // chat is NOT routed through it.
+  registerAgentControlIpc()
   // PTT system-audio mute IPC (Track 2 A4). Handler registration only — the
   // native helper is warm-spawned below, off the first-paint critical path.
   registerAudioMuteHandlers()

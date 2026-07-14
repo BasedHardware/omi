@@ -107,6 +107,44 @@ export function executionRoleAllowsTool(role: AgentExecutionRole, toolName: stri
   return role !== 'leaf' || !LEAF_AGENT_CONTROL_TOOLS.has(toolName)
 }
 
+/**
+ * INV-AGENT leaf-role guard, enforcement point #1: a leaf worker may not call
+ * any of LEAF_AGENT_CONTROL_TOOLS.
+ *
+ * This is called from the control-tool dispatch boundary (./controlTools
+ * `handleAgentControlToolCall`) on EVERY tool call, mirroring macOS
+ * control-tools.ts:561-570. It is the guard that actually stops a background
+ * agent from recursively spawning or messaging other agents — the
+ * `executionRoleAllowsTool` predicate alone enforces nothing.
+ */
+export function assertLeafControlToolsAllowed(
+  context: { executionRole?: AgentExecutionRole },
+  name: string
+): void {
+  if (!LEAF_AGENT_CONTROL_TOOLS.has(name)) return
+  if (!executionRoleAllowsTool(context.executionRole ?? 'coordinator', name)) {
+    throw new Error(
+      name === 'send_agent_message'
+        ? 'Leaf workers cannot continue agent sessions.'
+        : 'Background agents are leaf workers and cannot start additional agents.'
+    )
+  }
+}
+
+/**
+ * INV-AGENT leaf-role guard, enforcement point #2: the spawn-specific check the
+ * three spawning tools run before parsing input. `canSpawnAgents` is the
+ * deprecated compatibility flag for older direct callers.
+ */
+export function assertAgentSpawningAllowed(context: {
+  executionRole?: AgentExecutionRole
+  canSpawnAgents?: boolean
+}): void {
+  if (context.executionRole === 'leaf' || context.canSpawnAgents === false) {
+    throw new Error('Background agents are leaf workers and cannot start additional agents.')
+  }
+}
+
 export function executionRoleForSurface(input: {
   surfaceKind: string
   externalRefKind?: string | null
