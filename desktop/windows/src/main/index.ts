@@ -17,6 +17,7 @@ import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
+import type { ConversationFolder } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -77,6 +78,9 @@ import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
+import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
+import { registerAudioMuteHandlers } from './ipc/audioMute'
+import { systemAudioMuteBridge } from './audio/systemAudioMute'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -90,6 +94,7 @@ import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
 import { startRewindRetention } from './rewind/retentionRunner'
+import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
 import { perfMark, flushPerfMarks } from '../shared/perf'
 // Dev-only benchmarking / sandbox machinery. Every call below is behind
@@ -101,7 +106,7 @@ import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
-  setRecordAccelerator,
+  setRecordAcceleratorForced,
   getRecordShortcut,
   suspendRecordShortcut,
   resumeRecordShortcut
@@ -120,6 +125,12 @@ const DEFAULT_WINDOW_HEIGHT = 820
 // activate) reads through this variable so a re-created window can never leave
 // a consumer bound to a destroyed instance.
 let mainWindow: BrowserWindow | null = null
+
+// Whether the mic record chord is currently registered at all (Settings →
+// Shortcuts "Off"). Seeded from persisted appSettings at startup; the ONLY thing
+// that keeps a disabled chord from being resurrected by the rebind capture's
+// resume path (shortcuts:resume-capture). Persisted mirror: recordHotkeyEnabled.
+let recordShortcutEnabled = true
 
 function withMainWindow(fn: (win: BrowserWindow) => void): void {
   if (mainWindow && !mainWindow.isDestroyed()) fn(mainWindow)
@@ -280,6 +291,10 @@ import {
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
+  listConversationFolders,
+  replaceConversationFolders,
+  upsertConversationFolder,
+  deleteConversationFolder,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
@@ -557,6 +572,17 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
   )
+  // Track 4: conversation folders (local cache) + starred/folder mirror.
+  ipcMain.handle('db:listConversationFolders', async () => listConversationFolders())
+  ipcMain.handle('db:replaceConversationFolders', async (_e, folders: ConversationFolder[]) =>
+    replaceConversationFolders(folders)
+  )
+  ipcMain.handle('db:upsertConversationFolder', async (_e, folder: ConversationFolder) =>
+    upsertConversationFolder(folder)
+  )
+  ipcMain.handle('db:deleteConversationFolder', async (_e, id: string) =>
+    deleteConversationFolder(id)
+  )
   ipcMain.handle(
     'db:claimConversationForPosting',
     async (_e, id: string, resetAttempts?: boolean) =>
@@ -654,6 +680,13 @@ app.whenReady().then(async () => {
   // the active window (red = distracted, green = refocused). Handler registration
   // only; the window itself is created at ready-to-show below.
   registerGlowIpc()
+  // Agent-kernel SQLite runtime guard (non-fatal): validates the production
+  // better-sqlite3 driver path that unit tests can't cover. Logs and continues
+  // on failure — the kernel is not yet wired to any caller.
+  probeAgentStoreRuntimeAtStartup()
+  // PTT system-audio mute IPC (Track 2 A4). Handler registration only — the
+  // native helper is warm-spawned below, off the first-paint critical path.
+  registerAudioMuteHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
@@ -769,9 +802,16 @@ app.whenReady().then(async () => {
     startRewindCapture()
     startRewindOcr()
     startRewindRetention()
+    // Delete JPEGs orphaned by a crash between the file write and the DB insert
+    // (Windows-specific — frames are per-file). Startup pass + every 6h.
+    startOrphanSweep()
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
+    // Warm-spawn the audio-mute helper so the first PTT hold never pays the
+    // cold-spawn cost. Deferred off first paint; a silent no-op when the helper
+    // binary was never built (no .NET SDK) — PTT then simply doesn't mute.
+    setTimeout(() => systemAudioMuteBridge.warm(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
     // Pre-create the focus-halo window. It is created ONCE and never hidden after
@@ -828,11 +868,21 @@ app.whenReady().then(async () => {
   // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
   // window if it was hidden, so a global hotkey both starts capture AND brings Omi
   // to the front.
-  const recordState = registerRecordShortcut(getAppSettings().recordHotkey, () => {
-    surfaceMainWindow()
-    withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
-  })
-  if (!recordState.registered) {
+  // Always create the slot (so getRecordShortcut + a later enable work); when the
+  // user has turned the chord off, `claim: false` attaches the handler WITHOUT
+  // registering — the OS never claims Ctrl+Space, not even for an instant (the
+  // whole point of Off is to free it for the IME). A later enable resumes the slot,
+  // whose handler is already attached.
+  recordShortcutEnabled = getAppSettings().recordHotkeyEnabled !== false
+  const recordState = registerRecordShortcut(
+    getAppSettings().recordHotkey,
+    () => {
+      surfaceMainWindow()
+      withMainWindow((w) => w.webContents.send('recorder:hotkey', 'mic'))
+    },
+    { claim: recordShortcutEnabled }
+  )
+  if (recordShortcutEnabled && !recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
   }
 
@@ -868,7 +918,10 @@ app.whenReady().then(async () => {
 
   // Record-chord get/rebind. Rebinds persist and never throw on a conflict — a
   // taken chord returns registered=false so the UI can prompt for another.
-  ipcMain.handle('shortcuts:get-record', () => getRecordShortcut())
+  ipcMain.handle('shortcuts:get-record', () => ({
+    ...getRecordShortcut(),
+    enabled: recordShortcutEnabled
+  }))
   // Summon (floating-bar) chord: current binding + whether the OS claimed it, so
   // Settings → Shortcuts can show a conflict instead of a silently-dead shortcut.
   ipcMain.handle('shortcuts:get-summon', () => getOverlaySummonState())
@@ -888,7 +941,8 @@ app.whenReady().then(async () => {
     suspendOverlayShortcut()
   })
   ipcMain.on('shortcuts:resume-capture', () => {
-    resumeRecordShortcut()
+    // Don't resurrect a chord the user has turned off — resume only when enabled.
+    if (recordShortcutEnabled) resumeRecordShortcut()
     resumeOverlayShortcut()
   })
 
@@ -896,9 +950,31 @@ app.whenReady().then(async () => {
     if (typeof accelerator !== 'string' || !accelerator.trim()) {
       return { ok: false, registered: getRecordShortcut().registered }
     }
-    const next = setRecordAccelerator(accelerator.trim())
-    if (next.registered) setAppSettings({ recordHotkey: next.accelerator })
+    // Forced (no rollback): the user's exact choice becomes the current chord even
+    // when the OS can't claim it, so what we persist and show always matches what
+    // they picked (a rollback would leave the old chord live under a new label).
+    const next = setRecordAcceleratorForced(accelerator.trim())
+    // Selecting a binding (Default/Custom) is an explicit intent to enable the
+    // chord, independent of whether the OS could claim it right now — a conflict
+    // (registered=false) surfaces as the card's "held by another app" warning, it
+    // must NOT refuse to enable. So always persist the accelerator + enable intent.
+    recordShortcutEnabled = true
+    setAppSettings({ recordHotkey: next.accelerator, recordHotkeyEnabled: true })
     return { ok: next.registered, registered: next.registered }
+  })
+
+  // Turn the record chord fully on/off (Settings → Shortcuts "Off" chip). Off
+  // releases the OS chord (frees Ctrl+Space for the IME); on re-registers the
+  // stored accelerator, surfacing registered=false when now held by another app.
+  ipcMain.handle('shortcuts:set-record-enabled', (_e, enabled: boolean) => {
+    recordShortcutEnabled = enabled === true
+    setAppSettings({ recordHotkeyEnabled: recordShortcutEnabled })
+    if (recordShortcutEnabled) {
+      resumeRecordShortcut()
+    } else {
+      suspendRecordShortcut()
+    }
+    return { ...getRecordShortcut(), enabled: recordShortcutEnabled }
   })
 
   // Rebind the summon chord (mirrors overlay:setAccelerator used by onboarding):
@@ -966,6 +1042,11 @@ app.on('will-quit', () => {
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).
   helperProcess.dispose()
+  // Same for the PTT audio-mute helper — and here it's not just hygiene: quitting
+  // mid-hold would otherwise orphan a helper still holding the system-audio mute,
+  // leaving the user's speakers muted with Omi gone. dispose() closes its stdin,
+  // which is its cue to unmute and exit.
+  systemAudioMuteBridge.dispose()
 })
 
 // In this file you can include the rest of your app's specific main process

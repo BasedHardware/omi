@@ -36,6 +36,7 @@ import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
+import { refreshIfStale } from './lib/voice/autoModelSelector'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -196,6 +197,23 @@ function App(): React.JSX.Element {
   // (its error-path assertion starts a session with no auth). Main window only.
   useEffect(() => {
     if (!IS_SECONDARY_WINDOW) attachVoiceE2eHook()
+  }, [])
+
+  // Warm the daily "Auto" realtime-voice model pick, so the user's FIRST voice
+  // session already connects on the current pick instead of the Gemini default
+  // (macOS warms it at launch — OmiApp.swift:310; starting a session also refreshes,
+  // but that resolves synchronously from the cache, so the in-flight fetch lands too
+  // late for that session). No-op when the cached pick is < 24h old.
+  //
+  // Gated on a signed-in user, NOT on mount: Firebase restores the session
+  // asynchronously, so firing at mount would go out unauthenticated, 401, and cache
+  // the Gemini fallback with a fresh 24h timestamp — pinning the user to Gemini for
+  // a day. (Mac has no such window; its auth is restored before the launch call.)
+  useEffect(() => {
+    if (IS_SECONDARY_WINDOW) return
+    return onAuthStateChanged(auth, (user) => {
+      if (user) refreshIfStale()
+    })
   }, [])
 
   useEffect(() => {

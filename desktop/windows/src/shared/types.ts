@@ -511,8 +511,13 @@ export type OmiGlowApi = {
  *  Mirrors the main-process TrayState in main/trayState.ts. */
 export type TrayListeningState = 'idle' | 'listening' | 'paused'
 
-/** The mic record chord and whether the OS accepted its registration. */
-export type RecordHotkeyState = { accelerator: string; registered: boolean }
+/** The mic record chord and whether the OS accepted its registration. `enabled`
+ *  is whether the chord is registered at all: the Record card (only) lets the user
+ *  turn it fully off (default Ctrl+Space collides with the Windows IME switch), and
+ *  main leaves it unregistered while off. The summon path reuses this shape and
+ *  does not populate `enabled` (its card has no Off affordance) — hence optional;
+ *  consumers must treat `undefined` as enabled (`enabled !== false`). */
+export type RecordHotkeyState = { accelerator: string; registered: boolean; enabled?: boolean }
 
 /** Outcome of a manual "check for updates" from Settings → About.
  *  - `unsupported`: the updater is inert (unpackaged dev build) — updates install
@@ -548,6 +553,15 @@ export type OmiBridgeApi = {
    *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
    *  attempt counter (manual re-sync of a wedged row). */
   claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
+  // --- Track 4: conversation folders / starred (local cache + mirror) ---
+  /** Cached folders for instant paint (ordered), reconciled from /v1/folders. */
+  listConversationFolders: () => Promise<ConversationFolder[]>
+  /** Replace the whole folder cache from a backend fetch. */
+  replaceConversationFolders: (folders: ConversationFolder[]) => Promise<void>
+  /** Optimistic single-folder upsert (create/edit) before the reconcile lands. */
+  upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
+  /** Drop a folder from the cache (optimistic delete). */
+  deleteConversationFolder: (id: string) => Promise<void>
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
    *  delivery. A re-enqueue for the same key updates the assistant text /
@@ -720,6 +734,10 @@ export type OmiBridgeApi = {
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
+  /** Runtime capture directive (pause + effective cadence) the main process derives
+   *  from OS power/lock state; the capture host prefers it over the base interval. */
+  rewindGetCaptureDirective: () => Promise<RewindCaptureDirective>
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => () => void
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
@@ -786,6 +804,12 @@ export type OmiBridgeApi = {
     plan: AutomationPlan
   ) => Promise<{ ok: boolean; canceled?: boolean; message?: string }>
   onAutomationStep: (cb: (r: StepResult) => void) => () => void
+  // --- Track 2 A4: system-audio mute during PTT capture ---
+  // Fire-and-forget (never awaited): the PTT hold path must never wait on the
+  // native helper. Mute is gated renderer-side on the pttMuteSystemAudio pref;
+  // restore is unconditional so a mute is ALWAYS undone, even on error paths.
+  muteSystemAudio: () => void
+  restoreSystemAudio: () => void
   // Cross-window conversations refresh: a renderer that writes a local
   // conversation calls notifyConversationsChanged(); main broadcasts
   // 'conversations:changed' to ALL windows so each invalidates its own
@@ -829,6 +853,10 @@ export type OmiBridgeApi = {
   /** Rebind the record chord (persisted). Never throws on a conflict — returns
    *  registered=false when the chord is owned by another app. */
   setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** Turn the record chord fully on/off (Record card's "Off" chip). Off leaves it
+   *  unregistered so the OS releases Ctrl+Space; on re-registers the stored chord
+   *  (returns registered=false if now held by another app). Returns the fresh state. */
+  setRecordHotkeyEnabled: (enabled: boolean) => Promise<RecordHotkeyState>
   /** The current floating-bar summon chord and whether the OS accepted it. Same
    *  shape as the record chord; the summon accelerator is persisted in renderer
    *  preferences (overlayShortcut) and re-applied to main on startup. */
@@ -1268,6 +1296,14 @@ export type RewindSettings = {
   /** App names to never screenshot (case-insensitive substring match against the
    *  foreground app/process name). Empty = capture everything. */
   excludedApps: string[]
+}
+
+/** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
+ *  `paused` tears down the capture stream (sleep/lock); `intervalMs` is the effective
+ *  cadence (base × battery multiplier). Separate from the persisted RewindSettings. */
+export type RewindCaptureDirective = {
+  paused: boolean
+  intervalMs: number
 }
 
 // --- Track 4: Rewind/Conversations/capture ---

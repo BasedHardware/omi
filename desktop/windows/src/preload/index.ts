@@ -11,6 +11,7 @@ import type {
   BarShowPayload,
   BarChatState,
   LocalConversation,
+  ConversationFolder,
   ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
@@ -24,6 +25,7 @@ import type {
   OnboardingGraphEdge,
   UsageSettings,
   RewindSettings,
+  RewindCaptureDirective,
   InsightPayload,
   MeetingToastPayload,
   WhatsNewPayload,
@@ -52,6 +54,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
     ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  // --- Track 4: conversation folders / starred ---
+  listConversationFolders: () => ipcRenderer.invoke('db:listConversationFolders'),
+  replaceConversationFolders: (folders: ConversationFolder[]) =>
+    ipcRenderer.invoke('db:replaceConversationFolders', folders),
+  upsertConversationFolder: (folder: ConversationFolder) =>
+    ipcRenderer.invoke('db:upsertConversationFolder', folder),
+  deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
@@ -200,6 +209,12 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
   },
+  rewindGetCaptureDirective: () => ipcRenderer.invoke('rewind:getCaptureDirective'),
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => {
+    const listener = (_e: unknown, d: RewindCaptureDirective): void => cb(d)
+    ipcRenderer.on('rewind:capture-directive', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
+  },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
@@ -260,6 +275,10 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('automation:step', listener)
     return () => ipcRenderer.removeListener('automation:step', listener)
   },
+  // PTT system-audio mute (Track 2 A4). `send`, never `invoke` — the hold path
+  // is never awaited, so a slow or missing helper can't delay a capture.
+  muteSystemAudio: () => ipcRenderer.send('audio:muteSystemAudio'),
+  restoreSystemAudio: () => ipcRenderer.send('audio:restoreSystemAudio'),
   notifyConversationsChanged: () => ipcRenderer.send('conversations:notify-changed'),
   onConversationsChanged: (cb: () => void) => {
     const listener = (): void => cb()
@@ -308,6 +327,8 @@ const omi: OmiBridgeApi = {
   },
   getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
   setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  setRecordHotkeyEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('shortcuts:set-record-enabled', enabled),
   getSummonHotkey: () => ipcRenderer.invoke('shortcuts:get-summon'),
   setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),

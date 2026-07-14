@@ -14,6 +14,13 @@ import {
   type VoiceTurnOutboxDb
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import {
+  listConversationFoldersOn,
+  replaceConversationFoldersOn,
+  upsertConversationFolderOn,
+  deleteConversationFolderOn,
+  type ConversationFoldersDb
+} from './conversationFolders'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -22,6 +29,7 @@ import type {
   TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
+  ConversationFolder,
   ConversationSyncPatch,
   ConversationSyncState,
   FileIndexDigest,
@@ -501,6 +509,32 @@ export function claimConversationForPosting(id: string, resetAttempts = false): 
     )
     .run(id)
   return r.changes > 0
+}
+
+// --- Track 4: conversation folders / starred ---
+// Thin wrappers over the driver-agnostic CRUD in conversationFolders.ts (extracted
+// so the SQL is unit-testable under plain-node vitest with node:sqlite; see that
+// file + its test). get() returns a better-sqlite3 Database whose prepared
+// statements satisfy the ConversationFoldersDb shape structurally — cast to bridge
+// the driver duck-typing, same idiom the voice-turn-outbox wrappers use.
+function foldersDb(): ConversationFoldersDb {
+  return get() as unknown as ConversationFoldersDb
+}
+
+export function listConversationFolders(): ConversationFolder[] {
+  return listConversationFoldersOn(foldersDb())
+}
+
+export function replaceConversationFolders(folders: ConversationFolder[]): void {
+  replaceConversationFoldersOn(foldersDb(), folders)
+}
+
+export function upsertConversationFolder(folder: ConversationFolder): void {
+  upsertConversationFolderOn(foldersDb(), folder)
+}
+
+export function deleteConversationFolder(id: string): void {
+  deleteConversationFolderOn(foldersDb(), id)
 }
 
 export function updateLocalConversationTitle(id: string, title: string): void {
@@ -1069,6 +1103,16 @@ export function getRewindFrameOcrLines(id: number): OcrLine[] {
   } catch {
     return []
   }
+}
+
+/** Image paths of frames captured in [fromMs, toMs) — used by the orphaned-JPEG
+ *  sweep to tell a crash-orphaned file apart from one with a live DB row. */
+export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] {
+  return (
+    get()
+      .prepare('SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?')
+      .all(fromMs, toMs) as { image_path: string }[]
+  ).map((r) => r.image_path)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {

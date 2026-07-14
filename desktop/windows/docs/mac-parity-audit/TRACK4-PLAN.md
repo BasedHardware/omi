@@ -134,10 +134,29 @@
 - **PR1** — Rewind FTS5 search: `rewind_frames_fts` + triggers + backfill migration; BM25 order;
   query expansion (camelCase + digit split, `*` prefix); persist `ocr_lines_json`; on-image
   bounding-box highlight overlay (purple stroke per ruling). Replace LIKE. Keep search UI.
-- **PR2** — Rewind capture durability: 30s keyframe anchor (bypass dedup if >30s since last
-  stored), battery-aware cadence (3×, powerMonitor on-battery, flush+restart on flip),
-  sleep/suspend + lock handling (distinct, reinit stream on wake/unlock), orphaned-JPEG FS sweep,
-  OCR re-backfill parity, DB corruption recovery (universal tiers, single-connection).
+- **PR2** — Rewind capture durability (`feat/win-rewind-durability`). GROUND-TRUTHED 2026-07-14 vs
+  Mac source (4 extractors) — corrected from stale spec:
+  - **30s keyframe anchor** (CONFIRMED Mac `frameDedupeMaxInterval=30.0`, RewindIndexer.swift:26/165):
+    force-store a duplicate frame if >30s since last STORED frame. Windows lacks it. Main-side
+    (`captureDecision.ts` + `captureService.ts` `lastCapturedAt`).
+  - **Battery cadence 3×** (CONFIRMED Mac `batteryCaptureIntervalMultiplier=3.0`): on battery,
+    effective interval = base×3. Windows base stays 1s (Mac base is 3s — deliberate divergence, do
+    NOT change Windows default; renderer caps fps for a reason). Adapt to Electron: main reads
+    `powerMonitor.isOnBatteryPower()` + `on('on-battery'|'on-ac')`, pushes effective interval to the
+    renderer; on flip, renderer restarts its loop. NO OCR-defer on battery (Mac `skippedForBattery`
+    is DEAD CODE — cadence-only).
+  - **Sleep/lock reinit** (Mac: pause timer on sleep+lock; reinit capture + 1.5s settle on WAKE;
+    reinit + restart IMMEDIATELY on UNLOCK). Windows: main `powerMonitor` 'suspend'/'resume'/
+    'lock-screen'/'unlock-screen' → signal renderer (which owns the getUserMedia stream) to pause
+    loop + teardown stream on suspend/lock, reacquire stream + restart on resume(1.5s)/unlock(0s).
+  - **Orphaned-JPEG FS sweep** — Mac has NO disk→DB sweep (DB-row-driven retention only). KEEP as a
+    Windows-storage-model fix: Windows stores per-frame JPEGs and a crash between writeFileSync and
+    insertRewindFrame orphans a file forever. Conservative: delete only `<userData>/rewind/*/…jpg`
+    with no matching DB row, past a grace window.
+  - **OCR re-backfill parity** — DROPPED. Mac has only dead stubs; Windows already has a working 4s
+    backfill loop (`ocrService.ts`). Windows is ahead; nothing to port.
+  - **DB corruption recovery** — SPLIT to PR2b (Chris-gated, task #13): wide blast radius on core
+    db.ts open path.
 - **PR3** — Rewind redesign to Mac day-scoped: date picker (browse any day), list/timeline
   search-result toggle, sampled-to-500/day, keep static frame viewer (NO auto-play transport),
   recovery banner, empty/permission/capture-broken states. RewindTab settings parity
