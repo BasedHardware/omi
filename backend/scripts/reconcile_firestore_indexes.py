@@ -25,11 +25,24 @@ IndexSignature = tuple[str, str, tuple[tuple[str, str], ...]]
 CommandRunner = Callable[..., Any]
 
 
-def _index_signature(index: Mapping[str, Any]) -> IndexSignature:
+def _collection_group_from_resource_name(index: Mapping[str, Any]) -> str:
     collection_group = index.get('collectionGroup')
+    if isinstance(collection_group, str):
+        return collection_group
+    name = index.get('name')
+    marker = '/collectionGroups/'
+    if isinstance(name, str) and marker in name:
+        collection_group = name.split(marker, 1)[1].split('/', 1)[0]
+        if collection_group:
+            return collection_group
+    raise ValueError('Firestore index entry must contain collectionGroup or a collectionGroups resource name')
+
+
+def _index_signature(index: Mapping[str, Any]) -> IndexSignature:
+    collection_group = _collection_group_from_resource_name(index)
     query_scope = index.get('queryScope')
     fields = index.get('fields')
-    if not isinstance(collection_group, str) or not isinstance(query_scope, str) or not isinstance(fields, list):
+    if not isinstance(query_scope, str) or not isinstance(fields, list):
         raise ValueError('Firestore index entry must contain collectionGroup, queryScope, and fields')
     normalized_fields: list[tuple[str, str]] = []
     for field in fields:
@@ -116,6 +129,13 @@ def list_live_indexes(
             continue
         state = index.get('state')
         states[signature] = state if isinstance(state, str) else 'UNKNOWN'
+        if (
+            len(signature[2]) > 1
+            and signature[2][-1][0] == '__name__'
+            and signature[2][-1][1] == signature[2][-2][1]
+            and signature[2][-1][1] in {'ASCENDING', 'DESCENDING'}
+        ):
+            states[(signature[0], signature[1], signature[2][:-1])] = states[signature]
     return states
 
 
