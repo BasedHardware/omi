@@ -33,6 +33,20 @@ describe('autoModelSelector — core pick', () => {
     expect(resolveEffectiveVoiceProvider()).toBe('openai')
   })
 
+  // Regression: this poll is fire-and-forget and swallows every failure, so a
+  // dead-session 401 must reject quietly instead of routing the user to Login
+  // (apiClient's responseErrorHandler calls forceReauth() unless a request opts
+  // out). Without __sessionPreserving, merely STARTING a voice session with a
+  // stale token would kick the user to the sign-in screen.
+  it('polls with __sessionPreserving so a dead-session 401 never forces reauth', async () => {
+    get.mockResolvedValue({ data: { provider: 'geminiFlashLive' } })
+    await refresh()
+    expect(get).toHaveBeenCalledWith(
+      '/v1/auto/model-pick',
+      expect.objectContaining({ __sessionPreserving: true, timeout: 15_000 })
+    )
+  })
+
   it('fetches geminiFlashLive and resolves to gemini under Auto', async () => {
     get.mockResolvedValue({ data: { provider: 'geminiFlashLive' } })
     await refresh()
@@ -109,5 +123,16 @@ describe('autoModelSelector — a concrete setting bypasses the selector', () =>
 
   it('Auto with no cached pick resolves to gemini', () => {
     expect(resolveEffectiveVoiceProvider()).toBe('gemini')
+  })
+
+  // Regression: preferences are a hand-editable localStorage blob with no
+  // per-field validation, so an unrecognized value must NOT be passed through as
+  // a lane (it would reach the session machine and fail at mint). Unknown = Auto,
+  // matching Mac's RealtimeOmniProvider(rawValue:) → nil decode.
+  it('treats an unrecognized persisted provider as Auto rather than a lane', async () => {
+    get.mockResolvedValue({ data: { provider: 'gptRealtime2' } })
+    await refresh()
+    setPreferences({ voiceProvider: 'grok' as unknown as 'auto' })
+    expect(resolveEffectiveVoiceProvider()).toBe('openai') // the Auto pick, not 'grok'
   })
 })
