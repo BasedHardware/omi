@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Меморија уређаја",
+    "deviceStoragePercentFull": "{percent}% попуњено",
+    "deviceStorageUsedOfTotal": "{used} од {total} искоришћено",
+    "deviceStorageFree": "{free} слободно",
+    "deviceStorageNearlyFull": "Уређај је скоро пун — синхронизујте да ослободите простор."
 }

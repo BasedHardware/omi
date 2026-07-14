@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "डिव्हाइस स्टोरेज",
+    "deviceStoragePercentFull": "{percent}% भरले",
+    "deviceStorageUsedOfTotal": "{total} पैकी {used} वापरले",
+    "deviceStorageFree": "{free} रिकामे",
+    "deviceStorageNearlyFull": "डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा."
 }

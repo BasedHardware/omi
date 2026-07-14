@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Apparaatopslag",
+    "deviceStoragePercentFull": "{percent}% vol",
+    "deviceStorageUsedOfTotal": "{used} van {total} gebruikt",
+    "deviceStorageFree": "{free} vrij",
+    "deviceStorageNearlyFull": "Apparaat bijna vol — synchroniseer om ruimte vrij te maken."
 }

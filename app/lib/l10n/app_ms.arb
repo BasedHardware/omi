@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Storan peranti",
+    "deviceStoragePercentFull": "{percent}% penuh",
+    "deviceStorageUsedOfTotal": "{used} daripada {total} digunakan",
+    "deviceStorageFree": "{free} bebas",
+    "deviceStorageNearlyFull": "Peranti hampir penuh — segerakkan untuk mengosongkan ruang."
 }

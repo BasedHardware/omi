@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Сховішча прылады",
+    "deviceStoragePercentFull": "запоўнена {percent}%",
+    "deviceStorageUsedOfTotal": "{used} з {total} выкарыстана",
+    "deviceStorageFree": "{free} вольна",
+    "deviceStorageNearlyFull": "Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца."
 }

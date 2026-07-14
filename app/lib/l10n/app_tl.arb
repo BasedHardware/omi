@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Storage ng device",
+    "deviceStoragePercentFull": "{percent}% puno",
+    "deviceStorageUsedOfTotal": "{used} sa {total} ang nagamit",
+    "deviceStorageFree": "{free} ang libre",
+    "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo."
 }
