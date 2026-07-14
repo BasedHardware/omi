@@ -64,23 +64,11 @@ struct OnboardingFloatingBarDemoView: View {
                             .foregroundColor(OmiColors.textSecondary)
                             .multilineTextAlignment(.center)
                     } else {
-                        // One line, ending in an arrow that points up to the real
-                        // floating bar at the top of the screen — once it activates
-                        // many people never look up.
-                        HStack(spacing: OmiSpacing.sm) {
-                            Text("Type in the Floating Bar 'Which computer should I buy?'")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(OmiColors.textPrimary)
-                                .lineLimit(1)
-                                .fixedSize()
-
-                            Image(systemName: "arrow.up")
-                                .font(.system(size: 24, weight: .bold))
-                                .foregroundColor(OmiColors.textPrimary)
-                                // Tilt up-left so it points toward the bar/dock,
-                                // which sits left of the text's trailing edge.
-                                .rotationEffect(.degrees(-30))
-                        }
+                        Text("Type in the Floating Bar 'Which computer should I buy?'")
+                            .font(.system(size: 24, weight: .bold))
+                            .foregroundColor(OmiColors.textPrimary)
+                            .lineLimit(1)
+                            .fixedSize()
                     }
                 }
 
