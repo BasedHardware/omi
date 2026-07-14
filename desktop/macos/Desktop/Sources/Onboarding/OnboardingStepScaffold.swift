@@ -318,46 +318,44 @@ struct OnboardingKeyCapView: View {
   private var isWide: Bool { Self.wideTokens.contains(token) }
 
   var body: some View {
-    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-      .fill(isActive ? Color.white : OmiColors.backgroundTertiary)
-      .frame(minWidth: isWide ? 116 : 64, minHeight: 64)
-      .overlay(
-        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-          .stroke(
-            isActive ? Color.white : OmiColors.textTertiary.opacity(0.3),
-            lineWidth: 2
-          )
-      )
-      .overlay(alignment: .topLeading) {
-        // Named keys mirror a physical Mac key: symbol in the top-left corner…
-        if keyName != nil {
+    // The label is part of layout (not an overlay) so the cap widens to keep
+    // the key's name on a single line instead of wrapping ("comman/d").
+    Group {
+      if let keyName {
+        // Named keys mirror a physical Mac key: symbol in the top-left
+        // corner, name on one line along the bottom.
+        VStack(spacing: 0) {
           Text(token)
             .font(.system(size: 18, weight: .semibold))
-            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
-            .padding(.top, 8)
-            .padding(.leading, 10)
-        }
-      }
-      .overlay(alignment: .bottom) {
-        // …with the key's name written along the bottom.
-        if let keyName {
+            .frame(maxWidth: .infinity, alignment: .leading)
+          Spacer(minLength: 4)
           Text(keyName)
             .font(.system(size: 10, weight: .medium))
-            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
-            .padding(.bottom, 8)
-            .padding(.horizontal, 8)
+            .lineLimit(1)
+            .fixedSize()
         }
-      }
-      .overlay {
+      } else {
         // Plain letter keys show just the letter, centered.
-        if keyName == nil {
-          Text(token)
-            .font(.system(size: 22, weight: .semibold))
-            .foregroundColor(isActive ? .black : OmiColors.textPrimary)
-            .padding(.horizontal, 12)
-        }
+        Text(token)
+          .font(.system(size: 22, weight: .semibold))
       }
-      .fixedSize()
+    }
+    .foregroundColor(isActive ? .black : OmiColors.textPrimary)
+    .padding(.horizontal, 10)
+    .padding(.vertical, 8)
+    .frame(minWidth: isWide ? 116 : 64, minHeight: 64)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+        .fill(isActive ? Color.white : OmiColors.backgroundTertiary)
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
+            .stroke(
+              isActive ? Color.white : OmiColors.textTertiary.opacity(0.3),
+              lineWidth: 2
+            )
+        )
+    )
+    .fixedSize()
   }
 }
 
