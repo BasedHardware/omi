@@ -43,6 +43,61 @@ def test_reconcile_deploys_generated_manifest_and_waits_for_every_index():
     assert sleeps == [1]
 
 
+def test_live_gcloud_indexes_derive_collection_group_and_alias_implicit_document_id():
+    live_index = {
+        'name': (
+            'projects/dev-project/databases/(default)/collectionGroups/' 'task_attention_overrides/indexes/index-id'
+        ),
+        'queryScope': 'COLLECTION',
+        'fields': [
+            {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
+            {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': '__name__', 'order': 'ASCENDING'},
+        ],
+        'state': 'READY',
+    }
+
+    def runner(_command, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
+
+    states = reconcile_firestore_indexes.list_live_indexes(project='dev-project', database='(default)', runner=runner)
+
+    assert (
+        states[
+            (
+                'task_attention_overrides',
+                'COLLECTION',
+                (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+            )
+        ]
+        == 'READY'
+    )
+
+
+def test_live_gcloud_index_does_not_alias_explicitly_descending_document_id():
+    live_index = {
+        'name': 'projects/dev-project/databases/(default)/collectionGroups/task_attention_overrides/indexes/index-id',
+        'queryScope': 'COLLECTION',
+        'fields': [
+            {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
+            {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': '__name__', 'order': 'DESCENDING'},
+        ],
+        'state': 'READY',
+    }
+
+    def runner(_command, **_kwargs):
+        return SimpleNamespace(returncode=0, stdout=json.dumps([live_index]))
+
+    states = reconcile_firestore_indexes.list_live_indexes(project='dev-project', database='(default)', runner=runner)
+
+    assert (
+        'task_attention_overrides',
+        'COLLECTION',
+        (('account_generation', 'ASCENDING'), ('expires_at', 'ASCENDING')),
+    ) not in states
+
+
 def test_reconcile_fails_when_a_required_index_never_becomes_ready():
     def runner(command, **_kwargs):
         if command[:3] == ['npx', '--no-install', 'firebase']:
