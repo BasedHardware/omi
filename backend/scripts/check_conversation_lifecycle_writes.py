@@ -20,13 +20,13 @@ RAW_STORAGE_ALLOWLIST = {
     'backend/database/conversation_finalization_jobs.py',
 }
 LIFECYCLE_METHODS = {
-    '_upsert_conversation_with_lifecycle',
-    '_persist_processing_result_with_lifecycle',
-    '_create_conversation_if_absent_with_lifecycle',
-    '_transition_conversation_status',
-    '_claim_conversation_status',
-    '_set_conversation_as_discarded',
-    '_restore_conversation_from_discarded',
+    'upsert_conversation_with_lifecycle',
+    'persist_processing_result_with_lifecycle',
+    'create_conversation_if_absent_with_lifecycle',
+    'transition_conversation_status',
+    'claim_conversation_status',
+    'set_conversation_as_discarded',
+    'restore_conversation_from_discarded',
 }
 GENERIC_LIFECYCLE_MUTATION_METHODS = {'update_conversation'}
 FINALIZATION_ADMISSION_METHODS = {

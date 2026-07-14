@@ -73,8 +73,8 @@ def create_in_progress_conversation(uid: str, conversation_data: dict[str, Any],
     """Create the one durable in-progress resource for a recording generation."""
     _require_status(conversation_data, ConversationStatus.in_progress)
     if idempotent:
-        return conversations_db._create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+        return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
     return True
 
 
@@ -82,8 +82,8 @@ def create_processing_conversation(uid: str, conversation_data: dict[str, Any], 
     """Create a server/import/merge conversation already admitted to processing."""
     _require_status(conversation_data, ConversationStatus.processing)
     if idempotent:
-        return conversations_db._create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+        return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
     return True
 
 
@@ -91,8 +91,8 @@ def create_completed_conversation(uid: str, conversation_data: dict[str, Any], *
     """Create a fully processed conversation without granting processors recreate authority."""
     _require_status(conversation_data, ConversationStatus.completed)
     if idempotent:
-        return conversations_db._create_conversation_if_absent_with_lifecycle(uid, conversation_data)
-    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+        return conversations_db.create_conversation_if_absent_with_lifecycle(uid, conversation_data)
+    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
     return True
 
 
@@ -114,7 +114,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
         if status == ConversationStatus.processing.value
         else {ConversationStatus.processing.value, ConversationStatus.merging.value}
     )
-    return conversations_db._persist_processing_result_with_lifecycle(
+    return conversations_db.persist_processing_result_with_lifecycle(
         uid,
         conversation_data,
         expected_statuses=expected,
@@ -124,7 +124,7 @@ def persist_processed_conversation(uid: str, conversation_data: dict[str, Any]) 
 def persist_imported_conversation(uid: str, conversation_data: dict[str, Any]) -> None:
     """Persist an externally completed immutable import through the lifecycle owner."""
     _require_status(conversation_data, ConversationStatus.completed)
-    conversations_db._upsert_conversation_with_lifecycle(uid, conversation_data)
+    conversations_db.upsert_conversation_with_lifecycle(uid, conversation_data)
 
 
 def transition(
@@ -147,14 +147,14 @@ def transition(
     if target.value not in _STATUS_TRANSITIONS.get(current, set()):
         raise LifecycleTransitionError(f'invalid lifecycle transition {current}->{target.value}')
     if expected is not None:
-        return conversations_db._claim_conversation_status(
+        return conversations_db.claim_conversation_status(
             uid,
             conversation_id,
             expected,
             target,
             extra_updates=extra_updates,
         )
-    conversations_db._transition_conversation_status(uid, conversation_id, target)
+    conversations_db.transition_conversation_status(uid, conversation_id, target)
     return True
 
 
@@ -184,14 +184,14 @@ def ensure_processing(uid: str, conversation_id: str) -> bool:
 
 def complete(uid: str, conversation_id: str) -> bool:
     """Close an admitted processing or merge generation exactly once."""
-    if conversations_db._claim_conversation_status(
+    if conversations_db.claim_conversation_status(
         uid,
         conversation_id,
         ConversationStatus.processing,
         ConversationStatus.completed,
     ):
         return True
-    return conversations_db._claim_conversation_status(
+    return conversations_db.claim_conversation_status(
         uid,
         conversation_id,
         ConversationStatus.merging,
@@ -205,12 +205,12 @@ def begin_merge(uid: str, conversation_id: str) -> bool:
 
 def discard(uid: str, conversation_id: str) -> None:
     """Discard is terminal and deliberately cannot be undone by a generic write."""
-    conversations_db._set_conversation_as_discarded(uid, conversation_id)
+    conversations_db.set_conversation_as_discarded(uid, conversation_id)
 
 
 def restore_discarded(uid: str, conversation_id: str) -> None:
     """An explicit user intent may restore visibility without changing status."""
-    conversations_db._restore_conversation_from_discarded(uid, conversation_id)
+    conversations_db.restore_conversation_from_discarded(uid, conversation_id)
 
 
 def open_recording_session(
@@ -471,7 +471,9 @@ def _finalization_admission(
     }
 
 
-def claim_finalization_fanout(job_id: str, dispatch_generation: int, lease_epoch: int) -> dict[str, Any]:
+def claim_finalization_fanout(
+    job_id: str, dispatch_generation: int, lease_epoch: int
+) -> jobs_db.FinalizationFanoutClaim:
     """Claim the durable external-integration fanout through the lifecycle owner."""
     return jobs_db.claim_finalization_fanout(job_id, dispatch_generation, lease_epoch)
 

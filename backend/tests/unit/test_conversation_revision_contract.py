@@ -135,7 +135,7 @@ def test_processing_upsert_preserves_every_user_owned_field(monkeypatch):
         'data_protection_level': 'standard',
     }
 
-    conversations_db._upsert_conversation_with_lifecycle('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     assert len(ref.set_calls) == 1
     written, options = ref.set_calls[0]
@@ -160,7 +160,7 @@ def test_first_processing_write_still_creates_complete_document(monkeypatch):
         'data_protection_level': 'standard',
     }
 
-    conversations_db._upsert_conversation_with_lifecycle('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     written, options = ref.set_calls[0]
     assert options == {}
@@ -173,7 +173,7 @@ def test_create_if_absent_never_persists_firestore_revision_metadata(monkeypatch
     monkeypatch.setattr(conversations_db, 'db', _Firestore(ref))
     revision = datetime(2026, 7, 9, 12, 0, tzinfo=timezone.utc)
 
-    conversations_db._create_conversation_if_absent_with_lifecycle(
+    conversations_db.create_conversation_if_absent_with_lifecycle(
         'user-1',
         {
             'id': 'conversation-1',
@@ -227,7 +227,7 @@ def test_processing_transaction_reloads_user_fields_when_firestore_retries(monke
         'data_protection_level': 'standard',
     }
 
-    conversations_db._upsert_conversation_with_lifecycle('user-1', incoming)
+    conversations_db.upsert_conversation_with_lifecycle('user-1', incoming)
 
     retried_write, options = ref.set_calls[-1]
     assert options == {'merge': True}

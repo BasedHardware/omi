@@ -5,7 +5,7 @@ from scripts.check_conversation_lifecycle_writes import violations
 
 def test_tripwire_rejects_a_pasted_back_direct_status_write():
     errors = violations(
-        "conversations_db._transition_conversation_status(uid, conversation_id, ConversationStatus.processing)\n",
+        "conversations_db.transition_conversation_status(uid, conversation_id, ConversationStatus.processing)\n",
         'backend/routers/transcribe.py',
     )
     assert len(errors) == 1
@@ -51,7 +51,7 @@ def test_tripwire_rejects_a_pasted_back_finalization_admission():
 def test_tripwire_allows_the_single_service_and_atomic_storage_primitive():
     assert (
         violations(
-            "conversations_db._transition_conversation_status(uid, conversation_id, ConversationStatus.completed)\n",
+            "conversations_db.transition_conversation_status(uid, conversation_id, ConversationStatus.completed)\n",
             'backend/utils/conversations/lifecycle.py',
         )
         == []

@@ -214,7 +214,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def _upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
+def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
     conversation_data.pop('updated_at', None)
@@ -263,7 +263,7 @@ def _upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     prepare_func=_prepare_conversation_for_write,
     preserve_result=True,
 )
-def _persist_processing_result_with_lifecycle(
+def persist_processing_result_with_lifecycle(
     uid: str,
     conversation_data: dict,
     *,
@@ -324,7 +324,7 @@ def _persist_processing_result_with_lifecycle(
     prepare_func=_prepare_conversation_for_write,
     preserve_result=True,
 )
-def _create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
+def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -955,13 +955,13 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
-def _transition_conversation_status(uid: str, conversation_id: str, status: str):
+def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
 
 
-def _claim_conversation_status(
+def claim_conversation_status(
     uid: str,
     conversation_id: str,
     expected_status: ConversationStatus,
@@ -991,13 +991,13 @@ def _claim_conversation_status(
     return claimed
 
 
-def _set_conversation_as_discarded(uid: str, conversation_id: str):
+def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
 
 
-def _restore_conversation_from_discarded(uid: str, conversation_id: str):
+def restore_conversation_from_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': False})
