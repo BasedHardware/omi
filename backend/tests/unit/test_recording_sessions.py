@@ -237,6 +237,9 @@ def test_shadow_mode_keeps_legacy_route_but_reports_the_mismatch(recording_store
 
     assert result['conversation_id'] == 'second-conversation'
     assert result['mapping_conflict'] is True
+    assert result['lifecycle_version'] is None
+    assert result['lifecycle_phase'] is None
+    assert result['lifecycle_sequence'] is None
 
 
 def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recording_store, monkeypatch):
@@ -249,6 +252,9 @@ def test_dual_write_mode_keeps_legacy_route_while_reporting_the_mismatch(recordi
 
     assert result['conversation_id'] == 'second-conversation'
     assert result['mapping_conflict'] is True
+    assert result['lifecycle_version'] is None
+    assert result['lifecycle_phase'] is None
+    assert result['lifecycle_sequence'] is None
 
 
 def test_shadow_mode_emits_legacy_envelope_when_durable_event_write_fails(monkeypatch):

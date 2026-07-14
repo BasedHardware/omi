@@ -259,7 +259,15 @@ def open_recording_session(
             binding['conversation_id'],
         )
         if recording_session_mode() in {'shadow', 'dual_write'}:
-            return dict(binding) | {'conversation_id': proposed_conversation_id}
+            # Compatibility routing must not borrow the canonical session's
+            # ordered envelope for a different legacy conversation. The
+            # client receives the pre-envelope route until enforce cutover.
+            return dict(binding) | {
+                'conversation_id': proposed_conversation_id,
+                'lifecycle_version': None,
+                'lifecycle_phase': None,
+                'lifecycle_sequence': None,
+            }
     return dict(binding)
 
 
