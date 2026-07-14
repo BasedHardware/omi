@@ -33,11 +33,15 @@ struct OnboardingExportsStepView: View {
           exportPanel(for: activeDestination)
         }
 
-        Button("Continue") {
-          onContinue()
+        HStack(spacing: OmiSpacing.md) {
+          OnboardingBackButton()
+
+          Button("Continue") {
+            onContinue()
+          }
+          .buttonStyle(OmiButtonStyle(.primary))
+          .keyboardShortcut(.defaultAction)
         }
-        .buttonStyle(OmiButtonStyle(.primary))
-        .keyboardShortcut(.defaultAction)
       }
       .frame(maxWidth: .infinity, alignment: .leading)
       .task {
