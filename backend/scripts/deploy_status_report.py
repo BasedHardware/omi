@@ -9,7 +9,7 @@ import json
 import subprocess
 import sys
 from pathlib import Path
-from typing import Any, cast
+from typing import Any, Mapping, cast
 
 DEFAULT_REGION = 'us-central1'
 DEFAULT_GKE_SERVICES = (
@@ -58,6 +58,9 @@ def main() -> int:
     parser.add_argument('--expect-cloud-run-traffic', action='append', default=[], metavar='SERVICE=REVISION')
     parser.add_argument('--k8s-state', type=Path, help='Offline Kubernetes state JSON fixture.')
     parser.add_argument('--cloud-run-state', type=Path, help='Offline Cloud Run state JSON fixture.')
+    parser.add_argument('--candidate-acceptance-manifest', type=Path)
+    parser.add_argument('--candidate-acceptance-evidence', type=Path)
+    parser.add_argument('--candidate-status-output', type=Path)
     parser.add_argument('--now', help='ISO timestamp used by tests for age calculations.')
     args = parser.parse_args()
 
@@ -71,6 +74,7 @@ def main() -> int:
     namespace = args.namespace or f'{args.env}-omi-backend'
     findings: list[Finding] = []
     sections: list[str] = []
+    candidate_tracker: dict[str, Any] | None = None
 
     if include_gke:
         k8s_state = load_json(args.k8s_state) if args.k8s_state else fetch_k8s_state(namespace)
@@ -111,6 +115,24 @@ def main() -> int:
         sections.append(section)
         findings.extend(cloud_findings)
 
+    if args.candidate_acceptance_manifest or args.candidate_acceptance_evidence:
+        if not args.candidate_acceptance_manifest or not args.candidate_acceptance_evidence:
+            print('candidate acceptance manifest and evidence must be supplied together', file=sys.stderr)
+            return 2
+        candidate_tracker = candidate_acceptance_tracker(
+            manifest_path=args.candidate_acceptance_manifest,
+            evidence_path=args.candidate_acceptance_evidence,
+        )
+        section, candidate_findings = render_candidate_acceptance_report(candidate_tracker)
+        sections.append(section)
+        findings.extend(candidate_findings)
+
+    if args.candidate_status_output:
+        if candidate_tracker is None:
+            print('--candidate-status-output requires candidate acceptance manifest and evidence', file=sys.stderr)
+            return 2
+        write_candidate_tracker(args.candidate_status_output, candidate_tracker)
+
     print('\n\n'.join(sections))
     if findings:
         print('\nFindings')
@@ -118,6 +140,127 @@ def main() -> int:
             print(f'- {finding.severity} [{finding.scope}] {finding.message}')
 
     return 1 if any(f.severity == 'FAIL' for f in findings) else 0
+
+
+def candidate_acceptance_tracker(*, manifest_path: Path, evidence_path: Path) -> dict[str, Any]:
+    """Normalize only bounded candidate outcomes for deployment tracking artifacts."""
+    try:
+        manifest = json.loads(manifest_path.read_text(encoding='utf-8'))
+        services = manifest.get('services') if isinstance(manifest, Mapping) else None
+        if manifest.get('schema_version') != 1 or not isinstance(services, Mapping):
+            raise ValueError
+        expected = {
+            service: value.get('contract')
+            for service, value in services.items()
+            if isinstance(service, str) and isinstance(value, Mapping) and isinstance(value.get('contract'), str)
+        }
+        if not expected or len(expected) != len(services):
+            raise ValueError
+    except (OSError, ValueError, json.JSONDecodeError, AttributeError):
+        return {
+            'schema_version': 1,
+            'status': 'FAIL',
+            'failed_contract_category': 'configuration',
+            'checks': [],
+        }
+
+    try:
+        evidence = json.loads(evidence_path.read_text(encoding='utf-8'))
+    except FileNotFoundError:
+        return {
+            'schema_version': 1,
+            'status': 'NOT_RUN',
+            'failed_contract_category': None,
+            'checks': [
+                {'service': service, 'contract': contract, 'status': 'NOT_RUN'}
+                for service, contract in sorted(expected.items())
+            ],
+        }
+    except (OSError, json.JSONDecodeError):
+        return {
+            'schema_version': 1,
+            'status': 'FAIL',
+            'failed_contract_category': 'configuration',
+            'checks': [],
+        }
+
+    checks = evidence.get('checks') if isinstance(evidence, Mapping) else None
+    evidence_status = evidence.get('status') if isinstance(evidence, Mapping) else None
+    normalized: list[dict[str, str]] = []
+    if not isinstance(checks, list):
+        checks = []
+    for raw_check in checks:
+        if not isinstance(raw_check, Mapping):
+            continue
+        service = raw_check.get('service')
+        contract = raw_check.get('contract')
+        status = raw_check.get('status')
+        if (
+            isinstance(service, str)
+            and isinstance(contract, str)
+            and isinstance(status, str)
+            and status in {'PASS', 'FAIL', 'NOT_RUN'}
+        ):
+            normalized.append({'service': service, 'contract': contract, 'status': status})
+    expected_pairs = {(service, contract) for service, contract in expected.items()}
+    actual_pairs = {(check['service'], check['contract']) for check in normalized}
+    duplicate_pairs = len(actual_pairs) != len(normalized)
+    if actual_pairs != expected_pairs or duplicate_pairs:
+        return {
+            'schema_version': 1,
+            'status': 'FAIL',
+            'failed_contract_category': 'configuration',
+            'checks': normalized,
+        }
+    failed = next((check['contract'] for check in normalized if check['status'] == 'FAIL'), None)
+    expected_status = 'PASS' if all(check['status'] == 'PASS' for check in normalized) else 'FAIL'
+    if evidence_status != expected_status:
+        return {
+            'schema_version': 1,
+            'status': 'FAIL',
+            'failed_contract_category': 'configuration',
+            'checks': normalized,
+        }
+    return {
+        'schema_version': 1,
+        'status': expected_status,
+        'failed_contract_category': failed,
+        'checks': sorted(normalized, key=lambda check: check['service']),
+    }
+
+
+def render_candidate_acceptance_report(tracker: Mapping[str, Any]) -> tuple[str, list[Finding]]:
+    lines = [
+        'Cloud Run candidate acceptance',
+        '| Service | Contract | Status |',
+        '|---|---|---|',
+    ]
+    findings: list[Finding] = []
+    checks = tracker.get('checks')
+    if not isinstance(checks, list):
+        checks = []
+    for check in checks:
+        if not isinstance(check, Mapping):
+            continue
+        service = str(check.get('service') or '-')
+        contract = str(check.get('contract') or '-')
+        status = str(check.get('status') or 'FAIL')
+        lines.append(f'| `{service}` | `{contract}` | {status} |')
+        if status == 'FAIL':
+            findings.append(Finding('FAIL', service, f'candidate contract {contract} failed before traffic promotion'))
+    status = str(tracker.get('status') or 'FAIL')
+    failed_category = tracker.get('failed_contract_category')
+    lines.extend(['', f'Overall candidate status: **{status}**'])
+    if isinstance(failed_category, str):
+        lines.append(f'Failed contract category: `{failed_category}`')
+    if status == 'FAIL' and not findings:
+        findings.append(Finding('FAIL', 'candidate-acceptance', 'candidate acceptance evidence is invalid'))
+    return '\n'.join(lines), findings
+
+
+def write_candidate_tracker(path: Path, tracker: Mapping[str, Any]) -> None:
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(json.dumps(tracker, indent=2, sort_keys=True) + '\n', encoding='utf-8')
 
 
 def render_gke_report(

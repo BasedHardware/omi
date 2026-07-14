@@ -3,6 +3,9 @@ import Foundation
 enum AppBuild {
   static let productionBundleIdentifier = "com.omi.computer-macos"
   static let desktopDevBundleIdentifier = "com.omi.desktop-dev"
+  static let externalPreviewBundleIdentifierPrefix = "com.omi.preview."
+  static let externalPreviewMarkerInfoKey = "OMIExternalPreview"
+  static let externalPreviewBackendInfoKey = "OMIExternalPreviewBackend"
   private static let updateChannelDefaultsKey = "update_channel"
   private static let betaOverwriteMigrationKey = "didMigrateBetaOverwrite_v1"
   private static let desktopAppcastURL = URL(
@@ -13,20 +16,115 @@ enum AppBuild {
   private static let channelProbeMainThreadBudget: TimeInterval = 1.5
   private static let channelProbeRequestTimeout: TimeInterval = 3
 
+  enum ExternalPreviewBackend: String, Equatable {
+    case production
+    case development
+
+    init?(infoValue: Any?) {
+      guard let rawValue = infoValue as? String else { return nil }
+      self.init(rawValue: rawValue.trimmingCharacters(in: .whitespacesAndNewlines).lowercased())
+    }
+  }
+
+  /// Preview bundle identity, the explicit Info.plist marker, and the selected backend are
+  /// all evaluated together. The reserved identity is the safety boundary: an artifact with
+  /// a preview identity is always restricted, even if a packaging error omits its marker.
+  struct Configuration: Equatable {
+    let bundleIdentifier: String
+    let isExternalPreview: Bool
+    let hasExternalPreviewMarker: Bool
+    let externalPreviewBackend: ExternalPreviewBackend?
+
+    var isNonProduction: Bool {
+      bundleIdentifier.hasPrefix("com.omi.")
+        && bundleIdentifier != AppBuild.productionBundleIdentifier
+    }
+
+    var allowsLocalAutomation: Bool {
+      isNonProduction && !isExternalPreview
+    }
+
+    var allowsSparkleUpdates: Bool {
+      !isExternalPreview
+    }
+
+    var hasValidExternalPreviewConfiguration: Bool {
+      !isExternalPreview || (hasExternalPreviewMarker && externalPreviewBackend != nil)
+    }
+  }
+
+  static func configuration(
+    bundleIdentifier: String,
+    infoDictionary: [String: Any]
+  ) -> Configuration {
+    let isExternalPreview = isExternalPreviewBundleIdentifier(bundleIdentifier)
+    let hasExternalPreviewMarker = infoDictionary[externalPreviewMarkerInfoKey] as? Bool == true
+    let externalPreviewBackend = ExternalPreviewBackend(
+      infoValue: infoDictionary[externalPreviewBackendInfoKey])
+
+    return Configuration(
+      bundleIdentifier: bundleIdentifier,
+      isExternalPreview: isExternalPreview,
+      hasExternalPreviewMarker: hasExternalPreviewMarker,
+      externalPreviewBackend: externalPreviewBackend
+    )
+  }
+
+  static func isExternalPreviewBundleIdentifier(_ bundleIdentifier: String) -> Bool {
+    let suffix = bundleIdentifier.dropFirst(externalPreviewBundleIdentifierPrefix.count)
+    return bundleIdentifier.hasPrefix(externalPreviewBundleIdentifierPrefix) && !suffix.isEmpty
+  }
+
+  private static var buildConfiguration: Configuration {
+    configuration(
+      bundleIdentifier: bundleIdentifier,
+      infoDictionary: Bundle.main.infoDictionary ?? [:]
+    )
+  }
+
   static var bundleIdentifier: String {
     Bundle.main.bundleIdentifier ?? productionBundleIdentifier
   }
 
   static var isNonProduction: Bool {
-    bundleIdentifier.hasPrefix("com.omi.") && bundleIdentifier != productionBundleIdentifier
+    buildConfiguration.isNonProduction
   }
 
   static var isProductionBundle: Bool {
     bundleIdentifier == productionBundleIdentifier
   }
 
+  static var isExternalPreview: Bool {
+    buildConfiguration.isExternalPreview
+  }
+
+  /// Only local development bundles expose the loopback automation/debug bridge. Published
+  /// preview apps share the non-production namespace but must never expose that bridge.
+  static var allowsLocalAutomation: Bool {
+    buildConfiguration.allowsLocalAutomation
+  }
+
+  /// Preview artifacts are delivered from their landing page, never from the shared Sparkle
+  /// feed. The updater additionally checks this at every call site.
+  static var allowsSparkleUpdates: Bool {
+    buildConfiguration.allowsSparkleUpdates
+  }
+
+  static var hasValidExternalPreviewConfiguration: Bool {
+    buildConfiguration.hasValidExternalPreviewConfiguration
+  }
+
+  /// Nil is intentional for a malformed preview configuration. Backend routing then fails
+  /// closed to production rather than inheriting the local-development default.
+  static var externalPreviewBackend: ExternalPreviewBackend? {
+    guard buildConfiguration.isExternalPreview, buildConfiguration.hasExternalPreviewMarker else {
+      return nil
+    }
+    return buildConfiguration.externalPreviewBackend
+  }
+
   static var isNamedDevelopmentBundle: Bool {
-    isNonProduction && bundleIdentifier != desktopDevBundleIdentifier
+    allowsLocalAutomation && bundleIdentifier != desktopDevBundleIdentifier
   }
 
   static var usesLazyDevPermissions: Bool {

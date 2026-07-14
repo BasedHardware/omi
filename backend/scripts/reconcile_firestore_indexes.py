@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Deploy the generated Firestore index manifest and wait until every index is READY."""
+"""Reconcile the generated Firestore index manifest and wait for READY indexes."""
 
 from __future__ import annotations
 
@@ -8,6 +8,7 @@ import json
 import subprocess
 import sys
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Callable, Iterable, Mapping
 
@@ -23,6 +24,25 @@ DEFAULT_POLL_INTERVAL_SECONDS = 10.0
 
 IndexSignature = tuple[str, str, tuple[tuple[str, str], ...]]
 CommandRunner = Callable[..., Any]
+
+_GCLOUD_QUERY_SCOPES = {
+    'COLLECTION': 'collection',
+    'COLLECTION_GROUP': 'collection-group',
+}
+_GCLOUD_FIELD_CONFIGS = {
+    'ASCENDING': 'order=ascending',
+    'DESCENDING': 'order=descending',
+    'CONTAINS': 'array-config=contains',
+}
+
+
+@dataclass(frozen=True)
+class LiveIndex:
+    """One Firestore Admin API resource, retained without response-shape aliases."""
+
+    resource_name: str
+    signature: IndexSignature
+    state: str
 
 
 def _collection_group_from_resource_name(index: Mapping[str, Any]) -> str:
@@ -94,12 +114,38 @@ def deploy_indexes(*, project: str, manifest_path: Path, runner: CommandRunner =
         raise RuntimeError('Firebase index deployment failed')
 
 
-def list_live_indexes(
-    *,
-    project: str,
-    database: str,
-    runner: CommandRunner = subprocess.run,
-) -> dict[IndexSignature, str]:
+def gcloud_create_index_command(*, project: str, database: str, signature: IndexSignature) -> list[str]:
+    """Build the Firestore Admin API create command for one manifest signature."""
+
+    collection_group, query_scope, fields = signature
+    try:
+        gcloud_query_scope = _GCLOUD_QUERY_SCOPES[query_scope]
+    except KeyError as exc:
+        raise ValueError(f'unsupported Firestore query scope for gcloud provisioning: {query_scope!r}') from exc
+    command = [
+        'gcloud',
+        'firestore',
+        'indexes',
+        'composite',
+        'create',
+        f'--project={project}',
+        f'--database={database}',
+        f'--collection-group={collection_group}',
+        f'--query-scope={gcloud_query_scope}',
+    ]
+    for field_path, direction in fields:
+        try:
+            field_config = _GCLOUD_FIELD_CONFIGS[direction]
+        except KeyError as exc:
+            raise ValueError(
+                f'unsupported Firestore field configuration for gcloud provisioning: {direction!r}'
+            ) from exc
+        command.append(f'--field-config=field-path={field_path},{field_config}')
+    return [*command, '--quiet']
+
+
+def list_live_indexes(*, project: str, database: str, runner: CommandRunner = subprocess.run) -> list[LiveIndex]:
+    """Read live Admin API resources without normalizing distinct index shapes."""
     command = [
         'gcloud',
         'firestore',
@@ -119,7 +165,7 @@ def list_live_indexes(
         raise RuntimeError('Firestore composite-index listing did not return JSON') from exc
     if not isinstance(payload, list):
         raise RuntimeError('Firestore composite-index listing did not return a list')
-    states: dict[IndexSignature, str] = {}
+    live_indexes: list[LiveIndex] = []
     for index in payload:
         if not isinstance(index, Mapping):
             continue
@@ -127,15 +173,70 @@ def list_live_indexes(
             signature = _index_signature(index)
         except ValueError:
             continue
+        resource_name = index.get('name')
+        if not isinstance(resource_name, str) or not resource_name:
+            continue
         state = index.get('state')
-        states[signature] = state if isinstance(state, str) else 'UNKNOWN'
-        if (
-            len(signature[2]) > 1
-            and signature[2][-1][0] == '__name__'
-            and signature[2][-1][1] == signature[2][-2][1]
-            and signature[2][-1][1] in {'ASCENDING', 'DESCENDING'}
-        ):
-            states[(signature[0], signature[1], signature[2][:-1])] = states[signature]
+        live_indexes.append(LiveIndex(resource_name=resource_name, signature=signature, state=state or 'UNKNOWN'))
+    return live_indexes
+
+
+def expected_index_resource_prefix(*, project: str, database: str, signature: IndexSignature) -> str:
+    collection_group = signature[0]
+    return f'projects/{project}/databases/{database}/collectionGroups/{collection_group}/indexes/'
+
+
+def _matches_expected_resource_identity(
+    live_index: LiveIndex, *, project: str, database: str, signature: IndexSignature
+) -> bool:
+    prefix = expected_index_resource_prefix(project=project, database=database, signature=signature)
+    identifier = live_index.resource_name.removeprefix(prefix)
+    return live_index.resource_name.startswith(prefix) and bool(identifier) and '/' not in identifier
+
+
+def _implicit_terminal_document_id_alias(signature: IndexSignature) -> IndexSignature | None:
+    """Return the historic Firebase-manifest shape for an Admin API implicit terminal order."""
+    fields = signature[2]
+    if (
+        len(fields) > 1
+        and fields[-1][0] == '__name__'
+        and fields[-1][1] == fields[-2][1]
+        and fields[-1][1] in {'ASCENDING', 'DESCENDING'}
+    ):
+        return (signature[0], signature[1], fields[:-1])
+    return None
+
+
+def expected_index_states(
+    *,
+    expected: Iterable[IndexSignature],
+    live_indexes: Iterable[LiveIndex],
+    project: str,
+    database: str,
+    allow_implicit_terminal_document_id_alias: bool = False,
+) -> dict[IndexSignature, str]:
+    """Return exact Admin API readiness states, failing closed on any ambiguity."""
+    states: dict[IndexSignature, str] = {}
+    inventory = list(live_indexes)
+    for signature in set(expected):
+        matches = [
+            index
+            for index in inventory
+            if (
+                index.signature == signature
+                or (
+                    allow_implicit_terminal_document_id_alias
+                    and _implicit_terminal_document_id_alias(index.signature) == signature
+                )
+            )
+            and _matches_expected_resource_identity(index, project=project, database=database, signature=signature)
+        ]
+        if not matches:
+            states[signature] = 'MISSING'
+        elif len(matches) != 1:
+            states[signature] = 'AMBIGUOUS'
+        else:
+            states[signature] = matches[0].state
     return states
 
 
@@ -145,6 +246,57 @@ def format_signature(signature: IndexSignature) -> str:
     return f'{query_scope}/{collection_group} ({field_text})'
 
 
+def missing_index_signatures(
+    *,
+    expected: Iterable[IndexSignature],
+    live_indexes: Iterable[LiveIndex],
+    project: str,
+    database: str,
+    allow_implicit_terminal_document_id_alias: bool = False,
+) -> set[IndexSignature]:
+    """Return manifest requirements absent from the Firestore Admin API inventory."""
+    states = expected_index_states(
+        expected=expected,
+        live_indexes=live_indexes,
+        project=project,
+        database=database,
+        allow_implicit_terminal_document_id_alias=allow_implicit_terminal_document_id_alias,
+    )
+    return {signature for signature, state in states.items() if state == 'MISSING'}
+
+
+def provision_missing_indexes(
+    *,
+    expected: Iterable[IndexSignature],
+    project: str,
+    database: str,
+    runner: CommandRunner = subprocess.run,
+) -> set[IndexSignature]:
+    """Create only manifest entries absent from the live Firestore inventory."""
+
+    missing = missing_index_signatures(
+        expected=expected,
+        live_indexes=list_live_indexes(
+            project=project,
+            database=database,
+            runner=runner,
+        ),
+        project=project,
+        database=database,
+    )
+    for signature in sorted(missing):
+        result = runner(
+            gcloud_create_index_command(project=project, database=database, signature=signature),
+            cwd=ROOT,
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if result.returncode != 0:
+            raise RuntimeError(f'Firestore composite-index provisioning failed: {format_signature(signature)}')
+    return missing
+
+
 def wait_for_indexes(
     *,
     expected: Iterable[IndexSignature],
@@ -152,6 +304,7 @@ def wait_for_indexes(
     database: str,
     timeout_seconds: float,
     poll_interval_seconds: float,
+    allow_implicit_terminal_document_id_alias: bool = False,
     runner: CommandRunner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
@@ -163,7 +316,17 @@ def wait_for_indexes(
     expected_set = set(expected)
     deadline = monotonic() + timeout_seconds
     while True:
-        states = list_live_indexes(project=project, database=database, runner=runner)
+        states = expected_index_states(
+            expected=expected_set,
+            live_indexes=list_live_indexes(
+                project=project,
+                database=database,
+                runner=runner,
+            ),
+            project=project,
+            database=database,
+            allow_implicit_terminal_document_id_alias=allow_implicit_terminal_document_id_alias,
+        )
         pending = {
             signature: states.get(signature, 'MISSING')
             for signature in expected_set
@@ -187,18 +350,44 @@ def reconcile(
     manifest_path: Path,
     timeout_seconds: float,
     poll_interval_seconds: float,
+    provision_missing: bool = False,
+    dry_run: bool = False,
     runner: CommandRunner = subprocess.run,
     sleep: Callable[[float], None] = time.sleep,
     monotonic: Callable[[], float] = time.monotonic,
 ) -> None:
     manifest = verify_manifest_source(manifest_path)
-    deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
+    expected = expected_index_signatures(manifest)
+    if dry_run:
+        live_indexes = list_live_indexes(
+            project=project,
+            database=database,
+            runner=runner,
+        )
+        missing = missing_index_signatures(
+            expected=expected,
+            live_indexes=live_indexes,
+            project=project,
+            database=database,
+            allow_implicit_terminal_document_id_alias=not provision_missing,
+        )
+        if provision_missing:
+            for signature in sorted(missing):
+                print(f'Firestore index provisioning dry run: would create {format_signature(signature)}')
+        else:
+            print('Firestore index deployment dry run: would deploy the generated Firebase manifest')
+        return
+    if provision_missing:
+        provision_missing_indexes(expected=expected, project=project, database=database, runner=runner)
+    else:
+        deploy_indexes(project=project, manifest_path=manifest_path, runner=runner)
     wait_for_indexes(
-        expected=expected_index_signatures(manifest),
+        expected=expected,
         project=project,
         database=database,
         timeout_seconds=timeout_seconds,
         poll_interval_seconds=poll_interval_seconds,
+        allow_implicit_terminal_document_id_alias=not provision_missing,
         runner=runner,
         sleep=sleep,
         monotonic=monotonic,
@@ -212,6 +401,14 @@ def main() -> int:
     parser.add_argument('--manifest', type=Path, default=ROOT / 'firestore.indexes.json')
     parser.add_argument('--timeout-seconds', type=float, default=DEFAULT_TIMEOUT_SECONDS)
     parser.add_argument('--poll-interval-seconds', type=float, default=DEFAULT_POLL_INTERVAL_SECONDS)
+    parser.add_argument(
+        '--provision-missing',
+        action='store_true',
+        help='create manifest entries missing from the Firestore Admin API inventory with gcloud',
+    )
+    parser.add_argument(
+        '--dry-run', action='store_true', help='validate the manifest and print the no-write reconciliation plan'
+    )
     args = parser.parse_args()
     try:
         reconcile(
@@ -220,6 +417,8 @@ def main() -> int:
             manifest_path=args.manifest.resolve(),
             timeout_seconds=args.timeout_seconds,
             poll_interval_seconds=args.poll_interval_seconds,
+            provision_missing=args.provision_missing,
+            dry_run=args.dry_run,
         )
     except (OSError, RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)

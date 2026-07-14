@@ -100,6 +100,8 @@ describe("kernel ContextSnapshot", () => {
 
     expect(policy).toContain("recentTurns are the canonical history");
     expect(policy).toContain("before searching memories");
+    expect(policy).toContain("Clear instructions to start or delegate a task are authorization to submit it now");
+    expect(policy).toContain("Do not ask for a second confirmation merely to delegate");
   });
 
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {

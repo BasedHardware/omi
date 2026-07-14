@@ -665,7 +665,7 @@ final class UpdaterViewModel: ObservableObject {
   private var isInitialized = false
 
   var usesManagedUpdatePolicy: Bool {
-    !AnalyticsManager.isDevBuild
+    AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
   }
 
   /// Whether automatic update checks are enabled
@@ -739,16 +739,19 @@ final class UpdaterViewModel: ObservableObject {
   }
 
   private init() {
-    // Restore beta for users whose preference was overwritten by the March 27 bug
-    AppBuild.migrateBetaChannelOverwrite()
+    if AppBuild.allowsSparkleUpdates {
+      // Restore beta for users whose preference was overwritten by the March 27 bug
+      AppBuild.migrateBetaChannelOverwrite()
 
-    if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
-      AppBuild.syncUpdateChannelOnFirstLaunch()
+      if UserDefaults.standard.string(forKey: kUpdateChannelKey) == nil {
+        AppBuild.syncUpdateChannelOnFirstLaunch()
+      }
     }
 
-    // Initialize the updater controller with our delegate
+    // Preview builds must not use the shared update feed. Do not start Sparkle for those
+    // artifacts; its manual and background entry points are guarded below as well.
     updaterController = SPUStandardUpdaterController(
-      startingUpdater: true,
+      startingUpdater: AppBuild.allowsSparkleUpdates,
       updaterDelegate: updaterDelegate,
       userDriverDelegate: nil
     )
@@ -772,16 +775,22 @@ final class UpdaterViewModel: ObservableObject {
     // the only lever left for delivery latency after a build publishes.)
     updaterController.updater.updateCheckInterval = (updateChannel == .beta) ? 120 : 600
 
-    // Observe updater state changes
-    updaterController.updater.publisher(for: \.canCheckForUpdates)
-      .receive(on: DispatchQueue.main)
-      .assign(to: &$canCheckForUpdates)
+    if AppBuild.allowsSparkleUpdates {
+      // Observe updater state changes only when Sparkle is active. In particular, do not let
+      // its initial KVO value re-enable the update UI for a published preview app.
+      updaterController.updater.publisher(for: \.canCheckForUpdates)
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$canCheckForUpdates)
 
-    updaterController.updater.publisher(for: \.sessionInProgress)
-      .receive(on: DispatchQueue.main)
-      .assign(to: &$updateSessionInProgress)
+      updaterController.updater.publisher(for: \.sessionInProgress)
+        .receive(on: DispatchQueue.main)
+        .assign(to: &$updateSessionInProgress)
+    }
 
     applyManagedUpdatePolicy()
+    if !AppBuild.allowsSparkleUpdates {
+      canCheckForUpdates = false
+    }
     isInitialized = true
   }
 
@@ -792,11 +801,13 @@ final class UpdaterViewModel: ObservableObject {
 
   /// Manually check for updates
   func checkForUpdates() {
+    guard AppBuild.allowsSparkleUpdates else { return }
     updaterController.checkForUpdates(nil)
   }
 
   /// Background update check (no UI). Used after channel changes.
   func checkForUpdatesInBackground() {
+    guard AppBuild.allowsSparkleUpdates else { return }
     updaterController.updater.checkForUpdatesInBackground()
   }
 
@@ -804,7 +815,7 @@ final class UpdaterViewModel: ObservableObject {
   /// - release builds: always auto-check + auto-install
   /// - dev builds: keep both disabled to avoid replacing the local app
   func applyManagedUpdatePolicy() {
-    let shouldAutoUpdate = !AnalyticsManager.isDevBuild
+    let shouldAutoUpdate = AppBuild.allowsSparkleUpdates && !AnalyticsManager.isDevBuild
     automaticallyChecksForUpdates = shouldAutoUpdate
     automaticallyDownloadsUpdates = shouldAutoUpdate
     updaterController.updater.automaticallyChecksForUpdates = shouldAutoUpdate
@@ -817,6 +828,7 @@ final class UpdaterViewModel: ObservableObject {
   /// Trigger one immediate silent update check right after launch.
   /// Sparkle recommends calling this only immediately after starting the updater.
   func checkForUpdatesImmediatelyAfterLaunchIfNeeded() {
+    guard AppBuild.allowsSparkleUpdates else { return }
     guard usesManagedUpdatePolicy else { return }
     guard automaticallyChecksForUpdates else { return }
     guard canCheckForUpdates else { return }

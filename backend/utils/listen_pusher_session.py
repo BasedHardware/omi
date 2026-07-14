@@ -301,6 +301,14 @@ class ListenPusherSession:
                                 # reclaim it instead of stranding `processing`.
                                 pending['sent_at'] = self.deps.now() - PENDING_REQUEST_TIMEOUT - 1
                             logger.error(f"Conversation processing failed: {self.uid} {self.session_id}")
+                    elif result.get('fenced'):
+                        self.pending_conversation_requests.pop(conversation_id, None)
+                        logger.info(
+                            'Conversation finalization fenced by durable lifecycle conversation=%s uid=%s session=%s',
+                            conversation_id,
+                            self.uid,
+                            self.session_id,
+                        )
                     elif result.get("success"):
                         self.pending_conversation_requests.pop(conversation_id, None)
                         logger.info(f"Conversation processed by pusher: {conversation_id} {self.uid} {self.session_id}")

@@ -18,9 +18,14 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubTools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
   - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift

@@ -30,6 +30,12 @@ class ConversationLifecycleAction(str, Enum):
     process_and_create_new = 'process_and_create_new'
 
 
+class RecordingSessionReconnectAction(str, Enum):
+    resume_current = 'resume_current'
+    replay_terminal_and_rollover = 'replay_terminal_and_rollover'
+    suppress_discarded_and_rollover = 'suppress_discarded_and_rollover'
+
+
 @dataclass(frozen=True)
 class CodecFrameDecision:
     codec: str
@@ -178,6 +184,56 @@ def decide_lifecycle_action(
     if seconds_since_last_update is not None and seconds_since_last_update >= conversation_creation_timeout:
         return ConversationLifecycleAction.process_and_create_new
     return ConversationLifecycleAction.continue_current
+
+
+def select_recording_session_id(
+    *,
+    client_conversation_id: Optional[str],
+    current_recording_session_id: Optional[str],
+    rollover: bool,
+    generated_id: str,
+) -> str:
+    """Choose the immutable recording identity for this listen generation.
+
+    A reconnect retries the current recording identity (and therefore returns
+    its canonical durable binding). A silence/status rollover is a new
+    recording generation even when the original client supplied an ID, so it
+    must receive a new server-generated identity instead of attempting to
+    mutate the completed binding.
+    """
+    if rollover:
+        return generated_id
+    return current_recording_session_id or client_conversation_id or generated_id
+
+
+def decide_recording_session_reconnect_action(
+    *, status: Any, discarded: bool = False, in_progress_status: Any
+) -> RecordingSessionReconnectAction:
+    """Choose whether a reconnect may accept audio for an existing binding.
+
+    Only a non-discarded in-progress conversation can be resumed. A discarded
+    row is suppressed rather than replayed as a completion, while other
+    terminal bindings are replayed before rolling to a fresh generation so
+    bytes received before the next lifecycle tick cannot mutate terminal data.
+    """
+    if discarded:
+        return RecordingSessionReconnectAction.suppress_discarded_and_rollover
+    if status == in_progress_status:
+        return RecordingSessionReconnectAction.resume_current
+    return RecordingSessionReconnectAction.replay_terminal_and_rollover
+
+
+def recording_session_id_for_lifecycle_event(
+    recording_session_ids_by_conversation: Mapping[str, str],
+    conversation_id: str,
+) -> Optional[str]:
+    """Return the durable binding for a delayed lifecycle callback.
+
+    The current live conversation can roll over before pusher finishes the
+    prior one. Completion must still advance and emit the prior recording's
+    terminal envelope; client-side identity filtering decides presentation.
+    """
+    return recording_session_ids_by_conversation.get(conversation_id)
 
 
 def should_process_on_disconnect(

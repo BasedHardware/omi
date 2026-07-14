@@ -9,15 +9,24 @@ enum DesktopBackendEnvironment {
     shouldUseDevelopmentBackends(
       bundleIdentifier: AppBuild.bundleIdentifier,
       updateChannel: AppBuild.currentUpdateChannel,
-      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS")
+      forceOverride: currentEnvironmentValue("OMI_FORCE_DEV_BACKENDS"),
+      externalPreviewBackend: AppBuild.externalPreviewBackend
     )
   }
 
   static func shouldUseDevelopmentBackends(
     bundleIdentifier: String,
     updateChannel: String,
-    forceOverride: String? = nil
+    forceOverride: String? = nil,
+    externalPreviewBackend: AppBuild.ExternalPreviewBackend? = nil
   ) -> Bool {
+    // External previews opt into their backend through signed bundle metadata. They must
+    // never inherit local-development routing or an environment force override. Missing or
+    // malformed preview metadata therefore fails closed to the production backend.
+    if AppBuild.isExternalPreviewBundleIdentifier(bundleIdentifier) {
+      return externalPreviewBackend == .development
+    }
+
     // Named/dev bundles route to the dev backend by default. Explicit launch
     // URLs still win below so local harnesses and intentionally-targeted tests
     // remain possible.

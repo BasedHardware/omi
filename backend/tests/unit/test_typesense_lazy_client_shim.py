@@ -21,6 +21,7 @@ os.environ.setdefault(
 )
 
 from utils.conversations import search
+from utils.memory import atom_keyword_index
 
 
 @pytest.fixture
@@ -68,8 +69,6 @@ def test_ensure_memories_collection_creates_through_the_shim(
     fake_typesense: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """End-to-end: the real production caller creates a missing collection."""
-    from utils.memory import atom_keyword_index
-
     monkeypatch.setenv(atom_keyword_index.ATOM_KEYWORD_COLLECTION_ENV, "canonical_memory_atoms")
     fake_typesense.collections.__getitem__.return_value.retrieve.side_effect = Exception("collection missing")
 

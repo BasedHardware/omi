@@ -308,9 +308,9 @@ class FloatingControlBarState: NSObject, ObservableObject {
     }
     var isVoiceLocked: Bool { voiceProjection.isLocked }
     var voiceTranscript: String { voiceProjection.transcript }
-    /// Transient inline hint shown in the bar (e.g. "Hold longer to record") after a
-    /// too-short PTT tap. Non-empty keeps the bar in its voice-UI size for ~2s.
-    var pttHintText: String { voiceProjection.hint }
+    /// Transient inline status shown in the bar (too-short / failure hints, or
+    /// "Transcribing…" progress already written to `voiceProjection.transcript`).
+    var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
     var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
     var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }
     /// True while a committed Push-to-Talk query is being processed and no

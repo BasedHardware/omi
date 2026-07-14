@@ -196,7 +196,7 @@ ACTIVE_ATTENTION_OVERRIDE_QUERY = FirestoreQuerySpec(
         FirestoreQueryFilter('account_generation', '==', 'account_generation'),
         FirestoreQueryFilter('expires_at', '>', 'now'),
     ),
-    index_fields=(_asc('account_generation'), _asc('expires_at')),
+    index_fields=(_asc('account_generation'), _asc('expires_at'), _asc('__name__')),
 )
 
 QUERY_SPECS = (ACTIVE_ATTENTION_OVERRIDE_QUERY,)

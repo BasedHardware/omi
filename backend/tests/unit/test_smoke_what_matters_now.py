@@ -44,6 +44,29 @@ def test_smoke_uses_admin_auth_without_reading_or_reporting_the_response_body(ca
     assert 'private' not in output
 
 
+def test_smoke_keeps_app_auth_and_uses_serverless_identity_when_supplied():
+    captured = {}
+
+    def http_open(request, timeout):
+        assert timeout == 7
+        captured['authorization'] = request.get_header('Authorization')
+        captured['identity'] = request.get_header('X-serverless-authorization')
+        return _Response(200)
+
+    smoke_what_matters_now.run_smoke(
+        smoke_what_matters_now.SmokeConfig(
+            base_url='https://api.omi.dev',
+            admin_key='private-key',
+            timeout_seconds=7,
+            cloud_run_identity_token='identity-token',
+        ),
+        http_open=http_open,
+    )
+
+    assert captured['authorization'] == f'Bearer private-key{WHAT_MATTERS_NOW_SMOKE_UID}'
+    assert captured['identity'] == 'Bearer identity-token'
+
+
 def test_smoke_fails_on_a_backend_5xx_without_exposing_the_response_body():
     def http_open(_request, timeout):
         raise HTTPError('https://api.omi.dev/v1/what-matters-now', 500, 'boom', {}, None)
@@ -80,10 +103,28 @@ def test_main_uses_the_code_owned_fixture_without_a_uid_environment_variable(mon
     )
 
 
-def test_development_deploy_workflows_use_only_the_existing_admin_key_for_the_smoke():
+def test_auto_dev_smoke_uses_the_tagged_candidate_output_with_existing_auth():
     root = Path(__file__).resolve().parents[3]
-    for workflow_name in ('gcp_backend.yml', 'gcp_backend_auto_dev.yml'):
-        workflow = (root / '.github' / 'workflows' / workflow_name).read_text(encoding='utf-8')
-        assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
-        assert '--secret=ADMIN_KEY' in workflow
-        assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow
+    workflow = (root / '.github' / 'workflows' / 'gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+
+    assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
+    assert '--secret=ADMIN_KEY' in workflow
+    assert 'Capture exact no-traffic candidate URLs' in workflow
+    assert 'resolve_cloud_run_tagged_url.py' in workflow
+    assert '--tag=${{ env.CANDIDATE_TAG }}' in workflow
+    assert 'run_dev_candidate_acceptance.py' in workflow
+    assert '--candidate backend=${{ steps.candidate-urls.outputs.backend_url }}' in workflow
+    assert workflow.index('run_dev_candidate_acceptance.py') < workflow.index(
+        'Shift Cloud Run traffic to validated revisions'
+    )
+    assert '--audience backend=${{ steps.candidate-urls.outputs.backend_audience }}' in workflow
+    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' not in workflow
+
+
+def test_manual_development_smoke_keeps_its_existing_external_hostname_path():
+    root = Path(__file__).resolve().parents[3]
+    workflow = (root / '.github' / 'workflows' / 'gcp_backend.yml').read_text(encoding='utf-8')
+
+    assert 'OMI_TASK_INTELLIGENCE_SMOKE_UID' not in workflow
+    assert '--secret=ADMIN_KEY' in workflow
+    assert 'smoke_what_matters_now.py --base-url https://api.omi.dev' in workflow

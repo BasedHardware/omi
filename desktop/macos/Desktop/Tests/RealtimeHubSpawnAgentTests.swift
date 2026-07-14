@@ -152,6 +152,45 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .setupNeeded(.openclaw))
   }
 
+  func testSharedSpawnReceiptFixturesAcceptValidAndRejectMalformed() throws {
+    let fixtureDir = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("agent/fixtures/spawn-receipt/v1")
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixtureDir.path)
+      .filter { $0.hasSuffix(".json") }
+      .sorted()
+    XCTAssertTrue(names.contains("valid-running.json"))
+    XCTAssertTrue(names.contains { $0.hasPrefix("malformed-") })
+
+    for name in names {
+      let data = try Data(contentsOf: fixtureDir.appendingPathComponent(name))
+      let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+      let payload = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let continuityKey =
+        (payload["journalReceipt"] as? [String: Any])?["continuityKey"] as? String
+        ?? "voice:00000000-0000-0000-0000-00000000f001"
+      let parsed = RealtimeSpawnJournalReceipt.parse(
+        output: output,
+        expectedContinuityKey: continuityKey)
+      if name.hasPrefix("valid-") {
+        let receipt = try XCTUnwrap(parsed, "valid fixture \(name) must parse")
+        XCTAssertEqual(receipt.continuityKey, continuityKey)
+        XCTAssertEqual(
+          receipt.userTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user"))
+        XCTAssertEqual(
+          receipt.assistantTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant"))
+        XCTAssertFalse(receipt.assistantText.isEmpty)
+      } else {
+        XCTAssertNil(parsed, "malformed fixture \(name) must be rejected")
+      }
+    }
+  }
+
   private func canonicalSpawnPayload(
     continuityKey: String,
     pillID: UUID? = nil,
@@ -222,9 +261,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testSpawnAgentUsesKernelRuntimeControlAuthority() throws {
     let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
 
     XCTAssertTrue(source.contains("toolName: name"))
-    XCTAssertTrue(source.contains("command.surfaceKind == \"realtime_voice\""))
+    XCTAssertTrue(toolAuthoritySource.contains("command.surfaceKind == \"realtime_voice\""))
     XCTAssertFalse(source.contains("pendingVoiceAgentHandoff"))
     XCTAssertFalse(source.contains("Starting a background agent."))
   }
@@ -330,20 +370,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testRealtimeToolUsesAuthorizedFallbackWhenProviderTranscriptIsUnavailable() throws {
     // omi-test-quality: source-inspection -- static contract: the realtime tool path must not reintroduce a transcript/tool circular wait.
     let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
 
     XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.promptForAuthorizedTool("))
     XCTAssertTrue(source.contains("authorizedToolFallback"))
     XCTAssertFalse(source.contains("deferredRealtimeToolInvocations.enqueue("))
     XCTAssertFalse(source.contains("resumeDeferredRealtimeToolsIfReady()"))
     XCTAssertTrue(source.contains("prompt: normalizedPrompt"))
-    XCTAssertTrue(source.contains("Execute only that separately authorized invocation"))
+    XCTAssertTrue(toolAuthoritySource.contains("Execute only that separately authorized invocation"))
     XCTAssertFalse(source.contains("I couldn't confirm the spoken request"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
     let source = try realtimeHubControllerSource()
+    let sessionPoliciesSource = try realtimeHubSessionPoliciesSource()
 
-    XCTAssertTrue(source.contains("case deferredForReplacement"))
+    XCTAssertTrue(sessionPoliciesSource.contains("case deferredForReplacement"))
     XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement"))
     XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true"))
     XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
@@ -398,6 +440,25 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeToolAuthoritySource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeToolAuthority.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubSessionPoliciesSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -406,6 +467,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentControlService.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

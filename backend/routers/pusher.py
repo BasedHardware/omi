@@ -12,7 +12,6 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database import users as users_db
-from models.conversation_enums import ConversationStatus
 from services.conversation_finalization import final_attempt_failed
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
@@ -20,7 +19,12 @@ from utils.app_integrations import (
     trigger_realtime_audio_bytes,
 )
 from utils.byok import set_byok_keys, set_byok_uid
-from utils.conversations.finalizer import ConversationFinalizationError, finalize_persisted_conversation
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.finalizer import (
+    ConversationFinalizationDisposition,
+    ConversationFinalizationError,
+    finalize_persisted_conversation,
+)
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
     supervise_tasks,
@@ -144,7 +148,7 @@ async def _process_conversation_task(
         terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
         try:
             if terminal:
-                await run_blocking(
+                marked_dead_letter = await run_blocking(
                     db_executor,
                     final_attempt_failed,
                     job_id,
@@ -152,15 +156,11 @@ async def _process_conversation_task(
                     lease_epoch,
                     attempt_count,
                 )
-                await run_blocking(
-                    db_executor,
-                    conversations_db.update_conversation_status,
-                    uid,
-                    conversation_id,
-                    ConversationStatus.failed,
+                if not marked_dead_letter:
+                    return False
+                return await run_blocking(
+                    db_executor, lifecycle_service.fail_and_discard_processing, uid, conversation_id
                 )
-                await run_blocking(db_executor, conversations_db.set_conversation_as_discarded, uid, conversation_id)
-                return True
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,
@@ -201,6 +201,9 @@ async def _process_conversation_task(
             expected_conversation_id=conversation_id,
         )
         claim_status = claim['status']
+        if claim_status == 'fenced':
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
+            return
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
             return
@@ -224,17 +227,36 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
 
-        await finalize_persisted_conversation(uid, conversation_id, language)
-
-        completed = await run_blocking(
-            db_executor,
-            finalization_jobs_db.mark_finalization_completed,
-            job_id,
-            generation,
-            lease_epoch,
+        disposition = await finalize_persisted_conversation(
+            uid,
+            conversation_id,
+            language,
+            finalization_job_id=job_id,
+            dispatch_generation=generation,
+            lease_epoch=lease_epoch,
         )
+
+        if disposition == ConversationFinalizationDisposition.fenced:
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                generation,
+                lease_epoch,
+            )
+        else:
+            completed = await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_completed,
+                job_id,
+                generation,
+                lease_epoch,
+            )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
+            return
+        if disposition == ConversationFinalizationDisposition.fenced:
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:

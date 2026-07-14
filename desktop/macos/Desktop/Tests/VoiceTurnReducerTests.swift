@@ -422,7 +422,7 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(result.model.turn?.projection.isListening, false)
     XCTAssertEqual(result.model.turn?.projection.isThinking, false)
     XCTAssertEqual(result.model.turn?.projection.isResponseActive, false)
-    XCTAssertEqual(result.model.turn?.projection.hint, "Voice response failed — try again")
+    XCTAssertEqual(result.model.turn?.projection.hint, "Couldn't get a voice reply — try again")
     XCTAssertTrue(result.model.turn?.deadlines.contains(.hintVisibility) == true)
   }
 

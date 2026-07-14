@@ -521,7 +521,12 @@ final class AgentPillsManager: ObservableObject {
                     onAccepted?(.failure(AuthError.userChangedDuringRequest))
                     return
                 case .rejectedBeforeDispatch:
-                    self.removeRenderedProjection(pillID: pill.id)
+                    // Keep a user-initiated spawn visible instead of vanishing.
+                    self.fail(
+                        pill: pill,
+                        errorText: AgentFailureTranscriptFormatter.userFacingFailure(
+                            for: AuthError.userChangedDuringRequest,
+                            harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
                     onAccepted?(.failure(AuthError.userChangedDuringRequest))
                     return
                 }
@@ -576,9 +581,15 @@ final class AgentPillsManager: ObservableObject {
                 else { return }
                 AgentRuntimeStatusStore.shared.recordLocalFailure(
                     surface: surfaceRef,
-                    error: error.localizedDescription
+                    error: AgentFailureTranscriptFormatter.userFacingFailure(
+                        for: error,
+                        harnessMode: bridgeHarnessOverride ?? pill.providerIdentity)
                 )
-                self.fail(pill: pill, errorText: error.localizedDescription)
+                self.fail(
+                    pill: pill,
+                    errorText: AgentFailureTranscriptFormatter.userFacingFailure(
+                        for: error,
+                        harnessMode: bridgeHarnessOverride ?? pill.providerIdentity))
             }
         }
         runTasksByPill[pill.id] = runTask
@@ -1647,11 +1658,14 @@ final class AgentPillsManager: ObservableObject {
     }
 
     private func fail(pill: AgentPill, errorText: String) {
-        pill.status = .failed(errorText)
-        pill.latestActivity = errorText
+        let sanitized = AgentFailureTranscriptFormatter.userFacingFailure(
+            errorText,
+            harnessMode: pill.bridgeHarnessOverride ?? pill.providerIdentity)
+        pill.status = .failed(sanitized)
+        pill.latestActivity = sanitized
         pill.completedAt = Date()
         Self.clearStreamingAssistantMessage(for: pill)
-        Self.ensureFailureMessage(errorText, for: pill)
+        Self.ensureFailureMessage(sanitized, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
         Task {
@@ -1662,7 +1676,7 @@ final class AgentPillsManager: ObservableObject {
                 runId: pill.canonicalRunId,
                 userText: pill.query,
                 title: pill.title,
-                assistantText: "Background agent failed: \(errorText)",
+                assistantText: "Background agent failed: \(sanitized)",
                 status: "failed"
             )
         }
