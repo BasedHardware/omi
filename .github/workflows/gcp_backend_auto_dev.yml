@@ -119,6 +119,14 @@ jobs:
           cache-from: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
+      - name: Migrate legacy public Cloud Run bindings
+        run: >-
+          python3 backend/scripts/preflight-cloud-run-deploy.py
+          --env dev
+          --project="${{ vars.GCP_PROJECT_ID }}"
+          --region="${{ env.REGION }}"
+          --migrate-legacy-public-binding backend --migrate-legacy-public-binding backend-sync
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
         uses: google-github-actions/deploy-cloudrun@v2
