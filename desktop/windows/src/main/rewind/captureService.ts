@@ -7,7 +7,7 @@ import { shouldCaptureFrame } from './captureDecision'
 import { rewindFramePath } from './paths'
 import { helperProcess } from '../ocr/helperProcess'
 import { insertRewindFrame } from '../ipc/db'
-import { persistFrameOcr } from './ocrPersist'
+import { persistFrameOcr, type FrameContext } from './ocrPersist'
 import { setCurrentScreen } from './currentScreen'
 import { getPersistedRewindSettings, persistRewindSettings } from './rewindSettings'
 import { startCaptureDirective, setBaseCaptureInterval } from './captureDirective'
@@ -57,7 +57,11 @@ let screenOcrInFlight = false
  * it with zero latency. Also persists the OCR onto the frame so the slower
  * backfiller doesn't re-OCR it. Best-effort and NEVER awaited by the capture path.
  */
-async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void> {
+async function refreshCurrentScreen(
+  frameId: number,
+  jpeg: Buffer,
+  context: FrameContext
+): Promise<void> {
   if (screenOcrInFlight) return
   screenOcrInFlight = true
   try {
@@ -70,7 +74,7 @@ async function refreshCurrentScreen(frameId: number, jpeg: Buffer): Promise<void
       // the OCR backlog sweep never revisits it — if this did not enqueue, almost
       // nothing would ever be embedded. persistFrameOcr fuses the two so they
       // cannot drift apart again.
-      persistFrameOcr(frameId, res.fullText, res.lines)
+      persistFrameOcr(frameId, res.fullText, context, res.lines)
     }
   } catch {
     /* best-effort: keep the last good cached value */
@@ -167,7 +171,9 @@ export async function ingestRewindFrame(jpeg: Buffer): Promise<IngestResult> {
     lastCapturedAtMs = ts
     // Update the chat's hot "current screen" cache from this fresh frame, in the
     // background (single-flight). Not awaited: capture cadence must not wait on OCR.
-    void refreshCurrentScreen(id, jpeg)
+    // The foreground app/title we just resolved goes with it — it is embedded with
+    // the OCR text, and it is the same metadata written onto the frame row above.
+    void refreshCurrentScreen(id, jpeg, { app: win.app, windowTitle: win.title })
     return { captured: true }
   } catch (e) {
     console.error('[rewind] capture failed:', (e as Error).message)

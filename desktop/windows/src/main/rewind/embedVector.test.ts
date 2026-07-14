@@ -2,12 +2,50 @@ import { describe, expect, it } from 'vitest'
 import {
   contentHash,
   dot,
+  formatForEmbedding,
   l2Normalize,
   scanTopKBySimilarity,
   EMBED_DIM,
   type VectorRow
 } from './embedVector'
 import { bufferToVector, vectorToBuffer } from '../ipc/taskEmbeddingVector'
+
+// Port of macOS OCREmbeddingService.formatForEmbedding (OCREmbeddingService.swift:43-50).
+// The app name and window title carry retrieval signal the OCR text often does not:
+// "that mockup in Figma", "the Slack thread about billing".
+describe('formatForEmbedding', () => {
+  it('prepends the app and window title, exactly as macOS composes it', () => {
+    expect(formatForEmbedding('the deck', 'Figma', 'Q3 mockups')).toBe(
+      '[Figma] Q3 mockups\nthe deck'
+    )
+  })
+
+  it('omits the title when there is none (macOS: "[app]\\n<ocr>")', () => {
+    expect(formatForEmbedding('the deck', 'Figma', '')).toBe('[Figma]\nthe deck')
+  })
+
+  it('emits no empty brackets when the app name is unknown', () => {
+    // macOS always has an app name and would emit a bare "[]"; the Windows
+    // foreground reader can come up empty, and "[]" is pure noise in the vector.
+    expect(formatForEmbedding('the deck', '', '')).toBe('the deck')
+    expect(formatForEmbedding('the deck', '', 'Q3 mockups')).toBe('Q3 mockups\nthe deck')
+  })
+
+  it('makes the same screen text in two different apps DISTINCT content', () => {
+    // This is the point of hashing the composed string (macOS does the same,
+    // OCREmbeddingService.swift:68): two apps showing identical text are two
+    // different things, and each earns its own vector...
+    const inFigma = formatForEmbedding('shared text', 'Figma', 'design')
+    const inSlack = formatForEmbedding('shared text', 'Slack', 'design')
+    expect(contentHash(inFigma)).not.toBe(contentHash(inSlack))
+
+    // ...while consecutive screenshots of the SAME window still collapse to one
+    // vector, which is where the ~20x dedup saving actually comes from.
+    expect(contentHash(inFigma)).toBe(
+      contentHash(formatForEmbedding('shared text', 'Figma', 'design'))
+    )
+  })
+})
 
 describe('l2Normalize', () => {
   it('scales a vector to unit length', () => {

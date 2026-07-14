@@ -49,14 +49,30 @@ function basisVector(index) {
   return values
 }
 
+// What the app actually sends for a stored frame: the OCR text with its app context
+// prepended — macOS's `"[<app>] <windowTitle>\n<ocrText>"` (rewind/embedVector.ts
+// formatForEmbedding, ported from OCREmbeddingService.swift:43-50). A search QUERY
+// is sent raw (macOS embeds the bare query too — OCREmbeddingService.swift:259);
+// the asymmetry is what RETRIEVAL_DOCUMENT vs RETRIEVAL_QUERY is for.
+const embedded = (app, title, ocrText) => `[${app}] ${title}\n${ocrText}`
+
+// Each seeded frame's composed document text. If the app stopped embedding the app
+// context (or composed it differently), these keys would stop matching and every
+// frame would fall through to the orthogonal basisVector(7) — no semantic hit, and
+// the merge assertions below would fail. So this pins the composition end to end.
+const DOC_A_EMBEDDED = embedded('Notes', 'ml notes', DOC_A)
+const DOC_B_EMBEDDED = embedded('Slides', 'board deck', DOC_B)
+const DOC_C_EMBEDDED = embedded('Browser', 'recipes', DOC_C)
+const DOC_E_EMBEDDED = embedded('Bank', 'reset', DOC_E)
+
 // The stub's semantic "space": the query is deliberately aligned with FRAME A
 // (cosine 1.0) and orthogonal to B and C (cosine 0). So a correct merge returns
 // B first (keyword) and then adds A (semantic recall FTS could never find).
 function vectorForText(text) {
-  if (text === DOC_A) return basisVector(0)
-  if (text === DOC_B) return basisVector(1)
-  if (text === DOC_C) return basisVector(2)
-  if (text === DOC_E) return basisVector(3)
+  if (text === DOC_A_EMBEDDED) return basisVector(0)
+  if (text === DOC_B_EMBEDDED) return basisVector(1)
+  if (text === DOC_C_EMBEDDED) return basisVector(2)
+  if (text === DOC_E_EMBEDDED) return basisVector(3)
   if (text === QUERY) return basisVector(0) // == DOC_A
   return basisVector(7) // anything else: orthogonal to all of the above
 }
@@ -258,8 +274,8 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   // which is the ~20x API saving in miniature.
   assert.deepEqual(
     sent.map((r) => r.content.parts[0].text).sort(),
-    [DOC_A, DOC_B, DOC_C, DOC_E].sort(),
-    'identical OCR text is sent to the API exactly once'
+    [DOC_A_EMBEDDED, DOC_B_EMBEDDED, DOC_C_EMBEDDED, DOC_E_EMBEDDED].sort(),
+    'each unique screen is sent once, WITH its app/window context (macOS parity)'
   )
 
   // --- Hybrid search, in two phases. ---
@@ -353,7 +369,7 @@ test('embeds seeded frames via the proxy, then merges vector recall into FTS sea
   // The pruned frame's mapping AND its vector are gone — no orphan left behind.
   assert.ok(!rows.some((r) => r.frame_id === 5), 'the pruned frame has no embedding row')
   assert.ok(
-    !orphanHashes(dbPath).includes(sha256_16(DOC_E)),
+    !orphanHashes(dbPath).includes(sha256_16(DOC_E_EMBEDDED)),
     'the pruned screen content left NO vector behind'
   )
 })

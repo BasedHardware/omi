@@ -55,6 +55,12 @@ const frame = (id: number, ocrText: string): RewindFrame => ({
 
 const vec = (seed: number): Float32Array => Float32Array.from([seed, 0, 0])
 
+/** What `frame()`'s OCR text actually becomes on the wire: macOS's
+ *  `"[<app>] <windowTitle>\n<ocrText>"` (OCREmbeddingService.swift:43-50). The app
+ *  and window title are embedded WITH the screen text — dropping them would make
+ *  "the thing I had open in Figma" unretrievable. */
+const embedded = (ocrText: string): string => `[Code] w\n${ocrText}`
+
 /** Let the backfill's awaits + its 200ms inter-batch pauses run to completion. */
 async function settle(): Promise<void> {
   await vi.advanceTimersByTimeAsync(60_000)
@@ -87,7 +93,7 @@ describe('session gating', () => {
     supply([frame(1, 'some frame text')])
 
     // No session: nothing is embedded, even with work available.
-    enqueueRewindEmbedding(1, 'text')
+    enqueueRewindEmbedding(1, 'some frame text', 'Code', 'w')
     await settle()
     expect(client.embedBatch).not.toHaveBeenCalled()
 
@@ -114,7 +120,8 @@ describe('backfill', () => {
 
     expect(client.embedBatch).toHaveBeenCalledTimes(1)
     const [, texts, taskType] = client.embedBatch.mock.calls[0]
-    expect(texts).toEqual(['alpha content', 'beta content'])
+    // The app context rides along with the OCR text — macOS parity.
+    expect(texts).toEqual([embedded('alpha content'), embedded('beta content')])
     expect(taskType).toBe('RETRIEVAL_DOCUMENT') // stored passages, not a query
     expect(db.upsertRewindEmbedding).toHaveBeenCalledWith(
       1,
@@ -137,7 +144,10 @@ describe('backfill', () => {
     configureRewindEmbedSession(SESSION)
     await settle()
 
-    expect(client.embedBatch.mock.calls[0][1]).toEqual(['same screen', 'other screen'])
+    expect(client.embedBatch.mock.calls[0][1]).toEqual([
+      embedded('same screen'),
+      embedded('other screen')
+    ])
     const calls = db.upsertRewindEmbedding.mock.calls
     expect(calls).toHaveLength(3) // every frame is mapped...
     const hashes = new Set(calls.map((c) => c[1] as string))
@@ -260,7 +270,9 @@ describe('backfill', () => {
 
     // The real frame is BEHIND 100 unembeddable ones. It must still get indexed.
     expect(client.embedBatch).toHaveBeenCalledTimes(1)
-    expect(client.embedBatch.mock.calls[0][1]).toEqual(['a real screenful of searchable text'])
+    expect(client.embedBatch.mock.calls[0][1]).toEqual([
+      embedded('a real screenful of searchable text')
+    ])
     expect(db.upsertRewindEmbedding).toHaveBeenCalledWith(
       101,
       expect.any(String),
@@ -300,8 +312,8 @@ describe('sign-out and user switch', () => {
     supply() // backfill has nothing to do; this is purely about the live queue
     startRewindEmbedding()
     configureRewindEmbedSession(A)
-    enqueueRewindEmbedding(1, "user A's private screen contents")
-    enqueueRewindEmbedding(2, 'more of user A private text')
+    enqueueRewindEmbedding(1, "user A's private screen contents", 'Mail', 'inbox')
+    enqueueRewindEmbedding(2, 'more of user A private text', 'Mail', 'inbox')
 
     configureRewindEmbedSession(null) // sign out (the DB wipe runs about here)
     configureRewindEmbedSession(B) // user B signs in on the same machine
@@ -324,7 +336,7 @@ describe('sign-out and user switch', () => {
     )
 
     configureRewindEmbedSession(A)
-    enqueueRewindEmbedding(1, "user A's private screen contents")
+    enqueueRewindEmbedding(1, "user A's private screen contents", 'Mail', 'inbox')
     await vi.advanceTimersByTimeAsync(61_000) // flush fires; the request hangs
 
     configureRewindEmbedSession(null) // sign-out + wipe lands mid-request

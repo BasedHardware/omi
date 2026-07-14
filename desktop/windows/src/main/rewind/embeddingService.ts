@@ -15,7 +15,7 @@
 //
 // The service is INERT until the renderer relays a Firebase session (the token
 // only exists there on Windows — same constraint as the AI-profile service).
-import { EMBED_MODEL, EMBED_DIM } from './embedVector'
+import { EMBED_MODEL, EMBED_DIM, formatForEmbedding } from './embedVector'
 import {
   EMBED_BATCH_SIZE,
   EmbedQueue,
@@ -157,11 +157,21 @@ export function rewindEmbeddingsAvailable(): boolean {
  * list forever. Overflow is not data loss — a dropped frame still has its OCR
  * text on disk with no vector, which is precisely what the backfill sweeps up.
  */
-export function enqueueRewindEmbedding(frameId: number, text: string): boolean {
+export function enqueueRewindEmbedding(
+  frameId: number,
+  ocrText: string,
+  app: string,
+  windowTitle: string
+): boolean {
   if (failedThisLaunch.has(frameId)) return false
   if (queue.size >= MAX_PENDING) return false
-  if (!isEmbeddableText(text)) return false
-  return queue.add(frameId, text, Date.now())
+  // The length floor is checked against the RAW OCR text, before the app context is
+  // prepended (macOS does the same — OCREmbeddingService.swift:65). Checking the
+  // formatted string instead would let a frame with NO screen text clear the floor
+  // on its "[Google Chrome] New Tab" prefix alone, and we would pay for a vector of
+  // pure window chrome.
+  if (!isEmbeddableText(ocrText)) return false
+  return queue.add(frameId, formatForEmbedding(ocrText, app, windowTitle), Date.now())
 }
 
 /** Persist a vector for this content (once) and point the frames at it, then
@@ -340,7 +350,7 @@ async function runBackfill(): Promise<void> {
         skipped++
         continue
       }
-      if (enqueueRewindEmbedding(f.id, f.ocrText)) accepted++
+      if (enqueueRewindEmbedding(f.id, f.ocrText, f.app, f.windowTitle)) accepted++
     }
     // Nothing submitted AND nothing newly excluded means this page cannot change
     // — the next query would return it verbatim. Stop rather than spin. (If we

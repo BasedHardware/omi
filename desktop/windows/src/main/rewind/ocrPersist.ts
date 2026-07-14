@@ -14,6 +14,11 @@ import { setRewindFrameOcr } from '../ipc/db'
 import { enqueueRewindEmbedding } from './embeddingService'
 import type { OcrLine } from '../../shared/types'
 
+/** The frame's app context. Embedded ALONGSIDE the OCR text (macOS parity — see
+ *  `formatForEmbedding`), because "the Figma file" and "the Slack thread" are how
+ *  people actually search for a screen, and neither word need appear in its OCR. */
+export type FrameContext = { app: string; windowTitle: string }
+
 /**
  * Store a frame's OCR text (+ per-line boxes) and queue it for embedding.
  *
@@ -21,8 +26,18 @@ import type { OcrLine } from '../../shared/types'
  * queue that a background timer drains. `text` may be empty (OCR found nothing, or
  * the image was gone) — the frame is still marked indexed so nothing re-OCRs it,
  * and the embedder skips it.
+ *
+ * `context` is required, not optional: an optional app/title would silently default
+ * to "no context" at any call site that forgot it, and the frames it embedded would
+ * be quietly less retrievable than their neighbours — exactly the kind of drift
+ * between the two OCR writers this function exists to prevent.
  */
-export function persistFrameOcr(frameId: number, text: string, lines?: OcrLine[] | null): void {
+export function persistFrameOcr(
+  frameId: number,
+  text: string,
+  context: FrameContext,
+  lines?: OcrLine[] | null
+): void {
   setRewindFrameOcr(frameId, text, lines ? JSON.stringify(lines) : null)
-  if (text) enqueueRewindEmbedding(frameId, text)
+  if (text) enqueueRewindEmbedding(frameId, text, context.app, context.windowTitle)
 }

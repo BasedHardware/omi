@@ -20,32 +20,42 @@ vi.mock('./embeddingService', () => service)
 import { persistFrameOcr } from './ocrPersist'
 
 const LINES: OcrLine[] = [{ text: 'hello', x: 0, y: 0, w: 10, h: 5, confidence: 0.9 }]
+const CTX = { app: 'Slides', windowTitle: 'board deck' }
 
 beforeEach(() => vi.clearAllMocks())
 
 describe('persistFrameOcr', () => {
   it('persists the text AND queues it for embedding — the two cannot drift apart', () => {
-    persistFrameOcr(7, 'quarterly revenue projections', LINES)
+    persistFrameOcr(7, 'quarterly revenue projections', CTX, LINES)
 
     expect(db.setRewindFrameOcr).toHaveBeenCalledWith(
       7,
       'quarterly revenue projections',
       JSON.stringify(LINES)
     )
-    expect(service.enqueueRewindEmbedding).toHaveBeenCalledWith(7, 'quarterly revenue projections')
+    // Only the OCR text is stored on the frame — the app context is already on the
+    // row. But BOTH go to the embedder (macOS parity: the vector covers app+title
+    // too, so "the deck in Slides" is retrievable).
+    expect(service.enqueueRewindEmbedding).toHaveBeenCalledWith(
+      7,
+      'quarterly revenue projections',
+      'Slides',
+      'board deck'
+    )
   })
 
   it('still marks a frame indexed when OCR found nothing, but queues no embedding', () => {
-    persistFrameOcr(8, '')
+    persistFrameOcr(8, '', CTX)
 
     // The frame must be marked indexed or the sweep would re-OCR it forever...
     expect(db.setRewindFrameOcr).toHaveBeenCalledWith(8, '', null)
-    // ...but there is no content to embed.
+    // ...but there is no content to embed. An app+title with no screen text is not
+    // worth a vector — and the context alone must never be enough to earn one.
     expect(service.enqueueRewindEmbedding).not.toHaveBeenCalled()
   })
 
   it('stores null (not "undefined") for boxes when there are none', () => {
-    persistFrameOcr(9, 'some text here', null)
+    persistFrameOcr(9, 'some text here', CTX, null)
     expect(db.setRewindFrameOcr).toHaveBeenCalledWith(9, 'some text here', null)
   })
 })

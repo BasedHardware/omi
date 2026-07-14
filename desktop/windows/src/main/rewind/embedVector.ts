@@ -41,6 +41,35 @@ export function dot(a: Float32Array, b: Float32Array): number {
 }
 
 /**
+ * What actually gets embedded (and hashed) for a frame: the OCR text with its app
+ * context prepended. Port of macOS `OCREmbeddingService.formatForEmbedding`
+ * (OCREmbeddingService.swift:43-50) — `"[<app>] <windowTitle>\n<ocrText>"`, with
+ * the title omitted when empty.
+ *
+ * The app name and window title are strong retrieval signal, and embedding raw OCR
+ * alone throws it away: "that thing I had open in Figma", "the Slack thread about
+ * billing" are exactly the queries semantic search exists to serve, and none of
+ * that vocabulary is necessarily anywhere in the screen text.
+ *
+ * Deviation from macOS, deliberately: macOS emits a bare `"[]"` when the app name
+ * is missing (it always has one; on Windows the foreground reader can come up
+ * empty). An empty bracket is noise in the embedded text, so the context prefix is
+ * dropped instead.
+ *
+ * NOTE this is what the content hash is taken over (macOS hashes the formatted
+ * string too — OCREmbeddingService.swift:68). Two frames with identical OCR in
+ * DIFFERENT apps are therefore distinct content and get their own vector, which is
+ * the point. The ~20x dedup saving comes from consecutive screenshots of the SAME
+ * window, which still compose byte-identically.
+ */
+export function formatForEmbedding(ocrText: string, app: string, windowTitle: string): string {
+  const context = [app.trim() ? `[${app.trim()}]` : '', windowTitle.trim()]
+    .filter(Boolean)
+    .join(' ')
+  return context ? `${context}\n${ocrText}` : ocrText
+}
+
+/**
  * Content key for embedding dedup: the first 16 bytes of the SHA-256 of the
  * text, hex-encoded (32 chars). Matches macOS. 128 bits is far past the point
  * where a collision is plausible for a per-launch working set, and the short key
