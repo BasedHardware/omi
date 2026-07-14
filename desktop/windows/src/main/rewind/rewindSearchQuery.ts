@@ -25,13 +25,17 @@ function isUpper(ch: string): boolean {
   return ch.toLowerCase() !== ch.toUpperCase() && ch === ch.toUpperCase()
 }
 
-/** Split camelCase on uppercase boundaries: "ActivityPerformance" -> [Activity, Performance].
- *  Parts shorter than 2 chars are dropped (matches Mac). */
-export function splitCamelCase(word: string): string[] {
+function isDigit(ch: string): boolean {
+  return ch >= '0' && ch <= '9'
+}
+
+/** Scan `word` left-to-right, starting a new part whenever `breakBefore(ch, prevCh)`
+ *  is true (never at the first char). Parts shorter than 2 chars are dropped (matches Mac). */
+function splitWord(word: string, breakBefore: (ch: string, prevCh: string) => boolean): string[] {
   const parts: string[] = []
   let cur = ''
   for (const ch of word) {
-    if (isUpper(ch) && cur !== '') {
+    if (cur !== '' && breakBefore(ch, cur[cur.length - 1])) {
       parts.push(cur)
       cur = ch
     } else {
@@ -42,24 +46,14 @@ export function splitCamelCase(word: string): string[] {
   return parts.filter((p) => p.length >= 2)
 }
 
-/** Split on digit/non-digit boundaries: "test123" -> [test, 123]. Parts shorter
- *  than 2 chars are dropped (matches Mac). */
+/** Split camelCase on uppercase boundaries: "ActivityPerformance" -> [Activity, Performance]. */
+export function splitCamelCase(word: string): string[] {
+  return splitWord(word, (ch) => isUpper(ch))
+}
+
+/** Split on digit/non-digit boundaries: "test123" -> [test, 123]. */
 export function splitOnDigits(word: string): string[] {
-  const parts: string[] = []
-  let cur = ''
-  let wasDigit = false
-  for (const ch of word) {
-    const isDigit = ch >= '0' && ch <= '9'
-    if (cur !== '' && isDigit !== wasDigit) {
-      parts.push(cur)
-      cur = ch
-    } else {
-      cur += ch
-    }
-    wasDigit = isDigit
-  }
-  if (cur !== '') parts.push(cur)
-  return parts.filter((p) => p.length >= 2)
+  return splitWord(word, (ch, prev) => isDigit(ch) !== isDigit(prev))
 }
 
 /** True when the string contains at least one letter or number the FTS5
