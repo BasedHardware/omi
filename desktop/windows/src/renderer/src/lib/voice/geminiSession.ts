@@ -6,7 +6,8 @@
 // v1alpha (the SDK connects to the constrained Live WS with it).
 //
 // Barge-in: the provider's server VAD interrupts generation; the interrupted
-// flag clears the local playback buffer instantly. The mic is never gated.
+// flag clears the local playback buffer AND gates the interrupted generation's
+// trailing audio (see createGeminiMessageHandler). The mic is never gated.
 
 import { GoogleGenAI, Modality, type Session, type LiveServerMessage } from '@google/genai'
 import { acquireMicStream } from '../audio'
@@ -25,6 +26,66 @@ import {
 // conversation, big enough that base64+WS framing overhead stays trivial.
 const UPLINK_FRAME_SAMPLES = 1024
 
+// The Gemini Live onmessage handler, factored out of startGeminiSession so its
+// barge-in gating is unit-testable without a live socket. Owns the per-turn
+// text/usage bookkeeping; `getPlayer`/`isStopped` read the live session state
+// (player is nulled on stop) so a late message after teardown is a no-op.
+export function createGeminiMessageHandler(deps: {
+  isStopped: () => boolean
+  getPlayer: () => VoicePlayer | null
+  cb: ProviderSessionCallbacks
+}): (msg: LiveServerMessage) => void {
+  const { isStopped, getPlayer, cb } = deps
+  let turnText = ''
+  let turnSeq = 0
+  // Gemini's usageMetadata is a RUNNING total re-sent across messages — report
+  // only the field-wise DELTA since the last snapshot so the ledger isn't
+  // over-counted (the OpenAI lane reports once, at stop, instead).
+  let lastUsage: RealtimeUsageBody | null = null
+  // Barge-in gate. Gemini keeps streaming a few trailing PCM parts AFTER it
+  // signals serverContent.interrupted for the barged-in generation; player.clear()
+  // only flushes what is already queued, so without this gate those later chunks
+  // get re-enqueued and bleed stale audio over the user. Mirrors Mac's
+  // geminiResponsePending hard gate (RealtimeHubSession.swift): closed the instant
+  // interrupt fires, re-opened at the next turn boundary (turnComplete) so the
+  // FOLLOWING generation's audio plays normally.
+  let interruptedTurnActive = false
+
+  return (msg: LiveServerMessage): void => {
+    if (isStopped()) return
+    const player = getPlayer()
+    const sc = msg.serverContent
+    if (sc?.interrupted) {
+      // Barge-in: stale audio must never keep playing over the user — flush what
+      // is queued and drop any trailing chunks for this now-dead generation.
+      interruptedTurnActive = true
+      player?.clear()
+    }
+    for (const part of sc?.modelTurn?.parts ?? []) {
+      const data = part.inlineData?.data
+      if (typeof data === 'string' && data.length > 0 && !interruptedTurnActive) {
+        player?.enqueuePcm16(base64ToBytes(data))
+      }
+    }
+    if (sc?.outputTranscription?.text) turnText += sc.outputTranscription.text
+    if (sc?.turnComplete) {
+      // Turn boundary: the (possibly interrupted) generation is closed — re-open
+      // the gate so the next generation's audio plays, and play any sub-cushion tail.
+      interruptedTurnActive = false
+      player?.flush()
+      const text = turnText
+      turnText = ''
+      if (text.trim()) cb.onUtterance(`gemini-turn-${turnSeq++}`, text)
+    }
+    if (msg.usageMetadata) {
+      const cumulative = mapGeminiUsage(msg.usageMetadata, GEMINI_LIVE_MODEL)
+      const delta = usageDelta(cumulative, lastUsage)
+      lastUsage = cumulative
+      if (usageTotal(delta) > 0) cb.onUsage(delta)
+    }
+  }
+}
+
 export async function startGeminiSession(args: {
   authToken: string
   sinkId?: string
@@ -36,12 +97,6 @@ export async function startGeminiSession(args: {
   let session: Session | null = null
   let player: VoicePlayer | null = null
   let mic: { stop: () => void } | null = null
-  let turnText = ''
-  let turnSeq = 0
-  // Gemini's usageMetadata is a RUNNING total re-sent across messages — report
-  // only the field-wise DELTA since the last snapshot so the ledger isn't
-  // over-counted (the OpenAI lane reports once, at stop, instead).
-  let lastUsage: RealtimeUsageBody | null = null
 
   const stop = (): void => {
     if (stopped) return
@@ -89,34 +144,11 @@ export async function startGeminiSession(args: {
         outputAudioTranscription: {}
       },
       callbacks: {
-        onmessage: (msg: LiveServerMessage) => {
-          if (stopped) return
-          const sc = msg.serverContent
-          if (sc?.interrupted) {
-            // Barge-in: stale audio must never keep playing over the user.
-            player?.clear()
-          }
-          for (const part of sc?.modelTurn?.parts ?? []) {
-            const data = part.inlineData?.data
-            if (typeof data === 'string' && data.length > 0) {
-              player?.enqueuePcm16(base64ToBytes(data))
-            }
-          }
-          if (sc?.outputTranscription?.text) turnText += sc.outputTranscription.text
-          if (sc?.turnComplete) {
-            // No more audio for this turn — play any sub-cushion tail now.
-            player?.flush()
-            const text = turnText
-            turnText = ''
-            if (text.trim()) cb.onUtterance(`gemini-turn-${turnSeq++}`, text)
-          }
-          if (msg.usageMetadata) {
-            const cumulative = mapGeminiUsage(msg.usageMetadata, GEMINI_LIVE_MODEL)
-            const delta = usageDelta(cumulative, lastUsage)
-            lastUsage = cumulative
-            if (usageTotal(delta) > 0) cb.onUsage(delta)
-          }
-        },
+        onmessage: createGeminiMessageHandler({
+          isStopped: () => stopped,
+          getPlayer: () => player,
+          cb
+        }),
         onerror: (e: ErrorEvent) => fail(`Gemini live error: ${e.message || 'socket error'}`, true),
         onclose: (e: CloseEvent) =>
           fail(`Gemini live closed (${e.code})${e.reason ? ` ${e.reason}` : ''}`, true)
