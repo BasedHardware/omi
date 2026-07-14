@@ -3244,23 +3244,35 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         + "contextChars=\(topLevelContext.rendered.count) plan=\(topLevelContext.planID.prefix(24)))")
   }
 
-  private struct VoiceSessionContext {
+  struct VoiceSessionContext {
+    let sessionID: String
     let rendered: String
     let snapshotFreshnessIdentity: String
     let planID: String
     let stableCacheIdentity: String
     let dynamicContextIdentity: String
     let semanticGuidance: String
+
+    /// Availability contract, mirroring `KernelVoiceContextSnapshot.isResolved`:
+    /// a kernel session bound to this owner scope plus a deterministic freshness
+    /// identity. Rendered context, plan identities, and semantic guidance are
+    /// context *material* — a valid new conversation renders none of it, and
+    /// `RealtimeHubTools.escalationBody` omits each empty section on its own.
+    /// Requiring them here would fail-closed on the first turn of every session.
+    var isResolved: Bool {
+      !sessionID.isEmpty && !snapshotFreshnessIdentity.isEmpty
+    }
   }
 
   /// Exact context material selected and rendered by the kernel for realtime.
   private func voiceSessionContext(for ownerScope: RealtimeHubOwnerScope) -> VoiceSessionContext {
     guard prefetchedVoiceContextOwnerScope == ownerScope else {
       return VoiceSessionContext(
-        rendered: "", snapshotFreshnessIdentity: "", planID: "", stableCacheIdentity: "",
-        dynamicContextIdentity: "", semanticGuidance: "")
+        sessionID: "", rendered: "", snapshotFreshnessIdentity: "", planID: "",
+        stableCacheIdentity: "", dynamicContextIdentity: "", semanticGuidance: "")
     }
     return VoiceSessionContext(
+      sessionID: prefetchedVoiceContextSessionID,
       rendered: prefetchedVoiceContext,
       snapshotFreshnessIdentity: prefetchedVoiceContextFreshnessIdentity,
       planID: prefetchedVoiceContextPlanID,
@@ -5202,13 +5214,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let query = (command.input["query"] as? String) ?? turnTranscript
       let toolContext = (command.input["context"] as? String) ?? ""
       let kernelContext = voiceSessionContext(for: currentOwnerScope)
-      guard !kernelContext.rendered.isEmpty,
-        !kernelContext.snapshotFreshnessIdentity.isEmpty,
-        !kernelContext.semanticGuidance.isEmpty,
-        !kernelContext.stableCacheIdentity.isEmpty,
-        !kernelContext.dynamicContextIdentity.isEmpty,
-        !kernelContext.planID.isEmpty
-      else {
+      guard kernelContext.isResolved else {
         return .failed(Self.authorizedRealtimeToolError(code: "kernel_context_unavailable"))
       }
       return await escalateToHigherModel(

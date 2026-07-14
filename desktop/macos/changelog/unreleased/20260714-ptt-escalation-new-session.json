@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the floating bar failing to escalate a hard voice question to the higher model at the start of a new conversation"
+}
