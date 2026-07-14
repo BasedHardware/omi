@@ -9,6 +9,7 @@ import {
   getRewindFrameOcrLines
 } from './db'
 import { groupFrames } from '../rewind/rewindGrouping'
+import { configureRewindEmbedSession } from '../rewind/embeddingService'
 import {
   getRewindSettings,
   updateRewindSettings,
@@ -20,13 +21,22 @@ import { rewindRoot } from '../rewind/paths'
 import type { RewindSettings } from '../../shared/types'
 
 export function registerRewindHandlers(): void {
-  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) => listRewindFrames(from, to))
+  ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
+    listRewindFrames(from, to)
+  )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:search', async (_e, query: string) => {
     const q = query.trim()
     if (!q) return []
     return groupFrames(searchRewindFrames(q), q)
   })
+  // Relay of the renderer's Firebase session — the embedding indexer and the
+  // query embedder are inert without it (the token only exists in the renderer).
+  ipcMain.handle(
+    'rewind:setEmbedSession',
+    async (_e, s: { desktopApiBase: string; token: string } | null) =>
+      configureRewindEmbedSession(s)
+  )
   // --- Track 4 --- Per-line OCR bounding boxes for the search highlight overlay.
   ipcMain.handle('rewind:frameOcrLines', async (_e, frameId: number) =>
     getRewindFrameOcrLines(frameId)

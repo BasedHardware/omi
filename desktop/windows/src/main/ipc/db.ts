@@ -21,6 +21,7 @@ import {
   deleteConversationFolderOn,
   type ConversationFoldersDb
 } from './conversationFolders'
+import { topKBySimilarity, type ScoredFrame } from '../rewind/embedVector'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -1125,6 +1126,84 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
+}
+
+// --- Track 4: Rewind semantic search (rewind_embeddings) ---
+// One L2-normalized Float32 vector per frame. Because the vectors are stored
+// normalized, a dot product IS the cosine similarity — see rewind/embedVector.ts.
+
+/** Frames that have OCR text but no embedding yet, newest first (the frames a
+ *  user is most likely to search for). Drives both the live indexer's catch-up
+ *  and the launch backfill; the LEFT JOIN is what makes the backfill inherently
+ *  resumable — a persisted vector is never re-fetched. */
+export function rewindFramesNeedingEmbedding(limit: number): RewindFrame[] {
+  return timed(
+    'rewindFramesNeedingEmbedding',
+    () =>
+      get()
+        .prepare(
+          `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
+             LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
+            WHERE rewind_frames.indexed = 1
+              AND rewind_frames.ocr_text IS NOT NULL AND rewind_frames.ocr_text != ''
+              AND rewind_embeddings.frame_id IS NULL
+            ORDER BY rewind_frames.ts DESC
+            LIMIT ?`
+        )
+        .all(limit) as RewindFrame[]
+  )
+}
+
+/** Store (or replace) a frame's vector. */
+export function upsertRewindEmbedding(frameId: number, vec: Float32Array, model: string): void {
+  get()
+    .prepare(
+      `INSERT INTO rewind_embeddings (frame_id, dim, model, vec, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(frame_id) DO UPDATE SET
+         dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
+    )
+    .run(frameId, vec.length, model, vectorToBuffer(vec), Date.now())
+}
+
+/** A frame's stored vector, or null when it has none (or the row is unusable). */
+export function getRewindEmbedding(frameId: number): Float32Array | null {
+  const row = get().prepare('SELECT vec FROM rewind_embeddings WHERE frame_id = ?').get(frameId) as
+    | { vec: Uint8Array }
+    | undefined
+  if (!row?.vec?.byteLength) return null
+  return bufferToVector(row.vec)
+}
+
+/**
+ * Brute-force k-NN over the stored vectors: the top `limit` frames by cosine
+ * similarity to `query`, strongest first. Rows are streamed (not materialized)
+ * straight into the ranking — see `topKBySimilarity`. Vectors of a different
+ * dimension (a model change) score 0 and drop out naturally.
+ */
+export function searchRewindEmbeddings(query: Float32Array, limit: number): ScoredFrame[] {
+  return timed('searchRewindEmbeddings', () => {
+    const rows = get()
+      .prepare('SELECT frame_id, vec FROM rewind_embeddings')
+      .iterate() as IterableIterator<{ frame_id: number; vec: Uint8Array }>
+    function* vectors(): Generator<{ frameId: number; vec: Float32Array }> {
+      for (const row of rows) {
+        if (row.vec?.byteLength) yield { frameId: row.frame_id, vec: bufferToVector(row.vec) }
+      }
+    }
+    return topKBySimilarity(vectors(), query, limit)
+  })
+}
+
+/** Hydrate frames by id, in the given order (ids with no row are skipped). */
+export function rewindFramesByIds(ids: number[]): RewindFrame[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  const frames = get()
+    .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id IN (${placeholders})`)
+    .all(...ids) as RewindFrame[]
+  const byId = new Map(frames.map((f) => [f.id, f]))
+  return ids.map((id) => byId.get(id)).filter((f): f is RewindFrame => f !== undefined)
 }
 
 // --- Proactive Insights ---

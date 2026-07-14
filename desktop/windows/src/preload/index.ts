@@ -175,6 +175,10 @@ const omi: OmiBridgeApi = {
   rewindFrames: (from: number, to: number) => ipcRenderer.invoke('rewind:frames', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
+  // --- Track 4 (Rewind semantic search) --- Session relay for the main-process
+  // embedding indexer + query embedder, which are inert without a Firebase token.
+  rewindSetEmbedSession: (session: { desktopApiBase: string; token: string } | null) =>
+    ipcRenderer.invoke('rewind:setEmbedSession', session),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
   // --- Track 4 --- per-line OCR boxes for the on-image search highlight overlay
   rewindFrameOcrLines: (frameId: number) => ipcRenderer.invoke('rewind:frameOcrLines', frameId),

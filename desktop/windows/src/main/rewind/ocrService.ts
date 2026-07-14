@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { helperProcess } from '../ocr/helperProcess'
 import { unindexedRewindFrames, setRewindFrameOcr } from '../ipc/db'
+import { enqueueRewindEmbedding } from './embeddingService'
 
 const BACKFILL_INTERVAL_MS = 4000
 const BATCH = 5
@@ -29,6 +30,10 @@ async function backfill(): Promise<void> {
         result.ok ? result.fullText : '',
         result.ok ? JSON.stringify(result.lines) : null
       )
+      // Queue the text for semantic indexing (Track 4). Fire-and-forget by
+      // design: embedding is a buffered background batch, and OCR must never
+      // wait on a network round trip.
+      if (result.ok && result.fullText) enqueueRewindEmbedding(f.id, result.fullText)
     }
   } finally {
     running = false

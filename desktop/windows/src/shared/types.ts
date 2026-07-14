@@ -735,6 +735,12 @@ export type OmiBridgeApi = {
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** Relay the Firebase session to the main-process Rewind embedding indexer
+   *  (Track 4); null on sign-out. Without it, semantic search stays inert and
+   *  `rewindSearch` returns keyword-only results. */
+  rewindSetEmbedSession: (
+    session: { desktopApiBase: string; token: string } | null
+  ) => Promise<void>
   rewindFrameImage: (imagePath: string) => Promise<string>
   // --- Track 4 --- per-line OCR bounding boxes (normalized 0..1) for the
   // on-image search highlight overlay in the Rewind frame viewer.

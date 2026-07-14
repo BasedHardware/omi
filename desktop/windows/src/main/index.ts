@@ -94,6 +94,7 @@ import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './ass
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
+import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
@@ -806,6 +807,10 @@ app.whenReady().then(async () => {
     // OCR/retention loops are cheap no-ops until frames exist.
     startRewindCapture()
     startRewindOcr()
+    // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
+    // and the launch backfill only move once the renderer relays a Firebase
+    // session (see rewind/embeddingService.ts).
+    startRewindEmbedding()
     startRewindRetention()
     // Delete JPEGs orphaned by a crash between the file write and the DB insert
     // (Windows-specific — frames are per-file). Startup pass + every 6h.
