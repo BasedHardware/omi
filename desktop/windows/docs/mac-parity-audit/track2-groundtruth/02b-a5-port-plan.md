@@ -557,7 +557,7 @@ New module `lib/voice/hub/hubController.ts` — Windows-native, providing **only
 - **OpenAI Realtime over WebSocket** (not WebRTC — see **D3**):
   - warm-time: `session.update { turn_detection: null }` (**PTT controls turns, not server VAD**)
   - per turn: `input_audio_buffer.append` (while held) → on release `input_audio_buffer.commit` → `response.create`
-  - barge-in: `response.cancel` + `conversation.item.truncate` (Mac's `.inSessionCancel` strategy)
+  - barge-in: `response.cancel` + `input_audio_buffer.clear` (Mac's `.inSessionCancel` strategy). **CORRECTION (A5 PR-4):** `conversation.item.truncate` does NOT exist anywhere in the macOS `Sources/` tree — the real `RealtimeHubSession.cancelActiveResponse` (RealtimeHubSession.swift:285/295) sends `response.cancel` + `input_audio_buffer.clear`. The earlier claim of a `truncate` frame here was wrong; the shipped lane sends the real frames.
   - browser/Electron WS auth via subprotocols `["realtime", "openai-insecure-api-key.<ephemeral client_secret>"]`
   - ephemeral secrets are short-lived **for establishing** the connection → **mint fresh on each `ensureWarm`, not per turn**
 - **Gemini Live — manual activity detection** (Mac's `.replaceSession` barge-in strategy):
@@ -611,7 +611,7 @@ coordinator.send({ type: 'selectRoute', turnID, route })
 ### PR 4 — hub session lanes (no reducer yet)
 **Files:** `lib/voice/hub/hubSession.ts` (interface), `openaiHubSession.ts` (WS + manual turn detection), `geminiHubSession.ts` (manual activity detection)
 **Scope:** the provider frame sequences in §C.5. **Reuses the capture window's PCM and the existing `pcmPlayer` — no new audio graph.**
-**Tests:** hermetic, against a **fake WebSocket** — assert exact frame sequences: `turn_detection: null` at warm; `append` → `commit` → `response.create`; `response.cancel` + `conversation.item.truncate` on barge-in; `activityStart` / `activityEnd` on Gemini.
+**Tests:** hermetic, against a **fake WebSocket** — assert exact frame sequences: `turn_detection: null` at warm; `append` → `commit` → `response.create`; `response.cancel` + `input_audio_buffer.clear` on barge-in (NOT `conversation.item.truncate` — see the OpenAI barge-in correction above); `activityStart` / `activityEnd` on Gemini (no in-session cancel frame — Gemini barge-in is fresh-session).
 **Real-app:** dev-only "warm + one turn" harness behind the flag, exercised with a real mic.
 
 ### PR 5 — hub controller
