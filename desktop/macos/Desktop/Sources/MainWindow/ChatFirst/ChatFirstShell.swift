@@ -35,6 +35,7 @@ struct ChatFirstShell: View {
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
       viewModelContainer.canonicalGoalsStore.activate(capability: capability)
+      AnalyticsManager.shared.chatFirst(.routeEntered(route: .chat, origin: .shellLaunch))
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }

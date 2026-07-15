@@ -304,8 +304,14 @@ struct ChatBubble: View {
             questionID: questionID,
             selectedOptionID: selectedOptionID
           ),
-          onSelect: { optionID in
+          onSelect: { optionID, isDeferral in
             Task { @MainActor in
+              AnalyticsManager.shared.chatFirst(
+                .question(lifecycle: isDeferral ? .deferred : .answered)
+              )
+              AnalyticsManager.shared.chatFirst(
+                .richBlock(kind: .questionCard, outcome: .acted, action: .select)
+              )
               await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
                 questionID: questionID,
                 optionID: optionID

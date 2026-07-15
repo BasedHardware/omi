@@ -60,16 +60,22 @@ final class ChatFirstShellTests: XCTestCase {
     navigation.toggleSidebar()
     XCTAssertEqual(navigation.route, .conversations)
     XCTAssertEqual(navigation.pendingFocus, focus)
+    XCTAssertEqual(navigation.focusedEntityID, "capture-1")
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
     XCTAssertFalse(navigation.acknowledgeFocus(.task(id: "task-1")))
     XCTAssertEqual(navigation.pendingFocus, focus)
     XCTAssertTrue(navigation.acknowledgeFocus(focus))
     XCTAssertNil(navigation.pendingFocus)
     XCTAssertEqual(navigation.lastAcknowledgedFocusKind, "capture")
+    XCTAssertEqual(navigation.focusedEntityID, "capture-1")
+    XCTAssertTrue(navigation.isFocusedEntityAcknowledged)
 
     let restored = ChatFirstShellNavigation(defaults: defaults)
     XCTAssertEqual(restored.route, .conversations)
     XCTAssertTrue(restored.isSidebarCollapsed)
     XCTAssertNil(restored.pendingFocus)
+    XCTAssertNil(restored.focusedEntityID)
+    XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
   func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() {
@@ -82,6 +88,8 @@ final class ChatFirstShellTests: XCTestCase {
     navigation.selectPrimary(.tasks)
     XCTAssertEqual(navigation.route, .tasks)
     XCTAssertNil(navigation.pendingFocus)
+    XCTAssertNil(navigation.focusedEntityID)
+    XCTAssertFalse(navigation.isFocusedEntityAcknowledged)
 
     navigation.open(focus: .memory(id: "memory-1"))
     navigation.selectLegacyDestination(.settings)
@@ -90,6 +98,32 @@ final class ChatFirstShellTests: XCTestCase {
 
     navigation.selectLegacyDestination(.chat)
     XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() {
+    let suiteName = "ChatFirstShellTests.analytics.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+    var events: [ChatFirstAnalyticsEvent] = []
+    let navigation = ChatFirstShellNavigation(defaults: defaults) { event in
+      events.append(event)
+    }
+
+    navigation.selectPrimary(.tasks)
+    navigation.open(focus: .goal(id: "private-goal-id"))
+    navigation.selectMore(.settings)
+
+    XCTAssertEqual(
+      events,
+      [
+        .routeEntered(route: .tasks, origin: .sidebar),
+        .routeEntered(route: .goals, origin: .chatDeeplink),
+        .routeEntered(route: .more, origin: .more),
+      ]
+    )
+    XCTAssertFalse(
+      events.map(\.analyticsPayload).flatMap { $0.properties.values }.contains("private-goal-id")
+    )
   }
 
   func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() {

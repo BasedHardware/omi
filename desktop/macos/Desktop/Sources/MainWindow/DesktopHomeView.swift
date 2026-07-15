@@ -641,6 +641,8 @@ struct DesktopHomeView: View {
       chatFirstRoute: chatFirstRoute?.stableName,
       pendingFocusKind: chatFirstNavigation.pendingFocus?.stableName,
       acknowledgedFocusKind: chatFirstNavigation.lastAcknowledgedFocusKind,
+      focusedEntityID: chatFirstNavigation.focusedEntityID,
+      isFocusedEntityAcknowledged: chatFirstNavigation.isFocusedEntityAcknowledged,
       showsPrimarySidebar: showsPrimarySidebar,
       isSidebarCollapsed: usesChatFirstShell
         ? chatFirstNavigation.isSidebarCollapsed : isSidebarCollapsed,
@@ -931,10 +933,18 @@ struct DesktopHomeView: View {
         ownerIsStillCurrent: false
       )
       _ = viewModelContainer.chatProvider.configureChatFirstMainChatCapability(nil)
+      AnalyticsManager.shared.chatFirst(
+        .capabilityResolution(
+          outcome: .unavailable,
+          generationBucket: .none,
+          errorClass: .ownerChanged
+        )
+      )
       reportAutomationState()
       return
     }
 
+    var capabilityErrorClass: ChatFirstAnalyticsEvent.CapabilityErrorClass = .none
     do {
       let control = try await APIClient.shared.getCandidateWorkflowControl(
         expectedOwnerId: ownerID,
@@ -955,6 +965,7 @@ struct DesktopHomeView: View {
         requestedOwnerID: ownerID,
         ownerIsStillCurrent: current
       )
+      capabilityErrorClass = .unavailable
       log("DesktopHomeView: chat-first control unavailable; using legacy shell")
     }
 
@@ -965,8 +976,27 @@ struct DesktopHomeView: View {
       // A pre-existing Main Chat session cannot be retroactively upgraded with
       // dynamic tools. Keep this launch on the byte-equivalent legacy path.
       chatFirstCapabilitySample.failClosed()
+      capabilityErrorClass = .projectionRejected
       log("DesktopHomeView: chat-first projection handoff rejected; using legacy shell")
     }
+    let projection = chatFirstCapabilitySample.variant.projection
+    let capabilityOutcome: ChatFirstAnalyticsEvent.CapabilityOutcome
+    if capabilityErrorClass == .projectionRejected {
+      capabilityOutcome = .projectionRejected
+    } else if capabilityErrorClass == .unavailable {
+      capabilityOutcome = .unavailable
+    } else if projection != nil {
+      capabilityOutcome = .enabled
+    } else {
+      capabilityOutcome = .disabled
+    }
+    AnalyticsManager.shared.chatFirst(
+      .capabilityResolution(
+        outcome: capabilityOutcome,
+        generationBucket: .bucket(for: projection?.controlGeneration),
+        errorClass: capabilityErrorClass
+      )
+    )
     reportAutomationState()
   }
 

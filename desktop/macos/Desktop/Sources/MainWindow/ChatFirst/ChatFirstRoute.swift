@@ -123,6 +123,16 @@ enum ChatFirstPendingFocus: Equatable, Sendable {
     case .memory: return "memory"
     }
   }
+
+  /// This identifier is intentionally retained only in the in-memory
+  /// navigation contract. The non-production automation bridge can prove the
+  /// exact focus acknowledgement without sending it to analytics or persisting
+  /// it across launches.
+  var entityID: String {
+    switch self {
+    case .task(let id), .goal(let id), .capture(let id, _), .memory(let id): return id
+    }
+  }
 }
 
 /// A route-safe, strongly typed origin for the one normal user turn created
@@ -171,12 +181,23 @@ final class ChatFirstShellNavigation: ObservableObject {
   /// focus itself and is never restored across launches.
   @Published private(set) var pendingFocusDestination: ChatFirstRoute?
   @Published private(set) var lastAcknowledgedFocusKind: String?
+  /// Test-only bridge state for proving route focus reaches the intended
+  /// entity. This is neither persisted nor emitted in analytics.
+  @Published private(set) var focusedEntityID: String?
+  @Published private(set) var isFocusedEntityAcknowledged: Bool
   @Published private(set) var isSidebarCollapsed: Bool
 
   private let defaults: UserDefaults
+  private let analytics: (ChatFirstAnalyticsEvent) -> Void
 
-  init(defaults: UserDefaults = .standard) {
+  init(
+    defaults: UserDefaults = .standard,
+    analytics: @escaping (ChatFirstAnalyticsEvent) -> Void = { event in
+      AnalyticsManager.shared.chatFirst(event)
+    }
+  ) {
     self.defaults = defaults
+    self.analytics = analytics
     if let data = defaults.data(forKey: Self.storageKey),
       let persisted = try? JSONDecoder().decode(ChatFirstPersistedNavigation.self, from: data)
     {
@@ -189,21 +210,26 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingFocus = nil
     pendingFocusDestination = nil
     lastAcknowledgedFocusKind = nil
+    focusedEntityID = nil
+    isFocusedEntityAcknowledged = false
   }
 
-  func selectPrimary(_ destination: ChatFirstRoute) {
+  func selectPrimary(
+    _ destination: ChatFirstRoute,
+    origin: ChatFirstAnalyticsEvent.RouteOrigin = .sidebar
+  ) {
     guard destination.isPrimaryDestination else { return }
     route = destination
-    pendingFocus = nil
-    pendingFocusDestination = nil
+    clearFocus()
     persistNavigation()
+    analytics(.routeEntered(route: analyticsRoute(destination), origin: origin))
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
     route = .more(page)
-    pendingFocus = nil
-    pendingFocusDestination = nil
+    clearFocus()
     persistNavigation()
+    analytics(.routeEntered(route: .more, origin: .more))
   }
 
   /// Used by a typed rich-Chat link. Unlike direct navigation it carries the
@@ -220,14 +246,17 @@ final class ChatFirstShellNavigation: ObservableObject {
     route = destination
     pendingFocus = focus
     pendingFocusDestination = destination
+    focusedEntityID = focus.entityID
+    isFocusedEntityAcknowledged = false
     persistNavigation()
+    analytics(.routeEntered(route: analyticsRoute(destination), origin: .chatDeeplink))
   }
 
   /// Routes first, then records exactly one ordinary main-Chat user turn.
   /// `ChatProvider` remains the single journal owner; navigation stores no
   /// transcript copy or separate session identity.
   func discuss(_ context: ChatFirstDiscussionContext, using chatProvider: ChatProvider) {
-    selectPrimary(.chat)
+    selectPrimary(.chat, origin: .chatDeeplink)
     Task {
       _ = await chatProvider.sendMessage(context.userMessage)
     }
@@ -239,6 +268,8 @@ final class ChatFirstShellNavigation: ObservableObject {
     pendingFocus = nil
     pendingFocusDestination = nil
     lastAcknowledgedFocusKind = focus.stableName
+    focusedEntityID = focus.entityID
+    isFocusedEntityAcknowledged = true
     return true
   }
 
@@ -275,6 +306,24 @@ final class ChatFirstShellNavigation: ObservableObject {
   private func persistNavigation() {
     let persisted = ChatFirstPersistedNavigation(route: route, isSidebarCollapsed: isSidebarCollapsed)
     defaults.set(try? JSONEncoder().encode(persisted), forKey: Self.storageKey)
+  }
+
+  private func clearFocus() {
+    pendingFocus = nil
+    pendingFocusDestination = nil
+    focusedEntityID = nil
+    isFocusedEntityAcknowledged = false
+  }
+
+  private func analyticsRoute(_ route: ChatFirstRoute) -> ChatFirstAnalyticsEvent.Route {
+    switch route {
+    case .chat: return .chat
+    case .conversations: return .conversations
+    case .tasks: return .tasks
+    case .goals: return .goals
+    case .memories: return .memories
+    case .more: return .more
+    }
   }
 }
 
