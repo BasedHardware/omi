@@ -59,6 +59,20 @@ import {
 // ---------------------------------------------------------------------------
 // Denylist patterns (WINDOWS)
 // ---------------------------------------------------------------------------
+//
+// THREAT-MODEL CEILING (read before extending these rules): this denylist is a
+// best-effort guard against ACCIDENTAL / HALLUCINATED destructive commands — it
+// is NOT a hard security boundary against an adversarial model. It classifies
+// the command/path TEXT statically, before bash runs; bash expands variables and
+// splits quotes at exec time, AFTER the classifier has seen the text. So forms
+// that only resolve to a dangerous target at runtime CANNOT be closed by any
+// regex here, e.g. arbitrary variable indirection (`d=/c/Windows; rm -rf "$d"`)
+// or internal-quote splitting (`rm -rf C:/Win""dows/System32`). We deliberately
+// do NOT chase these — the real boundary is process sandboxing / least privilege
+// (pi runs non-elevated with no write access outside the workspace). What we DO
+// close: the common literal spellings a model reaches for in a single command
+// (drive roots, C:\Windows / Program Files, credential files, the idiomatic
+// $env:/%VAR%/$WINDIR env-var names, 8.3 short names, device-namespace paths).
 
 /** A single deny rule. `pattern` MUST match something clearly dangerous;
  *  `reason` is shown to the LLM so it can pick a safer alternative. */
@@ -98,6 +112,12 @@ const DANGEROUS_TARGET =
   `|[a-zA-Z]:[\\\\/]?${TARGET_END}` +
   // native system path "C:\\Windows", "C:/Program Files/..."
   `|[a-zA-Z]:[\\\\/]${WIN_SYS_DIR}(?:[\\\\/][^\\s;&|'"]*)?${TARGET_END}` +
+  // DOS 8.3 short names under a drive root — resolve() does NOT expand these,
+  // so `C:\\PROGRA~1` reaches Program Files unblocked. PROGRA~n covers Program
+  // Files / Program Files (x86) / ProgramData; WINDOW~n is defensive (Windows
+  // itself is <=8 chars and has no short form). Native + git-bash mount forms.
+  `|[a-zA-Z]:[\\\\/](?:PROGRA~\\d|WINDOW~\\d)(?:[\\\\/][^\\s;&|'"]*)?${TARGET_END}` +
+  `|\\/[a-zA-Z]\\/(?:PROGRA~\\d|WINDOW~\\d)(?:\\/[^\\s;&|'"]*)?${TARGET_END}` +
   // parent-traversal root escape "../.." or "..\\.." (restored from macOS —
   // classifyBash cannot resolve `..`, so this literal guard is the only defense
   // against `rm -rf ../../../../`).
@@ -110,6 +130,15 @@ const DANGEROUS_TARGET =
   // at run time — the idiomatic way PowerShell names these paths.
   `|\\$env:(?:windir|systemroot|programfiles(?:\\(x86\\))?|programdata|allusersprofile)\\b` +
   `|\\$env:(?:userprofile|homepath|homedrive)[\\\\/]?${TARGET_END}` +
+  // bash-inherited Windows env vars — Git Bash exposes $WINDIR, $SYSTEMROOT
+  // (both = C:\\Windows) and $SystemDrive (= C:). `rm -rf "$WINDIR"` and
+  // `rm -rf "$SYSTEMROOT/System32"` are idiomatic and were reachable. System
+  // dirs match on any subpath (\\b); $SystemDrive is the drive root, blocked on
+  // any reference too so `"$SystemDrive/Windows"` is also caught. Brace forms
+  // included. NOTE: bash expands these BEFORE the classifier sees the text only
+  // when written literally — see the best-effort ceiling note at the head.
+  `|\\$(?:WINDIR|SYSTEMROOT|SystemDrive)\\b` +
+  `|\\$\\{(?:WINDIR|SYSTEMROOT|SystemDrive)\\}` +
   // home: "~", "~/", "~\\"
   `|~[\\\\/]?${TARGET_END}` +
   // "$HOME", "${HOME}", "$USERPROFILE", "${USERPROFILE}"
@@ -296,6 +325,16 @@ export const WRITE_PATH_DENY_RULES: DenyRule[] = [
     reason: 'Writing under Program Files is blocked (installed system binaries).'
   },
   {
+    // DOS 8.3 short name for a system dir under a drive root (PROGRA~1 = Program
+    // Files, PROGRA~2 = Program Files (x86)/ProgramData). resolve() does not
+    // expand these, so without this rule `C:\PROGRA~1\evil.dll` plants a DLL in
+    // Program Files. WINDOW~n is defensive.
+    pattern: /^[A-Za-z]:\\(?:PROGRA~\d|WINDOW~\d)(?:\\|$)/i,
+    reason:
+      'Writing under a DOS 8.3 short name of a system dir (PROGRA~1 = Program ' +
+      'Files) is blocked.'
+  },
+  {
     pattern: /[\\/]\.ssh[\\/](?:authorized_keys|id_[^\\/]+)$/i,
     reason:
       'Writing SSH private keys or authorized_keys is blocked. Ask the user to ' +
@@ -345,10 +384,13 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   // normalize any forward slashes to backslashes so the rules match regardless
   // of the separator the model used (`C:/Windows` vs `C:\Windows`).
   const normalized = resolve(filePath).replace(/\//g, '\\')
-  // Strip a Windows extended-length / namespace prefix (`\\?\C:\...`,
-  // `\\?\UNC\server\share`) so `\\?\C:\Windows\System32\x` — which pi's fs-based
-  // write/edit tool honors — cannot slip past the drive-letter-anchored rules.
-  const resolved = normalized.replace(/^\\\\\?\\(UNC\\)?/i, (_m, unc) => (unc ? '\\\\' : ''))
+  // Strip a Windows extended-length / device-namespace prefix — both the
+  // `\\?\` extended-length form AND the sibling Win32 device form `\\.\`
+  // (`\\?\C:\...`, `\\.\C:\...`, `\\?\UNC\server\share`). Both are honored by
+  // pi's fs-based write/edit tool and both keep the drive letter behind the
+  // prefix, so without stripping them `\\.\C:\Windows\System32\x` slips past the
+  // drive-letter-anchored rules and lands the bytes at the plain path.
+  const resolved = normalized.replace(/^\\\\[.?]\\(UNC\\)?/i, (_m, unc) => (unc ? '\\\\' : ''))
   for (const rule of WRITE_PATH_DENY_RULES) {
     if (rule.pattern.test(resolved)) {
       return { blocked: true, reason: rule.reason }
@@ -356,6 +398,17 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   }
   return null
 }
+
+/** Tools whose calls this denylist actually enforces (dispatched in
+ *  inspectToolCall). A classifier THROW for one of these must fail CLOSED —
+ *  never silently permit a dangerous command — so the tool_call handler blocks
+ *  these on error. Any other tool (read/grep/ls/…) is pass-through anyway. */
+export const ENFORCED_TOOL_NAMES: ReadonlySet<string> = new Set([
+  'bash',
+  'write',
+  'edit',
+  'edit-diff'
+])
 
 /** Classify a whole tool_call event by dispatching on toolName.
  *  When OMI_YOLO_MODE=1, all tool calls are allowed (no denylist).
@@ -924,8 +977,11 @@ export default function omiProvider(pi: ExtensionAPI): void {
     try {
       decision = inspectToolCall(event)
     } catch (err) {
-      // Never let classifier bugs block execution. Fail-open for the denylist
-      // and log the error through the audit channel.
+      // FAIL CLOSED for the tools the denylist enforces: an internal classifier
+      // error must never silently permit a bash/write/edit call (that would
+      // contradict the whole point of a load-bearing guard). Non-enforced tools
+      // (read/grep/ls/…) are pass-through regardless, so a throw there is safe to
+      // allow. Always audit-log the error either way.
       const msg = err instanceof Error ? err.message : String(err)
       void appendAudit({
         ts: new Date().toISOString(),
@@ -935,6 +991,9 @@ export default function omiProvider(pi: ExtensionAPI): void {
         reason: `classifier threw: ${msg}`,
         summary: summarizeInput(event)
       })
+      if (ENFORCED_TOOL_NAMES.has(event.toolName)) {
+        return { block: true, reason: 'denylist classifier error — blocked for safety' }
+      }
       return undefined
     }
 

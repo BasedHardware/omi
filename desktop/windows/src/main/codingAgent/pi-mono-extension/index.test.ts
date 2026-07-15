@@ -309,6 +309,21 @@ describe('classifyBash (Windows)', () => {
     expect(classifyBash('Remove-Item $env:TEMP\\scratch')).toBeNull()
   })
 
+  it('blocks bash-inherited Windows env vars ($WINDIR / $SYSTEMROOT / $SystemDrive)', () => {
+    // Git Bash inherits these; both are idiomatic single-command destructive forms.
+    expect(classifyBash('rm -rf "$WINDIR"')).toBeTruthy()
+    expect(classifyBash('rm -rf "$SYSTEMROOT/System32"')).toBeTruthy()
+    expect(classifyBash('rm -rf "${WINDIR}"')).toBeTruthy()
+    expect(classifyBash('rm -rf "$SystemDrive/Windows"')).toBeTruthy()
+    // A normal $HOME subpath stays allowed (not a system/root target).
+    expect(classifyBash('rm -rf "$HOME/proj/build"')).toBeNull()
+  })
+
+  it('blocks DOS 8.3 short-name system paths (bash forms)', () => {
+    expect(classifyBash('rm -rf C:/PROGRA~1')).toBeTruthy()
+    expect(classifyBash('rm -rf /c/PROGRA~1')).toBeTruthy()
+  })
+
   it('blocks parent-traversal root escape (restored from macOS)', () => {
     expect(classifyBash('rm -rf ../../../../')).toBeTruthy()
     expect(classifyBash('rm -rf ../../..')).toBeTruthy()
@@ -396,6 +411,11 @@ describe('classifyFileWrite (Windows)', () => {
     // Extended-length / namespace prefix must not bypass the drive-anchored rules.
     expect(classifyFileWrite('\\\\?\\C:\\Windows\\System32\\x')).toBeTruthy()
     expect(classifyFileWrite('\\\\?\\C:\\Program Files\\app\\x.dll')).toBeTruthy()
+    // Win32 DEVICE namespace `\\.\` (sibling of `\\?\`) must also be stripped.
+    expect(classifyFileWrite('\\\\.\\C:\\Windows\\System32\\evil.dll')).toBeTruthy()
+    // DOS 8.3 short name of Program Files must not bypass.
+    expect(classifyFileWrite('C:\\PROGRA~1\\evil.dll')).toBeTruthy()
+    expect(classifyFileWrite('C:\\PROGRA~2\\app\\x.dll')).toBeTruthy()
   })
 
   it('blocks SSH keys and cloud credential files', () => {
@@ -461,6 +481,48 @@ describe('inspectToolCall', () => {
     process.env.OMI_YOLO_MODE = '1'
     expect(inspectToolCall(bashEvent('rm -rf C:\\Windows'))).toBeNull()
     expect(inspectToolCall(writeEvent('C:\\Windows\\x'))).toBeNull()
+  })
+})
+
+// ===========================================================================
+// M1 — a classifier THROW must FAIL CLOSED for enforced tools (not fail-open)
+// ===========================================================================
+describe('tool_call handler fails closed on classifier error', () => {
+  // An input whose `command` getter throws makes inspectToolCall raise inside
+  // the `bash` case — the realistic shape of an internal classifier bug.
+  function throwingBashEvent(): ToolCallEvent {
+    const input = {}
+    Object.defineProperty(input, 'command', {
+      enumerable: true,
+      get() {
+        throw new Error('boom')
+      }
+    })
+    return { type: 'tool_call', toolName: 'bash', toolCallId: 't', input } as ToolCallEvent
+  }
+
+  it('blocks an enforced tool (bash) when inspectToolCall throws', async () => {
+    process.env.OMI_PI_AUDIT_LOG = join(tmpdir(), 'omi-m1-audit.log')
+    const cap = makeFakePi()
+    omiProvider(cap.pi)
+    const handler = cap.handlers['tool_call'] as (e: ToolCallEvent) => Promise<unknown>
+    const res = await handler(throwingBashEvent())
+    expect(res).toEqual({ block: true, reason: expect.stringContaining('classifier error') })
+  })
+
+  it('allows a non-enforced tool (read) even if classification would error', async () => {
+    process.env.OMI_PI_AUDIT_LOG = join(tmpdir(), 'omi-m1-audit.log')
+    const cap = makeFakePi()
+    omiProvider(cap.pi)
+    const handler = cap.handlers['tool_call'] as (e: ToolCallEvent) => Promise<unknown>
+    // read is pass-through (default branch never reads input) → undefined (allow).
+    const res = await handler({
+      type: 'tool_call',
+      toolName: 'read',
+      toolCallId: 't',
+      input: { path: 'C:\\Windows\\x' }
+    } as ToolCallEvent)
+    expect(res).toBeUndefined()
   })
 })
 
