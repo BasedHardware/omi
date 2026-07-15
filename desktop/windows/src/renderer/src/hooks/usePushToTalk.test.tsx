@@ -4,7 +4,8 @@ import { renderHook, act, cleanup } from '@testing-library/react'
 import {
   HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
-  ERROR_STRIP_MS
+  ERROR_STRIP_MS,
+  DOUBLE_TAP_WINDOW_MS
 } from '../lib/ptt/constants'
 
 // The pure machine/gate/transport logic has its own suites — these tests cover
@@ -577,5 +578,165 @@ describe('warm-hub delegation', () => {
     await advance(HOLD_THRESHOLD_MS)
     act(() => result.current.cancel())
     expect(delegate.cancel).toHaveBeenCalledTimes(1)
+  })
+})
+
+// Privacy backstop for the tap-to-lock latch: a hands-free locked capture must NOT
+// survive the bar hiding or losing focus. Releasing only the warm mic would strand
+// the latch 'locked' over a dead mic (or leave the capture running while hidden),
+// so hide/blur while locked must CANCEL (drop the latch + discard the capture).
+describe('tap-to-lock privacy backstop (hide/blur while locked)', () => {
+  const installBridge = (): { active: Array<(a: boolean) => void>; hide: Array<() => void> } => {
+    const cbs = { active: [] as Array<(a: boolean) => void>, hide: [] as Array<() => void> }
+    ;(window as unknown as { omiOverlay: unknown }).omiOverlay = {
+      onActiveChange: (cb: (a: boolean) => void) => {
+        cbs.active.push(cb)
+        return () => {}
+      },
+      onWillHide: (cb: () => void) => {
+        cbs.hide.push(cb)
+        return () => {}
+      }
+    }
+    return cbs
+  }
+  afterEach(() => {
+    delete (window as unknown as { omiOverlay?: unknown }).omiOverlay
+  })
+
+  const latchLocked = async (result: {
+    current: ReturnType<typeof usePushToTalk>
+  }): Promise<void> => {
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    await advance(150)
+    act(() => result.current.beginHold())
+    await advance(0) // flush the capture promise so job.capture is assigned
+  }
+
+  it('onWillHide while locked cancels the capture and clears the latch', async () => {
+    const bridge = installBridge()
+    const { result } = setup()
+    await latchLocked(result)
+    expect(result.current.locked).toBe(true)
+    expect(h.state.captures).toHaveLength(1)
+
+    act(() => bridge.hide.forEach((cb) => cb()))
+    expect(result.current.locked).toBe(false)
+    expect(result.current.recording).toBe(false)
+    expect(h.state.captures[0].dispose).toHaveBeenCalled()
+  })
+
+  it('onActiveChange(false) while locked also cancels', async () => {
+    const bridge = installBridge()
+    const { result } = setup()
+    await latchLocked(result)
+    expect(result.current.locked).toBe(true)
+
+    act(() => bridge.active.forEach((cb) => cb(false)))
+    expect(result.current.locked).toBe(false)
+    expect(h.state.captures[0].dispose).toHaveBeenCalled()
+  })
+
+  it('hide while idle (no locked capture) starts nothing and cancels nothing', async () => {
+    const bridge = installBridge()
+    setup()
+    act(() => bridge.hide.forEach((cb) => cb()))
+    expect(h.startPttCapture).not.toHaveBeenCalled()
+  })
+})
+
+// Tap-to-lock is on the HOTKEY path (beginHold/endHold) only — the textarea Space
+// keeps typing. A quick double-tap latches hands-free listening; a tap finalizes;
+// a long hold is a normal PTT turn.
+describe('tap-to-lock latch (hotkey path)', () => {
+  it('double-tap latches locked listening; endHold is ignored; a tap finalizes → transcribe', async () => {
+    const { result, onCommit } = setup()
+    // Tap 1 — quick press (< tap-to-lock ceiling) → opens the decision window.
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    expect(result.current.recording).toBe(false) // a tap never captured
+    // Tap 2 — within the double-tap window → latch locked + start a hands-free capture.
+    await advance(150)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(true)
+    expect(result.current.recording).toBe(true)
+    expect(h.startPttCapture).toHaveBeenCalledOnce()
+    // Key-up while locked is ignored — the mic stays open.
+    act(() => result.current.endHold())
+    expect(result.current.locked).toBe(true)
+    expect(result.current.recording).toBe(true)
+    // Tap 3 — finalize the hands-free turn → drain → transcribe.
+    await advance(500)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(false)
+    await advance(0)
+    await act(async () => {
+      h.state.batchCalls[0].resolve('hands free dictation')
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(onCommit).toHaveBeenCalledWith('hands free dictation')
+  })
+
+  it('flag on — a locked capture delegates to the hub and a finalizing tap ends the hub turn', async () => {
+    const delegate = { enabled: () => true, begin: vi.fn(), end: vi.fn(), cancel: vi.fn() }
+    const { result } = setup({ hubDelegate: delegate })
+    // Double-tap to latch.
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    await advance(150)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(true)
+    // The locked hands-free capture delegates to the hub — no local capture job.
+    expect(delegate.begin).toHaveBeenCalledTimes(1)
+    expect(h.startPttCapture).not.toHaveBeenCalled()
+    act(() => result.current.endHold()) // key-up ignored while locked
+    // Finalizing tap ends the DELEGATED turn (there is no local job to RELEASE).
+    await advance(500)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(false)
+    expect(delegate.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('a long hold via the hotkey is a normal PTT turn (never latches)', async () => {
+    const { result, onCommit } = setup()
+    act(() => result.current.beginHold())
+    await advance(HOLD_THRESHOLD_MS) // crosses the hold threshold → recording
+    expect(result.current.recording).toBe(true)
+    expect(result.current.locked).toBe(false)
+    act(() => result.current.endHold()) // a release, not a tap
+    await advance(0)
+    await act(async () => {
+      h.state.batchCalls[0].resolve('held dictation')
+      await vi.advanceTimersByTimeAsync(0)
+    })
+    expect(onCommit).toHaveBeenCalledWith('held dictation')
+    expect(result.current.locked).toBe(false)
+  })
+
+  it('a lone tap opens then abandons the window — no capture when no second tap lands', async () => {
+    const { result } = setup()
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    await advance(DOUBLE_TAP_WINDOW_MS + 20) // window elapses
+    expect(result.current.locked).toBe(false)
+    expect(result.current.recording).toBe(false)
+    expect(h.startPttCapture).not.toHaveBeenCalled()
+  })
+
+  it('a second tap after the window is too late to latch — starts a fresh normal hold', async () => {
+    const { result } = setup()
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold()) // tap 1 → pending window
+    await advance(DOUBLE_TAP_WINDOW_MS + 20) // window EXPIRES → idle
+    act(() => result.current.beginHold()) // a fresh press, not a latch
+    await advance(HOLD_THRESHOLD_MS)
+    expect(result.current.locked).toBe(false)
+    expect(result.current.recording).toBe(true) // an ordinary hold
   })
 })

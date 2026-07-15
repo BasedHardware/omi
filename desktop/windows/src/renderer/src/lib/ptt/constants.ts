@@ -74,6 +74,17 @@ export const MIC_IDLE_RELEASE_MS = 15000
  *  open the whole time the user is merely typing. */
 export const MIC_TAP_RELEASE_MS = 2000
 
+/** A press released within this window counts as a TAP for tap-to-lock (macOS
+ *  PushToTalkManager.tapToLockMaxHoldDuration). A slower press is a normal tap or,
+ *  past HOLD_THRESHOLD_MS, a hold — neither latches. Well under the hold threshold
+ *  so hold-to-talk is untouched. */
+export const TAP_TO_LOCK_MAX_MS = 220
+
+/** After a lock-tap, the second tap must land within this window to latch locked
+ *  listening (macOS PushToTalkManager.doubleTapThreshold). Also the lifetime of the
+ *  pending-lock decision window. */
+export const DOUBLE_TAP_WINDOW_MS = 400
+
 /** Batch transcription contract — shared by the transport and the live E2E
  *  suite so the harness can never green-test a stale request shape. */
 export const BATCH_TRANSCRIBE_PATH = '/v2/voice-message/transcribe'

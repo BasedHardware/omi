@@ -395,6 +395,10 @@ export function BarApp(): React.JSX.Element {
   const agentsActive = chat.agentsActive ?? false
   const orb = deriveOrbState({
     recording: recordingNow,
+    // Distinct locked-listening pose for a tap-to-lock hands-free capture. The
+    // recording/thinking signals already fold in a main-owned hub turn via
+    // recordingNow/thinkingNow (onVoiceHubState).
+    locked: ptt.locked,
     transcribing: thinkingNow,
     status: chat.status,
     continuousListening,

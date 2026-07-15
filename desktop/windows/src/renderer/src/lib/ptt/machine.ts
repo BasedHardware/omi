@@ -14,6 +14,7 @@
 //   batching → BATCH_OK → commit | BATCH_FAIL → error strip
 //   any non-idle → CANCEL/WATCHDOG → idle (discard, abort in-flight work)
 import { type AudioStats, gateDecision } from './gate'
+import { TAP_TO_LOCK_MAX_MS, DOUBLE_TAP_WINDOW_MS } from './constants'
 
 export type PttPhase = 'idle' | 'holding' | 'draining' | 'streamFinalize' | 'batching'
 
@@ -243,6 +244,89 @@ export function reduce(s: PttState, e: PttEvent): Step {
           { kind: 'captureEnded' }
         ]
       }
+    }
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Tap-to-lock latch (hands-free PTT) — a SECOND pure reducer, orthogonal to the
+// capture pipeline above. Port of macOS PushToTalkManager's tap-to-lock
+// (handleShortcutDown/Up): a quick tap opens a short decision window; a second
+// quick tap within it latches LOCKED listening (the mic stays open with no key
+// held); a tap while locked finalizes. A long hold never enters this path — the
+// hook only feeds TAP_RELEASED for a sub-threshold press — so hold-to-talk is
+// unchanged. Like the capture machine this owns no clock: the hook measures the
+// tap duration + inter-tap gap and passes them in, so every timing edge
+// (0.21s tap, 0.39s vs 0.41s second tap) is unit-testable here.
+
+export type LockPhase = 'idle' | 'pendingLock' | 'locked'
+
+export type LockState = { phase: LockPhase }
+
+export const initialLockState: LockState = { phase: 'idle' }
+
+export type LockEvent =
+  /** A press was released as a tap; `holdMs` is how long it was down. */
+  | { type: 'TAP_RELEASED'; holdMs: number; doubleTapForLock: boolean }
+  /** A new press went down; `gapMs` is the time since the last tap-up. */
+  | { type: 'PRESS_DOWN'; gapMs: number }
+  /** The pending-lock decision window elapsed with no second tap. */
+  | { type: 'WINDOW_EXPIRED' }
+  /** Esc / focus loss / unmount. */
+  | { type: 'CANCEL' }
+
+export type LockEffect =
+  /** Arm the decision window (DOUBLE_TAP_WINDOW_MS) → WINDOW_EXPIRED on elapse. */
+  | { kind: 'armWindow' }
+  /** Drop the decision window. */
+  | { kind: 'cancelWindow' }
+  /** Latch locked — the hook starts a hands-free capture (a normal hold that is
+   *  not tied to a key-up). */
+  | { kind: 'enterLocked' }
+  /** End the locked capture — the hook releases it into the transcribe pipeline. */
+  | { kind: 'finalizeLocked' }
+
+export type LockStep = { state: LockState; effects: LockEffect[] }
+
+const lockStay = (state: LockState): LockStep => ({ state, effects: [] })
+
+export function reduceLock(s: LockState, e: LockEvent): LockStep {
+  switch (e.type) {
+    case 'TAP_RELEASED': {
+      // Only a fast tap while the setting is on opens the window; a slower tap is
+      // an ordinary tap and never latches.
+      if (s.phase === 'idle' && e.doubleTapForLock && e.holdMs < TAP_TO_LOCK_MAX_MS) {
+        return { state: { phase: 'pendingLock' }, effects: [{ kind: 'armWindow' }] }
+      }
+      return lockStay(s)
+    }
+    case 'PRESS_DOWN': {
+      if (s.phase === 'pendingLock') {
+        // Second tap inside the window → latch locked; too late → fall back to idle
+        // (the hook treats this press as a fresh gesture).
+        if (e.gapMs < DOUBLE_TAP_WINDOW_MS) {
+          return {
+            state: { phase: 'locked' },
+            effects: [{ kind: 'cancelWindow' }, { kind: 'enterLocked' }]
+          }
+        }
+        return { state: { phase: 'idle' }, effects: [{ kind: 'cancelWindow' }] }
+      }
+      if (s.phase === 'locked') {
+        return { state: { phase: 'idle' }, effects: [{ kind: 'finalizeLocked' }] }
+      }
+      return lockStay(s)
+    }
+    case 'WINDOW_EXPIRED': {
+      if (s.phase === 'pendingLock') return { state: { phase: 'idle' }, effects: [] }
+      return lockStay(s)
+    }
+    case 'CANCEL': {
+      if (s.phase === 'idle') return lockStay(s)
+      // Discarding the locked capture is the hook's job (it cancels the active
+      // capture); here we only drop the latch + any pending window.
+      const effects: LockEffect[] = s.phase === 'pendingLock' ? [{ kind: 'cancelWindow' }] : []
+      return { state: { phase: 'idle' }, effects }
     }
   }
 }
