@@ -52,6 +52,11 @@ export type ChatQuotaGate = {
   sync: () => Promise<void>
   /** Pre-send verdict. Awaits ONE quota fetch only when no snapshot exists yet. */
   check: () => Promise<QuotaVerdict>
+  /** Synchronous verdict from the local snapshot ONLY — never the network. Used by
+   *  the PTT pre-capture veto, where a key press must not wait on any await. No
+   *  snapshot yet ⇒ { blocked:false } (fail open, same posture as check()'s
+   *  cold-start branch, minus the one sync it deliberately cannot afford here). */
+  checkSync: () => QuotaVerdict
   /** Count a query sent since the last server sync (call after a send goes out). */
   recordQuery: () => void
   /** Test/seam: apply a snapshot directly. */
@@ -127,6 +132,12 @@ export function createChatQuotaGate(
       // network here. Time-boxed — a stalled probe fails open rather than holding
       // the send (see withTimeout above).
       if (!quota) await withTimeout(sync(), coldStartTimeoutMs)
+      if (!isLimitReached(quota, optimisticDelta)) return { blocked: false }
+      return { blocked: true, message: limitMessage(quota) }
+    },
+    checkSync: () => {
+      // Same verdict as check(), minus the cold-start sync — a PTT gesture cannot
+      // block on the network. No snapshot ⇒ isLimitReached is false ⇒ fail open.
       if (!isLimitReached(quota, optimisticDelta)) return { blocked: false }
       return { blocked: true, message: limitMessage(quota) }
     }

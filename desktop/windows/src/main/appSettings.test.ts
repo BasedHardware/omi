@@ -92,7 +92,11 @@ describe('appSettings', () => {
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
-      aiProfileEnabled: false,
+      aiProfileEnabled: true,
+      focusEnabled: true,
+      focusNotificationsEnabled: true,
+      focusCooldownMinutes: 10,
+      focusExcludedApps: [],
       glowOverlayEnabled: true,
       screenAnalysisEnabled: true,
       notificationsEnabled: true,
@@ -115,11 +119,28 @@ describe('appSettings', () => {
     // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
     // appears in response to a Focus verdict, and it is click-through.
     expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
-    // The AI user profile is the one opt-IN flag: it defaults OFF until a
-    // consumer and a Settings toggle exist, so only an explicit true enables it
-    // (everything else here is opt-out). See the AppSettings field comment.
-    expect(sanitizeAppSettings({ aiProfileEnabled: true }).aiProfileEnabled).toBe(true)
-    expect(sanitizeAppSettings({ aiProfileEnabled: 'yes' } as never).aiProfileEnabled).toBe(false)
+    // The AI user profile is opt-OUT now that Focus consumes it: on unless the
+    // user explicitly turns it off.
+    expect(sanitizeAppSettings({ aiProfileEnabled: false }).aiProfileEnabled).toBe(false)
+    expect(sanitizeAppSettings({ aiProfileEnabled: 'yes' } as never).aiProfileEnabled).toBe(true)
+    // Focus master flags are opt-OUT; cooldown and excluded-apps sanitize.
+    expect(sanitizeAppSettings({ focusEnabled: false }).focusEnabled).toBe(false)
+    expect(
+      sanitizeAppSettings({ focusNotificationsEnabled: false }).focusNotificationsEnabled
+    ).toBe(false)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 5 }).focusCooldownMinutes).toBe(5)
+    // Zero/negative/junk cooldown falls back to 10 (never disables the cooldown).
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 0 }).focusCooldownMinutes).toBe(10)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: -3 }).focusCooldownMinutes).toBe(10)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 2.5 }).focusCooldownMinutes).toBe(10)
+    // Excluded apps: only non-empty strings survive.
+    expect(
+      sanitizeAppSettings({ focusExcludedApps: ['Slack', '', '  Discord  ', 5] as never })
+        .focusExcludedApps
+    ).toEqual(['Slack', 'Discord'])
+    expect(sanitizeAppSettings({ focusExcludedApps: 'nope' as never }).focusExcludedApps).toEqual(
+      []
+    )
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

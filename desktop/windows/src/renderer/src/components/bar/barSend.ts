@@ -10,7 +10,7 @@
 // ChatBridgeHost raises the popup there, and speaks the line back for a voice
 // turn — while the bar itself renders the same copy inline (Mac shows both: a
 // local assistant bubble in the bar AND the modal on the main window).
-import { createChatQuotaGate, type ChatQuotaGate } from '../../lib/chatQuotaGate'
+import { createChatQuotaGate, type ChatQuotaGate, type QuotaVerdict } from '../../lib/chatQuotaGate'
 import { auth } from '../../lib/firebase'
 
 export type BarSender = {
@@ -20,6 +20,10 @@ export type BarSender = {
   /** Refresh the quota snapshot (mount + every reveal), so the hot send path
    *  reads a cached verdict instead of a network round trip. */
   sync: () => Promise<void>
+  /** Synchronous local-snapshot verdict for the PTT pre-capture veto — never
+   *  awaits, so a key press can't stall. Signed-out ⇒ not blocked (same fail-open
+   *  posture as send(): a signed-out user has no chat to gate). */
+  checkSync: () => QuotaVerdict
 }
 
 export function createBarSender(
@@ -37,11 +41,24 @@ export function createBarSender(
       if (!isSignedIn()) return
       await gate.sync()
     },
+    checkSync: (): QuotaVerdict => (isSignedIn() ? gate.checkSync() : { blocked: false }),
     send: async (text: string, fromVoice: boolean): Promise<string | null> => {
       if (!text.trim()) return null
       const verdict = isSignedIn() ? await gate.check() : ({ blocked: false } as const)
       if (verdict.blocked) {
-        window.omiBar.notifyUsageLimit({ message: verdict.message, spoken: fromVoice })
+        // A blocked VOICE turn is answered ALOUD only — no popup — because the
+        // pre-capture PTT veto (usePushToTalk) owns the modal for voice: it fires
+        // at the gesture whenever the snapshot already shows the limit. A voice
+        // turn only reaches here having slipped past a stale/absent snapshot, and
+        // mirrors macOS FloatingControlBarWindow's post-transcription voice path
+        // (speakOneShot, NO showUsageLimitPopup). A blocked TYPED submit still
+        // raises the popup (Mac's typed floating_bar path). This split is why a
+        // refused voice turn can never double-pop the modal.
+        window.omiBar.notifyUsageLimit({
+          message: verdict.message,
+          spoken: fromVoice,
+          popup: !fromVoice
+        })
         return verdict.message
       }
       // Onboarding: the user asked something in the bar.
