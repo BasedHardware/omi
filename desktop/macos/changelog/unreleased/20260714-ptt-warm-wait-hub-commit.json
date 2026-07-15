@@ -1,3 +1,0 @@
-{
-  "change": "Fixed push-to-talk turns spoken while the voice connection was still warming up getting stuck thinking with no reply"
-}

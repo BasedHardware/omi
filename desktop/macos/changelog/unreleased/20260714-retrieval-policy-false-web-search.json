@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Calendar, Gmail and Apple Notes imports failing to extract anything, and chat turns erroring out, when a message merely mentioned something like \"today\" plus \"schedule\""
-}

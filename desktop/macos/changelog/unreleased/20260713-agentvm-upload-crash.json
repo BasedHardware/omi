@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a crash on launch that could occur when preparing an empty local database for agent sync"
-}
