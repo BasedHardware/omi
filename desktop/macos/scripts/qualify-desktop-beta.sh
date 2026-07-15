@@ -281,6 +281,8 @@ prepare_qualification_defaults "$QUALIFICATION_BUNDLE_ID" "$BUNDLE"
   OMI_SKIP_SETTINGS_SEED=1 make desktop-run-local DESKTOP_APP_NAME="$BUNDLE" DESKTOP_USER=alice
 ) >"$LAUNCH_LOG" 2>&1 &
 DESKTOP_LAUNCH_PID=$!
+# Build time must not consume the desktop-launch readiness allowance.
+SECONDS=0
 
 if ! wait_for_bridge "$AUTOMATION_PORT"; then
   echo "--- last 80 lines of $LAUNCH_LOG ---" >&2
