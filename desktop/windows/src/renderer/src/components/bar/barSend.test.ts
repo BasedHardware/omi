@@ -45,23 +45,31 @@ describe('bar send — usage-limit gate', () => {
     expect(sendChat).not.toHaveBeenCalled()
     expect(notifyAsked).not.toHaveBeenCalled()
     // The main window is told to raise the popup (the bar is a separate renderer
-    // and cannot show the shared modal itself).
+    // and cannot show the shared modal itself). A typed block shows the modal
+    // (popup:true) and is not spoken — Mac's typed floating_bar path.
     expect(notifyUsageLimit).toHaveBeenCalledWith({
       message: expect.stringContaining("You've reached"),
-      spoken: false
+      spoken: false,
+      popup: true
     })
     // …and the bar renders the same line inline.
     expect(notice).toContain('Upgrade to keep chatting without restrictions.')
   })
 
-  it('BLOCKS a blocked PTT turn and asks the main window to SPEAK the line (voice gets an answer)', async () => {
+  it('BLOCKS a blocked PTT turn: SPEAKS the line but does NOT re-pop the popup (the gesture veto owns it)', async () => {
+    // A voice turn only reaches the send gate having slipped past a stale/absent
+    // snapshot at the gesture (the pre-capture veto raises the popup when the
+    // snapshot already shows the limit). So here we speak the answer but pass
+    // popup:false — mirroring macOS's speakOneShot-only voice path, and the reason
+    // a refused voice turn can never double-pop the modal.
     const sender = createBarSender(createChatQuotaGate(async () => quota({ allowed: false })))
     await sender.send('what is on my calendar', true)
 
     expect(sendChat).not.toHaveBeenCalled()
     expect(notifyUsageLimit).toHaveBeenCalledWith({
       message: expect.any(String),
-      spoken: true
+      spoken: true,
+      popup: false
     })
   })
 
@@ -143,5 +151,32 @@ describe('bar send — usage-limit gate', () => {
     // …and the synced snapshot still blocks an over-cap send.
     expect(await sender.send('hello', false)).toContain("You've reached")
     expect(sendChat).not.toHaveBeenCalled()
+  })
+
+  // checkSync is the PTT pre-capture veto's synchronous read (BarApp → usePushToTalk).
+  describe('checkSync — the PTT pre-capture veto seam', () => {
+    it('reports the block (with the limit line) once a snapshot is over the cap', async () => {
+      const sender = createBarSender(createChatQuotaGate(async () => quota({ allowed: false })))
+      await sender.sync()
+      expect(sender.checkSync()).toEqual({
+        blocked: true,
+        message: expect.stringContaining("You've reached")
+      })
+    })
+
+    it('allows an in-quota snapshot', async () => {
+      const sender = createBarSender(createChatQuotaGate(async () => quota({ used: 3 })))
+      await sender.sync()
+      expect(sender.checkSync()).toEqual({ blocked: false })
+    })
+
+    it('SIGNED OUT: never blocks — a signed-out user has no chat to gate', () => {
+      h.authObj.currentUser = null
+      const fetchQuota = vi.fn(async () => quota({ allowed: false }))
+      const sender = createBarSender(createChatQuotaGate(fetchQuota))
+      expect(sender.checkSync()).toEqual({ blocked: false })
+      // Reads the local snapshot only — never awaits/fetches on the gesture path.
+      expect(fetchQuota).not.toHaveBeenCalled()
+    })
   })
 })

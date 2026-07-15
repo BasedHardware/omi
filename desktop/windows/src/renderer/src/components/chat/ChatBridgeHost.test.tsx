@@ -31,7 +31,7 @@ import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../li
 
 let barSendCb: ((p: { text: string; fromVoice: boolean }) => void) | null
 let reqStateCb: (() => void) | null
-let usageLimitCb: ((p: { message: string; spoken: boolean }) => void) | null
+let usageLimitCb: ((p: { message: string; spoken: boolean; popup?: boolean }) => void) | null
 let published: BarChatState[]
 
 beforeEach(() => {
@@ -58,7 +58,7 @@ beforeEach(() => {
       reqStateCb = cb
       return () => {}
     },
-    onBarUsageLimit: (cb: (p: { message: string; spoken: boolean }) => void) => {
+    onBarUsageLimit: (cb: (p: { message: string; spoken: boolean; popup?: boolean }) => void) => {
       usageLimitCb = cb
       return () => {}
     },
@@ -197,12 +197,22 @@ describe('ChatBridgeHost', () => {
     unsub()
   })
 
-  it('speaks the limit line back when the blocked bar send was a VOICE turn', () => {
+  it('speaks the limit line back for a blocked VOICE turn, but does NOT re-pop the popup (popup:false)', () => {
+    // A blocked voice send arrives with popup:false: the pre-capture PTT veto
+    // already owns the modal for voice (macOS parity). TTS lives here
+    // (voiceController), so the turn is still answered aloud — but the popup must
+    // NOT be raised a second time.
+    const reasons: (UsageLimitReason | null)[] = []
+    const unsub = onUsageLimit((r) => reasons.push(r))
     render(<ChatBridgeHost />)
-    usageLimitCb?.({ message: "You've reached your monthly free message limit.", spoken: true })
+    usageLimitCb?.({
+      message: "You've reached your monthly free message limit.",
+      spoken: true,
+      popup: false
+    })
 
-    // TTS lives here (voiceController), so a blocked PTT turn still gets an answer
-    // out loud instead of dying in silence — and the popup is raised too.
     expect(speakSpy).toHaveBeenCalledWith("You've reached your monthly free message limit.")
+    expect(reasons).not.toContain('chat')
+    unsub()
   })
 })
