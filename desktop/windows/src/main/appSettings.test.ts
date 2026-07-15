@@ -100,7 +100,11 @@ describe('appSettings', () => {
       glowOverlayEnabled: true,
       screenAnalysisEnabled: true,
       notificationsEnabled: true,
-      notificationFrequency: 0
+      notificationFrequency: 0,
+      memoryEnabled: true,
+      memoryExtractionIntervalMin: 10,
+      memoryMinConfidence: 0.7,
+      memoryExcludedApps: []
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
     // interrupt once the user has chosen a frequency. Anything that is not a
@@ -141,6 +145,25 @@ describe('appSettings', () => {
     expect(sanitizeAppSettings({ focusExcludedApps: 'nope' as never }).focusExcludedApps).toEqual(
       []
     )
+    // Memory: master flag opt-OUT; interval reuses the cooldown sanitizer (positive
+    // integer minutes, junk → 10); min-confidence clamps to [0,1] (junk → 0.7).
+    expect(sanitizeAppSettings({ memoryEnabled: false }).memoryEnabled).toBe(false)
+    expect(
+      sanitizeAppSettings({ memoryExtractionIntervalMin: 15 }).memoryExtractionIntervalMin
+    ).toBe(15)
+    expect(
+      sanitizeAppSettings({ memoryExtractionIntervalMin: 0 }).memoryExtractionIntervalMin
+    ).toBe(10)
+    expect(sanitizeAppSettings({ memoryMinConfidence: 0.85 }).memoryMinConfidence).toBe(0.85)
+    expect(sanitizeAppSettings({ memoryMinConfidence: 2 }).memoryMinConfidence).toBe(1)
+    expect(sanitizeAppSettings({ memoryMinConfidence: -1 }).memoryMinConfidence).toBe(0)
+    expect(sanitizeAppSettings({ memoryMinConfidence: 'high' } as never).memoryMinConfidence).toBe(
+      0.7
+    )
+    expect(
+      sanitizeAppSettings({ memoryExcludedApps: ['Zoom', '', '  Music  '] as never })
+        .memoryExcludedApps
+    ).toEqual(['Zoom', 'Music'])
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

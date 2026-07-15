@@ -45,6 +45,21 @@ const TRACK3_SCHEMA = `
     updated_at INTEGER NOT NULL,
     PRIMARY KEY (source, item_id)
   );
+
+  CREATE TABLE IF NOT EXISTS memories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    content TEXT NOT NULL,
+    category TEXT NOT NULL,
+    source_app TEXT NOT NULL DEFAULT '',
+    window_title TEXT NOT NULL DEFAULT '',
+    context_summary TEXT NOT NULL DEFAULT '',
+    confidence REAL,
+    screenshot_id INTEGER,
+    backend_id TEXT,
+    backend_synced INTEGER NOT NULL DEFAULT 0,
+    created_at INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
 `
 
 function makeDb(): DatabaseSync {
@@ -64,7 +79,7 @@ function tableNames(db: DatabaseSync): string[] {
 describe('Track 3 schema', () => {
   it('creates the three net-new tables', () => {
     const names = tableNames(makeDb())
-    for (const t of ['ai_user_profiles', 'focus_sessions', 'task_embeddings']) {
+    for (const t of ['ai_user_profiles', 'focus_sessions', 'task_embeddings', 'memories']) {
       expect(names, `table ${t}`).toContain(t)
     }
   })
@@ -197,6 +212,79 @@ describe('focus_sessions round-trip', () => {
       .get(id) as { backendId: string; backendSynced: number }
     expect(synced.backendId).toBe('be-99')
     expect(synced.backendSynced).toBe(1)
+  })
+})
+
+describe('memories round-trip', () => {
+  // Mirrors db.ts insertMemory / markMemorySynced / recentMemories, exercised
+  // through the same DDL the app ships (TRACK3_SCHEMA is a verbatim copy).
+  const INSERT = `INSERT INTO memories
+       (content, category, source_app, window_title, context_summary, confidence, screenshot_id, backend_id, backend_synced, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+  const RECENT = 'SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?'
+
+  it('inserts a row, defaulting the optional text columns to empty strings', () => {
+    const db = makeDb()
+    // insertMemory passes '' for the three text columns when the caller omits them.
+    db.prepare(INSERT).run('User works at Acme', 'system', '', '', '', 0.9, null, null, 0, 1000)
+    const row = db
+      .prepare(
+        'SELECT content, category, source_app AS sourceApp, window_title AS windowTitle, context_summary AS contextSummary, confidence, backend_synced AS backendSynced FROM memories'
+      )
+      .get() as {
+      content: string
+      category: string
+      sourceApp: string
+      windowTitle: string
+      contextSummary: string
+      confidence: number
+      backendSynced: number
+    }
+    expect(row).toMatchObject({
+      content: 'User works at Acme',
+      category: 'system',
+      sourceApp: '',
+      windowTitle: '',
+      contextSummary: '',
+      confidence: 0.9,
+      backendSynced: 0
+    })
+  })
+
+  it('recentMemories returns content+category newest-first, capped at the limit', () => {
+    const db = makeDb()
+    db.prepare(INSERT).run('oldest', 'system', 'Slack', 't', 'c', 0.8, 1, null, 0, 1000)
+    db.prepare(INSERT).run('middle', 'interesting', 'X', 't', 'c', 0.9, 2, null, 0, 2000)
+    db.prepare(INSERT).run('newest', 'system', 'Notion', 't', 'c', 0.95, 3, null, 0, 3000)
+
+    const recent = db.prepare(RECENT).all(2) as { content: string; category: string }[]
+    expect(recent).toEqual([
+      { content: 'newest', category: 'system' },
+      { content: 'middle', category: 'interesting' }
+    ])
+  })
+
+  it('markMemorySynced stamps backend_id + backend_synced', () => {
+    const db = makeDb()
+    const r = db.prepare(INSERT).run('m', 'system', 'App', 't', 'c', 0.8, null, null, 0, 1000)
+    const id = Number(r.lastInsertRowid)
+    db.prepare('UPDATE memories SET backend_synced = 1, backend_id = ? WHERE id = ?').run(
+      'mem-42',
+      id
+    )
+    const synced = db
+      .prepare(
+        'SELECT backend_id AS backendId, backend_synced AS backendSynced FROM memories WHERE id = ?'
+      )
+      .get(id) as { backendId: string; backendSynced: number }
+    expect(synced).toEqual({ backendId: 'mem-42', backendSynced: 1 })
+  })
+
+  it('stores a NULL confidence when the caller passes null', () => {
+    const db = makeDb()
+    db.prepare(INSERT).run('no conf', 'system', 'App', 't', 'c', null, null, null, 0, 1000)
+    const row = db.prepare('SELECT confidence FROM memories').get() as { confidence: number | null }
+    expect(row.confidence).toBeNull()
   })
 })
 
