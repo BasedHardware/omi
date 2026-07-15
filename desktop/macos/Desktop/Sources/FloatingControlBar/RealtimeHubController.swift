@@ -371,8 +371,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// latest scheduled playback epoch may publish a drain for the current lease.
   private var realtimePlaybackEpoch = 0
 
-  /// Log tag for the currently-connected provider.
-  var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
+    /// Log tag; an unbound handoff never infers a provider.
+    var providerTag: String { RealtimeHubProviderLogTag.current(sessionProvider) }
 
   private var reducerCapturingInput: Bool {
     VoiceTurnCoordinator.shared.activeTurn?.phase.isRecording == true

@@ -3,6 +3,12 @@ import XCTest
 @testable import Omi_Computer
 
 final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
+  func testProviderLogTagDoesNotGuessOpenAIWhileSessionIsUnbound() {
+    XCTAssertEqual(RealtimeHubProviderLogTag.current(nil), "unbound")
+    XCTAssertEqual(RealtimeHubProviderLogTag.current(.gemini), "gemini")
+    XCTAssertEqual(RealtimeHubProviderLogTag.current(.openai), "openai")
+  }
+
   func testAuthenticatedSocketWithStaleContextCapturesAndBuffersInsteadOfEnteringDirectly() {
     XCTAssertEqual(
       RealtimePTTAdmissionPolicy.decide(

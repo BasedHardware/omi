@@ -985,13 +985,11 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
-      // A response already accepted by the provider has no local PCM left to
-      // recover. Transcript fallback is only valid while this logical input is
-      // still captured or its hub commit is deferred.
-      guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
-        terminate(&model, reason: .providerFailed, effects: &effects)
-        return VoiceTurnReduction(model: model, effects: effects)
-      }
+      // A successful rebind is always admissible for the reconnect identity.
+      // Whether a failed reconnect may use transcription fallback is decided
+      // separately below; rejecting this success after the provider accepted a
+      // commit incorrectly terminalized healthy turns while their response was
+      // still draining.
       cancel(.providerReconnect, in: &model, effects: &effects)
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID

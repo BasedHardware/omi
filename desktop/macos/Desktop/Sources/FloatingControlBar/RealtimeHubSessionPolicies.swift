@@ -1,5 +1,22 @@
 import Foundation
 
+/// Logging must distinguish an unbound handoff from an actual OpenAI session.
+/// During a controller-owned reconnect, `sessionProvider` is briefly nil while
+/// the next physical provider is being selected. Treating that as OpenAI made
+/// a Gemini-only turn look like a voice/provider switch in diagnostics.
+enum RealtimeHubProviderLogTag {
+  static func current(_ provider: RealtimeHubProvider?) -> String {
+    switch provider {
+    case .gemini:
+      return "gemini"
+    case .openai:
+      return "openai"
+    case nil:
+      return "unbound"
+    }
+  }
+}
+
 /// Safe, non-sensitive classification for realtime WebSocket teardown messages.
 ///
 /// Gemini can idle-close warm sessions with WebSocket 1008 after the socket has
