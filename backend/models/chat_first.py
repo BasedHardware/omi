@@ -1,5 +1,6 @@
-"""Strict, content-free contracts for chat-first structured-block admission."""
+"""Strict contracts for chat-first structured-block and proactive-intent admission."""
 
+from datetime import datetime
 from hashlib import sha256
 from typing import Annotated, Literal, Union
 
@@ -86,6 +87,110 @@ class ChatFirstBlockValidationReceipt(_StrictModel):
     blocks: list[dict[str, object]] = Field(default_factory=list)
 
 
+ProactiveIntentSource = Literal['daily_opener', 'capture_arrival', 'deferral_reraise', 'agent_judgment']
+ProactiveIntentDeliveryState = Literal['ready', 'delivered']
+
+
+class ProactiveIntent(_StrictModel):
+    """A server-side instruction, not a Chat transcript row.
+
+    The local desktop kernel is the sole writer of the visible assistant turn.
+    This record remains ready until that kernel has committed and acknowledged
+    its stable ``intent_id``.
+    """
+
+    intent_id: StableId
+    continuity_key: StableId
+    account_generation: int = Field(ge=0)
+    source: ProactiveIntentSource
+    subject: ChatFirstSubject | None = None
+    blocks: list[ChatFirstBlockSpec] = Field(min_length=1, max_length=8)
+    delivery_state: ProactiveIntentDeliveryState = 'ready'
+    created_at: datetime
+    delivered_at: datetime | None = None
+    materialization_receipt_id: StableId | None = None
+
+    @property
+    def consumes_turn_budget(self) -> bool:
+        return self.source == 'agent_judgment'
+
+
+class ProactiveBudgetReservation(_StrictModel):
+    intent_id: StableId
+    expires_at: datetime
+
+
+class ProactiveBudgetState(_StrictModel):
+    """Private server accounting for proactive agent turns only."""
+
+    account_generation: int = Field(ge=0)
+    materialized_at: list[datetime] = Field(default_factory=list, max_length=64)
+    reservations: list[ProactiveBudgetReservation] = Field(default_factory=list, max_length=16)
+
+
+class ProactiveMaterializationReceipt(_StrictModel):
+    """Content-free receipt emitted only after the local journal commits."""
+
+    intent_id: StableId
+    receipt_id: StableId
+
+
+class MaterializePromptsRequest(_StrictModel):
+    source_surface: Literal['main_chat']
+    control_generation: int = Field(ge=0)
+    owner_fence: StableId
+    window_foreground: bool = False
+    receipts: list[ProactiveMaterializationReceipt] = Field(default_factory=list, max_length=16)
+
+    @model_validator(mode='after')
+    def validate_unique_receipts(self):
+        intent_ids = [receipt.intent_id for receipt in self.receipts]
+        if len(intent_ids) != len(set(intent_ids)):
+            raise ValueError('materialization receipt intent IDs must be unique')
+        return self
+
+
+class MaterializePromptsResponse(_StrictModel):
+    intents: list[ProactiveIntent] = Field(default_factory=list)
+
+
+class DeferralCreateRequest(_StrictModel):
+    """The idempotent server receiver for the kernel-owned deferral outbox."""
+
+    source_surface: Literal['main_chat']
+    control_generation: int = Field(ge=0)
+    owner_fence: StableId
+    continuity_key: StableId
+    subject: ChatFirstSubject
+    question: QuestionCardSpec
+
+    @model_validator(mode='after')
+    def require_question_subject_match(self):
+        if self.question.subject != self.subject:
+            raise ValueError('deferral question subject must match the deferred subject')
+        return self
+
+
+class ProactiveDeferral(_StrictModel):
+    """Durable, server-side record delivered by the kernel's deferral outbox."""
+
+    deferral_id: StableId
+    continuity_key: StableId
+    account_generation: int = Field(ge=0)
+    subject: ChatFirstSubject
+    question: QuestionCardSpec
+    created_at: datetime
+    due_at: datetime
+    state: Literal['pending', 'released'] = 'pending'
+    released_intent_id: StableId | None = None
+
+
+class DeferralReceipt(_StrictModel):
+    deferral_id: StableId
+    due_at: datetime
+    state: Literal['pending', 'released']
+
+
 def stable_block_id(*, uid: str, generation: int, block: ChatFirstBlockSpec) -> str:
     """Generate an opaque, retry-stable block ID without exposing block text."""
 
@@ -100,7 +205,16 @@ __all__ = [
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',
     'ChatFirstSubject',
+    'DeferralCreateRequest',
+    'DeferralReceipt',
     'GoalLinkSpec',
+    'MaterializePromptsRequest',
+    'MaterializePromptsResponse',
+    'ProactiveBudgetReservation',
+    'ProactiveBudgetState',
+    'ProactiveDeferral',
+    'ProactiveIntent',
+    'ProactiveMaterializationReceipt',
     'QuestionCardSpec',
     'QuestionOption',
     'TaskCardSpec',
