@@ -127,14 +127,11 @@ extension SettingsContentView {
           .foregroundColor(OmiColors.textSecondary)
         }
         Spacer()
-        Picker("", selection: $shortcutSettings.selectedVoiceID) {
+        SettingsMenuPicker(selection: $shortcutSettings.selectedVoiceID) {
           ForEach(ShortcutSettings.availableVoices) { voice in
             Text(voice.name).tag(voice.id)
           }
         }
-        .pickerStyle(.menu)
-        .labelsHidden()
-        .frame(width: 200)
       }
     }
   }
@@ -159,13 +156,11 @@ extension SettingsContentView {
 
             Spacer()
 
-            Picker("", selection: $chatBridgeMode) {
+            SettingsMenuPicker(selection: $chatBridgeMode) {
               ForEach(AIProvider.all) { provider in
                 Text(provider.displayName).tag(provider.bridgeModeRawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: chatBridgeMode) { _, newMode in
               if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
                 Task {
