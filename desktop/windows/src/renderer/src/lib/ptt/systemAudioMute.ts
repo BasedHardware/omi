@@ -58,3 +58,14 @@ export function applyPttSystemAudio(effect: PttEffect['kind']): void {
 export function restoreSystemAudio(): void {
   window.omi?.restoreSystemAudio?.()
 }
+
+/** Pref-gated MUTE for a warm-hub (A5) PTT turn's capture start. Identical gate +
+ *  IPC as the cascade's `startCapture` mute (`applyPttSystemAudio('startCapture')`),
+ *  separated so the hub turn has a named, turn-boundary entry point — the cascade
+ *  path is untouched (still `applyPttSystemAudio`), so the flag-off behavior is
+ *  byte-for-byte unchanged. RESTORE is the SAME unconditional `restoreSystemAudio`;
+ *  the host guarantees exactly one restore per turn (`voiceTurnHost.ts`). */
+export function muteSystemAudioForHubCapture(): void {
+  if (!muteEnabled()) return
+  window.omi?.muteSystemAudio?.()
+}
