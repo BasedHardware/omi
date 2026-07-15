@@ -1,5 +1,13 @@
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Mic, Monitor, Power, Presentation } from 'lucide-react'
+import {
+  LayoutDashboard,
+  MessageSquarePlus,
+  MessagesSquare,
+  Mic,
+  Monitor,
+  Power,
+  Presentation
+} from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
@@ -38,6 +46,7 @@ export function GeneralTab(): React.JSX.Element {
           </select>
         }
       />
+      <MultiChatRow />
       <LegacyHomeRow />
       <MeetingDetectionRow />
       <LaunchAtLoginRow />
@@ -101,6 +110,32 @@ function AudioRecordingRow(): React.JSX.Element {
       subtitle={on ? 'Recording and transcribing audio' : 'Audio recording is paused'}
       keywords="audio recording microphone transcribe listening voice"
       control={<Toggle on={on} onChange={change} label="Audio Recording" />}
+    />
+  )
+}
+
+// Multi-chat sessions (macOS "Multiple Chat Sessions"). Off = the single Synced
+// Chat thread shared with mobile; on = separate desktop chat threads with a
+// history switcher. The multi-chat header also requires the pi_mono chat engine
+// (a dark flag), so flipping this on under the default legacy engine has no
+// visible effect yet — matching Mac, where multi-chat is kernel-backed.
+function MultiChatRow(): React.JSX.Element {
+  const [on, setOn] = useState(() => getPreferences().multiChatEnabled === true)
+
+  useEffect(() => onPreferencesChange((p) => setOn(p.multiChatEnabled === true)), [])
+
+  const change = (next: boolean): void => {
+    setOn(next) // optimistic; setPreferences notifies subscribers to reconcile
+    setPreferences({ multiChatEnabled: next })
+  }
+
+  return (
+    <SettingRow
+      icon={MessageSquarePlus}
+      title="Multiple Chat Sessions"
+      subtitle={on ? 'Create separate chat threads' : 'Single chat synced with the mobile app'}
+      keywords="multi chat sessions threads history switcher conversations separate"
+      control={<Toggle on={on} onChange={change} label="Multiple Chat Sessions" />}
     />
   )
 }
