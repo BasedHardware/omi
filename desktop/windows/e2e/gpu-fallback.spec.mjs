@@ -4,12 +4,29 @@
 // and proves the brain map degrades to a deliberate static mark instead of leaving
 // a black void, without regressing the healthy render.
 //
-// The bug this guards (from the product owner's crash.log): on hybrid-GPU Windows
-// laptops Chromium's GPU process crash-LOOPS (`child-process-gone type=GPU`, five in
-// 30s). The renderer's remount-based recovery is capped at 4, so a loop exhausts it
-// and — once Chromium refuses new 3D contexts — three.js's WebGLRenderer throws and
-// the pane stays permanently black. Onboarding is where that hurts most: the map is
-// half of a new user's first screen.
+// WARNING — THIS SPEC POPS REAL WINDOWS ON YOUR DESKTOP, ON PURPOSE. One of the runs
+// below launches the app with `--disable-gpu` plus a getContext-returns-null shim, so
+// you will briefly see the app on screen showing the GREY STATIC MARK where the brain
+// map belongs. That is the test doing its job, not the app breaking.
+//
+// WHAT THE EVIDENCE ACTUALLY SAYS. An earlier version of this header claimed a GPU
+// "crash LOOP" — five `child-process-gone type=GPU` in 30s. That claim was FABRICATED
+// and is retracted:
+//   * REAL: %APPDATA%/omi-windows/crash.log holds 8 genuine `type=GPU reason=crashed`
+//     deaths on this machine (2026-07-10 x7, 2026-07-11 x1), scattered across hours —
+//     the closest pair 3 minutes apart. GPU-process death is a real event here.
+//   * NOT OBSERVED: any crash *loop*. The five lines that started this investigation
+//     were `reason=killed exitCode=1` — the signature of a CLEAN QUIT on Windows, where
+//     the browser process ends its children with TerminateProcess. Our own Playwright
+//     harness produced them by launching and quitting the app five times. The crash-log
+//     handler only filtered `clean-exit`, so every ordinary quit forged a "GPU crash"
+//     line. That handler bug is fixed (dab54dffd) and is now guarded by the clean-quit
+//     test below.
+//
+// So what this spec guards is the consequence of a GPU death that leaves Chromium
+// refusing new 3D contexts: three.js's WebGLRenderer throws and the pane would otherwise
+// stay black. Onboarding is where that hurts most — the map is half of a new user's
+// first screen. This spec does NOT claim to reproduce a loop.
 //
 // Auth/onboarding seeding, network blocking and the step-driving helpers are lifted
 // from onboarding-layout.spec.mjs (same hermetic recipe: offline Firebase session in
@@ -44,8 +61,8 @@ const WIDTHS = [1280, 1920]
 // NOTE (measured, not assumed): --disable-gpu and --disable-3d-apis passed through
 // Electron's argv do NOT stop Chromium granting a WebGL context here — the first run
 // of this spec asserted `webglAvailable === false` and got `true`. So the refusal is
-// ALSO injected at the exact seam Chromium uses when it domain-blocks 3D APIs after
-// a GPU crash loop: getContext returns null (see refuseWebglScript). That null is the
+// ALSO injected at the exact seam Chromium uses when it domain-blocks 3D APIs after it
+// gives up on the GPU: getContext returns null (see refuseWebglScript). That null is the
 // real, observable symptom — it is what makes three's WebGLRenderer throw ("Error
 // creating WebGL context.", verified against three r184 in
 // components/graph/webglRendererThrows.test.ts) — so the app code under test takes
@@ -159,8 +176,9 @@ async function setContentSize(app, width, height) {
 }
 
 // Land on the Language step (map shown) by completing the Name step for real, so
-// the graph actually holds nodes — Onboarding calls resetOnboardingGraph on mount,
-// so a step reached by reload alone would render an empty (legitimately bare) map.
+// the graph actually holds nodes — this launch's --user-data-dir is throwaway, so
+// its persisted graph store is empty and a step reached by reload alone would hydrate
+// that empty store into a (legitimately) bare map.
 async function gotoPopulatedMapStep(page) {
   await page.evaluate(
     ({ PREFS_KEY }) => {
@@ -294,18 +312,31 @@ describe('BrainGraph GPU resilience', () => {
 
   // NON-REGRESSION PROOF, and the honest limits of it.
   //
-  // This asserts STRUCTURALLY that with WebGL available the REAL BrainGraph mounts
-  // (a <canvas> is present) and the fallback/boundary stay out of the way. It does
-  // NOT assert pixels — and right now it CANNOT, because BrainGraph paints zero
-  // pixels even on a healthy, non-lost context (separately proven: canvas 756x756,
-  // rAF at 66fps, real data, GL buffer reads back all-zero; owned by the BrainGraph
-  // render fix). The healthy screenshot is therefore black for a reason that has
-  // nothing to do with this change, and no screenshot can discriminate until that
-  // lands. A pixel-level healthy-path check must be re-run afterwards.
+  // This is the test that would have caught the regression that reached the product
+  // owner: an earlier cut PRE-PROBED for a WebGL context and mounted the fallback
+  // when the probe returned null. Because a probe must CREATE a context to answer,
+  // and contexts are a capped shared resource, the probe itself failed near the cap
+  // on a HEALTHY machine — and replaced his real brain map with the static mark.
+  // The component now fails OPEN (three.js is the only authority on whether a
+  // context can be had), so this asserts the real <canvas> mounts and the fallback
+  // is absent whenever WebGL works.
   //
-  // What this DOES prove is the thing that matters here: the probe does not steal
-  // the graph. The fallback fires only on a null context / a throwing renderer — it
-  // has no notion of "the canvas looks empty" — so it cannot mask the render bug.
+  // It does NOT assert pixels — it asserts STRUCTURE (a real <canvas> is mounted, the
+  // fallback is not). Do not "strengthen" it with a pixel check by either route we
+  // already tried and got wrong:
+  //   * Reading back the GL drawing buffer proves NOTHING here. r3f defaults to
+  //     `preserveDrawingBuffer: false`, under which the buffer is undefined (in
+  //     practice all-zero) after compositing — so a readback returns zeros whether the
+  //     graph painted beautifully or not at all. An earlier note in this file cited
+  //     exactly such a readback as proof that "BrainGraph paints zero pixels even on a
+  //     healthy context". That conclusion was UNSOUND and is retracted; the method
+  //     cannot distinguish the two cases. (The orb harness gets away with readPixels
+  //     only because orbRenderer.ts explicitly opts into preserveDrawingBuffer.)
+  //   * An OS-level PrintWindow capture does not include GPU-composited canvas layers
+  //     either, so a black PrintWindow bitmap is equally uninformative.
+  // A sound pixel check needs either a canvas created WITH preserveDrawingBuffer, or a
+  // real compositor capture (Playwright's page.screenshot, CDP capture). Until someone
+  // does that, this test stays structural rather than pretending to more.
   test('healthy (software GL) → the REAL graph mounts; the fallback does NOT steal it', async (t) => {
     mkdirSync(shotsDir, { recursive: true })
     const { app, cleanup } = await launch(SWIFTSHADER_ARGS)
