@@ -8,13 +8,14 @@
 // here (runInsightOnce) is gone; its pure helpers (insightPrompt / insightGate /
 // insightActivity) remain importable but unused.
 //
-// This bootstrap survives ONLY to start the two renderer→main session relays that
+// This bootstrap survives ONLY to start the renderer→main session relays that
 // the main-process services need (they are inert without a Firebase token): the
-// AI-profile host and the Rewind embedding indexer. Both are idempotent and
-// app-session-lived. The function name is unchanged so Home.tsx's single caller
-// (and its test mock) keep working.
+// AI-profile host, the Rewind embedding indexer, and the pi-mono managed-cloud
+// chat session relay. All are idempotent and app-session-lived. The function
+// name is unchanged so Home.tsx's single caller (and its test mock) keep working.
 import { startAiProfileHost } from './aiProfileHost'
 import { startRewindEmbedHost } from './rewindEmbedHost'
+import { startPiMonoAuthHost } from './piMonoAuthHost'
 
 let started = false
 
@@ -23,4 +24,5 @@ export function maybeStartInsightEngine(): void {
   started = true
   startAiProfileHost()
   startRewindEmbedHost()
+  startPiMonoAuthHost()
 }

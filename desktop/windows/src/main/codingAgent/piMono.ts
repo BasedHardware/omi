@@ -68,6 +68,15 @@ export interface HarnessConfig {
   omiApiBaseUrl?: string
   /** Firebase auth token for Omi API authentication (wired in PR-B). */
   authToken?: string
+  /**
+   * The complete `OMI_BYOK_*` env set to inject at spawn when the user has all
+   * four BYOK provider keys, or undefined/`{}` for Omi-managed billing. Built by
+   * the pi-mono session store from `ByokKeyStore` (`byokEnvVars`, all-or-nothing)
+   * and passed through at spawn — the bundled omi-provider extension reads these
+   * and re-emits them as `X-BYOK-*` headers. Separate from `authToken`: the
+   * managed `OMI_API_KEY` is always the Firebase token, never a BYOK key.
+   */
+  byokEnv?: Record<string, string>
 }
 
 interface SessionOpts {
@@ -416,6 +425,18 @@ export class PiMonoAdapter {
     if (process.env.OMI_YOLO_MODE === '1') {
       env.OMI_YOLO_MODE = '1'
       process.stderr.write('[pi-mono] WARNING: OMI_YOLO_MODE=1 — denylist bypass active\n')
+    }
+
+    // BYOK: scrub every inherited OMI_BYOK_* first (parity with macOS
+    // removeInheritedBYOKEnvironment), so a stale/partial set from the parent env
+    // can never leak into the subprocess, then inject only the complete set the
+    // session store built (all-or-nothing — see byokEnvVars). Key material is
+    // never logged.
+    for (const key of Object.keys(env)) {
+      if (key.toUpperCase().startsWith('OMI_BYOK_')) delete env[key]
+    }
+    if (this.config.byokEnv) {
+      Object.assign(env, this.config.byokEnv)
     }
 
     // In Electron, process.execPath is the app binary, not node. This flag makes

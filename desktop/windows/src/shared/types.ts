@@ -1032,6 +1032,14 @@ export type OmiBridgeApi = {
     commandOverrides?: CodingAgentCommandOverrides
   ) => Promise<{ ok: boolean; error?: string }>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  // --- pi-mono managed-cloud chat session relay ---
+  /** Push the renderer's Firebase session (token + desktop API base) to the
+   *  main-side pi-mono session store on sign-in and on every id-token refresh;
+   *  null on sign-out. The token lives only in the renderer on Windows, so the
+   *  store — and the pi-mono adapter it feeds — is inert until this is called. */
+  pimonoSetSession: (
+    session: { desktopApiBase: string; token: string } | null
+  ) => Promise<void>
   // --- BYOK (bring-your-own-key) provider keys (encrypted at rest in main) ---
   /** Every stored provider key, decrypted. Returns key material to the renderer
    *  Settings UI (same trust model as the app). Empty map when none stored. */
