@@ -447,3 +447,44 @@ describe('pcm helpers', () => {
     expect(resamplePcm16(src, 16000, 24000).length).toBe(6)
   })
 })
+
+// ---- post-commit provider death surfaces a hint (A7c follow-up #1) ----------
+// A committed hub turn whose provider dies mid-reply used to end SILENTLY: the
+// reducer computed a "Voice response failed" hint but `VoiceHubBarState` had no
+// hint field, so `emit` dropped it and the orb just idled. These pin the plumbing
+// fix — the hint now reaches the bar and auto-clears on the hintVisibility deadline.
+
+describe('post-commit provider death (A7c follow-up #1)', () => {
+  const driveToProviderDeath = (h: Harness): void => {
+    h.hub.setAvailability(true) // warm hub → route = hub
+    h.driver.begin({ backfillMs: 0 })
+    // Socket ready → the release commits into awaitingResponse.
+    h.hub.events().onConnected?.('sess' as VoiceSessionID)
+    h.driver.end()
+    // The provider dies mid-reply (post-commit): the controller surfaces onError.
+    h.hub.events().onError?.({
+      reason: 'websocket closed (1008)',
+      retryable: true,
+      aliveForMs: 5000
+    })
+  }
+
+  it("projects the reducer's terminal hint into VoiceHubBarState.hint (not a silent idle)", async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    driveToProviderDeath(h)
+
+    const last = h.states.at(-1)!
+    expect(last.active).toBe(false) // the orb dropped to idle...
+    expect(last.hint).toBe('Voice response failed — try again') // ...but the hint rode along
+    expect(h.hub.calls.didTerminate).toHaveLength(1)
+  })
+
+  it("clears the hint when the reducer's hintVisibility deadline fires (auto-dismiss)", async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    driveToProviderDeath(h)
+    expect(h.states.at(-1)!.hint).toBe('Voice response failed — try again')
+
+    h.scheduler.fire('hintVisibility')
+    expect(h.states.at(-1)!.hint).toBe('')
+  })
+})

@@ -452,6 +452,11 @@ export type VoiceHubBarState = {
   isResponseActive: boolean
   /** Latest orb loudness in [0,1] sampled from the main-owned capture. */
   orbLevel: number
+  /** Transient status/error hint for the bar (e.g. "Voice response failed — try
+   *  again" when a committed hub turn's provider dies mid-reply). Empty when there is
+   *  nothing to show. Sourced from the reducer projection; the reducer's `hintVisibility`
+   *  deadline clears it (so it auto-dismisses). */
+  hint: string
 }
 
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */

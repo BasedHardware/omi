@@ -525,7 +525,13 @@ export class VoiceHubTurnDriver {
       isListening: p.isListening,
       isThinking: p.isThinking,
       isResponseActive: p.isResponseActive,
-      orbLevel: this.turnID !== null ? this.orbLevel : 0
+      orbLevel: this.turnID !== null ? this.orbLevel : 0,
+      // Forwarded UNCONDITIONALLY (not gated on an active turn): a terminal hint (e.g.
+      // a post-commit provider death) is emitted on the same terminal transition that
+      // drops `turnID` to null, so gating it on `active` would swallow it. Non-terminal
+      // projections carry an empty hint, so this is inert during a normal turn. The
+      // reducer's `hintVisibility` deadline later re-projects an empty hint to clear it.
+      hint: p.hint
     })
   }
 }
