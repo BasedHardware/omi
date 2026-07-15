@@ -104,8 +104,8 @@ def test_rendered_dev_pusher_google_client_id_clears_legacy_secret_source(prefli
     }
 
 
-def test_rendered_dev_pusher_typesense_host_clears_legacy_secret_source(preflight: SimpleNamespace):
-    environment = "dev"
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_rendered_pusher_typesense_host_clears_legacy_secret_source(preflight: SimpleNamespace, environment: str):
     deployment = next(document for document in preflight.render(environment) if document.get("kind") == "Deployment")
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
     typesense_host = next(item for item in env if item["name"] == "TYPESENSE_HOST")
