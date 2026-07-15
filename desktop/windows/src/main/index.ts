@@ -106,7 +106,7 @@ import { perfMark, flushPerfMarks } from '../shared/perf'
 // Dev-only benchmarking / sandbox machinery. Every call below is behind
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
-import { initSentry } from './sentry'
+import { initSentry, captureMessage } from './sentry'
 import { registerMicPermissionHandlers } from './ipc/micPermission'
 import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
 import { isQuitting, quitApp } from './lifecycle'
@@ -278,6 +278,38 @@ app.on('child-process-gone', (_e, details) => {
       if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
     }
   }
+})
+// A HUNG (not crashed) UI thread never fires render-process-gone — the process is
+// alive but wedged, so none of the handlers above see it. Electron surfaces this
+// as the webContents 'unresponsive' event (there is no app-level equivalent), so
+// attach it as each webContents is created — covering every window (main /bar
+// /capture /insight-toast /glow) uniformly. Log + report to Sentry at message
+// level, mirroring the crash handlers above. Purely OBSERVATIONAL: we do NOT kill
+// or force-reload the window — a hang often self-clears (recorded by 'responsive'),
+// and auto-killing a wedged-but-recoverable UI is a heavier behavior change out of
+// scope here.
+app.on('web-contents-created', (_e, wc) => {
+  const urlOf = (): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  }
+  wc.on('unresponsive', () => {
+    logFatal('unresponsive', `url=${urlOf()} webContents=${wc.id}`)
+    captureMessage('Renderer unresponsive', {
+      area: 'lifecycle-unresponsive',
+      level: 'warning',
+      extra: { url: urlOf(), webContentsId: wc.id }
+    })
+  })
+  // The recovery signal — a transient hang that cleared. Console-only (not a fatal
+  // event, and we don't Sentry-report heals, matching how render-process-gone
+  // skips clean exits) so crash.log stays a log of things that actually went wrong.
+  wc.on('responsive', () => {
+    console.log(`[lifecycle] renderer responsive again: url=${urlOf()} webContents=${wc.id}`)
+  })
 })
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
