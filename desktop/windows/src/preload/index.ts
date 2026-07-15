@@ -11,6 +11,7 @@ import type {
   BarShowPayload,
   BarChatState,
   BarUsageLimitPayload,
+  VoiceHubBarState,
   LocalConversation,
   ConversationFolder,
   ConversationSyncPatch,
@@ -383,6 +384,25 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('chat:barRequestState', listener)
   },
   publishChatState: (state: BarChatState) => ipcRenderer.send('chat:publishState', state),
+  // --- Warm-hub PTT driver (main-window side; A5 PR-6b) ---
+  onVoiceHubBegin: (cb: (payload: { backfillMs: number }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { backfillMs: number }): void =>
+      cb(payload)
+    ipcRenderer.on('voiceHub:begin', listener)
+    return () => ipcRenderer.removeListener('voiceHub:begin', listener)
+  },
+  onVoiceHubEnd: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:end', listener)
+    return () => ipcRenderer.removeListener('voiceHub:end', listener)
+  },
+  onVoiceHubCancel: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:cancel', listener)
+    return () => ipcRenderer.removeListener('voiceHub:cancel', listener)
+  },
+  publishVoiceHubState: (state: VoiceHubBarState) =>
+    ipcRenderer.send('voiceHub:publishState', state),
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {
@@ -517,6 +537,15 @@ const omiBar: OmiBarApi = {
     const listener = (_e: Electron.IpcRendererEvent, phase: 'down' | 'up'): void => cb(phase)
     ipcRenderer.on('bar:ptt', listener)
     return () => ipcRenderer.removeListener('bar:ptt', listener)
+  },
+  voiceHubBegin: (payload: { backfillMs: number }) =>
+    ipcRenderer.send('bar:voiceHubBegin', payload),
+  voiceHubEnd: () => ipcRenderer.send('bar:voiceHubEnd'),
+  voiceHubCancel: () => ipcRenderer.send('bar:voiceHubCancel'),
+  onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: VoiceHubBarState): void => cb(state)
+    ipcRenderer.on('voiceHub:state', listener)
+    return () => ipcRenderer.removeListener('voiceHub:state', listener)
   },
   getContentProtection: () => ipcRenderer.invoke('bar:getContentProtection'),
   setContentProtection: (enabled: boolean) =>

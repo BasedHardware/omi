@@ -915,6 +915,23 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   ipcMain.on('chat:publishState', (_e, state: unknown) => {
     send('chat:state', state)
   })
+  // Warm-hub PTT (A5 PR-6b, gated on pttHubEnabled): a bar hold delegates its turn
+  // to the MAIN window's warm-hub driver (coordinator + hub live in main, D1), the
+  // same bar→main hop as sendChat. The bar sends these ONLY when the flag is on;
+  // flag off, they never fire and the bar runs its local cascade exactly as today.
+  ipcMain.on('bar:voiceHubBegin', (_e, payload: { backfillMs: number }) => {
+    sendToMain('voiceHub:begin', payload)
+  })
+  ipcMain.on('bar:voiceHubEnd', () => {
+    sendToMain('voiceHub:end')
+  })
+  ipcMain.on('bar:voiceHubCancel', () => {
+    sendToMain('voiceHub:cancel')
+  })
+  // Main window → bar: projected warm-hub turn state for the orb (phase + level).
+  ipcMain.on('voiceHub:publishState', (_e, state: unknown) => {
+    send('voiceHub:state', state)
+  })
   // Screen-share privacy toggle (persisted; applied live).
   ipcMain.handle('bar:getContentProtection', () => getAppSettings().hudContentProtection)
   ipcMain.handle('bar:setContentProtection', (_e, enabled: boolean) => {

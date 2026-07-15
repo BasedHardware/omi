@@ -68,6 +68,19 @@ type Options = {
   checkUsageLimit?: () => { blocked: boolean; message?: string }
   /** Raise the shared usage-limit popup for a hold that checkUsageLimit vetoed. */
   onUsageLimitBlocked?: (message: string) => void
+  /** Warm-hub delegation (A5 PR-6b, gated on `pttHubEnabled`). When present AND
+   *  `enabled()` returns true at hold-start, the hold is driven by the MAIN
+   *  window's warm-hub turn driver instead of this hook's local cascade: the hook
+   *  still owns gesture detection (tap-vs-hold threshold, mic warm, barge-in) but
+   *  creates NO local capture job and issues NO local `ptt-start`. Absent or
+   *  disabled ⇒ the local cascade path runs byte-for-byte as today (the flag-off
+   *  invariant). `begin` carries the pre-roll backfill (ms since key-down). */
+  hubDelegate?: {
+    enabled: () => boolean
+    begin: (backfillMs: number) => void
+    end: () => void
+    cancel: () => void
+  }
 }
 
 export type PushToTalk = {
@@ -166,6 +179,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // Consecutive dead-mic turns across holds (macOS PTTSilentMicRecoveryPolicy):
   // drives the capture-rebuild-then-escalate ladder. Persists across holds.
   const deadMicPolicyRef = useRef(new DeadMicPolicy())
+  // A hold is being driven by the MAIN window's warm-hub driver (A5 PR-6b) instead
+  // of a local Job. Always false unless a hold-start actually delegated (flag on).
+  const hubActiveRef = useRef(false)
 
   const optsRef = useRef(opts)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
@@ -173,8 +189,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   const isForeground = (job: Job): boolean => jobRef.current === job
   /** Synchronous "is a hold capturing right now" for the key handlers — derived
-   *  from the machine state, never a second source of truth. */
-  const isHolding = (): boolean => jobRef.current?.state.phase === 'holding'
+   *  from the machine state (or a delegated hub hold), never a second source of
+   *  truth. `hubActiveRef` is always false unless a hold delegated (flag on), so
+   *  flag-off this reads exactly as before. */
+  const isHolding = (): boolean =>
+    jobRef.current?.state.phase === 'holding' || hubActiveRef.current
 
   // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
   // hold threshold), prefetch the auth token alongside the mic spin-up, and
@@ -434,6 +453,23 @@ export function usePushToTalk(opts: Options): PushToTalk {
     // hold-start (macOS PushToTalkManager.startListening → interruptCurrentResponse),
     // before mic capture begins. Safe no-op when nothing is playing.
     optsRef.current.onHoldStart?.()
+    // Warm-hub delegation (A5 PR-6b): flag on, the MAIN window's hub driver owns
+    // the turn — this hook detected the gesture (threshold, warm mic, barge-in
+    // above) but creates NO local capture job and issues NO local ptt-start.
+    // hubDelegate absent or disabled ⇒ fall straight through to the local cascade
+    // below, byte-for-byte as today (the flag-off invariant).
+    const hub = optsRef.current.hubDelegate
+    if (hub?.enabled()) {
+      const prevJob = jobRef.current
+      if (prevJob && (prevJob.state.phase === 'holding' || prevJob.state.phase === 'draining')) {
+        dispatch(prevJob, { type: 'CANCEL' })
+      }
+      hubActiveRef.current = true
+      // Take back the auto-repeat spaces typed while holding, like the local path.
+      optsRef.current.restoreDraft(snapshotRef.current)
+      hub.begin(keyDownAtRef.current > 0 ? Date.now() - keyDownAtRef.current : 0)
+      return
+    }
     // A prior job still pre-release can't coexist with a new hold (only possible
     // via focus glitches); one already transcribing keeps running in the
     // background and commits on its own — the new hold never kills it.
@@ -470,6 +506,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
       clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
+    if (hubActiveRef.current) {
+      hubActiveRef.current = false
+      optsRef.current.hubDelegate?.cancel()
+    }
     const job = jobRef.current
     if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
     setHint(null)
@@ -500,6 +540,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
       // typing a sentence — shorten the linger to a quick-re-press window.
       armMicIdleRelease(MIC_TAP_RELEASE_MS)
       return 'tap'
+    }
+    if (hubActiveRef.current) {
+      // A delegated hub hold released — the MAIN driver finalizes + commits. No
+      // local job exists. (Only reachable when a hold delegated, i.e. flag on.)
+      hubActiveRef.current = false
+      optsRef.current.hubDelegate?.end()
+      return 'released'
     }
     const job = jobRef.current
     if (job && job.state.phase === 'holding') {
@@ -598,6 +645,12 @@ export function usePushToTalk(opts: Options): PushToTalk {
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
       if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
+      // A delegated hub hold must not outlive the hook — tell the main driver to
+      // cancel its turn (no-op when nothing delegated, i.e. flag off).
+      if (hubActiveRef.current) {
+        hubActiveRef.current = false
+        optsRef.current.hubDelegate?.cancel()
+      }
       for (const job of [...liveJobsRef.current]) {
         if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
       }
