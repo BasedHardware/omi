@@ -88,9 +88,20 @@ struct BeeperSendResponse: Codable, Equatable {
 }
 
 struct BeeperInfo: Codable, Equatable {
-  // /v1/info payload is version metadata; we only require that it decodes as
-  // an object. Keep fields optional so client upgrades never break the probe.
-  var beeperDesktopVersion: String?
+  // /v1/info is public server metadata. Keep everything optional so a Beeper
+  // upgrade never breaks the probe; we only read `server.base_url` to
+  // self-correct the port.
+  struct Server: Codable, Equatable {
+    var baseURL: String?
+    var port: Int?
+
+    enum CodingKeys: String, CodingKey {
+      case baseURL = "base_url"
+      case port
+    }
+  }
+
+  var server: Server?
 }
 
 // MARK: - Live event stream wire models (ws://…/v1/ws, experimental)
@@ -116,7 +127,12 @@ struct BeeperDesktopClient {
   var accessToken: String
   var session: URLSession
 
-  static let defaultBaseURL = URL(string: "http://localhost:23373")!
+  /// Beeper Desktop's local API port. Current builds bind 23374; older builds
+  /// used 23373. `discoverBaseURL` probes both and then adopts whatever the
+  /// running app reports in `/v1/info`, so a version/port change never breaks
+  /// the connector.
+  static let defaultBaseURL = URL(string: "http://127.0.0.1:23374")!
+  static let candidatePorts = [23374, 23373]
 
   init(
     accessToken: String,
@@ -132,6 +148,26 @@ struct BeeperDesktopClient {
     let config = URLSessionConfiguration.ephemeral
     config.timeoutIntervalForRequest = 15
     return URLSession(configuration: config)
+  }
+
+  /// Locate the running Beeper Desktop API without needing a token: `/v1/info`
+  /// is public and reports the authoritative `server.base_url`. Probes each
+  /// candidate port and returns the URL the app itself advertises (falling
+  /// back to the reachable candidate). Returns nil when Beeper isn't running.
+  static func discoverBaseURL(
+    session: URLSession = BeeperDesktopClient.makeDefaultSession()
+  ) async -> URL? {
+    for port in candidatePorts {
+      guard let candidate = URL(string: "http://127.0.0.1:\(port)") else { continue }
+      guard let info = try? await BeeperDesktopClient(accessToken: "probe", baseURL: candidate, session: session)
+        .probeInfo()
+      else { continue }
+      if let advertised = info.server?.baseURL, let url = URL(string: advertised) {
+        return url
+      }
+      return candidate
+    }
+    return nil
   }
 
   // MARK: Endpoints
