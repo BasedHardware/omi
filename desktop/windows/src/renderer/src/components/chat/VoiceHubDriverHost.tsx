@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppState } from '../../state/appState'
+import { useAuth } from '../../hooks/useAuth'
+import { getPreferences, onPreferencesChange } from '../../lib/preferences'
+import { useHubWarmLifecycle } from '../../hooks/useHubWarmLifecycle'
 import { interruptCurrentResponse } from '../../lib/voice/voiceController'
 import { startPttCapture } from '../../lib/ptt/capture'
 import { batchTranscribe } from '../../lib/ptt/transport'
@@ -21,11 +24,21 @@ import { VoiceHubTurnDriver } from '../../lib/voice/turn/voiceHubTurnDriver'
 // capture, no hub warm, no projection. The shipped local PTT cascade is untouched.
 export function VoiceHubDriverHost(): null {
   const { chat } = useAppState()
+  const { user, loading } = useAuth()
+  // Eager-warm gate (the pttHubEnabled opt-out contract). Reactive so a runtime
+  // toggle warms/tears down with no restart.
+  const [hubEnabled, setHubEnabled] = useState(() => getPreferences().pttHubEnabled === true)
+  useEffect(() => onPreferencesChange((p) => setHubEnabled(p.pttHubEnabled === true)), [])
 
   // Latest-ref so the once-constructed driver always drives the freshest send.
   const sendRef = useRef(chat.send)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
   sendRef.current = chat.send
+  // Latest-ref for the hub-turn recorder (append, no re-answer) — reads the freshest
+  // history so a recorded turn lands after everything sent before it.
+  const recordVoiceTurnRef = useRef(chat.recordVoiceTurn)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
+  recordVoiceTurnRef.current = chat.recordVoiceTurn
 
   // Built once. Every collaborator points at the real main-resident subsystem:
   //   * hub session (playback via its own pcmPlayer, D3) — HubController.
@@ -44,6 +57,10 @@ export function VoiceHubDriverHost(): null {
         startCapture: (opts) => startPttCapture(opts),
         transcribe: (pcm) => batchTranscribe(pcm, new AbortController().signal),
         onFinalText: (text) => void sendRef.current(text, { fromVoice: true }),
+        // A completed HUB turn: APPEND its text to the ONE chat engine (INV-CHAT-1),
+        // no LLM/TTS re-run (the hub already spoke it).
+        onRecordTurn: (userText, assistantText) =>
+          recordVoiceTurnRef.current(userText, assistantText),
         muteForCapture: muteSystemAudioForHubCapture
       })
   )
@@ -58,6 +75,11 @@ export function VoiceHubDriverHost(): null {
       un3?.()
     }
   }, [driver])
+
+  // Eagerly warm the hub for a signed-in user with the flag on. This is what makes
+  // hub.isAvailable() true — without it selectPttRoute always picks the cascade and
+  // the warm hub never engages. Tears down on toggle-off / sign-out.
+  useHubWarmLifecycle(driver, { ready: !loading, signedIn: !!user, hubEnabled })
 
   return null
 }

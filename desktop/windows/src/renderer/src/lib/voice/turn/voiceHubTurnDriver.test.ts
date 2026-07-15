@@ -113,6 +113,7 @@ type Harness = {
     interruptPlayback: ReturnType<typeof vi.fn>
     transcribe: ReturnType<typeof vi.fn>
     onFinalText: ReturnType<typeof vi.fn>
+    onRecordTurn: ReturnType<typeof vi.fn>
     muteForCapture: ReturnType<typeof vi.fn>
     restoreSystemAudio: ReturnType<typeof vi.fn>
     trackEvent: ReturnType<typeof vi.fn>
@@ -130,6 +131,7 @@ function makeDriver(opts: { pttHubEnabled?: boolean; transcript?: string } = {})
     interruptPlayback: vi.fn(),
     transcribe: vi.fn(() => Promise.resolve(opts.transcript ?? 'hello world')),
     onFinalText: vi.fn(),
+    onRecordTurn: vi.fn(),
     muteForCapture: vi.fn(),
     restoreSystemAudio: vi.fn(),
     trackEvent: vi.fn()
@@ -141,6 +143,7 @@ function makeDriver(opts: { pttHubEnabled?: boolean; transcript?: string } = {})
     startCapture: capture.start,
     transcribe: spies.transcribe,
     onFinalText: spies.onFinalText,
+    onRecordTurn: spies.onRecordTurn,
     muteForCapture: spies.muteForCapture,
     restoreSystemAudio: spies.restoreSystemAudio,
     trackEvent: spies.trackEvent,
@@ -266,6 +269,79 @@ describe('barge-in', () => {
     await flush()
     h.driver.begin({ backfillMs: 0 }) // a second hold while the first still owns the turn
     expect(h.hub.calls.beginTurn.at(-1)!.interrupting).toBe(true)
+  })
+})
+
+// ---- chat recording (INV-CHAT-1: a hub turn lands in the one timeline) ------
+
+describe('chat recording', () => {
+  const finishTurn = (h: Harness): void => {
+    const ev = h.hub.events()
+    h.driver.end()
+    ev.onSpeakingStart?.()
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.() // playbackDrained -> terminal(success)
+  }
+
+  it('records a completed hub turn exactly once (append, never re-answers)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    ev.onInputTranscript?.('what time is it', true, null)
+    ev.onAssistantText?.("it's noon", false, null)
+    finishTurn(h)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('what time is it', "it's noon", false)
+    // Append-only: a hub turn must NOT go through the cascade send (no LLM re-answer).
+    expect(h.spies.onFinalText).not.toHaveBeenCalled()
+  })
+
+  it('an empty final assistant marker does not wipe the accumulated reply', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    ev.onInputTranscript?.('capital of france', true, null)
+    ev.onAssistantText?.('Paris', false, null) // streamed delta
+    ev.onAssistantText?.('', true, null) // OpenAI GA empty-final marker
+    finishTurn(h)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('capital of france', 'Paris', false)
+  })
+
+  it('barge-in records the interrupted turn once, then the successor — no double-record', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    // Turn 1: a partial reply, then a barge-in supersedes it.
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    ev.onInputTranscript?.('turn one', true, null)
+    ev.onAssistantText?.('partial reply', false, null)
+    h.driver.begin({ backfillMs: 0 }) // barge-in
+    await flush()
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith('turn one', 'partial reply', true)
+    // Turn 2 completes normally.
+    ev.onInputTranscript?.('turn two', true, null)
+    ev.onAssistantText?.('full reply', false, null)
+    finishTurn(h)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(2)
+    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith('turn two', 'full reply', false)
+  })
+
+  it('does not record a cascade turn via onRecordTurn (no accumulated hub reply)', async () => {
+    const h = makeDriver({ pttHubEnabled: true, transcript: 'take a note' })
+    h.hub.setAvailability(false) // omniSTT cascade route
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    h.driver.end()
+    await flush()
+    await flush()
+    expect(h.spies.onRecordTurn).not.toHaveBeenCalled()
+    expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note') // cascade records via send
   })
 })
 
