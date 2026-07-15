@@ -9,6 +9,7 @@ export LC_NUMERIC=C
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+FAST_ONLY=0
 SHOW_HELP=0
 for arg in "$@"; do
     case "$arg" in
@@ -17,6 +18,9 @@ for arg in "$@"; do
             ;;
         --full)
             FORCE_FULL_BUNDLE=1
+            ;;
+        --fast-only)
+            FAST_ONLY=1
             ;;
         --help|-h)
             SHOW_HELP=1
@@ -27,6 +31,11 @@ for arg in "$@"; do
             ;;
     esac
 done
+
+if [ "$FAST_ONLY" = "1" ] && [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    echo "ERROR: --fast-only cannot be combined with --full or OMI_FORCE_FULL_BUNDLE=1" >&2
+    exit 2
+fi
 
 # ─── Help ──────────────────────────────────────────────────────────────
 if [ "$SHOW_HELP" = "1" ]; then
@@ -68,6 +77,7 @@ Examples:
   OMI_SKIP_TUNNEL=1 ./run.sh                # No Cloudflare tunnel (use direct URL)
   ./run.sh --yolo                            # Quick start: use dev backend, no local services
   ./run.sh --full                            # Rebuild every packaged dependency
+  ./run.sh --fast-only                       # Reuse an eligible installed bundle or fail without packaging
 USAGE
     exit 0
 fi
@@ -296,6 +306,65 @@ resolve_signing_identity() {
         substep "Using ad-hoc signing for named test bundle ($BUNDLE_ID)"
     fi
 }
+
+fast_bundle_fingerprint() {
+    omi_fast_bundle_fingerprint \
+        "$SCRIPT_DIR" \
+        "bundle-id=$BUNDLE_ID" \
+        "signing-identity=$SIGN_IDENTITY" \
+        "yolo=$YOLO_MODE" \
+        "skip-backend=${OMI_SKIP_BACKEND:-0}" \
+        "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
+        "desktop-api-url=${OMI_DESKTOP_API_URL:-}" \
+        "python-api-url=${OMI_PYTHON_API_URL:-}" \
+        "backend-port=$BACKEND_PORT"
+}
+
+fast_bundle_profile_root() {
+    if [ "$IS_NAMED_BUNDLE" = true ]; then
+        printf '%s\n' "$HOME/Library/Application Support/Omi Dev Bundles/$BUNDLE_ID"
+    else
+        printf '%s\n' "$HOME/Library/Application Support/Omi"
+    fi
+}
+
+fail_fast_only() {
+    local reason="$1"
+    printf 'launch_mode=failed fast_reason=%s bundle_id=%s profile_root=%q\n' \
+        "$reason" "$BUNDLE_ID" "$(fast_bundle_profile_root)" >&2
+    exit 3
+}
+
+# `--fast-only` is an inspection-first agent operation. Read the same selected
+# configuration that a normal launch will use, but do it before killing an app,
+# clearing a build directory, starting a tunnel, or starting a backend. This
+# makes an ineligible fast launch safe to probe repeatedly.
+prepare_fast_only_configuration() {
+    if [ "$LOCAL_PROFILE" = false ] && [ -f "$BACKEND_DIR/.env" ]; then
+        set -a
+        # shellcheck disable=SC1090
+        source "$BACKEND_DIR/.env"
+        set +a
+    fi
+    if [ "$YOLO_MODE" = "1" ] || [ "$NAMED_BUNDLE_DEFAULT_DEV_BACKEND" = true ]; then
+        apply_yolo_env
+    fi
+}
+
+FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
+if [ "$FAST_ONLY" = "1" ]; then
+    prepare_fast_only_configuration
+    if [ "$LOCAL_PROFILE" = true ]; then
+        fail_fast_only "local_profile_requires_full"
+    fi
+
+    resolve_signing_identity
+    FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+    FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
+    if [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
+        fail_fast_only "$FAST_BUNDLE_REASON"
+    fi
+fi
 
 sign_app_bundle() {
     local bundle="$1"
@@ -701,33 +770,28 @@ while true; do
 done
 
 FAST_BUNDLE=0
-FAST_BUNDLE_STAMP="$OMI_DEV_DIR/fast-dev-bundles/$BUNDLE_ID.stamp"
-fast_bundle_fingerprint() {
-    omi_fast_bundle_fingerprint \
-        "$SCRIPT_DIR" \
-        "bundle-id=$BUNDLE_ID" \
-        "signing-identity=$SIGN_IDENTITY" \
-        "yolo=$YOLO_MODE" \
-        "skip-backend=${OMI_SKIP_BACKEND:-0}" \
-        "skip-tunnel=${OMI_SKIP_TUNNEL:-0}" \
-        "desktop-api-url=${OMI_DESKTOP_API_URL:-}" \
-        "python-api-url=${OMI_PYTHON_API_URL:-}" \
-        "backend-port=$BACKEND_PORT"
-}
+FAST_BUNDLE_REASON=""
 
 step "Checking reusable development bundle..."
 resolve_signing_identity
 FAST_BUNDLE_FINGERPRINT="$(fast_bundle_fingerprint)"
+FAST_BUNDLE_REASON="$(omi_fast_bundle_eligibility_reason "$APP_PATH" "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT")"
 if [ "$FORCE_FULL_BUNDLE" = "1" ]; then
+    FAST_BUNDLE_REASON="full_requested"
     substep "Full bundle requested (--full or OMI_FORCE_FULL_BUNDLE=1)"
 elif [ "$LOCAL_PROFILE" = true ]; then
     # The profile generates credential-bearing .env files. Keep that isolated
     # harness lane conservative until its configuration has a secret-free stamp.
+    FAST_BUNDLE_REASON="local_profile_requires_full"
     substep "Local profile requires a full bundle"
-elif [ ! -d "$APP_PATH/Contents" ]; then
-    substep "No installed bundle at $APP_PATH"
-elif ! omi_fast_bundle_stamp_matches "$FAST_BUNDLE_STAMP" "$FAST_BUNDLE_FINGERPRINT"; then
-    substep "Packaged inputs or launch configuration changed"
+    if [ "$FAST_ONLY" = "1" ]; then
+        fail_fast_only "$FAST_BUNDLE_REASON"
+    fi
+elif [ "$FAST_BUNDLE_REASON" != "reusable" ]; then
+    substep "Fast bundle unavailable: $FAST_BUNDLE_REASON"
+    if [ "$FAST_ONLY" = "1" ]; then
+        fail_fast_only "$FAST_BUNDLE_REASON"
+    fi
 else
     FAST_BUNDLE=1
     substep "Fast path: reusing installed bundle at $APP_PATH"
@@ -1103,6 +1167,15 @@ if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then
 fi
 echo "========================================"
 echo ""
+
+LAUNCH_MODE="full"
+[ "$FAST_BUNDLE" = "1" ] && LAUNCH_MODE="fast"
+PROFILE_ROOT="$HOME/Library/Application Support/Omi"
+if [ "$IS_NAMED_BUNDLE" = true ]; then
+    PROFILE_ROOT="$HOME/Library/Application Support/Omi Dev Bundles/$BUNDLE_ID"
+fi
+printf 'launch_mode=%s fast_reason=%s bundle_id=%s profile_root=%q\n' \
+    "$LAUNCH_MODE" "$FAST_BUNDLE_REASON" "$BUNDLE_ID" "$PROFILE_ROOT"
 
 auth_debug "BEFORE launch: $(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 if [ "${#AUTOMATION_ARGS[@]}" -gt 0 ]; then

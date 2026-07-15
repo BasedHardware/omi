@@ -23,6 +23,8 @@ covers:
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift
   - desktop/macos/Desktop/Sources/OmiApp.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopDevRuntimeManifest.swift
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift
   - desktop/macos/Desktop/Sources/Onboarding/OnboardingFloatingBarDemoView.swift

@@ -290,6 +290,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     DesktopAutomationBridge.shared.startIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
+    publishNamedBundleRuntimeManifest()
 
     // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
     // These break the code signature seal, causing the NEXT update to fail with
@@ -1250,6 +1251,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return false
     }
     return true
+  }
+
+  /// Publish only token-free local diagnostics for a running named dev bundle.
+  /// The agent-facing doctor reads endpoint URLs from the loopback health route,
+  /// not from this durable file.
+  private func publishNamedBundleRuntimeManifest() {
+    guard DesktopLocalProfile.isNamedDevelopmentBundle,
+          let bundleID = Bundle.main.bundleIdentifier
+    else { return }
+
+    let manifest = DesktopDevRuntimeManifest(
+      bundleIdentifier: bundleID,
+      processID: ProcessInfo.processInfo.processIdentifier,
+      startedAt: Date(),
+      appPath: Bundle.main.bundleURL.path,
+      profileRoot: DesktopLocalProfile.applicationSupportURL().path,
+      logPath: omiLogFilePath(),
+      automationPort: Int(DesktopAutomationLaunchOptions.port))
+    do {
+      try DesktopDevRuntimeManifestStore.write(
+        manifest,
+        in: DesktopLocalProfile.applicationSupportURL())
+      log("AppDelegate: Published named-bundle runtime manifest")
+    } catch {
+      logError("AppDelegate: Failed to publish named-bundle runtime manifest", error: error)
+    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {

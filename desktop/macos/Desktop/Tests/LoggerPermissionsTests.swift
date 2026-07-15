@@ -80,8 +80,8 @@ final class LoggerPermissionsTests: XCTestCase {
       processID: 202)
 
     XCTAssertNotEqual(first, second)
-    XCTAssertEqual(first, "/private/tmp/omi/com.omi.qa-one/pid-101.log")
-    XCTAssertEqual(second, "/private/tmp/omi/com.omi.qa-two/pid-202.log")
+    XCTAssertEqual(first, "/private/tmp/omi-dev-com.omi.qa-one-101.log")
+    XCTAssertEqual(second, "/private/tmp/omi-dev-com.omi.qa-two-202.log")
     XCTAssertEqual(
       OmiLogPathResolver.logPath(
         isNonProduction: false,

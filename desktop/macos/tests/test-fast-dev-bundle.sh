@@ -51,4 +51,28 @@ omi_fast_bundle_write_stamp "$stamp" "$agent_changed"
 omi_fast_bundle_stamp_matches "$stamp" "$agent_changed"
 ! omi_fast_bundle_stamp_matches "$stamp" "$first"
 
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/missing.app" "$stamp" "$agent_changed")" = "no_installed_bundle"
+mkdir -p "$TMP_ROOT/installed.app/Contents"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$TMP_ROOT/missing.stamp" "$agent_changed")" = "missing_fast_fingerprint"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$first")" = "fast_fingerprint_mismatch"
+test "$(omi_fast_bundle_eligibility_reason "$TMP_ROOT/installed.app" "$stamp" "$agent_changed")" = "reusable"
+
+# An agent's failed --fast-only probe must not tear down a running app, clean
+# build output, or start services merely to discover that the named bundle does
+# not exist. Exercise the real launcher with a unique missing app name.
+fast_only_output="$TMP_ROOT/fast-only-launcher.log"
+fast_only_name="omi-fast-only-contract-$$"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="$fast_only_name" "$MACOS_DIR/run.sh" --yolo --fast-only >"$fast_only_output" 2>&1; then
+  echo "--fast-only unexpectedly succeeded for a missing bundle" >&2
+  exit 1
+else
+  fast_only_status=$?
+fi
+test "$fast_only_status" = "3"
+grep -q 'launch_mode=failed fast_reason=no_installed_bundle' "$fast_only_output"
+if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Starting Cloudflare|Starting Rust backend|Preparing agent runtime' "$fast_only_output"; then
+  echo "--fast-only performed launch side effects before rejecting a missing bundle" >&2
+  exit 1
+fi
+
 echo "fast-dev-bundle fingerprint tests passed"
