@@ -1338,6 +1338,46 @@ export function rewindFramesByIds(ids: number[]): RewindFrame[] {
   return ids.map((id) => byId.get(id)).filter((f): f is RewindFrame => f !== undefined)
 }
 
+/** Run a caller-supplied read-only SELECT (Insight's execute_sql tool). The
+ *  read-only enforcement lives in the caller (assistants/insight/sql.ts); this is
+ *  the impure edge only. `stmt.reader` is a second guard: better-sqlite3 marks a
+ *  non-row-returning statement `reader === false`, so a write that slipped the
+ *  caller's blocklist still cannot run through `.all()`. Returns column names +
+ *  row arrays. Never log the rows — they are raw OCR/screen text. */
+export function runReadonlySelect(sql: string): { columns: string[]; rows: unknown[][] } {
+  const stmt = get().prepare(sql)
+  if (stmt.reader === false) throw new Error('statement is not a read query')
+  const columns = stmt.columns().map((c) => c.name)
+  const rows = stmt.raw().all() as unknown[][]
+  return { columns, rows }
+}
+
+/** Mac's `buildActivitySummary` aggregate over the frame timeline: per (app,
+ *  window) screenshot counts + first/last-seen, most-active first. */
+export function rewindActivityAggregate(
+  fromMs: number,
+  toMs: number,
+  limit = 30
+): { app: string; windowTitle: string; count: number; firstSeen: number; lastSeen: number }[] {
+  return get()
+    .prepare(
+      `SELECT app, window_title AS windowTitle, COUNT(*) AS count,
+              MIN(ts) AS firstSeen, MAX(ts) AS lastSeen
+         FROM rewind_frames
+        WHERE ts >= ? AND ts <= ? AND app IS NOT NULL AND app != ''
+        GROUP BY app, window_title
+        ORDER BY count DESC
+        LIMIT ?`
+    )
+    .all(fromMs, toMs, limit) as {
+    app: string
+    windowTitle: string
+    count: number
+    firstSeen: number
+    lastSeen: number
+  }[]
+}
+
 // --- Proactive Insights ---
 
 const INSIGHT_COLUMNS =

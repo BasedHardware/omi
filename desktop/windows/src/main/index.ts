@@ -93,6 +93,7 @@ import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { registerFocusAssistant } from './assistants/focus/register'
+import { registerInsightAssistant } from './assistants/insight/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -862,6 +863,10 @@ app.whenReady().then(async () => {
     // that turns the proactive stack on. The glow window above is pre-created; the
     // renderer relays a session that Focus (and the AI profile) read.
     registerFocusAssistant()
+    // Track 3 (Insight assistant): Mac's two-phase tool-calling "Advice" pipeline.
+    // A coordinator peer to Focus (same shared loop); the sole Insight engine now
+    // that the renderer bootstrap no longer runs one.
+    registerInsightAssistant()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
