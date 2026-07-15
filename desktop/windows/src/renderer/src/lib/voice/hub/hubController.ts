@@ -196,7 +196,8 @@ export class HubController {
       })
     this.now = options.now ?? (() => Date.now())
     this.setTimer = options.setTimer ?? ((ms, fire) => setTimeout(fire, ms))
-    this.clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
+    this.clearTimer =
+      options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
   }
 
   // MARK: Warm (idempotent, eager-callable)
