@@ -88,4 +88,4 @@ ENV HOSTNAME "0.0.0.0"
 # Assuming you have a server.js file for the standalone output
 # If your package.json defines a different start script used by standalone output, adjust this command.
 # Check your .next/standalone/package.json 'scripts' section if unsure.
-CMD ["node", "server.js"] 
+CMD ["node", "server.js"]
