@@ -96,6 +96,17 @@ describe('MicPermissionStep', () => {
     expect(permissionsQuery).not.toHaveBeenCalled()
   })
 
+  // M4: permission steps used to have no Back button (only steps 1-3 did). The wrapper
+  // must forward onBack through to a working control.
+  it('forwards onBack — a Back button that steps the user back', async () => {
+    const onBack = vi.fn()
+    render(<MicPermissionStep stepIndex={7} totalSteps={14} onContinue={vi.fn()} onBack={onBack} />)
+    await tick()
+
+    fireEvent.click(screen.getByText('Back'))
+    expect(onBack).toHaveBeenCalledTimes(1)
+  })
+
   it('treats a Windows Deny as not-granted without prompting', async () => {
     getMicPermissionState.mockResolvedValue('denied')
     const { onContinue } = renderStep()

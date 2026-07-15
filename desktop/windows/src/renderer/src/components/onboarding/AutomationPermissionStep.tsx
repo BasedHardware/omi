@@ -7,6 +7,7 @@ type AutomationPermissionStepProps = {
   totalSteps: number
   aside?: React.ReactNode
   onContinue: () => void
+  onBack?: () => void
   onSkip?: () => void
 }
 
@@ -15,13 +16,14 @@ export function AutomationPermissionStep({
   totalSteps,
   aside,
   onContinue,
+  onBack,
   onSkip
 }: AutomationPermissionStepProps): React.JSX.Element {
-  // Automation has no OS permission prompt (Windows UIA needs no grant) —
-  // enabling it is a local opt-in that records consent, so there is nothing to
-  // poll and no `checkGranted`. useChat's action-planner pre-step gates on this
-  // preference (alongside the OMI_AUTOMATION env kill-switch), so flipping it on
-  // here is what actually lets Omi take real UI actions in your apps.
+  // Automation has no OS permission prompt (Windows UIA needs no grant) — enabling it
+  // is a local opt-in that records consent, so what `checkGranted` reads below is that
+  // consent, not an OS state. useChat's action-planner pre-step gates on this preference
+  // (alongside the OMI_AUTOMATION env kill-switch), so flipping it on here is what
+  // actually lets Omi take real UI actions in your apps.
   const enableAutomation = async (): Promise<void> => {
     setPreferences({ automationConsentedAt: Date.now() })
   }
@@ -58,6 +60,7 @@ export function AutomationPermissionStep({
       onActivate={enableAutomation}
       checkGranted={isConsented}
       onContinue={onContinue}
+      onBack={onBack}
       onSkip={onSkip}
     />
   )

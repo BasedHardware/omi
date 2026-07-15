@@ -6,6 +6,7 @@ type ScreenPermissionStepProps = {
   totalSteps: number
   aside?: React.ReactNode
   onContinue: () => void
+  onBack?: () => void
   onSkip?: () => void
 }
 
@@ -14,6 +15,7 @@ export function ScreenPermissionStep({
   totalSteps,
   aside,
   onContinue,
+  onBack,
   onSkip
 }: ScreenPermissionStepProps): React.JSX.Element {
   // Windows has NO OS consent prompt for desktop capture (unlike macOS Screen
@@ -84,6 +86,7 @@ export function ScreenPermissionStep({
       onActivate={enableCapture}
       checkGranted={isCaptureOn}
       onContinue={onContinue}
+      onBack={onBack}
       onSkip={onSkip ? () => declineCapture(onSkip) : undefined}
     />
   )

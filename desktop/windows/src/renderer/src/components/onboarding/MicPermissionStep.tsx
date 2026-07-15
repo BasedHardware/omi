@@ -7,6 +7,7 @@ type MicPermissionStepProps = {
   totalSteps: number
   aside?: React.ReactNode
   onContinue: () => void
+  onBack?: () => void
   onSkip?: () => void
 }
 
@@ -36,6 +37,7 @@ export function MicPermissionStep({
   totalSteps,
   aside,
   onContinue,
+  onBack,
   onSkip
 }: MicPermissionStepProps): React.JSX.Element {
   // Trigger the real Windows microphone grant. getUserMedia surfaces the OS
@@ -97,6 +99,7 @@ export function MicPermissionStep({
       recoveryLabel="Open Windows Settings"
       onRecover={() => window.omi?.openMicPrivacySettings?.()}
       onContinue={onContinue}
+      onBack={onBack}
       onSkip={onSkip}
     />
   )
