@@ -95,6 +95,21 @@ export function getPiMonoSession(): PiMonoSession | null {
 }
 
 /**
+ * The managed-cloud OMI chat API base for the pi subprocess → its
+ * `OMI_API_BASE_URL`. The relayed `desktopApiBase` is intentionally version-less
+ * (siblings append their own version — `${desktopApiBase}/v2/chat/completions` in
+ * aiUserProfile/service.ts, `${desktopApiBase}/v1/...` in rewind/embeddingClient.ts).
+ * pi-mono's managed `openai-completions` provider needs the `/v2` segment baked in,
+ * because the OpenAI SDK resolves `<base>/chat/completions` — without `/v2` every
+ * request 404s at `.../chat/completions` instead of `.../v2/chat/completions`.
+ * Trailing-slash safe. BYOK requests reuse this same base (they differ only by
+ * added `X-BYOK-*` headers), so `/v2` is correct for managed and BYOK alike.
+ */
+export function piMonoManagedApiBaseUrl(session: PiMonoSession): string {
+  return `${session.desktopApiBase.replace(/\/+$/, '')}/v2`
+}
+
+/**
  * The `OMI_BYOK_*` env set to inject into the pi subprocess, or `{}` when the
  * user does not have all four BYOK keys. All-or-nothing (see `byokEnvVars`).
  * Independent of the Firebase session: managed OMI_API_KEY is always the token.
