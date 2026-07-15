@@ -1069,11 +1069,20 @@ export type OmiBridgeApi = {
   codingAgentRun: (args: CodingAgentRunArgs) => Promise<CodingAgentResult>
   codingAgentCancel: (taskId: string) => Promise<boolean>
   /** Spawn the agent and complete the ACP handshake, then tear it down —
-   *  proves the configured command works (Settings → Agents "Test"). */
+   *  proves the configured command works (Settings → Agents "Test"). For Claude
+   *  Code, a missing/expired sign-in is reported as `needsAuth` (not a generic
+   *  failure) so the UI can offer "Sign in" instead of a confusing error. */
   codingAgentTest: (
     agentId: CodingAgentId,
     commandOverrides?: CodingAgentCommandOverrides
-  ) => Promise<{ ok: boolean; error?: string }>
+  ) => Promise<CodingAgentTestResult>
+  /** Whether the built-in Claude Code agent has usable credentials. */
+  codingAgentAuthStatus: () => Promise<CodingAgentAuthStatus>
+  /** Run the Claude Code sign-in: loopback PKCE flow + open the browser, then
+   *  write credentials. Resolves with the post-sign-in status. */
+  codingAgentStartAuth: () => Promise<CodingAgentStartAuthResult>
+  /** Sign out of Claude Code (drop only its stored credentials). */
+  codingAgentSignOut: () => Promise<CodingAgentAuthStatus>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
@@ -1160,6 +1169,32 @@ export type CodingAgentEvent =
       input?: Record<string, unknown>
     }
   | { type: 'tool_result_display'; taskId: string; toolUseId: string; name: string; output: string }
+  // Claude Code hit an authentication failure mid-task — the UI surfaces a
+  // "Sign in to Claude" prompt (the flow itself is triggered from the UI, never
+  // auto-opened from inside the adapter).
+  | { type: 'auth_required'; taskId: string; adapterId: CodingAgentId }
+
+/** Result of Settings → Agents "Test". `needsAuth` marks the built-in Claude
+ *  Code agent as not-signed-in (vs. a generic connection failure). */
+export type CodingAgentTestResult = {
+  ok: boolean
+  error?: string
+  needsAuth?: boolean
+}
+
+/** Whether the built-in Claude Code agent has usable credentials. */
+export type CodingAgentAuthStatus = {
+  connected: boolean
+  /** Epoch ms of access-token expiry, when known. */
+  expiresAt: number | null
+}
+
+/** Outcome of the Claude Code sign-in flow. */
+export type CodingAgentStartAuthResult = {
+  ok: boolean
+  error?: string
+  status: CodingAgentAuthStatus
+}
 
 export type CodingAgentResult = {
   taskId: string

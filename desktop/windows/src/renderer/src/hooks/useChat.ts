@@ -6,6 +6,7 @@ import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
+import { beginClaudeSignIn } from '../lib/claudeSignIn'
 import type {
   AutomationPlan,
   CodingAgentEvent,
@@ -375,6 +376,11 @@ export function useChat(): UseChat {
         text_ += event.text
       } else if (event.type === 'tool_activity') {
         activity = event.status === 'started' ? event.name : null
+      } else if (event.type === 'auth_required') {
+        // Claude Code isn't signed in — show the upsell sheet + launch the
+        // parallel OAuth (macOS parity). The task's own error result already
+        // explains the block in the thread.
+        beginClaudeSignIn()
       }
       render()
       if (Date.now() - lastPersist > 1500) {

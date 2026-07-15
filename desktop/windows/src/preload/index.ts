@@ -248,6 +248,9 @@ const omi: OmiBridgeApi = {
   codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
   codingAgentTest: (agentId: CodingAgentId, commandOverrides?: CodingAgentCommandOverrides) =>
     ipcRenderer.invoke('codingAgent:test', agentId, commandOverrides),
+  codingAgentAuthStatus: () => ipcRenderer.invoke('codingAgent:authStatus'),
+  codingAgentStartAuth: () => ipcRenderer.invoke('codingAgent:startAuth'),
+  codingAgentSignOut: () => ipcRenderer.invoke('codingAgent:signOut'),
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
     ipcRenderer.on('codingAgent:event', listener)
