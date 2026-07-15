@@ -320,20 +320,22 @@ def _append_commit_transaction(
     if current_head != expected_parent:
         raise HeadConflict(expected_parent, current_head)
 
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
+
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        _state_head_write_payload(
-            transaction=transaction,
-            user_ref=user_ref,
-            uid=uid,
-            state=state,
-            commit=commit,
-        ),
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 
@@ -368,20 +370,22 @@ def _append_commit_with_builder_transaction(
     if commit_snapshot.exists:
         return {'commit': _typed_doc(commit_snapshot), 'applied': False}
 
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
+
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        _state_head_write_payload(
-            transaction=transaction,
-            user_ref=user_ref,
-            uid=uid,
-            state=state,
-            commit=commit,
-        ),
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 
