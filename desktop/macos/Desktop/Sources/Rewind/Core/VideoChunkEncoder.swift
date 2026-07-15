@@ -188,7 +188,7 @@ actor VideoChunkEncoder {
                 encoderRestartCount += 1
             } catch {
                 consecutiveWriteFailures += 1
-                logError("VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
+                logError("VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)
 
                 // Reset the half-initialized chunk state so the NEXT frame cleanly retries
                 // starting the writer. Without this, currentChunkStartTime stays set while
@@ -222,7 +222,7 @@ actor VideoChunkEncoder {
             resetStalenessTimer()
         } catch {
             consecutiveWriteFailures += 1
-            logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures)): \(error)")
+            logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)
 
             if consecutiveWriteFailures >= maxConsecutiveFailures {
                 logError("VideoChunkEncoder: Too many write failures, performing emergency reset")
