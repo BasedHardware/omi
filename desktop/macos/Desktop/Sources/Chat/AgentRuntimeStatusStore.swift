@@ -332,7 +332,7 @@ final class AgentRuntimeStatusStore: ObservableObject {
     case .initMessage, .toolUse, .authorizedToolExecution,
       .authRequired, .authSuccess, .controlToolResult,
       .journalOperationResult, .journalTurnChanged, .journalBackendSync, .journalBackendDelete,
-      .journalBackendReconcile,
+      .journalBackendReconcile, .chatFirstDeferralDelivery,
       .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,

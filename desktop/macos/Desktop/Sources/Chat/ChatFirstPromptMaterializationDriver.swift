@@ -66,7 +66,7 @@ struct ChatFirstPromptIntent: Decodable {
   let continuityKey: String
   let accountGeneration: Int
   let source: Source
-  let blocks: [OmiAPI.OmiAnyCodable]
+  let blocks: [OmiAnyCodable]
 
   enum CodingKeys: String, CodingKey {
     case intentID = "intent_id"

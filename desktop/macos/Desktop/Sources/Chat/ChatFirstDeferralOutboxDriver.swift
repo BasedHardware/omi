@@ -13,13 +13,13 @@ struct ChatFirstDeferralDeliveryRequest: Sendable, Equatable {
     let optionID: String
     let label: String
     let preparedAnswer: String
-    let defer: Bool
+    let isDeferred: Bool
 
     enum CodingKeys: String, CodingKey {
       case optionID = "option_id"
       case label
       case preparedAnswer = "prepared_answer"
-      case defer
+      case isDeferred = "defer"
     }
   }
 
@@ -76,11 +76,16 @@ struct ChatFirstDeferralDeliveryRequest: Sendable, Equatable {
         let preparedAnswer = option["preparedAnswer"] as? String,
         !preparedAnswer.isEmpty, preparedAnswer.count <= 500
       else { return nil }
-      return Option(optionID: optionID, label: label, preparedAnswer: preparedAnswer, defer: option["defer"] as? Bool ?? false)
+      return Option(
+        optionID: optionID,
+        label: label,
+        preparedAnswer: preparedAnswer,
+        isDeferred: option["defer"] as? Bool ?? false
+      )
     }
     guard options.count == optionsPayload.count,
           Set(options.map(\.optionID)).count == options.count,
-          options.filter(\.defer).count <= 1
+          options.filter(\.isDeferred).count <= 1
     else { return nil }
 
     self.ownerID = ownerID
