@@ -38,6 +38,7 @@ covers:
   - desktop/macos/Desktop/Sources/TaskActionItem.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TaskDetailViews.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/DailyTaskCreationSheet.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+TaskCatalog.swift
 preconditions:
   - automation_bridge_ready
 

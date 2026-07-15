@@ -450,7 +450,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 
   func testRealtimeStatusReadsCoordinatorOpenLoops() throws {
-    let source = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let source = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
 
     XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
@@ -510,7 +510,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testPTTVoiceSpawnUsesCanonicalBackgroundAgentProjection() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
     XCTAssertTrue(chatSource.contains("kernelTurnProjection"))
@@ -541,7 +541,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testPTTBuildsFreshRealtimeSessionsFromTypedKernelContextSnapshot() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
 
@@ -606,7 +606,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testVoiceContextSnapshotUsesDedicatedRealtimeSessionAndTypedFreshness() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let providerSource = try sourceFile("Providers/ChatProvider.swift")
 
     XCTAssertTrue(managerSource.contains("provider.prepareRealtimeVoiceContextSnapshot()"))
@@ -620,7 +620,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testVoiceKernelAuthorizedToolResultFlowsIntoFinalTranscript() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
 
     XCTAssertTrue(managerSource.contains("func recordExchange("))
     XCTAssertFalse(hubSource.contains("let persistedReply ="))

@@ -1,5 +1,5 @@
 import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { describe, expect, it } from "vitest";
 
@@ -33,6 +33,12 @@ function sourceFiles(root: string): string[] {
       ? sourceFiles(path)
       : name.endsWith(".ts") || name.endsWith(".swift") ? [path] : [];
   });
+}
+
+function realtimeHubSources(): string[] {
+  return sourceFiles(join(SWIFT_SOURCES, "FloatingControlBar")).filter((path) =>
+    basename(path).startsWith("RealtimeHubController"),
+  );
 }
 
 const FORBIDDEN: ForbiddenPattern[] = [
@@ -179,14 +185,16 @@ describe("#9515 single-owner authority ratchets", () => {
   });
 
   it("keeps raw realtime provider tool calls behind the external run authority", () => {
-    const source = readFileSync(
-      join(SWIFT_SOURCES, "FloatingControlBar", "RealtimeHubController.swift"),
-      "utf8",
-    );
-    const handler = declarationBody(source, "func hubDidRequestTool(");
+    const sources = realtimeHubSources();
+    const handlerSource = sources
+      .map((path) => readFileSync(path, "utf8"))
+      .find((source) => source.includes("func hubDidRequestTool("));
+    expect(handlerSource).toBeDefined();
+    const handler = declarationBody(handlerSource!, "func hubDidRequestTool(");
     expect(handler).toContain("invokeExternallyAuthorizedTool(");
     expect(handler).not.toMatch(/ChatToolExecutor\.execute|APIClient\.shared|NSWorkspace\.shared/);
-    expect(source).not.toContain("voiceResponseWatchdog");
+    const realtimeHubModule = sources.map((path) => readFileSync(path, "utf8")).join("\n");
+    expect(realtimeHubModule).not.toContain("voiceResponseWatchdog");
   });
 
   it("never serializes an invocation bearer into a context snapshot", () => {

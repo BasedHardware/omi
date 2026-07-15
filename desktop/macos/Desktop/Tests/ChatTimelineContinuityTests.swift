@@ -1435,10 +1435,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
 
-    let hub = try String(
-      contentsOf: root.appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hub = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let runtime = try String(
       contentsOf: root.appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift"),
       encoding: .utf8

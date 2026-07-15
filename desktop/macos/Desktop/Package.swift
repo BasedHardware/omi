@@ -69,6 +69,7 @@ let package = Package(
         "OmiSupport",
         "OmiWAL",
         "Bluetooth/ARCHITECTURE.md",
+        "FloatingControlBar/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),

@@ -26,7 +26,7 @@ final class AgentDelegationBoundaryTests: XCTestCase {
 
   func testKernelControlPlaneIsOnlyProductionSpawnBoundaryForTopLevelSurfaces() throws {
     // omi-test-quality: source-inspection -- static contract: no Swift semantic router or pre-loop spawn boundary may return
-    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let realtime = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
     let executor = try sourceFile("FloatingControlBar/AgentDelegationExecutor.swift")

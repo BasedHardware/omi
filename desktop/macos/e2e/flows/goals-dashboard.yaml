@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalsAIService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/GoalStorage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/GoalCelebrationView.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+GoalModels.swift
 preconditions:
   - automation_bridge_ready
 
