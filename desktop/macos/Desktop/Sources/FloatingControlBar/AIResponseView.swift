@@ -222,6 +222,10 @@ struct AIResponseView: View {
         case .discoveryCard(_, let title, let summary, let fullText):
           DiscoveryCard(title: title, summary: summary, fullText: fullText)
             .frame(maxWidth: .infinity, alignment: .leading)
+        // The floating/notch surface never opts into rich chat-first controls.
+        // Keep journaled blocks inert if an older runtime projects them here.
+        case .questionCard, .taskCard, .goalLink, .captureLink:
+          EmptyView()
         case .agentSpawn(
           _, let pillId, let sessionId, let runId, let title, let objective, let provider
         ):

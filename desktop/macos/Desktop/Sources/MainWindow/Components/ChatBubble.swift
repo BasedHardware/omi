@@ -17,6 +17,9 @@ struct ChatBubble: View {
   var onCancelTurn: (() -> Void)? = nil
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Nil for all existing Chat surfaces. Rich blocks are transcript data, but
+  /// only the capability-gated main shell is allowed to turn them into controls.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
 
   @State private var isTimestampHovering = false
   @State private var isExpanded = false
@@ -30,7 +33,8 @@ struct ChatBubble: View {
     onCitationTap: ((Citation) -> Void)? = nil, isDuplicate: Bool = false,
     onCancelTurn: (() -> Void)? = nil,
     onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil,
-    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+    onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil,
+    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   ) {
     self.message = message
     self.app = app
@@ -40,6 +44,7 @@ struct ChatBubble: View {
     self.onCancelTurn = onCancelTurn
     self.onOpenAgent = onOpenAgent
     self.onOpenAgentRef = onOpenAgentRef
+    self.chatFirstRichBlockContext = chatFirstRichBlockContext
     _lastSubmittedRating = State(initialValue: message.rating)
   }
 
@@ -85,7 +90,8 @@ struct ChatBubble: View {
   var body: some View {
     let groupedBlocks = ContentBlockGroup.visibleChatGroups(
       message.contentBlocks,
-      isStreaming: message.isStreaming
+      isStreaming: message.isStreaming,
+      richBlockRenderingEnabled: chatFirstRichBlockContext != nil
     )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
@@ -276,6 +282,46 @@ struct ChatBubble: View {
       return AnyView(ThinkingBlock(text: text))
     case .discoveryCard(_, let title, let summary, let fullText):
       return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
+    case .questionCard(_, let questionID, let text, let options, let selectedOptionID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        QuestionCardView(
+          questionID: questionID,
+          text: text,
+          options: options,
+          selectedOptionID: selectedOptionID,
+          isActionable: false,
+          onSelect: { _ in }
+        )
+      )
+    case .taskCard(_, let taskID):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        TaskCardView(
+          taskID: taskID,
+          tasksStore: chatFirstRichBlockContext.tasksStore,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .goalLink(_, let goalID, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        GoalLinkView(
+          goalID: goalID,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
+    case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
+      guard let chatFirstRichBlockContext else { return AnyView(EmptyView()) }
+      return AnyView(
+        CaptureLinkView(
+          conversationID: conversationID,
+          momentTimestampMs: momentTimestampMs,
+          summary: summary,
+          navigation: chatFirstRichBlockContext.navigation
+        )
+      )
     case .agentSpawn(
       _, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):
@@ -857,6 +903,10 @@ enum ContentBlockGroup: Identifiable {
   case toolCalls(id: String, calls: [ChatContentBlock])
   case thinking(id: String, text: String)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case questionCard(id: String, questionID: String, text: String, options: [[String: Any]], selectedOptionID: String?)
+  case taskCard(id: String, taskID: String)
+  case goalLink(id: String, goalID: String, summary: String)
+  case captureLink(id: String, conversationID: String, momentTimestampMs: Int?, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -883,13 +933,20 @@ enum ContentBlockGroup: Identifiable {
     case .toolCalls(let id, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .questionCard(let id, _, _, _, _): return id
+    case .taskCard(let id, _): return id
+    case .goalLink(let id, _, _): return id
+    case .captureLink(let id, _, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
   }
 
   /// Groups consecutive `.toolCall` blocks together; passes other blocks through
-  static func group(_ blocks: [ChatContentBlock]) -> [ContentBlockGroup] {
+  static func group(
+    _ blocks: [ChatContentBlock],
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     var groups: [ContentBlockGroup] = []
     var pendingToolCalls: [ChatContentBlock] = []
 
@@ -913,11 +970,29 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard(let id, let title, let summary, let fullText):
         flushToolCalls()
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
-      // Chat-first blocks are decoded at the shared journal boundary in T02.
-      // T07 owns their main-chat visual treatment; suppress them on the legacy
-      // grouping projection until that renderer lands.
-      case .questionCard, .taskCard, .goalLink, .captureLink:
+      case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
         flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.questionCard(id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
+      case .taskCard(let id, let taskID):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.taskCard(id: id, taskID: taskID))
+      case .goalLink(let id, let goalID, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(.goalLink(id: id, goalID: goalID, summary: summary))
+      case .captureLink(let id, let conversationID, let momentTimestampMs, let summary):
+        flushToolCalls()
+        guard richBlockRenderingEnabled else { continue }
+        groups.append(
+          .captureLink(
+            id: id,
+            conversationID: conversationID,
+            momentTimestampMs: momentTimestampMs,
+            summary: summary
+          )
+        )
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):
@@ -963,7 +1038,11 @@ enum ContentBlockGroup: Identifiable {
   /// survive. When a structured `.agentSpawn` exists
   /// for the same pill/run, hide the spawn tool call so the card is the single
   /// entrypoint (INV-6 structured identity).
-  static func visibleChatGroups(_ blocks: [ChatContentBlock], isStreaming: Bool) -> [ContentBlockGroup] {
+  static func visibleChatGroups(
+    _ blocks: [ChatContentBlock],
+    isStreaming: Bool,
+    richBlockRenderingEnabled: Bool = false
+  ) -> [ContentBlockGroup] {
     // The display projection turns a persisted spawn into its terminal card.
     // Both structured forms are therefore authoritative evidence that the
     // matching raw `spawn_agent` tool row is lifecycle plumbing, not a second
@@ -987,11 +1066,11 @@ enum ContentBlockGroup: Identifiable {
         return trimmedRun.isEmpty ? nil : "run:\(trimmedRun)"
       }
     )
-    return group(blocks).compactMap { group in
+    return group(blocks, richBlockRenderingEnabled: richBlockRenderingEnabled).compactMap { group in
       switch group {
       case .text(_, let text):
         return text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? nil : group
-      case .discoveryCard, .agentSpawn, .agentCompletion:
+      case .discoveryCard, .questionCard, .taskCard, .goalLink, .captureLink, .agentSpawn, .agentCompletion:
         return group
       case .thinking:
         return isStreaming ? group : nil

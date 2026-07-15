@@ -67,6 +67,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
   var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
   /// Opens via structured agent identity (session/run/pill) when available.
   var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
+  /// Explicitly enables chat-first controls only in the cohort shell's main
+  /// Chat route. Nil keeps shared transcript projections safe elsewhere.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @ViewBuilder var welcomeContent: () -> WelcomeContent
 
   /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -448,7 +451,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
           isDuplicate: dupeIds.contains(message.id),
           onCancelTurn: onCancelTurn,
           onOpenAgent: onOpenAgent,
-          onOpenAgentRef: onOpenAgentRef
+          onOpenAgentRef: onOpenAgentRef,
+          chatFirstRichBlockContext: chatFirstRichBlockContext
         )
         .id(message.id)
       }

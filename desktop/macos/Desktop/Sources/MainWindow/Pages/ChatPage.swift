@@ -5,6 +5,9 @@ import SwiftUI
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
+  /// Present only for the cohort-gated main-window Chat. Every other caller
+  /// intentionally keeps journaled chat-first blocks inert.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @State private var showAppPicker = false
   @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
@@ -388,6 +391,7 @@ struct ChatPage: View {
       onOpenAgentRef: { ref, completion in
         FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
       },
+      chatFirstRichBlockContext: chatFirstRichBlockContext,
       welcomeContent: { welcomeMessage }
     )
   }
