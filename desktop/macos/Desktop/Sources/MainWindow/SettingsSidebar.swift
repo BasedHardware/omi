@@ -345,6 +345,7 @@ struct SettingsSidebar: View {
     .account,
     .transcription,
     .floatingBar,
+    .aiClone,
     .notifications,
     .rewind,
     .shortcuts,
@@ -532,6 +533,7 @@ struct SettingsSidebarItem: View {
     case .planUsage: return "creditcard"
     case .aiChat: return "cpu"
     case .floatingBar: return "sparkles"
+    case .aiClone: return "person.2.wave.2.fill"
     case .shortcuts: return "keyboard"
     case .advanced: return "chart.bar"
     case .about: return "info.circle"
