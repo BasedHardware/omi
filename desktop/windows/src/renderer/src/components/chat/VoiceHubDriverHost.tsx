@@ -34,6 +34,11 @@ export function VoiceHubDriverHost(): null {
   const sendRef = useRef(chat.send)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
   sendRef.current = chat.send
+  // Latest-ref for the hub-turn recorder (append, no re-answer) — reads the freshest
+  // history so a recorded turn lands after everything sent before it.
+  const recordVoiceTurnRef = useRef(chat.recordVoiceTurn)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
+  recordVoiceTurnRef.current = chat.recordVoiceTurn
 
   // Built once. Every collaborator points at the real main-resident subsystem:
   //   * hub session (playback via its own pcmPlayer, D3) — HubController.
@@ -52,6 +57,10 @@ export function VoiceHubDriverHost(): null {
         startCapture: (opts) => startPttCapture(opts),
         transcribe: (pcm) => batchTranscribe(pcm, new AbortController().signal),
         onFinalText: (text) => void sendRef.current(text, { fromVoice: true }),
+        // A completed HUB turn: APPEND its text to the ONE chat engine (INV-CHAT-1),
+        // no LLM/TTS re-run (the hub already spoke it).
+        onRecordTurn: (userText, assistantText) =>
+          recordVoiceTurnRef.current(userText, assistantText),
         muteForCapture: muteSystemAudioForHubCapture
       })
   )

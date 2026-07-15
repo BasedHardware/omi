@@ -74,6 +74,11 @@ export type UseChat = {
   send: (text: string, opts?: { fromVoice?: boolean }) => Promise<void>
   /** Clear the thread to a fresh conversation. */
   reset: () => void
+  /** Record a COMPLETED native realtime-hub voice turn (user transcript + assistant
+   *  reply) into the thread — APPENDS both messages WITHOUT calling the LLM or TTS
+   *  (the hub already produced and spoke the reply). INV-CHAT-1: the spoken turn
+   *  lands in the one shared timeline. Empty user/assistant is ignored. */
+  recordVoiceTurn: (userText: string, assistantText: string) => void
 }
 
 /**
@@ -765,5 +770,27 @@ export function useChat(): UseChat {
     }
   }
 
-  return { history, sending, speaking, agentActive, send, reset }
+  // Record a COMPLETED native realtime-hub voice turn (user transcript + assistant
+  // reply) into the ONE thread (INV-CHAT-1). The hub already produced AND spoke the
+  // reply on the bar, so this APPENDS both messages and persists them WITHOUT
+  // calling the LLM or TTS — it must NOT re-answer (no send()). Windows-side mirror
+  // of macOS RealtimeHubController's turn persistence (both texts, exactly-once on
+  // the terminal; the driver owns the turnRecorded dedup + empty-final guard).
+  const recordVoiceTurn = (userText: string, assistantText: string): void => {
+    const user = userText.trim()
+    const assistant = assistantText.trim()
+    if (!user || !assistant) return
+    // Same generation guard the send/agent paths use: if the thread is reset while
+    // this record's persist is in flight, drop the write so the turn can't be
+    // misattributed to the new conversation (per-launch mode replaces, not merges).
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+    const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: user }
+    const assistantMsg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content: assistant }
+    const base = history
+    setHistory((h) => [...h, userMsg, assistantMsg])
+    void persistChat([...base, userMsg, assistantMsg], isCurrent)
+  }
+
+  return { history, sending, speaking, agentActive, send, reset, recordVoiceTurn }
 }

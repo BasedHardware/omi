@@ -89,8 +89,14 @@ export type VoiceHubTurnDriverDeps = {
   /** Batch-transcribe retained PCM (cascade route + hub warm-wait fallback).
    *  Production wraps `transport.batchTranscribe`. */
   transcribe: (pcm: Int16Array) => Promise<string>
-  /** Commit the final user transcript to the chat engine (the main window's send). */
+  /** Commit the final user transcript to the chat engine (the main window's send).
+   *  CASCADE route only — this re-answers via the LLM (fromVoice ⇒ spoken reply). */
   onFinalText: (text: string) => void
+  /** Record a COMPLETED HUB turn (user transcript + assistant reply) into the ONE
+   *  chat engine — APPEND-only, NO re-answer (the hub already produced and spoke it).
+   *  `interrupted` = the turn was cut off by a barge-in (a partial reply is still
+   *  recorded, per macOS RealtimeHubController.recordInterruptedTurn). */
+  onRecordTurn?: (userText: string, assistantText: string, interrupted: boolean) => void
   /** Pref-gated system-audio duck at capture start (defaults to the shipped A4 call). */
   muteForCapture?: () => void
   /** Unconditional, idempotent system-audio restore (defaults to shipped). */
@@ -133,6 +139,12 @@ export class VoiceHubTurnDriver {
   private handedOff = false
   private cascadeBuffer: Int16Array[] = []
   private cascadeBufferBytes = 0
+  // Transcript + reply accumulators for chat recording (macOS turnTranscript /
+  // assistantText). `turnRecorded` dedups exactly-once across terminal edges (a
+  // delegate that fires turn-done twice on reconnect/barge-in). Reset per turn.
+  private turnTranscript = ''
+  private assistantText = ''
+  private turnRecorded = false
 
   // Projection state ----------------------------------------------------------
   private lastProjection: VoiceTurnUIProjection = IDLE_PROJECTION
@@ -201,6 +213,12 @@ export class VoiceHubTurnDriver {
 
     const superseding = this.turnID !== null
 
+    // Barge-in: record the turn being superseded (its partial reply) into chat
+    // BEFORE it's torn down and its accumulators are reset — macOS
+    // recordInterruptedTurn. Exactly-once via turnRecorded; a no-op if the reply
+    // never started (empty assistant text).
+    if (superseding) this.recordTurnIfUnrecorded(true)
+
     // `begin` mints the id and sends `start` (which terminates any prior turn as
     // interruptedByBargeIn — the reducer preserves a hub socket for the successor).
     const turnID = this.coordinator.begin('hold')
@@ -213,6 +231,9 @@ export class VoiceHubTurnDriver {
     this.cascadeBufferBytes = 0
     this.sessionID = null
     this.orbLevel = 0
+    this.turnTranscript = ''
+    this.assistantText = ''
+    this.turnRecorded = false
 
     // The HOST picks the route (the reducer never does): flag-gated kill-switch.
     const route = selectPttRoute(this.hub, this.prefs())
@@ -407,9 +428,21 @@ export class VoiceHubTurnDriver {
           })
         }
       },
-      onInputTranscript: (text) => {
+      onInputTranscript: (text, isFinal) => {
         const turnID = this.turnID
-        if (turnID !== null && text) this.dispatch({ type: 'transcriptChanged', turnID, text })
+        if (turnID === null || !text) return
+        // Accumulate the user transcript for chat recording (deltas add; a non-empty
+        // final replaces with the full string). Kept separate from the reducer
+        // dispatch below so the orb projection is unchanged.
+        this.turnTranscript = isFinal ? text : this.turnTranscript + text
+        this.dispatch({ type: 'transcriptChanged', turnID, text })
+      },
+      onAssistantText: (text, isFinal) => {
+        if (this.turnID === null) return
+        // Accumulate the reply text for chat recording. Empty-final guard: OpenAI GA
+        // emits an EMPTY final transcript marker after the deltas — it must NOT wipe
+        // what we accumulated, or the turn records with no assistant text.
+        if (text) this.assistantText = isFinal ? text : this.assistantText + text
       },
       // The warm-wait buffer lost the 1 s race — the reducer already moved the
       // route to deepgramBatch and kept the turn alive. Transcribe on the cascade.
@@ -441,8 +474,17 @@ export class VoiceHubTurnDriver {
     this.coordinator.send(event)
     if (this.turnID !== null && this.coordinator.activeTurnID === null) {
       // Terminal reached: the host already ran stopCapture / cancelHub /
-      // restoreSystemAudio via effects. Clear the driver's per-turn state and tell
-      // the bar to drop back to its local orb (`active:false`).
+      // restoreSystemAudio via effects. A clean-success hub turn records its text
+      // into the ONE chat engine here (INV-CHAT-1) — append-only, exactly-once.
+      // (Cascade turns record via onFinalText → chat.send instead, and have no
+      // accumulated assistantText, so recordTurnIfUnrecorded is a no-op for them.
+      // A barge-in interrupted turn was already recorded in begin(). Non-success
+      // terminals — cancel / providerFailed — are not recorded.)
+      if (this.coordinator.model.lastTerminal?.reason === 'success') {
+        this.recordTurnIfUnrecorded(false)
+      }
+      // Clear the driver's per-turn state and tell the bar to drop back to its
+      // local orb (`active:false`).
       this.turnID = null
       this.captureID = null
       this.route = { kind: 'undecided' }
@@ -452,6 +494,18 @@ export class VoiceHubTurnDriver {
       this.orbLevel = 0
       this.emit(true)
     }
+  }
+
+  /** Append this turn's user transcript + assistant reply to the ONE chat engine,
+   *  exactly once (macOS turnRecorded). No-op if already recorded or if either text
+   *  is empty (e.g. a cascade turn, or a barge-in before the reply started). */
+  private recordTurnIfUnrecorded(interrupted: boolean): void {
+    if (this.turnRecorded) return
+    const user = this.turnTranscript.trim()
+    const assistant = this.assistantText.trim()
+    if (!user || !assistant) return
+    this.turnRecorded = true
+    this.deps.onRecordTurn?.(user, assistant, interrupted)
   }
 
   private onProjection(projection: VoiceTurnUIProjection): void {
