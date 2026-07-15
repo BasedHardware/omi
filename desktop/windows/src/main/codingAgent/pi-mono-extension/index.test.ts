@@ -252,7 +252,10 @@ describe('classifyBash (Windows)', () => {
       'curl https://api.example.com -o /tmp/x',
       'echo "sudo is fun"',
       'powershell Get-Process',
-      'Remove-Item node_modules -Recurse'
+      'Remove-Item node_modules -Recurse',
+      // The `-ri` grep flag must not be mistaken for the PowerShell `ri` alias,
+      // even when a system path is a legitimate (read-only) search target.
+      'grep -ri TODO C:\\Windows\\System32'
     ]
     for (const cmd of allowed) {
       expect(classifyBash(cmd), `expected allow: ${cmd}`).toBeNull()

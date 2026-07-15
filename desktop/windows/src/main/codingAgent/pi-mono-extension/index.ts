@@ -141,11 +141,13 @@ export const BASH_DENY_RULES: DenyRule[] = [
       'working tree instead.'
   },
   {
-    // PowerShell / cmd delete of a dangerous target: Remove-Item, ri, rd,
-    // rmdir, del, erase — with -Recurse/-Force or /s, targeting a system path
-    // or the whole home. Catches `Remove-Item -Recurse -Force C:\Windows`.
+    // PowerShell / cmd delete of a dangerous target: Remove-Item, rd, rmdir,
+    // del, erase — targeting a system path or the whole home. Catches
+    // `Remove-Item -Recurse -Force C:\Windows`. The bare `ri` alias is
+    // deliberately omitted: `\bri\b` collides with common flags like grep's
+    // `-ri`, and Remove-Item is the realistic form.
     pattern: new RegExp(
-      `\\b(?:Remove-Item|ri|rd|rmdir|del|erase)\\b[^\\n]*?${TARGET_QUOTE}${DANGEROUS_TARGET}`,
+      `\\b(?:Remove-Item|rmdir|rd|del|erase)\\b[^\\n]*?${TARGET_QUOTE}${DANGEROUS_TARGET}`,
       'i'
     ),
     reason:
