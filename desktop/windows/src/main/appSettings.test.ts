@@ -15,7 +15,13 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { getAppSettings, setAppSettings, sanitizeAppSettings, _resetForTests } from './appSettings'
+import {
+  getAppSettings,
+  setAppSettings,
+  sanitizeAppSettings,
+  onAppSettingsChanged,
+  _resetForTests
+} from './appSettings'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -59,6 +65,24 @@ describe('appSettings', () => {
     expect(getAppSettings().recordHotkeyEnabled).toBe(false)
   })
 
+  // The proactive coordinator's master toggle would otherwise be one-way: it
+  // re-reads the setting each tick (so OFF works), but only a listener can
+  // re-arm the loop when it goes back ON.
+  it('notifies listeners on every write, and a throwing listener does not lose the write', () => {
+    const seen: boolean[] = []
+    onAppSettingsChanged(() => {
+      throw new Error('boom')
+    })
+    onAppSettingsChanged((s) => seen.push(s.screenAnalysisEnabled))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    setAppSettings({ screenAnalysisEnabled: false })
+    setAppSettings({ screenAnalysisEnabled: true })
+
+    expect(seen).toEqual([false, true])
+    expect(getAppSettings().screenAnalysisEnabled).toBe(true)
+  })
+
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
@@ -68,8 +92,55 @@ describe('appSettings', () => {
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
-      aiProfileEnabled: true
+      aiProfileEnabled: true,
+      focusEnabled: true,
+      focusNotificationsEnabled: true,
+      focusCooldownMinutes: 10,
+      focusExcludedApps: [],
+      glowOverlayEnabled: true,
+      screenAnalysisEnabled: true,
+      notificationsEnabled: true,
+      notificationFrequency: 0
     })
+    // Proactive notifications default to Off (level 0) — an assistant may only
+    // interrupt once the user has chosen a frequency. Anything that is not a
+    // valid level falls back to Off, never to the NEAREST level: clamping a
+    // corrupt file (or a backend sync sending 10) up to 5 would mean "no
+    // throttle" — unthrottled toasts for a user whose default was silence.
+    expect(sanitizeAppSettings({ notificationFrequency: 4 }).notificationFrequency).toBe(4)
+    expect(sanitizeAppSettings({ notificationFrequency: 9 }).notificationFrequency).toBe(0)
+    expect(sanitizeAppSettings({ notificationFrequency: -2 }).notificationFrequency).toBe(0)
+    expect(sanitizeAppSettings({ notificationFrequency: 2.5 }).notificationFrequency).toBe(0)
+    expect(
+      sanitizeAppSettings({ notificationFrequency: 'max' } as never).notificationFrequency
+    ).toBe(0)
+    // Screen analysis is opt-OUT: on unless the user turns it off.
+    expect(sanitizeAppSettings({ screenAnalysisEnabled: false }).screenAnalysisEnabled).toBe(false)
+    // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
+    // appears in response to a Focus verdict, and it is click-through.
+    expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
+    // The AI user profile is opt-OUT now that Focus consumes it: on unless the
+    // user explicitly turns it off.
+    expect(sanitizeAppSettings({ aiProfileEnabled: false }).aiProfileEnabled).toBe(false)
+    expect(sanitizeAppSettings({ aiProfileEnabled: 'yes' } as never).aiProfileEnabled).toBe(true)
+    // Focus master flags are opt-OUT; cooldown and excluded-apps sanitize.
+    expect(sanitizeAppSettings({ focusEnabled: false }).focusEnabled).toBe(false)
+    expect(
+      sanitizeAppSettings({ focusNotificationsEnabled: false }).focusNotificationsEnabled
+    ).toBe(false)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 5 }).focusCooldownMinutes).toBe(5)
+    // Zero/negative/junk cooldown falls back to 10 (never disables the cooldown).
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 0 }).focusCooldownMinutes).toBe(10)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: -3 }).focusCooldownMinutes).toBe(10)
+    expect(sanitizeAppSettings({ focusCooldownMinutes: 2.5 }).focusCooldownMinutes).toBe(10)
+    // Excluded apps: only non-empty strings survive.
+    expect(
+      sanitizeAppSettings({ focusExcludedApps: ['Slack', '', '  Discord  ', 5] as never })
+        .focusExcludedApps
+    ).toEqual(['Slack', 'Discord'])
+    expect(sanitizeAppSettings({ focusExcludedApps: 'nope' as never }).focusExcludedApps).toEqual(
+      []
+    )
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

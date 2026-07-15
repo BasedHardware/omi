@@ -51,9 +51,13 @@ export const screen = {
   getAllDisplays: (): unknown[] => [],
   on: noop
 }
+// Both power APIs are stubbed: `onBatteryPower` is the modern readonly property
+// (the proactive coordinator reads it to triple its tick interval on battery), and
+// `isOnBatteryPower()` is the older method other callers still use.
 export const powerMonitor = {
   on: noop,
   getSystemIdleTime: (): number => 0,
+  onBatteryPower: false,
   isOnBatteryPower: (): boolean => false
 }
 export const safeStorage = {

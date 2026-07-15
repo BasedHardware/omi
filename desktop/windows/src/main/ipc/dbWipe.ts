@@ -29,9 +29,14 @@ export const USER_DATA_TABLES = [
   // sign-out.
   'conversation_folders',
   'conversation_speaker_names',
+  // PR8: LiveNotes — both the notes and their session anchor are user content.
+  'transcription_sessions',
   'live_notes',
   'rescue_segments',
   'rewind_embeddings',
+  // The vectors themselves — derived from the user's screen content, so they must
+  // go on an account switch just like the frame->content mapping above.
+  'rewind_embedding_vectors',
   'file_index_meta',
   // Track 2's voice-turn outbox holds queued user voice-message data; it must be
   // cleared on account switch (drift-guard caught it missing — see dbWipe.test.ts).

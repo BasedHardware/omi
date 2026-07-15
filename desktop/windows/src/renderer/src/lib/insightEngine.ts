@@ -1,6 +1,8 @@
 // src/renderer/src/lib/insightEngine.ts
+import { startAiProfileHost } from './aiProfileHost'
+import { startRewindEmbedHost } from './rewindEmbedHost'
 import { generate } from './geminiClient'
-import { isPrivateWindow, isDeniedContext, redactFrameFields } from './screenRedact'
+import { isPrivateWindow, isDeniedContext, isUserDenied, redactFrameFields } from './screenRedact'
 import { summarizeActivity } from './insightActivity'
 import { buildInsightPrompt, parseInsightResponse, INSIGHT_RESPONSE_SCHEMA } from './insightPrompt'
 import { selectInsight } from './insightGate'
@@ -16,12 +18,13 @@ let running = false
 let started = false
 let timer: ReturnType<typeof setTimeout> | null = null
 
-function filter(frames: RewindFrame[]): RewindFrame[] {
-  return frames.filter(
-    (f) =>
-      !isPrivateWindow(f.windowTitle) &&
-      !isDeniedContext({ app: f.app, windowTitle: f.windowTitle, processName: f.processName })
-  )
+function filter(frames: RewindFrame[], userDenylist: string[]): RewindFrame[] {
+  return frames.filter((f) => {
+    const ctx = { app: f.app, windowTitle: f.windowTitle, processName: f.processName }
+    // Three-way OR (mirrors macOS): drop the frame if the private-window marker,
+    // the builtin DEFAULT_DENYLIST, OR the user's own Insight denylist matches.
+    return !isPrivateWindow(f.windowTitle) && !isDeniedContext(ctx) && !isUserDenied(ctx, userDenylist)
+  })
 }
 
 // One extraction pass. Best-effort: never throws. Returns true if an insight was shown.
@@ -37,7 +40,7 @@ export async function runInsightOnce(): Promise<boolean> {
 
     const now = Date.now()
     const frames = await window.omi.rewindFrames(now - LOOKBACK_MS, now)
-    const allowed = filter(frames)
+    const allowed = filter(frames, settings.denylist ?? [])
     if (allowed.length === 0) {
       await window.omi.insightSetSettings({ lastRunAt: now })
       return false
@@ -58,7 +61,10 @@ export async function runInsightOnce(): Promise<boolean> {
       parts: [{ text: buildInsightPrompt(summary, recentHeadlines) }],
       responseSchema: INSIGHT_RESPONSE_SCHEMA as unknown as Record<string, unknown>
     })
-    const insight = selectInsight(parseInsightResponse(raw), { threshold: THRESHOLD, recentHeadlines })
+    const insight = selectInsight(parseInsightResponse(raw), {
+      threshold: THRESHOLD,
+      recentHeadlines
+    })
 
     await window.omi.insightSetSettings({ lastRunAt: now })
     if (!insight) return false
@@ -81,6 +87,12 @@ export async function runInsightOnce(): Promise<boolean> {
 export function maybeStartInsightEngine(): void {
   if (started) return
   started = true
+  // Renderer proactive bootstrap: the insight engine below, plus the session
+  // relays for the main-process services that are inert without a Firebase token
+  // (the AI-profile service, and the Rewind embedding indexer). All idempotent
+  // and app-session-lived.
+  startAiProfileHost()
+  startRewindEmbedHost()
   const schedule = (delayMs: number): void => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(async () => {

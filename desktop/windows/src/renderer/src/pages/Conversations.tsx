@@ -4,13 +4,10 @@ import {
   GanttChartSquare,
   Mic,
   Search,
-  Trash2,
-  Share2,
   CheckSquare,
-  Check,
-  Loader2,
   MessageSquare,
-  Radio
+  Radio,
+  type LucideIcon
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import {
@@ -21,16 +18,63 @@ import {
   refreshCloudConversations,
   getPendingConversations,
   reconcilePending,
+  publishConversationsCache,
   type ConversationRow
 } from '../lib/pageCache'
 import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
 import { resyncConversation, retryUnsyncedConversations } from '../lib/sync/conversationSync'
 import { backfillCandidates, runBackfill, type BackfillProgress } from '../lib/sync/backfill'
 import type { CloudConversationLite } from '../lib/sync/outbox'
+import {
+  applyFilters,
+  buildConversationQuery,
+  groupConversationsByDate,
+  hasActiveFilters,
+  mergeableRows,
+  type ConversationFilters,
+  type FilterKind,
+  type FolderFilter,
+  type DateRange,
+  NO_DATE_RANGE
+} from '../lib/conversations/filtering'
+import { fetchFolders, loadCachedFolders } from '../lib/conversations/folders'
+import {
+  removeRows,
+  restoreRows,
+  mergeApplied,
+  shouldCommit
+} from '../lib/conversations/optimistic'
+import {
+  mergeConversations,
+  moveConversationToFolder,
+  setConversationStarred,
+  setConversationTitle
+} from '../lib/conversations/mutations'
+import { FolderTabsStrip } from '../components/conversations/FolderTabsStrip'
+import { DateFilterButton } from '../components/conversations/DateFilterButton'
+import { ConversationListRow } from '../components/conversations/ConversationListRow'
+import { SelectionActionBar } from '../components/conversations/SelectionActionBar'
+import { FolderDialog } from '../components/conversations/FolderDialog'
+import { MergeConfirmDialog } from '../components/conversations/MergeConfirmDialog'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
-import type { LocalConversation } from '../../../shared/types'
+import type { LocalConversation, ConversationFolder } from '../../../shared/types'
 import type { Conversation as CloudConversation } from '../lib/omiApi.generated'
+
+// The "default view" = all folders + no date range. Only this view is written to
+// the shared conversationsCache (filtered fetches keep it clean) and it's the only
+// one whose warm cache lets the first mount skip a fetch. Type + search stay
+// client-side so they don't affect this.
+function isDefaultView(folder: FolderFilter, dateRange: DateRange): boolean {
+  return folder.kind === 'all' && dateRange.start == null && dateRange.end == null
+}
+
+// Chat/recording type filter — a client-side segmented control over the merged rows.
+const TYPE_TABS: { value: FilterKind; label: string; icon?: LucideIcon }[] = [
+  { value: 'all', label: 'All' },
+  { value: 'chat', label: 'Chats', icon: MessageSquare },
+  { value: 'recording', label: 'Recordings', icon: Radio }
+]
 
 function summarize(segments: { text: string }[] | undefined): string {
   if (!segments || segments.length === 0) return ''
@@ -74,54 +118,17 @@ function localToRow(c: LocalConversation): ConversationRow {
   }
 }
 
-// Right-hand badge for a list row. Local recordings surface their sync-outbox
-// state: queued/in-flight/unconfirmed → "Sync pending" (neutral — it resolves
-// itself), a definitive failure → "Sync failed" with a Retry action, legacy
-// pre-sync rows → "Not synced" (the backfill banner offers to push those).
-function RowBadge({
-  r,
-  onRetry
-}: {
-  r: ConversationRow
-  onRetry?: (id: string) => void
-}): React.JSX.Element | null {
-  if (r.localKind === 'chat') return <span className="badge shrink-0">Chat</span>
-  if (r.source !== 'local') return null
-  if (r.sync === 'pending') return <span className="badge shrink-0">Sync pending</span>
-  if (r.sync === 'failed') {
-    return (
-      <span className="flex shrink-0 items-center gap-1.5">
-        <span className="badge-warning">Sync failed</span>
-        {onRetry && (
-          <button
-            onClick={(e) => {
-              e.preventDefault()
-              e.stopPropagation()
-              onRetry(r.id)
-            }}
-            className="text-xs font-medium text-white/70 transition-colors hover:text-white"
-          >
-            Retry
-          </button>
-        )}
-      </span>
-    )
-  }
-  return <span className="badge-warning shrink-0">Not synced</span>
-}
-
 function ConversationSkeleton(): React.JSX.Element {
   return (
-    <li className="surface-card p-5">
-      <div className="skeleton mb-2 h-5 w-2/5" />
-      <div className="skeleton mb-3 h-3 w-1/4" />
-      <div className="skeleton h-4 w-full" />
-      <div className="skeleton mt-1.5 h-4 w-4/5" />
+    <li className="surface-card flex items-center gap-3 p-3">
+      <div className="skeleton h-9 w-9 rounded-xl" />
+      <div className="min-w-0 flex-1">
+        <div className="skeleton mb-1.5 h-4 w-2/5" />
+        <div className="skeleton h-3 w-1/4" />
+      </div>
     </li>
   )
 }
-
-type FilterKind = 'all' | 'chat' | 'recording'
 
 export function Conversations(): React.JSX.Element {
   const navigate = useNavigate()
@@ -129,86 +136,159 @@ export function Conversations(): React.JSX.Element {
   const [loading, setLoading] = useState(!conversationsCache.loaded)
   const [error, setError] = useState<string | null>(conversationsCache.error)
   const [query, setQuery] = useState('')
-  const [filter, setFilter] = useState<FilterKind>('all')
+  const [type, setType] = useState<FilterKind>('all')
+  const [folderFilter, setFolderFilter] = useState<FolderFilter>({ kind: 'all' })
+  const [dateRange, setDateRange] = useState<DateRange>(NO_DATE_RANGE)
+  const [folders, setFolders] = useState<ConversationFolder[]>([])
   const [selectMode, setSelectMode] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
-  const [pendingDelete, setPendingDelete] = useState<{ ids: string[]; timeout: number } | null>(
-    null
-  )
+  const [pendingDelete, setPendingDelete] = useState<{
+    ids: string[]
+    timeout: number
+    // The full rows removed optimistically, so Undo can restore them exactly.
+    removed: ConversationRow[]
+  } | null>(null)
   const pendingTimeoutRef = useRef<number | null>(null)
+  // Ids optimistically hidden from the list while a cloud mutation is in flight
+  // (delete undo-window, merge). loadAll() filters these out so an interleaved cloud
+  // refetch can't re-add a row we've already removed; the id is dropped once the
+  // server reconciles (delete committed / merge landed) or the user hits Undo.
+  const suppressedIdsRef = useRef<Set<string>>(new Set())
+  // Monotonic generation of loadAll() calls — a superseded (stale) fetch must not
+  // overwrite fresher rows (fixes the concurrent-refetch clobber).
+  const loadGenRef = useRef(0)
+  // Generation + timer for the post-merge poll, so a new merge (or unmount) cancels
+  // an in-flight poll and its pending setTimeout.
+  const mergePollGenRef = useRef(0)
+  const pollTimerRef = useRef<number | null>(null)
+  const mountedRef = useRef(true)
   // Full local set (including hidden synced rows) — drives the backfill banner.
   const [locals, setLocals] = useState<LocalConversation[]>([])
   const [backfill, setBackfill] = useState<BackfillProgress | null>(null)
   const [backfillRunning, setBackfillRunning] = useState(false)
   const backfillRunningRef = useRef(false)
+  // Dialogs.
+  const [folderDialog, setFolderDialog] = useState<{ folder?: ConversationFolder } | null>(null)
+  const [mergeOpen, setMergeOpen] = useState(false)
 
-  const loadAll = useCallback(async (): Promise<void> => {
-    conversationsCache.error = null
-    setError(null)
-    const out: ConversationRow[] = []
-    let cloudLite: CloudConversationLite[] = []
-    try {
-      const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
-        params: { limit: 100, offset: 0 }
-      })
-      const list = Array.isArray(r.data) ? r.data : []
-      cloudLite = list
-      for (const c of list) {
-        const created = c.created_at ? new Date(c.created_at).getTime() : 0
-        out.push({
-          id: c.id,
-          title: c.structured?.title || 'Untitled conversation',
-          emoji: c.structured?.emoji || undefined,
-          subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
-          preview:
-            c.structured?.overview ||
-            summarize(c.transcript_segments).slice(0, 200) ||
-            '(no transcript)',
-          source: 'cloud',
-          sortAt: created
+  // Folder/starred/date filters are applied SERVER-SIDE (the /v1/conversations
+  // query supports them, so cloud pagination stays correct); type + search stay
+  // client-side over the merged rows.
+  const loadAll = useCallback(
+    async (showLoading = false): Promise<Set<string> | null> => {
+      const gen = ++loadGenRef.current
+      if (showLoading) setLoading(true)
+      conversationsCache.error = null
+      setError(null)
+      const out: ConversationRow[] = []
+      let cloudLite: CloudConversationLite[] = []
+      // Null unless the cloud fetch succeeds; the merge poll only trusts a real
+      // fetch to decide whether the originals are gone.
+      let cloudIds: Set<string> | null = null
+      try {
+        const r = await omiApi.get<CloudConversation[]>('/v1/conversations', {
+          params: buildConversationQuery(folderFilter, dateRange)
         })
+        const list = Array.isArray(r.data) ? r.data : []
+        cloudLite = list
+        cloudIds = new Set(list.map((c) => c.id))
+        for (const c of list) {
+          const created = c.created_at ? new Date(c.created_at).getTime() : 0
+          out.push({
+            id: c.id,
+            title: c.structured?.title || 'Untitled conversation',
+            emoji: c.structured?.emoji || undefined,
+            subtitle: c.created_at ? new Date(c.created_at).toLocaleString() : '',
+            preview:
+              c.structured?.overview ||
+              summarize(c.transcript_segments).slice(0, 200) ||
+              '(no transcript)',
+            source: 'cloud',
+            starred: c.starred ?? undefined,
+            folderId: c.folder_id ?? null,
+            sortAt: created
+          })
+        }
+      } catch (e) {
+        const msg = (e as Error).message
+        conversationsCache.error = msg
+        setError(msg)
       }
-    } catch (e) {
-      const msg = (e as Error).message
-      conversationsCache.error = msg
-      setError(msg)
-    }
-    try {
-      // Reconcile: rows still awaiting sync whose cloud twin has now appeared
-      // (same started_at/finished_at we posted) are adopted as done — this is
-      // what dissolves a "Sync pending" row into its cloud conversation.
-      const localRows = reconcileSyncedLocals(
-        await window.omi.listLocalConversations(),
-        cloudLite,
-        (id, patch) => window.omi.updateLocalConversationSync(id, patch)
+      try {
+        // Reconcile: rows still awaiting sync whose cloud twin has now appeared
+        // (same started_at/finished_at we posted) are adopted as done — this is
+        // what dissolves a "Sync pending" row into its cloud conversation.
+        const localRows = reconcileSyncedLocals(
+          await window.omi.listLocalConversations(),
+          cloudLite,
+          (id, patch) => window.omi.updateLocalConversationSync(id, patch)
+        )
+        setLocals(localRows)
+        // Synced rows whose cloud twin is in this fetch are hidden (the cloud row
+        // is the real one); if the cloud fetch failed the local copy stays visible.
+        const cloudIds = new Set(cloudLite.map((c) => c.id))
+        for (const c of hideSyncedLocals(localRows, cloudIds)) out.push(localToRow(c))
+        // Opportunistic retry of rows still waiting (throttled inside; serial).
+        void retryUnsyncedConversations(localRows).then((anyDone) => {
+          if (anyDone) refreshCloudConversations()
+        })
+      } catch (e) {
+        console.error('Failed to load local conversations:', e)
+      }
+      // Drop optimistic pendings the backend has now produced, then fold the rest in
+      // at the top so a just-finalized conversation shows instantly.
+      reconcilePending(out.filter((r) => r.source === 'cloud'))
+      // Hide any rows a concurrent cloud mutation has optimistically removed (delete
+      // undo-window / merge) so this fetch can't resurrect them.
+      const merged = removeRows(
+        [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt),
+        suppressedIdsRef.current
       )
-      setLocals(localRows)
-      // Synced rows whose cloud twin is in this fetch are hidden (the cloud row
-      // is the real one); if the cloud fetch failed the local copy stays visible.
-      const cloudIds = new Set(cloudLite.map((c) => c.id))
-      for (const c of hideSyncedLocals(localRows, cloudIds)) out.push(localToRow(c))
-      // Opportunistic retry of rows still waiting (throttled inside; serial).
-      void retryUnsyncedConversations(localRows).then((anyDone) => {
-        if (anyDone) refreshCloudConversations()
+      // A superseded fetch (a newer loadAll already started) must not overwrite the
+      // fresher state — but still return its cloud ids so a caller can inspect them.
+      if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
+      // Only the default view is the canonical shared cache.
+      if (isDefaultView(folderFilter, dateRange)) {
+        publishConversationsCache(merged)
+        conversationsCache.loaded = true
+      }
+      setRows(merged)
+      setLoading(false)
+      return cloudIds
+    },
+    [folderFilter, dateRange]
+  )
+
+  // Load folders: cached first (instant paint), then reconcile from the backend.
+  useEffect(() => {
+    void loadCachedFolders()
+      .then((f) => {
+        if (f.length) setFolders(f)
       })
-    } catch (e) {
-      console.error('Failed to load local conversations:', e)
-    }
-    // Drop optimistic pendings the backend has now produced, then fold the rest in
-    // at the top so a just-finalized conversation shows instantly.
-    reconcilePending(out.filter((r) => r.source === 'cloud'))
-    const merged = [...getPendingConversations(), ...out].sort((a, b) => b.sortAt - a.sortAt)
-    conversationsCache.rows = merged
-    conversationsCache.loaded = true
-    setRows(merged)
-    setLoading(false)
+      .catch(() => {})
+    void fetchFolders()
+      .then(setFolders)
+      .catch(() => {})
   }, [])
 
+  // (Re)fetch when the folder/date filter changes. Skip the fetch only on the very
+  // first mount when the default view is already warm in the shared cache (instant
+  // paint from the useState seed); every filter change after that fetches fresh.
+  const didInitRef = useRef(false)
   useEffect(() => {
-    if (conversationsCache.loaded) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
-    void loadAll()
+    const firstMount = !didInitRef.current
+    didInitRef.current = true
+    if (
+      firstMount &&
+      isDefaultView(folderFilter, dateRange) &&
+      conversationsCache.loaded &&
+      (conversationsCache.rows?.length ?? 0) > 0
+    ) {
+      return
+    }
+    void loadAll(true)
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- folder/date read once for the first-mount check; loadAll owns the fetch + its own deps
   }, [loadAll])
 
   // The continuous-recording host (and session-end) request a cloud re-fetch when
@@ -219,10 +299,9 @@ export function Conversations(): React.JSX.Element {
     })
   }, [loadAll])
 
-  // Live refresh: when the local store changes (e.g. an Omi chat is being
-  // saved as it streams), re-read local conversations and merge them with the
-  // already-loaded cloud rows — no extra cloud fetch — so the list updates in
-  // real time without waiting for a remount.
+  // Live refresh: when the local store changes (e.g. an Omi chat is being saved as
+  // it streams), re-read local conversations and merge with the already-loaded
+  // cloud rows — no extra cloud fetch — so the list updates in real time.
   useEffect(() => {
     return subscribeConversations(() => {
       window.omi
@@ -230,26 +309,37 @@ export function Conversations(): React.JSX.Element {
         .then((freshLocals) => {
           setLocals(freshLocals)
           setRows((prev) => {
-            // Keep the already-loaded CLOUD rows (not the optimistic pendings — those
-            // come fresh from getPendingConversations so titles/removals reflect).
             const cloud = prev.filter((r) => r.source === 'cloud' && !r.pending)
             const cloudIds = new Set(cloud.map((r) => r.id))
             const localRows = hideSyncedLocals(freshLocals, cloudIds).map(localToRow)
             const merged = [...getPendingConversations(), ...cloud, ...localRows].sort(
               (a, b) => b.sortAt - a.sortAt
             )
-            conversationsCache.rows = merged
+            if (isDefaultView(folderFilter, dateRange)) {
+              publishConversationsCache(merged)
+            }
             return merged
           })
           setLoading(false)
         })
         .catch((e) => console.error('Live local refresh failed:', e))
     })
-  }, [])
+  }, [folderFilter, dateRange])
 
-  // Legacy local-only recordings eligible for backfill; recomputed only when
-  // the local set actually changes.
+  // Legacy local-only recordings eligible for backfill; recomputed only when the
+  // local set actually changes.
   const unsyncedPast = useMemo(() => backfillCandidates(locals).length, [locals])
+
+  const filters: ConversationFilters = useMemo(
+    () => ({ folder: folderFilter, type, query, dateRange }),
+    [folderFilter, type, query, dateRange]
+  )
+  const visible = useMemo(() => applyFilters(rows, filters), [rows, filters])
+  const sections = useMemo(() => groupConversationsByDate(visible), [visible])
+  const anyFilter = hasActiveFilters(filters)
+
+  const selectedRows = useMemo(() => visible.filter((r) => selected.has(r.id)), [visible, selected])
+  const mergeableCount = mergeableRows(selectedRows).length
 
   // Manual per-row re-sync of a wedged 'Sync failed' row (resets the attempt cap).
   const handleRetrySync = useCallback((id: string): void => {
@@ -259,8 +349,7 @@ export function Conversations(): React.JSX.Element {
     })
   }, [])
 
-  // One-time, user-confirmed backfill of pre-sync local recordings (paced to
-  // stay under the from-segments rate limit; resumable across runs).
+  // One-time, user-confirmed backfill of pre-sync local recordings.
   const startBackfill = async (): Promise<void> => {
     if (backfillRunningRef.current) return
     backfillRunningRef.current = true
@@ -279,49 +368,87 @@ export function Conversations(): React.JSX.Element {
     }
   }
 
-  const filtered = rows.filter((r) => {
-    if (filter === 'chat' && r.localKind !== 'chat') return false
-    if (filter === 'recording' && r.localKind !== 'recording') return false
-    if (query.trim()) {
-      const q = query.trim().toLowerCase()
-      return (
-        (r.title?.toLowerCase() ?? '').includes(q) || (r.preview?.toLowerCase() ?? '').includes(q)
-      )
-    }
-    return true
-  })
+  // --- Row mutations (optimistic; revert on error) ---
 
-  const executeDeletion = async (ids: string[]): Promise<void> => {
-    setDeleting(true)
-    for (const id of ids) {
-      const row = rows.find((r) => r.id === id)
-      if (!row) continue
-      // Optimistic placeholder — no server document exists to delete; it reconciles
-      // away on its own once the real conversation lands.
-      if (row.pending) continue
-      try {
-        if (row.source === 'local') {
-          await window.omi.deleteLocalConversation(id)
-        } else {
-          await omiApi.delete(`/v1/conversations/${id}`)
-        }
-      } catch (e) {
-        console.error('Delete failed:', id, e)
-      }
-    }
-    invalidateConversationsCache()
-    setDeleting(false)
+  const patchRow = (id: string, patch: Partial<ConversationRow>): void => {
+    setRows((prev) => prev.map((r) => (r.id === id ? { ...r, ...patch } : r)))
   }
 
-  const handleDelete = (): void => {
-    if (deleting || selected.size === 0) return
-    const ids = Array.from(selected)
+  const handleStar = (row: ConversationRow, next: boolean): void => {
+    patchRow(row.id, { starred: next })
+    void setConversationStarred(row.id, next).catch(() => {
+      patchRow(row.id, { starred: !next }) // revert
+    })
+  }
+
+  const handleMoveToFolder = (row: ConversationRow, folderId: string | null): void => {
+    const prev = row.folderId ?? null
+    patchRow(row.id, { folderId })
+    void moveConversationToFolder(row.id, folderId)
+      .then(() => {
+        // Folder counts changed — refresh the strip (light call, cache-backed).
+        void fetchFolders().then(setFolders)
+      })
+      .catch(() => patchRow(row.id, { folderId: prev }))
+  }
+
+  const handleRename = (row: ConversationRow, title: string): void => {
+    const prev = row.title
+    patchRow(row.id, { title })
+    const write =
+      row.source === 'cloud'
+        ? setConversationTitle(row.id, title)
+        : window.omi.updateLocalConversationTitle(row.id, title)
+    void Promise.resolve(write).catch(() => patchRow(row.id, { title: prev }))
+  }
+
+  // --- Delete (5s undo, batched) ---
+
+  // Runs after the 5s undo window. `targets` is the snapshot captured at schedule
+  // time — we can't look rows up here because they were optimistically removed.
+  const executeDeletion = async (targets: ConversationRow[]): Promise<void> => {
+    setDeleting(true)
+    let anyCloud = false
+    for (const row of targets) {
+      if (row.pending) continue
+      try {
+        if (row.source === 'local') await window.omi.deleteLocalConversation(row.id)
+        else {
+          await omiApi.delete(`/v1/conversations/${row.id}`)
+          anyCloud = true
+        }
+      } catch (e) {
+        console.error('Delete failed:', row.id, e)
+      }
+    }
+    // Deletes are committed server-side; drop the suppression before reconciling so
+    // the refetch is authoritative (the rows are gone, so they won't return).
+    for (const row of targets) suppressedIdsRef.current.delete(row.id)
+    setDeleting(false)
+    // Trigger the REAL cloud refetch (invalidateConversationsCache() only pokes the
+    // local subscriber, which rebuilds cloud rows from prev and never re-reads the
+    // cloud — that was the M1 bug). refreshCloudConversations() re-runs the full
+    // cloud+local fetch, reconciling both a cloud delete and a local delete.
+    if (anyCloud) refreshCloudConversations()
+    else invalidateConversationsCache()
+  }
+
+  const scheduleDelete = (ids: string[]): void => {
+    if (deleting || ids.length === 0) return
+    const idSet = new Set(ids)
+    // Snapshot the real rows (source + full data) now — needed to delete against the
+    // right store later and to restore exactly on Undo. Pending rows aren't deletable.
+    const targets = rows.filter((r) => idSet.has(r.id) && !r.pending)
+    if (targets.length === 0) return
+    const targetIds = targets.map((r) => r.id)
+    for (const id of targetIds) suppressedIdsRef.current.add(id)
+    setRows((prev) => removeRows(prev, targetIds)) // optimistic removal (M1)
     const timeout = window.setTimeout(() => {
       setPendingDelete(null)
-      void executeDeletion(ids)
+      void executeDeletion(targets)
     }, 5000)
     pendingTimeoutRef.current = timeout
-    setPendingDelete({ ids, timeout })
+    setPendingDelete({ ids: targetIds, timeout, removed: targets })
     setSelected(new Set())
     setSelectMode(false)
   }
@@ -331,32 +458,100 @@ export function Conversations(): React.JSX.Element {
       clearTimeout(pendingTimeoutRef.current)
       pendingTimeoutRef.current = null
     }
+    if (pendingDelete) {
+      for (const r of pendingDelete.removed) suppressedIdsRef.current.delete(r.id)
+      setRows((prev) => restoreRows(prev, pendingDelete.removed))
+    }
     setPendingDelete(null)
   }
 
-  // Cleanup timeout on unmount.
+  // Cleanup timers + stop the merge poll on unmount (avoids setState-after-unmount).
   useEffect(() => {
     return () => {
+      mountedRef.current = false
       if (pendingTimeoutRef.current) clearTimeout(pendingTimeoutRef.current)
+      if (pollTimerRef.current) clearTimeout(pollTimerRef.current)
     }
   }, [])
 
-  const handleShare = async (): Promise<void> => {
-    const items = rows.filter((r) => selected.has(r.id))
-    const text = items.map((r) => `${r.title}\n${r.preview}`).join('\n\n---\n\n')
+  // --- Merge (fire-and-forget; refetch after) ---
+
+  const handleMergeConfirmed = async (): Promise<void> => {
+    const targets = mergeableRows(selectedRows)
+    const ids = targets.map((r) => r.id)
+    setMergeOpen(false)
+    setSelected(new Set())
+    setSelectMode(false)
+    if (ids.length < 2) return
+    // New generation cancels any in-flight poll from a previous merge.
+    const gen = ++mergePollGenRef.current
+    // Optimistically remove ALL originals — the backend merges them into a new
+    // conversation and deletes every one of them (no new id in the response).
+    for (const id of ids) suppressedIdsRef.current.add(id)
+    setRows((prev) => removeRows(prev, ids))
     try {
-      await navigator.clipboard.writeText(text)
-    } catch {
-      // fallback
+      await mergeConversations(ids)
+    } catch (e) {
+      // The merge request itself failed — un-suppress and restore the originals.
+      console.error('Merge failed:', e)
+      for (const id of ids) suppressedIdsRef.current.delete(id)
+      setRows((prev) => restoreRows(prev, targets))
+      return
     }
+    // Merge is async (returns status:merging, deletes originals later). Poll a bounded
+    // number of times until the server drops the originals, guarded by `gen` so a
+    // stale poll (superseded by a new merge or unmount) can't act, and by loadAll()'s
+    // own generation guard so a late refetch can't clobber fresher rows.
+    const ATTEMPTS = 6
+    const INTERVAL_MS = 2200 // ~13s total budget
+    for (let i = 0; i < ATTEMPTS; i++) {
+      await new Promise<void>((resolve) => {
+        pollTimerRef.current = window.setTimeout(resolve, INTERVAL_MS)
+      })
+      if (!mountedRef.current || gen !== mergePollGenRef.current) return
+      const cloudIds = await loadAll()
+      if (!mountedRef.current || gen !== mergePollGenRef.current) return
+      if (cloudIds && mergeApplied(ids, cloudIds)) {
+        // Originals gone server-side — suppression no longer needed.
+        for (const id of ids) suppressedIdsRef.current.delete(id)
+        return
+      }
+    }
+    // Poll exhausted without confirming the merge — leave the originals optimistically
+    // removed (they stay suppressed so an in-flight refetch can't re-add them); the
+    // server is authoritative on the next real load.
   }
+
+  // --- Folder dialog callbacks ---
+
+  const onFolderSaved = (): void => {
+    setFolderDialog(null)
+    void fetchFolders().then(setFolders)
+  }
+  const onFolderDeleted = (id: string): void => {
+    setFolderDialog(null)
+    if (folderFilter.kind === 'folder' && folderFilter.id === id) setFolderFilter({ kind: 'all' })
+    void fetchFolders().then(setFolders)
+    // Conversations that were in the deleted folder now carry a dangling folderId —
+    // re-fetch so their (server-reconciled) folder assignment is refreshed.
+    refreshCloudConversations()
+  }
+
+  const clearAllFilters = (): void => {
+    setFolderFilter({ kind: 'all' })
+    setType('all')
+    setQuery('')
+    setDateRange(NO_DATE_RANGE)
+  }
+
+  const allVisibleSelected = visible.length > 0 && selected.size === visible.length
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Conversations"
         subtitle={
-          loading ? 'Loading…' : `${rows.length} conversation${rows.length === 1 ? '' : 's'}`
+          loading ? 'Loading…' : `${visible.length} conversation${visible.length === 1 ? '' : 's'}`
         }
         actions={
           <button
@@ -370,7 +565,7 @@ export function Conversations(): React.JSX.Element {
         }
       />
 
-      {/* Search + filter bar */}
+      {/* Search + type filter + date + select */}
       <div className="flex items-center gap-2 px-6 pb-3 lg:px-10">
         <div className="surface-panel flex flex-1 items-center gap-2 px-4 py-2.5">
           <Search className="h-4 w-4 text-white/45" />
@@ -388,39 +583,23 @@ export function Conversations(): React.JSX.Element {
         </div>
 
         <div className="surface-panel flex items-center gap-1 p-1">
-          <button
-            onClick={() => setFilter('all')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'all'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            All
-          </button>
-          <button
-            onClick={() => setFilter('chat')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'chat'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <MessageSquare className="h-3.5 w-3.5" />
-            Chats
-          </button>
-          <button
-            onClick={() => setFilter('recording')}
-            className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
-              filter === 'recording'
-                ? 'bg-white/15 text-white'
-                : 'text-white/55 hover:bg-white/5 hover:text-white/80'
-            }`}
-          >
-            <Radio className="h-3.5 w-3.5" />
-            Recordings
-          </button>
+          {TYPE_TABS.map(({ value, label, icon: Icon }) => (
+            <button
+              key={value}
+              onClick={() => setType(value)}
+              className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
+                type === value
+                  ? 'bg-white/15 text-white'
+                  : 'text-white/55 hover:bg-white/5 hover:text-white/80'
+              }`}
+            >
+              {Icon && <Icon className="h-3.5 w-3.5" />}
+              {label}
+            </button>
+          ))}
         </div>
+
+        <DateFilterButton dateRange={dateRange} onChange={setDateRange} />
 
         <button
           onClick={() => {
@@ -437,38 +616,14 @@ export function Conversations(): React.JSX.Element {
         </button>
       </div>
 
-      {selectMode && (
-        <div className="flex items-center gap-2 px-6 pb-3 lg:px-10">
-          <span className="text-xs text-white/50">{selected.size} selected</span>
-          <button
-            onClick={() => {
-              if (selected.size === filtered.length) {
-                setSelected(new Set())
-              } else {
-                setSelected(new Set(filtered.map((r) => r.id)))
-              }
-            }}
-            className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs"
-          >
-            {selected.size === filtered.length ? 'Deselect all' : 'Select all'}
-          </button>
-          <button
-            onClick={handleDelete}
-            disabled={deleting}
-            className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs text-red-400 hover:text-red-300"
-          >
-            <Trash2 className="h-3.5 w-3.5" />
-            Delete
-          </button>
-          <button
-            onClick={handleShare}
-            className="btn-ghost flex items-center gap-1.5 px-3 py-1.5 text-xs"
-          >
-            <Share2 className="h-3.5 w-3.5" />
-            Share
-          </button>
-        </div>
-      )}
+      {/* Folder tabs */}
+      <FolderTabsStrip
+        folders={folders}
+        selected={folderFilter}
+        onSelect={setFolderFilter}
+        onCreate={() => setFolderDialog({})}
+        onEditFolder={(f) => setFolderDialog({ folder: f })}
+      />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {error && (
@@ -497,23 +652,27 @@ export function Conversations(): React.JSX.Element {
           </div>
         )}
         {loading && (
-          <ul className="mx-auto max-w-5xl space-y-3">
-            {Array.from({ length: 5 }).map((_, i) => (
+          <ul className="mx-auto max-w-5xl space-y-2.5">
+            {Array.from({ length: 6 }).map((_, i) => (
               <ConversationSkeleton key={i} />
             ))}
           </ul>
         )}
-        {!loading && filtered.length === 0 && (
+        {!loading && visible.length === 0 && (
           <EmptyState
             icon={GanttChartSquare}
-            title={query || filter !== 'all' ? 'No matching conversations' : 'No conversations yet'}
+            title={anyFilter ? 'No matching conversations' : 'No conversations yet'}
             description={
-              query || filter !== 'all'
+              anyFilter
                 ? 'Try a different search or filter.'
                 : 'Start a recording to capture audio and screen context. Your conversations will appear here.'
             }
             action={
-              query || filter !== 'all' ? undefined : (
+              anyFilter ? (
+                <button onClick={clearAllFilters} className="btn-ghost">
+                  Clear filters
+                </button>
+              ) : (
                 <Link to="/home" className="btn-record">
                   <Mic className="h-4 w-4" />
                   Start recording
@@ -522,95 +681,55 @@ export function Conversations(): React.JSX.Element {
             }
           />
         )}
-        {!loading && filtered.length > 0 && (
-          <ul className="mx-auto max-w-5xl space-y-2.5">
-            {filtered.map((r) => {
-              const checked = selected.has(r.id)
-              return (
-                <li key={r.id}>
-                  {r.pending ? (
-                    // Optimistic placeholder — no server conversation exists yet, so
-                    // opening it would 404 and it can't be deleted/shared server-side.
-                    // Render a non-navigable, non-selectable "Processing" card (even in
-                    // select mode); the real conversation replaces it within seconds.
-                    <div className="surface-card cursor-default p-5 opacity-70">
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="font-display text-lg font-semibold leading-tight text-text-primary">
-                          {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                          {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                        </div>
-                        <span className="badge flex shrink-0 items-center gap-1.5">
-                          <Loader2 className="h-3 w-3 animate-spin" aria-hidden />
-                          Processing
-                        </span>
-                      </div>
-                      {r.subtitle && (
-                        <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
-                      )}
-                      <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
-                        {r.preview}
-                      </p>
-                    </div>
-                  ) : selectMode ? (
-                    <button
-                      onClick={() => {
-                        setSelected((s) => {
-                          const next = new Set(s)
-                          if (checked) next.delete(r.id)
-                          else next.add(r.id)
-                          return next
-                        })
-                      }}
-                      className={`surface-card-interactive flex w-full items-center gap-4 p-5 text-left ${
-                        checked ? 'ring-1 ring-white/20' : ''
-                      }`}
-                    >
-                      <span
-                        className={`flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-colors ${
-                          checked
-                            ? 'border-white/30 bg-white/20 text-white'
-                            : 'border-white/20 bg-transparent'
-                        }`}
-                      >
-                        {checked && <Check className="h-3.5 w-3.5" />}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <div className="font-display text-lg font-semibold leading-tight text-text-primary">
-                          {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                          {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                        </div>
-                        {r.subtitle && (
-                          <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
-                        )}
-                      </div>
-                      <RowBadge r={r} />
-                    </button>
-                  ) : (
-                    <Link
-                      to={`/conversations/${r.id}`}
-                      className="surface-card-interactive block p-5"
-                    >
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="font-display text-lg font-semibold leading-tight text-text-primary">
-                          {r.emoji && <span className="mr-1.5">{r.emoji}</span>}
-                          {r.title || <span className="italic text-text-tertiary">loading…</span>}
-                        </div>
-                        <RowBadge r={r} onRetry={handleRetrySync} />
-                      </div>
-                      {r.subtitle && (
-                        <div className="mt-1 text-xs text-text-quaternary">{r.subtitle}</div>
-                      )}
-                      <p className="mt-2.5 line-clamp-2 text-sm leading-relaxed text-text-tertiary">
-                        {r.preview}
-                      </p>
-                    </Link>
-                  )}
-                </li>
-              )
-            })}
-          </ul>
+        {!loading && visible.length > 0 && (
+          <div className="mx-auto max-w-5xl space-y-6">
+            {sections.map((section) => (
+              <section key={section.key}>
+                <h2 className="section-label mb-2.5 px-1">{section.label}</h2>
+                <ul className="space-y-2">
+                  {section.rows.map((r) => (
+                    <li key={r.id}>
+                      <ConversationListRow
+                        row={r}
+                        folders={folders}
+                        selectMode={selectMode}
+                        selected={selected.has(r.id)}
+                        onToggleSelect={(id) =>
+                          setSelected((s) => {
+                            const next = new Set(s)
+                            if (next.has(id)) next.delete(id)
+                            else next.add(id)
+                            return next
+                          })
+                        }
+                        onStar={handleStar}
+                        onMoveToFolder={handleMoveToFolder}
+                        onRename={handleRename}
+                        onDelete={(row) => scheduleDelete([row.id])}
+                        onRetrySync={handleRetrySync}
+                      />
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ))}
+          </div>
         )}
       </div>
+
+      {selectMode && (
+        <SelectionActionBar
+          selectedCount={selected.size}
+          mergeableCount={mergeableCount}
+          allSelected={allVisibleSelected}
+          onToggleSelectAll={() =>
+            setSelected(allVisibleSelected ? new Set() : new Set(visible.map((r) => r.id)))
+          }
+          onMerge={() => setMergeOpen(true)}
+          onDelete={() => scheduleDelete(selectedRows.map((r) => r.id))}
+          deleting={deleting}
+        />
+      )}
 
       {pendingDelete && (
         <div className="glass-strong mx-6 mb-4 flex items-center justify-between rounded-2xl px-4 py-3 lg:mx-10">
@@ -625,6 +744,23 @@ export function Conversations(): React.JSX.Element {
             Undo
           </button>
         </div>
+      )}
+
+      {folderDialog && (
+        <FolderDialog
+          folder={folderDialog.folder}
+          onClose={() => setFolderDialog(null)}
+          onSaved={onFolderSaved}
+          onDeleted={onFolderDeleted}
+        />
+      )}
+
+      {mergeOpen && (
+        <MergeConfirmDialog
+          count={mergeableCount}
+          onCancel={() => setMergeOpen(false)}
+          onConfirm={handleMergeConfirmed}
+        />
       )}
     </div>
   )

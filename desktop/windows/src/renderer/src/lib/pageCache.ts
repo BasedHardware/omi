@@ -17,6 +17,12 @@ export type ConversationRow = {
   // True for optimistic placeholder rows shown immediately on finalize (titled
   // client-side, dropped once the backend's real conversation arrives).
   pending?: boolean
+  // --- Track 4: folders / starred (cloud rows only) ---
+  // Starred flag + folder assignment from the backend Conversation. Undefined for
+  // local-only/chat rows (they have no backend id, so can't be starred/filed —
+  // the star/folder/merge actions are gated to cloud rows; see filtering.ts).
+  starred?: boolean
+  folderId?: string | null
   sortAt: number
 }
 
@@ -24,6 +30,25 @@ export const conversationsCache = {
   rows: null as ConversationRow[] | null,
   error: null as string | null,
   loaded: false
+}
+
+// Readers that only want the CONTENT of the cache (the Hub's stat ribbon counts
+// conversations off it). The Conversations page owns the fetch; this lets another
+// surface observe the result instead of firing a second identical request.
+const cacheSubscribers = new Set<(rows: ConversationRow[]) => void>()
+
+/** Write the loaded rows and notify observers. The single write path for the cache. */
+export function publishConversationsCache(rows: ConversationRow[]): void {
+  conversationsCache.rows = rows
+  conversationsCache.loaded = true
+  cacheSubscribers.forEach((cb) => cb(rows))
+}
+
+export function subscribeConversationsCache(cb: (rows: ConversationRow[]) => void): () => void {
+  cacheSubscribers.add(cb)
+  return () => {
+    cacheSubscribers.delete(cb)
+  }
 }
 
 // Notify a mounted Conversations list that the local store changed so it can
@@ -128,7 +153,9 @@ export function reconcilePending(cloudRows: ConversationRow[]): void {
   const now = Date.now()
   pending = pending.filter((p) => {
     if (now - p.sortAt > TTL) return false
-    const replaced = cloudRows.some((c) => c.sortAt >= p.sortAt - 30_000 && c.sortAt <= p.sortAt + 180_000)
+    const replaced = cloudRows.some(
+      (c) => c.sortAt >= p.sortAt - 30_000 && c.sortAt <= p.sortAt + 180_000
+    )
     return !replaced
   })
 }

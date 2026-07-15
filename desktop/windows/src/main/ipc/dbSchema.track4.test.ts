@@ -19,6 +19,9 @@ import {
   MIGRATIONS,
   type MigrationDb
 } from './dbMigrations'
+// PR8 LiveNotes DDL is imported (not re-declared) so this census can't drift from
+// what db.ts actually execs — see liveNotesStore.ts.
+import { LIVE_NOTES_SCHEMA } from './liveNotesStore'
 
 // Base tables an existing install already has, verbatim from db.ts (the columns
 // the FTS triggers read from rewind_frames, and the local_conversation baseline).
@@ -70,6 +73,11 @@ const TRACK4_SCHEMA = `
   END;
   CREATE TABLE IF NOT EXISTS rewind_embeddings (
     frame_id INTEGER PRIMARY KEY,
+    hash TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_rewind_embeddings_hash ON rewind_embeddings(hash);
+  CREATE TABLE IF NOT EXISTS rewind_embedding_vectors (
+    hash TEXT PRIMARY KEY,
     dim INTEGER,
     model TEXT,
     vec BLOB,
@@ -93,16 +101,6 @@ const TRACK4_SCHEMA = `
     is_user INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (conversation_id, speaker_id)
   );
-  CREATE TABLE IF NOT EXISTS live_notes (
-    id TEXT PRIMARY KEY,
-    session_id TEXT NOT NULL,
-    text TEXT NOT NULL,
-    is_ai INTEGER NOT NULL DEFAULT 0,
-    seg_start INTEGER,
-    seg_end INTEGER,
-    created_at INTEGER NOT NULL
-  );
-  CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
   CREATE TABLE IF NOT EXISTS rescue_segments (
     session_id TEXT NOT NULL,
     seq INTEGER NOT NULL,
@@ -123,8 +121,10 @@ const TRACK4_SCHEMA = `
 const NEW_TABLES = [
   'rewind_frames_fts',
   'rewind_embeddings',
+  'rewind_embedding_vectors',
   'conversation_folders',
   'conversation_speaker_names',
+  'transcription_sessions',
   'live_notes',
   'rescue_segments',
   'file_index_meta',
@@ -174,6 +174,7 @@ function makeMigratedDb(): { db: DatabaseSync; preexistingRowId: number } {
   // make it searchable (the AFTER-INSERT trigger doesn't fire retroactively).
   const preexistingRowId = insertFrame(db, 1000, 'Chrome', 'Docs', 'pelican reservoir schematic')
   db.exec(TRACK4_SCHEMA)
+  db.exec(LIVE_NOTES_SCHEMA)
   addColumnIfMissing(db as unknown as MigrationDb, 'rewind_frames', 'ocr_lines_json', 'TEXT')
   addColumnIfMissing(
     db as unknown as MigrationDb,

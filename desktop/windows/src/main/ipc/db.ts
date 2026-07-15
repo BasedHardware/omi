@@ -1,10 +1,24 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
-import { basename, join } from 'path'
+import { app, BrowserWindow } from 'electron'
+import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
+import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
+import {
+  clearCorruptionFlags,
+  isCorruptionError,
+  isCorruptionSuspected,
+  markCorruptionSuspected,
+  NO_RECOVERY,
+  openDatabaseWithRecovery,
+  repairSuspectedCorruption,
+  type RecoveryDb,
+  type RecoveryDriver,
+  type RecoveryStatus
+} from './dbRecovery'
+import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
 import {
   insertVoiceTurnOn,
@@ -14,6 +28,34 @@ import {
   type VoiceTurnOutboxDb
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import {
+  LIVE_NOTES_SCHEMA,
+  createTranscriptionSessionOn,
+  endTranscriptionSessionOn,
+  createLiveNoteOn,
+  updateLiveNoteOn,
+  deleteLiveNoteOn,
+  listLiveNotesOn,
+  type LiveNotesDb
+} from './liveNotesStore'
+import {
+  listConversationFoldersOn,
+  replaceConversationFoldersOn,
+  upsertConversationFolderOn,
+  deleteConversationFolderOn,
+  type ConversationFoldersDb
+} from './conversationFolders'
+import { scanTopKBySimilarity } from '../rewind/embedVector'
+// The privacy/backfill/scan SQL lives in one importable module so production and
+// the SQL tests run byte-identical statements — a re-declared test copy drifts
+// (it did, twice). See rewindEmbeddingSql.ts.
+import {
+  DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL,
+  DROP_ORPHANED_EMBEDDING_VECTORS_SQL,
+  REWIND_COLUMNS_QUALIFIED,
+  rewindFramesNeedingEmbeddingSql,
+  searchEmbeddingPageSql
+} from './rewindEmbeddingSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -22,6 +64,7 @@ import type {
   TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
+  ConversationFolder,
   ConversationSyncPatch,
   ConversationSyncState,
   FileIndexDigest,
@@ -30,6 +73,7 @@ import type {
   InsightPayload,
   InsightRecord,
   KgSqlResult,
+  LiveNote,
   KnowledgeGraph,
   LocalConversation,
   LocalKGStatus,
@@ -77,20 +121,226 @@ function dropIfMissingColumn(d: Database.Database, table: string, col: string): 
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
 }
 
+// OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
+// never reads or writes the user's real omi.db.
+function dbFilePath(): string {
+  return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+}
+
+// Corrupt originals are archived next to the database (macOS: <dataDir>/backups),
+// keyed off the db file so a bench/test DB keeps its backups in its own temp dir.
+function backupsDir(): string {
+  return join(dirname(dbFilePath()), 'backups')
+}
+
+// The production driver for dbRecovery's seam. The casts bridge better-sqlite3's
+// generically-typed statement methods to the structural RecoveryDb surface —
+// same duck-typing idiom as voiceTurnDb() below and the node:sqlite test drivers.
+const betterSqliteDriver: RecoveryDriver = {
+  open: (file) => new Database(file) as unknown as RecoveryDb,
+  openReadonly: (file) =>
+    new Database(file, { readonly: true, fileMustExist: true }) as unknown as RecoveryDb
+}
+
+let recoveryStatus: RecoveryStatus = NO_RECOVERY
+
+// --- The runtime corruption trip ---------------------------------------------
+//
+// A damaged DATA page is invisible to the startup open+sanity check: the DB opens,
+// the schema reads, and only the damaged table throws SQLITE_CORRUPT — every time
+// it is queried, forever. Without this trip nothing would ever notice, and the
+// salvage engine could never run on the one class of corruption where it saves the
+// user's data (measured: sibling tables intact, ~99% of the damaged table's rows
+// still recoverable).
+//
+// So: arm every statement on the shared connection. A corrupt error from ANY live
+// query persists a suspicion flag and asks the user to restart; the repair itself
+// runs at the next startup, where it is safe. The error is always RETHROWN — this
+// observes, it never swallows.
+//
+// macOS has the same design (reportQueryError -> maxQueryIOErrorsBeforeRecovery)
+// with zero callers. This is the wiring it never got.
+
+let corruptionNoticed = false
+
+/** Persist the suspicion and tell the user, once per session. Never throws: it
+ *  runs from inside a failing query's catch block. */
+function noteCorruption(handle: Database.Database, err: unknown): void {
+  if (corruptionNoticed) return
+  corruptionNoticed = true
+  console.error('db: a live query raised a corruption error — flagging for repair on restart', err)
+  captureError(err, { area: 'db_corruption_runtime', extra: { file: dbFilePath() } })
+  try {
+    markCorruptionSuspected(handle as unknown as RecoveryDb)
+  } catch {
+    // Too damaged even to record it; the startup detector covers that class.
+  }
+  // Ask the user to restart. The repair cannot run now — the KG worker and the
+  // read-only handle are live, and replacing the file under them would strand them.
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('db:corruption-detected')
+  }
+}
+
+/**
+ * Wrap `prepare`/`exec` so a corrupt error from any query trips the flag. The
+ * error is rethrown unchanged, so caller behavior is identical — this is a pure
+ * observer on the failure path, and adds nothing to the success path beyond a
+ * try/catch.
+ */
+function armCorruptionTrip(handle: Database.Database): Database.Database {
+  const watch = <T>(run: () => T): T => {
+    try {
+      return run()
+    } catch (err) {
+      if (isCorruptionError(err)) noteCorruption(handle, err)
+      throw err
+    }
+  }
+
+  const originalPrepare = handle.prepare.bind(handle)
+  handle.prepare = ((sql: string) => {
+    const stmt = watch(() => originalPrepare(sql))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver methods are variadic/overloaded
+    const raw = stmt as any
+    for (const method of ['all', 'get', 'run', 'iterate', 'pluck'] as const) {
+      const original = raw[method]
+      if (typeof original !== 'function') continue
+      raw[method] = (...args: unknown[]): unknown =>
+        watch(() => (original as (...a: unknown[]) => unknown).apply(stmt, args))
+    }
+    return stmt
+  }) as typeof handle.prepare
+
+  const originalExec = handle.exec.bind(handle)
+  handle.exec = ((sql: string) => watch(() => originalExec(sql))) as typeof handle.exec
+
+  return handle
+}
+
+/** What happened to the database on this launch: whether corruption was detected,
+ *  how many rows were salvaged, and whether it had to be reset. Surfaced to the
+ *  user over IPC (`db:recoveryStatus`) — unlike macOS, whose equivalent flag is
+ *  declared but never set, so its recovery UI can never fire. */
+export function getDbRecoveryStatus(): RecoveryStatus {
+  return recoveryStatus
+}
+
+/**
+ * Open the database (recovering it first if it is corrupt) before anything else
+ * touches it. Called once at startup.
+ *
+ * This must run before the KG write worker (`kgWorker.ts`, which opens its OWN
+ * better-sqlite3 handle to the same path in a worker_thread) and before the
+ * read-only `roDb` handle below. Recovery replaces the file on disk; doing that
+ * under a live handle would leave that handle pointing at a deleted inode. All of
+ * those open lazily and later, so running recovery here — single-threaded, before
+ * any window exists — is what makes the swap safe by construction.
+ */
+export function initDatabase(): RecoveryStatus {
+  get()
+  return recoveryStatus
+}
+
 function get(): Database.Database {
   if (db) return db
-  // OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
-  // never reads or writes the user's real omi.db.
-  const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
-  db = new Database(file)
+  const file = dbFilePath()
+  const backups = backupsDir()
+  const log = (m: string): void => console.log(m)
+  const reopen = (): RecoveryDb =>
+    openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backups }).db
+  // Detect + recover corruption BEFORE any schema work. A healthy database is
+  // opened untouched; only a positively-classified corrupt one is backed up,
+  // salvaged and replaced. See dbRecovery.ts.
+  const opened = openDatabaseWithRecovery(file, betterSqliteDriver, {
+    backupsDir: backups,
+    hooks: {
+      log,
+      onCorruption: (err) => {
+        // Silent UX healing is fine; silent ops is not (AGENTS.md). No Windows
+        // recordFallback emitter exists, so this is console + Sentry.
+        console.error('db: CORRUPTION DETECTED in omi.db — recovering', err)
+        captureError(err, { area: 'db_corruption', extra: { file } })
+      }
+    }
+  })
+  let handle = opened.db
+  recoveryStatus = opened.status
+
+  // The next-launch half of the runtime trip: a previous session saw a live query
+  // raise a corrupt error and flagged it. The flag is only a SUSPICION — repair
+  // re-verifies that the damage still reproduces, refuses to rebuild into a worse
+  // state, and gives up after MAX_REPAIR_ATTEMPTS rather than looping forever.
+  if (!recoveryStatus.recovered && isCorruptionSuspected(handle)) {
+    const hooks = {
+      log,
+      onCorruption: (err: unknown) => {
+        console.error('db: corruption confirmed on restart — repairing', err)
+        captureError(err, { area: 'db_corruption_confirmed', extra: { file } })
+      }
+    }
+    const outcome = repairSuspectedCorruption(handle, file, betterSqliteDriver, {
+      backupsDir: backups,
+      hooks
+    })
+    if (outcome.action === 'repaired') {
+      handle = reopen()
+      recoveryStatus = outcome.status
+      // The salvage copied app_meta across, flag and all — clear it on the repaired DB.
+      clearCorruptionFlags(handle)
+    } else if (outcome.action === 'abandoned' || outcome.action === 'kept_original') {
+      // Confirmed damage we deliberately did NOT rebuild. Leave the DB alone, tell
+      // the user, and report — never silently keep limping.
+      const reason =
+        outcome.action === 'abandoned'
+          ? `repair budget exhausted after ${outcome.attempts} attempts`
+          : // kept_original covers two safe-direction outcomes: a rebuild would have
+            // lost rows a working table still serves, OR the corrupt file could not
+            // be moved aside so we refused to touch it. Either way, nothing changed.
+            'a safe rebuild was not possible (would lose readable rows, or the corrupt file could not be archived)'
+      console.error(`db: corruption confirmed but NOT repaired — ${reason}`)
+      captureError(new Error(`db corruption unrepaired: ${reason}`), {
+        area: 'db_corruption_unrepaired',
+        extra: { file, damaged: outcome.damaged }
+      })
+      recoveryStatus = {
+        ...NO_RECOVERY,
+        unrepairable: true,
+        damagedTables: outcome.damaged,
+        backupPath: outcome.action === 'kept_original' ? outcome.backupPath : null
+      }
+      // The handle was closed by the repair on the kept_original path; reopen.
+      if (outcome.action === 'kept_original') {
+        handle = reopen()
+      }
+    }
+    // 'no_repair_needed' (false alarm) leaves the handle and the DB untouched.
+  }
+
+  // Arm the trip so a corrupt error from any live query flags the DB for repair at
+  // the next launch. Must wrap the FINAL handle (post-repair).
+  db = armCorruptionTrip(handle as unknown as Database.Database)
   // WAL mode: allows main-thread reads to proceed concurrently while the KG
   // write worker holds the write lock. Synchronous stays at the default FULL so
   // non-KG tables (local_conversation etc.) are not at power-loss risk.
   // The worker sets synchronous=NORMAL only on its own connection.
   db.pragma('journal_mode = WAL')
+  // Wait out a concurrent writer (the KG worker) instead of failing with
+  // SQLITE_BUSY. macOS sets the same 5s timeout.
+  db.pragma('busy_timeout = 5000')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
+  // PR8 LiveNotes: PR0 shipped a dead, FK-less `live_notes` (no `updated_at`) and
+  // no `transcription_sessions`. The table has never held data, so drop the old
+  // shape and recreate it (below, via LIVE_NOTES_SCHEMA) with the cascading FK +
+  // `updated_at`, mirroring the macOS schema.
+  dropIfMissingColumn(db, 'live_notes', 'updated_at')
+  // Track 4 (Rewind semantic search): drop-then-create, as one ordered unit, in a
+  // module the schema tests can actually load. See rewindEmbeddingSchema.ts — a
+  // PR0-era rewind_embeddings has no `hash` column, and indexing it would throw
+  // out of this bootstrap and take every db-backed IPC handler down with it.
+  applyRewindEmbeddingSchema(db)
   db.exec(`
     CREATE TABLE IF NOT EXISTS caption_event (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -224,14 +474,9 @@ function get(): Database.Database {
       VALUES (new.id, new.ocr_text, new.window_title, new.app);
     END;
 
-    -- --- Track 4: Rewind embeddings (semantic-search vectors, one per frame) ---
-    CREATE TABLE IF NOT EXISTS rewind_embeddings (
-      frame_id INTEGER PRIMARY KEY,
-      dim INTEGER,
-      model TEXT,
-      vec BLOB,
-      created_at INTEGER
-    );
+    -- (Track 4's rewind_embeddings / rewind_embedding_vectors are created by
+    -- applyRewindEmbeddingSchema() above, not here — they need a drop-first
+    -- migration that must not be interleaved with this block.)
 
     -- --- Track 4: Conversation folders ---
     CREATE TABLE IF NOT EXISTS conversation_folders (
@@ -255,17 +500,9 @@ function get(): Database.Database {
       PRIMARY KEY (conversation_id, speaker_id)
     );
 
-    -- --- Track 4: Live notes (meeting minutes; AI-generated or manual) ---
-    CREATE TABLE IF NOT EXISTS live_notes (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      text TEXT NOT NULL,
-      is_ai INTEGER NOT NULL DEFAULT 0,
-      seg_start INTEGER,
-      seg_end INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
+    -- --- PR8: LiveNotes tables (transcription_sessions + live_notes) are created
+    -- from LIVE_NOTES_SCHEMA below, not here — the DDL lives in liveNotesStore.ts
+    -- so production and the CRUD tests run byte-identical statements. ---
 
     -- --- Track 4: Crash-rescue live-segment buffer ---
     CREATE TABLE IF NOT EXISTS rescue_segments (
@@ -355,6 +592,10 @@ function get(): Database.Database {
       PRIMARY KEY (source, item_id)
     );
   `)
+  // PR8 LiveNotes: transcription_sessions + live_notes (with the cascading FK).
+  // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
+  // the drop-if-old above recreated any FK-less PR0 table before this runs.
+  db.exec(LIVE_NOTES_SCHEMA)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
@@ -370,9 +611,24 @@ function get(): Database.Database {
   // Conversation starring + folder assignment (local mirror of the cloud fields).
   ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
   ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
+  // (rewind_embeddings is migrated by migrateRewindEmbeddingSchema, BEFORE the
+  // exec above — an ensureColumn here would run far too late to save it.)
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
+  // After a salvage the FTS index is empty: salvage skips virtual tables (copying
+  // FTS shadow tables raw would produce a corrupt index) and preserves
+  // user_version, so migration v2's backfill does not re-run. The bootstrap block
+  // above has just recreated the vtable + triggers, so rebuild the index from the
+  // recovered rewind_frames rows — same 'rebuild' idiom as migration v2. Never let
+  // this block startup.
+  if (recoveryStatus.recovered && !recoveryStatus.reset) {
+    try {
+      db.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
+    } catch (e) {
+      console.error('db: FTS rebuild after recovery failed (search may be stale)', e)
+    }
+  }
   return db
 }
 
@@ -503,10 +759,73 @@ export function claimConversationForPosting(id: string, resetAttempts = false): 
   return r.changes > 0
 }
 
+// --- Track 4: conversation folders / starred ---
+// Thin wrappers over the driver-agnostic CRUD in conversationFolders.ts (extracted
+// so the SQL is unit-testable under plain-node vitest with node:sqlite; see that
+// file + its test). get() returns a better-sqlite3 Database whose prepared
+// statements satisfy the ConversationFoldersDb shape structurally — cast to bridge
+// the driver duck-typing, same idiom the voice-turn-outbox wrappers use.
+function foldersDb(): ConversationFoldersDb {
+  return get() as unknown as ConversationFoldersDb
+}
+
+export function listConversationFolders(): ConversationFolder[] {
+  return listConversationFoldersOn(foldersDb())
+}
+
+export function replaceConversationFolders(folders: ConversationFolder[]): void {
+  replaceConversationFoldersOn(foldersDb(), folders)
+}
+
+export function upsertConversationFolder(folder: ConversationFolder): void {
+  upsertConversationFolderOn(foldersDb(), folder)
+}
+
+export function deleteConversationFolder(id: string): void {
+  deleteConversationFolderOn(foldersDb(), id)
+}
+
 export function updateLocalConversationTitle(id: string, title: string): void {
   get()
     .prepare('UPDATE local_conversation SET title = ? WHERE id = ?')
     .run(title.trim() || null, id)
+}
+
+// --- PR8: LiveNotes CRUD ---
+// Thin wrappers over the driver-agnostic CRUD in liveNotesStore.ts (extracted so
+// the SQL is unit-testable under plain-node vitest with node:sqlite). get()
+// returns a better-sqlite3 Database whose prepared statements satisfy the
+// LiveNotesDb shape structurally — same cast idiom as the folder wrappers.
+function liveNotesDb(): LiveNotesDb {
+  return get() as unknown as LiveNotesDb
+}
+
+export function createTranscriptionSession(session: {
+  id: string
+  startedAt: number
+  createdAt: number
+}): void {
+  createTranscriptionSessionOn(liveNotesDb(), session)
+}
+
+export function endTranscriptionSession(id: string, endedAt: number): void {
+  endTranscriptionSessionOn(liveNotesDb(), id, endedAt)
+}
+
+export function createLiveNote(note: LiveNote): void {
+  createLiveNoteOn(liveNotesDb(), note)
+}
+
+export function updateLiveNote(id: string, text: string, updatedAt: number): void {
+  updateLiveNoteOn(liveNotesDb(), id, text, updatedAt)
+}
+
+export function deleteLiveNote(id: string): void {
+  deleteLiveNoteOn(liveNotesDb(), id)
+}
+
+export function listLiveNotes(sessionId: string): LiveNote[] {
+  return listLiveNotesOn(liveNotesDb(), sessionId)
 }
 
 export function getLocalConversation(id: string): LocalConversation | null {
@@ -540,25 +859,52 @@ export function remapConversationId(fromId: string, toId: string): number {
   return r.changes
 }
 
-// Replace the whole index in batches of 500 (matches macOS commit cadence),
-// wrapped per batch in a transaction for speed.
-export function replaceIndexedFiles(records: IndexedFileRecord[]): void {
+// Load path → modified_at (ms) for the whole index. Drives both the retention
+// diff (which existing paths still exist on disk) and the incremental mtime-skip.
+export function loadIndexedFileMtimes(): Map<string, number> {
+  const rows = get().prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files').all() as {
+    path: string
+    modifiedAt: number
+  }[]
+  const map = new Map<string, number>()
+  for (const r of rows) map.set(r.path, r.modifiedAt)
+  return map
+}
+
+// Apply an incremental file-index diff ATOMICALLY: delete the gone paths and
+// upsert the new/changed records inside ONE transaction. This is the core
+// data-loss guard — a crash mid-apply can never leave a partially-wiped index,
+// and (unlike the old clear-then-insert) a transient unreadable root only means
+// its rows are absent from `toDelete`, so they survive untouched.
+export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: string[]): void {
   const d = get()
   const insert = d.prepare(
     `INSERT OR REPLACE INTO indexed_files
        (path, filename, extension, file_type, size_bytes, folder, depth, created_at, modified_at, target_path, indexed_at)
      VALUES (@path, @filename, @extension, @fileType, @sizeBytes, @folder, @depth, @createdAt, @modifiedAt, @targetPath, @indexedAt)`
   )
+  const del = d.prepare('DELETE FROM indexed_files WHERE path = ?')
   const indexedAt = Date.now()
-  const writeBatch = d.transaction((rows: IndexedFileRecord[]) => {
+  const apply = d.transaction(() => {
+    for (const path of toDelete) del.run(path)
     // Default the optional field so better-sqlite3 never sees `undefined`.
-    for (const r of rows) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
+    for (const r of toUpsert) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
   })
-  for (let i = 0; i < records.length; i += 500) writeBatch(records.slice(i, i + 500))
+  apply()
 }
 
-export function clearIndexedFiles(): void {
-  get().prepare('DELETE FROM indexed_files').run()
+// --- app_meta: durable app-level key/value flags (survives sign-out) ---------
+// Kept out of USER_DATA_TABLES so values like the file-index last-run timestamp
+// persist across restarts (see the app_meta DDL + dbWipe rationale).
+export function getAppMeta(key: string): string | null {
+  const row = get().prepare('SELECT value FROM app_meta WHERE key = ?').get(key) as
+    | { value: string | null }
+    | undefined
+  return row?.value ?? null
+}
+
+export function setAppMeta(key: string, value: string): void {
+  get().prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(key, value)
 }
 
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
@@ -723,8 +1069,14 @@ export function getLocalKGStatus(): LocalKGStatus {
 // connection first (get()) so the file/tables exist before we open it.
 function getReadonly(): Database.Database {
   if (roDb) return roDb
-  get() // ensure the db file + schema exist before opening read-only
-  roDb = new Database(join(app.getPath('userData'), 'omi.db'), { readonly: true })
+  // get() first: it ensures the file + schema exist, and — critically — that any
+  // corruption recovery (which REPLACES the file) has already run, so this handle
+  // can never be left pointing at a deleted inode.
+  get()
+  // dbFilePath(), not a hardcoded userData path: this used to ignore OMI_DB_PATH,
+  // so the bench/e2e harness opened the user's REAL omi.db read-only while the
+  // writable handle used the throwaway one.
+  roDb = new Database(dbFilePath(), { readonly: true })
   return roDb
 }
 
@@ -1002,13 +1354,9 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
 }
 
 // --- Track 4: Rewind FTS5 search ---
-// Columns qualified to `rewind_frames.` — the FTS join exposes an identically
-// named ocr_text/window_title/app that would otherwise be ambiguous.
-const REWIND_COLUMNS_QUALIFIED =
-  'rewind_frames.id, rewind_frames.ts, rewind_frames.app, rewind_frames.window_title AS windowTitle, ' +
-  'rewind_frames.process_name AS processName, rewind_frames.ocr_text AS ocrText, ' +
-  'rewind_frames.image_path AS imagePath, rewind_frames.width, rewind_frames.height, rewind_frames.indexed'
-
+// REWIND_COLUMNS_QUALIFIED (columns qualified to `rewind_frames.`, so the FTS
+// join's identically named ocr_text/window_title/app aren't ambiguous) is shared
+// with the backfill work-query and now lives in rewindEmbeddingSql.ts.
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
     const match = buildRewindFtsMatch(query)
@@ -1023,6 +1371,14 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
       )
       .all(match, limit) as RewindFrame[]
   })
+}
+
+/** Total captured frames, all time. A COUNT(*) rather than a row fetch: the Hub's
+ *  stat ribbon needs the number only, and listRewindFrames would drag full rows
+ *  (OCR text included) across IPC just to take a length. */
+export function rewindFrameCount(): number {
+  const row = get().prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number }
+  return row.n
 }
 
 export function rewindDayBounds(): { min: number; max: number } | null {
@@ -1088,9 +1444,184 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)
+    // Embeddings are DERIVED FROM THE USER'S SCREEN CONTENT, so retention has to
+    // reach them too — there is no FK/CASCADE here (foreign_keys is off), and a
+    // vector that outlives its frame is exactly the data the user asked us to
+    // forget. Same transaction as the frame delete: retention is all-or-nothing.
+    dropOrphanedEmbeddingsOn(d)
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
+}
+
+// --- Track 4: Rewind semantic search ---
+// Frame -> content hash -> ONE L2-normalized Float32 vector per unique hash.
+// Because the vectors are stored normalized, a dot product IS the cosine
+// similarity — see rewind/embedVector.ts.
+
+/** Delete embedding rows whose frame is gone, then any vector no frame references.
+ *  Ordered: the mapping is cleared first so the vector GC sees the truth. The two
+ *  statements live in rewindEmbeddingSql.ts so the privacy test runs exactly them. */
+function dropOrphanedEmbeddingsOn(d: Database.Database): void {
+  d.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run()
+  d.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
+}
+
+/**
+ * One-time sweep for embeddings left behind by a frame delete that did not clean
+ * them up — i.e. anything an earlier build of this feature already accumulated,
+ * plus the (rare) frames dropped outside `deleteRewindFramesOlderThan`. Runs at
+ * startup; a no-op on a healthy database.
+ */
+export function pruneOrphanedRewindEmbeddings(): number {
+  const d = get()
+  // Count BOTH tables: the vectors dropped by the second DELETE are the ones that
+  // actually held screen-derived content, and counting only the mapping rows made
+  // the startup log understate what had been cleaned.
+  const count = (): number =>
+    (
+      d
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM rewind_embeddings)
+                + (SELECT COUNT(*) FROM rewind_embedding_vectors) AS n`
+        )
+        .get() as { n: number }
+    ).n
+  const before = count()
+  d.transaction(() => dropOrphanedEmbeddingsOn(d))()
+  return before - count()
+}
+
+/** Frames that have OCR text but no embedding yet, newest first (the frames a
+ *  user is most likely to search for). `excludeIds` drops frames the caller has
+ *  already given up on this launch — without it, a batch that failed would be
+ *  handed back forever and the sweep could never advance past it.
+ *
+ *  The length floor MUST match the queue's `MIN_EMBED_TEXT_LEN`. When it didn't,
+ *  every too-short frame (lock screen, video, blank desktop) was returned here,
+ *  refused by the queue, never given an embedding row — and so returned again,
+ *  forever, monopolising the newest-first page until the backfill stalled outright.
+ *  Whitespace-only text is caught by TRIM here and by `.trim()` there. */
+export function rewindFramesNeedingEmbedding(
+  limit: number,
+  excludeIds: number[] = []
+): RewindFrame[] {
+  return timed('rewindFramesNeedingEmbedding', () => {
+    return get()
+      .prepare(rewindFramesNeedingEmbeddingSql(excludeIds.length))
+      .all(...excludeIds, limit) as RewindFrame[]
+  })
+}
+
+/**
+ * Point a frame at its content's vector, storing that vector only if this is the
+ * first frame to carry the content. Duplicate frames therefore cost one small
+ * mapping row instead of another 12KB copy, while staying just as findable.
+ */
+export function upsertRewindEmbedding(
+  frameId: number,
+  hash: string,
+  vec: Float32Array,
+  model: string
+): void {
+  const d = get()
+  d.transaction(() => {
+    d.prepare(
+      `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET
+         dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
+    ).run(hash, vec.length, model, vectorToBuffer(vec), Date.now())
+    d.prepare(
+      `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+       ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+    ).run(frameId, hash)
+  })()
+}
+
+/** Map a frame to the content's vector WITHOUT re-storing the vector — the
+ *  cache-hit path, when an identical screen was embedded earlier. Returns false
+ *  when that vector is gone (retention pruned it), so the caller re-embeds. */
+export function linkRewindEmbedding(frameId: number, hash: string): boolean {
+  const d = get()
+  const exists = d
+    .prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?')
+    .get(hash) as { ok: number } | undefined
+  if (!exists) return false
+  d.prepare(
+    `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+     ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+  ).run(frameId, hash)
+  return true
+}
+
+/**
+ * Rank stored content against `query` and return the matching frames, strongest
+ * first — WITHOUT blocking the main process.
+ *
+ * better-sqlite3 is synchronous, so scanning every vector in one statement would
+ * hold the main thread (and thus IPC, capture ingestion and the UI) for the whole
+ * scan. The scan is therefore paged and yields between pages; see
+ * `scanTopKBySimilarity`. The candidate set is bounded by retention: only content
+ * some live frame still references is scanned, and retention deletes the rest.
+ */
+export async function searchRewindEmbeddings(
+  query: Float32Array,
+  limit: number
+): Promise<{ frameId: number; similarity: number }[]> {
+  const d = get()
+  // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
+  // at, so an orphan that slipped through can't cost us a similarity computation.
+  //
+  // The vec guard is IN THE SQL (searchEmbeddingPageSql), not a .filter() on the
+  // page. `vec` is nullable, and scanTopKBySimilarity treats a short page as
+  // end-of-store — so filtering after the fact meant one partially-written row
+  // anywhere in the table silently truncated the scan there, and every vector past
+  // it went unranked. Filtering in the query keeps LIMIT and "rows returned"
+  // describing the same set.
+  const page = d.prepare(searchEmbeddingPageSql())
+
+  const scored = await scanTopKBySimilarity(
+    (offset, size) =>
+      (page.all(size, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
+        hash: r.hash,
+        vec: bufferToVector(r.vec)
+      })),
+    query,
+    limit,
+    () => new Promise<void>((resolve) => setImmediate(resolve))
+  )
+  if (scored.length === 0) return []
+
+  // Expand each winning hash back to the frames that carry that content. One
+  // hash can name many frames (that is the whole point of the dedup), so the
+  // result is capped at `limit` frames, strongest first then newest first.
+  const placeholders = scored.map(() => '?').join(',')
+  const rows = d
+    .prepare(
+      `SELECT e.frame_id AS frameId, e.hash AS hash, f.ts AS ts FROM rewind_embeddings e
+         JOIN rewind_frames f ON f.id = e.frame_id
+        WHERE e.hash IN (${placeholders})`
+    )
+    .all(...scored.map((s) => s.hash)) as { frameId: number; hash: string; ts: number }[]
+
+  const similarityByHash = new Map(scored.map((s) => [s.hash, s.similarity]))
+  return rows
+    .map((r) => ({ frameId: r.frameId, similarity: similarityByHash.get(r.hash) ?? 0, ts: r.ts }))
+    .sort((a, b) => b.similarity - a.similarity || b.ts - a.ts)
+    .slice(0, limit)
+    .map(({ frameId, similarity }) => ({ frameId, similarity }))
+}
+
+/** Hydrate frames by id, in the given order (ids with no row are skipped). */
+export function rewindFramesByIds(ids: number[]): RewindFrame[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  const frames = get()
+    .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id IN (${placeholders})`)
+    .all(...ids) as RewindFrame[]
+  const byId = new Map(frames.map((f) => [f.id, f]))
+  return ids.map((id) => byId.get(id)).filter((f): f is RewindFrame => f !== undefined)
 }
 
 // --- Proactive Insights ---

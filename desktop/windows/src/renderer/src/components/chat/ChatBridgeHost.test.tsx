@@ -20,17 +20,27 @@ let chat = {
 }
 vi.mock('../../state/appState', () => ({ useAppState: () => ({ chat }) }))
 
+const speakSpy = vi.fn((_text: string) => Promise.resolve())
+vi.mock('../../lib/voice/voiceController', () => ({
+  interruptCurrentResponse: vi.fn(),
+  speakText: (text: string) => speakSpy(text)
+}))
+
 import { ChatBridgeHost } from './ChatBridgeHost'
+import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../lib/usageLimit'
 
 let barSendCb: ((p: { text: string; fromVoice: boolean }) => void) | null
 let reqStateCb: (() => void) | null
+let usageLimitCb: ((p: { message: string; spoken: boolean; popup?: boolean }) => void) | null
 let published: BarChatState[]
 
 beforeEach(() => {
   vi.clearAllMocks()
   barSendCb = null
   reqStateCb = null
+  usageLimitCb = null
   published = []
+  dismissUsageLimit()
   chat = {
     history: [],
     sending: false,
@@ -46,6 +56,10 @@ beforeEach(() => {
     },
     onBarRequestChatState: (cb: () => void) => {
       reqStateCb = cb
+      return () => {}
+    },
+    onBarUsageLimit: (cb: (p: { message: string; spoken: boolean; popup?: boolean }) => void) => {
+      usageLimitCb = cb
       return () => {}
     },
     publishChatState: (s: BarChatState) => published.push(s)
@@ -166,5 +180,39 @@ describe('ChatBridgeHost', () => {
       warn.mockRestore()
       vi.useRealTimers()
     }
+  })
+
+  it('raises the shared usage-limit popup when a bar send was blocked by the quota', () => {
+    // The bar is a separate renderer: it cannot show UsageLimitPopup (mounted in
+    // the main window) — so a blocked bar send hops here and we raise it.
+    const reasons: (UsageLimitReason | null)[] = []
+    const unsub = onUsageLimit((r) => reasons.push(r))
+    render(<ChatBridgeHost />)
+
+    usageLimitCb?.({ message: "You've reached 30 Free messages this month.", spoken: false })
+
+    expect(reasons.at(-1)).toBe('chat')
+    // A typed block is shown, not spoken.
+    expect(speakSpy).not.toHaveBeenCalled()
+    unsub()
+  })
+
+  it('speaks the limit line back for a blocked VOICE turn, but does NOT re-pop the popup (popup:false)', () => {
+    // A blocked voice send arrives with popup:false: the pre-capture PTT veto
+    // already owns the modal for voice (macOS parity). TTS lives here
+    // (voiceController), so the turn is still answered aloud — but the popup must
+    // NOT be raised a second time.
+    const reasons: (UsageLimitReason | null)[] = []
+    const unsub = onUsageLimit((r) => reasons.push(r))
+    render(<ChatBridgeHost />)
+    usageLimitCb?.({
+      message: "You've reached your monthly free message limit.",
+      spoken: true,
+      popup: false
+    })
+
+    expect(speakSpy).toHaveBeenCalledWith("You've reached your monthly free message limit.")
+    expect(reasons).not.toContain('chat')
+    unsub()
   })
 })

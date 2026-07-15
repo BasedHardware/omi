@@ -5,6 +5,7 @@
 
 import { describe, expect, it, vi } from 'vitest'
 import {
+  KERNEL_MCP_PROTOCOL_VERSION,
   boundedLimit,
   buildDelegatedPrompt,
   nullableNumber,
@@ -17,7 +18,25 @@ import {
   stableMcpServerConfig,
   updateByColumns
 } from './kernelSupport'
+import { PROTOCOL_VERSION as AUTOMATION_HELPER_PROTOCOL_VERSION } from '../automation/protocol'
 import type { AgentStore } from './types'
+
+describe('KERNEL_MCP_PROTOCOL_VERSION', () => {
+  // The agent runtime's MCP tool-context contract is macOS protocol v2. Windows
+  // ALSO has an unrelated `automation/protocol.ts` exporting PROTOCOL_VERSION = 1
+  // — that is the C# UI-automation helper's wire format and has nothing to do with
+  // the agent runtime. Importing it here would silently stamp protocolVersion: 1
+  // into the MCP context file every adapter reads. Pin the value, and pin that the
+  // two are NOT the same number, so the mistake cannot be made quietly.
+  it('is 2, matching the macOS agent protocol', () => {
+    expect(KERNEL_MCP_PROTOCOL_VERSION).toBe(2)
+  })
+
+  it('is not the UI-automation helper protocol version', () => {
+    expect(AUTOMATION_HELPER_PROTOCOL_VERSION).toBe(1)
+    expect(KERNEL_MCP_PROTOCOL_VERSION).not.toBe(AUTOMATION_HELPER_PROTOCOL_VERSION)
+  })
+})
 
 describe('kernelSupport — deterministic serialization', () => {
   it('canonicalizes object key order', () => {

@@ -1,11 +1,12 @@
 import { useEffect } from 'react'
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
-import { Sidebar } from './components/layout/Sidebar'
+import { AppChrome } from './components/layout/AppChrome'
 import { MainViews } from './components/layout/MainViews'
 import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
+import { DbRecoveryNotice } from './components/ui/DbRecoveryNotice'
 import { purgeAppMemoriesOnce } from './lib/appMemories'
 import { AppStateProvider } from './state/AppStateProvider'
 import { useAppState } from './state/appState'
@@ -20,11 +21,14 @@ import { useOnboardingComplete } from './hooks/useOnboardingComplete'
 import { getPreferences } from './lib/preferences'
 import { SandboxBadge } from './components/SandboxBadge'
 import { BarApp } from './components/bar/BarApp'
+import { GlowWindow } from './components/glow/GlowWindow'
 import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
+import { LiveNotesHost } from './components/recording/LiveNotesHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
 import { startOutboxSweep, stopOutboxSweep } from './lib/sync/outboxSweep'
+import { useAppLifetimeJobs } from './lib/appLifetimeJobs'
 import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
@@ -35,7 +39,11 @@ import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
+import { attachLiveNotesE2eHook } from './lib/liveNotes/e2eHook'
+import { PrimitivesGallery } from './components/ui/__gallery/PrimitivesGallery'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
+import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
+import { refreshUserVocabulary, resetUserVocabulary } from './lib/ptt/userVocabulary'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -45,11 +53,7 @@ const IS_SECONDARY_WINDOW = isSecondaryWindow()
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
-  // Settings is a full-screen view with its own tab rail + Back button, so the
-  // main app sidebar is hidden there.
-  const { pathname } = useLocation()
   const navigate = useNavigate()
-  const hideSidebar = pathname === '/settings'
 
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
@@ -88,16 +92,21 @@ function AppShellInner(): React.JSX.Element {
     return () => stopOutboxSweep()
   }, [])
 
+  // The four app-lifetime background engines (knowledge graph, screen synthesis,
+  // insights, retention). They live in the shell — NOT in a page — so that neither
+  // Home design owns them and swapping Home cannot silently switch them off. See
+  // lib/appLifetimeJobs.ts for the full why.
+  useAppLifetimeJobs()
+
   return (
     <div className="app-canvas flex h-full min-h-0 flex-col">
       {/* Native-caption drag strip (Window Controls Overlay). */}
       <TitleBar />
-      <div className="flex min-h-0 flex-1">
-        {!hideSidebar && <Sidebar />}
-        <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
-          <MainViews />
-        </main>
-      </div>
+      {/* Only renders when omi.db was found corrupt and repaired at startup. */}
+      <DbRecoveryNotice />
+      <AppChrome>
+        <MainViews />
+      </AppChrome>
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}
@@ -107,6 +116,9 @@ function AppShellInner(): React.JSX.Element {
           run the on-save UI side effects. Capture itself (Rewind, mic, PTT, screen)
           runs in the hidden capture window now. */}
       <LiveMirrorHost />
+      {/* Generates live AI notes off the mirrored transcript, app-root scoped so
+          generation isn't gated on the notes panel being open. */}
+      <LiveNotesHost />
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
@@ -195,7 +207,10 @@ function App(): React.JSX.Element {
   // smoke harness can drive the voice controller even on the signed-out screen
   // (its error-path assertion starts a session with no auth). Main window only.
   useEffect(() => {
-    if (!IS_SECONDARY_WINDOW) attachVoiceE2eHook()
+    if (!IS_SECONDARY_WINDOW) {
+      attachVoiceE2eHook()
+      attachLiveNotesE2eHook()
+    }
   }, [])
 
   // Warm the daily "Auto" realtime-voice model pick, so the user's FIRST voice
@@ -208,10 +223,29 @@ function App(): React.JSX.Element {
   // asynchronously, so firing at mount would go out unauthenticated, 401, and cache
   // the Gemini fallback with a fresh 24h timestamp — pinning the user to Gemini for
   // a day. (Mac has no such window; its auth is restored before the launch call.)
+  //
+  // The <about_user> card is warmed on the same signal and for the same reason
+  // (macOS builds it when the hub starts — RealtimeHubController.swift:813 — not
+  // when a session starts). Starting a session refreshes it too, but reads the
+  // CACHE synchronously, so a launch-time miss would ship the user's FIRST voice
+  // session with no card at all — exactly the "assistant doesn't know who I am"
+  // gap this card exists to close. Sign-out drops it so it cannot outlive the
+  // account (and abandons any in-flight build).
+  //
+  // The PTT custom-vocabulary cache is warmed and dropped on the same signal for
+  // the same reason: collectPttKeywords reads it synchronously, so a launch-time
+  // miss would ship the first hold without the user's custom terms.
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     return onAuthStateChanged(auth, (user) => {
-      if (user) refreshIfStale()
+      if (user) {
+        refreshIfStale()
+        refreshAboutUserCard()
+        refreshUserVocabulary()
+      } else {
+        resetAboutUserCard()
+        resetUserVocabulary()
+      }
     })
   }, [])
 
@@ -250,9 +284,17 @@ function App(): React.JSX.Element {
         <Route path="/insight-toast" element={<InsightToast />} />
         {/* The top-edge bar window (replaces the old floating overlay). */}
         <Route path="/bar" element={<BarApp />} />
+        {/* The focus halo: a click-through ring around the user's active window.
+            Ungated (like /capture) — it paints geometry main hands it and holds
+            no user data. */}
+        <Route path="/glow" element={<GlowWindow />} />
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />
+        {/* Dev-only visual harness for the shared ui/* primitives. DEV-gated so
+            it tree-shakes out of packaged renderer builds; placed before the
+            auth-gated catch-all so it renders without sign-in. */}
+        {import.meta.env.DEV && <Route path="/__ui-gallery" element={<PrimitivesGallery />} />}
         <Route
           path="/login"
           element={

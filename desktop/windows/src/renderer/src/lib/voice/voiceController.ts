@@ -21,12 +21,16 @@ import { EchoGate, isHeadsetOutput } from './echoGate'
 import { GATE_REASSERT_MS } from '../../capture/assistantGate'
 import { mintRealtimeToken, MintError } from './tokenMint'
 import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelector'
+import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
+import { buildVoiceSystemInstruction } from './systemInstruction'
+import { getPreferences } from '../preferences'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
+import type { VoiceLeaseID } from './turn/voiceTurnMachine'
 
 type Listener = (state: VoiceSessionState) => void
 
@@ -242,6 +246,10 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   // the NEXT session uses a current pick; THIS session resolves synchronously
   // from the cache below. Mirrors Mac's "call refreshIfStale at session start".
   refreshIfStale()
+  // Same contract for the <about_user> card (macOS refreshAboutUserCard): rebuild
+  // it in the BACKGROUND and start THIS session from the cached value. A cache
+  // miss omits the card rather than adding a network round-trip to PTT latency.
+  refreshAboutUserCard()
   // No explicit lane (the UI path) → honor the user's provider setting, resolving
   // 'auto' to the cached concrete pick (macOS effectiveProvider). An explicit
   // provider (a forced-lane caller / test) bypasses the selector entirely.
@@ -287,6 +295,13 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   if (mySeq !== startSeq) return
 
   const cb = makeCallbacks(mySeq)
+  // Assembled synchronously (cached card + a preference read) so both lanes get
+  // the same grounded instruction without delaying the handshake. The continuity
+  // block stays empty until Track 1 feeds the voice-session seed in here.
+  const instructions = buildVoiceSystemInstruction({
+    aboutUser: getAboutUserCard(),
+    userLanguages: getPreferences().voiceLanguages ?? []
+  })
   // Await into a LOCAL first — publishing to the module `handle` before the
   // staleness check would let a stale start overwrite (and then stop+null) a
   // newer session's handle, orphaning its live mic/socket.
@@ -296,11 +311,17 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
       provider === 'openai'
         ? await startOpenAiSession({
             clientSecret: token,
+            instructions,
             onSpeakers: !headset,
             sinkId: sinkId || undefined,
             cb
           })
-        : await startGeminiSession({ authToken: token, sinkId: sinkId || undefined, cb })
+        : await startGeminiSession({
+            authToken: token,
+            instructions,
+            sinkId: sinkId || undefined,
+            cb
+          })
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })
@@ -514,7 +535,11 @@ function resetTtsPipeline(): void {
  * in-flight synth resolves the pending speakText promise promptly, which clears
  * useChat.speaking → the bar orb's speaking glow. Safe no-op when nothing plays.
  */
-export function interruptCurrentResponse(): void {
+export function interruptCurrentResponse(leaseID: VoiceLeaseID | null = null): void {
+  // A5 PR-3 seam: PR-6 fences the interrupt to the reducer's `stopPlayback`
+  // lease so a barge-in cancels THIS turn's audio and never the successor's.
+  // Inert until then — `null` (the default) is byte-for-byte today's behavior.
+  void leaseID
   record('tts-interrupt')
   resetTtsPipeline()
 }
@@ -612,7 +637,15 @@ async function runChunkedTts(
  * happens. A short single-chunk reply keeps the original one-synth-then-play
  * shape (no filler).
  */
-export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
+export async function speakText(
+  text: string,
+  voiceId: string = DEFAULT_TTS_VOICE,
+  leaseID: VoiceLeaseID | null = null
+): Promise<void> {
+  // A5 PR-3 seam: PR-6 threads this lease through `runChunkedTts`'s abort
+  // controller so a barge-in invalidates exactly this turn's playback lane.
+  // Inert until then — `null` (the default) is byte-for-byte today's behavior.
+  void leaseID
   const chunks = chunkTts(text)
   if (chunks.length === 0) return
 

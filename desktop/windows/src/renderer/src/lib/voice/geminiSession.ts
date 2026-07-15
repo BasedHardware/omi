@@ -16,11 +16,7 @@ import { createPcmPipeline as createWorkletPipeline } from '../capture/pcmPipeli
 import { createVoicePlayer, int16ToBase64, base64ToBytes, type VoicePlayer } from './pcmPlayer'
 import { GEMINI_LIVE_MODEL } from './tokenMint'
 import { mapGeminiUsage, usageDelta, usageTotal, type RealtimeUsageBody } from './usageReport'
-import {
-  OMI_VOICE_INSTRUCTIONS,
-  type ProviderSessionCallbacks,
-  type ProviderSessionHandle
-} from './providerSession'
+import { type ProviderSessionCallbacks, type ProviderSessionHandle } from './providerSession'
 
 // 1024 samples @16kHz = 64ms per uplink frame — low enough latency for
 // conversation, big enough that base64+WS framing overhead stays trivial.
@@ -88,6 +84,8 @@ export function createGeminiMessageHandler(deps: {
 
 export async function startGeminiSession(args: {
   authToken: string
+  /** The assembled per-session system instruction (systemInstruction.ts). */
+  instructions: string
   sinkId?: string
   cb: ProviderSessionCallbacks
 }): Promise<ProviderSessionHandle> {
@@ -139,7 +137,7 @@ export async function startGeminiSession(args: {
       model: GEMINI_LIVE_MODEL,
       config: {
         responseModalities: [Modality.AUDIO],
-        systemInstruction: OMI_VOICE_INSTRUCTIONS,
+        systemInstruction: args.instructions,
         // Omi's spoken words as SOURCE text for the injected record.
         outputAudioTranscription: {}
       },

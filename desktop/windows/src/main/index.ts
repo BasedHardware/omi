@@ -16,7 +16,9 @@ import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
+import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
+import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -26,8 +28,10 @@ import { registerCaptureBridge } from './ipc/captureBridge'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
+import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
+import { registerChatFilesHandlers } from './ipc/chatFiles'
 import { registerKgHandlers } from './ipc/kg'
 import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
@@ -78,6 +82,9 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
+import { registerAgentControlIpc } from './ipc/agentControl'
+import { registerAudioMuteHandlers } from './ipc/audioMute'
+import { systemAudioMuteBridge } from './audio/systemAudioMute'
 import { automationBridge } from './automation/bridge'
 import {
   startAutomationTargetTracker,
@@ -85,10 +92,13 @@ import {
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
+import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
+import { registerFocusAssistant } from './assistants/focus/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
+import { startRewindEmbedding } from './rewind/embeddingService'
 import { startRewindRetention } from './rewind/retentionRunner'
 import { startOrphanSweep } from './rewind/orphanSweep'
 import { prewarmPrimarySourceId } from './rewind/sourceId'
@@ -309,10 +319,22 @@ import {
   updateLocalConversationTitle,
   updateLocalConversationSync,
   claimConversationForPosting,
+  listConversationFolders,
+  replaceConversationFolders,
+  upsertConversationFolder,
+  deleteConversationFolder,
+  createTranscriptionSession,
+  createLiveNote,
+  updateLiveNote,
+  deleteLiveNote,
+  listLiveNotes,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
   recordVoiceTurnFailure,
+  pruneOrphanedRewindEmbeddings,
+  getDbRecoveryStatus,
+  initDatabase,
   wipeUserData
 } from './ipc/db'
 
@@ -393,6 +415,11 @@ function createWindow(): BrowserWindow {
     }
   })
 
+  // Windows' standard right-click editing menu (native, so Narrator/UIA see a real
+  // menu). Electron ships no default context menu — without this, right-clicking
+  // anywhere in the app does nothing.
+  installContextMenu(mainWindow)
+
   // NOTE: the main window is intentionally NOT content-protected. We used to call
   // setContentProtection(true) here (Windows WDA_EXCLUDEFROMCAPTURE) so Rewind/chat
   // screenshots read only what's BEHIND Omi — but Omi's own window should appear in
@@ -468,6 +495,27 @@ app.whenReady().then(async () => {
   // window/service setup, just let it exit and hand off to the first instance.
   if (!gotSingleInstanceLock) return
   perfMark('main:ready')
+
+  // Open (and, if it is corrupt, recover) omi.db before anything else can touch
+  // it. This has to happen here, first: recovery REPLACES the database file, and
+  // both the read-only chat handle and the KG write worker's own connection open
+  // lazily later — swapping the file under them would strand them on a deleted
+  // inode. Single-instance lock is already held, so no other process has it open.
+  // Never fatal: a throw here would be an unstartable app, and the renderer can
+  // still run (every DB call surfaces its own error).
+  try {
+    const recovery = initDatabase()
+    if (recovery.recovered) {
+      console.error(
+        `[main] omi.db was corrupt and has been recovered: ` +
+          `${recovery.rowsRecovered} row(s) restored, reset=${recovery.reset}, ` +
+          `backup=${recovery.backupPath}`
+      )
+    }
+  } catch (e) {
+    console.error('[main] database init failed', e)
+  }
+  perfMark('main:db-ready')
 
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
@@ -586,11 +634,34 @@ app.whenReady().then(async () => {
   ipcMain.handle('db:updateLocalConversationSync', async (_e, id, patch) =>
     updateLocalConversationSync(id, patch)
   )
+  // Track 4: conversation folders (local cache) + starred/folder mirror.
+  ipcMain.handle('db:listConversationFolders', async () => listConversationFolders())
+  ipcMain.handle('db:replaceConversationFolders', async (_e, folders: ConversationFolder[]) =>
+    replaceConversationFolders(folders)
+  )
+  ipcMain.handle('db:upsertConversationFolder', async (_e, folder: ConversationFolder) =>
+    upsertConversationFolder(folder)
+  )
+  ipcMain.handle('db:deleteConversationFolder', async (_e, id: string) =>
+    deleteConversationFolder(id)
+  )
   ipcMain.handle(
     'db:claimConversationForPosting',
     async (_e, id: string, resetAttempts?: boolean) =>
       claimConversationForPosting(id, resetAttempts)
   )
+  // PR8: LiveNotes — AI + manual notes during a live recording (local-only).
+  ipcMain.handle(
+    'db:createTranscriptionSession',
+    async (_e, session: { id: string; startedAt: number; createdAt: number }) =>
+      createTranscriptionSession(session)
+  )
+  ipcMain.handle('db:createLiveNote', async (_e, note: LiveNote) => createLiveNote(note))
+  ipcMain.handle('db:updateLiveNote', async (_e, id: string, text: string, updatedAt: number) =>
+    updateLiveNote(id, text, updatedAt)
+  )
+  ipcMain.handle('db:deleteLiveNote', async (_e, id: string) => deleteLiveNote(id))
+  ipcMain.handle('db:listLiveNotes', async (_e, sessionId: string) => listLiveNotes(sessionId))
   // Track 2: Voice & PTT depth — durable voice-turn outbox (unconsumed until
   // Phase B / Track 1 wire the kernel-write path; see ipc/voiceTurnOutbox.ts).
   ipcMain.handle('db:insertVoiceTurn', async (_e, entry) => insertVoiceTurn(entry))
@@ -618,6 +689,7 @@ app.whenReady().then(async () => {
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
+  registerChatFilesHandlers()
   registerKgHandlers()
   // Google sign-in (system browser + loopback). On success, surface the main
   // window OVER the browser: Windows blocks background apps from stealing
@@ -667,6 +739,10 @@ app.whenReady().then(async () => {
   // permission layer knows nothing about the per-app privacy toggle and answers
   // `granted` unconditionally, so onboarding must ask the OS, not the browser.
   registerMicPermissionHandlers()
+  // Database corruption recovery: the renderer pulls this once on mount and tells
+  // the user what happened to their data. macOS declares the equivalent flag but
+  // never sets it, so its recovery UI can never fire; ours reports for real.
+  ipcMain.handle('db:recoveryStatus', () => getDbRecoveryStatus())
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -691,10 +767,21 @@ app.whenReady().then(async () => {
   // a session (Firebase token + base URLs) and drives generation. The background
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
+  // Track 3 (focus halo): the click-through ring the Focus assistant fires around
+  // the active window (red = distracted, green = refocused). Handler registration
+  // only; the window itself is created at ready-to-show below.
+  registerGlowIpc()
   // Agent-kernel SQLite runtime guard (non-fatal): validates the production
   // better-sqlite3 driver path that unit tests can't cover. Logs and continues
   // on failure — the kernel is not yet wired to any caller.
   probeAgentStoreRuntimeAtStartup()
+  // Agent control plane (trusted direct control). Handler registration only —
+  // the kernel is constructed lazily on the first control call, and user-facing
+  // chat is NOT routed through it.
+  registerAgentControlIpc()
+  // PTT system-audio mute IPC (Track 2 A4). Handler registration only — the
+  // native helper is warm-spawned below, off the first-paint critical path.
+  registerAudioMuteHandlers()
 
   // `win` is this launch's instance for one-shot wiring below (ready-to-show,
   // bench); long-lived consumers read the module-level `mainWindow` instead.
@@ -809,6 +896,19 @@ app.whenReady().then(async () => {
     // OCR/retention loops are cheap no-ops until frames exist.
     startRewindCapture()
     startRewindOcr()
+    // Semantic-search indexer (Track 4). Starts its flush timer here; the queue
+    // and the launch backfill only move once the renderer relays a Firebase
+    // session (see rewind/embeddingService.ts).
+    startRewindEmbedding()
+    // Embeddings are derived from screen content, so any that outlived their frame
+    // are data the user asked us to forget. Retention deletes them inline now; this
+    // sweeps up anything an earlier build left behind. No-op on a healthy database.
+    try {
+      const dropped = pruneOrphanedRewindEmbeddings()
+      if (dropped > 0) console.log(`[rewind-embed] dropped ${dropped} orphaned embedding(s)`)
+    } catch (e) {
+      console.warn(`[rewind-embed] orphan sweep failed: ${(e as Error).message}`)
+    }
     startRewindRetention()
     // Delete JPEGs orphaned by a crash between the file write and the DB insert
     // (Windows-specific — frames are per-file). Startup pass + every 6h.
@@ -816,8 +916,17 @@ app.whenReady().then(async () => {
     // Warm the (slow) screen-source-id cache a few seconds later, off the critical
     // path, so enabling capture later is an instant cache hit.
     setTimeout(() => prewarmPrimarySourceId(), 4000)
+    // Warm-spawn the audio-mute helper so the first PTT hold never pays the
+    // cold-spawn cost. Deferred off first paint; a silent no-op when the helper
+    // binary was never built (no .NET SDK) — PTT then simply doesn't mute.
+    setTimeout(() => systemAudioMuteBridge.warm(), 4000)
     // Pre-create the (hidden) acrylic toast window so the first Omi insight shows instantly.
     createInsightToastWindow()
+    // Pre-create the focus-halo window. It is created ONCE and never hidden after
+    // its off-screen prime — a transparent frameless window fades in via the OS
+    // show-animation on every hide→show (the bug that read as the bar "plummeting"),
+    // so the halo parks off-screen instead. See main/glow/glowWindow.ts.
+    createGlowWindow()
     // Post-update "what's new" (Phase 8): a few seconds after startup (once the
     // toast window has loaded), surface the changelog for the version we just
     // updated into. No-op on a fresh install or an unchanged version.
@@ -833,6 +942,12 @@ app.whenReady().then(async () => {
     // timer. No-ops until the renderer has pushed a session (Firebase token lives
     // renderer-side) and is gated on the aiProfileEnabled setting.
     maybeGenerateAiProfileOnStartup()
+    // Track 3 (Focus assistant): register it with the coordinator, which brings
+    // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
+    // loop only polls frames once an assistant is registered, so this is the call
+    // that turns the proactive stack on. The glow window above is pre-created; the
+    // renderer relays a session that Focus (and the AI profile) read.
+    registerFocusAssistant()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
@@ -997,6 +1112,14 @@ app.whenReady().then(async () => {
   // Renderer → quit for real (menu/button in the UI).
   ipcMain.on('app:quit', () => quitApp())
 
+  // Renderer → restart. Used by the database-corruption prompt: the repair can only
+  // run at startup (before the read-only handle and the KG worker's own connection
+  // exist), so the fix is one clean relaunch.
+  ipcMain.on('app:relaunch', () => {
+    app.relaunch()
+    quitApp()
+  })
+
   // Dev perf bench: after the renderer loads, record the startup-timing marks and
   // quit. Entirely dev-only — tree-shaken from packaged main (see dev/bench).
   if (import.meta.env.DEV) devBench.runBenchDriver(win)
@@ -1027,9 +1150,11 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  cancelStartupRescan()
   stopMeetingMonitor()
   destroyTray()
   destroyBar()
+  destroyGlow()
   const capture = getCaptureWindow()
   if (capture && !capture.isDestroyed()) capture.destroy()
   unregisterOverlayShortcut()
@@ -1040,6 +1165,11 @@ app.on('will-quit', () => {
   // outlives the app on every quit, so orphaned omi-*-ocr-helper.exe processes
   // pile up across launches (no production dispose() call site before this).
   helperProcess.dispose()
+  // Same for the PTT audio-mute helper — and here it's not just hygiene: quitting
+  // mid-hold would otherwise orphan a helper still holding the system-audio mute,
+  // leaving the user's speakers muted with Omi gone. dispose() closes its stdin,
+  // which is its cue to unmute and exit.
+  systemAudioMuteBridge.dispose()
 })
 
 // In this file you can include the rest of your app's specific main process

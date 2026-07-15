@@ -377,6 +377,14 @@ export interface AdapterAttemptResult {
 
 export interface CancelAttemptContext {
   sessionId: string
+  /**
+   * Host-owned identity fields, same contract as AdapterAttemptContext: optional
+   * so the pre-kernel in-memory task path still satisfies it, always supplied by
+   * the kernel. Adapter payloads must never override the ownerId (INV-AGENT).
+   */
+  ownerId?: string
+  requestId?: string
+  clientId?: string
   runId?: string
   attemptId?: string
   binding?: AdapterBindingHandle

@@ -7,6 +7,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import {
   AuthExpiredError,
   HttpError,
+  SessionChangedError,
   generateProfile,
   type OrchestratorDeps,
   type SourceFetchers
@@ -137,6 +138,49 @@ describe('generateProfile (orchestrator core)', () => {
     await expect(generateProfile(deps)).rejects.toThrow(/auth expired/)
     expect(chat).not.toHaveBeenCalled()
     expect(insertProfile).not.toHaveBeenCalled()
+  })
+
+  // C1 (sign-out privacy). signOutUser() is wipe-then-signout, and a generation
+  // takes 10–90s. Without this guard an in-flight run completes AFTER the wipe
+  // and re-inserts the signed-out user's synthesized dossier into the DB that was
+  // just cleared to erase it (and PATCHes it to the backend with their token) —
+  // and if a second user has signed in by then, it lands in THEIR database.
+  it('(C1) discards the result — no insert, no sync — when the session changes mid-generation', async () => {
+    const fetchers: SourceFetchers = {
+      ...emptyFetchers(),
+      memories: vi.fn(async () => ['[work] engineer'])
+    }
+    // Session is live while the sources/LLM run, gone by the time we would write.
+    let stale = false
+    const chat = vi.fn(async (_messages: ChatMessage[]) => {
+      stale = true // the user signs out during synthesis
+      return '- User is an engineer'
+    })
+    const { deps, insertProfile, syncProfile } = makeDeps({
+      fetchers,
+      chat,
+      isStale: () => stale
+    })
+
+    await expect(generateProfile(deps)).rejects.toBeInstanceOf(SessionChangedError)
+
+    // The whole point: nothing was written anywhere.
+    expect(insertProfile).not.toHaveBeenCalled()
+    expect(syncProfile).not.toHaveBeenCalled()
+  })
+
+  it('(C1) writes normally while the session is unchanged (guard does not misfire)', async () => {
+    const fetchers: SourceFetchers = {
+      ...emptyFetchers(),
+      memories: vi.fn(async () => ['[work] engineer'])
+    }
+    const { deps, insertProfile, syncProfile } = makeDeps({ fetchers, isStale: () => false })
+
+    const record = await generateProfile(deps)
+
+    expect(record.id).toBe(42)
+    expect(insertProfile).toHaveBeenCalledTimes(1)
+    expect(syncProfile).toHaveBeenCalledTimes(1)
   })
 
   it('runs stage-2 consolidation when past profiles exist (oldest→newest)', async () => {

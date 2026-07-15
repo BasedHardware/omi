@@ -33,11 +33,24 @@ export const LEAF_AGENT_CONTROL_TOOLS = new Set([
   'run_agent_and_wait'
 ])
 
+/**
+ * Adapter ids whose credentials are Omi-managed cloud routing but which have no
+ * Windows adapter implementation yet. macOS ships `pi-mono` as a managed-cloud
+ * production adapter, so a session persisted against it must pin to
+ * `managed_cloud` here too — otherwise the same session would resolve to a
+ * different credential scope on the two platforms, which is exactly what the
+ * provider boundary exists to prevent. Remove an id from this set once a real
+ * Windows adapter for it is registered in ADAPTER_CAPABILITY_MATRIX.
+ */
+const MANAGED_CLOUD_ADAPTER_IDS = new Set<string>(['pi-mono'])
+
 export function providerBoundaryForAdapter(adapterId: string): ProviderBoundary {
-  if (
-    isProductionAdapterId(adapterId) &&
-    adapterCredentialScopeFor(adapterId) === 'managed_cloud'
-  ) {
+  if (isProductionAdapterId(adapterId)) {
+    return adapterCredentialScopeFor(adapterId) === 'managed_cloud'
+      ? 'managed_cloud'
+      : `local_user:${adapterId}`
+  }
+  if (MANAGED_CLOUD_ADAPTER_IDS.has(adapterId)) {
     return 'managed_cloud'
   }
   return `local_user:${adapterId}`
@@ -92,6 +105,44 @@ export function assertProductionAdapterScopeDeclared(adapterId: ProductionAdapte
 
 export function executionRoleAllowsTool(role: AgentExecutionRole, toolName: string): boolean {
   return role !== 'leaf' || !LEAF_AGENT_CONTROL_TOOLS.has(toolName)
+}
+
+/**
+ * INV-AGENT leaf-role guard, enforcement point #1: a leaf worker may not call
+ * any of LEAF_AGENT_CONTROL_TOOLS.
+ *
+ * This is called from the control-tool dispatch boundary (./controlTools
+ * `handleAgentControlToolCall`) on EVERY tool call, mirroring macOS
+ * control-tools.ts:561-570. It is the guard that actually stops a background
+ * agent from recursively spawning or messaging other agents — the
+ * `executionRoleAllowsTool` predicate alone enforces nothing.
+ */
+export function assertLeafControlToolsAllowed(
+  context: { executionRole?: AgentExecutionRole },
+  name: string
+): void {
+  if (!LEAF_AGENT_CONTROL_TOOLS.has(name)) return
+  if (!executionRoleAllowsTool(context.executionRole ?? 'coordinator', name)) {
+    throw new Error(
+      name === 'send_agent_message'
+        ? 'Leaf workers cannot continue agent sessions.'
+        : 'Background agents are leaf workers and cannot start additional agents.'
+    )
+  }
+}
+
+/**
+ * INV-AGENT leaf-role guard, enforcement point #2: the spawn-specific check the
+ * three spawning tools run before parsing input. `canSpawnAgents` is the
+ * deprecated compatibility flag for older direct callers.
+ */
+export function assertAgentSpawningAllowed(context: {
+  executionRole?: AgentExecutionRole
+  canSpawnAgents?: boolean
+}): void {
+  if (context.executionRole === 'leaf' || context.canSpawnAgents === false) {
+    throw new Error('Background agents are leaf workers and cannot start additional agents.')
+  }
 }
 
 export function executionRoleForSurface(input: {

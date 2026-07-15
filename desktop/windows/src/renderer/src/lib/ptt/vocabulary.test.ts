@@ -1,4 +1,10 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
+
+// Source 1 (the account-level custom vocabulary) is a synchronous cache read;
+// mock it so these tests control the terms without touching Firebase/the network.
+const { userVocabulary } = vi.hoisted(() => ({ userVocabulary: vi.fn<() => string[]>(() => []) }))
+vi.mock('./userVocabulary', () => ({ getUserVocabulary: userVocabulary }))
+
 import {
   collectPttKeywords,
   pttKeywordsParam,
@@ -34,6 +40,8 @@ function frame(p: Partial<RewindFrame>): RewindFrame {
 
 beforeEach(() => {
   setBridge({}) // no context methods by default
+  userVocabulary.mockReset()
+  userVocabulary.mockReturnValue([]) // no custom vocabulary by default
   __resetPttKeywordsForTests()
 })
 
@@ -81,6 +89,32 @@ describe('collectPttKeywords', () => {
   it('returns [] when the context bridge has no capture methods', async () => {
     setBridge({})
     expect(await collectPttKeywords(1000)).toEqual([])
+  })
+
+  it('adds the user vocabulary FIRST, before the on-screen OCR terms (Source 1 priority)', async () => {
+    userVocabulary.mockReturnValue(['Zephyrine', 'Quintessa'])
+    setBridge({ screenReadText: async () => 'Photoshop Illustrator', rewindFrames: async () => [] })
+    const terms = await collectPttKeywords(1000)
+    expect(terms.slice(0, 2)).toEqual(['Zephyrine', 'Quintessa'])
+    // The OCR proper nouns still land, but after the custom terms.
+    expect(terms.indexOf('Zephyrine')).toBeLessThan(terms.indexOf('Photoshop'))
+  })
+
+  it('reads the user vocabulary synchronously — the hot path never awaits a fetch', async () => {
+    // A getter that returns synchronously (a Promise here would be a bug — the
+    // collector calls it directly, not awaited). Assert it was invoked exactly once.
+    userVocabulary.mockReturnValue(['CustomTerm'])
+    setBridge({})
+    const terms = await collectPttKeywords(1000)
+    expect(userVocabulary).toHaveBeenCalledTimes(1)
+    expect(terms).toEqual(['CustomTerm'])
+  })
+
+  it('degrades to the OCR/frame sources when the custom-vocabulary cache is empty', async () => {
+    userVocabulary.mockReturnValue([])
+    setBridge({ screenReadText: async () => 'Photoshop', rewindFrames: async () => [] })
+    const terms = (await collectPttKeywords(1000)).map((t) => t.toLowerCase())
+    expect(terms).toContain('photoshop')
   })
 })
 

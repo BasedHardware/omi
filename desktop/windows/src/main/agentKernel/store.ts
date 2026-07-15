@@ -23,6 +23,7 @@ import { createRequire } from 'node:module'
 import { dirname, join } from 'node:path'
 import { randomUUID } from 'node:crypto'
 import { app } from 'electron'
+import { providerBoundaryForAdapter } from './executionPolicy'
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -57,7 +58,6 @@ import type {
   NewDesktopMemoryCandidate,
   NewDesktopTaskCandidate,
   NewRunAttempt,
-  ProviderBoundary,
   RunAttempt,
   StartupReconciliationResult
 } from './types'
@@ -93,13 +93,6 @@ const TERMINAL_ATTEMPT_STATUSES = [
   'timed_out',
   'orphaned'
 ] as const
-
-// Production adapters whose credentials are Omi-managed cloud routing. Every
-// other adapter is a user-local provider. This is the minimal faithful port of
-// the macOS execution-policy `providerBoundaryForAdapter` (only `pi-mono` is a
-// managed-cloud production adapter today); PR #3 may replace it with the full
-// adapter registry.
-const MANAGED_CLOUD_ADAPTER_IDS = new Set<string>(['pi-mono'])
 
 /** A single SQLite bind value (positional parameter). */
 export type SqlBind = null | number | bigint | string | Uint8Array
@@ -404,14 +397,10 @@ export function databasePathForStateDir(stateDir: string): string {
   return join(stateDir, DATABASE_FILENAME)
 }
 
-/**
- * Minimal faithful port of macOS execution-policy `providerBoundaryForAdapter`:
- * managed-cloud production adapters route through Omi cloud; everything else is a
- * user-local provider boundary.
- */
-export function providerBoundaryForAdapter(adapterId: string): ProviderBoundary {
-  return MANAGED_CLOUD_ADAPTER_IDS.has(adapterId) ? 'managed_cloud' : `local_user:${adapterId}`
-}
+// providerBoundaryForAdapter lives in ./executionPolicy (the canonical port of
+// macOS execution-policy.ts). Re-exported here because callers of the store have
+// always imported it from this module.
+export { providerBoundaryForAdapter }
 
 // Lazily load better-sqlite3. It is a native module rebuilt for Electron's ABI
 // and cannot load under plain-node Vitest, so we defer the require: importing
