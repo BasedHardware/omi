@@ -11,8 +11,9 @@ import importlib.util
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
-from run_checks import Check, execute_checks, load_manifest, resolve_checks, validate_manifest
+from run_checks import Check, changed_files, execute_checks, load_manifest, resolve_checks, validate_manifest
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -88,6 +89,21 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
+    def test_changed_files_keeps_deleted_paths_for_baseline_ratchets(self) -> None:
+        commands: list[tuple[str, ...]] = []
+
+        def fake_run_git(_root: Path, *args: str) -> str:
+            commands.append(args)
+            if args[0] == "merge-base":
+                return "merge-base"
+            return "desktop/macos/Backend-Rust/src/routes/chat_completions.rs"
+
+        with mock.patch("run_checks.run_git", side_effect=fake_run_git):
+            files = changed_files(REPO_ROOT, "origin/main", "HEAD")
+
+        self.assertEqual(files, ["desktop/macos/Backend-Rust/src/routes/chat_completions.rs"])
+        self.assertIn(("diff", "--name-only", "--diff-filter=ACMRD", "merge-base...HEAD"), commands)
+
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}
