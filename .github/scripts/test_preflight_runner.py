@@ -7,6 +7,10 @@ import importlib.util
 import os
 from pathlib import Path
 import signal
+import shutil
+import subprocess
+import sys
+import tempfile
 import types
 import unittest
 from unittest import mock
@@ -14,10 +18,24 @@ from unittest import mock
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 MODULE_PATH = SCRIPT_DIR / "preflight_runner.py"
+REPO_ROOT = SCRIPT_DIR.parents[1]
+WRAPPER_PATH = REPO_ROOT / "scripts" / "pre-push-singleflight"
 SPEC = importlib.util.spec_from_file_location("preflight_runner", MODULE_PATH)
 assert SPEC and SPEC.loader
 runner = importlib.util.module_from_spec(SPEC)
 SPEC.loader.exec_module(runner)
+
+
+def find_hook_bash() -> str | None:
+    if os.name == "nt":
+        git = shutil.which("git")
+        if git:
+            git_root = Path(git).resolve().parent.parent
+            for relative_path in (Path("bin/bash.exe"), Path("usr/bin/bash.exe")):
+                candidate = git_root / relative_path
+                if candidate.is_file():
+                    return str(candidate)
+    return shutil.which("bash")
 
 
 class FakeChild:
@@ -55,7 +73,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild()
 
         with mock.patch.object(runner, "HAS_PROCESS_GROUPS", True):
-            with mock.patch.object(runner.os, "killpg") as killpg:
+            with mock.patch.object(runner.os, "killpg", create=True) as killpg:
                 runner.signal_child(child, signal.SIGINT)
 
         killpg.assert_called_once_with(child.pid, signal.SIGINT)
@@ -81,7 +99,7 @@ class SignalChildTests(unittest.TestCase):
         child = FakeChild()
 
         with mock.patch.object(runner, "HAS_PROCESS_GROUPS", True):
-            with mock.patch.object(runner.os, "killpg", side_effect=ProcessLookupError):
+            with mock.patch.object(runner.os, "killpg", side_effect=ProcessLookupError, create=True):
                 runner.signal_child(child, signal.SIGTERM)
 
 
@@ -97,6 +115,32 @@ class ProcessExistsTests(unittest.TestCase):
     def test_live_and_dead_pids(self) -> None:
         self.assertTrue(runner.process_exists(os.getpid()))
         self.assertFalse(runner.process_exists(0))
+
+
+class WrapperContractTests(unittest.TestCase):
+    def test_launches_extensionless_pre_push_through_active_bash(self) -> None:
+        wrapper = WRAPPER_PATH.read_text(encoding="utf-8")
+
+        self.assertIn(' -- "$BASH" scripts/pre-push "$@"', wrapper)
+
+    def test_runner_launches_bash_on_this_host(self) -> None:
+        bash = find_hook_bash()
+        self.assertIsNotNone(bash)
+
+        with tempfile.TemporaryDirectory() as state_dir:
+            env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": state_dir}
+            completed = subprocess.run(
+                [sys.executable, str(MODULE_PATH), "--name", "bash-launch", "--", bash, "-c", "printf bash-ok"],
+                cwd=REPO_ROOT,
+                env=env,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                check=False,
+            )
+
+        self.assertEqual(completed.returncode, 0, completed.stderr)
+        self.assertIn("bash-ok", completed.stdout)
 
 
 if __name__ == "__main__":

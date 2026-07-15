@@ -19,9 +19,9 @@ checks:
     reason: "advisory desktop release evidence and drift report"
   - id: preflight-runner-portability
     command: ["python3", ".github/scripts/test_preflight_runner.py"]
-    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/test_preflight_runner.py"]
+    triggers: [".github/scripts/preflight_runner.py", ".github/scripts/test_preflight_runner.py", "scripts/pre-push-singleflight"]
     lanes: ["local", "ci"]
-    reason: "single-flight pre-push runner must start on hosts without POSIX signal APIs"
+    reason: "single-flight pre-push runner must start and launch its Bash checks portably"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
