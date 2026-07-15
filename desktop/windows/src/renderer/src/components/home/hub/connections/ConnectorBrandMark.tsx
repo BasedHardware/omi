@@ -2,16 +2,20 @@ import { BrandImage } from '../../../ui/BrandImage'
 import calendarLogo from '../../../../assets/brands/google_calendar_logo.png'
 import gmailLogo from '../../../../assets/brands/gmail_logo.png'
 import obsidianLogo from '../../../../assets/brands/obsidian_logo.png'
+import openclawLogo from '../../../../assets/brands/openclaw_logo.png'
+import hermesLogo from '../../../../assets/brands/hermes_logo.png'
 
 // The connector brand mark — the Windows port of macOS's ConnectorBrandIcon. It
 // renders each service's REAL logo, sized to sit in ConnectorRow's 34px/radius-9
-// box. Google Calendar, Gmail, and Obsidian reuse the exact PNG assets the macOS
-// app ships (copied into assets/brands/), for one-to-one parity. macOS draws
-// ChatGPT/Claude/Notion from the locally installed app icon — a source Windows
-// lacks — so those are faithful inline-SVG logomarks. X has no logo asset on
-// either platform: macOS renders the 𝕏 wordmark glyph, and so do we. Drop an
-// official `<brand>.png` into assets/brands/ and add it to PNG below to upgrade
-// any inline mark to a shipped asset.
+// box. Google Calendar, Gmail, Obsidian, OpenClaw, and Hermes reuse the exact PNG
+// assets the macOS app ships (copied into assets/brands/), for one-to-one parity.
+// macOS draws ChatGPT/Claude/Notion from the locally installed app icon — a source
+// Windows lacks — so those are faithful inline-SVG logomarks. X has no logo asset
+// on either platform: macOS renders the 𝕏 wordmark glyph, and so do we. The `omi`
+// mark (Ask Omi / Omi Device) is an inline white dot-ring — the shipped omi-mark.png
+// is black-on-transparent and would vanish on the dark tile. Drop an official
+// `<brand>.png` into assets/brands/ and add it to PNG below to upgrade any inline
+// mark to a shipped asset.
 
 export type ConnectorBrand =
   | 'calendar'
@@ -22,11 +26,16 @@ export type ConnectorBrand =
   | 'notion'
   | 'x'
   | 'sticky'
+  | 'openclaw'
+  | 'hermes'
+  | 'omi'
 
 const PNG: Partial<Record<ConnectorBrand, string>> = {
   calendar: calendarLogo,
   gmail: gmailLogo,
-  obsidian: obsidianLogo
+  obsidian: obsidianLogo,
+  openclaw: openclawLogo,
+  hermes: hermesLogo
 }
 
 // OpenAI blossom logomark (ChatGPT). Standard 24×24 path, rendered near-white to
@@ -96,6 +105,23 @@ function StickyMark(): React.JSX.Element {
   )
 }
 
+// Omi mark — eight white dots in a ring, exactly the shipped omi-mark.png glyph but
+// drawn inline in home-ink so it reads on the dark tile (the PNG is black). Used by
+// the "Ask Omi" and "Omi Device" tray rows, matching macOS's HomeOmiMarkIcon.
+function OmiMark(): React.JSX.Element {
+  const dots = Array.from({ length: 8 }, (_, i) => {
+    const a = (i * Math.PI) / 4
+    return { cx: 12 + 6.6 * Math.sin(a), cy: 12 - 6.6 * Math.cos(a) }
+  })
+  return (
+    <svg viewBox="0 0 24 24" className="h-[17px] w-[17px]" aria-hidden role="img">
+      {dots.map((d, i) => (
+        <circle key={i} cx={d.cx} cy={d.cy} r="1.55" fill="#f0ece3" />
+      ))}
+    </svg>
+  )
+}
+
 export function ConnectorBrandMark({ brand }: { brand: ConnectorBrand }): React.JSX.Element {
   const png = PNG[brand]
   if (png) {
@@ -112,9 +138,11 @@ export function ConnectorBrandMark({ brand }: { brand: ConnectorBrand }): React.
       return <XMark />
     case 'sticky':
       return <StickyMark />
+    case 'omi':
+      return <OmiMark />
     default:
-      // calendar/gmail/obsidian are served by PNG above; this only guards an
-      // unreachable path so the return type stays a JSX.Element.
+      // calendar/gmail/obsidian/openclaw/hermes are served by PNG above; this only
+      // guards an unreachable path so the return type stays a JSX.Element.
       return <span className="h-[18px] w-[18px]" aria-hidden />
   }
 }
