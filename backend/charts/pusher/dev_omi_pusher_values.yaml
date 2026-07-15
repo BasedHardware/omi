@@ -145,6 +145,14 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: GOOGLE_MAPS_API_KEY
+  - name: GOOGLE_CLIENT_ID
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: GOOGLE_CLIENT_ID
+      # Clear the historical named Secret source when Helm strategically merges
+      # this item into an existing Deployment during an upgrade.
+      secretKeyRef: null
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
