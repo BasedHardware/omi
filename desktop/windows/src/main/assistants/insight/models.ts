@@ -213,14 +213,20 @@ function parseCategory(v: unknown): InsightCategory {
   return typeof v === 'string' && VALID_CATEGORIES.includes(v) ? (v as InsightCategory) : 'other'
 }
 
-/** Mac's `confidence` extraction: number, then numeric string, else 0.5. */
-function parseConfidence(v: unknown): number {
+/** A finite number, either as-is or parsed from a numeric string; null for
+ *  anything else. The shared core of Mac's confidence and screenshot-id parses. */
+function parseFiniteNumber(v: unknown): number | null {
   if (typeof v === 'number' && Number.isFinite(v)) return v
   if (typeof v === 'string') {
     const n = Number(v.trim())
     if (Number.isFinite(n)) return n
   }
-  return 0.5
+  return null
+}
+
+/** Mac's `confidence` extraction: number, then numeric string, else 0.5. */
+function parseConfidence(v: unknown): number {
+  return parseFiniteNumber(v) ?? 0.5
 }
 
 function str(v: unknown): string {
@@ -230,13 +236,8 @@ function str(v: unknown): string {
 /** Mac's robust screenshot-id parse: integer, numeric string, or a float that is
  *  truncated. null when none of those hold (the model returned junk). */
 export function parseScreenshotId(args: Record<string, unknown>): number | null {
-  const v = args['screenshot_id']
-  if (typeof v === 'number' && Number.isFinite(v)) return Math.trunc(v)
-  if (typeof v === 'string') {
-    const n = Number(v.trim())
-    if (Number.isFinite(n)) return Math.trunc(n)
-  }
-  return null
+  const n = parseFiniteNumber(args['screenshot_id'])
+  return n == null ? null : Math.trunc(n)
 }
 
 /** provide_advice args → ExtractedInsight, with Mac's per-field fallbacks. */

@@ -109,6 +109,29 @@ type Content = { role: 'user' | 'model'; parts: Part[] }
 /** One decoded model turn: the function calls it made + any loose text. */
 export type ToolTurn = { toolCalls: ToolCall[]; text: string }
 
+/** Append one execute_sql round-trip to a phase's transcript: the model's call
+ *  echoed as a role:"model" functionCall turn (thoughtSignature preserved), then
+ *  the tool result as a role:"user" functionResponse turn. Identical in both
+ *  phases — this is the exact wire shape Mac sends. Returns the tool result. */
+function appendSqlRoundTrip(
+  contents: Content[],
+  call: ToolCall,
+  execSql: (query: string) => string
+): void {
+  const query = typeof call.args.query === 'string' ? call.args.query : ''
+  const result = execSql(query)
+  contents.push({
+    role: 'model',
+    parts: [
+      { functionCall: { name: 'execute_sql', args: { query } }, thoughtSignature: call.thoughtSignature }
+    ]
+  })
+  contents.push({
+    role: 'user',
+    parts: [{ functionResponse: { name: 'execute_sql', response: { result } } }]
+  })
+}
+
 function parseTurn(json: unknown): ToolTurn {
   const parts = (
     json as {
@@ -252,22 +275,8 @@ export async function runTwoPhasePipeline(deps: PipelineDeps): Promise<PipelineR
     if (!call) break // no tool call → end (both phases)
 
     if (call.name === 'execute_sql') {
-      const query = typeof call.args.query === 'string' ? call.args.query : ''
-      const result = deps.execSql(query)
+      appendSqlRoundTrip(p1, call, deps.execSql)
       sqlCount++
-      p1.push({
-        role: 'model',
-        parts: [
-          {
-            functionCall: { name: 'execute_sql', args: { query } },
-            thoughtSignature: call.thoughtSignature
-          }
-        ]
-      })
-      p1.push({
-        role: 'user',
-        parts: [{ functionResponse: { name: 'execute_sql', response: { result } } }]
-      })
       continue
     }
     if (call.name === 'request_screenshot') {
@@ -312,22 +321,8 @@ export async function runTwoPhasePipeline(deps: PipelineDeps): Promise<PipelineR
     if (!call) break // no tool call → end
 
     if (call.name === 'execute_sql') {
-      const query = typeof call.args.query === 'string' ? call.args.query : ''
-      const result = deps.execSql(query)
+      appendSqlRoundTrip(p2, call, deps.execSql)
       sqlCount++
-      p2.push({
-        role: 'model',
-        parts: [
-          {
-            functionCall: { name: 'execute_sql', args: { query } },
-            thoughtSignature: call.thoughtSignature
-          }
-        ]
-      })
-      p2.push({
-        role: 'user',
-        parts: [{ functionResponse: { name: 'execute_sql', response: { result } } }]
-      })
       continue
     }
     if (call.name === 'provide_advice') return { insight: parseProvideAdvice(call.args), sqlCount }
