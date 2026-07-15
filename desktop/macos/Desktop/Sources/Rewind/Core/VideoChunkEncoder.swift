@@ -489,7 +489,11 @@ actor VideoChunkEncoder {
         ]
         SentrySDK.addBreadcrumb(breadcrumb)
 
-        try? await finalizeCurrentChunk()
+        do {
+            try await finalizeCurrentChunk()
+        } catch {
+            logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)
+        }
     }
 
     // MARK: - Helpers
