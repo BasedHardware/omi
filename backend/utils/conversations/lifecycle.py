@@ -206,6 +206,25 @@ def complete(uid: str, conversation_id: str) -> bool:
     )
 
 
+def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
+    """Return a failed synchronous finalization's admission to in_progress.
+
+    The HTTP finalize endpoints admit processing and then run the processor
+    inside the request itself, with no durable job for the reconciler to
+    replay. If that processor raises, the admission must be undone — otherwise
+    the conversation is stranded on ``processing`` forever and every client
+    shows a stuck "Processing" card. The compare-and-swap only rolls back a
+    generation that is still processing, so a concurrent completion, discard,
+    or newer generation always wins.
+    """
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.in_progress,
+    )
+
+
 def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:
     """Atomically close a still-current failed finalization generation.
 
