@@ -37,7 +37,7 @@ The current dev work lives on the branch `feat/ai-clone-prompt-rewrite` (PR [#86
 ```bash
 # 0. Prep: install deps, create venvs, create a Telegram bot + tunnel.
 cd $WORKTREE
-./scripts/setup-dev.sh   # creates backend + plugin venvs (TODO)
+./scripts/setup-dev.sh   # creates backend + plugin venvs
 
 # 1. Run the entire stack:
 WORKTREE=$WORKTREE \
