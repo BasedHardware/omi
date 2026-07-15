@@ -126,6 +126,10 @@ describe('appSettings', () => {
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
       memoryExcludedApps: [],
+      taskEnabled: true,
+      taskFallbackIntervalMin: 10,
+      taskMinConfidence: 0.75,
+      taskExcludedApps: [],
       chatEngine: 'legacy_sse',
       chatScreenshotSharingEnabled: true
     })
@@ -187,6 +191,26 @@ describe('appSettings', () => {
       sanitizeAppSettings({ memoryExcludedApps: ['Zoom', '', '  Music  '] as never })
         .memoryExcludedApps
     ).toEqual(['Zoom', 'Music'])
+    // Task: master flag is default-ON (only an explicit false disables it, same
+    // idiom as screenAnalysisEnabled); interval reuses the cooldown sanitizer
+    // (junk → 10); min-confidence clamps to [0,1] with a 0.75 floor (vs Memory's
+    // 0.7); excluded-apps sanitize.
+    expect(sanitizeAppSettings(null).taskEnabled).toBe(true)
+    expect(sanitizeAppSettings({ taskEnabled: false }).taskEnabled).toBe(false)
+    expect(sanitizeAppSettings({ taskEnabled: true }).taskEnabled).toBe(true)
+    expect(sanitizeAppSettings(null).taskFallbackIntervalMin).toBe(10)
+    expect(sanitizeAppSettings({ taskFallbackIntervalMin: 15 }).taskFallbackIntervalMin).toBe(15)
+    expect(sanitizeAppSettings({ taskFallbackIntervalMin: 0 }).taskFallbackIntervalMin).toBe(10)
+    expect(sanitizeAppSettings(null).taskMinConfidence).toBe(0.75)
+    expect(sanitizeAppSettings({ taskMinConfidence: 0.9 }).taskMinConfidence).toBe(0.9)
+    expect(sanitizeAppSettings({ taskMinConfidence: 2 }).taskMinConfidence).toBe(1)
+    expect(sanitizeAppSettings({ taskMinConfidence: -1 }).taskMinConfidence).toBe(0)
+    expect(sanitizeAppSettings({ taskMinConfidence: 'high' } as never).taskMinConfidence).toBe(0.75)
+    expect(sanitizeAppSettings(null).taskExcludedApps).toEqual([])
+    expect(
+      sanitizeAppSettings({ taskExcludedApps: ['Slack', '', '  Notion  '] as never })
+        .taskExcludedApps
+    ).toEqual(['Slack', 'Notion'])
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

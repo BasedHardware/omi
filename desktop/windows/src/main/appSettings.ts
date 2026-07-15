@@ -99,6 +99,27 @@ export type AppSettings = {
    *  on top of the capture-time and privacy exclusions. Mac's
    *  `memoryExcludedApps`. Default []. */
   memoryExcludedApps: string[]
+  /** Track 3 (Task assistant): whether the screen→task extractor judges the
+   *  screen at all. Default ON, matching Mac's `taskAssistantEnabled`. It sits
+   *  UNDER the `screenAnalysisEnabled` master (the actual "may I send screenshots
+   *  to Gemini" consent, itself default-ON and shared with Focus/Insight), so a
+   *  default-ON here adds tasks to the already-consented screen-analysis feature
+   *  rather than opening a new cloud-vision surface. It is the SOLE task-specific
+   *  gate (see taskAssistant.isEnabled) — decoupled from notifications, since
+   *  extraction stages durable tasks whether or not a toast ever fires (Mac keeps
+   *  a separate `taskNotificationsEnabled`; quiet discovery is never gated on the
+   *  notification setting). */
+  taskEnabled: boolean
+  /** Track 3 (Task): apps the user never wants the task extractor to look at, on
+   *  top of the capture-time and privacy exclusions. Mirrors `memoryExcludedApps`.
+   *  Default []. */
+  taskExcludedApps: string[]
+  /** Track 3 (Task): minutes between fallback extraction attempts, Mac's
+   *  `extractionInterval` (600s = 10 min). Default 10. */
+  taskFallbackIntervalMin: number
+  /** Track 3 (Task): minimum confidence an extracted task must clear to be
+   *  staged, Mac's `minConfidence`. Default 0.75. */
+  taskMinConfidence: number
   /** Which engine renders default typed chat. `'legacy_sse'` = today's
    *  `fetch('/v2/messages')` path; `'pi_mono'` = the kernel main_chat → pi-mono
    *  adapter path (PR-E). Default `'legacy_sse'` until pi-mono is proven end to
@@ -170,11 +191,11 @@ function sanitizeExcludedApps(raw: unknown): string[] {
   return out
 }
 
-// Min confidence: a number in [0, 1], else Mac's default 0.7. Junk/out-of-range
-// clamps rather than disabling the gate (a 0 floor would keep every low-quality
-// memory the model emits; a >1 floor would keep none).
-function sanitizeMinConfidence(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0.7
+// Min confidence: a number in [0, 1], else the caller's default (Memory 0.7,
+// Task 0.75). Junk/out-of-range clamps rather than disabling the gate (a 0 floor
+// would keep every low-quality item the model emits; a >1 floor would keep none).
+function sanitizeMinConfidence(raw: unknown, fallback = 0.7): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback
   return Math.min(1, Math.max(0, raw))
 }
 
@@ -218,6 +239,16 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
     memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
+    // Default ON (!== false, same idiom as screenAnalysisEnabled), matching Mac's
+    // `taskAssistantEnabled`. The screenAnalysisEnabled master is the screenshot
+    // consent gate; this only decides whether tasks ride that already-on feature.
+    taskEnabled: r.taskEnabled !== false,
+    // Reuses the cooldown sanitizer: same contract (positive integer minutes,
+    // default 10, capped at a day). A junk interval falls back to 10, never 0.
+    taskFallbackIntervalMin: sanitizeCooldownMinutes(r.taskFallbackIntervalMin),
+    // Task's floor is 0.75 (vs Memory's 0.7) — pass it as the junk/absent fallback.
+    taskMinConfidence: sanitizeMinConfidence(r.taskMinConfidence, 0.75),
+    taskExcludedApps: sanitizeExcludedApps(r.taskExcludedApps),
     // Only the explicit 'pi_mono' opt-in flips this; anything else (junk, unset)
     // is the safe legacy path.
     chatEngine: r.chatEngine === 'pi_mono' ? 'pi_mono' : 'legacy_sse',

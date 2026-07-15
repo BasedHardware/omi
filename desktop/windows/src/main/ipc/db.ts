@@ -33,6 +33,7 @@ import {
   TASK_TABLES_SCHEMA,
   insertLocalActionItemOn,
   getLocalActionItemsOn,
+  getRecentActiveActionItemsOn,
   getFilteredActionItemsOn,
   updateCompletionStatusOn,
   updateActionItemFieldsOn,
@@ -2058,6 +2059,10 @@ export function getLocalActionItems(opts?: {
   return getLocalActionItemsOn(taskStoreDb(), opts)
 }
 
+export function getRecentActiveActionItems(limit?: number): ActionItemRecord[] {
+  return getRecentActiveActionItemsOn(taskStoreDb(), limit)
+}
+
 export function getFilteredActionItems(opts?: {
   dueAfter?: number | null
   dueBefore?: number | null
@@ -2160,7 +2165,8 @@ export function getTopRelevanceActionItems(
 
 export function searchActionItemsFTS(
   query: string,
-  limit?: number
+  limit?: number,
+  includeCompleted?: boolean
 ): {
   id: number
   description: string
@@ -2169,7 +2175,7 @@ export function searchActionItemsFTS(
   deletedBy: string | null
   relevanceScore: number | null
 }[] {
-  return searchActionItemsFTSOn(taskStoreDb(), query, limit)
+  return searchActionItemsFTSOn(taskStoreDb(), query, limit, includeCompleted)
 }
 
 // staged_tasks
