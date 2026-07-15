@@ -14,6 +14,11 @@ Account Token Creator role, and no ability to deploy Cloud Run/GKE resources.
 The GitHub workflow performs a read-only `google_project` data-source plan with
 no remote backend, refresh, lock, or apply path.
 
+The separate validation workflow uses a single checked-in,
+`offline-validation-only` token literal solely to initialize the Google provider
+for the bootstrap's backend-free, no-refresh plan. It is invalid for GCP and
+the guard rejects any different token or credential source.
+
 ## Operator bootstrap
 
 This PR does not apply the module. A separately approved development operator must first create a dedicated, versioned GCS state bucket with uniform bucket-level access and retain its name outside source control. Then the operator initializes this module with the reviewed bucket config, runs a saved plan, and applies that saved plan using a write-capable development-only identity.

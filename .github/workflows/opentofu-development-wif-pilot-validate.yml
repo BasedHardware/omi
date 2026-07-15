@@ -43,6 +43,10 @@ jobs:
         run: python3 .github/scripts/check_opentofu_development_wif_pilot.py
 
       - name: Validate bootstrap source without a remote backend
+        env:
+          # This invalid literal satisfies provider initialization only. The
+          # backend-free, no-refresh plan has no API path and cannot mutate GCP.
+          GOOGLE_OAUTH_ACCESS_TOKEN: offline-validation-only
         run: |
           export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-development-wif-bootstrap"
           python3 .github/scripts/check_opentofu_foundation.py \

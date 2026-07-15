@@ -13,6 +13,7 @@ BOOTSTRAP = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-p
 BOOTSTRAP_VARIABLES = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-plan" / "variables.tf"
 PROBE = ROOT / "infrastructure" / "opentofu" / "probes" / "development-project-read" / "main.tf"
 WORKFLOW = ROOT / ".github" / "workflows" / "opentofu-development-wif-pilot.yml"
+VALIDATION_WORKFLOW = ROOT / ".github" / "workflows" / "opentofu-development-wif-pilot-validate.yml"
 
 EXPECTED_BOOTSTRAP_RESOURCES = {
     "google_service_account.plan",
@@ -159,12 +160,44 @@ def check_workflow(text: str) -> list[str]:
     return errors
 
 
+def check_validation_workflow(text: str) -> list[str]:
+    errors: list[str] = []
+    for required in (
+        "contents: read",
+        "GOOGLE_OAUTH_ACCESS_TOKEN: offline-validation-only",
+        "--prepare-offline-plan-module",
+        "-backend=false",
+        "-lock=false",
+        "-refresh=false",
+    ):
+        if required not in text:
+            errors.append(f"pilot validation workflow is missing required offline contract {required!r}")
+    token_values = re.findall(r"^\s*GOOGLE_OAUTH_ACCESS_TOKEN:\s*(?P<value>\S.*)$", text, re.MULTILINE)
+    if token_values != ["offline-validation-only"]:
+        errors.append("pilot validation workflow may contain only the invalid offline-validation-only token literal")
+    for forbidden in (
+        "credentials_json",
+        "GOOGLE_APPLICATION_CREDENTIALS",
+        "GOOGLE_CREDENTIALS",
+        "google-github-actions/auth",
+        "id-token: write",
+        "workload_identity_provider",
+        "gcloud",
+        "tofu apply",
+        "backend-config",
+    ):
+        if forbidden in text:
+            errors.append(f"pilot validation workflow contains forbidden credential or mutation reference {forbidden!r}")
+    return errors
+
+
 def main() -> int:
     errors = (
         check_bootstrap(read(BOOTSTRAP))
         + check_bootstrap_variables(read(BOOTSTRAP_VARIABLES))
         + check_probe(read(PROBE))
         + check_workflow(read(WORKFLOW))
+        + check_validation_workflow(read(VALIDATION_WORKFLOW))
     )
     if errors:
         print("Development WIF pilot check failed:", file=sys.stderr)

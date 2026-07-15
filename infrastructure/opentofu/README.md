@@ -43,3 +43,9 @@ exchange its GitHub OIDC token and run the data-only
 backend, refresh, lock, or apply path. The pilot guard and fixture tests reject
 production scope, broader roles, secret access, release ownership, long-lived
 credentials, and `tofu apply`.
+
+The credentials-free validation workflow supplies exactly one checked-in,
+invalid `offline-validation-only` token literal to satisfy Google-provider
+initialization for the bootstrap's backend-free, no-refresh plan. It cannot
+authenticate to GCP, and the guard rejects any real credential source or a
+different token value.
