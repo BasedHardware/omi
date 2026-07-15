@@ -252,7 +252,7 @@ actor InsightAssistant: ProactiveAssistant {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend and update local record with backendId
-        if let backendId = await syncInsightToBackend(
+        if let backendMemory = await syncInsightToBackend(
             insight: extractedInsight,
             insightResult: adviceResult,
             windowTitle: windowTitle,
@@ -261,7 +261,7 @@ actor InsightAssistant: ProactiveAssistant {
             guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
             if let recordId = extractionRecord?.id {
                 do {
-                    try await MemoryStorage.shared.markSynced(id: recordId, backendId: backendId)
+                    try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
                     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Insight: Failed to update sync status", error: error)
@@ -363,7 +363,7 @@ actor InsightAssistant: ProactiveAssistant {
         insightResult: InsightExtractionResult,
         windowTitle: String? = nil,
         ownerID: String
-    ) async -> String? {
+    ) async -> ServerMemory? {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Build tags: ["tips", "<category>"]
@@ -388,7 +388,7 @@ actor InsightAssistant: ProactiveAssistant {
             guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Insight: Synced to backend (id: \(response.id))")
-            return response.id
+            return response
         } catch {
             logError("Insight: Failed to sync to backend", error: error)
             return nil
