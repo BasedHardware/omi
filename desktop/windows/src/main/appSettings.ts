@@ -12,6 +12,10 @@ import type { MeetingMode, MeetingSettings } from '../shared/types'
 export type AppSettings = {
   /** Whether the one-time "Omi keeps running in the tray" notice has been shown. */
   closeToTrayNoticeShown: boolean
+  /** Whether the one-time "a global shortcut couldn't be registered" notice has
+   *  been shown. Set only after the notice actually fires on a real conflict, so
+   *  a user who first sees a conflict months later is still told once. */
+  hotkeyConflictNoticeShown: boolean
   /** Electron accelerator that toggles mic recording. */
   recordHotkey: string
   /** Whether the mic record chord is registered at all. Default true; the user
@@ -148,6 +152,7 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
       : OVERLAY_ACCELERATOR
   return {
     closeToTrayNoticeShown: r.closeToTrayNoticeShown === true,
+    hotkeyConflictNoticeShown: r.hotkeyConflictNoticeShown === true,
     recordHotkey: hotkey,
     // Default ON: only an explicit false turns the record chord off (matches the
     // hudContentProtection convention above — non-boolean coerces to the default).
