@@ -176,10 +176,19 @@ export class VoiceHubTurnDriver {
   }
 
   /** Eagerly open the warm socket (bar summon / hover). Idempotent; a no-op when
-   *  the flag is off. */
+   *  the flag is off. Warming is what makes `hub.isAvailable()` true so the next
+   *  press routes to the hub instead of falling straight to the cascade. */
   warm(): void {
     if (this.prefs().pttHubEnabled !== true) return
     void this.hub.ensureWarm()
+  }
+
+  /** Drop the warm socket (kill-switch toggled off, or sign-out) without destroying
+   *  the driver — a later `warm()` reconnects. Abandons any live turn first so its
+   *  reducer state is released. Idempotent. */
+  teardown(): void {
+    if (this.turnID !== null) this.cancel()
+    this.hub.teardownSession()
   }
 
   /** A bar hold delegated its turn to this driver (flag on). Begins a main-owned

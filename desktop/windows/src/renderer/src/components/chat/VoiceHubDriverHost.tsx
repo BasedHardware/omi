@@ -1,5 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { useAppState } from '../../state/appState'
+import { useAuth } from '../../hooks/useAuth'
+import { getPreferences, onPreferencesChange } from '../../lib/preferences'
+import { useHubWarmLifecycle } from '../../hooks/useHubWarmLifecycle'
 import { interruptCurrentResponse } from '../../lib/voice/voiceController'
 import { startPttCapture } from '../../lib/ptt/capture'
 import { batchTranscribe } from '../../lib/ptt/transport'
@@ -21,6 +24,11 @@ import { VoiceHubTurnDriver } from '../../lib/voice/turn/voiceHubTurnDriver'
 // capture, no hub warm, no projection. The shipped local PTT cascade is untouched.
 export function VoiceHubDriverHost(): null {
   const { chat } = useAppState()
+  const { user, loading } = useAuth()
+  // Eager-warm gate (the pttHubEnabled opt-out contract). Reactive so a runtime
+  // toggle warms/tears down with no restart.
+  const [hubEnabled, setHubEnabled] = useState(() => getPreferences().pttHubEnabled === true)
+  useEffect(() => onPreferencesChange((p) => setHubEnabled(p.pttHubEnabled === true)), [])
 
   // Latest-ref so the once-constructed driver always drives the freshest send.
   const sendRef = useRef(chat.send)
@@ -58,6 +66,11 @@ export function VoiceHubDriverHost(): null {
       un3?.()
     }
   }, [driver])
+
+  // Eagerly warm the hub for a signed-in user with the flag on. This is what makes
+  // hub.isAvailable() true — without it selectPttRoute always picks the cascade and
+  // the warm hub never engages. Tears down on toggle-off / sign-out.
+  useHubWarmLifecycle(driver, { ready: !loading, signedIn: !!user, hubEnabled })
 
   return null
 }
