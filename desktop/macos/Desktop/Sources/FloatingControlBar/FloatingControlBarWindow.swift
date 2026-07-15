@@ -123,6 +123,14 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     /// Readable status strip under chrome/pill for too-short PTT / mic errors.
     static let pttHintRowHeight: CGFloat = 30
     private static let maxBarSize = NSSize(width: 1200, height: 1000)
+    /// The bar must never be buried under third-party overlay apps: notch
+    /// companions (e.g. Clicky) park windows at .popUpMenu (101) and full-screen
+    /// overlays at .screenSaver (1000), so .statusBar (25) lost the notch to
+    /// them. Assistive-tech-high (1500) beats every common overlay level while
+    /// staying below the system cursor and the screen-lock shield.
+    static let alwaysOnTopLevel = NSWindow.Level(
+        rawValue: Int(CGWindowLevelForKey(.assistiveTechHighWindow))
+    )
     static let notchExpandedWidth: CGFloat = 382
     private static let notificationWidth: CGFloat = 430
     private static let notificationHeight: CGFloat = 108
@@ -191,6 +199,12 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     private var frameAnimationToken: Int = 0
     private var pendingFrameAnimationTarget: NSRect?
     private var startupDisplayRevalidationWorkItems: [DispatchWorkItem] = []
+    /// In-process NSMenus (bar context menus, the model picker) render at
+    /// .popUpMenu (101); while one is tracking, the bar drops to that level so
+    /// the island cannot occlude its own menus. Depth-counted because nested
+    /// submenus emit their own begin/end tracking notifications.
+    private var menuTrackingDepth = 0
+    private var menuTrackingObservers: [NSObjectProtocol] = []
 
     /// The bar adopts the notch-island presentation whenever it is actively
     /// engaged — PTT listening, thinking, or speaking a reply — on ANY display,
@@ -409,7 +423,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         self.isOpaque = false
         self.backgroundColor = .clear
         self.hasShadow = false
-        self.level = initialUsesNotchIsland ? .statusBar : .floating
+        self.level = Self.alwaysOnTopLevel
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         self.isMovableByWindowBackground = false
         self.acceptsMouseMovedEvents = true
@@ -419,6 +433,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
         setupViews()
         updateNotchIslandState()
+        registerMenuTrackingObservers()
 
         if ShortcutSettings.shared.draggableBarEnabled,
            !notchModeEnabled,
@@ -439,6 +454,36 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
             centerOnMainScreen()
         }
         scheduleStartupDisplayRevalidation()
+    }
+
+    deinit {
+        menuTrackingObservers.forEach(NotificationCenter.default.removeObserver)
+    }
+
+    // MARK: - Window Level
+
+    /// Reasserts the bar's always-on-top level, yielding only while one of our
+    /// own menus is open (menus render at .popUpMenu and must stay clickable).
+    private func applySurfaceLevel() {
+        level = menuTrackingDepth > 0 ? .popUpMenu : Self.alwaysOnTopLevel
+    }
+
+    private func registerMenuTrackingObservers() {
+        let center = NotificationCenter.default
+        menuTrackingObservers.append(center.addObserver(
+            forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.menuTrackingDepth += 1
+            self.applySurfaceLevel()
+        })
+        menuTrackingObservers.append(center.addObserver(
+            forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
+        ) { [weak self] _ in
+            guard let self else { return }
+            self.menuTrackingDepth = max(0, self.menuTrackingDepth - 1)
+            self.applySurfaceLevel()
+        })
     }
 
     /// Clamp `rect` so it stays entirely inside `visible`. visibleFrame already
@@ -549,7 +594,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         if !usesNotch {
             state.notchRevealProgress = 1
         }
-        level = usesNotch ? .statusBar : .floating
+        applySurfaceLevel()
     }
 
     private func refreshPresentationForDraggableBarPreference() {
@@ -829,7 +874,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
     private func growOutFromNotch(on targetScreen: NSScreen) {
         state.usesNotchIsland = true
-        level = .statusBar
+        applySurfaceLevel()
         styleMask.remove(.resizable)
 
         let targetFrame = frameForCurrentState(on: targetScreen, usesNotchIsland: true)
@@ -1508,7 +1553,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
         updateNotchIslandState()
-        self.level = notchModeEnabled ? .statusBar : .floating
+        applySurfaceLevel()
 
         let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
         let constrainedSize = NSSize(
@@ -1551,7 +1596,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         resizeWorkItem?.cancel()
         resizeWorkItem = nil
         updateNotchIslandState()
-        level = notchModeEnabled ? .statusBar : .floating
+        applySurfaceLevel()
 
         let windowSize = responseGlowWindowSizeForCurrentScreen(forSurfaceSize: size)
         let constrainedSize = NSSize(
