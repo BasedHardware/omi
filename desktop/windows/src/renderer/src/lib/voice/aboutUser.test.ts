@@ -170,4 +170,40 @@ describe('getAboutUserCard / refreshAboutUserCard — cache', () => {
     expect(getAboutUserCard()).toBe('')
     currentUser!.uid = 'u1'
   })
+
+  // The build's fetches run against whatever token is current when they LAND, so
+  // an account switch mid-build yields the NEW user's data. Filing that under the
+  // uid captured at build start would leak u2's memories to u1 on their return.
+  it('discards a build whose account switched away while it was in flight', async () => {
+    let release: (v: unknown) => void = () => {}
+    get.mockReturnValue(new Promise((r) => (release = r)))
+
+    refreshAboutUserCard() // starts for u1
+    currentUser!.uid = 'u2'
+    currentUser!.displayName = 'Grace'
+    release({ data: [{ content: 'u2 secret', created_at: '2026-07-01T00:00:00Z' }] })
+    await whenAboutUserCardSettled()
+
+    expect(getAboutUserCard()).toBe('') // u2 has no card of its own yet
+    currentUser!.uid = 'u1'
+    currentUser!.displayName = 'Ada'
+    expect(getAboutUserCard()).toBe('') // and u1 never inherits u2's build
+  })
+
+  // Dedupe is per-account: the switched-to account must be able to start its own
+  // build even while the abandoned one is still settling.
+  it('starts a fresh build for the new account despite an in-flight one', async () => {
+    get.mockReturnValue(new Promise(() => {})) // u1's build never settles
+    refreshAboutUserCard()
+
+    currentUser!.uid = 'u2'
+    currentUser!.displayName = 'Grace'
+    get.mockResolvedValue({ data: [] })
+    refreshAboutUserCard()
+    await whenAboutUserCardSettled()
+
+    expect(getAboutUserCard()).toContain('Name: Grace')
+    currentUser!.uid = 'u1'
+    currentUser!.displayName = 'Ada'
+  })
 })

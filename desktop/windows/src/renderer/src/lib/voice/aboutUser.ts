@@ -107,6 +107,8 @@ function currentDisplayName(): string {
 
 let cached: { uid: string; card: string } | null = null
 let inFlight: Promise<void> | null = null
+// The uid the in-flight build was started for (see refreshAboutUserCard).
+let inFlightUid = ''
 // Bumped by resetAboutUserCard so an in-flight build from before the reset
 // (e.g. the previous account's) can never land in the cache afterwards.
 let generation = 0
@@ -119,16 +121,24 @@ export function getAboutUserCard(): string {
   return cached && cached.uid === uid ? cached.card : ''
 }
 
-/** Rebuild the card in the background (fire-and-forget, deduped). Call at voice
- *  session start: THIS session uses whatever is cached, the next one gets the
- *  fresh card — a slightly stale card is acceptable, a slow session start is not. */
+/** Rebuild the card in the background (fire-and-forget, deduped). Warmed at
+ *  sign-in (App.tsx) and re-kicked at voice session start: THIS session uses
+ *  whatever is cached, the next one gets the fresh card — a slightly stale card
+ *  is acceptable, a slow session start is not. */
 export function refreshAboutUserCard(): void {
-  if (inFlight) return
   const uid = auth.currentUser?.uid ?? ''
+  // Dedupe only against a build for the SAME account — an account switch must be
+  // able to start its own build even while the previous one is still in flight.
+  if (inFlight && inFlightUid === uid) return
   const gen = generation
+  inFlightUid = uid
   const build = buildAboutUserCard()
     .then((card) => {
-      if (gen === generation) cached = { uid, card }
+      // Cache only if that account is still the signed-in one. The build's fetches
+      // ran against whatever token was current when they landed, so an account
+      // switch mid-build would otherwise file the NEW user's name and memories
+      // under the OLD uid — and serve them back if the old account returned.
+      if (gen === generation && (auth.currentUser?.uid ?? '') === uid) cached = { uid, card }
     })
     .catch(() => {
       /* best-effort: keep whatever card we already had */
@@ -144,10 +154,12 @@ export function whenAboutUserCardSettled(): Promise<void> {
   return inFlight ?? Promise.resolve()
 }
 
-/** Drop the cached card and abandon any in-flight build (tests; also safe on
- *  sign-out — a build started for the previous account can no longer land). */
+/** Drop the cached card and abandon any in-flight build. Called on sign-out
+ *  (App.tsx) so a card can never outlive the account it was built for, and by
+ *  tests to reset module state. */
 export function resetAboutUserCard(): void {
   cached = null
   inFlight = null
+  inFlightUid = ''
   generation++
 }
