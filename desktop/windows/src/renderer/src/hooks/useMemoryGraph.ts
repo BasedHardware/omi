@@ -23,8 +23,17 @@ const EMPTY: KnowledgeGraph = { nodes: [], edges: [] }
 export function useMemoryGraph(memories: Memory[]): {
   graph: KnowledgeGraph
   centerNodeId?: string
+  // Passthrough of the underlying server-KG hook so a consumer (the full-screen
+  // brain-map viewer) can offer a rebuild without a second useKnowledgeGraph
+  // instance — a separate instance would rebuild into the shared module cache but
+  // never update THIS hook's scoped graph. Because the rebuild runs on the same
+  // instance whose `kg` we scope, the rebuilt graph flows straight back into the
+  // map. The Memories inline card ignores these fields, so its behavior is
+  // unchanged.
+  rebuild: () => Promise<void>
+  rebuilding: boolean
 } {
-  const { graph: kg, refetch } = useKnowledgeGraph()
+  const { graph: kg, refetch, rebuild, rebuilding } = useKnowledgeGraph()
   const [floor, setFloor] = useState<KnowledgeGraph>(EMPTY)
   const memoryCount = memories.length
 
@@ -73,5 +82,5 @@ export function useMemoryGraph(memories: Memory[]): {
     ? USER_NODE_ID
     : graph.nodes.find((n) => n.nodeType === 'person')?.id
 
-  return { graph, centerNodeId }
+  return { graph, centerNodeId, rebuild, rebuilding }
 }
