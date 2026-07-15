@@ -96,7 +96,10 @@ class RelayClient {
   private buffer = ''
   private counter = 0
   private readonly inbox: HostFrame[] = []
-  private readonly waiters: Array<{ pred: (f: HostFrame) => boolean; resolve: (f: HostFrame) => void }> = []
+  private readonly waiters: Array<{
+    pred: (f: HostFrame) => boolean
+    resolve: (f: HostFrame) => void
+  }> = []
   private helloResolve: (() => void) | null = null
   private helloReject: ((error: Error) => void) | null = null
   closed = false
