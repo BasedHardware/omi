@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import List, Optional
+from typing import Any, Callable, Iterable, List, Mapping, Optional
 
 from pydantic import BaseModel, Field
 
@@ -43,3 +43,21 @@ class Person(BaseModel):
     speech_samples: List[str] = []
     speech_sample_transcripts: Optional[List[str]] = None
     speech_samples_version: int = 3
+
+    @classmethod
+    def deserialize_many_safe(
+        cls,
+        records: Iterable[Mapping[str, Any]],
+        on_error: Optional[Callable[[Mapping[str, Any], Exception], None]] = None,
+    ) -> List['Person']:
+        """Build Person objects from raw stored records, skipping any that fail validation so one
+        malformed or legacy person document cannot break a whole people lookup. on_error(record,
+        exception), when provided, is called for each skip. Mirrors Message.deserialize_many_safe."""
+        parsed: List['Person'] = []
+        for record in records:
+            try:
+                parsed.append(cls(**record))
+            except Exception as exc:  # noqa: BLE001 - one bad record must not break the lookup
+                if on_error is not None:
+                    on_error(record, exc)
+        return parsed
