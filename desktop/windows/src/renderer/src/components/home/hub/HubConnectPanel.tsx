@@ -1,3 +1,4 @@
+import { createElement } from 'react'
 import { getHubConnectContent } from './hubConnectSlot'
 
 // The Connect stage — the slide-down panel the ask bar's "Connect" toggle reveals.
@@ -15,7 +16,7 @@ import { getHubConnectContent } from './hubConnectSlot'
 // `onDismiss` returns to the resting hub.
 
 export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
-  const Content = getHubConnectContent()
+  const content = getHubConnectContent()
 
   return (
     <div
@@ -28,8 +29,8 @@ export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React
       }}
       data-testid="hub-connect-panel"
     >
-      {Content ? (
-        <Content onDismiss={onDismiss} />
+      {content ? (
+        createElement(content, { onDismiss })
       ) : (
         <div className="flex flex-1 items-center justify-center">
           <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
