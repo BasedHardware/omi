@@ -184,6 +184,30 @@
       ]
     },
     {
+      "id": "firestore_schema_readiness",
+      "risk": "high",
+      "sources": [
+        "backend/database/firestore_index_registry.py",
+        "backend/scripts/firestore_workflow_policy.py",
+        "backend/scripts/reconcile_firestore_indexes.py",
+        "config/deployment-setting-classification.json",
+        "firestore.indexes.json",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_auto_dev.yml"
+      ],
+      "tests": [
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_verify_dev_backend_deployment.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
+        "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
+        "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
+      ]
+    },
+    {
       "id": "sync_cloud_tasks",
       "risk": "high",
       "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
