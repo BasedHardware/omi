@@ -131,16 +131,15 @@ export async function loadTaskContext(now: Date = new Date()): Promise<TaskConte
   // Merge order mirrors Mac (TaskAssistant.swift:1416-1418): top-relevance first,
   // then recent-active + staged that aren't already present by id. Staged carry
   // id 0, so they're never filtered out by the top-id set.
-  const top = safeRead(() => getTopRelevanceActionItems(TOP_RELEVANCE_LIMIT)).map((t) => ({
+  const toActiveTask = (t: { id: number; description: string; priority: string | null }): ActiveTask => ({
     id: t.id,
     description: t.description,
     priority: t.priority
-  }))
-  const recentActive = safeRead(() => getRecentActiveActionItems(RECENT_ACTIVE_LIMIT)).map((t) => ({
-    id: t.id,
-    description: t.description,
-    priority: t.priority
-  }))
+  })
+  const top = safeRead(() => getTopRelevanceActionItems(TOP_RELEVANCE_LIMIT)).map(toActiveTask)
+  const recentActive = safeRead(() =>
+    getRecentActiveActionItems(RECENT_ACTIVE_LIMIT)
+  ).map(toActiveTask)
   const staged = safeRead(() => getAllStagedTasks(STAGED_LIMIT)).map((t) => ({
     id: 0,
     description: t.description,

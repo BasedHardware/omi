@@ -404,8 +404,8 @@ export async function promoteIfNeeded(opts?: { bypassDebounce?: boolean }): Prom
       // session's DB.
       if (getSessionEpoch() !== epoch) return
       if (body.promoted === true && body.promoted_task) {
-        lastPromotedAt = Date.now()
         const at = Date.now()
+        lastPromotedAt = at
         syncTaskActionItems([mapPromotedTask(body.promoted_task, at)], { now: at })
         broadcastTasksChanged()
       }

@@ -254,7 +254,7 @@ export async function executeVectorSearch(query: string): Promise<TaskSearchResu
   return executeVectorSearchWith(
     {
       embedQuery,
-      searchSimilar: (vec, topK) => searchSimilar(vec, topK),
+      searchSimilar,
       getStagedTask: (id) => {
         const s = getStagedTask(id)
         return s ? projectRecord(s) : null
@@ -272,14 +272,7 @@ export async function executeVectorSearch(query: string): Promise<TaskSearchResu
  */
 export async function executeKeywordSearch(query: string): Promise<TaskSearchResult[]> {
   const { searchActionItemsFTS, searchStagedTasksFTS } = await import('../../ipc/db')
-  return executeKeywordSearchWith(
-    {
-      searchActionItemsFTS: (q, limit, includeCompleted) =>
-        searchActionItemsFTS(q, limit, includeCompleted),
-      searchStagedTasksFTS: (q, limit) => searchStagedTasksFTS(q, limit)
-    },
-    query
-  )
+  return executeKeywordSearchWith({ searchActionItemsFTS, searchStagedTasksFTS }, query)
 }
 
 /** Re-exported so callers can reference the discriminant without reaching into the

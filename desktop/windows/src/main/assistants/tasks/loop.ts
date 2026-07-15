@@ -99,6 +99,11 @@ const REJECT_LOOK_AGAIN_RESPONSE =
  *  can continue. */
 type Dispatch = { terminal: true } | { terminal: false; result: string }
 
+/** A string tool-call argument, or "" when absent/non-string (Mac's `as? String ?? ""`). */
+function stringArg(args: Record<string, unknown>, key: string): string {
+  return typeof args[key] === 'string' ? (args[key] as string) : ''
+}
+
 /**
  * Dispatch one consumed tool call: run the search backends / parse-and-validate an
  * extraction / handle reject_task, mutating `results` for a successful extract and
@@ -128,7 +133,7 @@ async function dispatch(
       if (!task) {
         // Title failed validation. Recompute the specific error + word count for
         // the REJECTED message exactly as Mac does (TA:1106-1132).
-        const title = typeof call.args['title'] === 'string' ? (call.args['title'] as string) : ''
+        const title = stringArg(call.args, 'title')
         const words = wordCount(title)
         const error = validateTaskTitle(title, words) ?? 'Title is empty'
         return { terminal: false, result: buildRejectedResponse(error, title, words) }
@@ -141,14 +146,12 @@ async function dispatch(
       return { terminal: false, result: REJECT_LOOK_AGAIN_RESPONSE }
 
     case 'search_similar': {
-      const query = typeof call.args['query'] === 'string' ? (call.args['query'] as string) : ''
-      const found = await deps.executeVectorSearch(query)
+      const found = await deps.executeVectorSearch(stringArg(call.args, 'query'))
       return { terminal: false, result: encodeSearchResults(found) }
     }
 
     case 'search_keywords': {
-      const query = typeof call.args['query'] === 'string' ? (call.args['query'] as string) : ''
-      const found = await deps.executeKeywordSearch(query)
+      const found = await deps.executeKeywordSearch(stringArg(call.args, 'query'))
       return { terminal: false, result: encodeSearchResults(found) }
     }
 
