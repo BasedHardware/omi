@@ -243,10 +243,7 @@ describe("kernel conversation journal", () => {
       questionId: "question-1",
       selectedOptionId: "focus",
     }));
-    expect(listJournalTurns(fixture.store, {
-      ownerId: fixture.ownerId,
-      conversationId: fixture.conversationId,
-    }).turns.map((turn) => turn.role)).toEqual(["assistant", "user", "assistant"]);
+    expect(currentJournalTurns(fixture).map((turn) => turn.role)).toEqual(["assistant", "user", "assistant"]);
 
     // A retry returns the same canonical rows after its placeholder has become
     // the tail; it cannot append a second ordinary user message.
@@ -423,10 +420,9 @@ describe("kernel conversation journal", () => {
       contentBlocks: [{ type: "text", id: "unrelated:text", text: "Actually, help me with something else." }],
       createdAtMs: 20,
     });
-    const retired = listJournalTurns(unrelated.store, {
-      ownerId: unrelated.ownerId,
-      conversationId: unrelated.conversationId,
-    }).turns[0]!.contentBlocks[0] as Extract<ConversationContentBlock, { type: "questionCard" }>;
+    const currentUnrelatedTurns = currentJournalTurns(unrelated);
+    expect(currentUnrelatedTurns.map((turn) => turn.role)).toEqual(["assistant", "user"]);
+    const retired = currentUnrelatedTurns[0]!.contentBlocks[0] as Extract<ConversationContentBlock, { type: "questionCard" }>;
     expect(retired.coldStartSequence?.retired).toBe(true);
     expect(listChatFirstMaterializationReceipts(unrelated.store, {
       ownerId: unrelated.ownerId, controlGeneration: 7,
@@ -556,6 +552,72 @@ describe("kernel conversation journal", () => {
       [recoveredClaim.continuityKey],
     )).toEqual({ status: "delivered" });
     reopened.close();
+  });
+
+  it("reclaims an expired Ask me later delivery lease with a new claim generation", () => {
+    const fixture = newSurface("main_chat", "chat", "question-deferral-expired-lease");
+    recordTerminalQuestion(fixture, "turn-question", [
+      { optionId: "later", label: "Ask me later", preparedAnswer: "Ask me again later.", defer: true },
+    ]);
+    const selected = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "question-1",
+      optionId: "later",
+      controlGeneration: 11,
+      nowMs: 200,
+    });
+    const [firstClaim] = drainChatFirstDeferralOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 201 });
+    const leaseExpiresAtMs = Number(fixture.store.getRow(
+      "SELECT lease_expires_at_ms FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+      [selected.continuityKey],
+    ).lease_expires_at_ms);
+
+    expect(drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: leaseExpiresAtMs - 1,
+    })).toEqual([]);
+    const [reclaimedClaim] = drainChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      nowMs: leaseExpiresAtMs,
+    });
+    expect(reclaimedClaim).toEqual(expect.objectContaining({
+      continuityKey: firstClaim.continuityKey,
+      attemptCount: 2,
+      deliveryGeneration: 2,
+    }));
+    // A late result for the expired claim cannot settle the replacement
+    // delivery. The reclaim preserves both the payload identity and the
+    // monotonic attempt/generation counters.
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: firstClaim.continuityKey,
+      deliveryGeneration: firstClaim.deliveryGeneration,
+      payloadHash: firstClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 1,
+    })).toBe(false);
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: reclaimedClaim.continuityKey,
+      deliveryGeneration: reclaimedClaim.deliveryGeneration,
+      payloadHash: reclaimedClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 2,
+    })).toBe(true);
+    expect(settleChatFirstDeferralOutbox(fixture.store, {
+      ownerId: fixture.ownerId,
+      continuityKey: reclaimedClaim.continuityKey,
+      deliveryGeneration: reclaimedClaim.deliveryGeneration,
+      payloadHash: reclaimedClaim.payloadHash,
+      ok: true,
+      nowMs: leaseExpiresAtMs + 3,
+    })).toBe(false);
+    expect(fixture.store.getRow(
+      "SELECT status, attempt_count, delivery_generation FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+      [reclaimedClaim.continuityKey],
+    )).toEqual({ status: "delivered", attempt_count: 2, delivery_generation: 2 });
+    fixture.store.close();
   });
 
   it("rejects wrong, non-main, stale, multiple, and missing chat-first targets without mutating journal rows", () => {
@@ -3237,6 +3299,19 @@ function recordTerminalQuestion(
     }],
     createdAtMs: 50,
   });
+}
+
+/** The journal list is an ordered revision stream; chat projects its latest revision per turn identity. */
+function currentJournalTurns(fixture: SurfaceFixture): ConversationTurn[] {
+  const latestByTurnId = new Map<string, ConversationTurn>();
+  for (const revision of listJournalTurns(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+  }).turns) {
+    const current = latestByTurnId.get(revision.turnId);
+    if (!current || current.turnSeq < revision.turnSeq) latestByTurnId.set(revision.turnId, revision);
+  }
+  return [...latestByTurnId.values()].sort((left, right) => left.turnSeq - right.turnSeq);
 }
 
 function insertActiveRunAttempt(fixture: SurfaceFixture, suffix: string) {
