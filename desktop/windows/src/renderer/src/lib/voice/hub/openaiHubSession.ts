@@ -38,9 +38,17 @@ export class OpenAiHubSession extends BaseHubSession {
   private responseActive = false
   private responseCreatePending = false
   private activeResponseID: string | null = null
-  // If barge-in cancels while a response.create is still pending, the resulting
-  // response.created must be consumed and ignored (Swift's canceled-pending flag).
-  private pendingResponseCanceled = false
+  // Count of canceled response.create frames whose response.created has NOT yet
+  // arrived. The server emits exactly one response.created per response.create, in
+  // request order, so a create canceled before its created still produces one — it
+  // must be consumed and ignored, never adopted as the active response. This mirrors
+  // Swift's `openAIPendingResponseIdentities` FIFO canceled-entry queue: because
+  // `requestResponse` only issues a new create when no response is active, canceled
+  // createds are always the oldest outstanding, so a leading-count is sufficient.
+  // A single boolean is NOT: `requestResponse` for the next turn would reset it and
+  // the stale canceled created would hijack `activeResponseID`, leaking the dead
+  // reply's audio into the successor turn (and dropping the real one).
+  private canceledCreatesPending = 0
   // call_id → function name, captured from response.output_item.added.
   private functionNames = new Map<string, string>()
   // Assistant items already dispatched as tool calls (dedup on response.done).
@@ -105,14 +113,15 @@ export class OpenAiHubSession extends BaseHubSession {
     this.responseActive = true
     this.responseCreatePending = true
     this.activeResponseID = null
-    this.pendingResponseCanceled = false
+    // Do NOT reset canceledCreatesPending — a create canceled by an earlier barge-in
+    // still owes us its response.created, which must be consumed before this one.
     this.send({ type: 'response.create', response: { output_modalities: ['audio'] } })
   }
 
   /** Barge-in cancel of an in-flight reply (Swift `cancelActiveResponse`). */
   private cancelActiveResponse(): void {
     if (this.responseActive) {
-      if (this.responseCreatePending) this.pendingResponseCanceled = true
+      if (this.responseCreatePending) this.canceledCreatesPending += 1
       this.send({ type: 'response.cancel' })
       this.responseActive = false
       this.responseCreatePending = false
@@ -128,11 +137,13 @@ export class OpenAiHubSession extends BaseHubSession {
     // Abandon (silent tap / cancel), keeping the warm socket (Swift abandonInputTurn).
     this.functionNames.clear()
     this.dispatchedToolItems.clear()
-    if (this.responseActive) this.send({ type: 'response.cancel' })
+    if (this.responseActive) {
+      if (this.responseCreatePending) this.canceledCreatesPending += 1
+      this.send({ type: 'response.cancel' })
+    }
     this.responseActive = false
     this.responseCreatePending = false
     this.activeResponseID = null
-    this.pendingResponseCanceled = false
     this.pendingToolCallIds.clear()
     this.send({ type: 'input_audio_buffer.clear' })
     this.clearPlayback()
@@ -155,7 +166,7 @@ export class OpenAiHubSession extends BaseHubSession {
     this.responseActive = false
     this.responseCreatePending = false
     this.activeResponseID = null
-    this.pendingResponseCanceled = false
+    this.canceledCreatesPending = 0
     this.functionNames.clear()
     this.dispatchedToolItems.clear()
     this.pendingToolCallIds.clear()
@@ -175,9 +186,9 @@ export class OpenAiHubSession extends BaseHubSession {
         const response = e.response as Record<string, unknown> | undefined
         const id = typeof response?.id === 'string' ? response.id : undefined
         if (!id) return
-        if (this.pendingResponseCanceled) {
-          this.pendingResponseCanceled = false
-          return // consumed a canceled response.created
+        if (this.canceledCreatesPending > 0) {
+          this.canceledCreatesPending -= 1
+          return // consumed a canceled response.created (do not adopt it)
         }
         if (!this.responseActive) return
         this.activeResponseID = id

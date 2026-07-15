@@ -210,6 +210,79 @@ describe('OpenAiHubSession — barge-in (Swift-faithful)', () => {
   })
 })
 
+describe('OpenAiHubSession — barge-in before response.created (stale-created hijack guard)', () => {
+  it('does not adopt a canceled response.created, so stale audio cannot leak into the next turn', async () => {
+    const h = harness()
+    await connect(h)
+    // Turn 1: commit, but response.created has NOT arrived yet (createPending).
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    // Barge-in turn 2 BEFORE turn 1's response.created comes back. The canceled
+    // create's response.created is still in flight and must be consumed, not adopted.
+    h.session.beginTurn({
+      turnID: 't2' as VoiceTurnID,
+      responseID: 'r2' as VoiceResponseID,
+      interrupting: true
+    })
+    h.session.commitTurn() // turn 2 response.create
+    h.player.enqueuePcm16.mockClear()
+    // The STALE (canceled) response.created for turn 1 arrives.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'stale_resp' } })
+    )
+    // Turn 1's trailing audio must NOT play into turn 2.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({
+        type: 'response.output_audio.delta',
+        response_id: 'stale_resp',
+        delta: 'STALE'
+      })
+    )
+    expect(h.player.enqueuePcm16).not.toHaveBeenCalled()
+    // A stale response.done must NOT finish turn 2.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'stale_resp', output: [] } })
+    )
+    expect(h.events.onTurnDone).not.toHaveBeenCalled()
+    // The REAL turn-2 response.created is adopted; its audio plays and it finishes once.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'real_resp' } })
+    )
+    h.getSocket().spec.onMessage(
+      JSON.stringify({
+        type: 'response.output_audio.delta',
+        response_id: 'real_resp',
+        delta: 'REAL'
+      })
+    )
+    expect(h.player.enqueuePcm16).toHaveBeenCalledTimes(1)
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.done', response: { id: 'real_resp', output: [] } })
+    )
+    expect(h.events.onTurnDone).toHaveBeenCalledTimes(1)
+  })
+
+  it('drops a stale response audio delta whose id is not the active response', async () => {
+    const h = harness()
+    await connect(h)
+    h.session.beginTurn({ turnID: tid, responseID: rid })
+    h.session.commitTurn()
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.created', response: { id: 'resp_1' } })
+    )
+    // A delta tagged with a DIFFERENT response id must be ignored by the current gate.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.output_audio.delta', response_id: 'other_resp', delta: 'X' })
+    )
+    expect(h.player.enqueuePcm16).not.toHaveBeenCalled()
+    // The current response's delta plays.
+    h.getSocket().spec.onMessage(
+      JSON.stringify({ type: 'response.output_audio.delta', response_id: 'resp_1', delta: 'Y' })
+    )
+    expect(h.player.enqueuePcm16).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('OpenAiHubSession — idle release (D4) + re-warm', () => {
   it('tears the socket down after the idle timer, then ensureWarm re-establishes', async () => {
     const h = harness()
