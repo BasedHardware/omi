@@ -107,14 +107,20 @@ export function projectKernelEvent(
       return { type: 'run_finished', requestId, runId, status: 'succeeded' }
     case 'run.cancelled':
       return { type: 'run_finished', requestId, runId, status: 'cancelled' }
-    case 'run.failed':
-      return {
-        type: 'run_finished',
-        requestId,
-        runId,
-        status: 'failed',
-        error: payload.errorMessage ? String(payload.errorMessage) : undefined
-      }
+    case 'run.failed': {
+      // Two terminal-failure payload shapes carry the message differently:
+      //  - pre-execution failure (failAttemptBeforeExecution): { errorMessage, failure }
+      //  - adapter-returned failure (finishAttemptAndRun, the common case): payload is
+      //    { runId, status, failure } with the message at failure.userMessage — NO
+      //    errorMessage key. Read both so the streamed error is never dropped.
+      const failure = payload.failure as { userMessage?: unknown } | undefined
+      const error = payload.errorMessage
+        ? String(payload.errorMessage)
+        : failure?.userMessage
+          ? String(failure.userMessage)
+          : undefined
+      return { type: 'run_finished', requestId, runId, status: 'failed', error }
+    }
     default:
       return null
   }

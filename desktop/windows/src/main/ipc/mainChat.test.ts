@@ -68,6 +68,10 @@ interface FakeAdapterOptions {
   reply?: (promptText: string) => string
   /** Per-prompt gate map — executeAttempt awaits gates.get(promptText). */
   gates?: Map<string, Gate>
+  /** When set, executeAttempt RETURNS terminalStatus:'failed' with this userMessage
+   *  (the adapter-returned failure path — payload.failure.userMessage, no
+   *  errorMessage), rather than throwing. */
+  fail?: string
 }
 
 let nativeSessionCounter = 0
@@ -137,6 +141,19 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
       if (gate) {
         await gate.promise
         if (signal.aborted) throw new Error('aborted')
+      }
+      if (options.fail !== undefined) {
+        return {
+          text: '',
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          terminalStatus: 'failed',
+          failure: {
+            code: 'adapter_execution_failed',
+            source: 'adapter_execution',
+            userMessage: options.fail,
+            retryable: false
+          }
+        }
       }
       return {
         text: options.reply?.(promptText) ?? `reply:${promptText}`,
@@ -489,5 +506,31 @@ describe('runMainChatTurn', () => {
     expect(adapter.calls.cancelAttempt).toHaveLength(1)
     const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
     expect(terminal.status).toBe('cancelled')
+  })
+
+  it('propagates the error on an adapter-returned failure (failure.userMessage shape)', async () => {
+    // The COMMON failure path: the adapter RETURNS terminalStatus:'failed' with a
+    // failure object, so the kernel's run.failed payload carries the message at
+    // failure.userMessage (NOT errorMessage). The streamed run_finished must still
+    // surface it — a hand-crafted { errorMessage } unit fixture would miss this.
+    const adapter = fakeAdapter({ fail: 'the model exploded' })
+    const kernel = newKernel(adapter)
+    const events: MainChatEvent[] = []
+
+    const result = await runMainChatTurn(
+      { requestId: 'req-f', prompt: 'boom', cleanUserText: 'boom' },
+      (e) => events.push(e),
+      { kernel, ownerId: OWNER }
+    )
+
+    expect(result.terminalStatus).toBe('failed')
+    expect(result.ok).toBe(false)
+    // The awaited invoke-return carries the error (from run.errorMessage).
+    expect(result.error).toBe('the model exploded')
+    // The STREAMED terminal event carries the same error — this is the wire
+    // contract E2 builds against, and the regression the both-shape fix guards.
+    const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
+    expect(terminal.status).toBe('failed')
+    expect(terminal.error).toBe('the model exploded')
   })
 })
