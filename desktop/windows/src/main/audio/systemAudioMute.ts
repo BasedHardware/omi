@@ -2,6 +2,7 @@ import { spawn, type ChildProcessWithoutNullStreams } from 'child_process'
 import { resolveAudioHelperPath } from './resolveHelperPath'
 import { encodeRequest, FrameDecoder } from '../ocr/helperProtocol'
 import { OP_MUTE, OP_RESTORE, OP_HELLO, PROTOCOL_VERSION } from './protocol'
+import { captureMessage } from '../sentry'
 
 // Track-2-owned bridge to win-audio-helper.exe — mutes the default output device
 // while push-to-talk is capturing (macOS SystemAudioMuteController parity, ported
@@ -84,6 +85,17 @@ class SystemAudioMuteBridge {
               'Build it once with: pwsh scripts/build-audio-helper.ps1  (needs .NET SDK). ' +
               `(${e.message})`
           )
+          // Durable signal: a field user's "PTT doesn't mute my music" otherwise
+          // records nothing. Inside the !unavailable guard, so it fires at most once.
+          // TODO(track3): route through a Windows main-process recordFallback emitter
+          // as outcome:'degraded' once one exists (see warnDegraded note in
+          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
+          // captureMessage is the correct call (Sentry for developer-facing degrades).
+          captureMessage('win-audio-helper binary not found — PTT system-audio mute disabled', {
+            area: 'ptt-audio-mute',
+            level: 'warning',
+            extra: { reason: 'enoent' }
+          })
         }
         this.unavailable = true
       } else {
@@ -115,6 +127,23 @@ class SystemAudioMuteBridge {
             'PTT system-audio muting is DISABLED until you rebuild it ' +
             '(npm run build:audio-helper).'
         )
+        if (!this.unavailable) {
+          // Durable signal for a stale helper build in the field. Guarded so it
+          // fires at most once (before we latch unavailable below).
+          // TODO(track3): route through a Windows main-process recordFallback emitter
+          // as outcome:'degraded' once one exists (see warnDegraded note in
+          // src/main/assistants/aiUserProfile/orchestrate.ts:46-52). Until then
+          // captureMessage is the correct call (Sentry for developer-facing degrades).
+          captureMessage('win-audio-helper protocol mismatch — PTT system-audio mute disabled', {
+            area: 'ptt-audio-mute',
+            level: 'warning',
+            extra: {
+              reason: 'protocol_mismatch',
+              helper: protocolVersion,
+              expected: PROTOCOL_VERSION
+            }
+          })
+        }
         this.unavailable = true
         this.recycle()
       }
