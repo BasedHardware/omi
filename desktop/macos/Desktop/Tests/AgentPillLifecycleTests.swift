@@ -1074,9 +1074,11 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingBarVoicePlaybackServiceSource()
 
     // The single voice playback service owns AVSpeechSynthesizerDelegate and
-    // must still clear glow on non-explicit cancellation paths.
+    // must clear glow only after proving that the callback belongs to the
+    // utterance that currently owns playback.
     XCTAssertTrue(source.contains("func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
-    XCTAssertTrue(source.contains("self.localSpeechActive = false"))
+    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utterance) else { return }"))
+    XCTAssertTrue(source.contains("self.clearFloatingPillResponseGlowIfIdle()"))
   }
 
   func testVoiceResponseGlowTriggersCompactResizeOnLegacyDisplays() throws {
@@ -1361,15 +1363,15 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try floatingBarVoicePlaybackServiceSource()
 
     XCTAssertTrue(source.contains("private var playbackGeneration: UInt64 = 0"))
-    XCTAssertTrue(source.contains("private var localSpeechActive = false"))
-    XCTAssertTrue(source.contains("if localSpeechActive { return true }"))
-    XCTAssertTrue(source.contains("localSpeechActive = true\n    let utterance = AVSpeechUtterance"))
+    XCTAssertTrue(source.contains("private var activeSystemSpeechToken: SystemSpeechToken?"))
+    XCTAssertTrue(source.contains("if activeSystemSpeechToken != nil { return true }"))
+    XCTAssertTrue(source.contains("activeSystemSpeechToken = SystemSpeechToken("))
     XCTAssertTrue(source.contains("playbackGeneration &+= 1"))
     XCTAssertTrue(source.contains("let generation = playbackGeneration"))
     XCTAssertTrue(source.contains("guard self.playbackGeneration == generation else { return }"))
     XCTAssertTrue(source.contains("guard self.audioPlayer === player else { return }"))
     XCTAssertTrue(source.contains("speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
-    XCTAssertTrue(source.contains("self.localSpeechActive = false\n      self.clearFloatingPillResponseGlowIfIdle()"))
+    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utterance) else { return }"))
   }
 
   func testFloatingBarResizeCoalescesNoopFrames() throws {
