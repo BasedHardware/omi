@@ -30,6 +30,7 @@ import { startGeminiSession } from './geminiSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
 import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
+import type { VoiceLeaseID } from './turn/voiceTurnMachine'
 
 type Listener = (state: VoiceSessionState) => void
 
@@ -534,7 +535,11 @@ function resetTtsPipeline(): void {
  * in-flight synth resolves the pending speakText promise promptly, which clears
  * useChat.speaking → the bar orb's speaking glow. Safe no-op when nothing plays.
  */
-export function interruptCurrentResponse(): void {
+export function interruptCurrentResponse(leaseID: VoiceLeaseID | null = null): void {
+  // A5 PR-3 seam: PR-6 fences the interrupt to the reducer's `stopPlayback`
+  // lease so a barge-in cancels THIS turn's audio and never the successor's.
+  // Inert until then — `null` (the default) is byte-for-byte today's behavior.
+  void leaseID
   record('tts-interrupt')
   resetTtsPipeline()
 }
@@ -632,7 +637,15 @@ async function runChunkedTts(
  * happens. A short single-chunk reply keeps the original one-synth-then-play
  * shape (no filler).
  */
-export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
+export async function speakText(
+  text: string,
+  voiceId: string = DEFAULT_TTS_VOICE,
+  leaseID: VoiceLeaseID | null = null
+): Promise<void> {
+  // A5 PR-3 seam: PR-6 threads this lease through `runChunkedTts`'s abort
+  // controller so a barge-in invalidates exactly this turn's playback lane.
+  // Inert until then — `null` (the default) is byte-for-byte today's behavior.
+  void leaseID
   const chunks = chunkTts(text)
   if (chunks.length === 0) return
 
