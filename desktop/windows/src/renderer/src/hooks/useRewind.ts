@@ -73,12 +73,19 @@ export function useRewind(): RewindState {
     const seq = ++loadSeq.current
     setLoading(true)
     const f = await window.omi.rewindFramesSampled(dayStart, endOfLocalDay(dayStart))
-    if (seq !== loadSeq.current) return // a newer day was selected mid-flight
+    // Superseded by a newer day selection: do NOT consume pendingJump here — the
+    // newest load owns it. Consuming it (or clearing it) on a stale load could seek
+    // the *newer* day's timeline to *this* day's timestamp — an empty frame, the very
+    // race this feature fixes (M1) — or wipe a jump the newer load still needs.
+    if (seq !== loadSeq.current) return
     setFrames(f)
     setLoading(false)
+    // This is the newest load, so it consumes the pending jump. Apply it only when it
+    // belongs to the day we just loaded (a jumpTo(dayA) quickly followed by a move to
+    // dayB must not seek dayB to dayA's moment); clear it regardless so it can't linger.
     const jump = pendingJump.current
     pendingJump.current = null
-    if (jump != null) setCursorTs(jump)
+    if (jump != null && startOfLocalDay(jump) === dayStart) setCursorTs(jump)
     else if (f.length > 0) setCursorTs(f[f.length - 1].ts)
     else setCursorTs(dayStart)
   }, [])

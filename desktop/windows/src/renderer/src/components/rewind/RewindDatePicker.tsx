@@ -173,6 +173,9 @@ function DayCell({
     <button
       onClick={onClick}
       data-day={label}
+      // Mac's selected-day purple, ported per the program UI ruling; contained (one
+      // shared MAC_PURPLE constant, not a new global token — desktop/windows is
+      // outside the INV-UI-1 brand ratchet).
       style={selected ? { backgroundColor: MAC_PURPLE } : undefined}
       className={`${base} ${
         selected
