@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect } from 'vitest'
-import { deriveView } from './XConnector'
+import { deriveView } from './xConnectorView'
 import type { XStatus, XRunState } from '../../../../../../shared/types'
 
 const idle: XRunState = { phase: 'idle', postCount: 0, memoryCount: 0 }

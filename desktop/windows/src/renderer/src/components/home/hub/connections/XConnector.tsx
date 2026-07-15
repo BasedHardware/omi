@@ -4,27 +4,25 @@ import { useMemories } from '../../../../hooks/useMemories'
 import { getXSession } from '../../../../lib/xSession'
 import { ConnectorRow, PillButton } from './ConnectorRow'
 import { ConnectorBrandMark } from './ConnectorBrandMark'
+import { deriveView, friendlyError } from './xConnectorView'
 import type { XStatus, XRunState } from '../../../../../../shared/types'
 
 // X (Twitter) connector row. The connect run lives in main (so it outlives this
 // panel); here we relay the session, kick it off, and reflect the streamed run
 // state (connecting → syncing with live counts → succeeded). See main/integrations/
-// xConnector.ts.
+// xConnector.ts. Row-state derivation lives in xConnectorView.ts.
 
 const IDLE_RUN: XRunState = { phase: 'idle', postCount: 0, memoryCount: 0 }
-
-function friendlyError(err?: string): string {
-  if (err === 'x_oauth_not_configured' || err === 'unknown' || err === 'no_auth_url')
-    return "X connector isn't configured on the server yet."
-  if (err === 'timeout')
-    return 'Timed out waiting for X. Finish the sign-in in your browser, then try again.'
-  return err ?? 'Something went wrong.'
-}
 
 export function XConnector(): React.JSX.Element {
   const { refresh } = useMemories()
   const [status, setStatus] = useState<XStatus | null>(null)
   const [run, setRun] = useState<XRunState>(IDLE_RUN)
+
+  const refreshStatus = async (): Promise<void> => {
+    const session = await getXSession()
+    if (session) setStatus(await xStatusSafe(session))
+  }
 
   useEffect(() => {
     let live = true
@@ -50,11 +48,6 @@ export function XConnector(): React.JSX.Element {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
-
-  const refreshStatus = async (): Promise<void> => {
-    const session = await getXSession()
-    if (session) setStatus(await xStatusSafe(session))
-  }
 
   const connect = async (): Promise<void> => {
     const session = await getXSession()
@@ -124,37 +117,6 @@ export function XConnector(): React.JSX.Element {
       }
     />
   )
-}
-
-export type XView = { state: 'connected' | 'busy' | 'idle'; description: React.ReactNode }
-
-// Precedence: an in-flight run drives the view; otherwise the connection status.
-export function deriveView(status: XStatus | null, run: XRunState): XView {
-  if (run.phase === 'connecting')
-    return {
-      state: 'busy',
-      description: 'Waiting for X sign-in… you can close this panel; Omi keeps importing.'
-    }
-  if (run.phase === 'syncing')
-    return {
-      state: 'busy',
-      description: `Saved ${run.postCount} post${run.postCount === 1 ? '' : 's'} · ${run.memoryCount} memor${run.memoryCount === 1 ? 'y' : 'ies'} so far…`
-    }
-  const connected = status?.connected || run.phase === 'succeeded'
-  if (connected) {
-    const handle = status?.handle ?? run.handle
-    const posts = status?.postCount ?? run.postCount
-    const mems = status?.memoryCount ?? run.memoryCount
-    return {
-      state: 'connected',
-      description: `Connected${handle ? ` as @${handle}` : ''} · ${posts} post${posts === 1 ? '' : 's'}, ${mems} memor${mems === 1 ? 'y' : 'ies'}`
-    }
-  }
-  if (run.phase === 'failed') return { state: 'idle', description: friendlyError(run.error) }
-  return {
-    state: 'idle',
-    description: 'Connect your X account so Omi learns from your tweets and bookmarks.'
-  }
 }
 
 // xStatus can legitimately fail (not configured / not connected yet); treat any
