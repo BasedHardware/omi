@@ -4,7 +4,20 @@ vi.mock('../apiClient', () => ({
   desktopApi: { post: vi.fn() }
 }))
 
-import { classifyMintFailure } from './tokenMint'
+import { classifyMintFailure, mintRealtimeToken } from './tokenMint'
+import { desktopApi } from '../apiClient'
+
+describe('mintRealtimeToken — request shape', () => {
+  it('mints with __sessionPreserving so an eager-warm 401 never forces reauth', async () => {
+    vi.mocked(desktopApi.post).mockResolvedValue({ data: { provider: 'openai', token: 'ek_x' } })
+    await mintRealtimeToken('openai')
+    expect(desktopApi.post).toHaveBeenCalledWith(
+      '/v2/realtime/session',
+      { provider: 'openai' },
+      expect.objectContaining({ __sessionPreserving: true })
+    )
+  })
+})
 
 describe('classifyMintFailure', () => {
   it('401 → sign-in required, no retry, no fallback', () => {

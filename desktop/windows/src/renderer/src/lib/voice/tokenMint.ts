@@ -10,8 +10,16 @@
 // The server locks the model at mint (gpt-realtime-2 / gemini-3.1-flash-live);
 // clients configure everything else on connect.
 
+import type { AxiosRequestConfig } from 'axios'
 import { desktopApi } from '../apiClient'
 import type { VoiceProvider } from './sessionMachine'
+
+// The mint can run during eager warm (before any PTT press), so a dead-session 401
+// must reject quietly and NOT yank the user to the sign-in screen — same
+// `__sessionPreserving` knob autoModelSelector's background poll uses (apiClient
+// responseErrorHandler still refreshes + retries once, but never forces reauth on
+// death). Without it, warming the hub with a stale token routes the user to Login.
+const MINT_CONFIG = { __sessionPreserving: true } as AxiosRequestConfig
 
 // Server-locked models (mirror Backend-Rust routes/realtime.rs constants).
 export const OPENAI_REALTIME_MODEL = 'gpt-realtime-2'
@@ -87,7 +95,8 @@ export async function mintRealtimeToken(provider: VoiceProvider): Promise<Minted
   try {
     const res = await desktopApi.post<{ provider: string; token: string; expires_at?: string }>(
       '/v2/realtime/session',
-      { provider }
+      { provider },
+      MINT_CONFIG
     )
     const token = res.data?.token
     if (typeof token !== 'string' || token.length === 0) {
