@@ -58,6 +58,16 @@ type Options = {
    *  FloatingBarVoicePlaybackService.interruptCurrentResponse() at exactly this
    *  point so a new hold cuts off Omi's still-playing spoken reply. */
   onHoldStart?: () => void
+  /** Pre-capture usage veto (mirrors macOS PushToTalkManager.isBlockedByUsageLimit,
+   *  checked at the top of startListening). Read once at hold-start, BEFORE the mic
+   *  opens and BEFORE any STT. MUST be synchronous — a key press can never wait on
+   *  the network — so it reads the already-synced local quota snapshot. No snapshot
+   *  ⇒ { blocked:false } (fail open: let the user speak; the send-time gate and the
+   *  server still enforce). Omit to disable the veto entirely (tests, non-gated
+   *  surfaces). */
+  checkUsageLimit?: () => { blocked: boolean; message?: string }
+  /** Raise the shared usage-limit popup for a hold that checkUsageLimit vetoed. */
+  onUsageLimitBlocked?: (message: string) => void
 }
 
 export type PushToTalk = {
@@ -407,6 +417,19 @@ export function usePushToTalk(opts: Options): PushToTalk {
   }
 
   const startHold = (): void => {
+    // Pre-capture usage veto (macOS PushToTalkManager.isBlockedByUsageLimit, at the
+    // top of startListening): a user over their monthly chat cap is refused HERE —
+    // before the mic opens and before any STT — and the shared usage-limit popup is
+    // raised, instead of recording + transcribing a whole turn only to refuse it at
+    // send. checkUsageLimit is synchronous + fail-open by contract, so the gesture
+    // never waits on the network; an absent snapshot lets the user speak. Checked
+    // BEFORE onHoldStart so a blocked hold neither barges in on a playing reply nor
+    // opens capture — matching Mac, whose veto returns before interruptCurrentResponse.
+    const veto = optsRef.current.checkUsageLimit?.()
+    if (veto?.blocked) {
+      optsRef.current.onUsageLimitBlocked?.(veto.message ?? '')
+      return
+    }
     // Barge-in: a new hold interrupts Omi's still-playing spoken reply at
     // hold-start (macOS PushToTalkManager.startListening → interruptCurrentResponse),
     // before mic capture begins. Safe no-op when nothing is playing.
