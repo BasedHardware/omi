@@ -436,7 +436,10 @@ export function useChat(): UseChat {
 
   const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
-    if (!text.trim() || sendingRef.current) return
+    // A send is allowed with text OR with staged attachments (Mac parity —
+    // attachment-only sends); only a truly empty send is dropped. The file_ids
+    // are drained from the pending list below.
+    if ((!text.trim() && getPendingAttachments().length === 0) || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
     setBusy(true)
     // Open a new generation. reset()/dismiss bumps genRef, so `isCurrent()` goes

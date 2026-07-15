@@ -4,6 +4,7 @@ import { cn } from '../../../lib/utils'
 import { HomeCanvasBackground } from '../HomeCanvasBackground'
 import { HubHeader } from './HubHeader'
 import { HubAskBar } from './HubAskBar'
+import { getPendingAttachments } from '../../../lib/chatAttachments'
 import { HubSuggestions } from './HubSuggestions'
 import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
@@ -69,7 +70,9 @@ export function HomeHub(): React.JSX.Element {
 
   const send = useCallback(
     (text: string): void => {
-      if (!text.trim() || chat.sending) return
+      // A send is allowed with text, with staged attachments, or both — never
+      // empty. useChat.send drains the pending attachments at send time.
+      if ((!text.trim() && getPendingAttachments().length === 0) || chat.sending) return
       setInput('')
       dispatch({ type: 'submitted' })
       void chat.send(text)

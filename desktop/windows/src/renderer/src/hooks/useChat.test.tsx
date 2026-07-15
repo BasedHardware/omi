@@ -584,6 +584,31 @@ describe('useChat — chat attachments (file_ids)', () => {
     ])
   })
 
+  it('allows an attachment-only send (empty text) — the guard keys on text OR files', async () => {
+    addAttachments([pick('img.png')], { upload: immediateUpload })
+    await awaitUploadsSettled()
+
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('')
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'ok' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    // NOT dropped: it opened /v2/messages with the file_ids and empty text.
+    expect(JSON.parse(bodies[0])).toEqual({ text: '', file_ids: ['srv-img.png'] })
+  })
+
+  it('still drops a truly empty send — no text AND no attachments', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('   ')
+      await flush()
+    })
+    expect(streams[0]).toBeUndefined() // never opened a fetch
+  })
+
   it('blocks the send until an in-flight upload settles (no half-uploaded send)', async () => {
     const { upload, resolve } = deferredUpload()
     addAttachments([pick('a.txt')], { upload }) // stays `uploading`
