@@ -415,6 +415,17 @@ class ConversationProvider extends ChangeNotifier {
 
     List<ServerConversation> newConversations = result.items;
 
+    // A conversation the server no longer reports as processing must drop its
+    // "Processing" card. The websocket ConversationEvent that normally clears it
+    // can be missed (socket drop, app backgrounded on Android), and unlike
+    // fetchConversations this path never rebuilt processingConversations — so a
+    // stale card stayed pinned at the top of the list indefinitely.
+    final resolvedIds =
+        newConversations.where((c) => c.status != ConversationStatus.processing).map((c) => c.id).toSet();
+    if (resolvedIds.isNotEmpty) {
+      processingConversations.removeWhere((c) => resolvedIds.contains(c.id));
+    }
+
     List<ServerConversation> upsertConvos = [];
 
     // processing convos
