@@ -14,7 +14,7 @@
       "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
       "options": {
         "mode": "markdown",
-        "content": "**No synthetic canaries.** These are accepted user journeys only. Compare a current rate with the same environment's own 24-hour baseline; do not compare dev and production. A Cloud Run scrape gap can make a quiet service look healthy, so check scrape targets before treating no data as recovery."
+        "content": "**No synthetic canaries.** These are accepted user journeys only. Dev and production are isolated by Prometheus instance, not an environment label: compare a current rate only with that Prometheus instance's own 24-hour baseline. A Cloud Run scrape gap can make a quiet service look healthy, so check scrape targets before treating no data as recovery. Traffic gates and a missing baseline intentionally suppress alerts; see `backend/docs/runbooks/product-health-real-traffic.md` for the current false-negative limits."
       }
     },
     {
@@ -56,6 +56,29 @@
         {
           "refId": "B",
           "expr": "sum(increase(omi_product_journey_terminal_total{journey=\"capture_finalization\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m] offset 24h)), 1)",
+          "legendFormat": "24h baseline",
+          "range": true
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 4,
+      "type": "timeseries",
+      "title": "Chat success rate vs. own baseline",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 13},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(omi_product_journey_terminal_total{journey=\"chat_response\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m])), 1)",
+          "legendFormat": "current",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(omi_product_journey_terminal_total{journey=\"chat_response\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m] offset 24h)), 1)",
           "legendFormat": "24h baseline",
           "range": true
         }

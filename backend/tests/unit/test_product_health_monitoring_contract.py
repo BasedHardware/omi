@@ -8,6 +8,7 @@ MONITORING = REPO / 'backend/charts/monitoring'
 METRIC = 'omi_product_journey_terminal_total'
 DASHBOARD = MONITORING / 'dashboards/omi-services/product-health-real-traffic.json'
 ALERTS = MONITORING / 'alerts/product-health.json'
+RUNBOOK = REPO / 'backend/docs/runbooks/product-health-real-traffic.md'
 
 
 def _rules(path: Path) -> dict[str, dict]:
@@ -24,7 +25,8 @@ def test_dashboard_declares_real_traffic_only_scope_and_self_baseline():
 
     text_panels = [panel['options']['content'] for panel in dashboard['panels'] if panel['type'] == 'text']
     assert any('No synthetic canaries' in content for content in text_panels)
-    assert any('same environment' in content for content in text_panels)
+    assert any('own 24-hour baseline' in content for content in text_panels)
+    assert any('Prometheus instance' in content for content in text_panels)
     assert any('Cloud Run scrape gap' in content for content in text_panels)
 
     expressions = [
@@ -36,11 +38,21 @@ def test_dashboard_declares_real_traffic_only_scope_and_self_baseline():
     assert any(METRIC in expression for expression in expressions)
     assert all('environment=' not in expression and 'env=' not in expression for expression in expressions)
 
+    chat_panels = [panel for panel in dashboard['panels'] if panel.get('title') == 'Chat success rate vs. own baseline']
+    assert len(chat_panels) == 1
+    chat_expressions = [target['expr'] for target in chat_panels[0]['targets']]
+    assert all('journey="chat_response"' in expression for expression in chat_expressions)
+    assert any('offset 24h' in expression for expression in chat_expressions)
+
 
 def test_alerts_are_traffic_gated_and_compare_only_to_their_own_baseline():
     combined = _rules(MONITORING / 'alert-rules.json')
     split = _rules(ALERTS)
-    required = {'product_health_capture_finalization_outage', 'product_health_pusher_regression'}
+    required = {
+        'product_health_capture_finalization_outage',
+        'product_health_chat_response_regression',
+        'product_health_pusher_regression',
+    }
 
     assert required <= combined.keys()
     assert required <= split.keys()
@@ -53,6 +65,20 @@ def test_alerts_are_traffic_gated_and_compare_only_to_their_own_baseline():
         assert 'offset 24h' in expression
         assert 'environment=' not in expression and 'env=' not in expression
         assert combined[uid]['labels']['severity'] == 'critical'
+
+    chat_expression = _promql(combined['product_health_chat_response_regression'])
+    assert 'journey="chat_response"' in chat_expression
+    assert '> 20' in chat_expression
+
+
+def test_runbook_documents_prometheus_instance_isolation_and_false_negative_limits():
+    runbook = RUNBOOK.read_text(encoding='utf-8')
+
+    assert 'Prometheus instance' in runbook
+    assert 'environment label' in runbook
+    assert 'low traffic' in runbook.lower()
+    assert 'scrape gap' in runbook
+    assert 'missing 24-hour baseline' in runbook
 
 
 def test_dev_and_prod_scrape_the_same_real_traffic_targets():

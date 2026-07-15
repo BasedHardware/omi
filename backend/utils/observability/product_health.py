@@ -5,8 +5,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from time import monotonic, time
+from typing import Callable
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
 
 
 class ProductJourney(str, Enum):
@@ -20,23 +21,44 @@ class ProductJourneyOutcome(str, Enum):
     failed = 'failed'
 
 
-PRODUCT_JOURNEY_ACCEPTED_TOTAL = Counter(
+def _registered_metric_or_create(name: str, factory: Callable[[], Counter | Histogram]) -> Counter | Histogram:
+    """Reuse collectors when isolated router tests reload this module."""
+
+    try:
+        return factory()
+    except ValueError:
+        collector = REGISTRY._names_to_collectors.get(name)
+        if collector is None:
+            raise
+        return collector
+
+
+PRODUCT_JOURNEY_ACCEPTED_TOTAL = _registered_metric_or_create(
     'omi_product_journey_accepted_total',
-    'Accepted real-traffic product journeys by closed journey name',
-    ['journey'],
+    lambda: Counter(
+        'omi_product_journey_accepted_total',
+        'Accepted real-traffic product journeys by closed journey name',
+        ['journey'],
+    ),
 )
 
-PRODUCT_JOURNEY_TERMINAL_TOTAL = Counter(
+PRODUCT_JOURNEY_TERMINAL_TOTAL = _registered_metric_or_create(
     'omi_product_journey_terminal_total',
-    'Terminal real-traffic product journeys by closed journey name and outcome',
-    ['journey', 'outcome'],
+    lambda: Counter(
+        'omi_product_journey_terminal_total',
+        'Terminal real-traffic product journeys by closed journey name and outcome',
+        ['journey', 'outcome'],
+    ),
 )
 
-PRODUCT_JOURNEY_LATENCY_SECONDS = Histogram(
+PRODUCT_JOURNEY_LATENCY_SECONDS = _registered_metric_or_create(
     'omi_product_journey_latency_seconds',
-    'End-to-end latency for terminal real-traffic product journeys',
-    ['journey', 'outcome'],
-    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600),
+    lambda: Histogram(
+        'omi_product_journey_latency_seconds',
+        'End-to-end latency for terminal real-traffic product journeys',
+        ['journey', 'outcome'],
+        buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600),
+    ),
 )
 
 
@@ -93,3 +115,17 @@ def record_durable_journey_terminal(
     outcome = _require_outcome(outcome)
     terminal_at = time() if now_epoch_seconds is None else now_epoch_seconds
     _record_terminal(journey, outcome, terminal_at - accepted_at_epoch_seconds)
+
+
+def finish_pusher_session_attempt(attempt: ProductJourneyAttempt, *, client_disconnect_code: int | None) -> None:
+    """Finish a pusher session using the peer's close frame, when present.
+
+    A normal close is only successful when it came from the client. Server
+    timeouts and error closes have no client close frame and are failures even
+    if the server happens to use close code 1000 while cleaning up.
+    """
+
+    outcome = (
+        ProductJourneyOutcome.succeeded if client_disconnect_code in {1000, 1001} else ProductJourneyOutcome.failed
+    )
+    attempt.finish(outcome)

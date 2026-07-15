@@ -6877,6 +6877,43 @@
     "labels": {"severity": "critical", "instatus_component": "capture-finalization"}
   },
   {
+    "uid": "product_health_chat_response_regression",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Product health",
+    "title": "Product health — chat response outage or regression",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 900, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m])) > 20) and ((sum(increase(omi_product_journey_terminal_total{journey=\"chat_response\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m])), 1)) < 0.80) and ((sum(increase(omi_product_journey_terminal_total{journey=\"chat_response\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m])), 1)) < ((sum(increase(omi_product_journey_terminal_total{journey=\"chat_response\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"chat_response\"}[15m] offset 24h)), 1)) - 0.20))",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "refId": "B", "type": "threshold", "conditions": [{"type": "query", "evaluator": {"type": "gt", "params": [0]}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"type": "last", "params": []}}]}
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {"__dashboardUid__": "omi-product-health-real-traffic", "__panelId__": "4", "runbook": "backend/docs/runbooks/product-health-real-traffic.md"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "record": null,
+    "labels": {"severity": "critical", "instatus_component": "chat"}
+  },
+  {
     "uid": "product_health_pusher_regression",
     "orgID": 1,
     "folderUID": "betdycdziadc0e",

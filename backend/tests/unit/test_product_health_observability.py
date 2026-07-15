@@ -11,6 +11,7 @@ from utils.observability.product_health import (
     ProductJourney,
     ProductJourneyAttempt,
     ProductJourneyOutcome,
+    finish_pusher_session_attempt,
     record_durable_journey_terminal,
 )
 
@@ -88,4 +89,22 @@ def test_metric_contract_has_only_closed_journey_and_outcome_labels():
         'realtime_pusher_session',
         'capture_finalization',
     }
+
+
+@pytest.mark.parametrize('client_disconnect_code', (1000, 1001))
+def test_pusher_normal_client_disconnects_are_terminal_successes(client_disconnect_code):
+    attempt = MagicMock()
+
+    finish_pusher_session_attempt(attempt, client_disconnect_code=client_disconnect_code)
+
+    attempt.finish.assert_called_once_with(ProductJourneyOutcome.succeeded)
+
+
+@pytest.mark.parametrize('client_disconnect_code', (None, 1006, 1011))
+def test_pusher_server_and_error_closes_are_terminal_failures(client_disconnect_code):
+    attempt = MagicMock()
+
+    finish_pusher_session_attempt(attempt, client_disconnect_code=client_disconnect_code)
+
+    attempt.finish.assert_called_once_with(ProductJourneyOutcome.failed)
     assert {outcome.value for outcome in ProductJourneyOutcome} == {'succeeded', 'failed'}

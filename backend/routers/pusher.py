@@ -30,6 +30,7 @@ from utils.observability.product_health import (
     ProductJourney,
     ProductJourneyAttempt,
     ProductJourneyOutcome,
+    finish_pusher_session_attempt,
     record_durable_journey_terminal,
 )
 from utils.async_tasks import (
@@ -324,6 +325,7 @@ async def _websocket_util_trigger(
     websocket_active = True
     shutdown_event = asyncio.Event()
     websocket_close_code = 1000
+    client_disconnect_code: int | None = None
     journey_attempt: ProductJourneyAttempt | None = None
 
     # audio bytes
@@ -587,6 +589,7 @@ async def _websocket_util_trigger(
                     logger.error(f"Error processing audio bytes: {e} {uid}")
 
     async def receive_tasks() -> None:
+        nonlocal client_disconnect_code
         nonlocal websocket_active
         nonlocal websocket_close_code
         nonlocal speaker_sample_queue
@@ -778,7 +781,8 @@ async def _websocket_util_trigger(
                         audiobuffer = bytearray()
                     continue
 
-        except WebSocketDisconnect:
+        except WebSocketDisconnect as disconnect:
+            client_disconnect_code = disconnect.code
             logger.info("WebSocket disconnected")
         except Exception as e:
             logger.error(f'Could not process audio: error {e}')
@@ -822,6 +826,9 @@ async def _websocket_util_trigger(
         )
         logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid}")
 
+        if exit_result.reason != 'disconnect':
+            websocket_close_code = 1011
+
         if receive_task.done() and not receive_task.cancelled():
             exc = receive_task.exception()
             if exc is not None:
@@ -841,6 +848,7 @@ async def _websocket_util_trigger(
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
         websocket_close_code = 1011
+        client_disconnect_code = None
     finally:
         shutdown_event.set()
         websocket_active = False
@@ -851,8 +859,7 @@ async def _websocket_util_trigger(
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
         if journey_attempt is not None:
-            outcome = ProductJourneyOutcome.succeeded if websocket_close_code == 1000 else ProductJourneyOutcome.failed
-            journey_attempt.finish(outcome)
+            finish_pusher_session_attempt(journey_attempt, client_disconnect_code=client_disconnect_code)
 
         if websocket.client_state == WebSocketState.CONNECTED:
             try:

@@ -60,6 +60,7 @@ from utils.stt.pre_recorded import get_prerecorded_service
 from config.prerecorded_stt import TranscriptionOutcome
 from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
 from utils.observability.transcription import TranscriptionAttempt
+from utils.observability.product_health import ProductJourney, ProductJourneyAttempt, ProductJourneyOutcome
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
@@ -413,7 +414,20 @@ def send_message(
 
         return ai_message, ask_for_nps
 
+    # The journey starts only after all admission work has completed and this
+    # request is committed to returning the real LLM stream. Quota-exceeded
+    # canned replies return above and intentionally do not contribute.
+    journey_attempt = ProductJourneyAttempt.accepted(ProductJourney.chat_response)
+
     async def generate_stream():
+        terminal_outcome: ProductJourneyOutcome | None = None
+
+        def finish_journey(outcome: ProductJourneyOutcome) -> None:
+            nonlocal terminal_outcome
+            if terminal_outcome is None:
+                terminal_outcome = outcome
+                journey_attempt.finish(outcome)
+
         callback_data = {}
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
@@ -441,7 +455,19 @@ def send_message(
                             'utf-8'
                         )
                         yield f"done: {encoded_response}\n\n"
+                        # This runs only after the terminal SSE chunk has been
+                        # handed to StreamingResponse. A cancelled send reaches
+                        # the cancellation handler instead.
+                        finish_journey(ProductJourneyOutcome.succeeded)
+        except asyncio.CancelledError:
+            finish_journey(ProductJourneyOutcome.failed)
+            raise
+        except Exception:
+            finish_journey(ProductJourneyOutcome.failed)
+            raise
         finally:
+            # A stream ending without a terminal response is a failed journey.
+            finish_journey(ProductJourneyOutcome.failed)
             reset_usage_context(usage_token)
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")

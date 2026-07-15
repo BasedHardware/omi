@@ -1,5 +1,6 @@
 """Router tests for explicit backend chat quota question counting."""
 
+import asyncio
 import base64
 import importlib.util
 import io
@@ -11,6 +12,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -268,6 +270,50 @@ def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
     finally:
         _cleanup(saved)
+
+
+def test_v2_messages_records_chat_journey_at_stream_acceptance_then_success():
+    client, module, saved = _make_chat_client()
+    try:
+        attempt = MagicMock()
+        with patch.object(module.ProductJourneyAttempt, 'accepted', return_value=attempt) as accepted:
+            response = module.send_message(module.SendMessageRequest(text='private user content'), uid='test-uid')
+
+            # The real stream is accepted when the StreamingResponse is returned, before it is consumed.
+            accepted.assert_called_once_with(module.ProductJourney.chat_response)
+            assert attempt.finish.call_count == 0
+            asyncio.run(_consume_stream(response.body_iterator))
+
+        attempt.finish.assert_called_once_with(module.ProductJourneyOutcome.succeeded)
+    finally:
+        _cleanup(saved)
+
+
+@pytest.mark.parametrize('failure', (RuntimeError('upstream error'), asyncio.CancelledError()))
+def test_v2_messages_records_chat_stream_error_and_cancellation_as_failed(failure):
+    client, module, saved = _make_chat_client()
+    try:
+        attempt = MagicMock()
+
+        async def failed_chat_stream(*_args, **_kwargs):
+            if False:
+                yield ''
+            raise failure
+
+        module.execute_chat_stream = failed_chat_stream
+        with patch.object(module.ProductJourneyAttempt, 'accepted', return_value=attempt):
+            response = module.send_message(module.SendMessageRequest(text='private user content'), uid='test-uid')
+            with pytest.raises(type(failure)):
+                asyncio.run(_consume_stream(response.body_iterator))
+
+        attempt.finish.assert_called_once_with(module.ProductJourneyOutcome.failed)
+    finally:
+        _cleanup(saved)
+
+
+async def _consume_stream(stream):
+    async for _chunk in stream:
+        pass
 
 
 def test_v2_voice_messages_records_quota_question_from_visible_message_chunk():
