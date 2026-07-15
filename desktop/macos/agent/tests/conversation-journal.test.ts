@@ -9,6 +9,7 @@ import {
   ackBackendTurnOutboxWithWakes,
   applyBackendReconcilePage,
   appendChatFirstBlocksToProducingTurn,
+  acknowledgeChatFirstMaterializationReceipts,
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
@@ -23,6 +24,9 @@ import {
   journalTurnForSurfaceProjection,
   journalTurnChangedWakes,
   listJournalTurns,
+  listChatFirstMaterializationReceipts,
+  materializeChatFirstIntent,
+  materializeChatFirstIntents,
   migrateJournalConversation,
   recordJournalExchange,
   recordJournalTurn,
@@ -45,6 +49,118 @@ afterEach(() => {
 });
 
 describe("kernel conversation journal", () => {
+  it("materializes each server intent once, persists its receipt, and stops at an unanswered tail question", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-materialization");
+    const first = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-open",
+      continuityKey: "intent-open",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-1" }],
+      nowMs: 100,
+    });
+    expect(first).toMatchObject({
+      accepted: true,
+      duplicate: false,
+      turn: { role: "assistant", status: "completed", content: "" },
+      receipt: { intentId: "intent-open" },
+    });
+    expect(first.turn?.contentBlocks).toEqual([{ type: "taskCard", id: expect.any(String), taskId: "task-1" }]);
+
+    const replay = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-open",
+      continuityKey: "intent-open",
+      source: "daily_opener",
+      blocks: [{ type: "taskCard", task_id: "task-1" }],
+      nowMs: 101,
+    });
+    expect(replay).toMatchObject({ accepted: true, duplicate: true, turn: { turnId: first.turn?.turnId } });
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    })).toEqual([first.receipt]);
+
+    recordTerminalQuestion(fixture, "tail-question", [
+      { optionId: "later", label: "Later", preparedAnswer: "Ask me later.", defer: true },
+    ]);
+    const suppressed = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "intent-capture",
+      continuityKey: "intent-capture",
+      source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }],
+      nowMs: 102,
+    });
+    expect(suppressed).toMatchObject({ accepted: false, suppressedByTailQuestion: true, turn: null, receipt: null });
+
+    expect(acknowledgeChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId,
+      controlGeneration: 7,
+      receipts: [first.receipt!],
+    })).toBe(1);
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("commits an ordered materialization batch once, stops after its question, and preserves a block-only outbox payload", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-batch");
+    const batch = materializeChatFirstIntents(fixture.store, [
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-first", continuityKey: "intent-first", source: "daily_opener",
+        blocks: [{ type: "taskCard", task_id: "task-1" }], nowMs: 100,
+      },
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-question", continuityKey: "intent-question", source: "deferral_reraise",
+        blocks: [{
+          type: "questionCard", question_id: "question-1", text: "Continue?",
+          subject: { kind: "goal", id: "goal-1" },
+          options: [{ option_id: "yes", label: "Yes", prepared_answer: "Yes" }],
+        }], nowMs: 101,
+      },
+      {
+        ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 9,
+        intentId: "intent-after-question", continuityKey: "intent-after-question", source: "capture_arrival",
+        blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 102,
+      },
+    ]);
+
+    expect(batch.stoppedByTail).toBe(true);
+    expect(batch.results).toHaveLength(2);
+    expect(batch.results.map((result) => result.turn?.turnId)).toEqual([
+      expect.stringMatching(/^turn_cfi_/), expect.stringMatching(/^turn_cfi_/),
+    ]);
+    const deliveries = drainBackendTurnOutbox(fixture.store, { ownerId: fixture.ownerId, nowMs: 103 });
+    expect(deliveries).toHaveLength(2);
+    expect(deliveries.map((delivery) => delivery.payload.text)).toEqual(["", ""]);
+    expect(deliveries.every((delivery) => delivery.payload.metadata?.includes("content_blocks"))).toBe(true);
+
+    fixture.store.close();
+  });
+
+  it("suppresses a materialization batch behind a streaming assistant tail", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-streaming-tail");
+    recordStreamingAssistantPlaceholder(fixture, "streaming-tail");
+    const batch = materializeChatFirstIntents(fixture.store, [{
+      ownerId: fixture.ownerId, conversationId: fixture.conversationId, controlGeneration: 4,
+      intentId: "intent-late", continuityKey: "intent-late", source: "capture_arrival",
+      blocks: [{ type: "captureLink", conversation_id: "capture-1", summary: "Capture" }], nowMs: 100,
+    }]);
+    expect(batch).toMatchObject({ stoppedByTail: true, results: [{
+      accepted: false, suppressedByStreamingTail: true, turn: null,
+    }] });
+    fixture.store.close();
+  });
+
   it("atomically binds the one current main-chat placeholder and replays validated chat-first blocks", () => {
     const fixture = newSurface("main_chat", "chat", "chat-first-append");
     const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-append");

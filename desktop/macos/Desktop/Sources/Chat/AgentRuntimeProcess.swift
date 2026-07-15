@@ -518,6 +518,11 @@ actor AgentRuntimeProcess {
     let accepted: Bool? = nil
     let duplicate: Bool? = nil
     let continuityKey: String? = nil
+    let suppressedByTailQuestion: Bool = false
+    let suppressedByStreamingTail: Bool = false
+    let materializationStoppedByTail: Bool = false
+    let materializationReceipts: [ChatFirstMaterializationReceipt] = []
+    let acknowledgedReceiptCount: Int = 0
   }
 
   struct QuestionInteractionReply: Sendable {
@@ -527,6 +532,12 @@ actor AgentRuntimeProcess {
     let parentTurn: KernelJournalTurn?
     let userTurn: KernelJournalTurn
     let assistantTurn: KernelJournalTurn
+  }
+
+  struct ChatFirstIntentsMaterialization: Sendable {
+    let accepted: Bool
+    let stoppedByTail: Bool
+    let receipts: [ChatFirstMaterializationReceipt]
   }
 
   typealias JournalTurnChangedHandler = @Sendable (KernelJournalTurn) -> Void
@@ -2035,6 +2046,109 @@ actor AgentRuntimeProcess {
       userTurn: userTurn,
       assistantTurn: assistantTurn
     )
+  }
+
+  /// Materialize one ordered server batch through the kernel, which owns the
+  /// canonical assistant rows, tail suppression, and receipt identities.
+  func materializeChatFirstIntents(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    intents: [ChatFirstPromptIntent],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> ChatFirstIntentsMaterialization {
+    guard surface.surfaceKind == "main_chat",
+      controlGeneration >= 0,
+      !intents.isEmpty,
+      intents.count <= 8,
+      intents.allSatisfy({ $0.accountGeneration == controlGeneration && $0.kernelBlocks != nil }),
+      !sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      throw BridgeError.agentError("Invalid chat-first materialization")
+    }
+    let result = try await journalOperation(
+      type: "materialize_chat_first_intents",
+      operation: "materialize_chat_first_intents",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "sessionId": sessionID,
+        "controlGeneration": controlGeneration,
+        "intents": intents.compactMap { intent in
+          guard let blocks = intent.kernelBlocks else { return nil }
+          return [
+            "intentId": intent.intentID,
+            "continuityKey": intent.continuityKey,
+            "source": intent.source.rawValue,
+            "blocks": blocks,
+          ] as [String: Any]
+        },
+      ],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    for turn in result.turns {
+      recordLifecycleJournalMutation(turn)
+    }
+    return ChatFirstIntentsMaterialization(
+      accepted: result.accepted == true,
+      stoppedByTail: result.materializationStoppedByTail,
+      receipts: result.materializationReceipts
+    )
+  }
+
+  func listChatFirstMaterializationReceipts(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> [ChatFirstMaterializationReceipt] {
+    guard surface.surfaceKind == "main_chat", controlGeneration >= 0 else {
+      throw BridgeError.agentError("Invalid chat-first receipt listing")
+    }
+    let result = try await journalOperation(
+      type: "list_chat_first_materialization_receipts",
+      operation: "list_chat_first_materialization_receipts",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: ["sessionId": sessionID, "controlGeneration": controlGeneration, "limit": 16],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    return result.materializationReceipts
+  }
+
+  @discardableResult
+  func acknowledgeChatFirstMaterializationReceipts(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    receipts: [ChatFirstMaterializationReceipt],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> Int {
+    guard surface.surfaceKind == "main_chat", controlGeneration >= 0, receipts.count <= 16 else {
+      throw BridgeError.agentError("Invalid chat-first receipt acknowledgement")
+    }
+    let result = try await journalOperation(
+      type: "acknowledge_chat_first_materialization_receipts",
+      operation: "acknowledge_chat_first_materialization_receipts",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "sessionId": sessionID,
+        "controlGeneration": controlGeneration,
+        "receipts": receipts.map { ["intentId": $0.intentID, "receiptId": $0.receiptID] },
+      ],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    return result.acknowledgedReceiptCount
   }
 
   private func journalOperation(
@@ -3684,8 +3798,29 @@ actor AgentRuntimeProcess {
         generationBaseTurnSeq: generationBaseTurnSeq,
         accepted: message.payload["accepted"] as? Bool,
         duplicate: message.payload["duplicate"] as? Bool,
-        continuityKey: message.payload["continuityKey"] as? String
+        continuityKey: message.payload["continuityKey"] as? String,
+        suppressedByTailQuestion: message.payload["suppressedByTailQuestion"] as? Bool ?? false,
+        suppressedByStreamingTail: message.payload["suppressedByStreamingTail"] as? Bool ?? false,
+        materializationStoppedByTail: message.payload["materializationStoppedByTail"] as? Bool ?? false,
+        materializationReceipts: Self.chatFirstMaterializationReceipts(
+          from: message.payload["materializationReceipts"]
+        ),
+        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0
       ))
+  }
+
+  private nonisolated static func chatFirstMaterializationReceipts(
+    from payload: Any?
+  ) -> [ChatFirstMaterializationReceipt] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let intentID = value["intentId"] as? String,
+        !intentID.isEmpty,
+        let receiptID = value["receiptId"] as? String,
+        !receiptID.isEmpty
+      else { return nil }
+      return ChatFirstMaterializationReceipt(intentID: intentID, receiptID: receiptID)
+    }
   }
 
   private func journalTurn(from message: RuntimeMessage) -> KernelJournalTurn? {

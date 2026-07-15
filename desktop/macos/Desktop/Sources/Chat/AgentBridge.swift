@@ -1387,6 +1387,74 @@ actor AgentBridge {
     )
   }
 
+  func materializeChatFirstIntents(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    intents: [ChatFirstPromptIntent],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.materializeChatFirstIntents(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      sessionID: sessionID,
+      controlGeneration: controlGeneration,
+      intents: intents,
+      authorizationSnapshot: authorization
+    )
+  }
+
+  func listChatFirstMaterializationReceipts(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> [ChatFirstMaterializationReceipt] {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.listChatFirstMaterializationReceipts(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      sessionID: sessionID,
+      controlGeneration: controlGeneration,
+      authorizationSnapshot: authorization
+    )
+  }
+
+  @discardableResult
+  func acknowledgeChatFirstMaterializationReceipts(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    controlGeneration: Int,
+    receipts: [ChatFirstMaterializationReceipt],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> Int {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.acknowledgeChatFirstMaterializationReceipts(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      sessionID: sessionID,
+      controlGeneration: controlGeneration,
+      receipts: receipts,
+      authorizationSnapshot: authorization
+    )
+  }
+
   func updateJournalTurn(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,

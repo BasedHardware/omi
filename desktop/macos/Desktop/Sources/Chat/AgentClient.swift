@@ -259,6 +259,53 @@ enum AgentClient {
       )
     }
 
+    func materializeChatFirstIntents(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int,
+      intents: [ChatFirstPromptIntent]
+    ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
+      try await bridge.materializeChatFirstIntents(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration,
+        intents: intents
+      )
+    }
+
+    func listChatFirstMaterializationReceipts(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int
+    ) async throws -> [ChatFirstMaterializationReceipt] {
+      try await bridge.listChatFirstMaterializationReceipts(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration
+      )
+    }
+
+    @discardableResult
+    func acknowledgeChatFirstMaterializationReceipts(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      controlGeneration: Int,
+      receipts: [ChatFirstMaterializationReceipt]
+    ) async throws -> Int {
+      try await bridge.acknowledgeChatFirstMaterializationReceipts(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        controlGeneration: controlGeneration,
+        receipts: receipts
+      )
+    }
+
     func updateJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,

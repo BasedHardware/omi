@@ -143,6 +143,42 @@ export interface ChatFirstDeferralDelivery {
   deliveryGeneration: number;
 }
 
+/** A restart-safe receipt for a locally committed deterministic-tier intent. */
+export interface ChatFirstMaterializationReceipt {
+  intentId: string;
+  receiptId: string;
+}
+
+export interface MaterializeChatFirstIntentInput {
+  ownerId: string;
+  conversationId: string;
+  controlGeneration: number;
+  intentId: string;
+  continuityKey: string;
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment";
+  blocks: readonly unknown[];
+  nowMs?: number;
+}
+
+export interface ChatFirstIntentMaterializationResult {
+  accepted: boolean;
+  duplicate: boolean;
+  suppressedByTailQuestion: boolean;
+  suppressedByStreamingTail: boolean;
+  turn: ConversationTurn | null;
+  receipt: ChatFirstMaterializationReceipt | null;
+}
+
+/**
+ * One ordered server batch becomes one kernel transaction. The server owns
+ * creation order; the kernel owns whether the current transcript tail admits
+ * the next intent and records the only visible rows.
+ */
+export interface ChatFirstIntentsMaterializationResult {
+  results: ChatFirstIntentMaterializationResult[];
+  stoppedByTail: boolean;
+}
+
 export interface TerminalizeJournalTurnInput {
   ownerId: string;
   conversationId: string;
@@ -849,6 +885,176 @@ export function recordQuestionInteractionReply(
       userTurn,
       assistantTurn,
     };
+  });
+}
+
+/**
+ * Commits one server-owned proactive intent into the canonical main-chat
+ * journal. Receipt persistence happens in this same transaction, allowing a
+ * retry to acknowledge the exact committed assistant row after a crash.
+ */
+function materializeChatFirstIntentInTransaction(
+  store: AgentStore,
+  input: MaterializeChatFirstIntentInput,
+): ChatFirstIntentMaterializationResult {
+  const now = input.nowMs ?? Date.now();
+  const intentId = nonEmpty(input.intentId, "chat-first intent ID");
+  const continuityKey = nonEmpty(input.continuityKey, "chat-first intent continuity key");
+  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
+    throw new Error("Chat-first materialization requires a valid control generation");
+  }
+  if (!["daily_opener", "capture_arrival", "deferral_reraise", "agent_judgment"].includes(input.source)) {
+    throw new Error("Chat-first materialization source is invalid");
+  }
+  const blocks = chatFirstIntentBlocks(intentId, input.blocks);
+  const turnId = stableChatFirstIntentTurnID(intentId);
+  const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
+
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const existingReceipt = store.getOptionalRow(
+    `SELECT owner_id, conversation_id, control_generation, receipt_id, turn_id
+     FROM chat_first_materialization_receipts WHERE intent_id = ?`,
+    [intentId],
+  );
+  if (existingReceipt) {
+    if (
+      String(existingReceipt.owner_id) !== input.ownerId
+      || String(existingReceipt.conversation_id) !== input.conversationId
+      || Number(existingReceipt.control_generation) !== input.controlGeneration
+      || String(existingReceipt.receipt_id) !== receiptId
+      || String(existingReceipt.turn_id) !== turnId
+    ) {
+      throw new Error("Chat-first intent ID was reused with different receipt identity");
+    }
+    return {
+      accepted: true,
+      duplicate: true,
+      suppressedByTailQuestion: false,
+      suppressedByStreamingTail: false,
+      turn: requireJournalTurn(store, input.conversationId, turnId),
+      receipt: { intentId, receiptId },
+    };
+  }
+
+  const tail = materializationTailState(store, input.conversationId);
+  if (tail.unansweredQuestion || tail.streaming) {
+    return {
+      accepted: false,
+      duplicate: false,
+      suppressedByTailQuestion: tail.unansweredQuestion,
+      suppressedByStreamingTail: tail.streaming,
+      turn: null,
+      receipt: null,
+    };
+  }
+
+  const recorded = recordJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: input.conversationId,
+      turnId,
+      producerId: `chat-first-intent:${intentId}`,
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      // Rich blocks are the visible content. Keep this empty rather than
+      // inventing an assistant sentence that could become a "Done." filler.
+      content: "",
+      contentBlocks: blocks,
+      metadataJson: JSON.stringify({
+        continuityKey,
+        chatFirstIntentId: intentId,
+        chatFirstIntentSource: input.source,
+      }),
+      createdAtMs: now,
+  });
+  store.execute(
+    `INSERT INTO chat_first_materialization_receipts(
+       intent_id, owner_id, conversation_id, control_generation, receipt_id, turn_id, created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [intentId, input.ownerId, input.conversationId, input.controlGeneration, receiptId, turnId, now],
+  );
+  return {
+    accepted: true,
+    duplicate: recorded.duplicate,
+    suppressedByTailQuestion: false,
+    suppressedByStreamingTail: false,
+    turn: recorded.turn,
+    receipt: { intentId, receiptId },
+  };
+}
+
+export function materializeChatFirstIntent(
+  store: AgentStore,
+  input: MaterializeChatFirstIntentInput,
+): ChatFirstIntentMaterializationResult {
+  return store.withTransaction(() => materializeChatFirstIntentInTransaction(store, input));
+}
+
+export function materializeChatFirstIntents(
+  store: AgentStore,
+  inputs: readonly MaterializeChatFirstIntentInput[],
+): ChatFirstIntentsMaterializationResult {
+  if (inputs.length < 1 || inputs.length > 8) {
+    throw new Error("Chat-first materialization batch requires one to eight intents");
+  }
+  return store.withTransaction(() => {
+    const results: ChatFirstIntentMaterializationResult[] = [];
+    for (const input of inputs) {
+      const result = materializeChatFirstIntentInTransaction(store, input);
+      results.push(result);
+      // Do not submit an additional intent after a current tail suppresses the
+      // batch, or after this intent itself becomes the new unanswered tail.
+      if (
+        result.suppressedByTailQuestion
+        || result.suppressedByStreamingTail
+        || materializationTailState(store, input.conversationId).unansweredQuestion
+      ) {
+        return { results, stoppedByTail: true };
+      }
+    }
+    return { results, stoppedByTail: false };
+  });
+}
+
+/** Receipts remain pending locally until Swift receives a successful server acknowledgement. */
+export function listChatFirstMaterializationReceipts(
+  store: AgentStore,
+  input: { ownerId: string; controlGeneration: number; limit?: number },
+): ChatFirstMaterializationReceipt[] {
+  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
+    throw new Error("Chat-first receipt listing requires a valid control generation");
+  }
+  const limit = Math.max(1, Math.min(input.limit ?? 16, 16));
+  return store.allRows(
+    `SELECT intent_id, receipt_id FROM chat_first_materialization_receipts
+     WHERE owner_id = ? AND control_generation = ?
+     ORDER BY created_at_ms ASC LIMIT ?`,
+    [input.ownerId, input.controlGeneration, limit],
+  ).map((row) => ({ intentId: String(row.intent_id), receiptId: String(row.receipt_id) }));
+}
+
+/** Delete only the exact server-acknowledged receipt identities. */
+export function acknowledgeChatFirstMaterializationReceipts(
+  store: AgentStore,
+  input: { ownerId: string; controlGeneration: number; receipts: readonly ChatFirstMaterializationReceipt[] },
+): number {
+  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
+    throw new Error("Chat-first receipt acknowledgement requires a valid control generation");
+  }
+  return store.withTransaction(() => {
+    let acknowledged = 0;
+    for (const receipt of input.receipts) {
+      const intentId = nonEmpty(receipt.intentId, "chat-first receipt intent ID");
+      const receiptId = nonEmpty(receipt.receiptId, "chat-first receipt ID");
+      const result = store.execute(
+        `DELETE FROM chat_first_materialization_receipts
+         WHERE intent_id = ? AND owner_id = ? AND control_generation = ? AND receipt_id = ?`,
+        [intentId, input.ownerId, input.controlGeneration, receiptId],
+      );
+      acknowledged += result;
+    }
+    return acknowledged;
   });
 }
 
@@ -2869,6 +3075,142 @@ function stableQuestionInteractionTurnID(continuityKey: string, role: "user" | "
   return `turn_${createHash("sha256").update(`${continuityKey}\u0000${role}`).digest("hex").slice(0, 16)}`;
 }
 
+function stableChatFirstIntentTurnID(intentId: string): string {
+  return `turn_cfi_${createHash("sha256").update(intentId).digest("hex").slice(0, 24)}`;
+}
+
+function stableChatFirstMaterializationReceiptID(intentId: string, continuityKey: string): string {
+  return `cfi_receipt_${createHash("sha256")
+    .update(`${intentId}\u0000${continuityKey}`)
+    .digest("hex")
+    .slice(0, 24)}`;
+}
+
+/** Any unanswered question or streaming assistant tail blocks proactive arrival. */
+function materializationTailState(
+  store: AgentStore,
+  conversationId: string,
+): { unansweredQuestion: boolean; streaming: boolean } {
+  const tail = store.getOptionalRow(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+    [conversationId],
+  );
+  if (!tail) return { unansweredQuestion: false, streaming: false };
+  const turn = requireJournalTurn(store, conversationId, String(tail.turn_id));
+  const assistant = turn.role === "assistant";
+  return {
+    unansweredQuestion: assistant
+      && turn.status === "completed"
+      && turn.contentBlocks.some((block) => block.type === "questionCard" && block.selectedOptionId === undefined),
+    streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
+  };
+}
+
+/**
+ * Proactive intents are server contracts with snake_case fields; normalize and
+ * bound them once before they become kernel-owned persisted blocks. This keeps
+ * Swift a transport/projection layer instead of another block writer.
+ */
+function chatFirstIntentBlocks(
+  intentId: string,
+  rawBlocks: readonly unknown[],
+): ConversationContentBlock[] {
+  if (rawBlocks.length < 1 || rawBlocks.length > 8) {
+    throw new Error("Chat-first intent requires one to eight blocks");
+  }
+  return rawBlocks.map((raw, index) => {
+    const block = recordValue(raw, "chat-first intent block");
+    const type = nonEmptyString(block.type, "chat-first intent block type");
+    const id = `cfi_block_${createHash("sha256")
+      .update(`${intentId}\u0000${index}\u0000${type}`)
+      .digest("hex")
+      .slice(0, 20)}`;
+    switch (type) {
+      case "questionCard": {
+        const subject = recordValue(block.subject, "chat-first question subject");
+        const options = arrayValue(block.options, "chat-first question options").map((rawOption) => {
+          const option = recordValue(rawOption, "chat-first question option");
+          const defer = option.defer === undefined ? undefined : booleanValue(option.defer, "chat-first question defer");
+          return {
+            optionId: nonEmptyString(option.option_id, "chat-first question option ID"),
+            label: nonEmptyString(option.label, "chat-first question option label"),
+            preparedAnswer: nonEmptyString(option.prepared_answer, "chat-first question prepared answer"),
+            ...(defer === true ? { defer: true } : {}),
+          };
+        });
+        return {
+          type,
+          id,
+          questionId: nonEmptyString(block.question_id, "chat-first question ID"),
+          text: nonEmptyString(block.text, "chat-first question text"),
+          subject: {
+            kind: chatFirstSubjectKind(subject.kind),
+            id: nonEmptyString(subject.id, "chat-first question subject ID"),
+          },
+          options,
+        };
+      }
+      case "taskCard":
+        return { type, id, taskId: nonEmptyString(block.task_id, "chat-first task ID") };
+      case "goalLink":
+        return {
+          type,
+          id,
+          goalId: nonEmptyString(block.goal_id, "chat-first goal ID"),
+          summary: nonEmptyString(block.summary, "chat-first goal summary"),
+        };
+      case "captureLink": {
+        const rawMoment = block.moment_timestamp_ms;
+        const momentTimestampMs = rawMoment === undefined || rawMoment === null
+          ? undefined
+          : safeNonNegativeInteger(rawMoment, "chat-first capture moment");
+        return {
+          type,
+          id,
+          conversationId: nonEmptyString(block.conversation_id, "chat-first capture ID"),
+          ...(momentTimestampMs === undefined ? {} : { momentTimestampMs }),
+          summary: nonEmptyString(block.summary, "chat-first capture summary"),
+        };
+      }
+      default:
+        throw new Error("Chat-first intent block type is invalid");
+    }
+  });
+}
+
+function recordValue(value: unknown, name: string): Record<string, unknown> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) throw new Error(`${name} is invalid`);
+  return value as Record<string, unknown>;
+}
+
+function arrayValue(value: unknown, name: string): unknown[] {
+  if (!Array.isArray(value)) throw new Error(`${name} is invalid`);
+  return value;
+}
+
+function nonEmptyString(value: unknown, name: string): string {
+  if (typeof value !== "string" || !value.trim()) throw new Error(`${name} is invalid`);
+  return value;
+}
+
+function booleanValue(value: unknown, name: string): boolean {
+  if (typeof value !== "boolean") throw new Error(`${name} is invalid`);
+  return value;
+}
+
+function safeNonNegativeInteger(value: unknown, name: string): number {
+  if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
+    throw new Error(`${name} is invalid`);
+  }
+  return value;
+}
+
+function chatFirstSubjectKind(value: unknown): "task" | "goal" | "capture" {
+  if (value === "task" || value === "goal" || value === "capture") return value;
+  throw new Error("chat-first question subject kind is invalid");
+}
+
 function findSelectedQuestionBlock(
   store: AgentStore,
   conversationId: string,
@@ -3127,6 +3469,8 @@ function journalTurnPayloadHash(value: Record<string, unknown>): string {
 
 function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
+  const isChatFirstMaterialization = typeof metadata.chatFirstIntentId === "string"
+    && metadata.chatFirstIntentId.length > 0;
   const backendMetadata = {
     ...metadata,
     ...(turn.contentBlocks.length > 0 ? { content_blocks: turn.contentBlocks } : {}),
@@ -3134,6 +3478,8 @@ function backendTurnPayload(turn: ConversationTurn): BackendTurnPayload {
   };
   const projectedText = turn.content.trim()
     ? turn.content
+    : isChatFirstMaterialization
+      ? ""
     : turn.role === "assistant"
       && turn.status === "completed"
       && (turn.contentBlocks.length > 0 || turn.resources.length > 0)
@@ -3162,6 +3508,18 @@ function boundedJournalRevision(revision: number): number {
 function backendTombstoneCode(turn: ConversationTurn): string | null {
   const payload = backendTurnPayload(turn);
   if (payload.text.trim()) return null;
+  const metadata = parseObjectJson(turn.metadataJson) as Record<string, unknown>;
+  if (
+    turn.role === "assistant"
+    && turn.status === "completed"
+    && typeof metadata.chatFirstIntentId === "string"
+    && metadata.chatFirstIntentId.length > 0
+    && turn.contentBlocks.length > 0
+  ) {
+    // The canonical structured blocks are the content. This must still use
+    // the normal reconciliation outbox, just without fabricating "Done.".
+    return null;
+  }
   if (turn.status === "failed") return "empty_failed_turn_cancelled";
   if (turn.status === "completed") return "empty_completed_turn_cancelled";
   return null;

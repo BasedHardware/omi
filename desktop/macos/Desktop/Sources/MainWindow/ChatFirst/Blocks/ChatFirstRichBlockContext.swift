@@ -9,14 +9,17 @@ struct ChatFirstRichBlockContext {
   let navigation: ChatFirstShellNavigation
   let tasksStore: TasksStore
   let chatProvider: ChatProvider
+  let promptMaterializationCoordinator: ChatFirstPromptMaterializationCoordinator
 
   init(
     navigation: ChatFirstShellNavigation,
     tasksStore: TasksStore = .shared,
-    chatProvider: ChatProvider
+    chatProvider: ChatProvider,
+    promptMaterializationCoordinator: ChatFirstPromptMaterializationCoordinator
   ) {
     self.navigation = navigation
     self.tasksStore = tasksStore
     self.chatProvider = chatProvider
+    self.promptMaterializationCoordinator = promptMaterializationCoordinator
   }
 }
