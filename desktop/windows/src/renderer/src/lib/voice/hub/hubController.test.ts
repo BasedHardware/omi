@@ -204,6 +204,10 @@ describe('HubController — warm-wait buffer', () => {
     expect(s.appended).toEqual([frame(1), frame(2)])
     expect(s.committed).toBe(1)
     expect(h.events.onCascadeHandoff).not.toHaveBeenCalled()
+    // The hub WON — the fail-open telemetry must NOT fire on the happy flush; it is
+    // reserved for the actual hub→cascade hand-off (guards against a telemetry leak
+    // that would inflate the degraded-fallback rate on every successful warm turn).
+    expect(trackEvent).not.toHaveBeenCalled()
   })
 
   it('hands the buffer to the cascade on the 1 s hubWarm timeout — the turn SURVIVES (not terminated, socket kept)', async () => {
