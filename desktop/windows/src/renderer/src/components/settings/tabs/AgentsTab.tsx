@@ -4,12 +4,12 @@
 // agent and completes a real ACP handshake, so a green check means the command
 // actually works — not just that a string was saved.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
-import type { CodingAgentId } from '../../../../../shared/types'
+import type { CodingAgentAuthStatus, CodingAgentId } from '../../../../../shared/types'
 
 type ExternalAgentId = Exclude<CodingAgentId, 'acp'>
 
@@ -45,12 +45,55 @@ const EXTERNAL_AGENT_GUIDES: Record<ExternalAgentId, AgentGuide> = {
 
 type TestState = { running: boolean; verdict?: 'ok' | 'failed'; detail?: string }
 
+type ClaudeAuthUi = { status: CodingAgentAuthStatus | null; busy: boolean; error?: string }
+
 export function AgentsTab(): React.JSX.Element {
   const { agents, refresh } = useCodingAgents()
   const [commands, setCommands] = useState<Partial<Record<ExternalAgentId, string>>>(
     () => getPreferences().agentCommands ?? {}
   )
   const [tests, setTests] = useState<Partial<Record<CodingAgentId, TestState>>>({})
+  const [claudeAuth, setClaudeAuth] = useState<ClaudeAuthUi>({ status: null, busy: false })
+
+  const refreshClaudeAuth = (): void => {
+    void window.omi
+      .codingAgentAuthStatus()
+      .then((status) => setClaudeAuth((a) => ({ ...a, status })))
+      .catch(() => {})
+  }
+
+  // Load the Claude Code sign-in state on mount, and re-check whenever a
+  // delegated task reports it needs auth (so the row flips to "Sign in" the
+  // moment the user's token is rejected mid-task).
+  useEffect(() => {
+    refreshClaudeAuth()
+    return window.omi.onCodingAgentEvent((event) => {
+      if (event.type === 'auth_required' && event.adapterId === 'acp') refreshClaudeAuth()
+    })
+  }, [])
+
+  const signInToClaude = (): void => {
+    setClaudeAuth((a) => ({ ...a, busy: true, error: undefined }))
+    setTests((t) => ({ ...t, acp: { running: false } }))
+    void window.omi
+      .codingAgentStartAuth()
+      .then((r) =>
+        setClaudeAuth({ status: r.status, busy: false, error: r.ok ? undefined : r.error })
+      )
+      .catch((e: Error) =>
+        setClaudeAuth((a) => ({ ...a, busy: false, error: e.message }))
+      )
+  }
+
+  const signOutOfClaude = (): void => {
+    void window.omi
+      .codingAgentSignOut()
+      .then((status) => {
+        setClaudeAuth({ status, busy: false })
+        setTests((t) => ({ ...t, acp: { running: false } }))
+      })
+      .catch(() => {})
+  }
 
   const saveCommand = (id: ExternalAgentId): void => {
     const trimmed = commands[id]?.trim()
@@ -66,12 +109,15 @@ export function AgentsTab(): React.JSX.Element {
     setTests((t) => ({ ...t, [id]: { running: true } }))
     void window.omi
       .codingAgentTest(id, getPreferences().agentCommands)
-      .then((r) =>
+      .then((r) => {
+        // A needs-auth verdict for Claude Code means the token is gone/expired —
+        // reflect it in the sign-in row rather than as a bare test failure.
+        if (r.needsAuth) refreshClaudeAuth()
         setTests((t) => ({
           ...t,
           [id]: { running: false, verdict: r.ok ? 'ok' : 'failed', detail: r.error }
         }))
-      )
+      })
       .catch((e: Error) =>
         setTests((t) => ({ ...t, [id]: { running: false, verdict: 'failed', detail: e.message } }))
       )
@@ -91,7 +137,7 @@ export function AgentsTab(): React.JSX.Element {
     )
   }
 
-  const claudeCode = agents.find((a) => a.id === 'acp')
+  const claudeConnected = claudeAuth.status?.connected ?? false
 
   return (
     <div>
@@ -105,20 +151,45 @@ export function AgentsTab(): React.JSX.Element {
       <SettingRow
         icon={Bot}
         title="Claude Code"
-        subtitle="Built in — no install needed. Signs in with your Claude account."
-        keywords="claude code anthropic coding agent builtin"
-        dot={claudeCode?.connected ? 'on' : 'off'}
+        subtitle={
+          claudeConnected
+            ? 'Built in — signed in with your Claude account.'
+            : 'Built in — no install needed. Sign in with your Claude account to use it.'
+        }
+        keywords="claude code anthropic coding agent builtin sign in login authenticate"
+        dot={claudeConnected ? 'on' : 'off'}
         control={
-          <button
-            onClick={() => runTest('acp')}
-            disabled={tests.acp?.running}
-            className="btn-ghost disabled:opacity-40"
-          >
-            {tests.acp?.running ? 'Testing…' : 'Test'}
-          </button>
+          claudeConnected ? (
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => runTest('acp')}
+                disabled={tests.acp?.running}
+                className="btn-ghost disabled:opacity-40"
+              >
+                {tests.acp?.running ? 'Testing…' : 'Test'}
+              </button>
+              <button onClick={signOutOfClaude} className="btn-ghost">
+                Disconnect
+              </button>
+            </div>
+          ) : (
+            <button
+              onClick={signInToClaude}
+              disabled={claudeAuth.busy || claudeAuth.status === null}
+              className="btn-ghost disabled:opacity-40"
+            >
+              {claudeAuth.busy ? 'Signing in…' : 'Sign in to Claude'}
+            </button>
+          )
         }
       >
-        {testLine('acp')}
+        {claudeAuth.busy && (
+          <div className="mt-2 text-sm text-text-tertiary">
+            Finish signing in in your browser, then come back here.
+          </div>
+        )}
+        {claudeAuth.error && <div className="mt-2 text-sm text-amber-400">{claudeAuth.error}</div>}
+        {claudeConnected && testLine('acp')}
       </SettingRow>
 
       {(Object.keys(EXTERNAL_AGENT_GUIDES) as ExternalAgentId[]).map((id) => {
