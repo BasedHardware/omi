@@ -12,9 +12,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest import mock
 
 from pr_metadata import load_from_api
-from pr_preflight import select_checks
+from pr_preflight import changed_files, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -59,6 +60,22 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_changed_files_keeps_deleted_paths_for_baseline_ratchets(self) -> None:
+        with mock.patch(
+            "pr_preflight.run_git",
+            return_value="desktop/macos/Backend-Rust/src/routes/chat_completions.rs",
+        ) as run_git:
+            files = changed_files(REPO_ROOT, "origin/main", "HEAD")
+
+        self.assertEqual(files, ["desktop/macos/Backend-Rust/src/routes/chat_completions.rs"])
+        run_git.assert_called_once_with(
+            REPO_ROOT,
+            "diff",
+            "--name-only",
+            "--diff-filter=ACMRD",
+            "origin/main...HEAD",
+        )
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
