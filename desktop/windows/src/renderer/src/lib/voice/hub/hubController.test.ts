@@ -180,6 +180,13 @@ async function warmed(h: Harness): Promise<void> {
   await p
 }
 
+/** Fail the in-flight (connecting, never-connected) warm attempt and let the reject
+ *  settle so the controller's `warming` clears before the next re-warm fires. */
+async function failBeforeConnect(h: Harness, closeCode = 1008): Promise<void> {
+  h.getSession().fail(`websocket closed (${closeCode})`, true, closeCode)
+  await tick()
+}
+
 beforeEach(() => {
   vi.mocked(trackEvent).mockClear()
 })
@@ -397,13 +404,6 @@ describe('HubController — connect/error surface (A7c seam)', () => {
 })
 
 describe('HubController — A7c reconnect policy (B: strike-bounded re-warm)', () => {
-  // Fail the in-flight (connecting, never-connected) warm attempt and let the reject
-  // settle so the controller's `warming` clears before the next re-warm fires.
-  async function failBeforeConnect(h: Harness, closeCode = 1008): Promise<void> {
-    h.getSession().fail(`websocket closed (${closeCode})`, true, closeCode)
-    await tick()
-  }
-
   it('a genuine failure arms a backoff and re-warms itself so the NEXT press is warm', async () => {
     const h = harness()
     await warmed(h) // connected at now=1000
@@ -500,5 +500,52 @@ describe('HubController — A7c reconnect policy (B: strike-bounded re-warm)', (
       reWarms++
     }
     expect(reWarms).toBe(4)
+  })
+})
+
+describe('HubController — A7c reconnect policy (C: idle-teardown survival)', () => {
+  it('an expected idle-close proactively re-warms so isAvailable() is true BEFORE the next press', async () => {
+    const h = harness()
+    await warmed(h) // connected at now=1000
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS + 1 // long-lived, no active turn
+    h.getSession().fail('websocket closed (1008)', true, 1008) // → expected_idle_teardown
+
+    // The socket is gone, but the controller has armed a proactive re-warm (no press).
+    expect(h.controller.isAvailable()).toBe(false)
+    expect(h.pendingReconnect()).toBe(true)
+
+    h.fireReconnect()
+    await tick()
+    // A session object now exists again BEFORE any press → selectPttRoute will pick the
+    // warm lane (hubWarmWait), not a cold cascade.
+    expect(h.controller.isAvailable()).toBe(true)
+    h.getSession().connect()
+    expect(h.controller.isWarm()).toBe(true)
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+  })
+
+  it('an idle teardown re-warms WITHOUT spending a strike (the failure budget stays full)', async () => {
+    const h = harness()
+    await warmed(h) // connected at now=1000
+    // aliveFor EXACTLY the threshold: an idle teardown (classify uses >=), but the
+    // >60 s strike RESET (uses strict >) does NOT fire — so this isolates "idle spends
+    // no strike" from "a long-lived socket resets the budget".
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS
+    h.getSession().fail('websocket closed (1008)', true, 1008)
+    expect(h.pendingReconnect()).toBe(true)
+    h.fireReconnect()
+    await tick() // session connecting (never connected → no reset)
+
+    // The idle close spent no strike, so the full failure budget of 5 remains — 5 fast
+    // failures each still re-warm (would be only 4 if the idle close had taken a strike).
+    let reWarms = 0
+    for (let i = 0; i < 12; i++) {
+      await failBeforeConnect(h)
+      if (!h.pendingReconnect()) break
+      h.fireReconnect()
+      await tick()
+      reWarms++
+    }
+    expect(reWarms).toBe(5)
   })
 })

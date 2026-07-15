@@ -49,7 +49,12 @@ import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voice
 import { GeminiHubSession } from './geminiHubSession'
 import { OpenAiHubSession } from './openaiHubSession'
 import type { HubEventIdentity, HubSession, HubSessionEvents } from './hubSession'
-import { classifyHubClose, HUB_IDLE_TEARDOWN_THRESHOLD_MS, type HubCloseCategory } from './hubClose'
+import {
+  classifyHubClose,
+  consumesStrike,
+  HUB_IDLE_TEARDOWN_THRESHOLD_MS,
+  type HubCloseCategory
+} from './hubClose'
 
 // MARK: - Public surface
 
@@ -452,18 +457,21 @@ export class HubController {
     this.scheduleReconnectForClose(category, aliveForMs)
   }
 
-  // MARK: A7c reconnect policy (strike-bounded re-warm)
+  // MARK: A7c reconnect policy (strike-bounded re-warm + idle-teardown survival)
 
-  /** Decide whether/how to re-warm after a socket close. A genuine FAILURE re-warms
-   *  bounded by the strike budget so a dead endpoint (revoked token, provider outage)
-   *  isn't hammered. A socket that survived past the idle window proved the endpoint
-   *  works, so it refreshes the budget (Mac: aliveFor>60 → strikes=0). An EXPECTED idle
-   *  teardown is left to A7c item C (proactive idle re-warm). */
+  /** Decide whether/how to re-warm after a socket close. A socket that survived past
+   *  the idle window proved the endpoint works, so it refreshes the strike budget
+   *  (Mac: aliveFor>60 → strikes=0). A genuine FAILURE re-warms bounded by the budget
+   *  so a dead endpoint (revoked token, provider outage) isn't hammered (item B). An
+   *  EXPECTED idle teardown (Gemini ~2.5 min 1008 with no active turn) re-warms WITHOUT
+   *  spending a strike — an idle user's socket keeps coming back warm so the next press
+   *  takes the warm lane (`hubWarmWait`), not a cold cascade (item C). */
   private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
-    if (category === 'expected_idle_teardown') return
     if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) this.reconnectStrikes = 0
-    if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) return
-    this.reconnectStrikes += 1
+    if (consumesStrike(category)) {
+      if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) return
+      this.reconnectStrikes += 1
+    }
     this.scheduleReWarm()
   }
 
