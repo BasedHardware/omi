@@ -234,6 +234,12 @@ TASK_INTELLIGENCE_ATTRIBUTION_TOTAL = Counter(
     ['event', 'subject_kind', 'code'],
 )
 
+CHAT_FIRST_PROACTIVE_TOTAL = Counter(
+    'chat_first_proactive_total',
+    'Chat-first proactive engine activity with no user content',
+    ['event', 'source'],
+)
+
 AUTH_FLOW_EVENTS = Counter(
     'auth_flow_events_total',
     'Auth flow events by provider, stage, outcome, and sanitized failure class',

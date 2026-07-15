@@ -5543,6 +5543,48 @@
         "title": "CandidateSubjectKind",
         "type": "string"
       },
+      "CaptureLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "conversation_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Conversation Id",
+            "type": "string"
+          },
+          "moment_timestamp_ms": {
+            "anyOf": [
+              {
+                "minimum": 0.0,
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Moment Timestamp Ms"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "captureLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "conversation_id",
+          "summary"
+        ],
+        "title": "CaptureLinkSpec",
+        "type": "object"
+      },
       "CategoryEnum": {
         "enum": [
           "personal",
@@ -5682,6 +5724,33 @@
           "data_points"
         ],
         "title": "ChartDataset",
+        "type": "object"
+      },
+      "ChatFirstSubject": {
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Id",
+            "type": "string"
+          },
+          "kind": {
+            "enum": [
+              "task",
+              "goal",
+              "capture"
+            ],
+            "title": "Kind",
+            "type": "string"
+          }
+        },
+        "required": [
+          "kind",
+          "id"
+        ],
+        "title": "ChatFirstSubject",
         "type": "object"
       },
       "ChatMessageCountResponse": {
@@ -8464,6 +8533,84 @@
           "default_app"
         ],
         "title": "DefaultTaskIntegrationResponse",
+        "type": "object"
+      },
+      "DeferralCreateRequest": {
+        "additionalProperties": false,
+        "description": "The idempotent server receiver for the kernel-owned deferral outbox.",
+        "properties": {
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "question": {
+            "$ref": "#/components/schemas/QuestionCardSpec"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence",
+          "continuity_key",
+          "subject",
+          "question"
+        ],
+        "title": "DeferralCreateRequest",
+        "type": "object"
+      },
+      "DeferralReceipt": {
+        "additionalProperties": false,
+        "properties": {
+          "deferral_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Deferral Id",
+            "type": "string"
+          },
+          "due_at": {
+            "format": "date-time",
+            "title": "Due At",
+            "type": "string"
+          },
+          "state": {
+            "enum": [
+              "pending",
+              "released"
+            ],
+            "title": "State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "deferral_id",
+          "due_at",
+          "state"
+        ],
+        "title": "DeferralReceipt",
         "type": "object"
       },
       "DeleteAccountRequest": {
@@ -11309,6 +11456,36 @@
         "title": "GoalLifecycleRequest",
         "type": "object"
       },
+      "GoalLinkSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "goal_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Goal Id",
+            "type": "string"
+          },
+          "summary": {
+            "maxLength": 200,
+            "minLength": 1,
+            "title": "Summary",
+            "type": "string"
+          },
+          "type": {
+            "const": "goalLink",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "goal_id",
+          "summary"
+        ],
+        "title": "GoalLinkSpec",
+        "type": "object"
+      },
       "GoalMetric": {
         "additionalProperties": false,
         "properties": {
@@ -12421,6 +12598,62 @@
           "period_days"
         ],
         "title": "LlmUsageResponse",
+        "type": "object"
+      },
+      "MaterializePromptsRequest": {
+        "additionalProperties": false,
+        "properties": {
+          "control_generation": {
+            "minimum": 0.0,
+            "title": "Control Generation",
+            "type": "integer"
+          },
+          "owner_fence": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Owner Fence",
+            "type": "string"
+          },
+          "receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveMaterializationReceipt"
+            },
+            "maxItems": 16,
+            "title": "Receipts",
+            "type": "array"
+          },
+          "source_surface": {
+            "const": "main_chat",
+            "title": "Source Surface",
+            "type": "string"
+          },
+          "window_foreground": {
+            "default": false,
+            "title": "Window Foreground",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "source_surface",
+          "control_generation",
+          "owner_fence"
+        ],
+        "title": "MaterializePromptsRequest",
+        "type": "object"
+      },
+      "MaterializePromptsResponse": {
+        "additionalProperties": false,
+        "properties": {
+          "intents": {
+            "items": {
+              "$ref": "#/components/schemas/ProactiveIntent"
+            },
+            "title": "Intents",
+            "type": "array"
+          }
+        },
+        "title": "MaterializePromptsResponse",
         "type": "object"
       },
       "McpAddServerResponse": {
@@ -15467,6 +15700,158 @@
         "title": "PrivateCloudSyncResponse",
         "type": "object"
       },
+      "ProactiveIntent": {
+        "additionalProperties": false,
+        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains ready until that kernel has committed and acknowledged\nits stable ``intent_id``.",
+        "properties": {
+          "account_generation": {
+            "minimum": 0.0,
+            "title": "Account Generation",
+            "type": "integer"
+          },
+          "blocks": {
+            "items": {
+              "discriminator": {
+                "mapping": {
+                  "captureLink": "#/components/schemas/CaptureLinkSpec",
+                  "goalLink": "#/components/schemas/GoalLinkSpec",
+                  "questionCard": "#/components/schemas/QuestionCardSpec",
+                  "taskCard": "#/components/schemas/TaskCardSpec"
+                },
+                "propertyName": "type"
+              },
+              "oneOf": [
+                {
+                  "$ref": "#/components/schemas/QuestionCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/TaskCardSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/GoalLinkSpec"
+                },
+                {
+                  "$ref": "#/components/schemas/CaptureLinkSpec"
+                }
+              ]
+            },
+            "maxItems": 8,
+            "minItems": 1,
+            "title": "Blocks",
+            "type": "array"
+          },
+          "continuity_key": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Continuity Key",
+            "type": "string"
+          },
+          "created_at": {
+            "format": "date-time",
+            "title": "Created At",
+            "type": "string"
+          },
+          "delivered_at": {
+            "anyOf": [
+              {
+                "format": "date-time",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Delivered At"
+          },
+          "delivery_state": {
+            "default": "ready",
+            "enum": [
+              "ready",
+              "delivered"
+            ],
+            "title": "Delivery State",
+            "type": "string"
+          },
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "materialization_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Materialization Receipt Id"
+          },
+          "source": {
+            "enum": [
+              "daily_opener",
+              "capture_arrival",
+              "deferral_reraise",
+              "agent_judgment"
+            ],
+            "title": "Source",
+            "type": "string"
+          },
+          "subject": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ChatFirstSubject"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          }
+        },
+        "required": [
+          "intent_id",
+          "continuity_key",
+          "account_generation",
+          "source",
+          "blocks",
+          "created_at"
+        ],
+        "title": "ProactiveIntent",
+        "type": "object"
+      },
+      "ProactiveMaterializationReceipt": {
+        "additionalProperties": false,
+        "description": "Content-free receipt emitted only after the local journal commits.",
+        "properties": {
+          "intent_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Intent Id",
+            "type": "string"
+          },
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          }
+        },
+        "required": [
+          "intent_id",
+          "receipt_id"
+        ],
+        "title": "ProactiveMaterializationReceipt",
+        "type": "object"
+      },
       "ProactiveNotification": {
         "properties": {
           "scopes": {
@@ -15662,6 +16047,86 @@
           "support_email"
         ],
         "title": "PublicFairUseCaseStatusResponse",
+        "type": "object"
+      },
+      "QuestionCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "options": {
+            "items": {
+              "$ref": "#/components/schemas/QuestionOption"
+            },
+            "maxItems": 4,
+            "minItems": 1,
+            "title": "Options",
+            "type": "array"
+          },
+          "question_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Question Id",
+            "type": "string"
+          },
+          "subject": {
+            "$ref": "#/components/schemas/ChatFirstSubject"
+          },
+          "text": {
+            "maxLength": 300,
+            "minLength": 1,
+            "title": "Text",
+            "type": "string"
+          },
+          "type": {
+            "const": "questionCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "question_id",
+          "text",
+          "subject",
+          "options"
+        ],
+        "title": "QuestionCardSpec",
+        "type": "object"
+      },
+      "QuestionOption": {
+        "additionalProperties": false,
+        "properties": {
+          "defer": {
+            "default": false,
+            "title": "Defer",
+            "type": "boolean"
+          },
+          "label": {
+            "maxLength": 80,
+            "minLength": 1,
+            "title": "Label",
+            "type": "string"
+          },
+          "option_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Option Id",
+            "type": "string"
+          },
+          "prepared_answer": {
+            "maxLength": 500,
+            "minLength": 1,
+            "title": "Prepared Answer",
+            "type": "string"
+          }
+        },
+        "required": [
+          "option_id",
+          "label",
+          "prepared_answer"
+        ],
+        "title": "QuestionOption",
         "type": "object"
       },
       "RateMessageRequest": {
@@ -18698,6 +19163,29 @@
             "$ref": "#/components/schemas/TaskSupersedeCandidate"
           }
         ]
+      },
+      "TaskCardSpec": {
+        "additionalProperties": false,
+        "properties": {
+          "task_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Task Id",
+            "type": "string"
+          },
+          "type": {
+            "const": "taskCard",
+            "title": "Type",
+            "type": "string"
+          }
+        },
+        "required": [
+          "type",
+          "task_id"
+        ],
+        "title": "TaskCardSpec",
+        "type": "object"
       },
       "TaskChangePayload": {
         "additionalProperties": false,
@@ -30242,6 +30730,182 @@
         "summary": "Reject Candidate",
         "tags": [
           "candidates"
+        ]
+      }
+    },
+    "/v1/chat/deferrals": {
+      "post": {
+        "description": "Receive one idempotent kernel-outbox deferral without touching Chat state.",
+        "operationId": "record_chat_deferral_v1_chat_deferrals_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/DeferralCreateRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeferralReceipt"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Record Chat Deferral",
+        "tags": [
+          "chat-first"
+        ]
+      }
+    },
+    "/v1/chat/materialize-prompts": {
+      "post": {
+        "description": "Fetch ready intents and accept kernel receipts; never writes a Chat row.",
+        "operationId": "materialize_prompts_v1_chat_materialize_prompts_post",
+        "parameters": [
+          {
+            "in": "header",
+            "name": "authorization",
+            "required": false,
+            "schema": {
+              "title": "Authorization",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Platform",
+            "required": false,
+            "schema": {
+              "title": "X-App-Platform",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-Device-Id-Hash",
+            "required": false,
+            "schema": {
+              "title": "X-Device-Id-Hash",
+              "type": "string"
+            }
+          },
+          {
+            "in": "header",
+            "name": "X-App-Version",
+            "required": false,
+            "schema": {
+              "title": "X-App-Version",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/MaterializePromptsRequest"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/MaterializePromptsResponse"
+                }
+              }
+            },
+            "description": "Successful Response"
+          },
+          "401": {
+            "$ref": "#/components/responses/Error401"
+          },
+          "422": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            },
+            "description": "Validation Error"
+          }
+        },
+        "security": [
+          {
+            "firebaseBearer": []
+          }
+        ],
+        "summary": "Materialize Prompts",
+        "tags": [
+          "chat-first"
         ]
       }
     },
