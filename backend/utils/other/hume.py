@@ -148,7 +148,10 @@ class HumeJobResponseModel:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HumeJobResponseModel":
-        model = cls(data["job_id"])
+        # Read job_id defensively: this runs on the success (HTTP 200) path from resp.json(),
+        # and a response missing job_id must not raise KeyError out of the caller while every
+        # error status is already turned into an error dict. id is Optional[str].
+        model = cls(data.get("job_id"))
         return model
 
 
