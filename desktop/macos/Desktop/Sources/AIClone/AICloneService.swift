@@ -89,18 +89,38 @@ final class AICloneService: ObservableObject {
     !(storedAccessToken() ?? "").isEmpty
   }
 
+  /// UserDefaults key used for the Beeper token on non-production bundles.
+  /// The login Keychain's item ACL is bound to the code signature, so ad-hoc
+  /// `omi-*` test builds (re-signed every rebuild) cannot silently read a token
+  /// written by a prior build and would otherwise prompt for the Keychain
+  /// password. The token is a local, revocable Beeper access token, so on
+  /// non-production builds it lives in UserDefaults (stable across rebuilds, no
+  /// prompt); production (stable Developer ID signature) keeps it in the
+  /// Keychain.
+  static let tokenDefaultsKey = "aiCloneBeeperAccessToken"
+  private static var usesKeychainForToken: Bool { AppBuild.isProductionBundle }
+
   func storedAccessToken() -> String? {
-    DesktopKeychainStore.string(service: Self.tokenService, account: Self.tokenAccount)
+    if Self.usesKeychainForToken {
+      return DesktopKeychainStore.string(service: Self.tokenService, account: Self.tokenAccount)
+    }
+    let value = UserDefaults.standard.string(forKey: Self.tokenDefaultsKey)
+    return (value?.isEmpty ?? true) ? nil : value
   }
 
   func saveAccessToken(_ token: String) {
     let trimmed = token.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
-    _ = DesktopKeychainStore.setString(trimmed, service: Self.tokenService, account: Self.tokenAccount)
+    if Self.usesKeychainForToken {
+      _ = DesktopKeychainStore.setString(trimmed, service: Self.tokenService, account: Self.tokenAccount)
+    } else {
+      UserDefaults.standard.set(trimmed, forKey: Self.tokenDefaultsKey)
+    }
   }
 
   func disconnectAndForgetToken() {
     stopListening()
+    UserDefaults.standard.removeObject(forKey: Self.tokenDefaultsKey)
     DesktopKeychainStore.delete(service: Self.tokenService, account: Self.tokenAccount)
     connectionState = .disconnected
     chats = []
