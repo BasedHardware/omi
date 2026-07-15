@@ -67,6 +67,7 @@ import type {
   AiUserProfileRecord,
   FocusSessionInput,
   FocusSessionRecord,
+  MemoryInput,
   TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
@@ -597,6 +598,21 @@ function get(): Database.Database {
       updated_at INTEGER NOT NULL,
       PRIMARY KEY (source, item_id)
     );
+
+    CREATE TABLE IF NOT EXISTS memories (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      content TEXT NOT NULL,
+      category TEXT NOT NULL,
+      source_app TEXT NOT NULL DEFAULT '',
+      window_title TEXT NOT NULL DEFAULT '',
+      context_summary TEXT NOT NULL DEFAULT '',
+      confidence REAL,
+      screenshot_id INTEGER,
+      backend_id TEXT,
+      backend_synced INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
   `)
   // PR8 LiveNotes: transcription_sessions + live_notes (with the cascading FK).
   // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
@@ -1923,6 +1939,49 @@ export function markFocusSessionSynced(id: number, backendId: string): void {
   get()
     .prepare('UPDATE focus_sessions SET backend_synced = 1, backend_id = ? WHERE id = ?')
     .run(backendId, id)
+}
+
+// --- Memories (screen-extracted) ---
+// One row per accepted memory-extraction (confidence-gated, hard-capped at 1 per
+// screenshot). Local-first: inserted here immediately, then dual-written to the
+// backend `POST /v3/memories`. The table also SOURCES the extractor's in-prompt
+// dedup (recentMemories) — a deliberate Windows choice over Mac's in-memory ring,
+// so the "don't re-extract these" list survives an app restart.
+
+export function insertMemory(rec: MemoryInput): number {
+  const info = get()
+    .prepare(
+      `INSERT INTO memories
+         (content, category, source_app, window_title, context_summary, confidence, screenshot_id, backend_id, backend_synced, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      rec.content,
+      rec.category,
+      rec.sourceApp ?? '',
+      rec.windowTitle ?? '',
+      rec.contextSummary ?? '',
+      rec.confidence ?? null,
+      rec.screenshotId ?? null,
+      rec.backendId ?? null,
+      rec.backendSynced ? 1 : 0,
+      rec.createdAt
+    )
+  return info.lastInsertRowid as number
+}
+
+export function markMemorySynced(id: number, backendId: string): void {
+  get()
+    .prepare('UPDATE memories SET backend_synced = 1, backend_id = ? WHERE id = ?')
+    .run(backendId, id)
+}
+
+// The extractor's dedup source: the most-recent memories, newest first, capped.
+// Only content + category leave this function — that is all the prompt lists.
+export function recentMemories(limit = 20): { content: string; category: string }[] {
+  return get()
+    .prepare('SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?')
+    .all(limit) as { content: string; category: string }[]
 }
 
 // --- Task embeddings (semantic ranking) ---
