@@ -32,13 +32,17 @@ const h = vi.hoisted(() => {
     syncTaskActionItems: vi.fn(() => ({ skipped: 0, adopted: 0, inserted: 0, updated: 0 })),
     hardDeleteAbsentTasks: vi.fn((): number[] => []),
     getAppMeta: vi.fn((): string | null => '1'), // full-sync flag set → skip full sync by default
-    setAppMeta: vi.fn()
+    setAppMeta: vi.fn(),
+    // `tasks:changed` broadcast spy — a fake window's webContents.send.
+    send: vi.fn()
   }
 })
 
 vi.mock('electron', () => ({
   net: { fetch: h.netFetch },
-  BrowserWindow: { getAllWindows: () => [] }
+  BrowserWindow: {
+    getAllWindows: () => [{ isDestroyed: () => false, webContents: { send: h.send } }]
+  }
 }))
 
 vi.mock('../ipc/db', () => ({
@@ -146,6 +150,24 @@ describe('hydration (local-first)', () => {
 
     expect(h.netFetch).not.toHaveBeenCalled()
     expect(h.syncTaskActionItems).not.toHaveBeenCalled()
+  })
+
+  // Regression: a hydrate that changes nothing MUST NOT emit `tasks:changed`. The
+  // renderer re-reads on that event, and every read kicks another hydrate — an
+  // unconditional broadcast turns steady state into an unbounded backend-poll loop.
+  it('a no-op hydrate stays silent (no tasks:changed broadcast)', async () => {
+    const { engine } = await freshEngine()
+    // Defaults: syncTaskActionItems → all-zero counts, hardDeleteAbsentTasks → [].
+    await engine.hydrateIncomplete()
+    expect(h.syncTaskActionItems).toHaveBeenCalledTimes(1)
+    expect(h.send).not.toHaveBeenCalledWith('tasks:changed')
+  })
+
+  it('broadcasts tasks:changed when the sync actually changes a row', async () => {
+    h.syncTaskActionItems.mockReturnValue({ skipped: 0, adopted: 0, inserted: 1, updated: 0 })
+    const { engine } = await freshEngine()
+    await engine.hydrateIncomplete()
+    expect(h.send).toHaveBeenCalledWith('tasks:changed')
   })
 })
 

@@ -376,15 +376,19 @@ async function doHydrateIncomplete(): Promise<void> {
     const items = await fetchAll(session, false, epoch, external)
     if (getSessionEpoch() !== epoch) return
     const now = Date.now()
-    syncTaskActionItems(
+    const res = syncTaskActionItems(
       items.map((i) => mapBackendItem(i, now)),
       { now }
     )
+    // maybeReconcile broadcasts on its own iff it hard-deletes something. Here we
+    // broadcast only when the sync actually changed a row — a no-op hydrate MUST
+    // stay silent, else the renderer (which re-reads on `tasks:changed`, and every
+    // read kicks another hydrate) spins in an unbounded backend-polling loop.
     maybeReconcile(
       items.map((i) => i.id),
       now
     )
-    broadcastTasksChanged()
+    if (res.inserted + res.updated + res.adopted > 0) broadcastTasksChanged()
   } catch (e) {
     console.warn('[tasks] hydrateIncomplete failed:', errName(e))
   }
@@ -409,11 +413,13 @@ async function doHydrateCompleted(): Promise<void> {
     const items = await fetchAll(session, true, epoch, external)
     if (getSessionEpoch() !== epoch) return
     const now = Date.now()
-    syncTaskActionItems(
+    const res = syncTaskActionItems(
       items.map((i) => mapBackendItem(i, now)),
       { now }
     )
-    broadcastTasksChanged()
+    // Broadcast only on an actual change — see doHydrateIncomplete for why a silent
+    // no-op hydrate is mandatory (renderer re-read → hydrate → broadcast loop).
+    if (res.inserted + res.updated + res.adopted > 0) broadcastTasksChanged()
   } catch (e) {
     console.warn('[tasks] hydrateCompleted failed:', errName(e))
   }

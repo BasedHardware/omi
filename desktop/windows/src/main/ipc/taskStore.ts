@@ -367,15 +367,18 @@ function markSyncedOn(
         `UPDATE ${table} SET backend_id = ?, backend_synced = 1, updated_at = ? WHERE id = ?`
       ).run(backendId, now, localId)
       return { merged: false, keptId: localId }
-    } catch {
-      // Lost a race: another row grabbed backendId between the SELECT and the UPDATE.
-      // Fold this freshly-synced duplicate into the canonical row.
+    } catch (e) {
+      // Expected only as the UNIQUE-constraint race: another row grabbed backendId
+      // between the SELECT and the UPDATE. Fold this freshly-synced duplicate into
+      // the canonical row. If NO other row holds backendId, the error was something
+      // else entirely — never delete this row on an unknown failure (silent task
+      // loss); re-throw and let the transaction roll back.
       const winner = d
         .prepare(`SELECT id FROM ${table} WHERE backend_id = ? AND id != ?`)
         .get(backendId, localId) as { id: number } | undefined
-      const keptId = winner?.id ?? localId
+      if (!winner) throw e
       d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(localId)
-      return { merged: true, keptId }
+      return { merged: true, keptId: winner.id }
     }
   })
 }
