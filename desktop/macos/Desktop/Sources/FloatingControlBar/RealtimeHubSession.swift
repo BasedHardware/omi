@@ -137,6 +137,12 @@ final class RealtimeHubSession: NSObject {
 
   private var isOpen = false
   private var terminated = false
+#if DEBUG
+  // The hermetic local-profile harness intentionally has no network socket. Its
+  // explicit readiness seam is a successful local transport boundary, not a
+  // disconnected production session.
+  private var acceptsTestingTransport = false
+#endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
   private var pendingAudio: [Data] = []
@@ -376,7 +382,10 @@ final class RealtimeHubSession: NSObject {
   }
 
   func markReadyForTesting() {
-    q.async { [weak self] in self?.markReady() }
+    q.async { [weak self] in
+      self?.acceptsTestingTransport = true
+      self?.markReady()
+    }
   }
 
   func seedOpenAIIdentityMapsForTesting(
@@ -612,7 +621,11 @@ final class RealtimeHubSession: NSObject {
         self.openAIResponseIdentities.removeAll()
         self.openAIPendingInputIdentities.removeAll()
         self.openAIInputItemIdentities.removeAll()
-        self.send(json: ["type": "input_audio_buffer.clear"])
+        // A pre-connect cancellation has no provider buffer to clear. Sending on
+        // the absent transport would terminalize a session that may still connect.
+        if self.isOpen {
+          self.send(json: ["type": "input_audio_buffer.clear"])
+        }
       case .gemini:
         self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
@@ -1348,6 +1361,12 @@ final class RealtimeHubSession: NSObject {
       failSend(RealtimeHubSessionSendError.encodingFailed, completion: completion)
       return
     }
+#if DEBUG
+    if acceptsTestingTransport {
+      completion?(nil)
+      return
+    }
+#endif
     if usesRawWS {
       guard let rawWS else {
         failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
