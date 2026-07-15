@@ -1688,6 +1688,173 @@ export type TaskEmbeddingRecord = {
   updatedAt: number
 }
 
+// --- Track 3: Local task storage (action_items + staged_tasks) ---
+// Faithful port of macOS ActionItemStorage + StagedTaskStorage. The DDL and CRUD
+// live in src/main/ipc/taskStore.ts (driver-agnostic) so production and the
+// node:sqlite tests run byte-identical SQL. All timestamps are epoch-ms integers
+// (Windows convention; Mac stores DATETIME). `relevanceScore` is lower = more
+// important (1 = top). The 3072-dim Float32 embedding BLOB is NOT surfaced on the
+// record — it is read only via the dedicated getAll*Embeddings accessors.
+
+/** Who deleted a task. Mac stores free text; these are the values it emits. */
+export type TaskDeletedBy = 'user' | 'ai_dedup' | 'staged'
+
+/** One local action item (todo/task). Every column except `embedding` is mapped. */
+export type ActionItemRecord = {
+  id: number
+  backendId: string | null
+  backendSynced: boolean
+  description: string
+  completed: boolean
+  deleted: boolean
+  deletedBy: string | null
+  source: string | null // screenshot | conversation | omi | manual | recurring
+  conversationId: string | null
+  priority: string | null // high | medium | low
+  category: string | null
+  tags: string[] // from tags_json
+  dueAt: number | null // epoch ms
+  screenshotId: number | null // rewind_frames.id (no FK; frames may be pruned)
+  confidence: number | null
+  sourceApp: string | null
+  windowTitle: string | null
+  contextSummary: string | null
+  currentActivity: string | null
+  metadataJson: string | null
+  relevanceScore: number | null
+  scoredAt: number | null // epoch ms
+  fromStaged: boolean
+  sortOrder: number | null
+  indentLevel: number | null
+  createdAt: number // epoch ms
+  updatedAt: number // epoch ms
+}
+
+/** Insert input for a locally-extracted action item. `backendSynced` is forced to
+ *  false by insertLocalActionItem; optional fields default to null/0/false. */
+export type ActionItemInput = {
+  backendId?: string | null
+  backendSynced?: boolean
+  description: string
+  completed?: boolean
+  deleted?: boolean
+  deletedBy?: string | null
+  source?: string | null
+  conversationId?: string | null
+  priority?: string | null
+  category?: string | null
+  tags?: string[]
+  dueAt?: number | null
+  screenshotId?: number | null
+  confidence?: number | null
+  sourceApp?: string | null
+  windowTitle?: string | null
+  contextSummary?: string | null
+  currentActivity?: string | null
+  metadataJson?: string | null
+  embedding?: Float32Array | null
+  relevanceScore?: number | null
+  scoredAt?: number | null
+  fromStaged?: boolean
+  sortOrder?: number | null
+  indentLevel?: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** One staged task awaiting promotion to action_items. Same shape as
+ *  ActionItemRecord minus the promotion/ordering fields (fromStaged, sortOrder,
+ *  indentLevel), mirroring Mac's StagedTaskRecord. */
+export type StagedTaskRecord = {
+  id: number
+  backendId: string | null
+  backendSynced: boolean
+  description: string
+  completed: boolean
+  deleted: boolean
+  deletedBy: string | null
+  source: string | null
+  conversationId: string | null
+  priority: string | null
+  category: string | null
+  tags: string[]
+  dueAt: number | null
+  screenshotId: number | null
+  confidence: number | null
+  sourceApp: string | null
+  windowTitle: string | null
+  contextSummary: string | null
+  currentActivity: string | null
+  metadataJson: string | null
+  relevanceScore: number | null
+  scoredAt: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** Insert input for a staged task. `backendSynced` forced false by insertLocalStagedTask. */
+export type StagedTaskInput = {
+  backendId?: string | null
+  backendSynced?: boolean
+  description: string
+  completed?: boolean
+  deleted?: boolean
+  deletedBy?: string | null
+  source?: string | null
+  conversationId?: string | null
+  priority?: string | null
+  category?: string | null
+  tags?: string[]
+  dueAt?: number | null
+  screenshotId?: number | null
+  confidence?: number | null
+  sourceApp?: string | null
+  windowTitle?: string | null
+  contextSummary?: string | null
+  currentActivity?: string | null
+  metadataJson?: string | null
+  embedding?: Float32Array | null
+  relevanceScore?: number | null
+  scoredAt?: number | null
+  createdAt: number
+  updatedAt: number
+}
+
+/** An incoming backend task row for syncTaskActionItems (the pull/upsert). Mirrors
+ *  Mac's TaskActionItem sync payload: `backendId` is the server id (item.id). */
+export type SyncActionItem = {
+  backendId: string
+  description: string
+  completed: boolean
+  deleted?: boolean | null
+  deletedBy?: string | null
+  source?: string | null
+  conversationId?: string | null
+  priority?: string | null
+  category?: string | null
+  tags?: string[]
+  dueAt?: number | null
+  sourceApp?: string | null
+  windowTitle?: string | null
+  metadataJson?: string | null
+  relevanceScore?: number | null
+  sortOrder?: number | null
+  indentLevel?: number | null
+  fromStaged?: boolean | null
+  createdAt: number
+  updatedAt?: number | null
+}
+
+/** Result of a defensive markSynced: `merged` = a duplicate backend_id already
+ *  existed and the incoming row was folded into it; `keptId` = the surviving row. */
+export type MarkSyncedResult = { merged: boolean; keptId: number }
+
+/** {localId, embedding} pair for loading an in-memory embedding index. */
+export type TaskEmbeddingRow = { id: number; embedding: Float32Array }
+
+/** One (backendId, newPosition) re-rank instruction from the scoring service. */
+export type TaskRerank = { backendId: string; newPosition: number }
+
 // --- Meeting detection (Phase 5) ---
 export type MeetingMode = 'off' | 'ask' | 'auto'
 

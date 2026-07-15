@@ -67,8 +67,10 @@ const WIPE_EXEMPT = new Set<string>([
 function tablesDeclaredInSource(): string[] {
   // liveNotesStore.ts holds the PR8 LiveNotes DDL (transcription_sessions +
   // live_notes) that db.ts execs via LIVE_NOTES_SCHEMA — scan it too so those
-  // tables are still required in USER_DATA_TABLES by the drift guard.
-  const src = ['./db.ts', './dbMigrations.ts', './liveNotesStore.ts']
+  // tables are still required in USER_DATA_TABLES by the drift guard. taskStore.ts
+  // holds the Track 3 task DDL (action_items + staged_tasks) execed via
+  // TASK_TABLES_SCHEMA — same reason.
+  const src = ['./db.ts', './dbMigrations.ts', './liveNotesStore.ts', './taskStore.ts']
     .map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))
     .join('\n')
   const names = new Set<string>()
@@ -100,7 +102,9 @@ describe('USER_DATA_TABLES covers the whole schema (sign-out leak guard)', () =>
       'local_conversation',
       'ai_user_profiles',
       'focus_sessions',
-      'task_embeddings'
+      'task_embeddings',
+      'action_items',
+      'staged_tasks'
     ]) {
       expect(tables, `schema should contain ${t}`).toContain(t)
     }
