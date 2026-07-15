@@ -41,6 +41,17 @@ const SYSTEM_PROMPT =
 // passes no custom budget. Max-tier pro upgrade is deferred (documented).
 const NOTE_MODEL = 'gemini-2.5-flash'
 
+// Cost guard against a persistently broken proxy. On a FAILED generation the
+// accumulator does NOT decrement wordsSinceLastGeneration (only success does), so
+// once it's >= threshold every subsequent new-word update re-produces a request —
+// a non-retryable 4xx/5xx fails instantly and would re-fire at speech cadence
+// (thousands of paid POSTs over a long broken-proxy session). Mac's LiveNotesMonitor
+// has this exact bug and no guard; we do NOT port the bug — this circuit breaker
+// bounds it: after MAX_CONSECUTIVE_FAILURES straight failures, stop attempting
+// until a reset (a new session, or CIRCUIT_RESET_MS elapses → a single probe).
+const MAX_CONSECUTIVE_FAILURES = 3
+const CIRCUIT_RESET_MS = 60_000
+
 /** Turns a transcript segment + existing notes into a note string. Injected so
  *  tests never hit the network. */
 export type LiveNoteGenerator = (prompt: string, systemPrompt: string) => Promise<string>
@@ -99,11 +110,16 @@ export class LiveNotesMonitor {
   private readonly subscribers = new Set<() => void>()
   private unsubscribeTranscript: (() => void) | null = null
   private startCount = 0
+  // Cost-guard circuit-breaker state (see MAX_CONSECUTIVE_FAILURES).
+  private consecutiveFailures = 0
+  private lastFailureAt = 0
 
   constructor(
     private generator: LiveNoteGenerator = defaultGenerator,
     private readonly storage: LiveNoteStorage = defaultStorage,
-    private readonly live: LiveTranscriptSource = liveConversation
+    private readonly live: LiveTranscriptSource = liveConversation,
+    // Injectable clock so the failure cool-off is deterministically testable.
+    private readonly now: () => number = () => Date.now()
   ) {}
 
   /** Swap the note generator. Used ONLY by the E2E hook (gated on OMI_E2E) to stub
@@ -173,11 +189,21 @@ export class LiveNotesMonitor {
 
     if (this.currentSessionId === null || !this.aiEnabled) return
 
+    // Always feed the accumulator (keeps the word buffer / processed counts
+    // current) but suppress the actual LLM call when the failure circuit is open.
     const request = this.accumulator.handleSegmentsUpdate(
       toAccumulatorSegments(segments),
       this.generating
     )
-    if (request) void this.generateNote(request)
+    if (request && this.canGenerate()) void this.generateNote(request)
+  }
+
+  /** Circuit breaker: true unless too many consecutive failures have opened the
+   *  circuit and its cool-off hasn't elapsed. Bounds cost on a broken proxy. */
+  private canGenerate(): boolean {
+    if (this.consecutiveFailures < MAX_CONSECUTIVE_FAILURES) return true
+    // Open — permit a single probe once the cool-off since the last failure passes.
+    return this.now() - this.lastFailureAt >= CIRCUIT_RESET_MS
   }
 
   private startSession(): void {
@@ -186,6 +212,9 @@ export class LiveNotesMonitor {
     this.currentSessionId = id
     this.notes = []
     this.generating = false
+    // A new session is a reset condition for the failure circuit.
+    this.consecutiveFailures = 0
+    this.lastFailureAt = 0
     this.accumulator.reset()
     // Persist the anchor (best-effort — a failed insert must not stop generation;
     // FKs are off so a note with a missing session row still inserts).
@@ -294,6 +323,8 @@ export class LiveNotesMonitor {
       const raw = await this.generator(prompt, SYSTEM_PROMPT)
       // Clean up (Mac: trim, strip straight quotes/apostrophes).
       const noteText = raw.trim().replace(/["']/g, '')
+      // The proxy responded (even if empty) — the circuit is healthy again.
+      this.consecutiveFailures = 0
       if (!noteText) {
         this.finishGeneration(sessionId)
         return
@@ -335,6 +366,10 @@ export class LiveNotesMonitor {
         reason: 'generation_failed',
         outcome: 'degraded'
       })
+      // Trip the breaker so a persistently broken proxy can't re-fire on every
+      // subsequent word update (graceful degradation, bounded cost).
+      this.consecutiveFailures++
+      this.lastFailureAt = this.now()
       console.warn('[live-notes] generation failed:', (e as Error).message)
       this.finishGeneration(sessionId)
     }

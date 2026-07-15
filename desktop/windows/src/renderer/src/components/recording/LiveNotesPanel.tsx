@@ -9,13 +9,13 @@ import type { LiveNote } from '../../../../shared/types'
 // delete a typed note. Ports the macOS LiveNotesView (MainWindow/Components/
 // LiveNotesView.swift) as clean Windows-native components (not cloned SwiftUI).
 //
-// PURPLE — reviewer decision (INV-UI-1): Mac renders the AI accent (sparkles icon,
-// add button) in `OmiColors.purplePrimary`. Per the PR8 brief's UI ruling ("match
-// Mac's brand INCLUDING its purple where Mac renders purple, contained module, not
-// a global token") this ports that purple as ONE contained constant. It is NOT a
-// design token and the Windows brand ratchet (check_brand_ui.py) doesn't scan
-// desktop/windows. Flip AI_ACCENT to 'text-white' to make it neutral if the
-// reviewer prefers the Windows no-purple policy — a one-line change.
+// PURPLE — on the record (INV-UI-1): Mac renders the AI accent (sparkles icon, add
+// button) in `OmiColors.purplePrimary`. Ported here per the program's binding UI
+// ruling — "match Mac's brand INCLUDING purple where Mac renders purple, in a
+// CONTAINED module (not a global token)" — and CONFIRMED by the PR8 audit (keep it,
+// do not flip to neutral). This is ONE contained constant, not a design token; the
+// Windows brand ratchet (check_brand_ui.py) does not scan desktop/windows. If brand
+// policy ever changes, revert is one line: AI_ACCENT = 'text-white'.
 const AI_ACCENT = 'text-purple-400'
 
 function formatTime(ms: number): string {

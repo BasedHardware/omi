@@ -201,4 +201,67 @@ describe('LiveNotesMonitor', () => {
     expect(monitor.getNotes()).toHaveLength(0)
     expect(storage.deleteNote).toHaveBeenCalledWith(id)
   })
+
+  // Drive `updates` post-threshold word-updates, each +60 fresh words, letting the
+  // single-flight generation settle between them. Returns the monitor + generator.
+  async function driveFailingSession(
+    generator: LiveNoteGenerator,
+    updates: number,
+    clock?: () => number
+  ): Promise<{ monitor: LiveNotesMonitor; live: ReturnType<typeof makeFakeLive> }> {
+    const live = makeFakeLive()
+    const storage = makeFakeStorage()
+    const monitor = new LiveNotesMonitor(generator, storage, live, clock)
+    monitor.start()
+    for (let i = 0; i < updates; i++) {
+      live.push([line('a', 60 + i * 60)]) // +60 new words each update → a request
+      await vi.waitFor(() => expect(monitor.isGenerating()).toBe(false))
+    }
+    return { monitor, live }
+  }
+
+  it('cost guard: stops re-firing after N consecutive failures (bounded proxy calls)', async () => {
+    // A persistently broken proxy. Without the breaker this would re-fire on every
+    // one of the 12 word-updates; with it, calls are capped at MAX (3).
+    const generator: LiveNoteGenerator = vi.fn(async () => {
+      throw new Error('proxy 500 (non-retryable)')
+    })
+    await driveFailingSession(generator, 12)
+    expect(generator).toHaveBeenCalledTimes(3)
+  })
+
+  it('cost guard: a new session resets the breaker and generation resumes', async () => {
+    let fail = true
+    const generator: LiveNoteGenerator = vi.fn(async () => {
+      if (fail) throw new Error('down')
+      return 'recovered note'
+    })
+    const { monitor, live } = await driveFailingSession(generator, 6)
+    expect(generator).toHaveBeenCalledTimes(3) // circuit open
+
+    // Finalize, then a new conversation's words — startSession resets the circuit.
+    fail = false
+    live.push([line('a', 360)], true) // saved (finalized)
+    live.push([line('b', 60)]) // new session, fresh words
+    await vi.waitFor(() => expect(monitor.getNotes()).toHaveLength(1))
+    expect(generator).toHaveBeenCalledTimes(4) // one probe after the reset, succeeded
+  })
+
+  it('cost guard: probes again once the cool-off elapses (half-open)', async () => {
+    let t = 1_000_000
+    let fail = true
+    const generator: LiveNoteGenerator = vi.fn(async () => {
+      if (fail) throw new Error('down')
+      return 'note after cooloff'
+    })
+    const { monitor, live } = await driveFailingSession(generator, 6, () => t)
+    expect(generator).toHaveBeenCalledTimes(3) // open; still-in-cooloff updates suppressed
+
+    // Advance past the cool-off and recover the proxy — the next update probes once.
+    t += 61_000
+    fail = false
+    live.push([line('a', 500)])
+    await vi.waitFor(() => expect(monitor.getNotes()).toHaveLength(1))
+    expect(generator).toHaveBeenCalledTimes(4)
+  })
 })
