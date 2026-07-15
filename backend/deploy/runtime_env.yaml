@@ -660,6 +660,30 @@ environments:
       backend-listen:
         values_file: backend/charts/backend-listen/prod_omi_backend_listen_values.yaml
         env:
+          ACCOUNT_DELETION_DISPATCH_MODE:
+            value: cloud_tasks
+            category: reliability
+          ACCOUNT_DELETION_TASKS_QUEUE:
+            value: account-deletion
+            category: reliability
+          ACCOUNT_DELETION_HANDLER_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: ACCOUNT_DELETION_HANDLER_URL
+          SYNC_TASKS_PROJECT:
+            value: based-hardware
+            category: reliability
+          SYNC_TASKS_LOCATION:
+            value: us-central1
+            category: reliability
+          SYNC_TASKS_INVOKER_SA:
+            config_map:
+              name: prod-omi-backend-config
+              key: SYNC_TASKS_INVOKER_SA
+          SYNC_TASKS_HANDLER_URL:
+            config_map:
+              name: prod-omi-backend-config
+              key: SYNC_TASKS_HANDLER_URL
           DESKTOP_UPDATE_POINTERS_MODE:
             value: primary
             category: rollout
@@ -824,6 +848,27 @@ environments:
       services:
         backend:
           env:
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              category: reliability
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
@@ -912,6 +957,27 @@ environments:
               version: latest
         backend-sync: &prod_backend_sync
           env:
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              category: reliability
             SYNC_LEDGER_FENCE_MODE:
               env_var: SYNC_LEDGER_FENCE_MODE
               default: legacy
@@ -1006,6 +1072,27 @@ environments:
           provisional: true
         backend-integration:
           env:
+            ACCOUNT_DELETION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            ACCOUNT_DELETION_TASKS_QUEUE:
+              value: account-deletion
+              category: reliability
+            ACCOUNT_DELETION_HANDLER_URL:
+              env_var: ACCOUNT_DELETION_HANDLER_URL
+              category: reliability
+            SYNC_TASKS_PROJECT:
+              value: based-hardware
+              category: reliability
+            SYNC_TASKS_LOCATION:
+              value: us-central1
+              category: reliability
+            SYNC_TASKS_INVOKER_SA:
+              env_var: SYNC_TASKS_INVOKER_SA
+              category: reliability
+            SYNC_TASKS_HANDLER_URL:
+              env_var: SYNC_TASKS_HANDLER_URL
+              category: reliability
             OMI_ENV_STAGE:
               value: prod
               category: runtime_identity

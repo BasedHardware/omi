@@ -144,6 +144,35 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
+def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profile():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+
+    assert validator._validate_account_deletion_dispatch_contract('prod', prod) == []
+
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    missing_entry = backend_env.pop('ACCOUNT_DELETION_DISPATCH_MODE')
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            'missing required account-deletion env ACCOUNT_DELETION_DISPATCH_MODE',
+        ) in validator._validate_account_deletion_dispatch_contract('prod', prod)
+    finally:
+        backend_env['ACCOUNT_DELETION_DISPATCH_MODE'] = missing_entry
+
+    dispatch_mode = prod['gke']['backend-listen']['env']['ACCOUNT_DELETION_DISPATCH_MODE']
+    original_mode = dispatch_mode['value']
+    dispatch_mode['value'] = 'inline'
+    try:
+        assert validator.ValidationError(
+            'prod/gke/backend-listen',
+            "account-deletion env ACCOUNT_DELETION_DISPATCH_MODE must be literal 'cloud_tasks'",
+        ) in validator._validate_account_deletion_dispatch_contract('prod', prod)
+    finally:
+        dispatch_mode['value'] = original_mode
+
+
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
     validator = load_validator()
     values_path = tmp_path / 'values.yaml'

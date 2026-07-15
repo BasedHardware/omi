@@ -28,9 +28,12 @@ required_config=(
 
 if [[ "$ENVIRONMENT" == "prod" ]]; then
   required_config+=(
+    ACCOUNT_DELETION_HANDLER_URL
     MCP_OAUTH_CLAUDE_CLIENT_ID
     MCP_OAUTH_CLAUDE_CLIENT_NAME
     MCP_OAUTH_CLAUDE_REDIRECT_URIS
+    SYNC_TASKS_HANDLER_URL
+    SYNC_TASKS_INVOKER_SA
   )
 fi
 
