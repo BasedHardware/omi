@@ -64,17 +64,27 @@ extension AppState {
 
   // MARK: - Folder Management
 
-  /// Load folders from API
-  func loadFolders() async {
+  /// Load folders from API. `fetch` is a test seam (production uses APIClient).
+  func loadFolders(fetch: (() async throws -> [Folder])? = nil) async {
     guard !isLoadingFolders else { return }
 
     isLoadingFolders = true
+    let generation = ownerScopeGeneration
 
     do {
-      let fetchedFolders = try await APIClient.shared.getFolders()
+      let fetchedFolders: [Folder]
+      if let fetch {
+        fetchedFolders = try await fetch()
+      } else {
+        fetchedFolders = try await APIClient.shared.getFolders()
+      }
+      // Owner fence: a previous account's in-flight response must not
+      // repopulate folders after an account switch reset them.
+      guard generation == ownerScopeGeneration else { return }
       folders = fetchedFolders
       log("Folders: Loaded \(fetchedFolders.count) folders")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("Folders: Failed to load", error: error)
     }
 
@@ -174,13 +184,22 @@ extension AppState {
 
   // MARK: - People (Speaker Profiles)
 
-  /// Fetches all people from the OMI API
-  func fetchPeople() async {
+  /// Fetches all people from the OMI API. `fetch` is a test seam.
+  func fetchPeople(fetch: (() async throws -> [Person])? = nil) async {
+    let generation = ownerScopeGeneration
     do {
-      let fetchedPeople = try await APIClient.shared.getPeople()
+      let fetchedPeople: [Person]
+      if let fetch {
+        fetchedPeople = try await fetch()
+      } else {
+        fetchedPeople = try await APIClient.shared.getPeople()
+      }
+      // Owner fence: see loadFolders.
+      guard generation == ownerScopeGeneration else { return }
       people = fetchedPeople
       log("People: Loaded \(fetchedPeople.count) people")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("People: Failed to load", error: error)
     }
   }

@@ -2,6 +2,22 @@ import XCTest
 
 @testable import Omi_Computer
 
+private actor OwnerFencePauseGate {
+  private var released = false
+  private var waiters: [CheckedContinuation<Void, Never>] = []
+
+  func pause() async {
+    if released { return }
+    await withCheckedContinuation { waiters.append($0) }
+  }
+
+  func release() {
+    released = true
+    waiters.forEach { $0.resume() }
+    waiters = []
+  }
+}
+
 /// Regression: an in-place account switch posts only .runtimeOwnerDidChange
 /// (never .userDidSignOut), so AppState's account-owned conversation UI state
 /// (folders, filters, counts, people) must fence itself or the previous
@@ -36,5 +52,49 @@ final class AppStateOwnerFenceTests: XCTestCase {
     XCTAssertFalse(state.isLoadingConversations)
     XCTAssertFalse(state.isLoadingFolders)
     XCTAssertTrue(state.people.isEmpty, "previous account's people must clear on switch")
+  }
+
+  func testInFlightFolderLoadFromPreviousAccountIsDroppedAfterOwnerSwitch() async throws {
+    let state = AppState()
+    let previousFolder = try JSONDecoder().decode(
+      Folder.self,
+      from: Data(#"{"id":"previous-folder","name":"Previous account folder"}"#.utf8))
+    let gate = OwnerFencePauseGate()
+
+    let load = Task { @MainActor in
+      await state.loadFolders {
+        await gate.pause()
+        return [previousFolder]
+      }
+    }
+    // Let the load start and suspend on the gate, then switch accounts mid-flight.
+    await Task.yield()
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    await gate.release()
+    await load.value
+
+    XCTAssertTrue(
+      state.folders.isEmpty,
+      "a previous account's in-flight folder response must not repopulate after the switch")
+  }
+
+  func testInFlightPeopleFetchFromPreviousAccountIsDroppedAfterOwnerSwitch() async throws {
+    let state = AppState()
+    let gate = OwnerFencePauseGate()
+
+    let load = Task { @MainActor in
+      await state.fetchPeople {
+        await gate.pause()
+        return [Person(id: "previous-person", name: "Previous account person")]
+      }
+    }
+    await Task.yield()
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+    await gate.release()
+    await load.value
+
+    XCTAssertTrue(
+      state.people.isEmpty,
+      "a previous account's in-flight people response must not repopulate after the switch")
   }
 }
