@@ -58,21 +58,23 @@ describe('ConnectionsPanel', () => {
 
   it('navigates to the App Marketplace and dismisses when the link is clicked', async () => {
     const { onDismiss } = renderPanel()
-    fireEvent.click(screen.getByTestId('connections-apps-link'))
+    fireEvent.click(screen.getByTestId('connector-browse-the-app-marketplace'))
     expect(onDismiss).toHaveBeenCalledTimes(1)
     await waitFor(() => expect(screen.getByText('APPS MARKETPLACE PAGE')).toBeTruthy())
   })
 
-  it('shows the Email card in a non-dead "requires configuration" state when the client lane is unconfigured', () => {
+  it('shows the Email card in a non-dead "requires setup" state when the client lane is unconfigured', () => {
     renderPanel()
-    expect(screen.getByText(/Requires Google sign-in to be configured/)).toBeTruthy()
+    // Single-line description + a muted "Requires setup" indicator (no dead button).
+    expect(screen.getByText('Requires setup')).toBeTruthy()
   })
 })
 
 describe('Connect-stage registration', () => {
-  it('registers ConnectionsPanel as the Hub Connect content on import', () => {
-    // Importing the panel module (top of this file) runs its bottom-of-file
-    // registerHubConnectContent side effect — the same seam main.tsx triggers.
-    expect(getHubConnectContent()).toBe(ConnectionsPanel)
+  it('registers a (lazy) Connect content component on import of register.ts', async () => {
+    // main.tsx imports this tiny module for effect; it registers a React.lazy
+    // factory so the connections graph loads only when Connect first opens.
+    await import('./register')
+    expect(getHubConnectContent()).not.toBeNull()
   })
 })

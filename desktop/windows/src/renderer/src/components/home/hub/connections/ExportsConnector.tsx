@@ -1,9 +1,11 @@
 import { useState } from 'react'
-import { NotebookPen, FileDown, FileText } from 'lucide-react'
+import { FileText } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
 import { useMemories } from '../../../../hooks/useMemories'
-import type { ExportMemory, MemoryExportResult } from '../../../../../../shared/types'
+import { runMemoryExport } from '../../../../lib/memoryExport'
+import type { ExportMemory } from '../../../../../../shared/types'
 import { ConnectorRow, PillButton } from './ConnectorRow'
+import { ConnectorBrandMark } from './ConnectorBrandMark'
 
 // Memory export destinations — Obsidian, a plain Markdown file, or Notion. These
 // are Windows' shipped one-shot writers (main/memoryExport/*), reused verbatim via
@@ -37,16 +39,13 @@ export function ExportsConnector(): React.JSX.Element {
     }
     setExporting(true)
     try {
-      const mems = toExportMemories()
-      let r: MemoryExportResult
-      if (target === 'obsidian') r = await window.omi.memoryExportObsidian(mems)
-      else if (target === 'file') r = await window.omi.memoryExportFile(mems)
-      else
-        r = await window.omi.memoryExportNotion({
-          token: notionToken.trim(),
-          parentPageId: notionPage.trim(),
-          memories: mems
-        })
+      const r = await runMemoryExport(
+        target,
+        toExportMemories(),
+        target === 'notion'
+          ? { token: notionToken.trim(), parentPageId: notionPage.trim() }
+          : undefined
+      )
       if (!r.canceled) {
         toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, {
           tone: 'success',
@@ -63,7 +62,7 @@ export function ExportsConnector(): React.JSX.Element {
   return (
     <>
       <ConnectorRow
-        icon={NotebookPen}
+        iconNode={<ConnectorBrandMark brand="notion" />}
         title="Notion"
         description="Write your memories into a Notion page."
         action={
@@ -71,7 +70,7 @@ export function ExportsConnector(): React.JSX.Element {
             tone={notionOpen ? 'ghost' : 'primary'}
             onClick={() => setNotionOpen((v) => !v)}
           >
-            {notionOpen ? 'Close' : 'Connect'}
+            {notionOpen ? 'Close' : 'Export'}
           </PillButton>
         }
       >
@@ -100,12 +99,12 @@ export function ExportsConnector(): React.JSX.Element {
       </ConnectorRow>
 
       <ConnectorRow
-        icon={FileDown}
+        iconNode={<ConnectorBrandMark brand="obsidian" />}
         title="Obsidian"
         description="Write your memories into your Obsidian vault."
         action={
           <PillButton tone="primary" onClick={() => runExport('obsidian')} disabled={exporting}>
-            Export…
+            Export
           </PillButton>
         }
       />
@@ -116,7 +115,7 @@ export function ExportsConnector(): React.JSX.Element {
         description="Save your memories as a single Markdown file."
         action={
           <PillButton tone="primary" onClick={() => runExport('file')} disabled={exporting}>
-            Export…
+            Export
           </PillButton>
         }
       />

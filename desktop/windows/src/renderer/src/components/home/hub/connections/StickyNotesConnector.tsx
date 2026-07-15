@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { StickyNote } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
 import { toastImportTally } from '../../../../lib/importToast'
 import { useMemories } from '../../../../hooks/useMemories'
 import { readAndExtractStickyNotes, importStickyMemories } from '../../../../lib/stickyNotesImport'
 import { ConnectorRow, PillButton } from './ConnectorRow'
+import { ConnectorBrandMark } from './ConnectorBrandMark'
 import { MemoryPreviewList } from './MemoryPreviewList'
 
 // Sticky Notes import — the Windows-native stand-in for Mac's Apple Notes import
@@ -57,7 +57,7 @@ export function StickyNotesConnector(): React.JSX.Element {
 
   return (
     <ConnectorRow
-      icon={StickyNote}
+      iconNode={<ConnectorBrandMark brand="sticky" />}
       title="Sticky Notes"
       description="Turn your Windows Sticky Notes into durable memories — notes never leave your PC."
       action={

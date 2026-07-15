@@ -150,7 +150,7 @@ describe('Connections panel', () => {
 
       // The App Marketplace link navigates to /apps and closes the panel.
       await page.evaluate(() =>
-        document.querySelector('[data-testid="connections-apps-link"]').click()
+        document.querySelector('[data-testid="connector-browse-the-app-marketplace"]').click()
       )
       await page.waitForFunction(() => window.location.hash.includes('/apps'), undefined, {
         timeout: 10000

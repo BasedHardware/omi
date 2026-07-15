@@ -1,5 +1,4 @@
 import { useEffect, useRef, useState } from 'react'
-import { CalendarDays } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
 import {
   getCalendarStatus,
@@ -9,6 +8,7 @@ import {
   type CalendarStatus
 } from '../../../../lib/calendarConnect'
 import { ConnectorRow, PillButton } from './ConnectorRow'
+import { ConnectorBrandMark } from './ConnectorBrandMark'
 
 // Google Calendar via the BACKEND-mediated lane — works out of the box with no
 // client-side Google credentials. Connect opens the system browser, then we POLL
@@ -85,7 +85,7 @@ export function CalendarConnector(): React.JSX.Element {
 
   return (
     <ConnectorRow
-      icon={CalendarDays}
+      iconNode={<ConnectorBrandMark brand="calendar" />}
       title="Calendar"
       description={description}
       action={

@@ -1,4 +1,4 @@
-import { createElement } from 'react'
+import { createElement, Suspense } from 'react'
 import { getHubConnectContent } from './hubConnectSlot'
 
 // The Connect stage — the slide-down panel the ask bar's "Connect" toggle reveals.
@@ -15,6 +15,16 @@ import { getHubConnectContent } from './hubConnectSlot'
 // windows), the panel itself does NOT scroll (own an internal overflow region), and
 // `onDismiss` returns to the resting hub.
 
+// Resting state — shown when no content is registered AND as the Suspense fallback
+// while the lazily-imported connections chunk loads on first open.
+function RestingState(): React.JSX.Element {
+  return (
+    <div className="flex flex-1 items-center justify-center">
+      <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
+    </div>
+  )
+}
+
 export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React.JSX.Element {
   const content = getHubConnectContent()
 
@@ -30,11 +40,12 @@ export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React
       data-testid="hub-connect-panel"
     >
       {content ? (
-        createElement(content, { onDismiss })
+        // The registered content is a React.lazy component (registered via a dynamic
+        // import in connections/register.ts), so it must render under a Suspense
+        // boundary. A plain component registered directly (tests) renders fine too.
+        <Suspense fallback={<RestingState />}>{createElement(content, { onDismiss })}</Suspense>
       ) : (
-        <div className="flex flex-1 items-center justify-center">
-          <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
-        </div>
+        <RestingState />
       )}
     </div>
   )

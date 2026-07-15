@@ -1,5 +1,4 @@
 import { useState } from 'react'
-import { MessagesSquare, Sparkles } from 'lucide-react'
 import { toast } from '../../../../lib/toast'
 import { toastImportTally } from '../../../../lib/importToast'
 import { useMemories } from '../../../../hooks/useMemories'
@@ -10,6 +9,7 @@ import {
   toastForExtractResult
 } from '../../../../lib/pasteImport'
 import { ConnectorRow, PillButton } from './ConnectorRow'
+import { ConnectorBrandMark } from './ConnectorBrandMark'
 import { MemoryPreviewList } from './MemoryPreviewList'
 
 // A ChatGPT / Claude memory-log paste connector, rendered once per source so the
@@ -17,9 +17,9 @@ import { MemoryPreviewList } from './MemoryPreviewList'
 // inline paste box (Windows' take on Mac's paste sheet); all extraction/fallback/
 // import logic is shared via lib/pasteImport.ts.
 
-const META: Record<MemorySource, { title: string; icon: typeof MessagesSquare }> = {
-  chatgpt: { title: 'ChatGPT', icon: MessagesSquare },
-  claude: { title: 'Claude', icon: Sparkles }
+const TITLE: Record<MemorySource, string> = {
+  chatgpt: 'ChatGPT',
+  claude: 'Claude'
 }
 
 export function PasteImportConnector({ source }: { source: MemorySource }): React.JSX.Element {
@@ -66,12 +66,12 @@ export function PasteImportConnector({ source }: { source: MemorySource }): Reac
     }
   }
 
-  const { title, icon } = META[source]
+  const title = TITLE[source]
   const count = parsed?.length ?? 0
 
   return (
     <ConnectorRow
-      icon={icon}
+      iconNode={<ConnectorBrandMark brand={source} />}
       title={title}
       description="Paste a memory export into Omi."
       action={
