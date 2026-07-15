@@ -151,6 +151,16 @@ export async function planScan(opts: PlanScanOptions): Promise<ScanPlan> {
     else await walkFiles(r.path)
   }
 
-  const toDelete = pathsToDelete(scannedPaths, new Set(existing.keys()), failedPrefixes, sep)
+  // Guard against reintroducing the blind-clear through the back door: if there
+  // are NO roots to scan AND NO known-absent roots (e.g. every scan-env var was
+  // undefined, so candidateScanRoots came back empty), then scannedPaths is empty
+  // and nothing is protected — pathsToDelete would return EVERY indexed path and
+  // wipe the table. An empty scan is not evidence that every file is gone, so
+  // skip the deletion entirely. (Partial emptiness is already safe: a missing
+  // root lands in absentRootPaths and a failed root in failedPrefixes.)
+  const nothingScannable = roots.length === 0 && absentRootPaths.length === 0
+  const toDelete = nothingScannable
+    ? new Set<string>()
+    : pathsToDelete(scannedPaths, new Set(existing.keys()), failedPrefixes, sep)
   return { toUpsert, toDelete: [...toDelete], failedPrefixes: [...failedPrefixes] }
 }

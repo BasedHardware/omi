@@ -104,6 +104,25 @@ describe('planScan — data-loss retention guard', () => {
     expect(plan.toDelete).toEqual([])
     expect(plan.toUpsert).toEqual([])
   })
+
+  it('skips deletion when nothing is scannable and nothing is protected (empty scan env)', async () => {
+    // Every scan-env var undefined ⇒ candidateScanRoots is empty ⇒ roots AND
+    // absentRootPaths are both empty. An empty scan must NOT be read as "every
+    // indexed file is gone" — that is the blind-clear this PR exists to prevent.
+    const existing = new Map<string, number>([
+      ['C:\\U\\Downloads\\a.txt', 1],
+      ['C:\\U\\Documents\\b.txt', 2]
+    ])
+    const plan = await planScan({
+      roots: [],
+      absentRootPaths: [],
+      existing,
+      fs: makeFs({ dirs: {} }),
+      sep
+    })
+    expect(plan.toDelete).toEqual([])
+    expect(plan.toUpsert).toEqual([])
+  })
 })
 
 describe('planScan — walk behavior', () => {
