@@ -5,9 +5,12 @@
 // `TaskModels.swift`.
 //
 // Fidelity notes (Mac is the reference implementation):
-//  - `extract_task` declares 19 tool params, but Mac's `ExtractedTask` struct
-//    (TaskModels.swift:407) stores 18: `context_summary`/`current_activity` route
-//    to the extraction RESULT (read separately by the loop), not onto the task;
+//  - `extract_task` declares 19 tool params. Mac's `ExtractedTask` struct
+//    (TaskModels.swift:407) stores 18 of them, routing `context_summary`/
+//    `current_activity` to the extraction RESULT instead. On Windows the loop
+//    returns `ExtractedTask[]` with NO separate per-frame result object, so the
+//    two context strings are carried ON the task (they are still per-extract_task
+//    tool params, one pair per call) and flow into create.ts's staged metadata.
 //    `alreadyDone` is DERIVED (`capture_kind == "already_done"`), not a param.
 //  - Every non-title field has a Mac default (TA:1135–1163), so the only inputs
 //    that yield `null` are a non-object `args` and a title that fails
@@ -46,6 +49,12 @@ export type ExtractedTask = {
   duplicateOf: string | null
   refinesTask: string | null
   ownershipConfidence: number | null
+  /** The two extraction-context strings (`context_summary` / `current_activity`
+   *  tool params). Mac routes these to the extraction RESULT; Windows carries them
+   *  on the task so create.ts can write them into the staged row + metadata dict.
+   *  Default "" when the model omits them (Mac sends ""). */
+  contextSummary: string
+  currentActivity: string
 }
 
 const VALID_PRIORITIES: readonly TaskPriority[] = ['high', 'medium', 'low']
@@ -134,7 +143,11 @@ export function parseExtractTask(args: unknown): ExtractedTask | null {
     alreadyDone: captureKind === 'already_done',
     duplicateOf: nonEmptyString(args['duplicate_of']),
     refinesTask: nonEmptyString(args['refines_task']),
-    ownershipConfidence: parseNumber(args['ownership_confidence'], null)
+    ownershipConfidence: parseNumber(args['ownership_confidence'], null),
+    // Mac `arguments["context_summary"] as? String ?? ""` — kept as-is (no empty
+    // collapse), defaulting to "" so the metadata dict always has the two keys.
+    contextSummary: typeof args['context_summary'] === 'string' ? (args['context_summary'] as string) : '',
+    currentActivity: typeof args['current_activity'] === 'string' ? (args['current_activity'] as string) : ''
   }
 }
 

@@ -72,7 +72,9 @@ const task: ExtractedTask = {
   alreadyDone: false,
   duplicateOf: null,
   refinesTask: null,
-  ownershipConfidence: 0.85
+  ownershipConfidence: 0.85,
+  contextSummary: 'Viewing a Slack DM',
+  currentActivity: 'Reading a message from Priya'
 }
 
 const frame: RewindFrame = {
@@ -218,6 +220,17 @@ describe('createStagedTaskFromExtraction — local row + POST body', () => {
     await createStagedTaskFromExtraction(task, frame, 5, context)
     const [, opts] = createCall() as unknown as [string, { headers: Record<string, string> }]
     expect(opts.headers.Authorization).toBe('Bearer t')
+  })
+
+  it('derives context from the task when no explicit context is passed', async () => {
+    // The metadata-gap fix: context_summary/current_activity now live on the task,
+    // so a 3-arg call (the assistant's call shape) carries them into the metadata.
+    const t = { ...task, contextSummary: 'On task ctx', currentActivity: 'On task activity' }
+    await createStagedTaskFromExtraction(t, frame, 5)
+    const [, opts] = createCall()
+    const meta = JSON.parse(JSON.parse(opts.body).metadata)
+    expect(meta.context_summary).toBe('On task ctx')
+    expect(meta.current_activity).toBe('On task activity')
   })
 })
 

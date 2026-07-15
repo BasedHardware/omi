@@ -50,6 +50,18 @@ describe('parseExtractTask', () => {
     expect(t.refinesTask).toBeNull()
     expect(t.ownershipConfidence).toBe(0.8)
     expect(t.alreadyDone).toBe(false) // capture_kind !== "already_done"
+    // The two extraction-context strings ride on the task (Windows has no separate
+    // per-frame result object) → create.ts writes them into the staged metadata.
+    expect(t.contextSummary).toBe('Looking at a Slack DM')
+    expect(t.currentActivity).toBe('Reading a message from Karthik')
+  })
+
+  it('defaults context_summary/current_activity to "" when absent', () => {
+    const t = parseExtractTask(
+      fullArgs({ context_summary: undefined, current_activity: undefined })
+    ) as ExtractedTask
+    expect(t.contextSummary).toBe('')
+    expect(t.currentActivity).toBe('')
   })
 
   it('returns null for a non-object args', () => {

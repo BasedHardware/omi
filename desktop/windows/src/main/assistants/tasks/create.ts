@@ -42,16 +42,20 @@ const DEFAULT_MIN_CONFIDENCE = 0.75
 // Mac `TaskPromotionService.promotionDebounceInterval` (TaskPromotionService.swift:10).
 const PROMOTION_DEBOUNCE_MS = 30_000
 
-/** The per-result extraction context the loop reads separately from the task
- *  (`context_summary` / `current_activity` route to the extraction RESULT, not the
- *  `ExtractedTask` — see models.ts). Both ride into the local row + backend
- *  metadata. Empty strings when the caller has no context (Mac sends ""). */
+/** The two extraction-context strings (`context_summary` / `current_activity`)
+ *  that ride into the local row + backend metadata. They now live ON the
+ *  `ExtractedTask` (models.ts), so the default is derived from the task; the
+ *  explicit param is retained only as a test/override seam. Empty strings when the
+ *  model omitted them (Mac sends ""). */
 export type TaskExtractionContext = {
   contextSummary: string
   currentActivity: string
 }
 
-const EMPTY_CONTEXT: TaskExtractionContext = { contextSummary: '', currentActivity: '' }
+/** Pull the context strings off the parsed task (their canonical home). */
+function contextOf(task: ExtractedTask): TaskExtractionContext {
+  return { contextSummary: task.contextSummary, currentActivity: task.currentActivity }
+}
 
 // --- HTTP helpers (mirrored from taskSyncEngine.ts) --------------------------
 
@@ -231,7 +235,7 @@ export async function createStagedTaskFromExtraction(
   task: ExtractedTask,
   frame: RewindFrame,
   epoch: number,
-  context: TaskExtractionContext = EMPTY_CONTEXT,
+  context: TaskExtractionContext = contextOf(task),
   minConfidence: number = DEFAULT_MIN_CONFIDENCE
 ): Promise<void> {
   // §5 step 1 — confidence gate (Mac gates in processFrame before save). Below the
