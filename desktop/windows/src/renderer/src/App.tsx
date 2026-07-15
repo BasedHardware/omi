@@ -39,6 +39,7 @@ import { attachVoiceE2eHook } from './lib/voice/e2eHook'
 import { PrimitivesGallery } from './components/ui/__gallery/PrimitivesGallery'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
 import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
+import { refreshUserVocabulary, resetUserVocabulary } from './lib/ptt/userVocabulary'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -219,14 +220,20 @@ function App(): React.JSX.Element {
   // session with no card at all — exactly the "assistant doesn't know who I am"
   // gap this card exists to close. Sign-out drops it so it cannot outlive the
   // account (and abandons any in-flight build).
+  //
+  // The PTT custom-vocabulary cache is warmed and dropped on the same signal for
+  // the same reason: collectPttKeywords reads it synchronously, so a launch-time
+  // miss would ship the first hold without the user's custom terms.
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     return onAuthStateChanged(auth, (user) => {
       if (user) {
         refreshIfStale()
         refreshAboutUserCard()
+        refreshUserVocabulary()
       } else {
         resetAboutUserCard()
+        resetUserVocabulary()
       }
     })
   }, [])
