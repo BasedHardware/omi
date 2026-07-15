@@ -50,6 +50,7 @@ for _p in ["google", "google.cloud", "database", "models", "utils"]:
 _mod("google.cloud.firestore", SERVER_TIMESTAMP=MagicMock())
 _mod("google.cloud.firestore_v1", FieldFilter=MagicMock(), transactional=lambda fn: fn)
 _mod("database._client", db=MagicMock(), document_id_from_seed=lambda seed: "id")
+_mod("database.read_boundary", parse_snapshot_or_none=MagicMock(), parse_snapshot_strict=MagicMock())
 _mod("database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock())
 _mod(
     "database.redis_db",
