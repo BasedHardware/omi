@@ -1,5 +1,5 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
-import type { ByokKeys, ByokProvider } from './byok'
+import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
 
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
@@ -1116,6 +1116,12 @@ export type OmiBridgeApi = {
   byokClearAll: () => Promise<void>
   /** True only when all four providers have a key (backend all-or-nothing). */
   byokIsActive: () => Promise<boolean>
+  /** Live-validate the stored keys and reconcile backend BYOK activation. The
+   *  Firebase bearer token is relayed from the renderer's session. */
+  byokEnroll: (token: string) => Promise<ByokEnrollResult>
+  /** Fires when the BYOK key set or activation changed (any window). Returns an
+   *  unsubscribe fn. Carries no key material — reload via byokGetAll. */
+  onByokChanged: (cb: () => void) => () => void
   // --- Track 6 (UI surfaces) additions ---
   /** Settings → General → Font Size "Reset Window Size": restore the main window
    *  to its default content size (1280×820) and re-center it. */

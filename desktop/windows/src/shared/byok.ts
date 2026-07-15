@@ -7,10 +7,11 @@
 // canonical casing below. The backend enforces ALL-OR-NOTHING enrollment via
 // `has_all_byok_keys()` — a partial set is not a valid BYOK-active state.
 //
-// Pure module: the only dependency is `node:crypto` (used by the fingerprint
-// helper, which runs in the main process only). No Electron / no I/O.
-
-import { createHash } from 'node:crypto'
+// Pure, browser-safe module: no Node built-ins, no Electron, no I/O. It is
+// imported by BOTH the main process and the renderer (the axios/fetch BYOK
+// header lanes). The enrollment fingerprint helper — the one piece that needs
+// `node:crypto` — lives in `byokFingerprint.ts` (main-process only) so this
+// file never drags a Node built-in into the web bundle.
 
 /** A provider whose API key a user can bring themselves. */
 export type ByokProvider = 'openai' | 'anthropic' | 'gemini' | 'deepgram'
@@ -42,6 +43,34 @@ export const BYOK_ENV_NAMES: Record<ByokProvider, string> = {
 
 /** A (possibly partial) map of provider → raw provider key. */
 export type ByokKeys = Partial<Record<ByokProvider, string>>
+
+/** Why a key failed live validation — distinct kinds so the UI can phrase copy. */
+export type ByokFailureKind = 'empty' | 'rejected' | 'http' | 'network' | 'timeout'
+
+/** Outcome of validating one provider key. `ok` mirrors a 2xx auth check. */
+export interface ByokKeyValidation {
+  ok: boolean
+  /** Present only when `!ok`. */
+  kind?: ByokFailureKind
+  /** Human-readable detail for the failing case (never contains the key). */
+  detail?: string
+}
+
+/** Per-provider validation results. */
+export type ByokValidationResults = Partial<Record<ByokProvider, ByokKeyValidation>>
+
+/** Outcome of an enrollment attempt, returned to the renderer Settings UI. */
+export interface ByokEnrollResult {
+  /** True only when all four keys authenticated AND the backend accepted them. */
+  active: boolean
+  /** Per-provider live-validation results (empty when the set wasn't full). */
+  results: ByokValidationResults
+  /**
+   * Set only when the keys all validated but the backend enroll call itself
+   * failed (network/HTTP) — distinct from a provider rejecting a key.
+   */
+  backendError?: string
+}
 
 /**
  * Return a NEW headers object with `X-BYOK-*` attached for every provider that
@@ -87,15 +116,4 @@ export function byokEnvVars(keys: ByokKeys): Record<string, string> {
     out[BYOK_ENV_NAMES[provider]] = (keys[provider] as string).trim()
   }
   return out
-}
-
-/**
- * SHA-256 hex (lowercase) of the raw key — the enrollment fingerprint the
- * backend stores and validates against (regex `^[a-f0-9]{64}$`). Used for
- * enrollment/verification, never as a header value. The key is hashed
- * trimmed to match the wire value `withByokHeaders` actually sends (the
- * backend re-hashes the trimmed header value to validate enrollment).
- */
-export function byokFingerprint(key: string): string {
-  return createHash('sha256').update(key.trim(), 'utf8').digest('hex')
 }

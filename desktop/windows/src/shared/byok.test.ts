@@ -6,9 +6,9 @@ import {
   withByokHeaders,
   byokEnvVars,
   isByokActive,
-  byokFingerprint,
   type ByokKeys
 } from './byok'
+import { byokFingerprint } from './byokFingerprint'
 
 const fullKeys: ByokKeys = {
   openai: 'sk-openai',
