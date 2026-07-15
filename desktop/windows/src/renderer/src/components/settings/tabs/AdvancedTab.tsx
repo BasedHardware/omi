@@ -16,17 +16,13 @@ import {
   type MemoryBreakdown
 } from '../../../lib/memoryCleanup'
 import { fetchAllMemories } from '../../../lib/memoriesBulk'
+import { runMemoryExport } from '../../../lib/memoryExport'
 import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { IntegrationsTab } from './IntegrationsTab'
 import { DeveloperKeysSection } from './DeveloperKeysSection'
-import type {
-  ExportMemory,
-  FileIndexStatus,
-  LocalKGStatus,
-  MemoryExportResult
-} from '../../../../../shared/types'
+import type { ExportMemory, FileIndexStatus, LocalKGStatus } from '../../../../../shared/types'
 
 export function AdvancedTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
@@ -141,16 +137,13 @@ export function AdvancedTab(): React.JSX.Element {
     }
     setExporting(true)
     try {
-      const mems = toExportMemories()
-      let r: MemoryExportResult
-      if (target === 'obsidian') r = await window.omi.memoryExportObsidian(mems)
-      else if (target === 'file') r = await window.omi.memoryExportFile(mems)
-      else
-        r = await window.omi.memoryExportNotion({
-          token: notionToken.trim(),
-          parentPageId: notionPage.trim(),
-          memories: mems
-        })
+      const r = await runMemoryExport(
+        target,
+        toExportMemories(),
+        target === 'notion'
+          ? { token: notionToken.trim(), parentPageId: notionPage.trim() }
+          : undefined
+      )
       if (!r.canceled) {
         toast(`Exported ${r.count} memor${r.count === 1 ? 'y' : 'ies'}`, {
           tone: 'success',

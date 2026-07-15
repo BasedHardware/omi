@@ -1,13 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { StickyNote, Mail } from 'lucide-react'
 import { toast } from '../../../lib/toast'
 import { readAndExtractStickyNotes, importStickyMemories } from '../../../lib/stickyNotesImport'
 import { toastImportTally } from '../../../lib/importToast'
-import { runGoogleSync } from '../../../lib/googleSync'
-import { GOOGLE_ENABLED } from '../../../lib/googleFeatureFlag'
 import { useMemories } from '../../../hooks/useMemories'
+import { useGoogleConnection } from '../../../hooks/useGoogleConnection'
 import { SettingRow } from '../SettingRow'
-import type { GoogleStatus } from '../../../../../shared/types'
 
 export function IntegrationsTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
@@ -60,76 +58,17 @@ export function IntegrationsTab(): React.JSX.Element {
     }
   }
 
-  // --- Google ---
-  const [googleStatus, setGoogleStatus] = useState<GoogleStatus>({ connected: false })
-  const [googleBusy, setGoogleBusy] = useState(false)
-  const [googleSyncing, setGoogleSyncing] = useState(false)
-
-  useEffect(() => {
-    if (!GOOGLE_ENABLED) return
-    window.omi
-      .googleStatus()
-      .then(setGoogleStatus)
-      .catch(() => {})
-  }, [])
-
-  const runSync = async (): Promise<void> => {
-    if (googleSyncing) return
-    setGoogleSyncing(true)
-    try {
-      const out = await runGoogleSync(memories.map((m) => m.content))
-      if (out.errors.length > 0) {
-        toast('Sync finished with errors', { tone: 'warn', body: out.errors.join('; ') })
-      } else {
-        toast(
-          `Synced — ${out.memoriesAdded} memor${out.memoriesAdded === 1 ? 'y' : 'ies'}, ${out.tasksAdded} task${out.tasksAdded === 1 ? '' : 's'}`,
-          { tone: 'success' }
-        )
-      }
-      if (out.memoriesAdded > 0) await refresh()
-      await window.omi.googleStatus().then(setGoogleStatus)
-    } catch (e) {
-      toast('Google sync failed', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setGoogleSyncing(false)
-    }
-  }
-
-  useEffect(() => {
-    if (!GOOGLE_ENABLED || !googleStatus.connected) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
-    void runSync()
-    const id = setInterval(() => void runSync(), 15 * 60 * 1000)
-    return () => clearInterval(id)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [googleStatus.connected])
-
-  const connectGoogle = async (): Promise<void> => {
-    if (googleBusy) return
-    setGoogleBusy(true)
-    try {
-      const status = await window.omi.googleConnect()
-      setGoogleStatus(status)
-      if (status.connected) toast('Google connected', { tone: 'success', body: status.email })
-    } catch (e) {
-      toast('Could not connect Google', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setGoogleBusy(false)
-    }
-  }
-
-  const disconnectGoogle = async (): Promise<void> => {
-    if (googleBusy) return
-    setGoogleBusy(true)
-    try {
-      setGoogleStatus(await window.omi.googleDisconnect())
-      toast('Google disconnected', { tone: 'success' })
-    } catch (e) {
-      toast('Could not disconnect', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setGoogleBusy(false)
-    }
-  }
+  // --- Google --- (client-side Gmail lane; shared with the Hub Email card, incl.
+  // the sync-on-connect + 15-min background resync, via the singleton hook.)
+  const {
+    googleEnabled,
+    status: googleStatus,
+    connect: connectGoogle,
+    disconnect: disconnectGoogle,
+    syncNow: runSync,
+    busy: googleBusy,
+    syncing: googleSyncing
+  } = useGoogleConnection()
 
   return (
     <>
@@ -177,7 +116,7 @@ export function IntegrationsTab(): React.JSX.Element {
         )}
       </SettingRow>
 
-      {GOOGLE_ENABLED && (
+      {googleEnabled && (
         <SettingRow
           icon={Mail}
           dot={googleStatus.connected ? 'on' : 'off'}

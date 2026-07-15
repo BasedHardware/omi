@@ -45,19 +45,24 @@ export async function importStickyMemories(
   memories: string[],
   profile: string
 ): Promise<BatchImportTally> {
+  // These lists are short (a handful of notes), so fire the writes concurrently
+  // rather than one-at-a-time. firstError keeps array order via the results index.
+  const results = await Promise.allSettled(
+    memories.map((content) => omiApi.post('/v3/memories', { content, tags: [STICKY_NOTE_TAG] }))
+  )
   let ok = 0
   let failed = 0
   let firstError: string | undefined
-  for (const content of memories) {
-    try {
-      await omiApi.post('/v3/memories', { content, tags: [STICKY_NOTE_TAG] })
+  for (const r of results) {
+    if (r.status === 'fulfilled') {
       ok++
-    } catch (e) {
-      const msg =
-        (e as { response?: { data?: { detail?: string } }; message: string }).response?.data
-          ?.detail ?? (e as Error).message
-      if (!firstError) firstError = msg
+    } else {
       failed++
+      if (!firstError) {
+        firstError =
+          (r.reason as { response?: { data?: { detail?: string } }; message: string }).response
+            ?.data?.detail ?? (r.reason as Error).message
+      }
     }
   }
   if (profile.trim()) {
