@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a crash when a window reported a zero-area frame while the app was capturing screen context"
-}
