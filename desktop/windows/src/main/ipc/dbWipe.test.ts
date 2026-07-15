@@ -102,7 +102,6 @@ describe('USER_DATA_TABLES covers the whole schema (sign-out leak guard)', () =>
       'local_conversation',
       'ai_user_profiles',
       'focus_sessions',
-      'task_embeddings',
       'action_items',
       'staged_tasks'
     ]) {

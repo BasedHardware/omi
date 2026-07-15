@@ -44,7 +44,6 @@ export const USER_DATA_TABLES = [
   // --- Track 3 (proactive) ---
   'ai_user_profiles',
   'focus_sessions',
-  'task_embeddings',
   // Screen-extracted memories — user data derived from the user's screen; must be
   // cleared on account switch just like focus_sessions / the rewind frames above.
   'memories',

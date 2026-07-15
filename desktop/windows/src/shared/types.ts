@@ -1674,19 +1674,10 @@ export type MemoryInput = {
   createdAt: number
 }
 
+// Which local task table a stored embedding belongs to. The two tables both start
+// rowids at 1, so this discriminator is what keeps `action_item:1` distinct from
+// `staged_task:1` in the in-memory index (a deliberate fix ported from macOS).
 export type TaskEmbeddingSource = 'action_item' | 'staged_task'
-
-// Persisted Gemini embedding vector for a task / staged-task (semantic ranking).
-// The composite (source, item_id) primary key is a deliberate fix ported from
-// macOS: ids from different source tables must not collide.
-export type TaskEmbeddingRecord = {
-  source: TaskEmbeddingSource
-  itemId: string
-  vector: Float32Array // L2-normalized, Float32 little-endian
-  text: string
-  model: string
-  updatedAt: number
-}
 
 // --- Track 3: Local task storage (action_items + staged_tasks) ---
 // Faithful port of macOS ActionItemStorage + StagedTaskStorage. The DDL and CRUD

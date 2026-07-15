@@ -104,7 +104,6 @@ import type {
   FocusSessionInput,
   FocusSessionRecord,
   MemoryInput,
-  TaskEmbeddingRecord,
   ActionItemInput,
   ActionItemRecord,
   StagedTaskInput,
@@ -631,16 +630,6 @@ function get(): Database.Database {
       window_title TEXT
     );
     CREATE INDEX IF NOT EXISTS idx_focus_sessions_created_at ON focus_sessions(created_at);
-
-    CREATE TABLE IF NOT EXISTS task_embeddings (
-      source TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      vector BLOB NOT NULL,
-      text TEXT NOT NULL,
-      model TEXT NOT NULL,
-      updated_at INTEGER NOT NULL,
-      PRIMARY KEY (source, item_id)
-    );
 
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -2034,72 +2023,6 @@ export function recentMemories(limit = 20): { content: string; category: string 
   return get()
     .prepare('SELECT content, category FROM memories ORDER BY created_at DESC, id DESC LIMIT ?')
     .all(limit) as { content: string; category: string }[]
-}
-
-// --- Task embeddings (semantic ranking) ---
-// 3072-dim Gemini vectors keyed by (source, item_id) so ids from different
-// source tables can't collide. Vectors stored as a Float32 little-endian BLOB
-// (see taskEmbeddingVector.ts), exposed as Float32Array.
-
-const TASK_EMBEDDING_COLUMNS =
-  'source, item_id AS itemId, vector, text, model, updated_at AS updatedAt'
-
-type TaskEmbeddingRow = {
-  source: string
-  itemId: string
-  vector: Buffer | Uint8Array
-  text: string
-  model: string
-  updatedAt: number
-}
-
-function mapTaskEmbedding(row: TaskEmbeddingRow): TaskEmbeddingRecord {
-  return {
-    source: row.source === 'staged_task' ? 'staged_task' : 'action_item',
-    itemId: row.itemId,
-    vector: bufferToVector(row.vector),
-    text: row.text,
-    model: row.model,
-    updatedAt: row.updatedAt
-  }
-}
-
-export function upsertTaskEmbedding(rec: TaskEmbeddingRecord): void {
-  get()
-    .prepare(
-      `INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at)
-       VALUES (@source, @itemId, @vector, @text, @model, @updatedAt)
-       ON CONFLICT(source, item_id) DO UPDATE SET
-         vector = excluded.vector, text = excluded.text, model = excluded.model, updated_at = excluded.updated_at`
-    )
-    .run({
-      source: rec.source,
-      itemId: rec.itemId,
-      vector: vectorToBuffer(rec.vector),
-      text: rec.text,
-      model: rec.model,
-      updatedAt: rec.updatedAt
-    })
-}
-
-export function getTaskEmbedding(source: string, itemId: string): TaskEmbeddingRecord | null {
-  const row = get()
-    .prepare(
-      `SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings WHERE source = ? AND item_id = ?`
-    )
-    .get(source, itemId) as TaskEmbeddingRow | undefined
-  return row ? mapTaskEmbedding(row) : null
-}
-
-export function allTaskEmbeddings(): TaskEmbeddingRecord[] {
-  const rows = get()
-    .prepare(`SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings`)
-    .all() as TaskEmbeddingRow[]
-  return rows.map(mapTaskEmbedding)
-}
-
-export function deleteTaskEmbedding(source: string, itemId: string): void {
-  get().prepare('DELETE FROM task_embeddings WHERE source = ? AND item_id = ?').run(source, itemId)
 }
 
 // --- Track 3: Local task storage (action_items + staged_tasks) ---
