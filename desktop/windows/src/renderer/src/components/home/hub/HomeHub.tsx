@@ -7,6 +7,7 @@ import { HubAskBar } from './HubAskBar'
 import { HubSuggestions } from './HubSuggestions'
 import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
+import { HubConnectPanel } from './HubConnectPanel'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
 import type { HomeStageEvent, HomeStageMode } from './hubStage'
@@ -18,12 +19,25 @@ import type { HomeStageEvent, HomeStageMode } from './hubStage'
 // two responsive ones; everything else is fixed, because on Mac these are elements
 // on a stage that grows around them, not elements that stretch with it.
 const SIDE_INSET = 'min(96px, max(30px, 6vw))'
-// Mac's homeStageBottomPadding is a flat 26px, and the cluster docks right onto it.
-// Ported literally, the cluster read as stuck to the bottom edge on Windows — Mac's
-// window has no sidebar and a taller floor (680 vs our 600), so the same 26px does not
-// land the same way. This is a DELIBERATE deviation from Mac, on Chris's call: lift the
-// cluster off the floor, scaling with the window so it doesn't crowd a short one.
-const STAGE_BOTTOM_INSET = 'clamp(26px, 8vh, 80px)'
+// DELIBERATE DEVIATION FROM MAC (Chris's call). Mac's homeStageBottomPadding is a flat
+// 26px (DashboardPage.swift:302) and its cluster docks right onto it, low on the stage.
+//
+// Everything else here is now Mac-exact — the header floats instead of eating 62px of
+// stage (see below), the sidebar is gone, and the wordmark lands on the stage's true
+// centre. With those bugs fixed the layout still read as bottom-heavy, so this is a real
+// design preference, not compensation for a defect: we are deviating from a CORRECT
+// baseline, which is the only honest place to deviate from.
+//
+// Scales with the window so it never crowds a short one; floors at Mac's 26px.
+const STAGE_BOTTOM_INSET = 'clamp(26px, 12vh, 128px)'
+
+// Also a deliberate deviation. Mac's Spacer(minLength: 24) (DashboardPage.swift:671) is
+// the floor on the wordmark→cluster gap, and it is where the layout actually settles:
+// once the wordmark is at the stage's true centre the flexible gap is squeezed to
+// exactly that minimum, so 24px IS the gap in practice, not just its floor. Chris wants
+// the wordmark to breathe, so raise the floor. Raising it also lifts the wordmark, since
+// the top spacer is the only shrinkable item and gives way first.
+const WORDMARK_GAP = 56
 const STAGE_MAX = 1360
 const ASK_MAX_HUB = 980
 const ASK_MAX_PANEL = 1280
@@ -105,6 +119,29 @@ export function HomeHub(): React.JSX.Element {
     <div className="relative h-full overflow-hidden">
       <HomeCanvasBackground />
 
+      {/* The header FLOATS over the stage; it does not sit in the column.
+          Mac stacks it (DashboardPage.swift:584-611):
+
+              ZStack(alignment: .topTrailing) {
+                homeStage(...).frame(width: proxy.size.width, height: proxy.size.height)
+                homeHeader.padding(.top, 26)
+              }
+
+          so the stage gets the window's FULL height and the header consumes none of it.
+          It was a sibling row in this flex column, which quietly ate ~62px (26px pad +
+          36px tall) off the top of the stage — pushing the wordmark's centre point AND
+          the docked cluster down by that much. That is what made the Hub read as
+          bottom-heavy, and it is why lifting the bottom inset "fixed" it: I was padding
+          the floor to compensate for space being stolen from the ceiling. */}
+      <div
+        className="pointer-events-none absolute inset-x-0 top-0 z-10 mx-auto flex justify-end"
+        style={{ maxWidth: STAGE_MAX, paddingLeft: SIDE_INSET, paddingRight: SIDE_INSET, paddingTop: 26 }}
+      >
+        <div className="pointer-events-auto">
+          <HubHeader />
+        </div>
+      </div>
+
       <div
         className="mx-auto flex h-full flex-col"
         style={{
@@ -114,9 +151,6 @@ export function HomeHub(): React.JSX.Element {
           paddingBottom: STAGE_BOTTOM_INSET
         }}
       >
-        <div className="flex shrink-0 justify-end pt-[26px]">
-          <HubHeader />
-        </div>
 
         {/* The stage's height budget. The cluster (ribbon + ask bar + suggestions) is
             shrink-0 and the lead-in spacer is the ONLY shrinkable item, so a shorter
@@ -133,7 +167,7 @@ export function HomeHub(): React.JSX.Element {
             stage at the DEFAULT window size and this is what made it visible. */}
         <div
           ref={stageRef}
-          className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[clamp(20px,7vh,74px)]"
+          className="flex min-h-0 flex-1 flex-col items-center overflow-y-auto pt-[74px]"
           data-testid="hub-stage"
           data-mode={mode}
         >
@@ -144,7 +178,7 @@ export function HomeHub(): React.JSX.Element {
                   {askBar}
                 </HubChatPanel>
               ) : (
-                <ConnectPanelPlaceholder />
+                <HubConnectPanel onDismiss={() => dispatch({ type: 'dismissed' })} />
               )}
             </StagePanel>
           ) : (
@@ -179,8 +213,14 @@ export function HomeHub(): React.JSX.Element {
                 omi.
               </h1>
 
-              {/* Mac: Spacer(minLength: 24) — absorbs the slack, docking the cluster. */}
-              <div className="min-h-[24px] w-full shrink-0 grow" aria-hidden />
+              {/* Mac: Spacer(minLength: 24) — absorbs slack, docking the cluster. The
+                  min-height (WORDMARK_GAP) is raised above Mac's 24 on Chris's call; see
+                  the constant. It grows to fill any extra height, so this is the FLOOR. */}
+              <div
+                className="w-full shrink-0 grow"
+                style={{ minHeight: WORDMARK_GAP }}
+                aria-hidden
+              />
 
               <div
                 className="flex w-full shrink-0 flex-col items-center"
@@ -234,20 +274,3 @@ function StagePanel({ children }: { children: React.ReactNode }): React.JSX.Elem
   )
 }
 
-// Connect is a follow-up PR (the integrations tray). This is the panel chrome it
-// will fill — built, but deliberately empty rather than half-built.
-function ConnectPanelPlaceholder(): React.JSX.Element {
-  return (
-    <div
-      className="flex h-full w-full items-center justify-center rounded-[26px] border"
-      style={{
-        borderColor: 'rgb(var(--home-stage-glow-rgb) / 0.14)',
-        backgroundImage:
-          'linear-gradient(to bottom, rgb(255 255 255 / 0.03), rgb(var(--home-stage-glow-rgb) / 0.05))',
-        boxShadow: '0 18px 44px rgb(0 0 0 / 0.42)'
-      }}
-    >
-      <p className="text-[13px] font-medium text-home-muted">Connections are coming soon.</p>
-    </div>
-  )
-}

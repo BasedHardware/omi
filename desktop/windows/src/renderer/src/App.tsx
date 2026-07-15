@@ -1,8 +1,8 @@
 import { useEffect } from 'react'
-import { HashRouter, Routes, Route, Navigate, useLocation, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
 import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
-import { Sidebar } from './components/layout/Sidebar'
+import { AppChrome } from './components/layout/AppChrome'
 import { MainViews } from './components/layout/MainViews'
 import { TitleBar } from './components/layout/TitleBar'
 import { Spinner } from './components/ui/Spinner'
@@ -50,11 +50,7 @@ const IS_SECONDARY_WINDOW = isSecondaryWindow()
 
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
-  // Settings is a full-screen view with its own tab rail + Back button, so the
-  // main app sidebar is hidden there.
-  const { pathname } = useLocation()
   const navigate = useNavigate()
-  const hideSidebar = pathname === '/settings'
 
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
@@ -103,12 +99,9 @@ function AppShellInner(): React.JSX.Element {
     <div className="app-canvas flex h-full min-h-0 flex-col">
       {/* Native-caption drag strip (Window Controls Overlay). */}
       <TitleBar />
-      <div className="flex min-h-0 flex-1">
-        {!hideSidebar && <Sidebar />}
-        <main className="page-outlet relative z-10 min-h-0 flex-1 overflow-hidden">
-          <MainViews />
-        </main>
-      </div>
+      <AppChrome>
+        <MainViews />
+      </AppChrome>
       <SourcePicker
         open={pickerOpen}
         onClose={() => setPickerOpen(false)}

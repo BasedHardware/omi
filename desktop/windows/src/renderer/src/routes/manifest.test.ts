@@ -14,7 +14,67 @@ vi.mock('../pages/Apps', () => ({ Apps: () => null }))
 vi.mock('../pages/Rewind', () => ({ Rewind: () => null }))
 vi.mock('../pages/LiveConversation', () => ({ LiveConversation: () => null }))
 
-import { resolveRoute, navRoutes, panelRoutes, isNavActive, routeManifest } from './manifest'
+import {
+  resolveRoute,
+  navRoutes,
+  panelRoutes,
+  isNavActive,
+  routeManifest,
+  pathForShortcut,
+  escapesToHome,
+  showsPageChrome
+} from './manifest'
+
+describe('nav model (macOS parity)', () => {
+  // The exact Cmd+N mapping macOS binds in OmiApp.swift:163-214. Pinned as a table
+  // because the pre-existing Windows hook had 3 and 4 SWAPPED (3=Tasks, 4=Memories)
+  // — and, being dead code that was never called, nothing caught it.
+  it.each([
+    ['1', '/home'],
+    ['2', '/conversations'],
+    ['3', '/memories'],
+    ['4', '/tasks'],
+    ['5', '/rewind'],
+    ['6', '/apps'],
+    [',', '/settings']
+  ])('Ctrl+%s navigates to %s', (key, path) => {
+    expect(pathForShortcut(key)).toBe(path)
+  })
+
+  it('binds no other keys', () => {
+    expect(pathForShortcut('7')).toBeUndefined()
+    expect(pathForShortcut('k')).toBeUndefined() // macOS has no command palette
+  })
+
+  // DesktopHomeView.swift:1037-1044 — Esc goes Home from these four ONLY.
+  it.each(['/conversations', '/memories', '/tasks', '/rewind'])('Esc returns Home from %s', (p) => {
+    expect(escapesToHome(p)).toBe(true)
+  })
+
+  it.each(['/home', '/settings', '/apps'])('Esc does NOT return Home from %s', (p) => {
+    expect(escapesToHome(p)).toBe(false)
+  })
+
+  // DesktopHomeView.swift:907-917 — every page but the dashboard wears the chrome.
+  it.each(['/conversations', '/memories', '/tasks', '/rewind', '/apps', '/settings'])(
+    'shows the PageChromeBar on %s',
+    (p) => {
+      expect(showsPageChrome(p)).toBe(true)
+    }
+  )
+
+  it('does NOT show the PageChromeBar on Home (it IS home)', () => {
+    expect(showsPageChrome('/home')).toBe(false)
+  })
+
+  it('does NOT show the PageChromeBar on exclusive routes (they carry their own Back)', () => {
+    // A conversation detail / live transcript has a contextual back arrow in its
+    // PageHeader; stacking a "Home" pill on top would be the double affordance
+    // macOS avoids.
+    expect(showsPageChrome('/conversations/abc123')).toBe(false)
+    expect(showsPageChrome('/conversations/live')).toBe(false)
+  })
+})
 
 describe('route manifest', () => {
   it('redirects /, /live, /chat to /home', () => {

@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { onSettingsTabRequest, consumeSettingsTabRequest } from '../lib/settingsNav'
 import { SettingsSearchProvider } from '../components/settings/SettingsSearchProvider'
 import { useSettingsSearch } from '../components/settings/searchContext'
@@ -38,6 +38,23 @@ function SettingsInner(): React.JSX.Element {
   const [active, setActive] = useState<SettingsTabId>('general')
   const { query, setQuery } = useSettingsSearch()
   const navigate = useNavigate()
+  const { key } = useLocation()
+
+  // macOS semantics: this returns to the page you came FROM, not to Home — it reads
+  // `previousIndexBeforeSettings` and only falls back to the dashboard when there is
+  // no previous page (DesktopHomeView.swift:855-862). The Home pill in the chrome bar
+  // is the control that goes Home; these are deliberately different destinations.
+  //
+  // location.key is the router's own "is there anything behind me" signal: the initial
+  // history entry is always keyed 'default'. So key === 'default' means Settings was
+  // the first page (deep-linked, or opened straight from Ctrl+, at launch) and there is
+  // nothing to pop — take Mac's Home fallback instead of navigating out of the app's
+  // history. Using the router's key rather than window.history.state also keeps this
+  // correct under HashRouter (which the app uses) and MemoryRouter (which tests use).
+  const goBack = (): void => {
+    if (key === 'default') navigate('/home')
+    else navigate(-1)
+  }
 
   // Deep-link consumer: callers elsewhere (e.g. the usage-limit popup's Upgrade
   // button) request a tab via settingsNav before/after this view mounts; the
@@ -61,7 +78,7 @@ function SettingsInner(): React.JSX.Element {
         }}
         query={query}
         onQuery={setQuery}
-        onBack={() => navigate('/home')}
+        onBack={goBack}
       />
       {active === 'memories' ? (
         // Full page: owns its own header, scroll and width (the brain map needs the

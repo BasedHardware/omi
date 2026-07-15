@@ -51,6 +51,14 @@ export interface RouteEntry {
   render?: (params: Record<string, string>) => ReactElement
   // Sidebar nav entry; absent for pages with no rail item (Memories/Goals/Settings).
   nav?: RouteNav
+  // Ctrl+<key> jumps here. Independent of `nav` on purpose: Memories and Settings
+  // have no rail item but DO have a shortcut, so this cannot be folded into RouteNav.
+  // Mirrors macOS's Cmd+1..6 / Cmd+, (OmiApp.swift:163-214).
+  shortcut?: string
+  // Esc returns to Home from this page. macOS allows it from conversations /
+  // memories / tasks / rewind only — NOT Settings, NOT Apps
+  // (DesktopHomeView.swift:1037-1044, navigateHomeOnEscapeIfNeeded).
+  escapeToHome?: boolean
 }
 
 // Every panel stays mounted (inactive ones hidden) so tab switches are instant.
@@ -106,23 +114,35 @@ export const routeManifest: RouteEntry[] = [
     kind: 'panel',
     path: '/home',
     Component: HomePanel,
-    nav: { label: 'Home', Icon: House, order: 0 }
+    nav: { label: 'Home', Icon: House, order: 0 },
+    shortcut: '1'
   },
   {
     id: 'conversations',
     kind: 'panel',
     path: '/conversations',
     Component: ConversationsPanel,
-    nav: { label: 'Conversations', Icon: GanttChartSquare, order: 1 }
+    nav: { label: 'Conversations', Icon: GanttChartSquare, order: 1 },
+    shortcut: '2',
+    escapeToHome: true
   },
-  { id: 'memories', kind: 'panel', path: '/memories', Component: MemoriesPanel },
-  { id: 'settings', kind: 'panel', path: '/settings', Component: SettingsPanel },
+  {
+    id: 'memories',
+    kind: 'panel',
+    path: '/memories',
+    Component: MemoriesPanel,
+    shortcut: '3',
+    escapeToHome: true
+  },
+  { id: 'settings', kind: 'panel', path: '/settings', Component: SettingsPanel, shortcut: ',' },
   {
     id: 'tasks',
     kind: 'panel',
     path: '/tasks',
     Component: TasksPanel,
-    nav: { label: 'Tasks', Icon: ListChecks, order: 2, activeFor: ['/goals'] }
+    nav: { label: 'Tasks', Icon: ListChecks, order: 2, activeFor: ['/goals'] },
+    shortcut: '4',
+    escapeToHome: true
   },
   { id: 'goals', kind: 'panel', path: '/goals', Component: GoalsPanel },
   {
@@ -130,16 +150,22 @@ export const routeManifest: RouteEntry[] = [
     kind: 'panel',
     path: '/apps',
     Component: AppsPanel,
-    nav: { label: 'Apps', Icon: LayoutGrid, order: 4 }
+    nav: { label: 'Apps', Icon: LayoutGrid, order: 4 },
+    shortcut: '6'
   },
   {
     id: 'rewind',
     kind: 'panel',
     path: '/rewind',
     Component: RewindPanel,
-    nav: { label: 'Rewind', Icon: History, order: 3 }
+    nav: { label: 'Rewind', Icon: History, order: 3 },
+    shortcut: '5',
+    escapeToHome: true
   }
 ]
+
+// Home is the one page with no PageChromeBar and no Esc-to-home (it IS home).
+export const HOME_PATH = '/home'
 
 export type ResolveResult =
   | { entry: RouteEntry; params: Record<string, string> }
@@ -175,6 +201,27 @@ export function navRoutes(): RouteEntry[] {
   return routeManifest
     .filter((e) => e.nav)
     .sort((a, b) => (a.nav as RouteNav).order - (b.nav as RouteNav).order)
+}
+
+// Destination for a Ctrl+<key> press, or undefined if the key isn't bound.
+export function pathForShortcut(key: string): string | undefined {
+  return routeManifest.find((e) => e.shortcut === key)?.path
+}
+
+// Does Esc return Home from this pathname? Only the four pages macOS allows it on.
+export function escapesToHome(pathname: string): boolean {
+  return routeManifest.some((e) => e.path === pathname && e.escapeToHome === true)
+}
+
+// Every page except Home gets the PageChromeBar. Exclusive routes (a conversation
+// detail, the live transcript) carry their own PageHeader with a contextual Back
+// arrow, so they're excluded — a "Home" pill above their own back button would be
+// the same double-affordance macOS avoids.
+export function showsPageChrome(pathname: string): boolean {
+  const resolved = resolveRoute(pathname)
+  if (!resolved || !('entry' in resolved)) return false
+  if (resolved.entry.kind !== 'panel') return false
+  return resolved.entry.path !== HOME_PATH
 }
 
 // Exact-path match plus any activeFor aliases (e.g. Tasks lights up on /goals).
