@@ -52,6 +52,16 @@ describe('appSettings', () => {
     expect(s.recordHotkey).toBe('Ctrl+Space')
   })
 
+  it('chatEngine defaults to legacy_sse and round-trips the pi_mono opt-in', () => {
+    expect(getAppSettings().chatEngine).toBe('legacy_sse')
+    setAppSettings({ chatEngine: 'pi_mono' })
+    _resetForTests()
+    expect(getAppSettings().chatEngine).toBe('pi_mono')
+    // Junk / unknown values fall back to the safe legacy path, never to pi_mono.
+    expect(sanitizeAppSettings({ chatEngine: 'nope' } as never).chatEngine).toBe('legacy_sse')
+    expect(sanitizeAppSettings(null).chatEngine).toBe('legacy_sse')
+  })
+
   it('round-trips a rebound record hotkey', () => {
     setAppSettings({ recordHotkey: 'Ctrl+Shift+O' })
     _resetForTests()
@@ -105,7 +115,8 @@ describe('appSettings', () => {
       memoryEnabled: false,
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
-      memoryExcludedApps: []
+      memoryExcludedApps: [],
+      chatEngine: 'legacy_sse'
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
     // interrupt once the user has chosen a frequency. Anything that is not a
