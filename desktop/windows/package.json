@@ -55,6 +55,8 @@
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.58.1",
+    "@earendil-works/pi-ai": "^0.80.6",
+    "@earendil-works/pi-coding-agent": "^0.80.6",
     "@electron-toolkit/preload": "^3.0.2",
     "@fontsource-variable/inter": "^5.2.8",
     "@fontsource-variable/jetbrains-mono": "^5.2.8",
