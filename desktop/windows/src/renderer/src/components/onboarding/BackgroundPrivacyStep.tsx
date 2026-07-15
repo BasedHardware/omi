@@ -8,6 +8,7 @@ type BackgroundPrivacyStepProps = {
   stepIndex: number
   totalSteps: number
   onContinue: () => void
+  onBack?: () => void
 }
 
 /**
@@ -20,7 +21,8 @@ type BackgroundPrivacyStepProps = {
 export function BackgroundPrivacyStep({
   stepIndex,
   totalSteps,
-  onContinue
+  onContinue,
+  onBack
 }: BackgroundPrivacyStepProps): React.JSX.Element {
   const [listening, setListening] = useState(() => getPreferences().continuousRecording ?? true)
   const [launchAtLogin, setLaunchAtLogin] = useState(true)
@@ -38,6 +40,7 @@ export function BackgroundPrivacyStep({
       title="How Omi runs on your PC"
       widthClassName="max-w-[440px]"
       onContinue={handleContinue}
+      onBack={onBack}
     >
       <p className="text-center text-sm leading-relaxed text-white">
         Omi works best as a quiet companion running in the background. You’re in control — change

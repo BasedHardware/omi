@@ -282,6 +282,8 @@ const omi: OmiBridgeApi = {
   },
   whatsNewGetPending: () => ipcRenderer.invoke('whatsnew:getPending'),
   whatsNewOpenNotes: () => ipcRenderer.send('whatsnew:openNotes'),
+  openMicPrivacySettings: () => ipcRenderer.send('settings:openMicPrivacy'),
+  getMicPermissionState: () => ipcRenderer.invoke('permissions:micState'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
   // Main-window chrome: whether the window was created with a Windows 11 Mica
@@ -430,6 +432,12 @@ const omiOverlay: OmiOverlayApi = {
     const listener = (): void => cb()
     ipcRenderer.on('overlay:voiceCaptured', listener)
     return () => ipcRenderer.removeListener('overlay:voiceCaptured', listener)
+  },
+  notifyVoiceFailed: (message: string) => ipcRenderer.send('overlay:voiceFailed', message),
+  onVoiceFailed: (cb: (message: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, message: string): void => cb(message)
+    ipcRenderer.on('overlay:voiceFailed', listener)
+    return () => ipcRenderer.removeListener('overlay:voiceFailed', listener)
   },
   notifyAsked: () => ipcRenderer.send('overlay:asked'),
   onAsked: (cb: () => void) => {

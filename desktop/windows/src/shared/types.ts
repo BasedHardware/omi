@@ -366,9 +366,10 @@ export type OmiOverlayApi = {
   suspendShortcut: () => void
   /** Re-claim the current accelerator after recording (or cancelling). */
   resumeShortcut: () => Promise<boolean>
-  /** Subscribe to the overlay's open/focused state (broadcast to every window),
-   *  so the onboarding voice step can switch between "press the hotkey" and "hold
-   *  Space". Returns an unsubscribe fn. */
+  /** Subscribe to the overlay's open/focused state (broadcast to every window).
+   *  NOTE `active` (focused) is only ever true for the EXPANDED bar — a peek/PTT
+   *  pill is deliberately non-focusable — so no step may gate its instructions on
+   *  it. Returns an unsubscribe fn. */
   onVisibilityChange: (cb: (state: OverlayVisibility) => void) => () => void
   /** Tell main a push-to-talk transcript was just captured (called from the
    *  overlay), so it can broadcast it to the onboarding window. */
@@ -376,6 +377,13 @@ export type OmiOverlayApi = {
   /** Subscribe to push-to-talk capture events (broadcast to every window).
    *  Returns an unsubscribe fn. */
   onVoiceCaptured: (cb: () => void) => () => void
+  /** Tell main a push-to-talk capture FAILED (mic unavailable, transcription
+   *  error): the user performed the gesture but it produced nothing. Broadcast so
+   *  onboarding can say what went wrong instead of leaving the step silent. */
+  notifyVoiceFailed: (message: string) => void
+  /** Subscribe to push-to-talk failures (broadcast to every window). Returns an
+   *  unsubscribe fn. */
+  onVoiceFailed: (cb: (message: string) => void) => () => void
   /** Tell main the user sent a message from the overlay (typed or spoken), so it
    *  can broadcast it to onboarding. Fired from the overlay's send choke-point. */
   notifyAsked: () => void
@@ -858,6 +866,14 @@ export type OmiBridgeApi = {
   whatsNewGetPending: () => Promise<WhatsNewPayload | null>
   /** Toast renderer → main: open the GitHub release notes in the browser. */
   whatsNewOpenNotes: () => void
+  /** Open Windows Settings → Privacy & security → Microphone (denied-mic recovery
+   *  in onboarding). Fixed `ms-settings:` target, no caller-supplied URL. */
+  openMicPrivacySettings: () => void
+  /** The REAL Windows microphone permission, read from the Capability Access Manager
+   *  registry in main. `navigator.permissions.query` is NOT usable for this — Electron
+   *  answers 'granted' unconditionally, so onboarding used to false-grant the mic step.
+   *  'unknown' = never set / unreadable, and must be treated as NOT granted. */
+  getMicPermissionState: () => Promise<MicPermissionState>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   /** True when the main window was created with the Win11 Mica background
@@ -1394,6 +1410,11 @@ export type RewindSearchGroup = {
   representative: RewindFrame
   matchSnippet: string
 }
+
+/** The real Windows microphone consent, read from the registry in main.
+ *  'unknown' = the user has never been asked (or the key is unreadable). Callers MUST
+ *  treat 'unknown' as not-granted — never as a grant. */
+export type MicPermissionState = 'granted' | 'denied' | 'unknown'
 
 export type RewindSettings = {
   captureEnabled: boolean
