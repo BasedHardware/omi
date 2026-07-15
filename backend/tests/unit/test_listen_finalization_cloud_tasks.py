@@ -754,6 +754,8 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    extracted = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', extracted)
     monkeypatch.setattr(
         persisted_finalizer.lifecycle_service,
         'claim_finalization_fanout',
@@ -777,6 +779,7 @@ async def test_completed_conversation_replays_only_the_durable_fanout_boundary(m
         idempotency_key='conversation:conversation-1:finalization',
         require_delivery=True,
     )
+    extracted.assert_called_once_with('uid-1', conversation)
     assert disposition == ConversationFinalizationDisposition.completed
     completed.assert_called_once_with('job-1', 2, 3)
 
@@ -855,7 +858,8 @@ async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
     )
     monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
     monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
-    monkeypatch.setattr(persisted_finalizer, 'process_conversation', lambda *args: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', lambda *args, **kwargs: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', MagicMock())
     claim_fanout = MagicMock(
         return_value={'status': 'fenced', 'fanout_key': 'conversation:conversation-1:finalization'}
     )
@@ -873,3 +877,40 @@ async def test_finalizer_skips_fanout_when_atomic_claim_is_fenced(monkeypatch):
     assert disposition == ConversationFinalizationDisposition.fenced
     claim_fanout.assert_called_once_with('job-1', 2, 3)
     integrations.assert_not_awaited()
+
+
+@pytest.mark.anyio
+async def test_finalizer_retries_canonical_memory_extraction_before_fanout(monkeypatch):
+    async def inline_run_blocking(_executor, func, *args, **kwargs):
+        return func(*args, **kwargs)
+
+    conversation = SimpleNamespace(
+        id='conversation-1', status=ConversationStatus.processing, language='en', discarded=False
+    )
+    process = MagicMock(return_value=conversation)
+    extract = MagicMock(side_effect=RuntimeError('canonical write gate unavailable'))
+    claim_fanout = MagicMock()
+    monkeypatch.setattr(persisted_finalizer, 'run_blocking', inline_run_blocking)
+    monkeypatch.setattr(
+        persisted_finalizer.conversations_db,
+        'get_conversation',
+        lambda *args: {'id': 'conversation-1', 'status': ConversationStatus.processing.value, 'discarded': False},
+    )
+    monkeypatch.setattr(persisted_finalizer, 'deserialize_conversation', lambda value: conversation)
+    monkeypatch.setattr(persisted_finalizer, 'get_cached_user_geolocation', lambda uid: None)
+    monkeypatch.setattr(persisted_finalizer, 'process_conversation', process)
+    monkeypatch.setattr(persisted_finalizer, 'extract_memories', extract)
+    monkeypatch.setattr(persisted_finalizer.lifecycle_service, 'claim_finalization_fanout', claim_fanout)
+
+    with pytest.raises(ConversationFinalizationError):
+        await persisted_finalizer.finalize_persisted_conversation(
+            'uid-1',
+            'conversation-1',
+            finalization_job_id='job-1',
+            dispatch_generation=2,
+            lease_epoch=3,
+        )
+
+    assert process.call_args.kwargs['defer_memory_extraction'] is True
+    extract.assert_called_once_with('uid-1', conversation)
+    claim_fanout.assert_not_called()

@@ -7,7 +7,6 @@ import database.users as users_db
 from models.memories import MemoryDB, Memory, MemoryCategory
 from models.integrations import ExternalIntegrationCreateMemory
 from utils.llm.memories import extract_memories_from_text
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -124,9 +123,7 @@ def process_external_integration_memory(
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
         db_client = getattr(db_client_module, 'db', None)
-        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL and canonical_write_enabled(
-            uid, db_client=db_client
-        ):
+        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
                 if memory_db.id in explicit_memory_ids:
@@ -182,9 +179,7 @@ def process_twitter_memories(uid: str, tweets_text: str, persona_id: str) -> Lis
     if saved_memories:
         # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
         db_client = getattr(db_client_module, 'db', None)
-        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL and canonical_write_enabled(
-            uid, db_client=db_client
-        ):
+        if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
             memory_service = MemoryService(db_client=db_client)
             for memory_db in saved_memories:
                 memory_service.write(uid, memory_db.model_dump())

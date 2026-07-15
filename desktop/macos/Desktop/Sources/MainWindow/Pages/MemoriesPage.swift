@@ -288,8 +288,8 @@ class MemoriesViewModel: ObservableObject {
     canonicalLifecycleExposed ? token.layerFilter.allowedLayers : nil
   }
 
-  private func includeExplicitLifecycleRows(for token: MemoryScopeToken) -> Bool {
-    canonicalLifecycleExposed
+  private func recordReadScope(for token: MemoryScopeToken) -> MemoryRecordReadScope {
+    canonicalLifecycleExposed ? .canonicalProduct : .legacyCompatibility
   }
 
   private func displayMemories(_ values: [ServerMemory], for token: MemoryScopeToken) -> [ServerMemory] {
@@ -301,12 +301,36 @@ class MemoriesViewModel: ObservableObject {
   }
 
   private func displayMemories(_ values: [ServerMemory], lifecycleExposed: Bool) -> [ServerMemory] {
-    lifecycleExposed ? values : values.filter { !$0.tierIsExplicit }
+    values.filter { $0.tierIsExplicit == lifecycleExposed }
   }
 
   private struct MemoryPageFetchResult {
     let page: APIClient.MemoryListPage
     let deviceScopeSupportedOverride: Bool?
+  }
+
+  private var lifecycleExposureCapabilityKey: String {
+    let userId = UserDefaults.standard.string(forKey: "auth_userId") ?? "unknown"
+    return "memoriesCanonicalLifecycleExposure_v1_\(userId)"
+  }
+
+  /// Restores the last authoritative lifecycle capability for this account.
+  ///
+  /// The cache itself cannot prove whether an untiered row is a legacy
+  /// compatibility record or a local-pending write. Until the first response
+  /// establishes that capability, defer cache rendering instead of briefly
+  /// presenting those rows as product memories.
+  @discardableResult
+  private func restoreCanonicalLifecycleExposure() -> Bool {
+    guard let exposed = UserDefaults.standard.object(forKey: lifecycleExposureCapabilityKey) as? Bool else {
+      return false
+    }
+    canonicalLifecycleExposed = exposed
+    return true
+  }
+
+  private func persistCanonicalLifecycleExposure(_ exposed: Bool) {
+    UserDefaults.standard.set(exposed, forKey: lifecycleExposureCapabilityKey)
   }
 
   @discardableResult
@@ -319,6 +343,7 @@ class MemoriesViewModel: ObservableObject {
     guard isCurrentScope(token) else { return false }
     if let expectedOffset, currentOffset != expectedOffset { return false }
     canonicalLifecycleExposed = page.canonicalLifecycleExposed
+    persistCanonicalLifecycleExposure(page.canonicalLifecycleExposed)
     if let deviceScopeCapability = deviceScopeSupportedOverride ?? page.deviceScopeSupported {
       deviceScopeSupported = deviceScopeCapability
     }
@@ -326,6 +351,7 @@ class MemoriesViewModel: ObservableObject {
   }
 
   private func layerAllowed(_ memory: ServerMemory, for token: MemoryScopeToken) -> Bool {
+    guard memory.tierIsExplicit == canonicalLifecycleExposed else { return false }
     guard let allowedLayers = layers(for: token) else { return true }
     return Set(allowedLayers).contains(memory.tier)
   }
@@ -345,7 +371,7 @@ class MemoriesViewModel: ObservableObject {
           limit: pageSize,
           offset: 0,
           tiers: layers(for: token),
-          includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+          scope: recordReadScope(for: token)
         )
         guard isCurrentScope(token) else { return }
         memories = displayCacheMemories(loaded, for: token)
@@ -450,7 +476,7 @@ class MemoriesViewModel: ObservableObject {
         limit: reloadLimit,
         offset: 0,
         tiers: layers(for: token),
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        scope: recordReadScope(for: token)
       )
       guard isCurrentScope(token) else { return }
       if let fetchedLifecycleExposure {
@@ -537,7 +563,7 @@ class MemoriesViewModel: ObservableObject {
         limit: reloadLimit,
         offset: 0,
         tiers: layers(for: token),
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        scope: recordReadScope(for: token)
       )
       guard isCurrentScope(token) else { return }
       log(
@@ -570,10 +596,9 @@ class MemoriesViewModel: ObservableObject {
       var counts: [MemoryTag: Int] = [:]
 
       // Get total count (no filters) and store for "All" badge
-      let includeExplicitLifecycleRows = canonicalLifecycleExposed
       let totalCount = try await MemoryStorage.shared.getLocalMemoriesCount(
         tiers: activeLayerFilter,
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows
+        scope: canonicalLifecycleExposed ? .canonicalProduct : .legacyCompatibility
       )
       totalMemoriesCount = totalCount
 
@@ -582,7 +607,7 @@ class MemoriesViewModel: ObservableObject {
         counts[tag] = try await MemoryStorage.shared.getLocalMemoriesCount(
           category: tag.rawValue,
           tiers: activeLayerFilter,
-          includeExplicitLifecycleRows: includeExplicitLifecycleRows
+          scope: canonicalLifecycleExposed ? .canonicalProduct : .legacyCompatibility
         )
       }
 
@@ -620,7 +645,7 @@ class MemoriesViewModel: ObservableObject {
         matchAnyTag: nil,
         matchAnyCategory: matchAnyCategory.isEmpty ? nil : matchAnyCategory,
         tiers: layers(for: token),
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        scope: recordReadScope(for: token)
       )
 
       guard isCurrentScope(token) else { return }
@@ -729,7 +754,7 @@ class MemoriesViewModel: ObservableObject {
         query: query,
         limit: 10000,
         tiers: layers(for: token),
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        scope: recordReadScope(for: token)
       )
       guard isCurrentScope(token) else { return }
       searchResults = displayCacheMemories(results, for: token)
@@ -791,38 +816,46 @@ class MemoriesViewModel: ObservableObject {
     rawBackendOffset = 0
     let token = currentScopeToken
     let tokenTiers = layers(for: token)
+    let hasRememberedLifecycleExposure = restoreCanonicalLifecycleExposure()
 
     // Step 1: Load from local cache first for instant display
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery)
-    do {
-      let cachedMemories = try await withThrowingTaskGroup(of: [ServerMemory].self) { group in
-        group.addTask {
-          try await MemoryStorage.shared.getLocalMemories(
-            limit: self.pageSize,
-            offset: 0,
-            tiers: tokenTiers,
-            includeExplicitLifecycleRows: self.includeExplicitLifecycleRows(for: token)
-          )
+    // A cache alone cannot establish an account's lifecycle capability. On a
+    // first launch, wait for the authoritative response rather than flash
+    // untiered legacy/local-pending records in a canonical user experience.
+    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
+    if hasRememberedLifecycleExposure {
+      do {
+        let cachedMemories = try await withThrowingTaskGroup(of: [ServerMemory].self) { group in
+          group.addTask {
+            try await MemoryStorage.shared.getLocalMemories(
+              limit: self.pageSize,
+              offset: 0,
+              tiers: tokenTiers,
+              scope: self.recordReadScope(for: token)
+            )
+          }
+          group.addTask {
+            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
+            throw CancellationError()
+          }
+          let result = try await group.next()!
+          group.cancelAll()
+          return result
         }
-        group.addTask {
-          try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-          throw CancellationError()
-        }
-        let result = try await group.next()!
-        group.cancelAll()
-        return result
-      }
 
-      if !cachedMemories.isEmpty, isCurrentScope(token) {
-        memories = displayCacheMemories(cachedMemories, for: token)
-        currentOffset = cachedMemories.count
-        hasMoreMemories = cachedMemories.count >= pageSize
-        isLoading = false  // Show cached data immediately
-        log("MemoriesViewModel: Loaded \(cachedMemories.count) memories from local cache")
+        if !cachedMemories.isEmpty, isCurrentScope(token) {
+          memories = displayCacheMemories(cachedMemories, for: token)
+          currentOffset = cachedMemories.count
+          hasMoreMemories = cachedMemories.count >= pageSize
+          isLoading = false  // Show cached data immediately
+          log("MemoriesViewModel: Loaded \(cachedMemories.count) memories from local cache")
+        }
+      } catch {
+        log("MemoriesViewModel: Local cache unavailable, falling back to API")
+        // Continue to API fetch even if cache fails
       }
-    } catch {
-      log("MemoriesViewModel: Local cache unavailable, falling back to API")
-      // Continue to API fetch even if cache fails
+    } else {
+      log("MemoriesViewModel: Deferring unclassified cache until lifecycle capability is confirmed")
     }
 
     // Step 2: Fetch from API in background and sync to local cache
@@ -874,7 +907,7 @@ class MemoriesViewModel: ObservableObject {
             limit: pageSize,
             offset: 0,
             tiers: layers(for: token),
-            includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+            scope: recordReadScope(for: token)
           )
         }
         guard isCurrentScope(token) else {
@@ -1076,7 +1109,7 @@ class MemoriesViewModel: ObservableObject {
         limit: pageSize,
         offset: requestedOffset,
         tiers: layers(for: token),
-        includeExplicitLifecycleRows: includeExplicitLifecycleRows(for: token)
+        scope: recordReadScope(for: token)
       )
 
       guard isCurrentScope(token), currentOffset == requestedOffset else { return }

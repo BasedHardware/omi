@@ -1,6 +1,19 @@
 import Foundation
 import GRDB
 
+/// Selects which provenance class may participate in a local-memory read.
+///
+/// This is intentionally separate from ``MemoryLayer``: legacy compatibility
+/// rows and unsynced local captures are not product-memory tiers.
+enum MemoryRecordReadScope: Sendable {
+    /// Preserve the caller's historical mixed-cache behavior.
+    case all
+    /// Only rows whose lifecycle came from the authoritative canonical API.
+    case canonicalProduct
+    /// Rows that do not expose a canonical lifecycle, for legacy compatibility.
+    case legacyCompatibility
+}
+
 /// Actor-based storage manager for memories with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor MemoryStorage {
@@ -48,11 +61,32 @@ actor MemoryStorage {
         return query.filter(tiers.map { $0.rawValue }.contains(Column("tier")))
     }
 
-    private static func applyLifecycleExposureFilter(
+    private static func applyRecordReadScope(
         _ query: QueryInterfaceRequest<MemoryRecord>,
-        includeExplicitLifecycleRows: Bool
+        scope: MemoryRecordReadScope
     ) -> QueryInterfaceRequest<MemoryRecord> {
-        includeExplicitLifecycleRows ? query : query.filter(Column("tierIsExplicit") == false)
+        switch scope {
+        case .all:
+            return query
+        case .canonicalProduct:
+            return query.filter(Column("tierIsExplicit") == true)
+        case .legacyCompatibility:
+            return query.filter(Column("tierIsExplicit") == false)
+        }
+    }
+
+    private static func appendRecordReadScopeCondition(
+        _ conditions: inout [String],
+        scope: MemoryRecordReadScope
+    ) {
+        switch scope {
+        case .all:
+            return
+        case .canonicalProduct:
+            conditions.append("tierIsExplicit = 1")
+        case .legacyCompatibility:
+            conditions.append("tierIsExplicit = 0")
+        }
     }
 
     private static func appendTierCondition(_ conditions: inout [String], _ arguments: inout [DatabaseValue], tiers: [MemoryLayer]?) {
@@ -76,7 +110,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
-        includeExplicitLifecycleRows: Bool = true,
+        scope: MemoryRecordReadScope = .all,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -95,9 +129,9 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
-            query = Self.applyLifecycleExposureFilter(
+            query = Self.applyRecordReadScope(
                 query,
-                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+                scope: scope
             )
 
             // Tag filtering using JSON
@@ -122,7 +156,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
-        includeExplicitLifecycleRows: Bool = true,
+        scope: MemoryRecordReadScope = .all,
         includeDismissed: Bool = false
     ) async throws -> Int {
         let db = try await ensureInitialized()
@@ -141,9 +175,9 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
-            query = Self.applyLifecycleExposureFilter(
+            query = Self.applyRecordReadScope(
                 query,
-                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+                scope: scope
             )
 
             if let tags = tags, !tags.isEmpty {
@@ -165,7 +199,7 @@ actor MemoryStorage {
         matchAnyCategory: [String]? = nil, // OR logic: matches any of these categories
         excludeTags: [String]? = nil,      // Exclude memories containing these tags
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
-        includeExplicitLifecycleRows: Bool = true,
+        scope: MemoryRecordReadScope = .all,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -180,9 +214,7 @@ actor MemoryStorage {
             }
 
             Self.appendTierCondition(&conditions, &arguments, tiers: tiers)
-            if !includeExplicitLifecycleRows {
-                conditions.append("tierIsExplicit = 0")
-            }
+            Self.appendRecordReadScopeCondition(&conditions, scope: scope)
 
             // Tag OR conditions
             if let tags = matchAnyTag, !tags.isEmpty {
@@ -243,7 +275,7 @@ actor MemoryStorage {
         category: String? = nil,
         tags: [String]? = nil,
         tiers: [MemoryLayer]? = [.shortTerm, .longTerm],
-        includeExplicitLifecycleRows: Bool = true,
+        scope: MemoryRecordReadScope = .all,
         includeDismissed: Bool = false
     ) async throws -> [ServerMemory] {
         let db = try await ensureInitialized()
@@ -266,9 +298,9 @@ actor MemoryStorage {
             }
 
             query = Self.applyTierFilter(query, tiers: tiers)
-            query = Self.applyLifecycleExposureFilter(
+            query = Self.applyRecordReadScope(
                 query,
-                includeExplicitLifecycleRows: includeExplicitLifecycleRows
+                scope: scope
             )
 
             if let tags = tags, !tags.isEmpty {
@@ -527,6 +559,36 @@ actor MemoryStorage {
         }
 
         log("MemoryStorage: Marked memory \(id) as synced (backendId: \(backendId))")
+    }
+
+    /// Reconcile a known local capture with the authoritative create receipt.
+    ///
+    /// A local record has no product-tier authority before the server responds.
+    /// Updating it from the receipt prevents a canonical Short-term item from
+    /// being rendered as the local model's legacy Long-term default.
+    func markSynced(id: Int64, serverMemory: ServerMemory) async throws {
+        let db = try await ensureInitialized()
+
+        try await db.write { database in
+            guard var record = try MemoryRecord.fetchOne(database, key: id) else {
+                throw MemoryStorageError.recordNotFound
+            }
+
+            if let existing = try MemoryRecord
+                .filter(Column("backendId") == serverMemory.id)
+                .fetchOne(database),
+                existing.id != record.id {
+                try record.delete(database)
+                return
+            }
+
+            record.backendId = serverMemory.id
+            record.backendSynced = true
+            record.updateFrom(serverMemory)
+            try record.update(database)
+        }
+
+        log("MemoryStorage: Reconciled memory \(id) from authoritative create receipt (backendId: \(serverMemory.id))")
     }
 
     /// Get memories that haven't been synced to backend yet
