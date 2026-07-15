@@ -138,7 +138,12 @@ export function createLiveNoteOn(d: LiveNotesDb, note: LiveNoteInput): void {
 }
 
 /** Update a note's text (explicit user edit only — Mac's updateNote). */
-export function updateLiveNoteOn(d: LiveNotesDb, id: string, text: string, updatedAt: number): void {
+export function updateLiveNoteOn(
+  d: LiveNotesDb,
+  id: string,
+  text: string,
+  updatedAt: number
+): void {
   d.prepare('UPDATE live_notes SET text = ?, updated_at = ? WHERE id = ?').run(text, updatedAt, id)
 }
 

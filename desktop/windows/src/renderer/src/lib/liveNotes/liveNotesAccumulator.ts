@@ -50,7 +50,8 @@ export class LiveNotesAccumulator {
   }) {
     this.wordThreshold = opts?.wordThreshold ?? DEFAULT_WORD_THRESHOLD
     this.maxWordBufferSize = opts?.maxWordBufferSize ?? DEFAULT_MAX_WORD_BUFFER
-    this.maxExistingNotesContext = opts?.maxExistingNotesContext ?? DEFAULT_MAX_EXISTING_NOTES_CONTEXT
+    this.maxExistingNotesContext =
+      opts?.maxExistingNotesContext ?? DEFAULT_MAX_EXISTING_NOTES_CONTEXT
   }
 
   /** Segment count covered so far (Mac's currentSegmentOrder) — used to stamp a

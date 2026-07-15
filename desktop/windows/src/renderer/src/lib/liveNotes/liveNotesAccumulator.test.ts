@@ -44,7 +44,10 @@ describe('LiveNotesAccumulator', () => {
 
   it('caps the rolling word buffer and passes only the last threshold words', () => {
     const acc = new LiveNotesAccumulator({ wordThreshold: 5, maxWordBufferSize: 10 })
-    const big: AccumulatorSegment = { id: 'a', text: Array.from({ length: 30 }, (_, i) => `x${i}`).join(' ') }
+    const big: AccumulatorSegment = {
+      id: 'a',
+      text: Array.from({ length: 30 }, (_, i) => `x${i}`).join(' ')
+    }
     const req = acc.handleSegmentsUpdate([big], false)
     // recentText is the LAST `wordThreshold` words of the (capped) buffer.
     expect(req?.recentText.split(' ')).toHaveLength(5)
