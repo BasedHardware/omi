@@ -102,6 +102,18 @@ class RunnerBehaviorTests(unittest.TestCase):
             selected = {check.id for check in resolve_checks(manifest, changed, lane)}
             self.assertIn("backend-route-policy-baseline", selected)
 
+    def test_failure_class_protocol_runs_in_both_lanes(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
+            self.assertIn("failure-class-protocol", selected)
+
+    def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        for lane in ("local", "ci"):
+            selected = {check.id for check in resolve_checks(manifest, ["backend/routers/example.py"], lane)}
+            self.assertIn("backend-datetime-sort-sentinel-ratchet", selected)
+
     def test_failure_is_propagated(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp)

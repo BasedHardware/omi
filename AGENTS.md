@@ -31,14 +31,14 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — setup, test commands, service boundaries, env vars, or agent-relevant behavior changes update the matching guide (this file, a component `AGENTS.md`, or `docs/doc/developer/`) in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
-7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
-8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). When product-invariant citations apply, draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` for paste-ready IDs).
+7. **Failure-class declaration** — every `fix:` commit declares `Failure-Class: FC-<slug> | new | none` in its PR body and validates it with `scripts/failure-class`.
+8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). Draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` for paste-ready invariant IDs).
 
 A deterministic diff-scoped check failing for the first time in CI is a manifest bug: fix the manifest instead of adding a one-off workflow step. Register new checks in `.github/checks-manifest.yaml` with both `local` and `ci` lanes.
 
-## Bug Fixes: Close the Failure Class
+## Bug Fixes: Repair the Failure-Class Boundary
 
-The unit of work is the violated contract, not only the line where the symptom appeared. Before fixing, inspect recent fixes in the same subsystem.
+The unit of work is the violated contract, not only the line where the symptom appeared. The declaration is the PR record for an ordinary instance fix; before fixing, inspect recent fixes in the same subsystem. Registry lifecycle transitions are separate PRs: dormant classes record `dormant_since`, and recurrence reopens them by setting `status: open` and removing it.
 
 - Identify the authoritative owner, identity, state transition, or boundary contract that failed — don't add another observer, fallback boolean, or call-site exception when ownership is the real problem.
 - If two or more recent fixes share the cause, add a reusable guard surface in the same PR: a typed state/policy model, behavioral contract test, fault harness, or narrow static checker.
@@ -77,7 +77,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 ## Issues
 
 - Open issues freely — one paragraph of symptom plus evidence (logs, IDs, links) is a complete issue. Tracking beats polish; iterate in comments.
-- Issues state problems; PRs state solutions. Don't write implementation epics, acceptance-criteria matrices, SLOs, or rollout programs into an issue — that content hardens in the PR, where the Definition of Done already demands root cause, durable guard, and evidence.
+- Issues state problems; PRs state solutions. Don't write implementation epics, acceptance-criteria matrices, SLOs, or rollout programs into an issue — that content hardens in the PR, where the Definition of Done already demands evidence.
 - If an issue does prescribe implementation: scope it to one self-contained PR, verify every code claim against current code first (the fix may already exist), and any proposed check must run in an existing CI or deploy lane.
 - Close incident issues on live evidence, not code merge; if live verification is deferred, name its owner in the closing comment.
 
@@ -88,6 +88,7 @@ The unit of work is the violated contract, not only the line where the symptom a
 - **Fallback telemetry:** when a branch changes provider, mode, or correctness, or takes a fail-open path, call the shared `record_fallback`/`recordFallback` helper — never a new one-off counter. Full contract: `docs/agents/fallback-telemetry.md`.
 - **Logging:** never log raw sensitive data; sanitize API responses and PII (backend: `utils.log_sanitizer`).
 - **Deferred-work markers:** new `TODO`/`FIXME`/`HACK` must reference a tracking issue or be resolved before merge. Packages over 12 source files need a package-root `ARCHITECTURE.md`/`README.md` (`check_arch_guardrails.py` ratchet). Designated rollout scaffolding needs a `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <issue URL or invariant ID>` (`check_lifecycle_headers.py`).
+- **New guards:** explain in the PR why the guard is not a shared primitive, and cite the real merged PR or incident it would have caught; no real instance means the check does not land.
 
 ## Formatting
 

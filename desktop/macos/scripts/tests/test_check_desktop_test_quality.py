@@ -56,6 +56,14 @@ class CollectionSafetyTests(unittest.TestCase):
             [("invalid-annotation", 2)],
         )
 
+    def test_collection_diagnostic_cites_the_real_incidents_and_safe_merger(self) -> None:
+        guidance = CHECKER.COLLECTION_SAFETY_GUIDANCE
+
+        self.assertIn("Dictionary(lastWriteWins:)", guidance)
+        self.assertIn("#6506", guidance)
+        self.assertIn("#9288", guidance)
+        self.assertIn("static tripwire", guidance)
+
 
 class TestQualityRatchetTests(unittest.TestCase):
     def test_counts_behavioral_source_inspection_at_exact_site(self) -> None:
