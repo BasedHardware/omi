@@ -29,6 +29,8 @@ export const USER_DATA_TABLES = [
   // sign-out.
   'conversation_folders',
   'conversation_speaker_names',
+  // PR8: LiveNotes — both the notes and their session anchor are user content.
+  'transcription_sessions',
   'live_notes',
   'rescue_segments',
   'rewind_embeddings',

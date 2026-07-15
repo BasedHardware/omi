@@ -18,7 +18,7 @@ import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
 import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
-import type { ConversationFolder } from '../shared/types'
+import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -301,6 +301,11 @@ import {
   replaceConversationFolders,
   upsertConversationFolder,
   deleteConversationFolder,
+  createTranscriptionSession,
+  createLiveNote,
+  updateLiveNote,
+  deleteLiveNote,
+  listLiveNotes,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
@@ -623,6 +628,18 @@ app.whenReady().then(async () => {
     async (_e, id: string, resetAttempts?: boolean) =>
       claimConversationForPosting(id, resetAttempts)
   )
+  // PR8: LiveNotes — AI + manual notes during a live recording (local-only).
+  ipcMain.handle(
+    'db:createTranscriptionSession',
+    async (_e, session: { id: string; startedAt: number; createdAt: number }) =>
+      createTranscriptionSession(session)
+  )
+  ipcMain.handle('db:createLiveNote', async (_e, note: LiveNote) => createLiveNote(note))
+  ipcMain.handle('db:updateLiveNote', async (_e, id: string, text: string, updatedAt: number) =>
+    updateLiveNote(id, text, updatedAt)
+  )
+  ipcMain.handle('db:deleteLiveNote', async (_e, id: string) => deleteLiveNote(id))
+  ipcMain.handle('db:listLiveNotes', async (_e, sessionId: string) => listLiveNotes(sessionId))
   // Track 2: Voice & PTT depth — durable voice-turn outbox (unconsumed until
   // Phase B / Track 1 wire the kernel-write path; see ipc/voiceTurnOutbox.ts).
   ipcMain.handle('db:insertVoiceTurn', async (_e, entry) => insertVoiceTurn(entry))

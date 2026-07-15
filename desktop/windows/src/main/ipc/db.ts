@@ -29,6 +29,16 @@ import {
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
 import {
+  LIVE_NOTES_SCHEMA,
+  createTranscriptionSessionOn,
+  endTranscriptionSessionOn,
+  createLiveNoteOn,
+  updateLiveNoteOn,
+  deleteLiveNoteOn,
+  listLiveNotesOn,
+  type LiveNotesDb
+} from './liveNotesStore'
+import {
   listConversationFoldersOn,
   replaceConversationFoldersOn,
   upsertConversationFolderOn,
@@ -63,6 +73,7 @@ import type {
   InsightPayload,
   InsightRecord,
   KgSqlResult,
+  LiveNote,
   KnowledgeGraph,
   LocalConversation,
   LocalKGStatus,
@@ -320,6 +331,11 @@ function get(): Database.Database {
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
+  // PR8 LiveNotes: PR0 shipped a dead, FK-less `live_notes` (no `updated_at`) and
+  // no `transcription_sessions`. The table has never held data, so drop the old
+  // shape and recreate it (below, via LIVE_NOTES_SCHEMA) with the cascading FK +
+  // `updated_at`, mirroring the macOS schema.
+  dropIfMissingColumn(db, 'live_notes', 'updated_at')
   // Track 4 (Rewind semantic search): drop-then-create, as one ordered unit, in a
   // module the schema tests can actually load. See rewindEmbeddingSchema.ts — a
   // PR0-era rewind_embeddings has no `hash` column, and indexing it would throw
@@ -484,17 +500,9 @@ function get(): Database.Database {
       PRIMARY KEY (conversation_id, speaker_id)
     );
 
-    -- --- Track 4: Live notes (meeting minutes; AI-generated or manual) ---
-    CREATE TABLE IF NOT EXISTS live_notes (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      text TEXT NOT NULL,
-      is_ai INTEGER NOT NULL DEFAULT 0,
-      seg_start INTEGER,
-      seg_end INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
+    -- --- PR8: LiveNotes tables (transcription_sessions + live_notes) are created
+    -- from LIVE_NOTES_SCHEMA below, not here — the DDL lives in liveNotesStore.ts
+    -- so production and the CRUD tests run byte-identical statements. ---
 
     -- --- Track 4: Crash-rescue live-segment buffer ---
     CREATE TABLE IF NOT EXISTS rescue_segments (
@@ -584,6 +592,10 @@ function get(): Database.Database {
       PRIMARY KEY (source, item_id)
     );
   `)
+  // PR8 LiveNotes: transcription_sessions + live_notes (with the cascading FK).
+  // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
+  // the drop-if-old above recreated any FK-less PR0 table before this runs.
+  db.exec(LIVE_NOTES_SCHEMA)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
@@ -777,6 +789,43 @@ export function updateLocalConversationTitle(id: string, title: string): void {
   get()
     .prepare('UPDATE local_conversation SET title = ? WHERE id = ?')
     .run(title.trim() || null, id)
+}
+
+// --- PR8: LiveNotes CRUD ---
+// Thin wrappers over the driver-agnostic CRUD in liveNotesStore.ts (extracted so
+// the SQL is unit-testable under plain-node vitest with node:sqlite). get()
+// returns a better-sqlite3 Database whose prepared statements satisfy the
+// LiveNotesDb shape structurally — same cast idiom as the folder wrappers.
+function liveNotesDb(): LiveNotesDb {
+  return get() as unknown as LiveNotesDb
+}
+
+export function createTranscriptionSession(session: {
+  id: string
+  startedAt: number
+  createdAt: number
+}): void {
+  createTranscriptionSessionOn(liveNotesDb(), session)
+}
+
+export function endTranscriptionSession(id: string, endedAt: number): void {
+  endTranscriptionSessionOn(liveNotesDb(), id, endedAt)
+}
+
+export function createLiveNote(note: LiveNote): void {
+  createLiveNoteOn(liveNotesDb(), note)
+}
+
+export function updateLiveNote(id: string, text: string, updatedAt: number): void {
+  updateLiveNoteOn(liveNotesDb(), id, text, updatedAt)
+}
+
+export function deleteLiveNote(id: string): void {
+  deleteLiveNoteOn(liveNotesDb(), id)
+}
+
+export function listLiveNotes(sessionId: string): LiveNote[] {
+  return listLiveNotesOn(liveNotesDb(), sessionId)
 }
 
 export function getLocalConversation(id: string): LocalConversation | null {

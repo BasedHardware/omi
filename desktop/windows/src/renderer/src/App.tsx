@@ -24,6 +24,7 @@ import { BarApp } from './components/bar/BarApp'
 import { GlowWindow } from './components/glow/GlowWindow'
 import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
+import { LiveNotesHost } from './components/recording/LiveNotesHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
 import { startOutboxSweep, stopOutboxSweep } from './lib/sync/outboxSweep'
@@ -38,6 +39,7 @@ import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
+import { attachLiveNotesE2eHook } from './lib/liveNotes/e2eHook'
 import { PrimitivesGallery } from './components/ui/__gallery/PrimitivesGallery'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
 import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
@@ -114,6 +116,9 @@ function AppShellInner(): React.JSX.Element {
           run the on-save UI side effects. Capture itself (Rewind, mic, PTT, screen)
           runs in the hidden capture window now. */}
       <LiveMirrorHost />
+      {/* Generates live AI notes off the mirrored transcript, app-root scoped so
+          generation isn't gated on the notes panel being open. */}
+      <LiveNotesHost />
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
@@ -202,7 +207,10 @@ function App(): React.JSX.Element {
   // smoke harness can drive the voice controller even on the signed-out screen
   // (its error-path assertion starts a session with no auth). Main window only.
   useEffect(() => {
-    if (!IS_SECONDARY_WINDOW) attachVoiceE2eHook()
+    if (!IS_SECONDARY_WINDOW) {
+      attachVoiceE2eHook()
+      attachLiveNotesE2eHook()
+    }
   }, [])
 
   // Warm the daily "Auto" realtime-voice model pick, so the user's FIRST voice

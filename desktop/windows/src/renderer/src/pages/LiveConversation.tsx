@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { Loader2, Check } from 'lucide-react'
 import { PageHeader } from '../components/layout/PageHeader'
 import { liveConversation, requestFinalize, type LiveStatus } from '../lib/liveConversation'
+import { LiveNotesPanel } from '../components/recording/LiveNotesPanel'
 import type { TranscriptLine } from '../../../shared/types'
 
 function statusLabel(status: LiveStatus): string {
@@ -87,32 +88,39 @@ export function LiveConversation(): React.JSX.Element {
           </div>
         }
       />
-      <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        <div className="mx-auto max-w-3xl">
-          <div className="surface-card p-6">
+      {/* Two-column split (mirrors Mac's expanded-transcript view): live
+          transcript LEFT, LiveNotes panel RIGHT. Stacks on narrow widths. */}
+      <div className="flex-1 overflow-hidden px-6 py-6 lg:px-10 lg:py-8">
+        <div className="mx-auto flex h-full max-w-6xl flex-col gap-4 lg:flex-row">
+          <div className="surface-card flex min-w-0 flex-1 flex-col p-6">
             <div className="mb-4 flex items-center justify-between">
               <h2 className="section-label">Transcript</h2>
             </div>
-            {segments.length > 0 ? (
-              <ul className="space-y-4">
-                {segments.map((s, i) => (
-                  <li key={s.id ?? i} className="flex gap-3 animate-fade-in">
-                    <span className="shrink-0 self-start rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/75">
-                      {s.speaker || 'speaker'}
-                    </span>
-                    <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
-                      {s.text}
-                    </p>
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              <p className="text-sm text-white/45">
-                {status === 'error'
-                  ? `Couldn't start listening: ${errorMsg || 'unknown error'}. If this is a permission issue, allow the mic in Windows Settings → Privacy → Microphone; otherwise it'll retry automatically.`
-                  : 'Listening… start speaking and your words will appear here. The finished conversation will show up in your list automatically.'}
-              </p>
-            )}
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              {segments.length > 0 ? (
+                <ul className="space-y-4">
+                  {segments.map((s, i) => (
+                    <li key={s.id ?? i} className="flex gap-3 animate-fade-in">
+                      <span className="shrink-0 self-start rounded-full border border-white/15 bg-white/5 px-2.5 py-0.5 text-[10px] font-medium uppercase tracking-wide text-white/75">
+                        {s.speaker || 'speaker'}
+                      </span>
+                      <p className="min-w-0 flex-1 whitespace-pre-wrap text-sm leading-relaxed text-white/85">
+                        {s.text}
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : (
+                <p className="text-sm text-white/45">
+                  {status === 'error'
+                    ? `Couldn't start listening: ${errorMsg || 'unknown error'}. If this is a permission issue, allow the mic in Windows Settings → Privacy → Microphone; otherwise it'll retry automatically.`
+                    : 'Listening… start speaking and your words will appear here. The finished conversation will show up in your list automatically.'}
+                </p>
+              )}
+            </div>
+          </div>
+          <div className="lg:w-[22rem] lg:shrink-0">
+            <LiveNotesPanel />
           </div>
         </div>
       </div>

@@ -597,6 +597,21 @@ export type OmiBridgeApi = {
   upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
   /** Drop a folder from the cache (optimistic delete). */
   deleteConversationFolder: (id: string) => Promise<void>
+  // --- PR8: LiveNotes (AI + manual notes during a live recording; local-only) ---
+  /** Persist the session anchor when a recording starts (idempotent on id). */
+  createTranscriptionSession: (session: {
+    id: string
+    startedAt: number
+    createdAt: number
+  }) => Promise<void>
+  /** Insert one note (AI or manual). Always an INSERT — never overwrites a row. */
+  createLiveNote: (note: LiveNote) => Promise<void>
+  /** Update a note's text (explicit user edit). */
+  updateLiveNote: (id: string, text: string, updatedAt: number) => Promise<void>
+  /** Delete a note (explicit user delete). */
+  deleteLiveNote: (id: string) => Promise<void>
+  /** All notes for a session, oldest-first (crash-recovery reload). */
+  listLiveNotes: (sessionId: string) => Promise<LiveNote[]>
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
    *  delivery. A re-enqueue for the same key updates the assistant text /
@@ -1453,6 +1468,7 @@ export type LiveNote = {
   segStart?: number | null
   segEnd?: number | null
   createdAt: number
+  updatedAt: number
 }
 
 /** A buffered live transcript segment persisted for crash recovery
