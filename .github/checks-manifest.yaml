@@ -54,7 +54,7 @@ checks:
     reason: "desktop files changed"
   - id: omi-macos-dev-cli
     command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
-    triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh"]
+    triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
     lanes: ["local", "ci"]
     reason: "agent-facing macOS development hygiene CLI remains safe and deterministic"
   - id: desktop-e2e-flow-coverage
