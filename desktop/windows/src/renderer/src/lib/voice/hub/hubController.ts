@@ -49,6 +49,7 @@ import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voice
 import { GeminiHubSession } from './geminiHubSession'
 import { OpenAiHubSession } from './openaiHubSession'
 import type { HubEventIdentity, HubSession, HubSessionEvents } from './hubSession'
+import { classifyHubClose, HUB_IDLE_TEARDOWN_THRESHOLD_MS, type HubCloseCategory } from './hubClose'
 
 // MARK: - Public surface
 
@@ -110,6 +111,10 @@ export type HubControllerOptions = {
   sinkId?: () => string | undefined
   /** Injectable wall clock for `aliveForMs` (tests use a fake). */
   now?: () => number
+  /** Injectable one-shot timer for the A7c reconnect backoff (fake timers in tests).
+   *  Defaults to `setTimeout`/`clearTimeout`. */
+  setTimer?: (ms: number, fire: () => void) => unknown
+  clearTimer?: (handle: unknown) => void
 }
 
 // MARK: - Controller
@@ -121,6 +126,8 @@ export class HubController {
   private readonly mintToken: (provider: VoiceProvider) => Promise<string>
   private readonly createSession: (spec: HubSessionSpec) => HubSession
   private readonly now: () => number
+  private readonly setTimer: (ms: number, fire: () => void) => unknown
+  private readonly clearTimer: (handle: unknown) => void
 
   private session: HubSession | null = null
   private sessionProvider: VoiceProvider | null = null
@@ -128,6 +135,17 @@ export class HubController {
   private connectedAt: number | null = null
   /** In flight ensureWarm, so overlapping calls (summon + first press) coalesce. */
   private warming: Promise<VoiceSessionID> | null = null
+
+  // A7c reconnect budget (ported from macOS RealtimeHubController) ---------------
+  /** After this many consecutive FAILURE re-warms with no surviving session, stop
+   *  re-warming so a dead endpoint (revoked token, provider outage) isn't hammered
+   *  (Mac `maxReconnectStrikes`). Expected idle teardowns never spend a strike. */
+  private static readonly MAX_RECONNECT_STRIKES = 5
+  /** Backoff before a scheduled re-warm (Mac's 1.5 s `asyncAfter`). */
+  private static readonly RECONNECT_BACKOFF_MS = 1500
+  private reconnectStrikes = 0
+  private reconnectPending = false
+  private reconnectHandle: unknown = null
 
   // Per-turn state (all reset by voiceTurnDidTerminate) ------------------------
   private activeTurnID: VoiceTurnID | null = null
@@ -172,6 +190,8 @@ export class HubController {
         return spec.provider === 'openai' ? new OpenAiHubSession(opts) : new GeminiHubSession(opts)
       })
     this.now = options.now ?? (() => Date.now())
+    this.setTimer = options.setTimer ?? ((ms, fire) => setTimeout(fire, ms))
+    this.clearTimer = options.clearTimer ?? ((h) => clearTimeout(h as ReturnType<typeof setTimeout>))
   }
 
   // MARK: Warm (idempotent, eager-callable)
@@ -259,6 +279,10 @@ export class HubController {
    *  re-warm is `teardownSession()` then `ensureWarm()`; both are safe at any turn
    *  phase. Does NOT touch per-turn reducer state. */
   teardownSession(): void {
+    // An explicit drop (kill-switch off / sign-out) must NOT auto-re-warm, and it is a
+    // clean reset — cancel any pending backoff and clear the strike budget.
+    this.cancelReconnect()
+    this.reconnectStrikes = 0
     const s = this.session
     this.session = null
     this.sessionProvider = null
@@ -371,7 +395,7 @@ export class HubController {
   private sessionEvents(): HubSessionEvents {
     return {
       onConnected: (sessionID) => this.handleConnected(sessionID),
-      onError: (message, retryable) => this.handleError(message, retryable),
+      onError: (message, retryable, closeCode) => this.handleError(message, retryable, closeCode),
       onInputTranscript: (text, isFinal, identity) =>
         this.events.onInputTranscript?.(text, isFinal, identity),
       onAssistantText: (text, isFinal, identity) =>
@@ -379,13 +403,22 @@ export class HubController {
       onSpeakingStart: () => this.events.onSpeakingStart?.(),
       onSpeakingEnd: () => this.events.onSpeakingEnd?.(),
       onToolRequest: (call, identity) => this.events.onToolRequest?.(call, identity),
-      onTurnDone: (identity) => this.events.onTurnDone?.(identity)
+      onTurnDone: (identity) => {
+        // A completed turn proves the hub works — reset the strike budget (Mac :3328).
+        this.reconnectStrikes = 0
+        this.events.onTurnDone?.(identity)
+      }
     }
   }
 
   private handleConnected(sessionID: VoiceSessionID): void {
     this.sessionID = sessionID
     this.connectedAt = this.now()
+    // A live socket supersedes any pending reconnect backoff. NB: connecting alone does
+    // NOT reset the strike budget (Mac parity) — only a PROVEN-good signal does (a
+    // completed turn, or a socket that survives past the idle window). A socket that
+    // connects then dies fast repeatedly must still exhaust its budget and stop.
+    this.cancelReconnect()
     // Flush any PCM withheld during warm-wait into the now-ready session, in order,
     // then replay a deferred commit. The hub won the race.
     if (this.warmBuffer !== null && this.session) {
@@ -400,12 +433,60 @@ export class HubController {
     this.events.onConnected?.(sessionID)
   }
 
-  private handleError(message: string, retryable: boolean): void {
+  private handleError(message: string, retryable: boolean, closeCode?: number): void {
     const aliveForMs = this.connectedAt !== null ? Math.max(0, this.now() - this.connectedAt) : 0
+    // Classify BEFORE forwarding: the forward drives the reducer's terminal, which
+    // clears `activeTurnID`, so the turn-at-close-time must be captured first.
+    const hadActiveTurn = this.activeTurnID !== null
     // The session tore itself down on error; drop our handle so ensureWarm rebuilds.
     this.session = null
     this.sessionProvider = null
     this.connectedAt = null
+    const category = classifyHubClose({
+      message,
+      closeCode,
+      aliveForMs,
+      hasActiveTurn: hadActiveTurn
+    })
     this.events.onError?.({ reason: message, retryable, aliveForMs })
+    this.scheduleReconnectForClose(category, aliveForMs)
+  }
+
+  // MARK: A7c reconnect policy (strike-bounded re-warm)
+
+  /** Decide whether/how to re-warm after a socket close. A genuine FAILURE re-warms
+   *  bounded by the strike budget so a dead endpoint (revoked token, provider outage)
+   *  isn't hammered. A socket that survived past the idle window proved the endpoint
+   *  works, so it refreshes the budget (Mac: aliveFor>60 → strikes=0). An EXPECTED idle
+   *  teardown is left to A7c item C (proactive idle re-warm). */
+  private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
+    if (category === 'expected_idle_teardown') return
+    if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) this.reconnectStrikes = 0
+    if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) return
+    this.reconnectStrikes += 1
+    this.scheduleReWarm()
+  }
+
+  /** Arm the one-shot backoff (Mac's 1.5 s `asyncAfter`). Coalesced: a second close
+   *  while one is pending is a no-op. Rebuilds only if nothing else re-warmed first. */
+  private scheduleReWarm(): void {
+    if (this.reconnectPending) return
+    this.reconnectPending = true
+    this.reconnectHandle = this.setTimer(HubController.RECONNECT_BACKOFF_MS, () => {
+      this.reconnectHandle = null
+      this.reconnectPending = false
+      // A failed re-warm (e.g. a still-dead mint) is expected on this path — swallow
+      // the rejection so it never surfaces as an unhandled promise; the next press
+      // (or a socket close from a partial connect) drives the next attempt.
+      if (this.session === null) void this.ensureWarm().catch(() => {})
+    })
+  }
+
+  private cancelReconnect(): void {
+    if (this.reconnectHandle !== null) {
+      this.clearTimer(this.reconnectHandle)
+      this.reconnectHandle = null
+    }
+    this.reconnectPending = false
   }
 }
