@@ -101,6 +101,7 @@ import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './ass
 import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
+import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -1022,6 +1023,13 @@ app.whenReady().then(async () => {
     // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
     // no notification — it records durable facts silently.
     registerMemoryAssistant()
+    // Track 3 (Task assistant): Mac's screen→task extractor. A coordinator peer to
+    // Focus/Insight/Memory (same shared loop) that stages tasks silently, gated on
+    // the opt-in `taskEnabled` setting. Bring the task-title embedding index up too
+    // (loadIndex + a one-shot backfill once the renderer relays a session) — those
+    // PR-A primitives were shipped but never wired until now.
+    registerTaskAssistant()
+    bringUpTaskEmbeddingIndex()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon
