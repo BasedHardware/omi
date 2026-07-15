@@ -518,3 +518,64 @@ describe('silent-mic escalation (A7b)', () => {
     expect(h.trackEvent).not.toHaveBeenCalled()
   })
 })
+
+// Warm-hub delegation (A5 PR-6b) — the flag-off invariant and the flag-on seam.
+describe('warm-hub delegation', () => {
+  function hub(enabled: boolean) {
+    return { enabled: () => enabled, begin: vi.fn(), end: vi.fn(), cancel: vi.fn() }
+  }
+
+  it('INVARIANT: flag off (no hubDelegate) — a hold issues local capture, never delegates', async () => {
+    setup()
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    // The local cascade path is byte-for-byte today's: capture is issued locally.
+    expect(h.startPttCapture).toHaveBeenCalledOnce()
+    expect(h.startPttStream).toHaveBeenCalledOnce()
+  })
+
+  it('INVARIANT: hubDelegate present but disabled — still the local path, never delegates', async () => {
+    const delegate = hub(false)
+    setup({ hubDelegate: delegate })
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    expect(delegate.begin).not.toHaveBeenCalled()
+    expect(h.startPttCapture).toHaveBeenCalledOnce() // local capture, exactly as today
+  })
+
+  it('flag on — a hold delegates to the hub driver and issues NO local capture', async () => {
+    const delegate = hub(true)
+    setup({ hubDelegate: delegate })
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    expect(delegate.begin).toHaveBeenCalledTimes(1)
+    expect(delegate.begin.mock.calls[0][0]).toBe(HOLD_THRESHOLD_MS) // backfill forwarded
+    expect(h.startPttCapture).not.toHaveBeenCalled() // no local owner
+    expect(h.startPttStream).not.toHaveBeenCalled()
+  })
+
+  it('flag on — release ends the delegated turn; a tap never delegates', async () => {
+    const delegate = hub(true)
+    setup({ hubDelegate: delegate })
+    // A quick tap: threshold not crossed → no delegation.
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS - 100)
+    releaseSpace()
+    expect(delegate.begin).not.toHaveBeenCalled()
+    // A real hold then release drives begin + end.
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    releaseSpace()
+    expect(delegate.begin).toHaveBeenCalledTimes(1)
+    expect(delegate.end).toHaveBeenCalledTimes(1)
+  })
+
+  it('flag on — cancel() aborts the delegated turn', async () => {
+    const delegate = hub(true)
+    const { result } = setup({ hubDelegate: delegate })
+    pressSpace()
+    await advance(HOLD_THRESHOLD_MS)
+    act(() => result.current.cancel())
+    expect(delegate.cancel).toHaveBeenCalledTimes(1)
+  })
+})
