@@ -320,6 +320,98 @@ function tx<T>(d: TaskStoreDb, fn: () => T): T {
   }
 }
 
+// The two task tables share identical delete/markSynced/rerank logic (only the
+// table name differs), so those bodies live in table-parameterized helpers here
+// and the per-table exports below are thin wrappers. `table` is one of these two
+// compile-time constants — never user input — so interpolating it into the SQL is
+// safe (same idiom as the `${fts}` names in db.ts).
+type TaskTable = 'action_items' | 'staged_tasks'
+
+/** HARD-delete rows by backend_id inside a tx; returns the deleted local ids (FIX
+ *  ii — so the caller can evict them from the in-memory embedding index). */
+function deleteByBackendIdOn(d: TaskStoreDb, table: TaskTable, backendId: string): number[] {
+  return tx(d, () => {
+    const ids = (
+      d.prepare(`SELECT id FROM ${table} WHERE backend_id = ?`).all(backendId) as { id: number }[]
+    ).map((r) => r.id)
+    if (ids.length > 0) d.prepare(`DELETE FROM ${table} WHERE backend_id = ?`).run(backendId)
+    return ids
+  })
+}
+
+/** Defensive markSynced dedup-merge (FIX iii / Mac's staged version): if any OTHER
+ *  row already holds `backendId`, mark THAT row synced and delete this one; else set
+ *  this row's backend_id, catching the UNIQUE-constraint race the same way. Never
+ *  throws on a duplicate backend_id. Returns which row survived. */
+function markSyncedOn(
+  d: TaskStoreDb,
+  table: TaskTable,
+  localId: number,
+  backendId: string,
+  now: number
+): MarkSyncedResult {
+  return tx(d, () => {
+    const existing = d
+      .prepare(`SELECT id FROM ${table} WHERE backend_id = ? AND id != ?`)
+      .get(backendId, localId) as { id: number } | undefined
+    if (existing) {
+      d.prepare(`UPDATE ${table} SET backend_synced = 1, updated_at = ? WHERE id = ?`).run(
+        now,
+        existing.id
+      )
+      d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(localId)
+      return { merged: true, keptId: existing.id }
+    }
+    try {
+      d.prepare(
+        `UPDATE ${table} SET backend_id = ?, backend_synced = 1, updated_at = ? WHERE id = ?`
+      ).run(backendId, now, localId)
+      return { merged: false, keptId: localId }
+    } catch {
+      // Lost a race: another row grabbed backendId between the SELECT and the UPDATE.
+      // Fold this freshly-synced duplicate into the canonical row.
+      const winner = d
+        .prepare(`SELECT id FROM ${table} WHERE backend_id = ? AND id != ?`)
+        .get(backendId, localId) as { id: number } | undefined
+      const keptId = winner?.id ?? localId
+      d.prepare(`DELETE FROM ${table} WHERE id = ?`).run(localId)
+      return { merged: true, keptId }
+    }
+  })
+}
+
+/** Selective re-rank: pull the re-ranked rows out of the current score order,
+ *  reinsert them at their new 1-based positions, then renumber every active row
+ *  1..N (relevance_score = position, scored_at = updated_at = now). */
+function applyRerankingOn(
+  d: TaskStoreDb,
+  table: TaskTable,
+  reranks: TaskRerank[],
+  now: number
+): void {
+  tx(d, () => {
+    const rows = d
+      .prepare(
+        `SELECT backend_id AS backendId FROM ${table}
+           WHERE completed = 0 AND deleted = 0
+           ORDER BY COALESCE(relevance_score, ${UNSCORED_SORT}) ASC`
+      )
+      .all() as { backendId: string | null }[]
+    let ordered = rows.map((r) => r.backendId).filter((b): b is string => b != null)
+    const rerankedSet = new Set(reranks.map((r) => r.backendId))
+    ordered = ordered.filter((b) => !rerankedSet.has(b))
+    const sorted = [...reranks].sort((a, b) => a.newPosition - b.newPosition)
+    for (const r of sorted) {
+      const idx = Math.max(0, Math.min(r.newPosition - 1, ordered.length))
+      ordered.splice(idx, 0, r.backendId)
+    }
+    const stmt = d.prepare(
+      `UPDATE ${table} SET relevance_score = ?, scored_at = ?, updated_at = ? WHERE backend_id = ?`
+    )
+    ordered.forEach((backendId, index) => stmt.run(index + 1, now, now, backendId))
+  })
+}
+
 // ===========================================================================
 // action_items
 // ===========================================================================
@@ -518,15 +610,7 @@ export function deleteActionItemByBackendIdOn(
   backendId: string,
   _deletedBy?: string | null
 ): number[] {
-  return tx(d, () => {
-    const ids = (
-      d.prepare('SELECT id FROM action_items WHERE backend_id = ?').all(backendId) as {
-        id: number
-      }[]
-    ).map((r) => r.id)
-    if (ids.length > 0) d.prepare('DELETE FROM action_items WHERE backend_id = ?').run(backendId)
-    return ids
-  })
+  return deleteByBackendIdOn(d, 'action_items', backendId)
 }
 
 /** Mark a locally-inserted action item synced with its backend id, bumping
@@ -540,34 +624,7 @@ export function markSyncedActionItemOn(
   backendId: string,
   now: number
 ): MarkSyncedResult {
-  return tx(d, () => {
-    const existing = d
-      .prepare('SELECT id FROM action_items WHERE backend_id = ? AND id != ?')
-      .get(backendId, localId) as { id: number } | undefined
-    if (existing) {
-      d.prepare('UPDATE action_items SET backend_synced = 1, updated_at = ? WHERE id = ?').run(
-        now,
-        existing.id
-      )
-      d.prepare('DELETE FROM action_items WHERE id = ?').run(localId)
-      return { merged: true, keptId: existing.id }
-    }
-    try {
-      d.prepare(
-        'UPDATE action_items SET backend_id = ?, backend_synced = 1, updated_at = ? WHERE id = ?'
-      ).run(backendId, now, localId)
-      return { merged: false, keptId: localId }
-    } catch {
-      // Lost a race: another row grabbed backendId between the SELECT and the UPDATE.
-      // Fold this freshly-synced duplicate into the canonical row.
-      const winner = d
-        .prepare('SELECT id FROM action_items WHERE backend_id = ? AND id != ?')
-        .get(backendId, localId) as { id: number } | undefined
-      const keptId = winner?.id ?? localId
-      d.prepare('DELETE FROM action_items WHERE id = ?').run(localId)
-      return { merged: true, keptId }
-    }
-  })
+  return markSyncedOn(d, 'action_items', localId, backendId, now)
 }
 
 // Compute the post-`updateFrom` column values for an existing action row from an
@@ -831,27 +888,7 @@ export function applyActionItemRerankingOn(
   reranks: TaskRerank[],
   now: number
 ): void {
-  tx(d, () => {
-    const rows = d
-      .prepare(
-        `SELECT backend_id AS backendId FROM action_items
-           WHERE completed = 0 AND deleted = 0
-           ORDER BY COALESCE(relevance_score, ${UNSCORED_SORT}) ASC`
-      )
-      .all() as { backendId: string | null }[]
-    let ordered = rows.map((r) => r.backendId).filter((b): b is string => b != null)
-    const rerankedSet = new Set(reranks.map((r) => r.backendId))
-    ordered = ordered.filter((b) => !rerankedSet.has(b))
-    const sorted = [...reranks].sort((a, b) => a.newPosition - b.newPosition)
-    for (const r of sorted) {
-      const idx = Math.max(0, Math.min(r.newPosition - 1, ordered.length))
-      ordered.splice(idx, 0, r.backendId)
-    }
-    const stmt = d.prepare(
-      'UPDATE action_items SET relevance_score = ?, scored_at = ?, updated_at = ? WHERE backend_id = ?'
-    )
-    ordered.forEach((backendId, index) => stmt.run(index + 1, now, now, backendId))
-  })
+  applyRerankingOn(d, 'action_items', reranks, now)
 }
 
 /** Highest-relevance active tasks (lowest score = most important). */
@@ -1026,32 +1063,7 @@ export function markSyncedStagedTaskOn(
   now: number,
   _source?: string | null
 ): MarkSyncedResult {
-  return tx(d, () => {
-    const existing = d
-      .prepare('SELECT id FROM staged_tasks WHERE backend_id = ? AND id != ?')
-      .get(backendId, localId) as { id: number } | undefined
-    if (existing) {
-      d.prepare('UPDATE staged_tasks SET backend_synced = 1, updated_at = ? WHERE id = ?').run(
-        now,
-        existing.id
-      )
-      d.prepare('DELETE FROM staged_tasks WHERE id = ?').run(localId)
-      return { merged: true, keptId: existing.id }
-    }
-    try {
-      d.prepare(
-        'UPDATE staged_tasks SET backend_id = ?, backend_synced = 1, updated_at = ? WHERE id = ?'
-      ).run(backendId, now, localId)
-      return { merged: false, keptId: localId }
-    } catch {
-      const winner = d
-        .prepare('SELECT id FROM staged_tasks WHERE backend_id = ? AND id != ?')
-        .get(backendId, localId) as { id: number } | undefined
-      const keptId = winner?.id ?? localId
-      d.prepare('DELETE FROM staged_tasks WHERE id = ?').run(localId)
-      return { merged: true, keptId }
-    }
-  })
+  return markSyncedOn(d, 'staged_tasks', localId, backendId, now)
 }
 
 /** HARD-delete a staged task by local id. FIX (i): exposed + wired (Mac has it but
@@ -1063,15 +1075,7 @@ export function deleteStagedTaskByIdOn(d: TaskStoreDb, id: number): number[] {
 
 /** HARD-delete a staged task by backend_id. FIX (i) + FIX (ii) (see deleteStagedTaskById). */
 export function deleteStagedTaskByBackendIdOn(d: TaskStoreDb, backendId: string): number[] {
-  return tx(d, () => {
-    const ids = (
-      d.prepare('SELECT id FROM staged_tasks WHERE backend_id = ?').all(backendId) as {
-        id: number
-      }[]
-    ).map((r) => r.id)
-    if (ids.length > 0) d.prepare('DELETE FROM staged_tasks WHERE backend_id = ?').run(backendId)
-    return ids
-  })
+  return deleteByBackendIdOn(d, 'staged_tasks', backendId)
 }
 
 /** Unsynced staged tasks for retry (backend_synced = 0, active), newest-first. */
@@ -1154,27 +1158,7 @@ export function applyStagedTaskRerankingOn(
   reranks: TaskRerank[],
   now: number
 ): void {
-  tx(d, () => {
-    const rows = d
-      .prepare(
-        `SELECT backend_id AS backendId FROM staged_tasks
-           WHERE completed = 0 AND deleted = 0
-           ORDER BY COALESCE(relevance_score, ${UNSCORED_SORT}) ASC`
-      )
-      .all() as { backendId: string | null }[]
-    let ordered = rows.map((r) => r.backendId).filter((b): b is string => b != null)
-    const rerankedSet = new Set(reranks.map((r) => r.backendId))
-    ordered = ordered.filter((b) => !rerankedSet.has(b))
-    const sorted = [...reranks].sort((a, b) => a.newPosition - b.newPosition)
-    for (const r of sorted) {
-      const idx = Math.max(0, Math.min(r.newPosition - 1, ordered.length))
-      ordered.splice(idx, 0, r.backendId)
-    }
-    const stmt = d.prepare(
-      'UPDATE staged_tasks SET relevance_score = ?, scored_at = ?, updated_at = ? WHERE backend_id = ?'
-    )
-    ordered.forEach((backendId, index) => stmt.run(index + 1, now, now, backendId))
-  })
+  applyRerankingOn(d, 'staged_tasks', reranks, now)
 }
 
 /** Count active (non-completed, non-deleted) staged tasks. */
