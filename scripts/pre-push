@@ -40,15 +40,9 @@ declare -a CHANGED_FILES=()
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
   for update in "${PUSH_UPDATES[@]}"; do
     IFS=: read -r local_oid remote_oid remote_ref <<<"$update"
-    if [ -z "$remote_oid" ] || [ "$remote_oid" = "$ZERO_SHA" ]; then
-      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
-    elif git cat-file -e "$remote_oid^{commit}" 2>/dev/null; then
-      DIFF_BASE="$remote_oid"
-    elif TRACKING_REF="refs/remotes/${PUSH_REMOTE}/${remote_ref#refs/heads/}" && git rev-parse --verify "$TRACKING_REF" >/dev/null 2>&1; then
-      DIFF_BASE=$(git rev-parse "$TRACKING_REF")
-    else
-      DIFF_BASE=$(git merge-base "$BASE_REMOTE_REF" "$local_oid")
-    fi
+    # Check selection describes the final review surface, not every historical
+    # commit needed to reconcile a stale remote PR branch.
+    DIFF_BASE=$(scripts/pre-push-diff-base "$BASE_REMOTE_REF" "$local_oid")
     changed_count=$(scripts/changed-files "$DIFF_BASE" "$local_oid" | wc -l | tr -d ' ')
     DIFF_SUMMARIES+=("${remote_ref:-$local_oid}: ${changed_count} changed file(s) since ${DIFF_BASE:0:12}")
     while IFS= read -r file; do
