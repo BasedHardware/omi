@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs'
 import { helperProcess } from '../ocr/helperProcess'
-import { unindexedRewindFrames, setRewindFrameOcr } from '../ipc/db'
+import { unindexedRewindFrames } from '../ipc/db'
+import { persistFrameOcr } from './ocrPersist'
 
 const BACKFILL_INTERVAL_MS = 4000
 const BATCH = 5
@@ -15,19 +16,25 @@ async function backfill(): Promise<void> {
     const frames = unindexedRewindFrames(BATCH)
     for (const f of frames) {
       if (f.id == null) continue
+      // The app context stored on the frame at capture time; it is embedded with
+      // the OCR text (see ocrPersist.FrameContext), so this sweep and the capture
+      // hot path produce byte-identical content for the same screen.
+      const context = { app: f.app, windowTitle: f.windowTitle }
       let jpeg: Buffer
       try {
         jpeg = readFileSync(f.imagePath)
       } catch {
-        setRewindFrameOcr(f.id, '') // image gone; mark indexed so we stop retrying
+        persistFrameOcr(f.id, '', context) // image gone; mark indexed so we stop retrying
         continue
       }
       const result = await helperProcess.ocr(jpeg)
-      // Persist per-line boxes (Track 4) with the flattened text for the overlay.
-      setRewindFrameOcr(
+      // Persists the text + per-line boxes AND queues it for semantic indexing —
+      // see ocrPersist.ts for why those two are deliberately fused.
+      persistFrameOcr(
         f.id,
         result.ok ? result.fullText : '',
-        result.ok ? JSON.stringify(result.lines) : null
+        context,
+        result.ok ? result.lines : null
       )
     }
   } finally {

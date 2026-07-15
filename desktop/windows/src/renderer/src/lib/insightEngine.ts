@@ -1,5 +1,6 @@
 // src/renderer/src/lib/insightEngine.ts
 import { startAiProfileHost } from './aiProfileHost'
+import { startRewindEmbedHost } from './rewindEmbedHost'
 import { generate } from './geminiClient'
 import { isPrivateWindow, isDeniedContext, redactFrameFields } from './screenRedact'
 import { summarizeActivity } from './insightActivity'
@@ -59,7 +60,10 @@ export async function runInsightOnce(): Promise<boolean> {
       parts: [{ text: buildInsightPrompt(summary, recentHeadlines) }],
       responseSchema: INSIGHT_RESPONSE_SCHEMA as unknown as Record<string, unknown>
     })
-    const insight = selectInsight(parseInsightResponse(raw), { threshold: THRESHOLD, recentHeadlines })
+    const insight = selectInsight(parseInsightResponse(raw), {
+      threshold: THRESHOLD,
+      recentHeadlines
+    })
 
     await window.omi.insightSetSettings({ lastRunAt: now })
     if (!insight) return false
@@ -82,10 +86,12 @@ export async function runInsightOnce(): Promise<boolean> {
 export function maybeStartInsightEngine(): void {
   if (started) return
   started = true
-  // Renderer proactive bootstrap: the insight engine below, plus the AI-profile
-  // host (relays the Firebase session to the main-process profile service, which
-  // is inert without it). Both are idempotent and app-session-lived.
+  // Renderer proactive bootstrap: the insight engine below, plus the session
+  // relays for the main-process services that are inert without a Firebase token
+  // (the AI-profile service, and the Rewind embedding indexer). All idempotent
+  // and app-session-lived.
   startAiProfileHost()
+  startRewindEmbedHost()
   const schedule = (delayMs: number): void => {
     if (timer) clearTimeout(timer)
     timer = setTimeout(async () => {

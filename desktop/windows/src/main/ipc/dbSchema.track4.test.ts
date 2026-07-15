@@ -70,6 +70,11 @@ const TRACK4_SCHEMA = `
   END;
   CREATE TABLE IF NOT EXISTS rewind_embeddings (
     frame_id INTEGER PRIMARY KEY,
+    hash TEXT
+  );
+  CREATE INDEX IF NOT EXISTS idx_rewind_embeddings_hash ON rewind_embeddings(hash);
+  CREATE TABLE IF NOT EXISTS rewind_embedding_vectors (
+    hash TEXT PRIMARY KEY,
     dim INTEGER,
     model TEXT,
     vec BLOB,
@@ -123,6 +128,7 @@ const TRACK4_SCHEMA = `
 const NEW_TABLES = [
   'rewind_frames_fts',
   'rewind_embeddings',
+  'rewind_embedding_vectors',
   'conversation_folders',
   'conversation_speaker_names',
   'live_notes',

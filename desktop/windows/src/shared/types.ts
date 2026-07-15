@@ -734,7 +734,23 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
+  /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
+   *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** Phase 2: the same result list with semantic hits merged in, delivered if and
+   *  when the embedding round-trip lands. Never fires when semantic search is
+   *  unavailable (signed out, backend down, nothing indexed) — the keyword results
+   *  from `rewindSearch` simply stand. Callers must ignore a payload whose `query`
+   *  is not the one they are currently showing. */
+  onRewindSearchResults: (
+    cb: (r: { query: string; groups: RewindSearchGroup[] }) => void
+  ) => () => void
+  /** Relay the Firebase session to the main-process Rewind embedding indexer
+   *  (Track 4); null on sign-out. Without it, semantic search stays inert and
+   *  `rewindSearch` returns keyword-only results. */
+  rewindSetEmbedSession: (
+    session: { desktopApiBase: string; token: string } | null
+  ) => Promise<void>
   rewindFrameImage: (imagePath: string) => Promise<string>
   // --- Track 4 --- per-line OCR bounding boxes (normalized 0..1) for the
   // on-image search highlight overlay in the Rewind frame viewer.
@@ -1344,10 +1360,19 @@ export type RewindCaptureDirective = {
 // (OcrLine — per-line OCR box, persisted as rewind_frames.ocr_lines_json — is
 // already defined above with the OCR helper types.)
 
-/** One semantic-search vector per rewind frame (rewind_embeddings row). `vec` is
- *  the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a subclass). */
+/** Maps a rewind frame to the hash of its OCR content (rewind_embeddings row).
+ *  Many frames share one hash — consecutive screenshots of a static screen have
+ *  byte-identical text — and the vector is stored once per hash, not per frame. */
 export type RewindEmbeddingRow = {
   frameId: number
+  hash: string
+}
+
+/** The stored vector for one unique piece of content (rewind_embedding_vectors
+ *  row). `vec` is the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a
+ *  subclass) — holding L2-normalized Float32s. */
+export type RewindEmbeddingVectorRow = {
+  hash: string
   dim: number
   model: string
   vec: Uint8Array
