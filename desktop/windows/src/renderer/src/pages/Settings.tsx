@@ -14,7 +14,6 @@ import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
 import { AgentsTab } from '../components/settings/tabs/AgentsTab'
 import { TranscriptionTab } from '../components/settings/tabs/TranscriptionTab'
 import { PlanUsageTab } from '../components/settings/tabs/PlanUsageTab'
-import { DeveloperKeysTab } from '../components/settings/tabs/DeveloperKeysTab'
 import { ShortcutsTab } from '../components/settings/tabs/ShortcutsTab'
 import { AboutTab } from '../components/settings/tabs/AboutTab'
 import { Memories } from './Memories'
@@ -30,7 +29,6 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   privacy: PrivacyTab,
   account: AccountTab,
   'plan-usage': PlanUsageTab,
-  'developer-keys': DeveloperKeysTab,
   shortcuts: ShortcutsTab,
   advanced: AdvancedTab,
   about: AboutTab

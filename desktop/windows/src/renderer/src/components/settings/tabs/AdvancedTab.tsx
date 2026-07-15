@@ -10,6 +10,7 @@ import { useMemories, type Memory } from '../../../hooks/useMemories'
 import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { IntegrationsTab } from './IntegrationsTab'
+import { DeveloperKeysSection } from './DeveloperKeysSection'
 import type {
   ExportMemory,
   FileIndexStatus,
@@ -385,6 +386,9 @@ export function AdvancedTab(): React.JSX.Element {
 
       {/* Integrations (Sticky Notes, Google) live under Advanced. */}
       <IntegrationsTab />
+
+      {/* Developer API Keys (BYOK) — Mac renders this as an Advanced subsection. */}
+      <DeveloperKeysSection />
 
       <SettingRow
         icon={FolderSearch}

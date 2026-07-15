@@ -65,8 +65,11 @@ export async function validateProviderKey(
   key: string,
   fetchImpl: FetchLike = globalThis.fetch as unknown as FetchLike
 ): Promise<ByokKeyValidation> {
+  // Per-field detail strings mirror the macOS validator's inline messages
+  // (BYOKValidator.swift): "Empty" / "Rejected (HTTP N)" / "HTTP N" / a network
+  // message. The aggregate "Rejected by provider: X" banner is composed in the UI.
   const trimmed = key.trim()
-  if (!trimmed) return { ok: false, kind: 'empty', detail: 'No key entered' }
+  if (!trimmed) return { ok: false, kind: 'empty', detail: 'Empty' }
 
   const { url, headers } = providerRequest(provider, trimmed)
   const controller = new AbortController()
@@ -75,12 +78,12 @@ export async function validateProviderKey(
     const res = await fetchImpl(url, { method: 'GET', headers, signal: controller.signal })
     if (res.status >= 200 && res.status < 300) return { ok: true }
     if (res.status === 401 || res.status === 403) {
-      return { ok: false, kind: 'rejected', detail: `Rejected by provider (HTTP ${res.status})` }
+      return { ok: false, kind: 'rejected', detail: `Rejected (HTTP ${res.status})` }
     }
-    return { ok: false, kind: 'http', detail: `Provider error (HTTP ${res.status})` }
+    return { ok: false, kind: 'http', detail: `HTTP ${res.status}` }
   } catch (err) {
     if (err instanceof Error && err.name === 'AbortError') {
-      return { ok: false, kind: 'timeout', detail: 'Timed out reaching provider' }
+      return { ok: false, kind: 'timeout', detail: 'Request timed out' }
     }
     return { ok: false, kind: 'network', detail: "Couldn't reach provider" }
   } finally {
