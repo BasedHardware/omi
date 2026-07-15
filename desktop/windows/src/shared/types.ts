@@ -359,9 +359,10 @@ export type OmiOverlayApi = {
   suspendShortcut: () => void
   /** Re-claim the current accelerator after recording (or cancelling). */
   resumeShortcut: () => Promise<boolean>
-  /** Subscribe to the overlay's open/focused state (broadcast to every window),
-   *  so the onboarding voice step can switch between "press the hotkey" and "hold
-   *  Space". Returns an unsubscribe fn. */
+  /** Subscribe to the overlay's open/focused state (broadcast to every window).
+   *  NOTE `active` (focused) is only ever true for the EXPANDED bar — a peek/PTT
+   *  pill is deliberately non-focusable — so no step may gate its instructions on
+   *  it. Returns an unsubscribe fn. */
   onVisibilityChange: (cb: (state: OverlayVisibility) => void) => () => void
   /** Tell main a push-to-talk transcript was just captured (called from the
    *  overlay), so it can broadcast it to the onboarding window. */
@@ -369,6 +370,13 @@ export type OmiOverlayApi = {
   /** Subscribe to push-to-talk capture events (broadcast to every window).
    *  Returns an unsubscribe fn. */
   onVoiceCaptured: (cb: () => void) => () => void
+  /** Tell main a push-to-talk capture FAILED (mic unavailable, transcription
+   *  error): the user performed the gesture but it produced nothing. Broadcast so
+   *  onboarding can say what went wrong instead of leaving the step silent. */
+  notifyVoiceFailed: (message: string) => void
+  /** Subscribe to push-to-talk failures (broadcast to every window). Returns an
+   *  unsubscribe fn. */
+  onVoiceFailed: (cb: (message: string) => void) => () => void
   /** Tell main the user sent a message from the overlay (typed or spoken), so it
    *  can broadcast it to onboarding. Fired from the overlay's send choke-point. */
   notifyAsked: () => void

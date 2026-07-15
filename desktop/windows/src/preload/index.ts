@@ -369,6 +369,12 @@ const omiOverlay: OmiOverlayApi = {
     ipcRenderer.on('overlay:voiceCaptured', listener)
     return () => ipcRenderer.removeListener('overlay:voiceCaptured', listener)
   },
+  notifyVoiceFailed: (message: string) => ipcRenderer.send('overlay:voiceFailed', message),
+  onVoiceFailed: (cb: (message: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, message: string): void => cb(message)
+    ipcRenderer.on('overlay:voiceFailed', listener)
+    return () => ipcRenderer.removeListener('overlay:voiceFailed', listener)
+  },
   notifyAsked: () => ipcRenderer.send('overlay:asked'),
   onAsked: (cb: () => void) => {
     const listener = (): void => cb()
