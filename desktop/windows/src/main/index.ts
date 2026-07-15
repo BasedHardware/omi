@@ -97,6 +97,7 @@ import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindo
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
+import { registerMemoryAssistant } from './assistants/memory/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -1004,6 +1005,10 @@ app.whenReady().then(async () => {
     // A coordinator peer to Focus (same shared loop); the sole Insight engine now
     // that the renderer bootstrap no longer runs one.
     registerInsightAssistant()
+    // Track 3 (Memory assistant): Mac's interval-based single-shot memory
+    // extractor. A coordinator peer to Focus/Insight (same shared loop); no glow,
+    // no notification — it records durable facts silently.
+    registerMemoryAssistant()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon

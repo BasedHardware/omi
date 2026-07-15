@@ -1636,6 +1636,44 @@ export type FocusSessionInput = {
   windowTitle?: string | null
 }
 
+// One extracted "memory" (a durable fact about the user, or external wisdom they
+// can learn from). Mac's `MemoryRecord` has ~30 columns spanning tier lifecycle,
+// tags, scoring and capture provenance — all backend-owned or unused by the
+// desktop extraction path. Windows keeps only the local mirror + dedup source:
+// the fields the extraction path writes plus backend-sync bookkeeping. `category`
+// is narrowed to the two values the extractor ever produces (Mac's third value
+// `manual` is for the manual-add path, which Windows does not have here).
+export type MemoryCategory = 'system' | 'interesting'
+
+export type MemoryRecord = {
+  id: number
+  content: string
+  category: MemoryCategory
+  sourceApp: string
+  windowTitle: string
+  contextSummary: string
+  confidence: number | null
+  /** rewind_frames.id the memory was extracted from (null if the frame is gone). */
+  screenshotId: number | null
+  backendId: string | null
+  backendSynced: boolean
+  createdAt: number // epoch ms
+}
+
+// Insert input: id is assigned by SQLite; optional fields default to ''/null/false.
+export type MemoryInput = {
+  content: string
+  category: MemoryCategory
+  sourceApp?: string
+  windowTitle?: string
+  contextSummary?: string
+  confidence?: number | null
+  screenshotId?: number | null
+  backendId?: string | null
+  backendSynced?: boolean
+  createdAt: number
+}
+
 export type TaskEmbeddingSource = 'action_item' | 'staged_task'
 
 // Persisted Gemini embedding vector for a task / staged-task (semantic ranking).

@@ -80,6 +80,25 @@ export type AppSettings = {
    *  reach the throttle stay silent until the user opts in, which is Mac's
    *  post-migration default (`NotificationService.defaultFrequencyLevel`). */
   notificationFrequency: number
+  /** Track 3 (Memory assistant): whether the interval-based memory extractor
+   *  judges the screen at all. Default OFF — the screen-memory scraper is opt-in,
+   *  matching Mac's net behavior (Mac gates it behind `notificationsEnabled`, which
+   *  defaults off). Conversation-derived memories populate the store regardless;
+   *  this is the supplementary on-screen source. It is the SOLE gate for the Memory
+   *  assistant (see memoryAssistant.isEnabled) — decoupled from notifications, since
+   *  memory writes durable facts whether or not a toast ever fires. The master
+   *  "may I send screenshots to Gemini" lever remains `screenAnalysisEnabled`. */
+  memoryEnabled: boolean
+  /** Track 3 (Memory): minutes between extraction attempts, Mac's
+   *  `memoryExtractionInterval` (600s = 10 min). Default 10. */
+  memoryExtractionIntervalMin: number
+  /** Track 3 (Memory): minimum confidence an extracted memory must clear to be
+   *  kept, Mac's `memoryMinConfidence`. Default 0.7. */
+  memoryMinConfidence: number
+  /** Track 3 (Memory): apps the user never wants the memory extractor to look at,
+   *  on top of the capture-time and privacy exclusions. Mac's
+   *  `memoryExcludedApps`. Default []. */
+  memoryExcludedApps: string[]
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -138,6 +157,14 @@ function sanitizeExcludedApps(raw: unknown): string[] {
   return out
 }
 
+// Min confidence: a number in [0, 1], else Mac's default 0.7. Junk/out-of-range
+// clamps rather than disabling the gate (a 0 floor would keep every low-quality
+// memory the model emits; a >1 floor would keep none).
+function sanitizeMinConfidence(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0.7
+  return Math.min(1, Math.max(0, raw))
+}
+
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
 // undefined yields the defaults, so defaults live in exactly one place.
 export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
@@ -171,7 +198,13 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     glowOverlayEnabled: r.glowOverlayEnabled !== false,
     screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
     notificationsEnabled: r.notificationsEnabled !== false,
-    notificationFrequency: sanitizeFrequency(r.notificationFrequency)
+    notificationFrequency: sanitizeFrequency(r.notificationFrequency),
+    memoryEnabled: r.memoryEnabled === true,
+    // Reuses the cooldown sanitizer: same contract (positive integer minutes,
+    // default 10, capped at a day). A junk interval falls back to 10, never 0.
+    memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
+    memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
+    memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps)
   }
 }
 
