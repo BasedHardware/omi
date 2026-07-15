@@ -6,6 +6,10 @@ $ErrorActionPreference = 'Stop'
 $proj = Join-Path $PSScriptRoot '..\src\main\audio\helper'
 $out = Join-Path $PSScriptRoot '..\resources\win-audio-helper'
 
+if (-not (Get-Command dotnet -ErrorAction SilentlyContinue)) {
+  throw 'build-audio-helper: .NET SDK not found on PATH — install it, then run: npm run build:audio-helper'
+}
+
 dotnet publish $proj `
   -c Release `
   -r win-x64 `
