@@ -202,6 +202,23 @@ final class AICloneInboundFilterTests: XCTestCase {
   }
 }
 
+@MainActor
+final class AICloneInboundDedupTests: XCTestCase {
+  func testEachMessageIDIsClaimedOnceEvenWithDuplicateEvents() {
+    let service = AICloneService(
+      store: AICloneConfigurationStore(
+        directory: FileManager.default.temporaryDirectory
+          .appendingPathComponent("ai-clone-dedup-\(UUID().uuidString)", isDirectory: true)))
+    // Beeper re-emits the same message under the numeric id and the Matrix
+    // event id; only the first claim of a given message id may reply.
+    XCTAssertTrue(service.claimInbound("275"))
+    XCTAssertFalse(service.claimInbound("275"))
+    XCTAssertFalse(service.claimInbound("275"))
+    XCTAssertTrue(service.claimInbound("276"), "a different message still replies once")
+    XCTAssertFalse(service.claimInbound("276"))
+  }
+}
+
 final class AICloneBenchmarkTests: XCTestCase {
   private func msg(_ id: String, _ text: String, mine: Bool, sender: String? = nil) -> BeeperMessage {
     BeeperMessage(

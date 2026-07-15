@@ -58,6 +58,12 @@ final class AICloneService: ObservableObject {
   /// Chats currently being processed — coalesces bursts of message.upserted
   /// events so one inbound burst produces one reply decision.
   private var inFlightChatIDs: Set<String> = []
+  /// Inbound message ids the clone has already acted on. Beeper emits the same
+  /// message as several `message.upserted` events (bridge numeric id, then the
+  /// Matrix event id, plus edits), so one message must reply at most once.
+  private var processedInboundMessageIDs: Set<String> = []
+  private var processedInboundOrder: [String] = []
+  private static let processedInboundLimit = 500
   /// Bounded auto-send budget (resets hourly) so a runaway loop can never
   /// spam a network into suspending the account.
   private var autoSendWindowStart = Date()
@@ -258,10 +264,30 @@ final class AICloneService: ObservableObject {
       log("AIClone: event had no fresh inbound message to act on")
       return
     }
+    // One reply per message: Beeper re-emits the same message under multiple
+    // event/envelope ids, so dedupe on the message id, not the event.
+    guard claimInbound(inbound.id) else {
+      log("AIClone: duplicate event for an already-handled message; ignoring")
+      return
+    }
     guard !inFlightChatIDs.contains(chatID) else { return }
     inFlightChatIDs.insert(chatID)
     defer { inFlightChatIDs.remove(chatID) }
     await processInbound(inbound, chatID: chatID, mode: mode)
+  }
+
+  /// Claims an inbound message id for processing. Returns true the first time a
+  /// message id is seen and false for every duplicate event afterward, so one
+  /// message produces at most one reply. Bounded so it can't grow unbounded.
+  func claimInbound(_ id: String) -> Bool {
+    guard !processedInboundMessageIDs.contains(id) else { return false }
+    processedInboundMessageIDs.insert(id)
+    processedInboundOrder.append(id)
+    if processedInboundOrder.count > Self.processedInboundLimit {
+      let evicted = processedInboundOrder.removeFirst()
+      processedInboundMessageIDs.remove(evicted)
+    }
+    return true
   }
 
   /// The newest event entry worth replying to: text-like, sent by someone
