@@ -43,8 +43,6 @@ class ConversationProvider extends ChangeNotifier {
   int totalSearchPages = 1;
   int currentSearchPage = 1;
 
-  Timer? _processingConversationWatchTimer;
-
   // Add debounce mechanism for refresh
   Timer? _refreshDebounceTimer;
   DateTime? _lastRefreshTime;
@@ -143,8 +141,6 @@ class ConversationProvider extends ChangeNotifier {
     _initialFetchRetryCount = 0;
     memoriesToDelete = {};
     deleteTimestamps = {};
-    _processingConversationWatchTimer?.cancel();
-    _processingConversationWatchTimer = null;
     _refreshDebounceTimer?.cancel();
     _refreshDebounceTimer = null;
     _lastRefreshTime = null;
@@ -935,7 +931,6 @@ class ConversationProvider extends ChangeNotifier {
 
   @override
   void dispose() {
-    _processingConversationWatchTimer?.cancel();
     _refreshDebounceTimer?.cancel();
     _initialFetchRetryTimer?.cancel();
     _mergeCompletedSubscription?.cancel();
