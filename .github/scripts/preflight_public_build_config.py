@@ -1,30 +1,48 @@
 #!/usr/bin/env python3
-"""Fail closed when GitHub's effective public build configuration drifts."""
+"""Resolve the reviewed public-build source from GitHub before a deploy builds."""
 
 from __future__ import annotations
 
 import argparse
+import base64
 import json
 import os
 import sys
 import urllib.error
 import urllib.parse
 import urllib.request
-from collections.abc import Callable
 from pathlib import Path
 from typing import Any, Iterable
 
-from check_public_build_contract import ROOT, Target, load_contract
+from check_public_build_contract import (
+    ROOT,
+    Contract,
+    Target,
+    build_args,
+    load_contract,
+    parse_values_document,
+    validate_values,
+)
 
 
 API_ROOT = "https://api.github.com"
-SCOPES_IN_PRECEDENCE = ("environment", "repository", "organization")
-JsonRequest = Callable[[str, str], dict[str, Any]]
 
 
-def request_json(url: str, token: str) -> dict[str, Any]:
+class RemoteConfigMissing(RuntimeError):
+    """The selected commit has no reviewed public-build configuration."""
+
+
+class RemoteConfigUnavailable(RuntimeError):
+    """The workflow token cannot read the authoritative GitHub source."""
+
+
+def request_remote_values(
+    *, repository: str, ref: str, config_path: str, token: str
+) -> dict[str, dict[str, str]]:
+    encoded_path = "/".join(urllib.parse.quote(segment, safe="") for segment in config_path.split("/"))
+    encoded_ref = urllib.parse.quote(ref, safe="")
     request = urllib.request.Request(
-        url,
+        f"{API_ROOT}/repos/{repository}/contents/{encoded_path}?ref={encoded_ref}",
         headers={
             "Accept": "application/vnd.github+json",
             "Authorization": f"Bearer {token}",
@@ -36,102 +54,83 @@ def request_json(url: str, token: str) -> dict[str, Any]:
         with urllib.request.urlopen(request, timeout=20) as response:  # noqa: S310 - fixed GitHub API root
             payload = json.loads(response.read().decode("utf-8"))
     except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"GitHub metadata request failed with HTTP {exc.code}") from exc
+        if exc.code == 404:
+            raise RemoteConfigMissing("reviewed public-build configuration is missing at the deployed ref") from exc
+        raise RemoteConfigUnavailable(f"reviewed public-build configuration is unavailable (HTTP {exc.code})") from exc
     except urllib.error.URLError as exc:
-        raise RuntimeError("GitHub metadata request failed") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError("GitHub metadata response was not an object")
-    return payload
+        raise RemoteConfigUnavailable("reviewed public-build configuration is unavailable") from exc
+    if (
+        not isinstance(payload, dict)
+        or payload.get("encoding") != "base64"
+        or not isinstance(payload.get("content"), str)
+    ):
+        raise RemoteConfigUnavailable("reviewed public-build configuration metadata is invalid")
+    try:
+        content = base64.b64decode("".join(payload["content"].split()), validate=True).decode("utf-8")
+        return parse_values_document(json.loads(content), source="remote reviewed public-build configuration")
+    except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as exc:
+        raise RemoteConfigUnavailable("reviewed public-build configuration content is invalid") from exc
 
 
-def list_variables(url: str, token: str, requester: JsonRequest = request_json) -> dict[str, str]:
-    variables: dict[str, str] = {}
-    page = 1
-    total_count: int | None = None
-    while total_count is None or len(variables) < total_count:
-        separator = "&" if "?" in url else "?"
-        payload = requester(f"{url}{separator}per_page=100&page={page}", token)
-        raw_variables = payload.get("variables")
-        total_count = payload.get("total_count")
-        if not isinstance(raw_variables, list) or not isinstance(total_count, int):
-            raise RuntimeError("GitHub metadata response did not contain variables")
-        for item in raw_variables:
-            if (
-                not isinstance(item, dict)
-                or not isinstance(item.get("name"), str)
-                or not isinstance(item.get("value"), str)
-            ):
-                raise RuntimeError("GitHub metadata response contained an invalid variable")
-            variables[item["name"]] = item["value"]
-        if not raw_variables and len(variables) < total_count:
-            raise RuntimeError("GitHub metadata pagination ended unexpectedly")
-        page += 1
-    return variables
-
-
-def inventories(
-    repository: str, environment: str, token: str, requester: JsonRequest = request_json
-) -> dict[str, dict[str, str]]:
-    encoded_environment = urllib.parse.quote(environment, safe="")
-    base = f"{API_ROOT}/repos/{repository}"
-    return {
-        "organization": list_variables(f"{base}/actions/organization-variables", token, requester),
-        "repository": list_variables(f"{base}/actions/variables", token, requester),
-        "environment": list_variables(f"{base}/environments/{encoded_environment}/variables", token, requester),
-    }
-
-
-def validate_target(target: Target, scope_variables: dict[str, dict[str, str]]) -> list[str]:
-    errors: list[str] = []
-    for item in target.inputs:
-        resolved_scope = next((scope for scope in SCOPES_IN_PRECEDENCE if item.name in scope_variables[scope]), None)
-        if resolved_scope is None:
-            errors.append(f"{target.name}: required {item.name} is missing")
-            continue
-        if resolved_scope != item.scope:
-            errors.append(f"{target.name}: {item.name} resolves from {resolved_scope}, expected {item.scope}")
-            continue
-        if not scope_variables[resolved_scope][item.name].strip():
-            errors.append(f"{target.name}: required {item.name} is empty in {resolved_scope}")
-    return errors
-
-
-def select_targets(targets: dict[str, Target], names: Iterable[str] | None, all_targets: bool) -> list[Target]:
-    selected_names = sorted(targets) if all_targets else list(names or [])
+def select_targets(contract: Contract, names: Iterable[str] | None, all_targets: bool) -> list[Target]:
+    selected_names = sorted(contract.targets) if all_targets else list(names or [])
     if not selected_names:
         raise ValueError("specify --target or --all")
-    unknown = sorted(set(selected_names) - targets.keys())
+    unknown = sorted(set(selected_names) - contract.targets.keys())
     if unknown:
         raise ValueError(f"unknown public-build targets: {', '.join(unknown)}")
-    return [targets[name] for name in selected_names]
+    return [contract.targets[name] for name in selected_names]
 
 
-def main() -> int:
+def write_github_output(path: Path, *, target: Target, values: dict[str, str]) -> None:
+    arguments = build_args(target, values)
+    with path.open("a", encoding="utf-8") as handle:
+        handle.write("build_args<<OMI_PUBLIC_BUILD_ARGS\n")
+        handle.write(f"{arguments}\n")
+        handle.write("OMI_PUBLIC_BUILD_ARGS\n")
+
+
+def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--environment", required=True)
     parser.add_argument("--target", action="append")
     parser.add_argument("--all", action="store_true")
     parser.add_argument("--repository", default=os.environ.get("GITHUB_REPOSITORY"))
+    parser.add_argument("--ref", default=os.environ.get("GITHUB_SHA"))
     parser.add_argument("--token", default=os.environ.get("GITHUB_TOKEN"))
     parser.add_argument("--contract", type=Path, default=ROOT / "config" / "public-build-contract.json")
-    args = parser.parse_args()
-
-    if not args.repository or not args.token:
-        print("public-build configuration preflight failed: repository and GitHub token are required", file=sys.stderr)
+    parser.add_argument("--github-output", type=Path)
+    args = parser.parse_args(argv)
+    if args.github_output and args.all:
+        print("public-build configuration preflight failed: --github-output requires one --target", file=sys.stderr)
+        return 1
+    if not args.repository or not args.ref or not args.token:
+        print(
+            "public-build configuration preflight failed: repository, ref, and read-only GitHub token are required",
+            file=sys.stderr,
+        )
         return 1
     try:
-        targets = select_targets(load_contract(args.contract), args.target, args.all)
-        scope_variables = inventories(args.repository, args.environment, args.token)
-    except (OSError, ValueError, RuntimeError, json.JSONDecodeError) as exc:
+        contract = load_contract(args.contract)
+        targets = select_targets(contract, args.target, args.all)
+        values = request_remote_values(
+            repository=args.repository,
+            ref=args.ref,
+            config_path=contract.config_path,
+            token=args.token,
+        )
+        errors = validate_values(contract, values, targets, args.environment)
+        if errors:
+            raise ValueError("; ".join(errors))
+        if args.github_output:
+            write_github_output(args.github_output, target=targets[0], values=values[args.environment])
+    except (OSError, ValueError, RemoteConfigMissing, RemoteConfigUnavailable, json.JSONDecodeError) as exc:
         print(f"public-build configuration preflight failed: {exc}", file=sys.stderr)
         return 1
-
-    errors = [error for target in targets for error in validate_target(target, scope_variables)]
-    if errors:
-        print("public-build configuration preflight failed:", file=sys.stderr)
-        print("\n".join(f"- {error}" for error in errors), file=sys.stderr)
-        return 1
-    print(f"public-build configuration preflight passed: environment={args.environment}, targets={len(targets)}")
+    print(
+        "public-build configuration preflight passed: "
+        f"source=reviewed-ref, environment={args.environment}, targets={len(targets)}"
+    )
     return 0
 
 

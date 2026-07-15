@@ -1,19 +1,22 @@
 #!/usr/bin/env python3
-"""Fixtures for public-build wiring and live-configuration preflights."""
+"""Fixtures for the public-build contract, source preflight, and browser smoke."""
 
 from __future__ import annotations
 
+import base64
 import importlib.util
 import json
 import sys
 import tempfile
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 
 ROOT = Path(__file__).resolve().parents[2]
 STATIC_PATH = ROOT / ".github" / "scripts" / "check_public_build_contract.py"
 PREFLIGHT_PATH = ROOT / ".github" / "scripts" / "preflight_public_build_config.py"
+SMOKE_PATH = ROOT / ".github" / "scripts" / "smoke_public_build_browser.py"
 
 
 def load_module(name: str, path: Path):
@@ -28,47 +31,93 @@ def load_module(name: str, path: Path):
 
 STATIC = load_module("check_public_build_contract", STATIC_PATH)
 PREFLIGHT = load_module("preflight_public_build_config", PREFLIGHT_PATH)
+SMOKE = load_module("smoke_public_build_browser", SMOKE_PATH)
+
+
+def fixture_contract() -> dict:
+    return {
+        "schema_version": 2,
+        "configuration": {
+            "source": "repository_config",
+            "path": "config/public-build-values.json",
+            "environments": ["development", "prod"],
+        },
+        "targets": {
+            "fake": {
+                "service": "fake-service",
+                "dockerfile": "web/fake/Dockerfile",
+                "workflow": ".github/workflows/gcp_fake.yml",
+                "canary_component": "web/fake/public-build-canary.tsx",
+                "inputs": [
+                    {
+                        "name": "FAKE_PUBLIC_INPUT",
+                        "required": True,
+                        "source": "repository_config",
+                        "allowed_scopes": ["repository"],
+                    }
+                ],
+                "candidate_acceptance": {
+                    "command": [
+                        "python3",
+                        ".github/scripts/smoke_public_build_browser.py",
+                        "--target",
+                        "fake",
+                        "--base-url",
+                        "{base_url}",
+                    ],
+                    "marker": "fake:ready",
+                },
+                "traffic_promotion": "candidate_after_browser_acceptance",
+            }
+        },
+    }
+
+
+def fixture_values(value: str = "configured") -> dict:
+    return {
+        "schema_version": 1,
+        "environments": {
+            "development": {"values": {"FAKE_PUBLIC_INPUT": value}},
+            "prod": {"values": {"FAKE_PUBLIC_INPUT": value}},
+        },
+    }
 
 
 class PublicBuildContractFixture(unittest.TestCase):
     def setUp(self) -> None:
         self.temp_dir = tempfile.TemporaryDirectory(prefix="omi-public-build-contract-")
         self.root = Path(self.temp_dir.name)
+        self.write_json("config/public-build-contract.json", fixture_contract())
+        self.write_json("config/public-build-values.json", fixture_values())
         self.write_json(
             "config/deployment-setting-classification.json",
-            {"kinds": {"public_build": ["FAKE_PUBLIC_ONE", "FAKE_PUBLIC_TWO"]}},
-        )
-        self.write_json(
-            "config/public-build-contract.json",
-            {
-                "targets": {
-                    "fake": {
-                        "dockerfile": "web/fake/Dockerfile",
-                        "workflow": ".github/workflows/fake.yml",
-                        "inputs": [
-                            {"name": "FAKE_PUBLIC_ONE", "scope": "repository"},
-                            {"name": "FAKE_PUBLIC_TWO", "scope": "environment"},
-                        ],
-                    }
-                }
-            },
+            {"kinds": {"public_build": ["FAKE_PUBLIC_INPUT"]}},
         )
         self.write(
             "web/fake/Dockerfile",
-            """ARG FAKE_PUBLIC_ONE
-ARG FAKE_PUBLIC_TWO
-ENV OMI_REQUIRED_PUBLIC_BUILD_INPUTS="FAKE_PUBLIC_ONE FAKE_PUBLIC_TWO"
-RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv \"$name\")"; test -n "$value"; done
+            """ARG FAKE_PUBLIC_INPUT
+ENV OMI_REQUIRED_PUBLIC_BUILD_INPUTS="FAKE_PUBLIC_INPUT"
+RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" || true)"; test -n "$value"; done
 """,
         )
         self.write(
-            ".github/workflows/fake.yml",
-            """run: |
-  docker build \\
-    --build-arg "FAKE_PUBLIC_ONE=${{ vars.FAKE_PUBLIC_ONE }}" \\
-    --build-arg "FAKE_PUBLIC_TWO=${{ vars.FAKE_PUBLIC_TWO }}" \\
-    -f web/fake/Dockerfile .
+            ".github/workflows/gcp_fake.yml",
+            """steps:
+  - id: public-build
+    uses: ./.github/actions/prepare-public-build
+  - uses: docker/build-push-action@v6
+    with:
+      build-args: ${{ steps.public-build.outputs.build_args }}
+  - uses: google-github-actions/deploy-cloudrun@v2
+    with:
+      no_traffic: true
+      flags: --revision-suffix=fake --tag=fake
+  - uses: ./.github/actions/public-build-candidate-promotion
 """,
+        )
+        self.write(
+            "web/fake/public-build-canary.tsx",
+            '<span data-omi-public-build-canary="fake:ready" />\n',
         )
 
     def tearDown(self) -> None:
@@ -82,78 +131,105 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv \"$name\
     def write_json(self, relative_path: str, value: object) -> None:
         self.write(relative_path, json.dumps(value))
 
-    def static_errors(self) -> list[str]:
-        targets = STATIC.load_contract(self.root / "config/public-build-contract.json")
-        return STATIC.validate(
-            self.root,
-            targets.values(),
-            STATIC.public_build_names(self.root / "config/deployment-setting-classification.json"),
-        )
+    def target(self):
+        return STATIC.load_contract(self.root / "config/public-build-contract.json").targets["fake"]
 
-    def test_accepts_matching_contract_dockerfile_and_workflow(self) -> None:
-        self.assertEqual(self.static_errors(), [])
+    def errors(self) -> list[str]:
+        return STATIC.validate_target(self.root, self.target(), {"FAKE_PUBLIC_INPUT"})
 
-    def test_rejects_missing_workflow_build_argument(self) -> None:
-        self.write(
-            ".github/workflows/fake.yml",
-            "--build-arg FAKE_PUBLIC_ONE=${{ vars.FAKE_PUBLIC_ONE }}\n",
-        )
+    def test_accepts_shared_preparation_and_candidate_promotion(self) -> None:
+        self.assertEqual(self.errors(), [])
 
-        self.assertIn("required public build arg FAKE_PUBLIC_TWO is missing", "\n".join(self.static_errors()))
-
-    def test_rejects_unguarded_dockerfile_input(self) -> None:
-        self.write(
-            "web/fake/Dockerfile",
-            """ARG FAKE_PUBLIC_ONE
-ARG FAKE_PUBLIC_TWO
-ENV OMI_REQUIRED_PUBLIC_BUILD_INPUTS="FAKE_PUBLIC_ONE"
-RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv \"$name\")"; test -n "$value"; done
-""",
-        )
-
-        self.assertIn("empty-value guard omits FAKE_PUBLIC_TWO", "\n".join(self.static_errors()))
-
-    def test_rejects_unclassified_contract_input(self) -> None:
-        self.write_json(
-            "config/deployment-setting-classification.json",
-            {"kinds": {"public_build": ["FAKE_PUBLIC_ONE"]}},
-        )
-
-        self.assertIn("required input FAKE_PUBLIC_TWO is not classified public_build", "\n".join(self.static_errors()))
-
-    def test_live_preflight_rejects_effective_scope_drift_and_empty_values(self) -> None:
-        target = STATIC.load_contract(self.root / "config/public-build-contract.json")["fake"]
-        errors = PREFLIGHT.validate_target(
-            target,
-            {
-                "organization": {},
-                "repository": {"FAKE_PUBLIC_ONE": "configured"},
-                "environment": {"FAKE_PUBLIC_TWO": "", "FAKE_PUBLIC_ONE": "override"},
-            },
-        )
+    def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
+        contract = STATIC.load_contract(self.root / "config/public-build-contract.json")
+        values = STATIC.parse_values_document(fixture_values(value=""), source="fixture")
 
         self.assertEqual(
-            errors,
-            [
-                "fake: FAKE_PUBLIC_ONE resolves from environment, expected repository",
-                "fake: required FAKE_PUBLIC_TWO is empty in environment",
-            ],
+            STATIC.validate_values(contract, values, contract.targets.values(), "prod"),
+            ["fake: required input FAKE_PUBLIC_INPUT is missing or empty in prod"],
         )
 
-    def test_live_preflight_paginates_variable_inventory(self) -> None:
-        requests: list[str] = []
-
-        def requester(url: str, _token: str) -> dict:
-            requests.append(url)
-            if url.endswith("page=1"):
-                return {"total_count": 2, "variables": [{"name": "ONE", "value": "one"}]}
-            return {"total_count": 2, "variables": [{"name": "TWO", "value": "two"}]}
-
-        self.assertEqual(
-            PREFLIGHT.list_variables("https://example.test/variables", "token", requester),
-            {"ONE": "one", "TWO": "two"},
+    def test_preflight_blocks_an_absent_newly_referenced_input_before_build(self) -> None:
+        original = PREFLIGHT.request_remote_values
+        PREFLIGHT.request_remote_values = lambda **_kwargs: STATIC.parse_values_document(
+            fixture_values(value=""), source="fixture"
         )
-        self.assertEqual(len(requests), 2)
+        try:
+            result = PREFLIGHT.main(
+                [
+                    "--target",
+                    "fake",
+                    "--environment",
+                    "prod",
+                    "--repository",
+                    "owner/repo",
+                    "--ref",
+                    "deadbeef",
+                    "--token",
+                    "token",
+                    "--contract",
+                    str(self.root / "config/public-build-contract.json"),
+                ]
+            )
+        finally:
+            PREFLIGHT.request_remote_values = original
+
+        self.assertEqual(result, 1)
+
+    def test_rejects_workflow_variable_bypass(self) -> None:
+        self.write(
+            ".github/workflows/gcp_fake.yml",
+            (self.root / ".github/workflows/gcp_fake.yml").read_text(encoding="utf-8")
+            + "FAKE_PUBLIC_INPUT=${{ vars.FAKE_PUBLIC_INPUT }}\n",
+        )
+
+        self.assertIn("bypasses repository_config", "\n".join(self.errors()))
+
+    def test_rejects_missing_client_canary(self) -> None:
+        self.write("web/fake/public-build-canary.tsx", "<span />\n")
+
+        self.assertIn("must expose fake browser canary", "\n".join(self.errors()))
+
+    def test_remote_preflight_decodes_reviewed_configuration_without_printing_values(self) -> None:
+        remote = json.dumps(fixture_values()).encode("utf-8")
+
+        class Response:
+            def read(self) -> bytes:
+                return json.dumps({"encoding": "base64", "content": base64.b64encode(remote).decode("ascii")}).encode(
+                    "utf-8"
+                )
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *_args) -> None:
+                return None
+
+        original = PREFLIGHT.urllib.request.urlopen
+        PREFLIGHT.urllib.request.urlopen = lambda *_args, **_kwargs: Response()
+        try:
+            values = PREFLIGHT.request_remote_values(
+                repository="owner/repo", ref="deadbeef", config_path="config/public-build-values.json", token="token"
+            )
+        finally:
+            PREFLIGHT.urllib.request.urlopen = original
+
+        self.assertEqual(values["prod"]["FAKE_PUBLIC_INPUT"], "configured")
+
+    def test_browser_smoke_requires_the_ready_marker(self) -> None:
+        original = SMOKE.render_candidate
+        SMOKE.render_candidate = lambda **_kwargs: '<span data-omi-public-build-canary="fake:ready" />'
+        try:
+            SMOKE.smoke(
+                target="fake",
+                base_url="https://candidate.example",
+                contract_path=self.root / "config/public-build-contract.json",
+                environment={"OMI_BROWSER_BIN": "fake-browser"},
+            )
+        finally:
+            SMOKE.render_candidate = original
+
+        self.assertTrue(True)
 
 
 if __name__ == "__main__":

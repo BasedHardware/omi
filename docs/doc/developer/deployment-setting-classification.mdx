@@ -9,7 +9,7 @@ Deployment wiring has three name-only classifications in
 | --- | --- | --- |
 | `secret` | Credentials, signing material, passwords, private keys, bearer tokens, and sensitive aggregate configuration | GitHub `secrets.*`, Cloud Run `secrets:`, or Helm / ExternalSecret secret references |
 | `config` | Non-secret service configuration such as identifiers, hosts, model policy, or redirect allowlists | GitHub `vars.*`, the backend runtime ConfigMap, or normal manifest values |
-| `public_build` | Browser-delivered build configuration | GitHub `vars.*` only |
+| `public_build` | Browser-delivered build configuration | Reviewed `config/public-build-values.json` through the shared public-build action |
 
 The policy contains names only. Never put a value, a representative credential,
 or a serialized secret payload in the policy, its tests, CI output, or fixtures.
@@ -34,27 +34,38 @@ date. Expired or incomplete exceptions fail CI.
 ## Public build contract
 
 [`config/public-build-contract.json`](https://github.com/BasedHardware/omi/blob/main/config/public-build-contract.json)
-is the canonical wiring inventory for browser-delivered build inputs. It names
-each deployment target, its Dockerfile, workflow, and the required effective
-GitHub variable scope. It must not contain values.
+is the canonical wiring inventory for browser-delivered build inputs. Together
+with the versioned, browser-public values in
+[`config/public-build-values.json`](https://github.com/BasedHardware/omi/blob/main/config/public-build-values.json),
+it declares each target's Dockerfile, workflow, source, requiredness, candidate
+browser acceptance command, and promotion rule. These files must never contain
+credentials or server-only configuration.
 
 `python3 .github/scripts/check_public_build_contract.py` is a deterministic
 static check, registered in the manifest. It rejects drift between that
-contract, the `public_build` classification, Docker `ARG`s, deploy workflow
-build arguments, and each Dockerfile's empty-value guard.
+contract, the `public_build` classification, Docker `ARG`s, Docker empty-value
+guards, client canaries, shared build preparation, candidate deployment, and
+traffic promotion.
 
 `python3 .github/scripts/preflight_public_build_config.py --all --environment prod`
-is the complementary live configuration check. It needs a token with
-`actions: read` and reads only GitHub variable metadata; it never prints values.
-It fails a deploy when a required input is missing, empty, or resolves from a
-higher-precedence scope than the contract allows. Every affected deploy runs it
-before cloud authentication, and a scheduled workflow checks production daily.
+is the complementary read-only control-plane check. It needs `actions: read`
+and resolves the reviewed source from the exact GitHub ref being deployed; it
+never prints values. It fails before image build if the source is missing,
+unreadable, malformed, or has a required empty input. Every deploy invokes the
+same composite action, and a scheduled workflow checks development and
+production daily.
+
+Every production change is deployed as a no-traffic tagged Cloud Run candidate.
+The shared promotion action waits for that exact revision, resolves its tag URL,
+runs the contract's headless-browser client-initialization canary, confirms the
+candidate is still the latest revision, and only then shifts traffic. A failed
+candidate leaves the serving revision untouched.
 
 When adding a public input, update the contract, classification, Dockerfile,
-workflow, and focused checker fixture together. Do not add a target-specific
-source scan or a one-off fallback. This is the short-term guard while
-[#9824](https://github.com/BasedHardware/omi/issues/9824) tracks the canonical
-build interface and candidate-artifact verification.
+reviewed values, client canary, workflow, and focused checker fixture together.
+Do not add a target-specific source scan, a console-only GitHub variable, or a
+fallback/default. This is the enforceable contract introduced by
+[#9824](https://github.com/BasedHardware/omi/issues/9824).
 
 ## Backend runtime ConfigMap rollout
 
@@ -85,7 +96,8 @@ the backend or backend-listen deployment first when initializing an environment.
    what the value grants, not on its variable name.
 2. Add its name to exactly one policy list.
 3. Use the allowed source for that kind. In particular, browser build args use
-   `vars.NAME`, and server credentials never move into a ConfigMap.
+   the reviewed public-build configuration, and server credentials never move
+   into a ConfigMap.
 4. Add a focused fake-name fixture to
    `.github/scripts/test_check_deployment_secret_boundary.py` when a new source
    shape is introduced.

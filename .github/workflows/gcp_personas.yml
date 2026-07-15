@@ -1,10 +1,15 @@
-name: Deploy Personas to Cloud RUN
+name: Deploy Personas to Cloud Run
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: ["main", "development"]
     paths:
       - 'web/personas-open-source/**'
+      - 'config/public-build-*.json'
+      - '.github/actions/prepare-public-build/**'
+      - '.github/actions/public-build-candidate-promotion/**'
+      - '.github/scripts/preflight_public_build_config.py'
+      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
     inputs:
       environment:
@@ -12,74 +17,74 @@ on:
         required: false
         default: 'prod'
         type: choice
-        options:
-          - development
-          - prod
-
+        options: [development, prod]
 
 env:
   SERVICE: omi-web
   REGION: us-central1
+  TARGET: personas
 
-# Serialize writes to the same Cloud Run service while allowing dev and prod to proceed independently.
 concurrency:
   group: deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
 
 jobs:
   deploy:
-    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || (github.ref == 'refs/heads/main' && 'prod') }}
+    environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
     permissions:
-      actions: 'read'
-      contents: 'read'
-      id-token: 'write'
-
+      actions: read
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Preflight public build configuration
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
+      - name: Prepare reviewed public build inputs
+        id: public-build
+        uses: ./.github/actions/prepare-public-build
+        with:
+          target: personas
+          environment: ${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}
+
+      - name: Compute immutable candidate identity
+        id: candidate
         run: |
-          python3 .github/scripts/preflight_public_build_config.py \
-            --target personas \
-            --environment "${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
+          short_sha="${GITHUB_SHA::7}"
+          revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          {
+            echo "short_sha=${short_sha}"
+            echo "revision_suffix=${revision_suffix}"
+            echo "revision=${{ env.SERVICE }}-${revision_suffix}"
+            echo "tag=public-personas-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: google-github-actions/auth@v2
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - run: gcloud auth configure-docker
-      - name: Build and Push Docker image
-        run: |
-          SHORT_SHA="${GITHUB_SHA::7}"
-          DEPLOY_ENV="${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || (github.ref == 'refs/heads/development' && 'development') || 'prod' }}"
-          IMAGE_TAG="${DEPLOY_ENV}-${SHORT_SHA}"
-          docker build \
-            --build-arg "NEXT_PUBLIC_FIREBASE_API_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_APP_ID=${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}" \
-            --build-arg "NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}" \
-            --build-arg "NEXT_PUBLIC_MIXPANEL_TOKEN=${{ vars.NEXT_PUBLIC_MIXPANEL_TOKEN }}" \
-            --build-arg "NEXT_PUBLIC_EXTRA_PROMPT_RULES=${{ vars.NEXT_PUBLIC_EXTRA_PROMPT_RULES }}" \
-            -t "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}" \
-            -f web/personas-open-source/Dockerfile .
 
-          docker push "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${IMAGE_TAG}"
-          echo "IMAGE=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:$IMAGE_TAG" >> "$GITHUB_ENV"
-      - name: Deploy to Cloud Run
-        id: deploy
+      - run: gcloud auth configure-docker
+
+      - name: Build and push immutable Docker image
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: web/personas-open-source/Dockerfile
+          push: true
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate.outputs.short_sha }}
+          build-args: ${{ steps.public-build.outputs.build_args }}
+
+      - name: Deploy no-traffic candidate revision
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: ${{ env.IMAGE }}
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
+            --tag=${{ steps.candidate.outputs.tag }}
           secrets: |
             RAPIDAPI_KEY=NEXT_PUBLIC_RAPIDAPI_KEY:latest
             RAPIDAPI_HOST=NEXT_PUBLIC_RAPIDAPI_HOST:latest
@@ -87,6 +92,12 @@ jobs:
             LINKEDIN_API_HOST=NEXT_PUBLIC_LINKEDIN_API_HOST:latest
             OPENROUTER_API_KEY=OPENROUTER_API_KEY:latest
 
-      # If required, use the Cloud Run url output in later steps
-      - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+      - name: Promote browser-accepted candidate
+        uses: ./.github/actions/public-build-candidate-promotion
+        with:
+          target: personas
+          service: ${{ env.SERVICE }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          revision: ${{ steps.candidate.outputs.revision }}
+          tag: ${{ steps.candidate.outputs.tag }}
