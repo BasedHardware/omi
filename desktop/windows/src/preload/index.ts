@@ -38,7 +38,8 @@ import type {
   CodingAgentId,
   CodingAgentRunArgs,
   VoiceTurnOutboxInput,
-  AiUserProfileRecord
+  AiUserProfileRecord,
+  LiveNote
 } from '../shared/types'
 import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -65,6 +66,14 @@ const omi: OmiBridgeApi = {
   deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
+  // --- PR8: LiveNotes (local-only AI + manual notes during a live recording) ---
+  createTranscriptionSession: (session: { id: string; startedAt: number; createdAt: number }) =>
+    ipcRenderer.invoke('db:createTranscriptionSession', session),
+  createLiveNote: (note: LiveNote) => ipcRenderer.invoke('db:createLiveNote', note),
+  updateLiveNote: (id: string, text: string, updatedAt: number) =>
+    ipcRenderer.invoke('db:updateLiveNote', id, text, updatedAt),
+  deleteLiveNote: (id: string) => ipcRenderer.invoke('db:deleteLiveNote', id),
+  listLiveNotes: (sessionId: string) => ipcRenderer.invoke('db:listLiveNotes', sessionId),
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   insertVoiceTurn: (entry: VoiceTurnOutboxInput) => ipcRenderer.invoke('db:insertVoiceTurn', entry),
   listPendingVoiceTurns: (limit?: number) => ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
