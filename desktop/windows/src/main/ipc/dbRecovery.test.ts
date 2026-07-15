@@ -150,6 +150,20 @@ describe('isCorruptionError', () => {
     expect(isCorruptionError(undefined)).toBe(false)
   })
 
+  // CORRUPTFS is filesystem-level corruption whose generic "disk i/o error" message
+  // also matches an access pattern. It must classify as CORRUPT (so the file gets
+  // repaired), while a plain transient SQLITE_IOERR stays access (left untouched).
+  it('treats SQLITE_IOERR_CORRUPTFS as corruption but a plain disk-i/o error as access', () => {
+    expect(isCorruptionError({ code: 'SQLITE_IOERR_CORRUPTFS', message: 'disk I/O error' })).toBe(
+      true
+    )
+    expect(isCorruptionError({ errcode: 6922, message: 'disk I/O error' })).toBe(true)
+    // A plain I/O blip is NOT corruption — we must not rebuild the DB over it.
+    expect(isCorruptionError({ code: 'SQLITE_IOERR', message: 'disk I/O error' })).toBe(false)
+    expect(isCorruptionError({ errcode: 10, message: 'disk I/O error' })).toBe(false)
+    expect(isAccessError({ code: 'SQLITE_IOERR', message: 'disk I/O error' })).toBe(true)
+  })
+
   it('classifies access errors separately so they are never recovered from', () => {
     expect(isAccessError({ code: 'SQLITE_BUSY' })).toBe(true)
     expect(isAccessError({ code: 'EACCES' })).toBe(true)
@@ -744,6 +758,80 @@ describe('salvage has no row-count ceiling', () => {
     expect(result.tables['local_conversation']).toBe(50)
     expect(countRows(out, 'rewind_frames')).toBe(frames)
   }, 120_000)
+})
+
+// The Windows swap is two renames (archive the original away, then move the salvaged
+// temp into place) because Windows cannot atomically replace an open database. A
+// crash BETWEEN them — power loss is this feature's whole threat model — leaves the
+// database path empty and the salvaged data stranded at `omi.db.salvage-<ts>`. The
+// next launch must adopt it, not create a fresh empty database and orphan the rows.
+describe('an interrupted repair is completed on the next launch, never orphaned', () => {
+  function makeStrandedSalvage(): { salvageName: string; rows: number } {
+    // Build the salvaged replacement exactly as the repair would, then simulate the
+    // crash: the original is already gone (archived), and only the temp remains.
+    buildDb(dbFile)
+    const salvageName = `${dbFile}.salvage-${Date.now()}`
+    const rows = salvage(dbFile, salvageName, driver).rows
+    rmSync(dbFile, { force: true }) // the original was MOVEd to backups/ before the crash
+    return { salvageName, rows }
+  }
+
+  it('adopts the stranded salvage when the database path is missing', () => {
+    const { rows } = makeStrandedSalvage()
+    expect(existsSync(dbFile)).toBe(false)
+
+    const { db, status } = openDatabaseWithRecovery(dbFile, driver, { backupsDir })
+    db.close()
+
+    // The salvaged data is now the live database — not a fresh empty one.
+    expect(status.recovered).toBe(false) // a completed swap, not a new corruption
+    expect(existsSync(dbFile)).toBe(true)
+    expect(rows).toBe(1450)
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+    expect(countRows(dbFile, 'rewind_frames')).toBe(800)
+    // No stray temp left behind.
+    expect(readdirSync(dir).filter((f) => f.includes('.salvage-'))).toEqual([])
+  })
+
+  it('adopts over a zero-byte stub (a fresh handle the crashed launch may have created)', () => {
+    const { salvageName } = makeStrandedSalvage()
+    writeFileSync(dbFile, '') // a 0-byte omi.db, as a bare open() would leave
+    expect(existsSync(salvageName)).toBe(true)
+
+    const { db } = openDatabaseWithRecovery(dbFile, driver, { backupsDir })
+    db.close()
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+  })
+
+  it('keeps only the newest salvage and discards superseded ones', () => {
+    buildDb(dbFile)
+    const older = `${dbFile}.salvage-100`
+    const newer = `${dbFile}.salvage-200`
+    salvage(dbFile, older, driver)
+    salvage(dbFile, newer, driver)
+    rmSync(dbFile, { force: true })
+
+    const { db } = openDatabaseWithRecovery(dbFile, driver, { backupsDir })
+    db.close()
+    expect(existsSync(dbFile)).toBe(true)
+    expect(existsSync(older)).toBe(false)
+    expect(existsSync(newer)).toBe(false)
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+  })
+
+  it('does NOT touch a healthy database that has a stray salvage temp beside it', () => {
+    // A leftover temp from a fully-completed repair must never displace a live DB.
+    buildDb(dbFile)
+    const stray = `${dbFile}.salvage-999`
+    writeFileSync(stray, 'garbage-not-a-db')
+    const before = readFileSync(dbFile)
+
+    const { db, status } = openDatabaseWithRecovery(dbFile, driver, { backupsDir })
+    db.close()
+    expect(status.recovered).toBe(false)
+    expect(readFileSync(dbFile).equals(before)).toBe(true) // untouched
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+  })
 })
 
 describe('never rebuild into a worse state', () => {

@@ -45,7 +45,7 @@
  *     read-only handle or the KG worker's connection exist.
  */
 import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'fs'
-import { dirname, join } from 'path'
+import { basename, dirname, join } from 'path'
 import type { DbRecoveryStatus } from '../../shared/types'
 
 // --- Driver seam -----------------------------------------------------------
@@ -128,13 +128,17 @@ function errorText(err: { errstr?: unknown; message?: unknown }): string {
 export function isCorruptionError(err: unknown): boolean {
   if (!err || typeof err !== 'object') return false
   const e = err as { code?: unknown; errcode?: unknown; errstr?: unknown; message?: unknown }
-  // An access/lock/disk error is never corruption, whatever else it looks like.
+  // SQLITE_IOERR_CORRUPTFS is filesystem-level corruption the DB cannot recover
+  // from in place — genuinely corrupt, not transient I/O. Its own message is the
+  // generic "disk i/o error", which ALSO matches an access pattern, so it must be
+  // recognised BEFORE the access gate or it would be misfiled as transient and the
+  // file never repaired. Only this EXACT extended signal jumps the gate; a plain
+  // SQLITE_IOERR (a transient read/write blip) stays access and is left untouched.
+  const code = typeof e.code === 'string' ? e.code.toUpperCase() : ''
+  if (code === 'SQLITE_IOERR_CORRUPTFS' || e.errcode === 6922) return true
+  // Any other access/lock/disk error is never corruption, whatever else it looks like.
   if (isAccessError(err)) return false
-  if (typeof e.code === 'string') {
-    const code = e.code.toUpperCase()
-    if (code.startsWith('SQLITE_CORRUPT') || code.startsWith('SQLITE_NOTADB')) return true
-    if (code === 'SQLITE_IOERR_CORRUPTFS') return true
-  }
+  if (code.startsWith('SQLITE_CORRUPT') || code.startsWith('SQLITE_NOTADB')) return true
   if (typeof e.errcode === 'number') {
     if (CORRUPT_EXTENDED_CODES.has(e.errcode)) return true
     // eslint-disable-next-line no-bitwise -- SQLite extended codes are primary | (sub << 8)
@@ -757,7 +761,7 @@ export function repairSuspectedCorruption(
   )
   db.close()
 
-  const tmp = `${file}.salvage-${now.getTime()}`
+  const tmp = `${file}${SALVAGE_TMP_INFIX}${now.getTime()}`
   const staging = `${file}.recover-src-${now.getTime()}`
   const cleanup = (): void => {
     forceRemove(tmp)
@@ -987,6 +991,48 @@ function discardStash(stashed: string[]): void {
   }
 }
 
+const SALVAGE_TMP_INFIX = '.salvage-'
+
+/**
+ * Recover from a repair that was interrupted mid-swap.
+ *
+ * The Windows swap is unavoidably two steps — archive the original away (a MOVE, so
+ * the original is already safe in backups/), then rename the salvaged temp into its
+ * place — because Windows cannot atomically replace an open database file. If the
+ * process dies BETWEEN them (power loss is this feature's whole threat model), the
+ * database path is empty and the salvaged data is stranded at `omi.db.salvage-<ts>`.
+ * Left alone, the next open would create a fresh empty database and silently orphan
+ * every recovered row.
+ *
+ * So: if the database is missing (or a zero-byte stub) and a salvage temp is sitting
+ * right there, complete the interrupted swap by moving it into place. Picks the
+ * newest by name (the timestamp suffix sorts chronologically). If the adopted file
+ * turns out to be a partial write, the normal open+recovery path below handles it —
+ * and the true original is still in backups/ regardless.
+ */
+function adoptInterruptedSalvage(file: string, log: (m: string) => void): void {
+  try {
+    if (existsSync(file) && statSync(file).size > 0) return // a real database is present
+    const dir = dirname(file)
+    const prefix = `${basename(file)}${SALVAGE_TMP_INFIX}`
+    if (!existsSync(dir)) return
+    const temps = readdirSync(dir)
+      .filter((n) => n.startsWith(prefix))
+      .sort() // timestamp suffix → chronological
+    const newest = temps[temps.length - 1]
+    if (!newest) return
+    // Any older salvage temps are leftovers from a superseded attempt — discard them.
+    for (const stale of temps.slice(0, -1)) forceRemove(join(dir, stale))
+    if (existsSync(file)) forceRemove(file) // clear the zero-byte stub, if any
+    forceRename(join(dir, newest), file)
+    log(`db: completed an interrupted repair — adopted salvaged ${newest}`)
+  } catch (e) {
+    // Best-effort: a failure here just falls through to the normal open path, and
+    // the real original is safe in backups/. Never let it break startup.
+    log(`db: could not adopt an interrupted salvage (${(e as Error)?.message})`)
+  }
+}
+
 /** Open + prove the connection can actually read the schema. macOS's real sanity
  *  query — cheap (schema is already in memory) unlike `quick_check`. */
 function openChecked(file: string, driver: RecoveryDriver): RecoveryDb {
@@ -1022,6 +1068,15 @@ export function openDatabaseWithRecovery(
   const log = hooks.log ?? ((): void => {})
 
   const now = opts.now?.() ?? new Date()
+
+  // Crash-recovery for the repair's own non-atomic swap. Windows cannot atomically
+  // replace an open database, so repairSuspectedCorruption archives the original
+  // (a MOVE — original now safe in backups/) and THEN renames the salvaged temp
+  // into place. A process death in that microsecond gap leaves `file` missing and
+  // the salvaged data stranded at `omi.db.salvage-*`. Without this, the next launch
+  // would create a fresh EMPTY database and silently orphan the recovered rows.
+  // Adopt the stranded salvage instead — the repair's result is not lost to a crash.
+  adoptInterruptedSalvage(file, log)
 
   let firstErr: unknown
   try {
@@ -1081,7 +1136,7 @@ function recover(
   log(`db: corrupt database archived to ${backupPath}`)
   parkStash(stashed, backupPath)
 
-  const tmp = `${file}.salvage-${now.getTime()}`
+  const tmp = `${file}${SALVAGE_TMP_INFIX}${now.getTime()}`
   forceRemove(tmp)
   const salvaged = salvage(backupPath, tmp, driver)
   log(

@@ -279,7 +279,10 @@ function get(): Database.Database {
       const reason =
         outcome.action === 'abandoned'
           ? `repair budget exhausted after ${outcome.attempts} attempts`
-          : 'a rebuild would have lost rows that still read fine'
+          : // kept_original covers two safe-direction outcomes: a rebuild would have
+            // lost rows a working table still serves, OR the corrupt file could not
+            // be moved aside so we refused to touch it. Either way, nothing changed.
+            'a safe rebuild was not possible (would lose readable rows, or the corrupt file could not be archived)'
       console.error(`db: corruption confirmed but NOT repaired — ${reason}`)
       captureError(new Error(`db corruption unrepaired: ${reason}`), {
         area: 'db_corruption_unrepaired',
@@ -806,9 +809,10 @@ export function remapConversationId(fromId: string, toId: string): number {
 // Load path → modified_at (ms) for the whole index. Drives both the retention
 // diff (which existing paths still exist on disk) and the incremental mtime-skip.
 export function loadIndexedFileMtimes(): Map<string, number> {
-  const rows = get()
-    .prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files')
-    .all() as { path: string; modifiedAt: number }[]
+  const rows = get().prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files').all() as {
+    path: string
+    modifiedAt: number
+  }[]
   const map = new Map<string, number>()
   for (const r of rows) map.set(r.path, r.modifiedAt)
   return map
