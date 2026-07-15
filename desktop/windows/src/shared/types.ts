@@ -1202,6 +1202,11 @@ export type MainChatSendArgs = {
   /** The already-context-prepended user prompt. PR-E2 assembles OCR/history
    *  context; the main-chat door forwards this string to the adapter verbatim. */
   prompt: string
+  /** The raw user message, BEFORE any OCR/context prepend. The main-chat door
+   *  records THIS (not `prompt`) as the user turn on the kernel transcript, so the
+   *  stored transcript stays clean of the contexted prompt while the adapter still
+   *  receives `prompt` verbatim. */
+  cleanUserText: string
   /** Main-chat conversation id; maps to the main_chat/chat/<chatId> surface.
    *  Defaults to 'default' when omitted. */
   chatId?: string

@@ -321,7 +321,7 @@ describe('runMainChatTurn', () => {
     const events: MainChatEvent[] = []
 
     const result = await runMainChatTurn(
-      { requestId: 'req-1', prompt: 'hi there' },
+      { requestId: 'req-1', prompt: 'hi there', cleanUserText: 'hi there' },
       (e) => events.push(e),
       { kernel, ownerId: OWNER }
     )
@@ -354,30 +354,47 @@ describe('runMainChatTurn', () => {
     expect(terminal.status).toBe('succeeded')
   })
 
-  it('creates exactly one run, one attempt, and one turn (no double-append)', async () => {
-    const adapter = fakeAdapter({ reply: () => 'the answer' })
+  it('records one clean user turn + one assistant turn (no double-append, verbatim forward)', async () => {
+    let dispatchedPrompt = ''
+    const adapter = fakeAdapter({
+      reply: () => 'the answer',
+      stream: (prompt) => {
+        dispatchedPrompt = prompt
+        return []
+      }
+    })
     const kernel = newKernel(adapter)
     const store = openStores[openStores.length - 1]
 
-    await runMainChatTurn({ requestId: 'req-1', prompt: 'the question' }, () => {}, {
-      kernel,
-      ownerId: OWNER
-    })
+    // `prompt` is the context-prepended string; `cleanUserText` is the raw message.
+    // The adapter must receive `prompt` verbatim; the transcript must store the
+    // clean text — never the contexted prompt.
+    await runMainChatTurn(
+      {
+        requestId: 'req-1',
+        prompt: '<<context>>\nthe question',
+        cleanUserText: 'the question'
+      },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
 
     expect(store.allRows('SELECT run_id FROM runs')).toHaveLength(1)
     expect(store.allRows('SELECT attempt_id FROM run_attempts')).toHaveLength(1)
-    // Bare `sendAgentMessage` does not thread externalRefKind/externalRefId, so the
-    // kernel records only the assistant turn for this run (the user-turn append at
-    // kernelCore.ts is gated on a resolvable surfaceRef, which is intentionally not
-    // supplied here — threading it would ALSO re-run assembleTurnContext and double-
-    // context the prompt E2 pre-prepends). Recording the clean user turn is a PR-E2
-    // responsibility (e.g. kernel.recordSurfaceTurn with the pre-context user text).
+    // Adapter got the verbatim contexted prompt.
+    expect(dispatchedPrompt).toBe('<<context>>\nthe question')
+    // Transcript: clean user turn (main-side record) THEN assistant turn (the run),
+    // both on the same conversation. The user turn stores the CLEAN text, not the
+    // contexted prompt.
     const turns = store.allRows(
-      'SELECT role, content FROM conversation_turns ORDER BY created_at_ms ASC, rowid ASC'
+      'SELECT role, content, conversation_id FROM conversation_turns ORDER BY created_at_ms ASC, rowid ASC'
     )
-    expect(turns.map((t) => t.role)).toEqual(['assistant'])
-    expect(turns[0].content).toBe('the answer')
-    // The adapter ran exactly once (no retry / no double-dispatch).
+    expect(turns.map((t) => t.role)).toEqual(['user', 'assistant'])
+    expect(turns[0].content).toBe('the question')
+    expect(turns[1].content).toBe('the answer')
+    // Both turns landed on the same conversation the run used (no forked transcript).
+    expect(turns[0].conversation_id).toBe(turns[1].conversation_id)
+    // Exactly one of each — no double assistant append, adapter ran once.
     expect(adapter.calls.executeAttempt).toHaveLength(1)
   })
 
@@ -408,14 +425,16 @@ describe('runMainChatTurn', () => {
       }
     }
 
-    const pA = runMainChatTurn({ requestId: 'req-A', prompt: 'PROMPT_A', chatId: 'chat-a' }, emit, {
-      kernel,
-      ownerId: OWNER
-    })
-    const pB = runMainChatTurn({ requestId: 'req-B', prompt: 'PROMPT_B', chatId: 'chat-b' }, emit, {
-      kernel,
-      ownerId: OWNER
-    })
+    const pA = runMainChatTurn(
+      { requestId: 'req-A', prompt: 'PROMPT_A', cleanUserText: 'PROMPT_A', chatId: 'chat-a' },
+      emit,
+      { kernel, ownerId: OWNER }
+    )
+    const pB = runMainChatTurn(
+      { requestId: 'req-B', prompt: 'PROMPT_B', cleanUserText: 'PROMPT_B', chatId: 'chat-b' },
+      emit,
+      { kernel, ownerId: OWNER }
+    )
     const [rA, rB] = await Promise.all([pA, pB])
 
     expect(rA.runId).not.toBe(rB.runId)
@@ -458,10 +477,11 @@ describe('runMainChatTurn', () => {
       }
     }
 
-    const result = await runMainChatTurn({ requestId: 'req-C', prompt: 'PROMPT_C' }, emit, {
-      kernel,
-      ownerId: OWNER
-    })
+    const result = await runMainChatTurn(
+      { requestId: 'req-C', prompt: 'PROMPT_C', cleanUserText: 'PROMPT_C' },
+      emit,
+      { kernel, ownerId: OWNER }
+    )
 
     expect(runId).toBeTruthy()
     expect(result.terminalStatus).toBe('cancelled')

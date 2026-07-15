@@ -134,6 +134,15 @@ function generateClientId(): string {
  * carries our (uniquely generated) clientId. From then on we forward only events
  * for that runId, so concurrent turns never leak into each other's stream, and we
  * unsubscribe on the terminal run event.
+ *
+ * Transcript: the run records only the ASSISTANT turn (bare sendAgentMessage does
+ * not thread a surfaceRef, and threading one would re-run assembleTurnContext and
+ * store the contexted prompt as the user turn). So we record the CLEAN user turn
+ * ourselves — main-side, before dispatch — via recordSurfaceTurn with an empty
+ * assistant text (which appends only the user turn). Both land on the SAME
+ * conversation the run resolves, giving one clean user + one assistant turn per
+ * send. Keeping this write here (not in a separate renderer IPC call) makes the
+ * main-chat door the single kernel-transcript writer.
  */
 export async function runMainChatTurn(
   args: MainChatSendArgs,
@@ -148,10 +157,31 @@ export async function runMainChatTurn(
   let unsubscribe: () => void = () => {}
 
   try {
+    const surfaceRef = {
+      surfaceKind: 'main_chat',
+      externalRefKind: 'chat',
+      externalRefId: chatId
+    }
+    // Pin the session to pi-mono / managed_cloud FIRST (this creates the session +
+    // surface_conversations mapping), so the user-turn record below reads that
+    // pinned session rather than creating an unpinned 'acp' one.
     const session = kernel.resolveSurfaceSession({
       ownerId,
-      surfaceRef: { surfaceKind: 'main_chat', externalRefKind: 'chat', externalRefId: chatId },
+      surfaceRef,
       defaultAdapterId: MAIN_CHAT_ADAPTER_ID
+    })
+
+    // Record the clean user turn on the kernel transcript (empty assistant text →
+    // only the user turn is appended; the run appends the assistant turn at
+    // completion). Idempotency-keyed on requestId so a retried send with the same
+    // id never double-appends.
+    kernel.recordSurfaceTurn({
+      ownerId,
+      surfaceRef,
+      userText: args.cleanUserText,
+      assistantText: '',
+      origin: 'main_chat',
+      idempotencyKey: requestId
     })
 
     unsubscribe = kernel.subscribe((event) => {
