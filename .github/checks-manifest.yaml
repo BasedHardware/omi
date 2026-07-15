@@ -12,6 +12,16 @@ checks:
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: product-file-line-count-ratchet
+    command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why"
+  - id: product-file-line-count-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_product_file_line_count_ratchet.py"]
+    triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -171,7 +181,7 @@ checks:
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     lanes: ["local", "ci"]
-    reason: "realtime hub ownership/line-count anti-regrowth ratchet"
+    reason: "realtime hub extracted-type ownership anti-regrowth ratchet"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]
