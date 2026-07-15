@@ -176,6 +176,19 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     XCTAssertFalse(committed.pendingCommit)
   }
 
+  func testOpenAITransportCloseImmediatelyMakesSessionNonSendableBeforeControllerTeardown() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    session.markReadyForTesting()
+    _ = await session.inputLifecycleSnapshot()
+    let transport = URLSession.shared.webSocketTask(with: URL(string: "wss://example.com")!)
+
+    session.urlSession(URLSession.shared, webSocketTask: transport, didCloseWith: .normalClosure, reason: nil)
+
+    let closed = await session.inputLifecycleSnapshot()
+    XCTAssertFalse(closed.isOpen, "a closed transport must become non-sendable before its controller handles the error")
+  }
+
   func testOpenAICancelReclaimsActiveResponseIdentity() async {
     let delegate = RealtimeHubSessionDelegateSpy()
     let session = makeSession(provider: .openai, delegate: delegate)

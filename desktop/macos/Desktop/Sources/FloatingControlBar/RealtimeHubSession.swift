@@ -296,6 +296,11 @@ final class RealtimeHubSession: NSObject {
   private func notifyError(_ message: String) {
     guard !terminated else { return }
     terminated = true
+    // Make this physical session non-sendable on q before the main-actor
+    // controller observes the error and schedules teardown.
+    isOpen = false
+    task = nil
+    rawWS = nil
     let d = delegate
     Task { @MainActor in d?.hubDidError(message, source: self) }
   }
