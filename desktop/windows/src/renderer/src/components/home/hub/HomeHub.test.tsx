@@ -82,6 +82,16 @@ describe('HomeHub — stage machine', () => {
     expect(screen.getByText('omi.')).not.toBeNull()
   })
 
+  it('labels the header pills with the FEATURE NAME, not the on/off state', () => {
+    // Mac's pills read "Capture" / "Listening" (state is carried by colour), not
+    // "On" / "Off" (DashboardPage.swift HomeStatusButton title:). Showing the state
+    // as the label read as a bare toggle with no hint of which control it was.
+    renderHub()
+    expect(screen.getByText('Capture')).not.toBeNull()
+    expect(screen.getByText('Listening')).not.toBeNull()
+    expect(screen.queryByText('Off')).toBeNull()
+  })
+
   it('docks the cluster with NOTHING between the wordmark and the stat ribbon', () => {
     // Mac's hub stage is wordmark → flexible gap → ribbon → ask bar → suggestions
     // (DashboardPage.swift:678-702). An earlier build wedged two 160px legacy

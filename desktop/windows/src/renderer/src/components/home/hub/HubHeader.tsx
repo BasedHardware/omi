@@ -137,16 +137,22 @@ export function HubHeader(): React.JSX.Element {
 
   return (
     <div className="flex h-9 items-center gap-2.5">
+      {/* Mac labels these with the FEATURE NAME ("Capture" / "Listening"), not the
+          state (DashboardPage.swift HomeStatusButton title:). The on/off state is
+          carried by the pill's colour (green when on) and, for listening, the icon
+          (mic → waveform) — so the label stays constant and legible, and the aria-label
+          still announces the action. Showing "On"/"Off" as the label read as a bare
+          toggle with no hint of WHICH control it is. */}
       <Pill
         Icon={Scan}
-        text={captureOn ? 'On' : 'Off'}
+        text="Capture"
         on={captureOn}
         label={captureOn ? 'Turn screen capture off' : 'Turn screen capture on'}
         onClick={toggleCapture}
       />
       <Pill
         Icon={micOn ? AudioWaveform : Mic}
-        text={micOn ? 'On' : 'Off'}
+        text="Listening"
         on={micOn}
         label={micOn ? 'Stop listening' : 'Start listening'}
         onClick={toggleMic}
