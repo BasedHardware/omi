@@ -610,13 +610,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   report_screen_observation: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Report Screen Observation", "Report a grounded current-screen answer.", [
-      "Only call after screenshot returns a current evidence id.",
-      "Use the exact frontmost application supplied by screenshot; do not infer it from history.",
+      "Only call after screenshot returns the current image.",
+      "Put only visual detail in the answer; native evidence supplies application identity.",
     ]),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "After screenshot succeeds for a current-screen question, report exactly one observation using its evidence_id and exact frontmost_app. Put only visual detail in answer; never identify, name, or claim an application there because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+        "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
     },
   },
   point_click: {
@@ -1266,22 +1266,17 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "report_screen_observation",
     label: "Report Screen Observation",
     description:
-      "Submit one current-screen observation bound to the exact evidence returned by screenshot.",
+      "Submit one current-screen observation after screenshot succeeds.",
     promptSnippet: "report_screen_observation - Submit a grounded current-screen answer",
     latency: "fast local",
     inputSchema: schema(
       {
-        evidence_id: { type: "string", description: "Opaque evidence id returned by screenshot." },
-        frontmost_app: {
-          type: "string",
-          description: "Exact frontmost application name returned by screenshot.",
-        },
         answer: {
           type: "string",
           description: "Concise visual detail only; do not name or identify an app.",
         },
       },
-      ["evidence_id", "frontmost_app", "answer"],
+      ["answer"],
     ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",

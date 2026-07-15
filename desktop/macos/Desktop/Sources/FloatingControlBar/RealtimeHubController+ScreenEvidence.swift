@@ -14,21 +14,15 @@ extension RealtimeHubController {
     let replacesRawCapture = screenEvidence?.descriptor.evidenceID == evidence.descriptor.evidenceID
     screenEvidence = evidence
     if !replacesRawCapture {
-      screenGroundingState = .awaitingTranscript(evidence.descriptor)
       logScreenEvidence(stage: "captured", evidence: evidence.descriptor)
       if !evidence.encodingFinished {
         startScreenEvidenceEncoding(evidence)
       }
-    } else if case .awaitingTranscript = screenGroundingState {
-      screenGroundingState = .awaitingTranscript(evidence.descriptor)
     }
     if evidence.encodingFinished {
       logScreenEvidence(
         stage: evidence.isReadyForProviderDelivery ? "encoded" : "encode_failed",
         evidence: evidence.descriptor)
-      if screenTranscriptFinalized {
-        resolveScreenGroundingAfterFinalTranscript()
-      }
     }
   }
 
@@ -48,10 +42,7 @@ extension RealtimeHubController {
   func screenshotToolResultTextForCurrentProvider(
     attachment: RealtimeScreenEvidenceAttachment?
   ) -> String {
-    RealtimeHubTools.screenshotToolResult(
-      evidenceID: attachment?.descriptor.evidenceID,
-      frontmostApp: attachment?.descriptor.frontmostApp,
-      capturedBytes: attachment?.jpeg.count)
+    RealtimeHubTools.screenshotToolResult(capturedBytes: attachment?.jpeg.count)
   }
 
   func resetScreenGrounding(for turnID: VoiceTurnID) {
@@ -59,12 +50,9 @@ extension RealtimeHubController {
       screenEvidence = nil
       screenEvidenceReadiness = nil
     }
-    screenGroundingState = .awaitingTranscript(screenEvidence?.descriptor)
-    deferredProviderAudio.removeAll(keepingCapacity: true)
-    deferredProviderText.removeAll(keepingCapacity: true)
-    deliveredScreenEvidenceID = nil
-    pendingScreenObservation = nil
-    screenTranscriptFinalized = false
+    // PTT-down capture is inert. A normal turn must never wait for a provider input
+    // transcript; only a reducer-admitted screenshot request may seal provider output.
+    screenGroundingState = .inactive
     screenAnswerPresented = false
   }
 
@@ -75,22 +63,60 @@ extension RealtimeHubController {
     screenEvidence = nil
     screenEvidenceReadiness = nil
     screenGroundingState = .inactive
-    deferredProviderAudio.removeAll(keepingCapacity: false)
-    deferredProviderText.removeAll(keepingCapacity: false)
     authorizedRealtimeScreenshotImages.removeAll()
-    deliveredScreenEvidenceID = nil
-    pendingScreenObservation = nil
-    screenTranscriptFinalized = false
     screenAnswerPresented = false
   }
 
-  func markScreenEvidenceDelivered(_ attachment: RealtimeScreenEvidenceAttachment) {
-    guard screenEvidence?.descriptor.turnID == attachment.descriptor.turnID,
-      screenEvidence?.descriptor.evidenceID == attachment.descriptor.evidenceID
+  /// Reserve the visual output gate only after the screenshot call has passed the normal
+  /// reducer/session ownership admission. This is intentionally before JPEG work: a model must
+  /// not leak an ungrounded answer while the one frozen image is still encoding.
+  func admitScreenScreenshotRequest(
+    source: RealtimeHubSession,
+    turnID: VoiceTurnID,
+    responseID: VoiceResponseID,
+    callID: String,
+    turnEpoch: Int
+  ) {
+    guard case .inactive = screenGroundingState else { return }
+    let request = RealtimeScreenScreenshotRequest(
+      descriptor: screenEvidence?.descriptor,
+      turnID: turnID,
+      responseID: responseID,
+      sessionObjectID: ObjectIdentifier(source),
+      screenshotCallID: callID,
+      turnEpoch: turnEpoch)
+    screenGroundingState = .awaitingScreenshot(request)
+    if let evidence = request.descriptor {
+      logScreenEvidence(stage: "screenshot_requested", evidence: evidence, callID: callID)
+    } else {
+      log("RealtimeHub: ptt_screen_evidence stage=screenshot_requested evidence=unavailable")
+    }
+  }
+
+  /// The synchronous `sendToolResult` handoff is the only transport fact we own. It is not a
+  /// remote delivery acknowledgement, so the receipt is named `transport_dispatched` and is
+  /// scoped to the exact session, response, tool call, and epoch that created the image.
+  func markScreenEvidenceTransportDispatched(
+    _ attachment: RealtimeScreenEvidenceAttachment,
+    source: RealtimeHubSession,
+    callID: String,
+    turnEpoch: Int
+  ) {
+    guard case .awaitingScreenshot(let request) = screenGroundingState,
+      request.acceptsTransportDispatch(
+        attachment: attachment,
+        sourceObjectID: ObjectIdentifier(source),
+        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+        activeResponseID: voiceResponseID,
+        currentTurnEpoch: realtimeToolTurnEpoch,
+        callID: callID),
+      turnEpoch == realtimeToolTurnEpoch
     else { return }
-    deliveredScreenEvidenceID = attachment.descriptor.evidenceID
-    logScreenEvidence(stage: "delivered", evidence: attachment.descriptor)
-    resolvePendingScreenObservationIfReady()
+    let receipt = RealtimeScreenObservationReceipt(
+      request: request,
+      descriptor: attachment.descriptor)
+    screenGroundingState = .awaitingReport(receipt)
+    logScreenEvidence(stage: "transport_dispatched", evidence: attachment.descriptor, callID: callID)
   }
 
   func logScreenEvidence(
@@ -108,8 +134,11 @@ extension RealtimeHubController {
     let turn = String(evidence.turnID.rawValue.uuidString.prefix(8))
     let image = evidence.imageDigest.map { String($0.prefix(12)) } ?? ""
     let tokens = imageTokenCount.map(String.init) ?? ""
+    let transcriptSeen = lastInputTranscriptUpdateAt != nil
     let message = "RealtimeHub: ptt_screen_evidence stage=\(stage) evidence=\(evidence.opaqueID) "
-      + "turn=\(turn) target=\(evidence.target.rawValue) capture_age=\(ageBucket) bytes=\(bytesBucket) "
+      + "provider=\(providerTag) turn=\(turn) epoch=\(realtimeToolTurnEpoch) "
+      + "input_transcription_seen=\(transcriptSeen) target=\(evidence.target.rawValue) "
+      + "capture_age=\(ageBucket) bytes=\(bytesBucket) "
       + "app=\(evidence.opaqueAppID ?? "") has_window=\(evidence.windowID != nil) "
       + "has_display=\(evidence.displayID != nil) image=\(image) "
       + "call=\(callHash.prefix(12)) image_tokens=\(tokens)"
@@ -120,9 +149,8 @@ extension RealtimeHubController {
     _ evidence: RealtimeScreenEvidenceDescriptor?,
     reason: String
   ) {
+    if case .rejected = screenGroundingState { return }
     screenGroundingState = .rejected(evidence)
-    deferredProviderAudio.removeAll(keepingCapacity: false)
-    deferredProviderText.removeAll(keepingCapacity: false)
     if let evidence {
       logScreenEvidence(stage: "report_rejected", evidence: evidence)
     }
@@ -134,6 +162,31 @@ extension RealtimeHubController {
       outcome: .exhausted,
       extra: ["screen_evidence_reason": reason, "user_visible": true])
     presentScreenEvidenceAnswer(RealtimeScreenGroundingPolicy.failureText)
+  }
+
+  /// The reducer's existing post-tool continuation deadline is the liveness owner. It is the
+  /// right place to close a report gate that cannot otherwise receive a second provider cycle;
+  /// cancellation/barge-in deliberately clears silently instead of narrating an old turn.
+  func rejectPendingScreenEvidenceAtTurnTermination(
+    turnID: VoiceTurnID,
+    reason: VoiceTurnTerminalReason
+  ) {
+    guard reason != .cancelled,
+      reason != .interruptedByBargeIn,
+      reason != .ownerChanged,
+      reason != .silentRejected,
+      reason != .tooShort
+    else { return }
+    let evidence: RealtimeScreenEvidenceDescriptor?
+    switch screenGroundingState {
+    case .awaitingScreenshot(let request) where request.turnID == turnID:
+      evidence = request.descriptor
+    case .awaitingReport(let receipt) where receipt.turnID == turnID:
+      evidence = receipt.descriptor
+    case .inactive, .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
+      return
+    }
+    rejectScreenEvidence(evidence, reason: "continuation_\(reason.rawValue)")
   }
 
   func presentScreenEvidenceAnswer(_ answer: String) {

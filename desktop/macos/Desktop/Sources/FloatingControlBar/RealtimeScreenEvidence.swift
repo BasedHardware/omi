@@ -111,28 +111,94 @@ final class RealtimeScreenEvidenceReadiness: @unchecked Sendable {
 
 enum RealtimeScreenGroundingState: Equatable {
   case inactive
-  case awaitingTranscript(RealtimeScreenEvidenceDescriptor?)
-  case passthrough
-  case awaitingReport(RealtimeScreenEvidenceDescriptor?)
-  case accepted(RealtimeScreenEvidenceDescriptor)
+  /// A screenshot was admitted for the current provider turn, but its frozen JPEG has not yet
+  /// been handed to the provider. Suppress speculative provider output only from this point.
+  case awaitingScreenshot(RealtimeScreenScreenshotRequest)
+  /// The exact JPEG tool result was locally dispatched to the active provider session. A model
+  /// report can now be presented only through this immutable local receipt.
+  case awaitingReport(RealtimeScreenObservationReceipt)
+  case accepted(RealtimeScreenObservationReceipt)
   case rejected(RealtimeScreenEvidenceDescriptor?)
 
   var suppressesProviderOutput: Bool {
     switch self {
-    case .awaitingTranscript, .awaitingReport, .accepted, .rejected:
+    case .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
       return true
-    case .inactive, .passthrough:
+    case .inactive:
       return false
     }
+  }
+}
+
+/// A screenshot request belongs to one provider response and one tool epoch. The model never
+/// supplies this authority: it is minted after reducer admission and checked again after every
+/// asynchronous boundary.
+struct RealtimeScreenScreenshotRequest: Equatable {
+  let descriptor: RealtimeScreenEvidenceDescriptor?
+  let turnID: VoiceTurnID
+  let responseID: VoiceResponseID
+  let sessionObjectID: ObjectIdentifier
+  let screenshotCallID: String
+  let turnEpoch: Int
+
+  func acceptsTransportDispatch(
+    attachment: RealtimeScreenEvidenceAttachment,
+    sourceObjectID: ObjectIdentifier,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?,
+    currentTurnEpoch: Int,
+    callID: String
+  ) -> Bool {
+    descriptor?.evidenceID == attachment.descriptor.evidenceID
+      && descriptor?.turnID == attachment.descriptor.turnID
+      && turnID == activeTurnID
+      && responseID == activeResponseID
+      && sessionObjectID == sourceObjectID
+      && screenshotCallID == callID
+      && turnEpoch == currentTurnEpoch
+  }
+}
+
+/// This is a local enqueue receipt, not a provider delivery acknowledgement. It proves that the
+/// matching JPEG function result was handed to this exact active session; a report cannot use
+/// model-supplied ids or application labels to recreate that authority.
+struct RealtimeScreenObservationReceipt: Equatable {
+  let descriptor: RealtimeScreenEvidenceDescriptor
+  let turnID: VoiceTurnID
+  let responseID: VoiceResponseID
+  let sessionObjectID: ObjectIdentifier
+  let screenshotCallID: String
+  let turnEpoch: Int
+
+  init(request: RealtimeScreenScreenshotRequest, descriptor: RealtimeScreenEvidenceDescriptor) {
+    self.descriptor = descriptor
+    turnID = request.turnID
+    responseID = request.responseID
+    sessionObjectID = request.sessionObjectID
+    screenshotCallID = request.screenshotCallID
+    turnEpoch = request.turnEpoch
+  }
+
+  func isCurrent(
+    sourceObjectID: ObjectIdentifier,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?,
+    currentTurnEpoch: Int
+  ) -> Bool {
+    descriptor.canVerifyCurrentScreen
+      && turnID == activeTurnID
+      && responseID == activeResponseID
+      && sessionObjectID == sourceObjectID
+      && !screenshotCallID.isEmpty
+      && turnEpoch == currentTurnEpoch
   }
 }
 
 enum RealtimeScreenReportDecision: Equatable {
   case accepted
   case evidenceUnavailable
-  case screenshotNotDelivered
-  case wrongEvidence
-  case wrongApplication
+  case transportNotDispatched
+  case staleReceipt
   case contradictoryApplication
   case emptyAnswer
 }
@@ -160,36 +226,27 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 enum RealtimeScreenGroundingPolicy {
   static let failureText = "I couldn't verify the current screen."
 
-  static func stateAfterFinalTranscript(
-    _ transcript: String,
-    evidence: RealtimeScreenEvidenceDescriptor?
-  ) -> RealtimeScreenGroundingState {
-    guard ScreenContextInterestDetector.isScreenContextRequest(transcript) else {
-      return .passthrough
-    }
-    guard evidence?.canVerifyCurrentScreen == true else {
-      return .rejected(evidence)
-    }
-    return .awaitingReport(evidence)
-  }
-
   static func reportDecision(
     state: RealtimeScreenGroundingState,
-    evidenceID: String,
-    frontmostApp: String,
     answer: String,
-    deliveredEvidenceID: String?,
+    sourceObjectID: ObjectIdentifier,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?,
+    currentTurnEpoch: Int,
     knownApplicationNames: [String] = []
   ) -> RealtimeScreenReportDecision {
-    guard case .awaitingReport(let evidence?) = state, evidence.canVerifyCurrentScreen else {
+    guard case .awaitingReport(let receipt) = state else {
       return .evidenceUnavailable
     }
-    guard evidence.evidenceID == evidenceID else { return .wrongEvidence }
-    guard deliveredEvidenceID == evidenceID else { return .screenshotNotDelivered }
+    let evidence = receipt.descriptor
+    guard evidence.canVerifyCurrentScreen else { return .transportNotDispatched }
+    guard receipt.isCurrent(
+      sourceObjectID: sourceObjectID,
+      activeTurnID: activeTurnID,
+      activeResponseID: activeResponseID,
+      currentTurnEpoch: currentTurnEpoch)
+    else { return .staleReceipt }
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
-      == RealtimeScreenEvidenceDescriptor.normalizedAppName(evidence.frontmostApp ?? "")
-    else { return .wrongApplication }
     guard !answerClaimsDifferentApplication(
       answer,
       frontmostApp: evidence.frontmostApp ?? "",

@@ -373,9 +373,10 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("private var toolEffectIdentityByTransportKey"))
-    XCTAssertTrue(source.contains("private var realtimeToolTurnEpoch = 0"))
+    // The screen-receipt extension shares this epoch fence after the visual receipt refactor.
+    XCTAssertTrue(source.contains("var realtimeToolTurnEpoch = 0"))
     XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
-    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = identity"))
+    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = toolIdentity"))
     XCTAssertTrue(
       source.contains("toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)"))
     XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey.removeValue(forKey: key)"))

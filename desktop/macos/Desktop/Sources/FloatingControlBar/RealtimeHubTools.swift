@@ -80,11 +80,10 @@ enum RealtimeHubTools {
     real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
     without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
-    image and evidence_id in its result are the only current visual source of truth. Disregard \
-    conflicting kernel context, OCR, work summaries, and earlier screen descriptions. You MUST \
-    then call report_screen_observation with that exact evidence_id, the exact frontmost_app from \
-    the screenshot result, and concise visual detail only. Never name or identify an app in the \
-    answer: the desktop renders app identity from native evidence. Do not speak or answer a \
+    attached image is the only current visual source of truth. Disregard conflicting kernel \
+    context, OCR, work summaries, and earlier screen descriptions. You MUST then call \
+    report_screen_observation with concise visual detail only. Never name or identify an app in \
+    the answer: the desktop renders app identity from native evidence. Do not speak or answer a \
     current-screen question outside that report; the app will present an accepted report itself.
 
     Keep latency low: prefer answering directly when you can.
@@ -95,11 +94,9 @@ enum RealtimeHubTools {
   /// the tool result as well as the session instruction so a warm session cannot prefer an older
   /// context summary over the pixels it just received.
   static func screenshotToolResult(
-    evidenceID: String?,
-    frontmostApp: String?,
     capturedBytes: Int?
   ) -> String {
-    guard let evidenceID, let frontmostApp, capturedBytes != nil else {
+    guard capturedBytes != nil else {
       return jsonToolResult([
         "ok": false,
         "error": ["code": "screen_evidence_unavailable"],
@@ -107,21 +104,13 @@ enum RealtimeHubTools {
     }
     return jsonToolResult([
       "ok": true,
-      "evidence_id": evidenceID,
-      "frontmost_app": frontmostApp,
-      "instruction": "Use the attached image as the only current visual source. Call report_screen_observation with this exact evidence_id and frontmost_app before answering.",
+      "instruction": "Use the attached image as the only current visual source. Call report_screen_observation with concise visual detail before answering.",
     ])
   }
 
   static func screenObservationResult(accepted: Bool) -> String {
     jsonToolResult(accepted
       ? ["ok": true, "status": "screen_observation_accepted"]
-      : ["ok": false, "error": ["code": "screen_observation_rejected"]])
-  }
-
-  static func screenObservationResult(pending: Bool) -> String {
-    jsonToolResult(pending
-      ? ["ok": true, "status": "screen_observation_pending_input_finalization"]
       : ["ok": false, "error": ["code": "screen_observation_rejected"]])
   }
 

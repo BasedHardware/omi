@@ -3,6 +3,10 @@ import XCTest
 @testable import Omi_Computer
 
 final class RealtimeScreenEvidenceTests: XCTestCase {
+  private let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
+  private let responseID = VoiceResponseID("response-1")
+  private let sessionObjectID = ObjectIdentifier(RealtimeScreenEvidenceTests.self)
+
   private func evidence(
     id: String = "evidence-1",
     app: String? = "Codex",
@@ -10,7 +14,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
   ) -> RealtimeScreenEvidenceDescriptor {
     RealtimeScreenEvidenceDescriptor(
       evidenceID: id,
-      turnID: VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!),
+      turnID: turnID,
       capturedAt: Date(timeIntervalSince1970: 1_000),
       target: .frontmostDisplay,
       frontmostApp: app,
@@ -18,91 +22,114 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       windowID: 7,
       displayID: 3,
       imageByteCount: bytes,
-      imageDigest: bytes > 0 ? "digest" : nil
-    )
+      imageDigest: bytes > 0 ? "digest" : nil)
   }
 
-  func testCurrentScreenTranscriptRequiresExactTurnEvidenceReport() {
-    let descriptor = evidence()
-    let state = RealtimeScreenGroundingPolicy.stateAfterFinalTranscript(
-      "What do you see on my screen?", evidence: descriptor)
-    XCTAssertEqual(state, .awaitingReport(descriptor))
+  private func request(
+    descriptor: RealtimeScreenEvidenceDescriptor? = nil,
+    callID: String = "screenshot-1",
+    epoch: Int = 7
+  ) -> RealtimeScreenScreenshotRequest {
+    RealtimeScreenScreenshotRequest(
+      descriptor: descriptor ?? evidence(),
+      turnID: turnID,
+      responseID: responseID,
+      sessionObjectID: sessionObjectID,
+      screenshotCallID: callID,
+      turnEpoch: epoch)
+  }
+
+  private func receipt(
+    descriptor: RealtimeScreenEvidenceDescriptor? = nil,
+    callID: String = "screenshot-1",
+    epoch: Int = 7
+  ) -> RealtimeScreenObservationReceipt {
+    let descriptor = descriptor ?? evidence()
+    return RealtimeScreenObservationReceipt(
+      request: request(descriptor: descriptor, callID: callID, epoch: epoch),
+      descriptor: descriptor)
+  }
+
+  func testPTTCaptureStartsInertUntilScreenshotToolIsAdmitted() {
+    XCTAssertFalse(RealtimeScreenGroundingState.inactive.suppressesProviderOutput)
+    XCTAssertTrue(
+      RealtimeScreenGroundingState.awaitingScreenshot(request()).suppressesProviderOutput)
+  }
+
+  func testTransportDispatchedReceiptAdmitsScreenReportWithoutInputTranscript() {
+    let state = RealtimeScreenGroundingState.awaitingReport(receipt())
+
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        evidenceID: "evidence-1",
-        frontmostApp: "codex",
-        answer: "You have Codex open.",
-        deliveredEvidenceID: "evidence-1"),
+        answer: "A dark editor window.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7),
       .accepted)
   }
 
-  func testCurrentScreenTranscriptFailsClosedWithoutVerifiableEvidence() {
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.stateAfterFinalTranscript(
-        "What am I looking at?", evidence: nil),
-      .rejected(nil))
+  func testReportBeforeTransportReceiptIsRejectedWithoutRedeemingItLater() {
+    let state = RealtimeScreenGroundingState.awaitingScreenshot(request())
 
-    let unavailable = evidence(app: nil, bytes: 0)
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.stateAfterFinalTranscript(
-        "What am I looking at?", evidence: unavailable),
-      .rejected(unavailable))
-  }
-
-  func testScreenReportRejectsWrongEvidenceOrFrontmostApplication() {
-    let descriptor = evidence()
-    let state = RealtimeScreenGroundingState.awaitingReport(descriptor)
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        evidenceID: "stale-evidence",
-        frontmostApp: "Codex",
-        answer: "Codex",
-        deliveredEvidenceID: "evidence-1"),
-      .wrongEvidence)
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.reportDecision(
-        state: state,
-        evidenceID: "evidence-1",
-        frontmostApp: "Cursor",
-        answer: "Cursor is open.",
-        deliveredEvidenceID: "evidence-1"),
-      .wrongApplication)
-  }
-
-  func testReportBeforeFinalTranscriptCannotBecomeAnAcceptedScreenAnswer() {
-    let descriptor = evidence()
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.reportDecision(
-        state: .awaitingTranscript(descriptor),
-        evidenceID: "evidence-1",
-        frontmostApp: "Codex",
-        answer: "Codex is open.",
-        deliveredEvidenceID: "evidence-1"),
+        answer: "A dark editor window.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7),
       .evidenceUnavailable)
   }
 
-  func testReportWithoutScreenshotDeliveryFailsClosed() {
-    let descriptor = evidence()
+  func testReceiptRequiresCurrentSessionResponseTurnAndEpoch() {
+    let state = RealtimeScreenGroundingState.awaitingReport(receipt())
+
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
-        state: .awaitingReport(descriptor),
-        evidenceID: "evidence-1",
-        frontmostApp: "Codex",
+        state: state,
         answer: "A dark editor window.",
-        deliveredEvidenceID: nil),
-      .screenshotNotDelivered)
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 8),
+      .staleReceipt)
+  }
+
+  func testScreenshotTransportDispatchRequiresTheExactAdmittedToolCall() {
+    let descriptor = evidence()
+    let request = request(descriptor: descriptor)
+    let attachment = RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3]))
+
+    XCTAssertFalse(
+      request.acceptsTransportDispatch(
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        callID: "different-screenshot-call"))
+    XCTAssertTrue(
+      request.acceptsTransportDispatch(
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        callID: "screenshot-1"))
   }
 
   func testContradictoryApplicationTextCannotReachNativePresentation() {
     let descriptor = evidence()
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
-      state: .awaitingReport(descriptor),
-      evidenceID: "evidence-1",
-      frontmostApp: "Codex",
+      state: .awaitingReport(receipt(descriptor: descriptor)),
       answer: "You are in Cursor.",
-      deliveredEvidenceID: "evidence-1",
+      sourceObjectID: sessionObjectID,
+      activeTurnID: turnID,
+      activeResponseID: responseID,
+      currentTurnEpoch: 7,
       knownApplicationNames: ["Codex", "Cursor"])
 
     XCTAssertEqual(decision, .contradictoryApplication)
@@ -111,6 +138,18 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         evidence: descriptor,
         answer: "A dark editor window."),
       "The frontmost app is Codex. A dark editor window.")
+  }
+
+  func testEmptyReportIsRejectedAfterLocalDispatch() {
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt()),
+        answer: " ",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7),
+      .emptyAnswer)
   }
 
   func testEncodingReadinessWaitsForAndReturnsTheFrozenAttachment() async {
@@ -140,32 +179,14 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
   }
 
   func testBargeInDuringScreenshotReadinessCannotRejectReplacementTurn() {
-    let originalTurn = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
     let replacementTurn = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000002")!)
-    let captured = RealtimeScreenEvidenceDescriptor(
-      evidenceID: "old-evidence",
-      turnID: originalTurn,
-      capturedAt: Date(timeIntervalSince1970: 1_000),
-      target: .frontmostDisplay,
-      frontmostApp: "Codex",
-      frontmostBundleID: "com.openai.codex",
-      windowID: 7,
-      displayID: 3,
-      imageByteCount: 3,
-      imageDigest: "digest")
+    let captured = evidence(id: "old-evidence")
 
     XCTAssertNil(
       RealtimeScreenEvidenceToolExecutionPolicy.failureEvidence(
         capturedEvidence: captured,
-        commandTurnID: originalTurn,
+        commandTurnID: turnID,
         activeTurnID: replacementTurn,
         invocationIsCurrent: false))
-  }
-
-  func testNonvisualTranscriptDoesNotBlockProviderOutput() {
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.stateAfterFinalTranscript(
-        "What did I ask you yesterday?", evidence: evidence()),
-      .passthrough)
   }
 }

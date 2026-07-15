@@ -14,34 +14,34 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))
         XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
         XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
-        XCTAssertTrue(instr.contains("evidence_id"))
+        XCTAssertFalse(instr.contains("evidence_id"))
         XCTAssertTrue(instr.contains("report_screen_observation"))
     }
 
     func testLiveScreenshotResultRequiresAValidatedObservationReport() {
         let valid = RealtimeHubTools.screenshotToolResult(
-            evidenceID: "evidence-1", frontmostApp: "Codex", capturedBytes: 1)
+            capturedBytes: 1)
         let invalid = RealtimeHubTools.screenshotToolResult(
-            evidenceID: nil, frontmostApp: nil, capturedBytes: nil)
+            capturedBytes: nil)
         let validPayload = try? JSONSerialization.jsonObject(with: Data(valid.utf8)) as? [String: Any]
         let invalidPayload = try? JSONSerialization.jsonObject(with: Data(invalid.utf8)) as? [String: Any]
 
         XCTAssertEqual(validPayload?["ok"] as? Bool, true)
-        XCTAssertEqual(validPayload?["evidence_id"] as? String, "evidence-1")
-        XCTAssertEqual(validPayload?["frontmost_app"] as? String, "Codex")
+        XCTAssertNil(validPayload?["evidence_id"])
+        XCTAssertNil(validPayload?["frontmost_app"])
         XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
         XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
     }
 
     func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
         let raw = RealtimeHubTools.screenshotToolResult(
-            evidenceID: "evidence-1", frontmostApp: "Codex", capturedBytes: 1)
+            capturedBytes: 1)
         let prepared = RealtimeProviderToolResultPolicy.prepare(
             provider: .gemini, name: HubTool.screenshot.rawValue, output: raw)
         let payload = try? JSONSerialization.jsonObject(with: Data(prepared.output.utf8)) as? [String: Any]
 
         XCTAssertEqual(payload?["ok"] as? Bool, true)
-        XCTAssertEqual(payload?["evidence_id"] as? String, "evidence-1")
+        XCTAssertNil(payload?["evidence_id"])
         XCTAssertEqual(
             ((payload?["toolResultEnvelope"] as? [String: Any])?["status"] as? String),
             "succeeded")

@@ -61,12 +61,15 @@ SwiftUI and floating-bar state are projections.
   and barge-in replacement remain visual states; only actionable typed capture,
   provider, tool, journal, or playback failures may show a text banner.
 - A PTT current-screen answer is admitted only from one pre-overlay capture bound
-  to that exact voice turn. The provider may propose visual detail only after
-  the matching image was delivered and must echo its evidence id; native code
-  verifies the frontmost application and rejects stale, missing, contradictory,
-  or cross-turn reports without using historical chat, memory, OCR, or context
-  summaries as screen authority. A cancelled screenshot tool execution must
-  never mutate or speak into a barge-in replacement turn.
+  to that exact voice turn. Capture itself never delays ordinary PTT output;
+  only a reducer-admitted screenshot call seals visual output. The provider may
+  propose visual detail only after native code has locally dispatched the exact
+  JPEG tool result to the same session/response/call/epoch receipt. Model-supplied
+  evidence IDs and app labels have no authority; native code supplies app identity
+  and rejects stale, missing, contradictory, or cross-turn reports without using
+  historical chat, memory, OCR, or context summaries as screen authority. A
+  cancelled screenshot tool execution must never mutate or speak into a barge-in
+  replacement turn.
 - `PushToTalkManager` has no `PTTState`, lifecycle timer, or current-turn variable.
   It derives `phase` from the coordinator and forwards snapshots to observers.
 - Realtime delegation does not run a second Swift text classifier. Explicit model

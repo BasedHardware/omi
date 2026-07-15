@@ -589,8 +589,8 @@ enum GeneratedToolCapabilities {
       surfaces: Set([.realtimeHub]),
       summary: "Report a grounded current-screen answer.",
       bullets: [
-      "Only call after screenshot returns a current evidence id.",
-      "Use the exact frontmost application supplied by screenshot; do not infer it from history."
+      "Only call after screenshot returns the current image.",
+      "Put only visual detail in the answer; native evidence supplies application identity."
     ]
     ),
     Capability(
