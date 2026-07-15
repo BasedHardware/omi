@@ -3,7 +3,6 @@ from typing import Optional
 
 
 class STTSocket(ABC):
-
     @abstractmethod
     def send(self, data: bytes) -> bool:
         """Return whether this socket durably accepted the audio bytes."""

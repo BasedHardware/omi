@@ -132,6 +132,59 @@ def _prepare_conversation_for_write(data: Dict[str, Any], uid: str, level: str) 
     return data
 
 
+def encode_conversation_for_write(
+    uid: str, conversation_data: Dict[str, Any], level: str = 'standard'
+) -> Dict[str, Any]:
+    """Encode a conversation exactly as the write path stores it.
+
+    The seam exists for harnesses that seed Firestore directly: a hand-written
+    document with a plain ``transcript_segments`` list is a state production
+    never writes, and seeding one hides encoding-aware guard bugs.
+    """
+    return _prepare_conversation_for_write(conversation_data, uid, level)
+
+
+def _decode_transcript_segments_strict(uid: str, raw_segments: Any, compressed: bool) -> List[Any]:
+    """Decode a stored ``transcript_segments`` blob, raising when it cannot be read.
+
+    The read path swallows decode failures into an empty list, which is safe for
+    rendering but unsafe for a caller deciding whether a conversation is empty.
+    """
+    if isinstance(raw_segments, list):
+        return raw_segments
+    if isinstance(raw_segments, str):
+        payload = encryption.decrypt(raw_segments, uid)
+        if compressed:
+            return json.loads(zlib.decompress(bytes.fromhex(payload)).decode('utf-8'))
+        return json.loads(payload)
+    if isinstance(raw_segments, bytes) and compressed:
+        return json.loads(zlib.decompress(raw_segments).decode('utf-8'))
+    raise ValueError(f'undecodable transcript_segments: {type(raw_segments).__name__} compressed={compressed}')
+
+
+def raw_conversation_has_content(uid: str, conversation: Dict[str, Any]) -> bool:
+    """Decide whether an un-decoded Firestore snapshot holds user content.
+
+    ``transcript_segments`` is written compressed (and encrypted for enhanced
+    users), so an empty segment list is a non-empty blob on the raw document.
+    Only the decoded value distinguishes an empty recording from a real one.
+    Undecodable segments count as content: never delete data we cannot read.
+    """
+    if conversation.get('has_content') or conversation.get('photos'):
+        return True
+    raw_segments = conversation.get('transcript_segments')
+    if not raw_segments:
+        return False
+    try:
+        segments = _decode_transcript_segments_strict(
+            uid, raw_segments, bool(conversation.get('transcript_segments_compressed'))
+        )
+    except (json.JSONDecodeError, TypeError, zlib.error, ValueError) as e:
+        logger.error(f'raw_conversation_has_content: undecodable segments, assuming content. {uid} {e}')
+        return True
+    return bool(segments)
+
+
 def _prepare_conversation_for_read(conversation_data: Optional[Dict[str, Any]], uid: str) -> Optional[Dict[str, Any]]:
     if not conversation_data:
         return None

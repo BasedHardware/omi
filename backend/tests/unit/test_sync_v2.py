@@ -22,6 +22,7 @@ from io import BytesIO
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
+from fastapi.routing import APIRoute
 from utils.executors import run_blocking as _production_run_blocking
 
 PIPELINE_PATH = os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'sync', 'pipeline.py')
@@ -1326,6 +1327,7 @@ class TestAsyncCoordinatorBehavioral:
             'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.multipart',
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
@@ -1349,6 +1351,9 @@ class TestAsyncCoordinatorBehavioral:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
@@ -2695,6 +2700,7 @@ class TestV2EndpointExecution:
             'utils.metrics',
             'utils.log_sanitizer',
             'utils.http_client',
+            'utils.multipart',
             'utils.request_validation',
             'utils.sync.files',
             'utils.sync.playback',
@@ -2716,6 +2722,9 @@ class TestV2EndpointExecution:
         saved_modules['utils.stt'] = prior_utils_stt
         saved_modules['utils.stt.outcomes'] = prior_outcomes
         sys.modules['utils.stt.outcomes'] = actual_outcomes
+        sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+        sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+        sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
 
         sys.modules['python_multipart'].__version__ = '0.0.99'
         sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})

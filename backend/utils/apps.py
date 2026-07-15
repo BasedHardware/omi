@@ -721,7 +721,6 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
         Dictionary representation of the subscription or None if not found
     """
     try:
-
         cached_customer_id = get_user_app_subscription_customer_id(app_id, uid)
         latest_subscription = None
 

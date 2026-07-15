@@ -24,6 +24,7 @@ from utils.conversations.finalizer import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
+from utils.observability.journeys import record_capture_finalization_terminal
 
 logger = logging.getLogger(__name__)
 
@@ -179,6 +180,11 @@ async def run_listen_finalization_job(
             )
         if not completed:
             return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+        accepted_at = job.get('created_at') if job else None
+        if disposition == ConversationFinalizationDisposition.fenced:
+            record_capture_finalization_terminal('stale', accepted_at)
+        else:
+            record_capture_finalization_terminal('success', accepted_at)
         return JSONResponse(status_code=200, content={'status': 'done'})
     except asyncio.CancelledError:
         release_lock = False

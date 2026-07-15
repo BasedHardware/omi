@@ -1061,7 +1061,6 @@ def process_segment(
             if private_cloud_sync_enabled:
                 _store_sync_audio_chunk(uid, created.id, timestamp, audio_bytes, data_protection_level)
         else:
-
             transcript_segments = [s.model_dump() for s in transcript_segments]
 
             # assign timestamps to each segment
@@ -1850,9 +1849,11 @@ async def _run_full_pipeline_background_async(
                 },
             )
             # Mirror realtime: store conversation audio only when private cloud sync is on.
-            private_cloud_sync_enabled, data_protection_level, person_embeddings_cache = (
-                await _load_sync_segment_context(uid)
-            )
+            (
+                private_cloud_sync_enabled,
+                data_protection_level,
+                person_embeddings_cache,
+            ) = await _load_sync_segment_context(uid)
 
             # --- Phase 5: Process segments (STT + LLM) ---
             await run_blocking(

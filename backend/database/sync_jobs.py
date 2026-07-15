@@ -198,7 +198,13 @@ def get_sync_job(job_id: str) -> Optional[Dict[str, Any]]:
     data = r.get(key)
     if not data:
         return None
-    raw = json.loads(data)
+    try:
+        raw = json.loads(data)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # A corrupt or legacy blob must not 500 the status poll. redis_db is fail-open and the
+        # fenced mutation paths below already guard the identical json.loads; an unparseable job
+        # is treated as an unknown job.
+        return None
     job: Dict[str, Any] = cast(Dict[str, Any], raw) if isinstance(raw, dict) else {}
 
     return job
@@ -284,7 +290,12 @@ def update_sync_job(job_id: str, updates: Dict[str, Any]) -> Optional[Dict[str, 
     if not data:
         return None
     current_raw = _as_redis_text(data)
-    decoded = json.loads(current_raw)
+    try:
+        decoded = json.loads(current_raw)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        # Corrupt/legacy blob: treat as an unresolvable job and skip the mutation, matching the
+        # isinstance(dict) guard just below and the fenced paths' json.loads handling.
+        return None
     if not isinstance(decoded, dict):
         return None
     current_job = cast(Dict[str, Any], decoded)

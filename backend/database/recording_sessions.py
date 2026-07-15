@@ -14,6 +14,7 @@ from typing import Any, Literal, TypedDict
 
 from google.cloud import firestore
 
+from database import conversations as conversations_db
 from database._client import get_firestore_client
 
 RECORDING_SESSIONS_COLLECTION = 'recording_sessions'
@@ -184,9 +185,7 @@ def tombstone_and_delete_empty_conversation(
         if (
             conversation.get('status') != 'in_progress'
             or conversation.get('discarded')
-            or conversation.get('has_content')
-            or conversation.get('transcript_segments')
-            or conversation.get('photos')
+            or conversations_db.raw_conversation_has_content(uid, conversation)
         ):
             return False
 

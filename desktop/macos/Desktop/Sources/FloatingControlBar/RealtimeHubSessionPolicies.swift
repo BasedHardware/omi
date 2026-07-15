@@ -4,10 +4,12 @@ import Foundation
 ///
 /// Gemini can idle-close warm sessions with WebSocket 1008 after the socket has
 /// lived for a while, and OpenAI has a known maximum-session-duration close.
-/// Both expected lifecycle paths should re-warm quietly rather than page Sentry
-/// as production errors. Fast 1008 closes are different: they usually mean
-/// provider policy/auth/config rejection and should still be reported, but with
-/// a stable category instead of raw provider text.
+/// OpenAI's transport can also surface an already-retired socket as an ENOTCONN
+/// ("Socket is not connected") write race, typically right after the 60-minute
+/// rotation. All of these expected lifecycle paths should re-warm quietly rather
+/// than page Sentry as production errors. Fast 1008 closes are different: they
+/// usually mean provider policy/auth/config rejection and should still be
+/// reported, but with a stable category instead of raw provider text.
 enum RealtimeHubCloseCategory: String {
   case expectedIdleTeardown = "expected_idle_teardown"
   case expectedSessionRotation = "expected_session_rotation"
@@ -40,6 +42,17 @@ enum RealtimeHubCloseClassifier {
       && lower.contains("60 minutes")
     {
       return .expectedSessionRotation
+    }
+    // A retired socket surfaces later writes as ENOTCONN. On an aged socket with
+    // no active turn (e.g. the window right after a 60-minute rotation) this is
+    // an expected transport teardown, not a provider error: re-warm quietly. A
+    // fast ENOTCONN, or one during an active turn, falls through and stays a
+    // reportable error so genuine transport failures remain observable.
+    if !hasActiveTurn,
+      aliveFor >= idleTeardownThreshold,
+      lower.contains("socket is not connected")
+    {
+      return .expectedIdleTeardown
     }
     guard lower.contains("websocket closed (1008)") else { return nil }
     if CredentialHealthManager.classifyProviderClose(

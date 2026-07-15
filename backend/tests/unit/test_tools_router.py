@@ -19,6 +19,7 @@ import types
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from unittest.mock import MagicMock, patch
+from zoneinfo import ZoneInfo
 
 import pytest
 from fastapi import FastAPI
@@ -249,6 +250,32 @@ calendar_tools_mod.create_calendar_event_tool = FakeCalendarEventTool()
 
 # Stub render and factory modules
 render_mod = _stub_module("utils.conversations.render")
+
+
+def _stub_resolve_display_tz(tz):
+    if tz:
+        try:
+            return ZoneInfo(tz), tz
+        except Exception:
+            pass
+    return timezone.utc, "UTC"
+
+
+def _stub_format_local_time(dt, display_tz, tz_label):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return f"{dt.astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def _stub_format_local_date(dt, display_tz):
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(display_tz).strftime('%Y-%m-%d')
+
+
+render_mod.resolve_display_tz = _stub_resolve_display_tz
+render_mod.format_local_time = _stub_format_local_time
+render_mod.format_local_date = _stub_format_local_date
 render_mod.conversations_to_string = MagicMock(
     side_effect=lambda convs, **kw: f"[{len(convs)} conversations formatted]"
 )

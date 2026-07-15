@@ -11,6 +11,14 @@ The active Rust routes cover authentication, provider proxies, realtime session
 minting, desktop chat, TTS, screen activity ingestion, release manifests, agent
 VM control, support webhooks, and health/configuration endpoints.
 
+Every development deployment of this backend proves its managed realtime path
+after traffic is assigned: the deploy workflow uses the non-human release-probe
+identity to mint each provider credential, opens OpenAI and Gemini directly,
+commits a fixed non-sensitive input, and waits for the provider terminal event.
+`scripts/voice-provider-probe.sh` emits only bounded step/failure classes and
+the workflow fails closed. An upstream-outage override is manual and visibly
+recorded as `skip_provider_probe=true` in the run log.
+
 Firestore access is deliberately limited to data required by those routes:
 
 | Repository | Live responsibility |

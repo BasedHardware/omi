@@ -13,6 +13,7 @@ from typing import Any, Callable, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
 
+from database import conversations as conversations_db
 from database._client import document_id_from_seed, get_firestore_client
 
 CONVERSATIONS_COLLECTION = 'conversations'
@@ -31,6 +32,7 @@ class FinalizationIntent(TypedDict):
     dispatch_generation: int | None
     requires_byok: bool
     fanout_key: str | None
+    created: bool
 
 
 class FinalizationAdmission(TypedDict):
@@ -55,6 +57,7 @@ class FinalizationClaim(TypedDict):
     status: str
     lease_epoch: int | None
     attempt_count: int
+    created_at: datetime | None
 
 
 def _now() -> datetime:
@@ -70,8 +73,13 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     return timedelta(seconds=max(30, seconds))
 
 
-def _claim_result(status: str, lease_epoch: int | None = None, attempt_count: int = 0) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count}
+def _claim_result(
+    status: str,
+    lease_epoch: int | None = None,
+    attempt_count: int = 0,
+    created_at: datetime | None = None,
+) -> FinalizationClaim:
+    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count, 'created_at': created_at}
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -98,13 +106,14 @@ def _job_id(uid: str, conversation_id: str, revision: int) -> str:
     return document_id_from_seed(f'listen-finalization:{uid}:{conversation_id}:{revision}')
 
 
-def _intent_from_job(job_id: str, data: dict[str, Any]) -> FinalizationIntent:
+def _intent_from_job(job_id: str, data: dict[str, Any], *, created: bool = False) -> FinalizationIntent:
     return {
         'job_id': job_id,
         'status': str(data.get('status') or 'queued'),
         'dispatch_generation': int(data.get('dispatch_generation') or 1),
         'requires_byok': bool(data.get('requires_byok')),
         'fanout_key': data.get('fanout_key') if isinstance(data.get('fanout_key'), str) else None,
+        'created': created,
     }
 
 
@@ -115,14 +124,15 @@ def _no_finalization_intent(status: str) -> FinalizationIntent:
         'dispatch_generation': None,
         'requires_byok': False,
         'fanout_key': None,
+        'created': False,
     }
 
 
 def _conversation_has_finalization_content(
-    conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any
+    uid: str, conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any
 ) -> bool:
     """Read current and pre-marker photo content within the admission transaction."""
-    if conversation.get('has_content') or conversation.get('transcript_segments') or conversation.get('photos'):
+    if conversations_db.raw_conversation_has_content(uid, dict(conversation)):
         return True
     # `has_content` was added after photo-only listen recordings already
     # existed. Keep their durable child documents admissible until all legacy
@@ -149,7 +159,7 @@ def _create_or_get_finalization_intent_txn(
     conversation = conversation_snapshot.to_dict() or {}
     if conversation.get('deferred'):
         return _no_finalization_intent('deferred')
-    if not _conversation_has_finalization_content(conversation, conversation_ref, transaction):
+    if not _conversation_has_finalization_content(uid, conversation, conversation_ref, transaction):
         return _no_finalization_intent('no_content')
 
     # The lifecycle service owns this pure decision, but it is evaluated while
@@ -216,7 +226,7 @@ def _create_or_get_finalization_intent_txn(
             'finalization_status': status,
         },
     )
-    return _intent_from_job(job_id, job)
+    return _intent_from_job(job_id, job, created=True)
 
 
 def create_or_get_finalization_intent(
@@ -252,6 +262,7 @@ def _resume_blocked_byok_job_txn(transaction: Any, job_ref: Any, now: datetime) 
             'dispatch_generation': None,
             'requires_byok': False,
             'fanout_key': None,
+            'created': False,
         }
     job = snapshot.to_dict() or {}
     if job.get('status') == 'blocked_byok' and job.get('requires_byok'):
@@ -333,7 +344,13 @@ def _claim_finalization_job_txn(
             'attempt_count': attempt_count,
         },
     )
-    return _claim_result('claimed', lease_epoch, attempt_count)
+    created_at = job.get('created_at')
+    return _claim_result(
+        'claimed',
+        lease_epoch,
+        attempt_count,
+        created_at if isinstance(created_at, datetime) else None,
+    )
 
 
 def claim_finalization_job(
@@ -671,6 +688,7 @@ def _claim_finalization_replay_txn(
             'dispatch_generation': None,
             'requires_byok': False,
             'fanout_key': None,
+            'created': False,
         }
     job = snapshot.to_dict() or {}
     status = str(job.get('status') or '')

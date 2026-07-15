@@ -366,6 +366,27 @@ def get_decisions(
     return _decision_records(raw_records, evaluation_id)
 
 
+def _valid_evaluation_projection(
+    raw_projection: Any, evaluation_id: str, now: datetime
+) -> Optional[WhatMattersNowProjection]:
+    """Build a WhatMattersNowProjection from a stored projection dict, or None if unusable.
+
+    The stored projection was validated with no guard, so a legacy or schema-drifted doc would raise
+    ValidationError and 500 the recommendation read. Treat a malformed (or non-dict, stale, or
+    id-mismatched) projection as absent, consistent with this reader's other None returns.
+    """
+    if not isinstance(raw_projection, dict):
+        return None
+    try:
+        projection = WhatMattersNowProjection.model_validate(raw_projection)
+    except ValidationError as e:
+        logger.warning('Ignoring malformed stored projection for evaluation %s: %s', evaluation_id, e)
+        return None
+    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
+        return None
+    return projection
+
+
 def get_evaluation_projection(
     uid: str,
     evaluation_id: str,
@@ -396,13 +417,7 @@ def get_evaluation_projection(
     payload = _snapshot_dict(snapshot)
     if payload.get('account_generation') != account_generation:
         return None
-    raw_projection = payload.get('projection')
-    if not isinstance(raw_projection, dict):
-        return None
-    projection = WhatMattersNowProjection.model_validate(raw_projection)
-    if projection.evaluation_id != evaluation_id or projection.expires_at <= now:
-        return None
-    return projection
+    return _valid_evaluation_projection(payload.get('projection'), evaluation_id, now)
 
 
 def create_feedback(

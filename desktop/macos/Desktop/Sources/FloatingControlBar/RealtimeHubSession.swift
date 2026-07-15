@@ -218,6 +218,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func _start() {
+    guard !terminated else { return }
     guard let request = makeRequest(), let url = request.url else {
       notifyError("Could not build \(provider.displayName) request URL")
       return
@@ -228,6 +229,7 @@ final class RealtimeHubSession: NSObject {
       rawWS = ws
       ws.onOpen = { [weak self] in
         guard let self else { return }
+        guard !self.terminated else { return }
         log("RealtimeHub: raw WS open (\(self.provider.displayName))")
         self.sendSessionSetup()
       }
@@ -296,6 +298,11 @@ final class RealtimeHubSession: NSObject {
   private func notifyError(_ message: String) {
     guard !terminated else { return }
     terminated = true
+    // Make this physical session non-sendable on q before the main-actor
+    // controller observes the error and schedules teardown.
+    isOpen = false
+    task = nil
+    rawWS = nil
     let d = delegate
     Task { @MainActor in d?.hubDidError(message, source: self) }
   }
@@ -829,7 +836,7 @@ final class RealtimeHubSession: NSObject {
   }
 
   private func markReady() {
-    guard !isOpen else { return }
+    guard !terminated, !isOpen else { return }
     isOpen = true
     log("\(tag): ready")
     // Open the speech window if a turn started before we connected (Gemini).
@@ -1285,6 +1292,7 @@ extension RealtimeHubSession: URLSessionWebSocketDelegate {
   ) {
     log("RealtimeHub: WS didOpen (OpenAI)")
     q.async {
+      guard !self.terminated else { return }
       self.receiveLoop()
       self.sendSessionSetup()
     }

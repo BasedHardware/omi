@@ -547,7 +547,22 @@ def get_candidate(uid: str, candidate_id: str) -> Optional[CandidateRecord]:
     snapshot = _candidate_ref(uid, candidate_id).get()
     if not snapshot.exists:
         return None
-    return CandidateRecord.from_storage(_snapshot_dict(snapshot))
+    try:
+        return CandidateRecord.from_storage(_snapshot_dict(snapshot))
+    except ValidationError as e:
+        # A malformed/legacy candidate doc must not 500 the read; return None (the router maps that to
+        # 404), mirroring the skip in list_candidates. Catch only ValidationError so unexpected runtime
+        # errors still surface, and log bounded structural error types only since the rendered pydantic
+        # error can contain private task text.
+        errors = e.errors(include_input=False, include_url=False)
+        bounded_error_types = [str(error.get('type', 'unknown')) for error in errors[:5]]
+        logger.warning(
+            'Ignoring malformed candidate record %s: error_count=%s validation_types=%s',
+            getattr(snapshot, 'id', None),
+            e.error_count(),
+            bounded_error_types,
+        )
+        return None
 
 
 def list_candidates(

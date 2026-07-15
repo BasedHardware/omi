@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from pathlib import Path
 import runpy
 import shutil
@@ -13,6 +15,7 @@ import pytest
 import yaml
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verify_pusher_config_references.py"
+CLASSIFICATION = SCRIPT.parents[2] / "config" / "deployment-setting-classification.json"
 
 
 @pytest.fixture
@@ -101,8 +104,51 @@ def test_rendered_dev_pusher_google_client_id_clears_legacy_secret_source(prefli
     }
 
 
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_rendered_pusher_typesense_host_clears_legacy_secret_source(preflight: SimpleNamespace, environment: str):
+    deployment = next(document for document in preflight.render(environment) if document.get("kind") == "Deployment")
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    typesense_host = next(item for item in env if item["name"] == "TYPESENSE_HOST")
+    typesense_api_key = next(item for item in env if item["name"] == "TYPESENSE_API_KEY")
+
+    assert typesense_host["valueFrom"] == {
+        "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": "TYPESENSE_HOST"},
+        "secretKeyRef": None,
+    }
+    assert typesense_api_key["valueFrom"] == {
+        "secretKeyRef": {"name": f"{environment}-omi-backend-secrets", "key": "TYPESENSE_API_KEY"}
+    }
+
+
+def test_typesense_and_google_binding_classifications_are_explicit():
+    kinds = json.loads(CLASSIFICATION.read_text(encoding="utf-8"))["kinds"]
+
+    assert "TYPESENSE_HOST" in kinds["config"]
+    assert {"TYPESENSE_API_KEY", "GOOGLE_CLIENT_SECRET"}.issubset(kinds["secret"])
+
+
+def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("dev")
+    expected, clear_historical_secret = preflight.dev_pusher_binding_contract()
+
+    assert preflight.direct_pusher_bindings(deployment) == expected
+    assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == []
+
+
+def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: SimpleNamespace):
+    deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    typesense_host = next(item for item in env if item["name"] == "TYPESENSE_HOST")
+    del typesense_host["valueFrom"]["secretKeyRef"]
+
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == [
+        "dev pusher binding contract must clear historical Secret source for TYPESENSE_HOST"
+    ]
+
+
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl is required for the local strategic-merge fixture")
-@pytest.mark.parametrize("env_name", ["REDIS_DB_HOST", "GOOGLE_CLIENT_ID"])
+@pytest.mark.parametrize("env_name", ["REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"])
 def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
     tmp_path: Path, preflight: SimpleNamespace, env_name: str
 ):

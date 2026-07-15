@@ -270,6 +270,7 @@ jobs:
         with:
           candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
           evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
 
       - name: Record protected full-route probe proof

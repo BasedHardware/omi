@@ -60,6 +60,37 @@ final class RealtimeHubCloseClassifierTests: XCTestCase {
     XCTAssertNil(category)
   }
 
+  func testClassifiesAgedIdleSocketNotConnectedAsExpectedTeardown() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 60 * 60,
+      provider: .openai)
+
+    XCTAssertEqual(category, .expectedIdleTeardown)
+    XCTAssertFalse(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesActiveTurnSocketNotConnectedAsReportableError() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 60 * 60,
+      hasActiveTurn: true,
+      provider: .openai)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
+  func testClassifiesFastSocketNotConnectedAsReportableError() {
+    let category = RealtimeHubCloseClassifier.category(
+      message: "The operation couldn’t be completed. Socket is not connected",
+      aliveFor: 3,
+      provider: .openai)
+
+    XCTAssertNil(category)
+    XCTAssertTrue(RealtimeHubCloseClassifier.shouldReportToSentry(category))
+  }
+
   func testClassifiesFastWebSocket1008AsProviderPolicyClose() {
     let category = RealtimeHubCloseClassifier.category(
       message: "WebSocket closed (1008) policy violation",

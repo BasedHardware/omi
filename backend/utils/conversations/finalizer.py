@@ -15,7 +15,7 @@ from models.conversation_enums import ConversationStatus
 from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
-from utils.conversations.location import async_get_google_maps_location
+from utils.conversations.location import async_resolve_geolocation
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
@@ -83,7 +83,8 @@ async def finalize_persisted_conversation(
         geolocation = await run_blocking(db_executor, get_cached_user_geolocation, uid)
         if geolocation:
             geolocation = Geolocation(**geolocation)
-            conversation.geolocation = await async_get_google_maps_location(geolocation.latitude, geolocation.longitude)
+            # Keep the cached coordinates when the geocode lookup misses instead of dropping them.
+            conversation.geolocation = await async_resolve_geolocation(geolocation)
 
         # The post-processing bulkhead preserves request context (including
         # validated live BYOK keys) while isolating this expensive sync path

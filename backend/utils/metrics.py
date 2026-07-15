@@ -26,6 +26,41 @@ PUSHER_SESSION_DEGRADED = Gauge(
     'Number of sessions currently in degraded mode (pusher unavailable)',
 )
 
+OMI_JOURNEY_ACCEPTED_TOTAL = Counter(
+    'omi_journey_accepted_total',
+    'Accepted real-traffic product journeys by closed journey name',
+    ['journey'],
+)
+
+OMI_JOURNEY_TERMINAL_TOTAL = Counter(
+    'omi_journey_terminal_total',
+    'Terminal real-traffic product journey outcomes by closed journey and outcome names',
+    ['journey', 'outcome'],
+)
+
+OMI_JOURNEY_LATENCY_SECONDS = Histogram(
+    'omi_journey_latency_seconds',
+    'Elapsed time from accepted real-traffic journey to terminal outcome',
+    ['journey', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600, 21600, 86400),
+)
+
+OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL = Counter(
+    'omi_capture_finalization_reconciliations_total',
+    'Reconciliation attempts for stale nonterminal capture finalization jobs',
+    ['outcome'],
+)
+
+# Export zero-valued children from a healthy but idle process. This lets
+# Prometheus/Grafana distinguish no user traffic from an absent scrape target.
+for _journey in ('chat_response', 'pusher_session', 'capture_finalization'):
+    OMI_JOURNEY_ACCEPTED_TOTAL.labels(journey=_journey)
+    for _outcome in ('success', 'failure', 'cancelled', 'stale'):
+        OMI_JOURNEY_TERMINAL_TOTAL.labels(journey=_journey, outcome=_outcome)
+        OMI_JOURNEY_LATENCY_SECONDS.labels(journey=_journey, outcome=_outcome)
+for _outcome in ('requeued', 'enqueue_failed'):
+    OMI_CAPTURE_FINALIZATION_RECONCILIATIONS_TOTAL.labels(outcome=_outcome)
+
 LISTEN_FINALIZATION_OLDEST_NONTERMINAL_AGE_SECONDS = Gauge(
     'listen_finalization_oldest_nonterminal_age_seconds',
     'Age of the oldest queued, leased, or blocked listen finalization job',
