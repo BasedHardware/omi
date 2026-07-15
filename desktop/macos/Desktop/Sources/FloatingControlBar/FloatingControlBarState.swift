@@ -782,7 +782,7 @@ extension ChatContentBlock {
     case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
     case .thinking(let id, _): return "h:\(id)"
     case .discoveryCard(let id, _, _, _): return "d:\(id)"
-    case .questionCard(let id, _, _, _, _, _): return "q:\(id)"
+    case .questionCard(let id, _, _, _, _, _, _): return "q:\(id)"
     case .taskCard(let id, _): return "t:\(id)"
     case .goalLink(let id, _, _): return "g:\(id)"
     case .captureLink(let id, _, _, _): return "c:\(id)"

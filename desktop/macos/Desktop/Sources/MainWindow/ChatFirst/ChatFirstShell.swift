@@ -46,7 +46,8 @@ struct ChatFirstShell: View {
         chatProvider: viewModelContainer.chatProvider,
         chatFirstRichBlockContext: ChatFirstRichBlockContext(
           navigation: navigation,
-          tasksStore: viewModelContainer.tasksStore
+          tasksStore: viewModelContainer.tasksStore,
+          chatProvider: viewModelContainer.chatProvider
         )
       )
       .accessibilityIdentifier("chat-first-route-chat")
@@ -57,9 +58,9 @@ struct ChatFirstShell: View {
       )
         .accessibilityIdentifier("chat-first-route-conversations")
     case .tasks:
-      TasksPage(
-        viewModel: viewModelContainer.tasksViewModel,
-        chatCoordinator: viewModelContainer.taskChatCoordinator,
+      ChatFirstTasksPage(
+        navigation: navigation,
+        tasksStore: viewModelContainer.tasksStore,
         chatProvider: viewModelContainer.chatProvider
       )
       .accessibilityIdentifier("chat-first-route-tasks")

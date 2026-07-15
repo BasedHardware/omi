@@ -89,11 +89,19 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    let groupedBlocks = ContentBlockGroup.visibleChatGroups(
-      message.contentBlocks,
-      isStreaming: message.isStreaming,
-      richBlockRenderingEnabled: chatFirstRichBlockContext != nil
-    )
+    if message.hidesEmptyStreamingPlaceholder,
+      message.isStreaming,
+      message.text.isEmpty,
+      message.contentBlocks.isEmpty
+    {
+      EmptyView()
+        .accessibilityHidden(true)
+    } else {
+      let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+        message.contentBlocks,
+        isStreaming: message.isStreaming,
+        richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+      )
 
     HStack(alignment: .top, spacing: OmiSpacing.md) {
       // Default omi replies render avatar-free for a quieter timeline; only
@@ -287,8 +295,19 @@ struct ChatBubble: View {
           text: text,
           options: options,
           selectedOptionID: selectedOptionID,
-          isActionable: false,
-          onSelect: { _ in }
+          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
+            messageID: message.id,
+            questionID: questionID,
+            selectedOptionID: selectedOptionID
+          ),
+          onSelect: { optionID in
+            Task { @MainActor in
+              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
+                questionID: questionID,
+                optionID: optionID
+              )
+            }
+          }
         )
       )
     case .taskCard(_, let taskID):

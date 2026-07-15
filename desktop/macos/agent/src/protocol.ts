@@ -394,6 +394,16 @@ export interface AppendChatFirstBlocksMessage extends ProtocolEnvelope {
   blocks: unknown[];
 }
 
+/** Kernel-owned selection for one persisted, tail-actionable question card. */
+export interface RecordQuestionInteractionReplyMessage extends ProtocolEnvelope {
+  type: "record_question_interaction_reply";
+  ownerId: string;
+  sessionId: string;
+  questionId: string;
+  optionId: string;
+  controlGeneration: number;
+}
+
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
   type: "ensure_agent_spawn_journal";
   ownerId: string;
@@ -441,6 +451,17 @@ export interface JournalBackendReconcileResultMessage extends ProtocolEnvelope {
   errorCode?: string;
 }
 
+/** Swift's physical transport result for the separate deferral outbox. */
+export interface ChatFirstDeferralDeliveryResultMessage extends ProtocolEnvelope {
+  type: "chat_first_deferral_delivery_result";
+  ownerId: string;
+  continuityKey: string;
+  deliveryGeneration: number;
+  payloadHash: string;
+  ok: boolean;
+  errorCode?: string;
+}
+
 /** Swift pushes a refreshed Firebase ID token to the bridge (piMono mode) */
 export interface RefreshTokenMessage {
   type: "refresh_token";
@@ -481,10 +502,12 @@ export type InboundMessage =
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
   | AppendChatFirstBlocksMessage
+  | RecordQuestionInteractionReplyMessage
   | EnsureAgentSpawnJournalMessage
   | JournalBackendSyncResultMessage
   | JournalBackendDeleteResultMessage
   | JournalBackendReconcileResultMessage
+  | ChatFirstDeferralDeliveryResultMessage
   | RefreshTokenMessage
   | RefreshOwnerMessage;
 
@@ -493,6 +516,7 @@ const INBOUND_RESPONSE_MESSAGE_TYPES = new Set<InboundMessage["type"]>([
   "journal_backend_sync_result",
   "journal_backend_delete_result",
   "journal_backend_reconcile_result",
+  "chat_first_deferral_delivery_result",
 ]);
 
 /** Response handlers log invalid replies locally; they never echo request errors back to Swift. */
@@ -909,7 +933,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "record_question_interaction_reply";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -921,6 +945,9 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   generationBaseTurnSeq: number;
   conversationGeneration: number;
   backendDeleteOperationId?: string;
+  accepted?: boolean;
+  duplicate?: boolean;
+  continuityKey?: string | null;
 }
 
 export interface JournalTurnChangedMessage extends OutboundEnvelope {
@@ -981,6 +1008,23 @@ export interface JournalBackendReconcileMessage extends OutboundEnvelope {
   pageLimit: number;
 }
 
+export interface ChatFirstDeferralDeliveryMessage extends OutboundEnvelope {
+  type: "chat_first_deferral_delivery";
+  ownerId: string;
+  continuityKey: string;
+  controlGeneration: number;
+  subject: { kind: "task" | "goal" | "capture"; id: string };
+  question: {
+    questionId: string;
+    text: string;
+    subject: { kind: "task" | "goal" | "capture"; id: string };
+    options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>;
+  };
+  attemptCount: number;
+  deliveryGeneration: number;
+  payloadHash: string;
+}
+
 export type OutboundMessage =
   | InitMessage
   | TextDeltaMessage
@@ -1010,7 +1054,8 @@ export type OutboundMessage =
   | JournalTurnChangedMessage
   | JournalBackendSyncMessage
   | JournalBackendDeleteMessage
-  | JournalBackendReconcileMessage;
+  | JournalBackendReconcileMessage
+  | ChatFirstDeferralDeliveryMessage;
 
 type OutboundWithEnvelope = Exclude<OutboundMessage, AuthRequiredMessage | AuthSuccessMessage>;
 
@@ -1046,7 +1091,8 @@ export type OutboundMessageDraft =
   | DraftEnvelope<JournalTurnChangedMessage>
   | DraftEnvelope<JournalBackendSyncMessage>
   | DraftEnvelope<JournalBackendDeleteMessage>
-  | DraftEnvelope<JournalBackendReconcileMessage>;
+  | DraftEnvelope<JournalBackendReconcileMessage>
+  | DraftEnvelope<ChatFirstDeferralDeliveryMessage>;
 
 export function ensureOutboundProtocolVersion(message: OutboundMessageDraft): OutboundMessage {
   if (message.type === "auth_required" || message.type === "auth_success") {

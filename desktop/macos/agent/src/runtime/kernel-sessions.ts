@@ -158,6 +158,35 @@ export class KernelSessions extends KernelArtifacts {
     return session;
   }
 
+  /**
+   * T08 is not a model-tool invocation, but it still needs the same immutable
+   * server-derived Main Chat capability that admitted rich blocks. Keeping the
+   * check here avoids a second Swift or UI-side rollout gate.
+   */
+  assertChatFirstMainCapability(sessionId: string, ownerId: string, controlGeneration: number): void {
+    this.ownedSession(sessionId, ownerId);
+    const capability = this.chatFirstCapability(sessionId, ownerId, "main_chat");
+    if (
+      capability?.chatFirstUi !== true
+      || capability.controlGeneration !== controlGeneration
+    ) {
+      throw new Error("Question interaction requires an enabled current main-Chat capability");
+    }
+  }
+
+  /**
+   * Background chat-first work is permitted only while this process has an
+   * immutable, enabled Main Chat projection for the active owner. It is not a
+   * persisted rollout flag: a fresh capability-off launch therefore leaves
+   * deferral rows dormant instead of delivering feature work to a legacy user.
+   */
+  hasChatFirstMainCapability(ownerId: string): boolean {
+    for (const [key, capability] of this.chatFirstCapabilities) {
+      if (key.startsWith(`${ownerId}:`) && capability.chatFirstUi === true) return true;
+    }
+    return false;
+  }
+
   defaultExecutionProfilePreference(ownerId: string): DefaultExecutionProfilePreference | undefined {
     return readDefaultExecutionProfilePreference(this.store, ownerId);
   }

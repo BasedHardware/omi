@@ -32,13 +32,14 @@ final class ChatFirstRichBlockTests: XCTestCase {
     let restored = try XCTUnwrap(ChatContentBlockCodec.decode(encoded))
     XCTAssertEqual(restored.count, blocks.count)
 
-    guard case .questionCard(_, let questionID, let text, let subjectKind, let subjectID, let options) = restored[0]
+    guard case .questionCard(_, let questionID, let text, let subjectKind, let subjectID, let options, let selectedOptionID) = restored[0]
     else { return XCTFail("question card should survive persisted replay") }
     XCTAssertEqual(questionID, "question-1")
     XCTAssertEqual(text, "Which goal should we focus on?")
     XCTAssertEqual(subjectKind, "goal")
     XCTAssertEqual(subjectID, "goal-1")
     XCTAssertEqual(options.first?["preparedAnswer"] as? String, "Keep goal 1 as my focus")
+    XCTAssertNil(selectedOptionID)
 
     guard case .taskCard(_, let taskID) = restored[1] else {
       return XCTFail("task card should survive persisted replay")
@@ -57,6 +58,30 @@ final class ChatFirstRichBlockTests: XCTestCase {
     XCTAssertEqual(captureID, "capture-1")
     XCTAssertEqual(timestamp, 42_000)
     XCTAssertEqual(captureSummary, "Planning conversation")
+  }
+
+  func testQuestionSelectionReceiptRoundTripsAndRetiresTheOptions() throws {
+    let selected = ChatContentBlock.questionCard(
+      id: "question-card",
+      questionId: "question-1",
+      text: "Which goal should we focus on?",
+      subjectKind: "goal",
+      subjectId: "goal-1",
+      options: [[
+        "optionId": "focus-goal-1",
+        "label": "Keep this goal",
+        "preparedAnswer": "Keep goal 1 as my focus",
+      ]],
+      selectedOptionId: "focus-goal-1"
+    )
+
+    let encoded = try XCTUnwrap(ChatContentBlockCodec.encode([selected]))
+    let restoredBlocks = try XCTUnwrap(ChatContentBlockCodec.decode(encoded))
+    let restored = try XCTUnwrap(restoredBlocks.first)
+    guard case .questionCard(_, _, _, _, _, _, let selectedOptionID) = restored else {
+      return XCTFail("question selection receipt should survive replay")
+    }
+    XCTAssertEqual(selectedOptionID, "focus-goal-1")
   }
 
   func testUnknownPersistedBlockDoesNotDropRecognizedNeighbors() throws {
@@ -138,12 +163,43 @@ final class ChatFirstRichBlockTests: XCTestCase {
     )
   }
 
-  private func task(id: String, completed: Bool) -> TaskActionItem {
+  func testTaskCaptureLinksFailClosedOutsideTheOmiDeviceArchive() {
+    let omiCaptureTask = task(
+      id: "omi-task",
+      completed: false,
+      conversationID: "omi-capture",
+      source: "transcription:omi"
+    )
+    let desktopCaptureTask = task(
+      id: "desktop-task",
+      completed: false,
+      conversationID: "desktop-conversation",
+      source: "transcription:desktop"
+    )
+    let unknownCaptureTask = task(
+      id: "unknown-task",
+      completed: false,
+      conversationID: "unknown-conversation"
+    )
+
+    XCTAssertEqual(ChatFirstCaptureLinkPolicy.captureID(for: omiCaptureTask), "omi-capture")
+    XCTAssertNil(ChatFirstCaptureLinkPolicy.captureID(for: desktopCaptureTask))
+    XCTAssertNil(ChatFirstCaptureLinkPolicy.captureID(for: unknownCaptureTask))
+  }
+
+  private func task(
+    id: String,
+    completed: Bool,
+    conversationID: String? = nil,
+    source: String? = nil
+  ) -> TaskActionItem {
     TaskActionItem(
       id: id,
       description: "Draft the plan",
       completed: completed,
-      createdAt: Date(timeIntervalSince1970: 0)
+      createdAt: Date(timeIntervalSince1970: 0),
+      conversationId: conversationID,
+      source: source
     )
   }
 }

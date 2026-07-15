@@ -106,7 +106,7 @@ struct AIResponseView: View {
         return ["thinking", id, text].joined(separator: "\u{1E}")
       case .discoveryCard(let id, let title, let summary, let fullText):
         return ["discovery", id, title, summary, fullText].joined(separator: "\u{1E}")
-      case .questionCard(let id, _, _, _, _, _):
+      case .questionCard(let id, _, _, _, _, _, _):
         return ["chatFirstQuestion", id].joined(separator: "\u{1E}")
       case .taskCard(let id, _):
         return ["chatFirstTask", id].joined(separator: "\u{1E}")
