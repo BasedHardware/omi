@@ -28,9 +28,8 @@ from utils.memory.canonical_memory_adapter import (
 )
 from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
-from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
+from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
 from utils.memory.memory_system import MemorySystem
-from utils.memory.memory_system_pin import resolve_pinned_memory_system
 from utils.memory.default_read_rollout import guard_legacy_memory_write
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_write_payload
 from utils.retrieval.hybrid import rrf_rerank
@@ -434,11 +433,30 @@ class MemoryService:
         self._legacy = LegacyMemoryBackend()
         self._canonical = CanonicalMemoryBackend(db_client=db_client)
 
-    def _resolve_backend(self, uid: str):
-        system = resolve_pinned_memory_system(uid, db_client=self._db_client)
-        if system == MemorySystem.CANONICAL:
+    def _resolve_mutation_backend(self, uid: str):
+        """Return the only store a mutation may affect for this account.
+
+        Canonical selection is sticky for mutations: a temporarily unavailable
+        canonical control/write gate is retryable, not permission to create or
+        modify a legacy row. Legacy accounts retain their existing behavior.
+        """
+
+        decision = canonical_write_decision(uid, db_client=self._db_client)
+        if decision.memory_system != MemorySystem.CANONICAL:
+            return self._legacy
+        if decision.enabled:
             return self._canonical
-        return self._legacy
+        raise HTTPException(status_code=503, detail={"reason": decision.reason, "memory_system": "canonical"})
+
+    def ensure_canonical_mutation_ready(self, uid: str) -> None:
+        """Fail closed when a canonical-selected background writer cannot mutate."""
+
+        backend = self._resolve_mutation_backend(uid)
+        if backend is not self._canonical:
+            raise HTTPException(
+                status_code=503,
+                detail={"reason": "canonical_selection_changed", "memory_system": "canonical"},
+            )
 
     def read(
         self,
@@ -481,36 +499,19 @@ class MemoryService:
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 
     def write(self, uid: str, data: Dict[str, Any]) -> str:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                return self._legacy.write(uid, data)
-        return self._resolve_backend(uid).write(uid, data)
+        return self._resolve_mutation_backend(uid).write(uid, data)
 
     def write_batch(self, uid: str, items: List[Dict[str, Any]]) -> List[str]:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                return self._legacy.write_batch(uid, items)
-        return self._resolve_backend(uid).write_batch(uid, items)
+        return self._resolve_mutation_backend(uid).write_batch(uid, items)
 
     def update_content(self, uid: str, memory_id: str, content: str) -> MemoryDB:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                return self._legacy.update_content(uid, memory_id, content)
-        return self._resolve_backend(uid).update_content(uid, memory_id, content)
+        return self._resolve_mutation_backend(uid).update_content(uid, memory_id, content)
 
     def update_visibility(self, uid: str, memory_id: str, visibility: str) -> None:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                self._legacy.update_visibility(uid, memory_id, visibility)
-                return
-        self._resolve_backend(uid).update_visibility(uid, memory_id, visibility)
+        self._resolve_mutation_backend(uid).update_visibility(uid, memory_id, visibility)
 
     def review(self, uid: str, memory_id: str, value: bool) -> None:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                self._legacy.review(uid, memory_id, value)
-                return
-        self._resolve_backend(uid).review(uid, memory_id, value)
+        self._resolve_mutation_backend(uid).review(uid, memory_id, value)
 
     def update_product_fields(
         self,
@@ -520,29 +521,22 @@ class MemoryService:
         tags: Optional[List[str]] = None,
         category: Optional[str] = None,
     ) -> MemoryDB:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                return self._legacy.update_product_fields(uid, memory_id, tags=tags, category=category)
-        return self._resolve_backend(uid).update_product_fields(uid, memory_id, tags=tags, category=category)
+        return self._resolve_mutation_backend(uid).update_product_fields(
+            uid,
+            memory_id,
+            tags=tags,
+            category=category,
+        )
 
     def delete(self, uid: str, memory_id: str) -> None:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                self._legacy.delete(uid, memory_id)
-                return
-        self._resolve_backend(uid).delete(uid, memory_id)
+        self._resolve_mutation_backend(uid).delete(uid, memory_id)
 
     def delete_all(self, uid: str) -> None:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) == MemorySystem.CANONICAL:
-            if not canonical_write_enabled(uid, db_client=self._db_client):
-                self._legacy.delete_all(uid)
-                return
-        self._resolve_backend(uid).delete_all(uid)
+        self._resolve_mutation_backend(uid).delete_all(uid)
 
     def retract_conversation_memories(self, uid: str, conversation_id: str) -> Optional[Dict[str, Any]]:
-        if resolve_pinned_memory_system(uid, db_client=self._db_client) != MemorySystem.CANONICAL:
-            return None
-        if not canonical_write_enabled(uid, db_client=self._db_client):
+        backend = self._resolve_mutation_backend(uid)
+        if backend is self._legacy:
             return None
         return retract_conversation_sourced_memories(uid, conversation_id, db_client=self._db_client)
 

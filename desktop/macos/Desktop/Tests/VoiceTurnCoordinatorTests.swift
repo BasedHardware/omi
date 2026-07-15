@@ -160,6 +160,7 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     XCTAssertFalse(barState.isVoiceListening)
     XCTAssertTrue(barState.isThinking)
     XCTAssertEqual(barState.voiceTranscript, "Transcribing…")
+    XCTAssertEqual(barState.pttHintText, "")
 
     coordinator.send(.transcriptionFailed(turnID: turnID, message: "fixture"))
     // The capture/listening phase is over, but the pill remains expanded long

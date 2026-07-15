@@ -57,6 +57,27 @@ SwiftUI and floating-bar state are projections.
   A late context result for a superseded turn is dropped.
 - User interrupt is a typed reducer event. It revokes tools/output and terminalizes
   exactly once; late tool and playback callbacks remain stale.
+- PTT status text is failure-only. Recording, transcription, fallback recovery,
+  and barge-in replacement remain visual states; only actionable typed capture,
+  provider, tool, journal, or playback failures may show a text banner.
+- A PTT current-screen answer is admitted only from one pre-overlay capture bound
+  to that exact voice turn. Capture itself never delays ordinary PTT output;
+  only a reducer-admitted screenshot call seals visual output. The provider may
+  propose visual detail only after native code has locally enqueued the exact
+  JPEG function-response wire for the same session/response/call/epoch receipt.
+  That frozen image must be less than five seconds old both when native code
+  mints the receipt and when it accepts the report; expiration fails closed into
+  the deterministic screen-verification failure. The paired screenshot/report is
+  one reducer-owned protocol: it retains the screenshot effect identity until a
+  verified report or deterministic failure closes it. Either local result is
+  authoritative and must close the provider-continuation fence rather than wait
+  for optional provider narration.
+  Model-supplied
+  evidence IDs and app labels have no authority; native code supplies app identity
+  and rejects stale, missing, contradictory, or cross-turn reports without using
+  historical chat, memory, OCR, or context summaries as screen authority. A
+  cancelled screenshot tool execution must never mutate or speak into a barge-in
+  replacement turn.
 - `PushToTalkManager` has no `PTTState`, lifecycle timer, or current-turn variable.
   It derives `phase` from the coordinator and forwards snapshots to observers.
 - Realtime delegation does not run a second Swift text classifier. Explicit model
@@ -95,6 +116,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`
@@ -107,6 +129,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Tests/VoiceTurnReducerTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeHubBargeInContinuityTests.swift`
+- `desktop/macos/Desktop/Tests/RealtimeScreenEvidenceTests.swift`
 - `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
 
@@ -115,6 +138,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`

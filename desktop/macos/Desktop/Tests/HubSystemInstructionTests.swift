@@ -14,19 +14,37 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))
         XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
         XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
-        XCTAssertTrue(instr.contains("image attached to its result"))
-        XCTAssertTrue(instr.contains("source of truth for any current-screen question"))
+        XCTAssertFalse(instr.contains("evidence_id"))
+        XCTAssertTrue(instr.contains("report_screen_observation"))
     }
 
-    func testLiveScreenshotResultSupersedesConflictingWarmScreenContext() {
+    func testLiveScreenshotResultRequiresAValidatedObservationReport() {
+        let valid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let invalid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: nil)
+        let validPayload = try? JSONSerialization.jsonObject(with: Data(valid.utf8)) as? [String: Any]
+        let invalidPayload = try? JSONSerialization.jsonObject(with: Data(invalid.utf8)) as? [String: Any]
+
+        XCTAssertEqual(validPayload?["ok"] as? Bool, true)
+        XCTAssertNil(validPayload?["evidence_id"])
+        XCTAssertNil(validPayload?["frontmost_app"])
+        XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
+        XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
+    }
+
+    func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
+        let raw = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let prepared = RealtimeProviderToolResultPolicy.prepare(
+            provider: .gemini, name: HubTool.screenshot.rawValue, output: raw)
+        let payload = try? JSONSerialization.jsonObject(with: Data(prepared.output.utf8)) as? [String: Any]
+
+        XCTAssertEqual(payload?["ok"] as? Bool, true)
+        XCTAssertNil(payload?["evidence_id"])
         XCTAssertEqual(
-            RealtimeHubTools.screenshotToolResult(capturedBytes: 1),
-            "Live screenshot captured just now. The attached image is authoritative for the current screen; disregard any conflicting screen summaries, OCR, or earlier screen descriptions."
-        )
-        XCTAssertEqual(
-            RealtimeHubTools.screenshotToolResult(capturedBytes: nil),
-            "Could not capture the screen."
-        )
+            ((payload?["toolResultEnvelope"] as? [String: Any])?["status"] as? String),
+            "succeeded")
     }
 
     func testInstructionDoesNotOwnSemanticSelectionOrRoutingPolicy() {

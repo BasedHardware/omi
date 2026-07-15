@@ -120,7 +120,6 @@ def test_legacy_reextract_failure_preserves_existing_memories(extractor_side_eff
         "memory_system_request_scope",
         lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.LEGACY, __exit__=lambda *a: None),
     )
-    monkeypatch.setattr(pc, "canonical_write_enabled", lambda *a, **k: False)
 
     conversation = Conversation(
         id="conv-preserve",
@@ -166,7 +165,6 @@ def test_canonical_reextract_failure_preserves_existing_memories(extractor_side_
         "memory_system_request_scope",
         lambda uid: MagicMock(__enter__=lambda s: pc.MemorySystem.CANONICAL, __exit__=lambda *a: None),
     )
-    monkeypatch.setattr(pc, "canonical_write_enabled", lambda *a, **k: True)
     monkeypatch.setattr(pc.users_db, "get_user_language_preference", lambda uid: "en")
 
     conversation = Conversation(

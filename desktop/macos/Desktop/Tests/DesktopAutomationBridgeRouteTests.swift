@@ -59,6 +59,9 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
     XCTAssertNotNil(object["backendEnvironment"] as? String)
     XCTAssertNotNil(object["pythonBackendURL"] as? String)
     XCTAssertNotNil(object["rustBackendURL"] as? String)
+    XCTAssertNotNil(object["processID"] as? Int)
+    XCTAssertEqual(object["logFilePath"] as? String, omiLogFilePath())
+    XCTAssertEqual(object["logLaunchID"] as? String, omiLogLaunchID())
     XCTAssertNotNil(object["agentRuntimeRunning"] as? Bool)
     XCTAssertEqual(
       object["agentRuntimeExpectedProtocolVersion"] as? Int,

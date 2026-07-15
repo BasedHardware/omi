@@ -74,6 +74,20 @@ struct RealtimeLocalProfileTurnPlan: Equatable {
 }
 #endif
 
+/// A canonical spawn receipt proves that the child exists, but it does not
+/// authorize the realtime provider to narrate the child's eventual outcome.
+/// Provider continuations remain necessary for transport completion, but are
+/// not presented to the user for that turn.
+enum RealtimeAcceptedSpawnPresentationPolicy {
+  static func suppressesProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
+    hasCanonicalSpawnReceipt
+  }
+
+  static func requiresProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
+    !hasCanonicalSpawnReceipt
+  }
+}
+
 /// Keeps the response glow tied to perceived playback instead of raw PCM chunk
 /// boundaries. Realtime providers can leave short gaps between streamed audio
 /// buffers; clearing the glow on every empty queue makes the notch resize and
@@ -136,9 +150,10 @@ final class RealtimeResponseGlowGate {
 final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   static let shared = RealtimeHubController()
 
-  private var session: RealtimeHubSession?
+  var session: RealtimeHubSession?
   private var voiceSessionID: VoiceSessionID?
-  private var voiceResponseID: VoiceResponseID?
+  /// Shared with the screen-evidence receipt extension to fence image dispatch to one response.
+  var voiceResponseID: VoiceResponseID?
   private var sessionProvider: RealtimeHubProvider?
   private var sessionAuth: HubAuth?
   /// Sessions detach from logical ownership synchronously, then close on their
@@ -165,7 +180,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return binding.ownerScope
   }
   private var pcmPlayer: StreamingPCMPlayer?
-  private lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active, lease in
+  lazy var responseGlowGate = RealtimeResponseGlowGate { [weak self] active, lease in
     guard self != nil, let lease,
       VoiceTurnCoordinator.shared.activeTurnID == lease.turnID
     else { return }
@@ -177,8 +192,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// Last provider input-transcript mutation for the active PTT turn. Permission
   /// tools use this only to wait for a stable live transcript; it is reset with
   /// every turn and is never persisted.
-  private var lastInputTranscriptUpdateAt: Date?
-  private var assistantText = ""
+  /// Screen-evidence telemetry records only whether this current turn saw a transcript event.
+  var lastInputTranscriptUpdateAt: Date?
+  var assistantText = ""
   private var audioReceivedThisTurn = false
   /// Stable per-turn key for kernel idempotent voice-turn persistence.
   private var turnIdempotencyKey = ""
@@ -199,9 +215,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var prefetchedVoiceContextOwnerScope: RealtimeHubOwnerScope?
   /// Typed snapshot identity baked into the current warm session's instructions.
   private var sessionVoiceContextFreshnessIdentity = ""
-  /// Fresh screenshots are held only between the kernel-authorized execution and the matching
-  /// provider tool result. They never become ambient session context.
-  private var authorizedRealtimeScreenshotImages: [String: Data] = [:]
+  /// A PTT current-screen answer is grounded in exactly one pre-overlay, turn-scoped image.
+  /// It is never ambient context and is released on terminal/cancel paths.
+  var screenEvidence: RealtimeScreenEvidence?
+  var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
+  var screenGroundingState: RealtimeScreenGroundingState = .inactive
+  var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
+  var screenAnswerPresented = false
   private var voiceContextPrefetchTask: Task<Void, Never>?
   private var voiceContextRefreshGeneration: UInt64 = 0
   private var turnPreparationTask: Task<Void, Never>?
@@ -314,11 +334,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     ) async throws -> Void)?
 #endif
   /// (b) Genuinely local: in-flight authorized tool envelopes for this process.
-  private var authorizedRealtimeInvocations: [String: RealtimeAuthorizedToolInvocation] = [:]
+  var authorizedRealtimeInvocations: [String: RealtimeAuthorizedToolInvocation] = [:]
   /// (b) Genuinely local delivery dedupe for this process. Kernel authorizes
   /// each run; this set only suppresses duplicate command delivery in-session.
   private var completedAuthorizedRealtimeInvocationIDs: Set<String> = []
-  private var realtimeToolTurnEpoch = 0
+  var realtimeToolTurnEpoch = 0
   private var pendingCompletedAgentDeltaAckIds: [String] = []
   private var pendingCompletedAgentDeltaHighWaterMs: Int?
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
@@ -349,7 +369,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   private var realtimePlaybackEpoch = 0
 
   /// Log tag for the currently-connected provider.
-  private var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
+  var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
 
   private var reducerCapturingInput: Bool {
     VoiceTurnCoordinator.shared.activeTurn?.phase.isRecording == true
@@ -1086,10 +1106,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))
       _ = commitTurn()
       let deadline = Date().addingTimeInterval(timeout)
+      let canonicalContinuityKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
       var redrive = false
       while Date() < deadline {
-        if !lastTurnDiagnostics.isEmpty { return lastTurnDiagnostics }
-        if attempt == 0, session !== turnSession {
+        let hasCanonicalSpawnReceipt =
+          acceptedSpawnJournalReceiptByContinuityKey[canonicalContinuityKey] != nil
+        if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
+          terminal.turnID == turnID
+        {
+          if terminal.reason == .success, !lastTurnDiagnostics.isEmpty {
+            return lastTurnDiagnostics
+          }
+          return ["error": "voice turn terminated with \(terminal.reason.rawValue)"]
+        }
+        if !hasCanonicalSpawnReceipt, !lastTurnDiagnostics.isEmpty {
+          return lastTurnDiagnostics
+        }
+        if attempt == 0,
+          RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+            sessionChanged: session !== turnSession,
+            hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
+        {
           redrive = true
           break
         }
@@ -1729,6 +1766,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       terminal.turnID == turnID
     {
       completeExternalRunAuthority(turnID: turnID, reason: terminal.reason)
+      if screenEvidence?.descriptor.turnID == turnID {
+        clearScreenGrounding(stage: terminal.reason == .success ? "released" : "cancelled")
+      }
+    } else if screenEvidence?.descriptor.turnID == turnID {
+      clearScreenGrounding(stage: "cancelled")
     }
     guard pendingSessionRefreshReason != nil else { return }
     guard
@@ -2152,6 +2194,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       continuityKey: idempotencyKey,
       retainingReceipt: retainingReceipt,
       operation)
+  }
+
+  /// A native screen answer becomes visible before the provider can narrate it.
+  /// Register its canonical journal obligation through the same retained receipt
+  /// path as other authoritative local results before the reducer closes the turn.
+  @discardableResult
+  func enqueueAuthoritativeScreenEvidencePersistence(
+    ownerID: String,
+    assistantText: String
+  ) -> Task<Bool, Never> {
+    let idempotencyKey = turnIdempotencyKey
+    let userText = turnTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    return enqueueTurnPersistence(idempotencyKey: idempotencyKey, retainingReceipt: true) { [weak self] in
+      await self?.persistTurnDirectlyToKernel(
+        ownerID: ownerID,
+        userText: userText,
+        assistantText: assistantText,
+        interrupted: false,
+        idempotencyKey: idempotencyKey,
+        acceptedSpawnOwnerID: nil) ?? false
+    }
   }
 
   /// The kernel journal and its SQLite outbox are the only durable transcript
@@ -2806,7 +2869,38 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return player
   }
 
-  private func acquireVoiceOutput(_ lane: VoiceOutputLane, reason: String) -> VoiceOutputLease? {
+  /// Replaces the provider's post-tool narration with the kernel's durable
+  /// admission fact. A spawn receipt is not a child completion receipt, so this
+  /// is the only spoken acknowledgement for a PTT spawn turn.
+  private func playCanonicalSpawnAcknowledgement(_ text: String) {
+    let acknowledgement = text.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !acknowledgement.isEmpty else { return }
+
+    // A provider can begin a speculative response before its tool call returns.
+    // Once the kernel accepts the spawn, that narration can no longer make
+    // lifecycle claims. Stop it before taking the deterministic acknowledgement
+    // lease so no stale audio competes with the canonical fact.
+    takeOverVoiceOutputForAuthoritativeLocalResult()
+    guard let lease = acquireVoiceOutput(.deterministicAgentAck, reason: "canonical_spawn_receipt")
+    else { return }
+    responseGlowGate.markPlaybackActive(lease: lease)
+    FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement, lease: lease)
+  }
+
+  /// Local results such as accepted agent receipts and verified/fail-closed
+  /// screen evidence supersede any speculative provider narration for this
+  /// turn. Keep the physical preemption and reducer lease release together so
+  /// every authoritative answer can acquire its own deterministic lease.
+  func takeOverVoiceOutputForAuthoritativeLocalResult() {
+    if let activeLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease {
+      FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: activeLease.id)
+      _ = VoiceTurnCoordinator.shared.releaseOutput(activeLease)
+    }
+    pcmPlayer?.stop()
+    responseGlowGate.clearImmediately()
+  }
+
+  func acquireVoiceOutput(_ lane: VoiceOutputLane, reason: String) -> VoiceOutputLease? {
     guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else {
       log(
         "RealtimeHub[\(providerTag)]: dropping \(lane.rawValue) output with no active PTT turn reason=\(reason)"
@@ -2904,6 +2998,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     lastExternalToolName = ""
     lastExternalToolErrorCode = ""
     turnIdempotencyKey = "voice:\(turnID.rawValue.uuidString.lowercased())"
+    resetScreenGrounding(for: turnID)
     if let interruptedTurnTask, !supersedesPendingReplacement {
       if !providerResponseInFlight || session?.bargeInStrategy != .freshSession {
         enqueueTurnPersistence(idempotencyKey: interruptedTurnIdempotencyKey) { [weak self] in
@@ -3321,10 +3416,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
   }
 
-  private func screenshotToolResultTextForCurrentProvider(capturedBytes: Int?) -> String {
-    RealtimeHubTools.screenshotToolResult(capturedBytes: capturedBytes)
-  }
-
   /// Await a task's value with a REAL deadline on return time. A plain withTaskGroup
   /// race is not enough: the group awaits its remaining children at scope exit and
   /// `Task<T, Never>.value` is not cancellation-interruptible, so the "timeout" would
@@ -3496,7 +3587,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     callId: String,
     name: String,
     output: String,
-    image: Data? = nil,
+    screenEvidence: RealtimeScreenEvidenceAttachment? = nil,
     expectedTurnEpoch: Int? = nil
   ) {
     guard isCurrentSession(source) else {
@@ -3513,19 +3604,24 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
     let turnID = VoiceTurnID(identity.generation)
-    guard VoiceTurnCoordinator.shared.isToolEffectActive(
+    let deferredScreenProtocol = name == HubTool.screenshot.rawValue
+      && screenGroundingState.protocolToken?.screenshotCallID == VoiceToolCallID(callId)
+      && screenGroundingState.protocolToken?.screenshotIdentity == identity
+    let toolIsActive = VoiceTurnCoordinator.shared.isToolEffectActive(
       turnID: turnID,
       callID: VoiceToolCallID(callId),
       identity: identity)
-    else {
+    guard toolIsActive || deferredScreenProtocol else {
       log("RealtimeHub[\(providerTag)]: dropping tool result after reducer revoked \(name)")
       return
     }
-    VoiceTurnCoordinator.shared.send(
-      .toolFinishedScoped(
-        turnID: turnID,
-        identity: identity,
-        callID: VoiceToolCallID(callId)))
+    if !deferredScreenProtocol {
+      VoiceTurnCoordinator.shared.send(
+        .toolFinishedScoped(
+          turnID: turnID,
+          identity: identity,
+          callID: VoiceToolCallID(callId)))
+    }
     let providerResult = RealtimeProviderToolResultPolicy.prepare(
       provider: effectiveProvider,
       name: name,
@@ -3548,11 +3644,40 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       "RealtimeHub[\(providerTag)]: tool result \(name) raw_bytes=\(providerResult.originalByteCount) "
         + "provider_bytes=\(providerResult.output.utf8.count) oversized=\(providerResult.wasOversized)"
     )
-    source.sendToolResult(
-      callId: callId,
-      name: name,
-      output: providerResult.output,
-      image: image)
+    if let screenEvidence {
+      // `sendToolResult` crosses the provider session's serial queue. Do not mint the visual
+      // receipt until that queue has accepted the exact image/function-response wire; scheduling
+      // the asynchronous call is not yet a transport fact.
+      logScreenEvidence(stage: "tool_wire_scheduled", evidence: screenEvidence.descriptor, callID: callId)
+      source.sendToolResult(
+        callId: callId,
+        name: name,
+        output: providerResult.output,
+        screenEvidence: screenEvidence,
+        onWireEnqueued: { [weak self, weak source] didEnqueue in
+          DispatchQueue.main.async {
+            guard let self, let source else { return }
+            guard didEnqueue else {
+              self.logScreenEvidence(
+                stage: "tool_wire_enqueue_failed",
+                evidence: screenEvidence.descriptor,
+                callID: callId)
+              self.rejectScreenEvidence(screenEvidence.descriptor, reason: "tool_wire_enqueue_failed")
+              return
+            }
+            self.markScreenEvidenceTransportEnqueued(
+              screenEvidence,
+              source: source,
+              callID: callId,
+              turnEpoch: turnEpoch)
+          }
+        })
+    } else {
+      source.sendToolResult(
+        callId: callId,
+        name: name,
+        output: providerResult.output)
+    }
   }
 
   @discardableResult
@@ -3757,7 +3882,27 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
             self.acceptedSpawnJournalReceiptByContinuityKey[receipt.continuityKey] =
               AcceptedSpawnJournalReceipt(ownerID: binding.ownerID, receipt: receipt)
             self.turnPersistenceLedger.recordAcceptedReceipt(for: receipt.continuityKey)
+            self.lastTurnDiagnostics = [
+              "provider": self.providerTag,
+              "provider_transcript": self.turnTranscript,
+              "provider_transcript_language": "",
+              "saved_user_text": self.turnTranscript,
+              "used_local_transcript": "false",
+              "local_transcript": "",
+              "local_language": "",
+              "assistant_reply": receipt.assistantText,
+              "provider_assistant_reply": self.assistantText,
+              "external_tool_name": name,
+              "external_tool_error": "",
+            ]
+            VoiceTurnCoordinator.shared.send(
+              .authoritativeLocalResultAcceptedScoped(
+                turnID: turnID,
+                identity: identity,
+                callID: VoiceToolCallID(callId),
+                kind: .spawnReceipt))
             self.assistantText = receipt.assistantText
+            self.playCanonicalSpawnAcknowledgement(receipt.assistantText)
             if let pill = receipt.pillProjection {
               AgentPillsManager.shared.upsertSpawnedPill(
                 id: pill.pillID,
@@ -3804,7 +3949,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           callId: callId,
           name: name,
           output: output,
-          image: screenshotImage,
+          screenEvidence: screenshotImage,
           expectedTurnEpoch: expectedTurnEpoch)
       } catch {
         let code = (error as? ExternalSurfaceAuthorityError)?.code
@@ -3901,19 +4046,43 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         ownerID: command.ownerID)
 
     case .screenshot:
+      // Preserve the original descriptor before suspension. The timeout branch must never read
+      // mutable `screenEvidence` after a barge-in, because that may already belong to a new turn.
+      let capturedEvidence = screenEvidence?.descriptor
+      let currentEvidence = await screenEvidenceForAuthorizedScreenshot()
+      let invocationIsCurrent = isCurrentAuthorizedRealtimeInvocation(command, invocation: invocation)
+      guard invocationIsCurrent else {
+        return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
+      }
       guard let captureResult = Self.performOwnerBoundPhysicalEffect(
         expectedOwnerID: command.ownerID,
-        effect: { [ScreenCaptureManager.captureScreenJPEG()] })
+        effect: { [currentEvidence] in [currentEvidence] })
       else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
-      let shot = captureResult[0]
-      if let shot {
-        // The provider receives this only inside the matching tool response. In particular,
-        // Gemini must not race a separate realtime video frame against an unblocked function.
-        authorizedRealtimeScreenshotImages[command.invocationID] = shot
+      let evidence = captureResult[0]
+      guard let evidence,
+        evidence.descriptor.turnID == VoiceTurnCoordinator.shared.activeTurnID,
+        let jpeg = evidence.jpeg,
+        evidence.descriptor.canVerifyCurrentScreen
+      else {
+        guard let failureEvidence = RealtimeScreenEvidenceToolExecutionPolicy.failureEvidence(
+          capturedEvidence: capturedEvidence,
+          commandTurnID: invocation.turnID,
+          activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+          invocationIsCurrent: invocationIsCurrent)
+        else {
+          return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
+        }
+        rejectScreenEvidence(failureEvidence, reason: "capture_unavailable")
+        return .succeeded(screenshotToolResultTextForCurrentProvider(attachment: nil))
       }
-      return .succeeded(screenshotToolResultTextForCurrentProvider(capturedBytes: shot?.count))
+      let attachment = RealtimeScreenEvidenceAttachment(descriptor: evidence.descriptor, jpeg: jpeg)
+      // The provider receives these exact pre-overlay pixels only inside the matching tool
+      // response. Gemini must not race a separate realtime video frame against an unblocked
+      // function, and a later pointer-selected display can never replace this evidence.
+      authorizedRealtimeScreenshotImages[command.invocationID] = attachment
+      return .succeeded(screenshotToolResultTextForCurrentProvider(attachment: attachment))
 
     case .pointClick:
       guard let x = Self.finiteCoordinate(command.input["x"]),
@@ -4019,6 +4188,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
+    guard !screenGroundingState.suppressesProviderOutput else { return }
+    guard !RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil)
+    else { return }
     guard !VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
     else { return }
     guard let lease = acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") else { return }
@@ -4083,6 +4256,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
+    guard !screenGroundingState.suppressesProviderOutput else { return }
+    guard !RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil)
+    else { return }
     guard !VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
     else { return }
     if !text.isEmpty {
@@ -4136,7 +4313,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     identity: RealtimeHubEventIdentity?,
     source: RealtimeHubSession
   ) {
-    guard acceptsTurnEvent(identity, source: source) else { return }
+    guard acceptsTurnEvent(identity, source: source), let eventIdentity = identity else { return }
     let toolTurnEpoch = realtimeToolTurnEpoch
     let transportKey = toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)
     guard toolEffectIdentityByTransportKey[transportKey] == nil,
@@ -4145,40 +4322,140 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       log("RealtimeHub[\(providerTag)]: dropping duplicate tool call \(name) id=\(callId)")
       return
     }
-    guard let identity = VoiceTurnCoordinator.shared.reserveEffectIdentity() else { return }
-    toolEffectIdentityByTransportKey[transportKey] = identity
+    guard let toolIdentity = VoiceTurnCoordinator.shared.reserveEffectIdentity() else { return }
+    toolEffectIdentityByTransportKey[transportKey] = toolIdentity
     VoiceTurnCoordinator.shared.send(
       .toolStartedScoped(
         turnID: turnID,
-        identity: identity,
+        identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
     guard VoiceTurnCoordinator.shared.isToolEffectActive(
       turnID: turnID,
       callID: VoiceToolCallID(callId),
-      identity: identity)
+      identity: toolIdentity)
     else {
       toolEffectIdentityByTransportKey.removeValue(forKey: transportKey)
       log("RealtimeHub[\(providerTag)]: reducer rejected tool call \(name) id=\(callId)")
       return
     }
+    if name == HubTool.screenshot.rawValue {
+      admitScreenScreenshotRequest(
+        source: source,
+        turnID: turnID,
+        responseID: eventIdentity.responseID,
+        callID: callId,
+        screenshotIdentity: toolIdentity,
+        turnEpoch: toolTurnEpoch)
+    }
     let arguments =
       (try? JSONSerialization.jsonObject(with: Data(argumentsJSON.utf8)) as? [String: Any]) ?? [:]
+    if name == HubTool.reportScreenObservation.rawValue {
+      handleScreenObservationReport(
+        source: source,
+        turnID: turnID,
+        callId: callId,
+        reportIdentity: toolIdentity,
+        arguments: arguments,
+        expectedTurnEpoch: toolTurnEpoch)
+      return
+    }
     invokeExternallyAuthorizedTool(
       source: source,
       turnID: turnID,
-      identity: identity,
+      identity: toolIdentity,
       callId: callId,
       name: name,
       arguments: arguments,
       expectedTurnEpoch: toolTurnEpoch)
   }
 
+  private func handleScreenObservationReport(
+    source: RealtimeHubSession,
+    turnID: VoiceTurnID,
+    callId: String,
+    reportIdentity: VoiceEffectIdentity,
+    arguments: [String: Any],
+    expectedTurnEpoch: Int
+  ) {
+    let answer = String(((arguments["answer"] as? String) ?? "").prefix(1_200))
+    let accepted = resolveScreenObservation(
+      answer: answer,
+      source: source,
+      turnID: turnID,
+      expectedTurnEpoch: expectedTurnEpoch,
+      callID: callId,
+      reportIdentity: reportIdentity)
+    sendToolResultIfCurrent(
+      source: source,
+      callId: callId,
+      name: HubTool.reportScreenObservation.rawValue,
+      output: RealtimeHubTools.screenObservationResult(accepted: accepted),
+      expectedTurnEpoch: expectedTurnEpoch)
+  }
+
+  @discardableResult
+  private func resolveScreenObservation(
+    answer: String,
+    source: RealtimeHubSession,
+    turnID: VoiceTurnID,
+    expectedTurnEpoch: Int,
+    callID: String,
+    reportIdentity: VoiceEffectIdentity
+  ) -> Bool {
+    let knownApplicationNames = NSWorkspace.shared.runningApplications.compactMap(\.localizedName)
+    let decision = RealtimeScreenGroundingPolicy.reportDecision(
+      state: screenGroundingState,
+      answer: answer,
+      sourceObjectID: ObjectIdentifier(source),
+      activeTurnID: turnID,
+      activeResponseID: voiceResponseID,
+      currentTurnEpoch: expectedTurnEpoch,
+      knownApplicationNames: knownApplicationNames)
+    guard decision == .accepted, case .awaitingReport(let receipt) = screenGroundingState else {
+      let reason: String
+      switch decision {
+      case .evidenceUnavailable: reason = "evidence_unavailable"
+      case .transportNotDispatched: reason = "transport_not_dispatched"
+      case .staleReceipt: reason = "stale_receipt"
+      case .evidenceExpired: reason = "evidence_expired"
+      case .contradictoryApplication: reason = "contradictory_application"
+      case .emptyAnswer: reason = "empty_answer"
+      case .accepted: reason = "evidence_state_changed"
+      }
+      if case .awaitingReport = screenGroundingState {
+        rejectScreenEvidence(screenEvidence?.descriptor, reason: reason)
+      } else {
+        // A report that races ahead of the screenshot result is rejected to the provider but
+        // never cached or redeemed. The original screenshot call may still complete normally.
+        log("RealtimeHub: rejected screen report without a current transport receipt reason=\(reason)")
+      }
+      return false
+    }
+    screenGroundingState = .accepted(receipt)
+    logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
+    return completeScreenEvidenceProtocol(
+      receipt.protocolToken,
+      outcome: .verified(
+        reportCallID: VoiceToolCallID(callID),
+        reportIdentity: reportIdentity),
+      answer: RealtimeScreenGroundingPolicy.presentedAnswer(evidence: receipt.descriptor, answer: answer))
+  }
+
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
     hubReconnectStrikes = 0  // a completed provider cycle proves the hub works.
+    if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+      _ = resolvePendingScreenEvidenceBeforeProviderTermination(
+        turnID: turnID,
+        reason: .providerNoResponse)
+    }
     let pendingToolCount = VoiceTurnCoordinator.shared.activeTurn?.pendingToolCallIDs.count ?? 0
+    let hasCanonicalSpawnReceipt =
+      acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil
     let postToolContinuationRequired =
       VoiceTurnCoordinator.shared.activeTurn?.postToolContinuationRequired == true
+        && RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+          hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
     if RealtimeProviderTurnDoneDisposition.decide(
       pendingToolCount: pendingToolCount,
       postToolContinuationRequired: postToolContinuationRequired)
@@ -4277,6 +4554,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       pendingCompletedAgentDeltaHighWaterMs = nil
     }
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
+      VoiceTurnCoordinator.shared.activeTurn?.providerFinished != true,
       let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
     {
       VoiceTurnCoordinator.shared.send(
@@ -4324,6 +4602,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     realtimeToolTurnEpoch += 1
     toolEffectIdentityByTransportKey.removeAll()
     authorizedRealtimeInvocations.removeAll()
+    authorizedRealtimeScreenshotImages.removeAll()
     acceptedSpawnJournalReceiptByContinuityKey.removeAll()
   }
 
@@ -4338,6 +4617,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    var resolvedScreenProtocol = false
+    if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+      resolvedScreenProtocol = resolvePendingScreenEvidenceBeforeProviderTermination(
+        turnID: turnID,
+        reason: .providerFailed)
+    }
     // Capture while the reducer still owns this turn. `.providerReconnectFailed`
     // or `.finish` synchronously terminalizes it and `cancelTurn` clears the
     // transcript, so starting this obligation any later loses the just-spoken
@@ -4466,7 +4751,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       teardownSession()
       return
     }
-    if ownsActiveHubTurn {
+    if ownsActiveHubTurn, !resolvedScreenProtocol, activeTurn?.providerFinished != true {
       terminateActiveHubTurn(activeTurn)
     }
     teardownSession()

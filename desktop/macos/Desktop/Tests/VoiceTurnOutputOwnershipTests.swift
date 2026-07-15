@@ -9,6 +9,70 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
     XCTAssertFalse(VoicePlaybackStartPolicy.accepts(started: false))
   }
 
+  func testOldSystemSpeechCallbackCannotOwnNewerUtterance() {
+    let firstUtterance = NSObject()
+    let currentUtterance = NSObject()
+    let leaseID = VoiceLeaseID()
+    let token = SystemSpeechToken(
+      generation: 8,
+      leaseID: leaseID,
+      utterance: currentUtterance)
+
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: firstUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: leaseID))
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 9,
+        activeLeaseID: leaseID))
+    XCTAssertFalse(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: VoiceLeaseID()))
+    XCTAssertTrue(
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: currentUtterance,
+        currentToken: token,
+        playbackGeneration: 8,
+        activeLeaseID: leaseID))
+  }
+
+  func testCancelledBackgroundKickoffCannotUseCachedOrSystemFallback() {
+    let leaseID = VoiceLeaseID()
+    let token = VoiceSynthesisToken(generation: 4, leaseID: leaseID)
+
+    XCTAssertFalse(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: true,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: leaseID))
+    XCTAssertTrue(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: false,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: leaseID))
+  }
+
+  func testSupersededCloudSynthesisCannotFallbackIntoNewLease() {
+    let token = VoiceSynthesisToken(generation: 4, leaseID: VoiceLeaseID())
+
+    XCTAssertFalse(
+      VoiceSynthesisFallbackPolicy.shouldUseFallback(
+        afterCancellation: false,
+        token: token,
+        playbackGeneration: 4,
+        activeLeaseID: VoiceLeaseID()))
+  }
+
   func testFillerCarriesTextIntoSystemVoiceFallback() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
@@ -114,6 +178,18 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
 
     XCTAssertNotNil(tryLease(coordinator.acquireOutput(.deterministicAgentAck, turnID: turnID)))
     XCTAssertTrue(coordinator.outputSnapshot.providerOutputSuppressed)
+  }
+
+  func testAuthoritativeScreenEvidenceCanTakeOverSpeculativeNativeLease() throws {
+    let (coordinator, turnID) = awaitingCoordinator()
+    let native = try XCTUnwrap(tryLease(coordinator.acquireOutput(.nativeRealtime, turnID: turnID)))
+
+    XCTAssertTrue(coordinator.releaseOutput(native))
+    let screen = try XCTUnwrap(
+      tryLease(coordinator.acquireOutput(.deterministicScreenEvidence, turnID: turnID)))
+
+    XCTAssertEqual(screen.lane, .deterministicScreenEvidence)
+    XCTAssertEqual(coordinator.outputSnapshot.activeLease, screen)
   }
 
   func testStaleReleaseCannotClearCurrentLease() throws {

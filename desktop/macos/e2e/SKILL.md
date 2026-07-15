@@ -74,7 +74,8 @@ cd desktop/macos && ./scripts/omi-ctl action wal_snapshot
 # Expect pending_count=0 and status synced|uploaded after SD-card sync completes
 
 # After triggering SD sync in a named test bundle:
-rg 'Uploaded WAL|WiFi sync completed|syncToCloud' /private/tmp/omi-dev.log | tail -20
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+rg 'Uploaded WAL|WiFi sync completed|syncToCloud' "$OMI_LOG_PATH" | tail -20
 ```
 Expect log lines like `Uploaded WAL <id>: status=synced` (or `status=uploaded` for
 202-queued jobs). Hermetic regression:
@@ -298,13 +299,14 @@ production 500ms debounce running: rapid calls must coalesce into exactly ONE
 ```bash
 cd desktop/macos
 ./scripts/omi-ctl action seed_tasks count=5 prefix=T05x      # note the returned ids
-MARK="T05-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+MARK="T05-$(date +%s)"; echo "$MARK" >> "$OMI_LOG_PATH"
 # three reorders inside one debounce window (each returns immediately, flushed=false)
 ./scripts/omi-ctl action reorder_task id=<id1> index=0 category=nodeadline flush=false
 ./scripts/omi-ctl action reorder_task id=<id2> index=1 category=nodeadline flush=false
 ./scripts/omi-ctl action reorder_task id=<id3> index=2 category=nodeadline flush=false
 sleep 2   # > 500ms debounce + sync
-awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -c 'TasksVM: Synced'   # assert exactly 1
+awk "/$MARK/{f=1} f" "$OMI_LOG_PATH" | grep -c 'TasksVM: Synced'   # assert exactly 1
 ./scripts/omi-ctl action dump_tasks limit=5000                 # assert final order persisted (no lost update)
 ```
 Hermetic ratchets: `--filter HardeningSeamActionTests` (flush param wiring) and
@@ -321,10 +323,11 @@ of CHAT-07 is the CHAT-02 suspend/resume path (a SIGSTOP'd agent across a "sleep
 the same stale-subprocess class) — already runtime-proven; see §2e.
 ```bash
 cd desktop/macos
-MARK="C07-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+MARK="C07-$(date +%s)"; echo "$MARK" >> "$OMI_LOG_PATH"
 ./scripts/omi-ctl action simulate_system_wake     # {"posted":"NSWorkspace.didWakeNotification"}
 sleep 2
-awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -E 'System woke from sleep|system_wake'
+awk "/$MARK/{f=1} f" "$OMI_LOG_PATH" | grep -E 'System woke from sleep|system_wake'
 #   assert: "System woke from sleep" (AppState observer ran) AND a RealtimeHub system_wake line —
 #   either "re-warming idle session" or "deferring system_wake ..." (defer while mid-turn). With no
 #   warm session yet, requestSessionRefresh no-ops by design (guard session != nil); warm one first
@@ -495,7 +498,7 @@ After making changes, verify them in the live app:
 | Element not found | Re-snapshot, try scrolling, check if on wrong screen |
 | Click doesn't navigate | Try `press` instead (Settings sidebar = `press`, main sidebar = `click`) |
 | Picker not responding | SwiftUI Picker `.menu` style may not expose as `popupbutton` — look for `button` with value label |
-| App seems frozen | Check `agent-swift status --json`, re-connect, check `/private/tmp/omi-dev.log` |
+| App seems frozen | Check `agent-swift status --json`, re-connect, check `./scripts/omi-ctl log-path` |
 
 ## Guard Conditions
 

@@ -137,6 +137,12 @@ final class RealtimeHubSession: NSObject {
 
   private var isOpen = false
   private var terminated = false
+#if DEBUG
+  // The hermetic local-profile harness intentionally has no network socket. Its
+  // explicit readiness seam is a successful local transport boundary, not a
+  // disconnected production session.
+  private var acceptsTestingTransport = false
+#endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
   private var pendingAudio: [Data] = []
@@ -180,9 +186,13 @@ final class RealtimeHubSession: NSObject {
   // responses); Gemini sends cumulative usageMetadata (we keep the latest).
   private var usageInText = 0
   private var usageInAudio = 0
+  private var usageInImage = 0
   private var usageInCached = 0
   private var usageOutText = 0
   private var usageOutAudio = 0
+  /// Evidence is local-only. This opaque descriptor lets the local log correlate the
+  /// attachment with Gemini's later per-modality usage without logging pixels or app text.
+  private var activeScreenEvidence: RealtimeScreenEvidenceDescriptor?
 
   /// Log prefix that names the provider + model on every line, so it's always
   /// clear which model produced which event.
@@ -372,7 +382,10 @@ final class RealtimeHubSession: NSObject {
   }
 
   func markReadyForTesting() {
-    q.async { [weak self] in self?.markReady() }
+    q.async { [weak self] in
+      self?.acceptsTestingTransport = true
+      self?.markReady()
+    }
   }
 
   func seedOpenAIIdentityMapsForTesting(
@@ -608,7 +621,11 @@ final class RealtimeHubSession: NSObject {
         self.openAIResponseIdentities.removeAll()
         self.openAIPendingInputIdentities.removeAll()
         self.openAIInputItemIdentities.removeAll()
-        self.send(json: ["type": "input_audio_buffer.clear"])
+        // A pre-connect cancellation has no provider buffer to clear. Sending on
+        // the absent transport would terminalize a session that may still connect.
+        if self.isOpen {
+          self.send(json: ["type": "input_audio_buffer.clear"])
+        }
       case .gemini:
         self.pendingGeminiToolCallIds.removeAll()
         if self.activityOpen, self.isOpen {
@@ -626,38 +643,90 @@ final class RealtimeHubSession: NSObject {
   /// may answer from older context before it processes the frame. Gemini 3 supports inline
   /// FunctionResponse parts; attach the fresh pixels there so the paused screenshot call resumes
   /// only with the exact image it captured.
-  func sendToolResult(callId: String, name: String, output: String, image: Data? = nil) {
+  func sendToolResult(
+    callId: String,
+    name: String,
+    output: String,
+    screenEvidence: RealtimeScreenEvidenceAttachment? = nil,
+    onWireEnqueued: ((Bool) -> Void)? = nil
+  ) {
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
       case .openai:
-        if let image {
-          let b64 = image.base64EncodedString()
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+          let b64 = screenEvidence.jpeg.base64EncodedString()
+          log(
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(b64.utf8.count)")
           self.send(json: [
             "type": "conversation.item.create",
             "item": [
               "type": "message", "role": "user",
               "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
             ],
-          ])
-        }
-        self.pendingOpenAIToolCallIds.remove(callId)
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": ["type": "function_call_output", "call_id": callId, "output": output],
-        ])
-        if self.pendingOpenAIToolCallIds.isEmpty {
-          self.requestResponse(audio: true)
+          ]) { [weak self] imageError in
+            guard let self, imageError == nil else {
+              onWireEnqueued?(false)
+              return
+            }
+            self.enqueueOpenAIToolResult(
+              callId: callId,
+              output: output,
+              onWireEnqueued: onWireEnqueued)
+          }
         } else {
-          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+          self.enqueueOpenAIToolResult(
+            callId: callId,
+            output: output,
+            onWireEnqueued: onWireEnqueued)
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
-        self.send(json: Self.geminiToolResponse(
+        if let screenEvidence {
+          self.activeScreenEvidence = screenEvidence.descriptor
+        }
+        let wire = Self.geminiToolResponse(
           callId: callId,
           name: name,
           output: output,
-          image: image))
+          screenEvidence: screenEvidence)
+        if let screenEvidence {
+          let serializedBytes = (try? JSONSerialization.data(withJSONObject: wire))?.count ?? 0
+          log(
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
+              + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(serializedBytes)")
+        }
+        self.send(json: wire) { error in
+          onWireEnqueued?(error == nil)
+        }
+      }
+    }
+  }
+
+  /// Runs on the session queue after an optional image write has completed. The completion is a
+  /// local transport fact only: the websocket accepted both exact function-response writes; it
+  /// is not a provider acknowledgement or proof that Gemini/OpenAI has processed the image.
+  private func enqueueOpenAIToolResult(
+    callId: String,
+    output: String,
+    onWireEnqueued: ((Bool) -> Void)?
+  ) {
+    pendingOpenAIToolCallIds.remove(callId)
+    send(json: [
+      "type": "conversation.item.create",
+      "item": ["type": "function_call_output", "call_id": callId, "output": output],
+    ]) { [weak self] error in
+      guard let self, error == nil else {
+        onWireEnqueued?(false)
+        return
+      }
+      onWireEnqueued?(true)
+      if self.pendingOpenAIToolCallIds.isEmpty {
+        self.requestResponse(audio: true)
+      } else {
+        log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
       }
     }
   }
@@ -666,23 +735,24 @@ final class RealtimeHubSession: NSObject {
     callId: String,
     name: String,
     output: String,
-    image: Data?
+    screenEvidence: RealtimeScreenEvidenceAttachment?
   ) -> [String: Any] {
     var functionResponse: [String: Any] = [
       "id": callId,
       "name": name,
       "response": ["result": output],
     ]
-    if let image {
+    if let screenEvidence {
       let displayName = "live-screenshot.jpg"
       functionResponse["response"] = [
         "result": output,
         "image": ["$ref": displayName],
+        "evidence_id": screenEvidence.descriptor.evidenceID,
       ]
       functionResponse["parts"] = [[
         "inlineData": [
           "mimeType": "image/jpeg",
-          "data": image.base64EncodedString(),
+          "data": screenEvidence.jpeg.base64EncodedString(),
           "displayName": displayName,
         ]
       ]]
@@ -982,6 +1052,7 @@ final class RealtimeHubSession: NSObject {
   private func resetTurnUsage() {
     usageInText = 0
     usageInAudio = 0
+    usageInImage = 0
     usageInCached = 0
     usageOutText = 0
     usageOutAudio = 0
@@ -996,6 +1067,7 @@ final class RealtimeHubSession: NSObject {
     let outD = usage["output_token_details"] as? [String: Any]
     usageInText += n(inD, "text_tokens")
     usageInAudio += n(inD, "audio_tokens")
+    usageInImage += n(inD, "image_tokens")
     usageInCached += n(inD, "cached_tokens")
     usageOutText += n(outD, "text_tokens")
     usageOutAudio += n(outD, "audio_tokens")
@@ -1003,22 +1075,28 @@ final class RealtimeHubSession: NSObject {
 
   /// Gemini: usageMetadata is cumulative for the turn → keep the latest (replace, not sum).
   private func accumulateGeminiUsage(_ um: [String: Any]) {
-    func split(_ arr: Any?) -> (text: Int, audio: Int) {
-      var t = 0, a = 0
+    func split(_ arr: Any?) -> (text: Int, audio: Int, image: Int) {
+      var t = 0, a = 0, i = 0
       for d in (arr as? [[String: Any]]) ?? [] {
         let c = (d["tokenCount"] as? Int) ?? (d["tokenCount"] as? NSNumber)?.intValue ?? 0
-        if (d["modality"] as? String)?.uppercased() == "AUDIO" { a += c } else { t += c }
+        switch (d["modality"] as? String)?.uppercased() {
+        case "AUDIO": a += c
+        case "IMAGE": i += c
+        default: t += c
+        }
       }
-      return (t, a)
+      return (t, a, i)
     }
     let pin = split(um["promptTokensDetails"])
     let pout = split(um["responseTokensDetails"])
-    if pin.text == 0 && pin.audio == 0 {
+    if pin.text == 0 && pin.audio == 0 && pin.image == 0 {
       usageInText = (um["promptTokenCount"] as? Int) ?? 0
       usageInAudio = 0
+      usageInImage = 0
     } else {
       usageInText = pin.text
       usageInAudio = pin.audio
+      usageInImage = pin.image
     }
     if pout.text == 0 && pout.audio == 0 {
       usageOutText = (um["candidatesTokenCount"] as? Int) ?? (um["responseTokenCount"] as? Int) ?? 0
@@ -1034,6 +1112,12 @@ final class RealtimeHubSession: NSObject {
   /// Resets first so a second finishTurn (barge-in edge) can't double-report.
   private func reportUsageIfNeeded() {
     let it = usageInText, ia = usageInAudio, ic = usageInCached, ot = usageOutText, oa = usageOutAudio
+    if let evidence = activeScreenEvidence {
+      log(
+        "\(tag): ptt_screen_evidence stage=provider_turn_done evidence=\(evidence.opaqueID) "
+          + "image_tokens=\(usageInImage)")
+      activeScreenEvidence = nil
+    }
     resetTurnUsage()
     guard auth.isEphemeral, it + ia + ic + ot + oa > 0 else { return }
     let providerName = provider == .gemini ? "gemini" : "openai"
@@ -1270,16 +1354,61 @@ final class RealtimeHubSession: NSObject {
 
   // MARK: - Send (on q)
 
-  private func send(json: [String: Any]) {
+  private func send(json: [String: Any], completion: ((Error?) -> Void)? = nil) {
     guard let data = try? JSONSerialization.data(withJSONObject: json),
       let text = String(data: data, encoding: .utf8)
-    else { return }
-    if usesRawWS {
-      rawWS?.sendText(text)
+    else {
+      failSend(RealtimeHubSessionSendError.encodingFailed, completion: completion)
       return
     }
-    task?.send(.string(text)) { [weak self] error in
-      if let error { self?.q.async { self?.notifyError(error.localizedDescription) } }
+#if DEBUG
+    if acceptsTestingTransport {
+      completion?(nil)
+      return
+    }
+#endif
+    if usesRawWS {
+      guard let rawWS else {
+        failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+        return
+      }
+      rawWS.sendText(text) { [weak self] error in
+        self?.q.async {
+          if let error { self?.notifyError(error.localizedDescription) }
+          completion?(error)
+        }
+      }
+      return
+    }
+    guard let task else {
+      failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+      return
+    }
+    task.send(.string(text)) { [weak self] error in
+      self?.q.async {
+        if let error { self?.notifyError(error.localizedDescription) }
+        completion?(error)
+      }
+    }
+  }
+
+  /// Every local send failure is a terminal session failure, including synchronous no-transport
+  /// and encoding paths. A screen-evidence receipt must never wait for a provider deadline after
+  /// the session has already proved it cannot enqueue the exact wire.
+  private func failSend(_ error: Error, completion: ((Error?) -> Void)?) {
+    notifyError(error.localizedDescription)
+    completion?(error)
+  }
+}
+
+private enum RealtimeHubSessionSendError: LocalizedError {
+  case encodingFailed
+  case notConnected
+
+  var errorDescription: String? {
+    switch self {
+    case .encodingFailed: "Could not encode realtime transport data."
+    case .notConnected: "Realtime transport is not connected."
     }
   }
 }

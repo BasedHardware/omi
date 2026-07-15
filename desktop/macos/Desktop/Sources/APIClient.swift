@@ -2434,10 +2434,10 @@ extension APIClient {
   }
 }
 
-struct CreateMemoryResponse: Codable {
-  let id: String
-  let message: String?
-}
+/// The create endpoint returns the stored memory, including its authoritative
+/// canonical lifecycle. Keep the historical name so callers do not mistake a
+/// successful response for an ID-only receipt.
+typealias CreateMemoryResponse = ServerMemory
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
 /// in `backend/models/memories.py`. The server honors `category`, so batch

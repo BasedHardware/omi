@@ -153,6 +153,7 @@ final class RealtimeHubTestHarness: NSObject, RealtimeHubSessionDelegate {
     case .spawnAgent: stub = "Started a background agent."
     case .setDesktopAttentionOverride: stub = "Attention override applied."
     case .screenshot: stub = "Screen captured."
+    case .reportScreenObservation: stub = "Screen observation accepted."
     case .pointClick: stub = "Clicked."
     case .none: stub = "ok"
     }

@@ -411,6 +411,8 @@ class PushToTalkManager: ObservableObject {
         log("PushToTalkManager: live finalization timeout — sending transcript")
         sendTranscript(turnID: turnID)
       }
+    case .screenEvidenceProtocolExpired(let turnID, let token):
+      RealtimeHubController.shared.expireScreenEvidenceProtocol(turnID: turnID, token: token)
     case .finalizeJournal(let turnID, let identity):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       if Self.isHubRoute(voiceTurnCoordinator.activeTurn?.route ?? .undecided) {
@@ -422,7 +424,7 @@ class PushToTalkManager: ObservableObject {
       }
     case .fallbackToTranscription(let turnID, let reason):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
-      discloseBackupTranscriptionFallback(reason: reason)
+      recordBackupTranscriptionFallback(reason: reason)
       resolveRealtimeHubWarmWait(ready: false)
     case .stopPlayback(let lease):
       if lease.lane == .nativeRealtime {
@@ -643,7 +645,7 @@ class PushToTalkManager: ObservableObject {
       mode: mode,
       hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
-    let preOverlayImage = ScreenCaptureManager.captureScreenImage()
+    let preOverlayImage = captureTurnScreenEvidence()
     updateBarState()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
@@ -688,7 +690,7 @@ class PushToTalkManager: ObservableObject {
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
       currentContextSnapshot = nil
-      let preOverlayImage = ScreenCaptureManager.captureScreenImage()
+      let preOverlayImage = captureTurnScreenEvidence()
       captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     }
 
@@ -1464,6 +1466,16 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Captures one in-memory visual evidence object before Omi expands its PTT overlay.
+  /// The realtime hub may later deliver these exact pixels only through the authorized
+  /// screenshot tool; it must never take a second, pointer-selected screen capture.
+  private func captureTurnScreenEvidence() -> CGImage? {
+    guard let turnID = currentVoiceTurnID else { return nil }
+    let evidence = RealtimeScreenEvidenceCapture.capture(for: turnID)
+    RealtimeHubController.shared.installScreenEvidence(evidence)
+    return evidence.preOverlayImage
+  }
+
   private func startAudioTranscription() {
     if automationCaptureBypass, let turnID = currentVoiceTurnID {
       micCaptureGeneration &+= 1
@@ -1598,11 +1610,8 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  /// One-line UX + shared fallback telemetry when hub warm/admission cascades.
-  private func discloseBackupTranscriptionFallback(reason: VoiceTurnTerminalReason) {
-    guard let turnID = currentVoiceTurnID else { return }
-    voiceTurnCoordinator.send(
-      .hintChanged(turnID: turnID, text: VoiceTurnUICopy.backupTranscription))
+  /// Preserve fallback observability without adding progress copy to PTT chrome.
+  private func recordBackupTranscriptionFallback(reason: VoiceTurnTerminalReason) {
     let toLane = phase == .finalizing ? "batch_stt" : "omni"
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "ptt_cascade",
@@ -1611,7 +1620,7 @@ class PushToTalkManager: ObservableObject {
       reason: "timeout",
       outcome: .degraded,
       extra: [
-        "user_visible": true,
+        "user_visible": false,
         "terminal_reason": reason.rawValue,
       ])
   }
@@ -1669,7 +1678,7 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.lock()
       batchAudioBuffer = turnAudio
       batchAudioLock.unlock()
-      discloseBackupTranscriptionFallback(reason: .hubWarmTimeout)
+      recordBackupTranscriptionFallback(reason: .hubWarmTimeout)
       transcribeBufferedWarmWaitAudio()
       return
     }
