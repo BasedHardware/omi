@@ -54,6 +54,13 @@ class DevelopmentWifPilotFixture(unittest.TestCase):
         self.assertIn("tofu apply", "\n".join(errors))
         self.assertIn("credentials_json", "\n".join(errors))
 
+    def test_validation_workflow_rejects_real_or_extra_credentials(self) -> None:
+        source = CHECKER.read(CHECKER.VALIDATION_WORKFLOW)
+        errors = CHECKER.check_validation_workflow(source.replace("offline-validation-only", "not-a-sentinel"))
+        self.assertIn("offline-validation-only", "\n".join(errors))
+        errors = CHECKER.check_validation_workflow(source + "\nGOOGLE_APPLICATION_CREDENTIALS: ${{ secrets.GCP_CREDENTIALS }}\n")
+        self.assertIn("GOOGLE_APPLICATION_CREDENTIALS", "\n".join(errors))
+
 
 if __name__ == "__main__":
     unittest.main()
