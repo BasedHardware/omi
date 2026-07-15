@@ -94,6 +94,8 @@ import {
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { registerTaskHandlers } from './ipc/tasks'
+import { setTaskDeletionListener } from './tasks/taskSyncEngine'
+import { removeFromIndex as removeTaskFromEmbeddingIndex } from './tasks/taskEmbeddingService'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { registerFocusAssistant } from './assistants/focus/register'
@@ -820,9 +822,14 @@ app.whenReady().then(async () => {
   registerAiUserProfileHandlers()
   // Track 3 (task sync engine): local-first Tasks list. Cheap handler registration;
   // the engine reads the shared backend session (relayed by the renderer) and syncs
-  // on demand when a list/reconcile channel is invoked. The embedding-index evictor
-  // is wired to the deletion listener at the embedding-service integration step.
+  // on demand when a list/reconcile channel is invoked.
   registerTaskHandlers()
+  // FIX (ii): keep the in-memory task-embedding index consistent — every hard-delete
+  // path in the sync engine (deleteTask + the reconcile sweep) hands the storage-
+  // returned ids here so their vectors are evicted. DI seam, no hard import either way.
+  setTaskDeletionListener((deleted) => {
+    for (const { source, id } of deleted) removeTaskFromEmbeddingIndex(source, id)
+  })
   // Track 3 (focus halo): the click-through ring the Focus assistant fires around
   // the active window (red = distracted, green = refocused). Handler registration
   // only; the window itself is created at ready-to-show below.
