@@ -59,9 +59,9 @@ export function HubAskBar(props: {
       }}
     >
       <input
-        // eslint-disable-next-line jsx-a11y/no-autofocus -- not a page-load autofocus:
-        // this only fires when the bar re-mounts inside the chat panel, restoring the
-        // focus the user already had. In the resting hub it is false.
+        // Not a page-load autofocus: this fires only when the bar re-mounts inside the
+        // chat panel, restoring the focus the user already had. In the resting hub it is
+        // false. No jsx-a11y plugin is configured here, so autoFocus needs no disable.
         autoFocus={autoFocus}
         value={value}
         onChange={(e) => onChange(e.target.value)}
