@@ -60,7 +60,11 @@ function sentinelFile(): string {
   return join(app.getPath('userData'), 'clean-exit-sentinel.json')
 }
 
-function readSentinelFile(): Sentinel | null {
+// Exported so a test can feed real garbage / truncated JSON / valid content
+// through the REAL parse+degrade path against a real file (not the injected-deps
+// mock) — the "corrupt → null → no report" safety is the recurring lesson this
+// program keeps relearning, so it's asserted by running I/O, not just reasoning.
+export function readSentinelFile(): Sentinel | null {
   try {
     const raw = JSON.parse(readFileSync(sentinelFile(), 'utf-8')) as Partial<Sentinel>
     return typeof raw?.cleanExit === 'boolean' ? { cleanExit: raw.cleanExit } : null
@@ -71,7 +75,7 @@ function readSentinelFile(): Sentinel | null {
   }
 }
 
-function writeSentinelFile(s: Sentinel): void {
+export function writeSentinelFile(s: Sentinel): void {
   try {
     writeFileSync(sentinelFile(), JSON.stringify(s), 'utf-8')
   } catch {

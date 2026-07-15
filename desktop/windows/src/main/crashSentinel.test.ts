@@ -1,18 +1,31 @@
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, afterAll, beforeEach } from 'vitest'
+import { mkdtempSync, writeFileSync, rmSync } from 'fs'
+import { tmpdir } from 'os'
+import { join } from 'path'
 
-// The pure functions under test take injected deps and touch neither electron nor
-// Sentry — but the module's file-backed wiring imports both at the top. Stub them
-// so importing the module doesn't pull the native electron binary / Sentry SDK
-// (matching appSettings.test.ts's local electron mock).
-vi.mock('electron', () => ({ app: { getPath: (): string => '/tmp' } }))
+// Point the module's userData at a REAL throwaway temp dir so the file-backed
+// read/write path (readSentinelFile / writeSentinelFile) exercises real I/O — the
+// "corrupt/partial → null → no report" degradation must be proven by feeding real
+// garbage through the real parse, not asserted in reasoning (this program's
+// recurring SQL-test-drift lesson). getPath dereferences tmpDir lazily (only when
+// the tests call it), so referencing it in the hoisted mock is safe — same pattern
+// as appSettings.test.ts. Sentry is stubbed so importing the module doesn't pull
+// the native SDK.
+const tmpDir = mkdtempSync(join(tmpdir(), 'omi-crashsentinel-'))
+vi.mock('electron', () => ({ app: { getPath: (): string => tmpDir } }))
 vi.mock('./sentry', () => ({ captureMessage: (): void => {} }))
 
 import {
   previousSessionCrashed,
   runCrashDetection,
+  readSentinelFile,
+  writeSentinelFile,
   type Sentinel,
   type SentinelDeps
 } from './crashSentinel'
+
+const sentinelPath = join(tmpDir, 'clean-exit-sentinel.json')
+afterAll(() => rmSync(tmpDir, { recursive: true, force: true }))
 
 describe('previousSessionCrashed', () => {
   it('treats a missing sentinel (first launch / wiped profile) as NOT a crash', () => {
@@ -90,5 +103,66 @@ describe('runCrashDetection', () => {
     expect(runCrashDetection(deps)).toBe(false)
     expect(report).toHaveBeenCalledTimes(1)
     expect(stored()).toEqual({ cleanExit: false })
+  })
+})
+
+// Runs the REAL readSentinelFile / writeSentinelFile against a REAL file in the
+// temp userData dir — the degradation layer the injected-deps tests above can't
+// cover. Corrupt/partial JSON must degrade to null (no crash report), and only a
+// genuinely dirty flag written to disk must be detected.
+describe('readSentinelFile / writeSentinelFile — real file I/O', () => {
+  beforeEach(() => {
+    rmSync(sentinelPath, { force: true })
+  })
+
+  it('missing file → null (no report)', () => {
+    expect(readSentinelFile()).toBeNull()
+  })
+
+  it('literal garbage → null (parse throws → degrades safe, never a false crash)', () => {
+    writeFileSync(sentinelPath, 'this is not json at all {{{', 'utf-8')
+    expect(readSentinelFile()).toBeNull()
+  })
+
+  it('truncated/partial JSON → null', () => {
+    writeFileSync(sentinelPath, '{"cleanExit":', 'utf-8')
+    expect(readSentinelFile()).toBeNull()
+  })
+
+  it('valid JSON without a boolean cleanExit → null (shape mismatch, not a crash)', () => {
+    writeFileSync(sentinelPath, JSON.stringify({ cleanExit: 'nope' }), 'utf-8')
+    expect(readSentinelFile()).toBeNull()
+    writeFileSync(sentinelPath, JSON.stringify({ other: 1 }), 'utf-8')
+    expect(readSentinelFile()).toBeNull()
+  })
+
+  it('valid {cleanExit:true} → read as clean → not detected as a crash', () => {
+    writeFileSync(sentinelPath, JSON.stringify({ cleanExit: true }), 'utf-8')
+    expect(readSentinelFile()).toEqual({ cleanExit: true })
+    const report = vi.fn()
+    expect(runCrashDetection({ read: readSentinelFile, write: writeSentinelFile, report })).toBe(
+      false
+    )
+    expect(report).not.toHaveBeenCalled()
+  })
+
+  it('valid {cleanExit:false} on disk → detected exactly once, and boot rewrites dirty', () => {
+    writeFileSync(sentinelPath, JSON.stringify({ cleanExit: false }), 'utf-8')
+    expect(readSentinelFile()).toEqual({ cleanExit: false })
+    const report = vi.fn()
+    // Real read + real write + spy report: exercises the on-disk detection outcome.
+    expect(runCrashDetection({ read: readSentinelFile, write: writeSentinelFile, report })).toBe(
+      true
+    )
+    expect(report).toHaveBeenCalledTimes(1)
+    // The boot's dirty write persisted through the real writeSentinelFile.
+    expect(readSentinelFile()).toEqual({ cleanExit: false })
+  })
+
+  it('writeSentinelFile → readSentinelFile round-trips clean through real files', () => {
+    writeSentinelFile({ cleanExit: true })
+    expect(readSentinelFile()).toEqual({ cleanExit: true })
+    writeSentinelFile({ cleanExit: false })
+    expect(readSentinelFile()).toEqual({ cleanExit: false })
   })
 })
