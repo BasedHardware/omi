@@ -10,9 +10,11 @@ import { beginClaudeSignIn } from '../lib/claudeSignIn'
 import type {
   AutomationPlan,
   CodingAgentEvent,
+  MainChatEvent,
   ChatCitation,
   ChatAttachment
 } from '../../../shared/types'
+import { saveDesktopMessage } from '../lib/desktopChatMessages'
 import {
   awaitUploadsSettled,
   clearAttachments,
@@ -142,6 +144,16 @@ export function useChat(): UseChat {
   // Coding-agent task currently streaming into this thread, so reset (the
   // overlay's Esc) can actually stop the agent subprocess, not just the UI.
   const activeAgentTaskRef = useRef<string | null>(null)
+  // Which chat engine this hook drives: 'legacy_sse' (the /v2/messages streaming
+  // path, default) or 'pi_mono' (kernel-routed managed-cloud). Read once from main
+  // appSettings at mount (single source of truth); a mid-session flip won't apply
+  // until remount, which is intentional — engines are not swapped under an active
+  // thread. Defaults to the safe legacy path until (and if) the read resolves.
+  const engineRef = useRef<'legacy_sse' | 'pi_mono'>('legacy_sse')
+  // The in-flight kernel run id (pi_mono engine), captured from its `accepted`
+  // event so reset()/dismiss can cancel the managed-cloud attempt on the server,
+  // not just tear down the on-screen thread (parallels activeAgentTaskRef).
+  const activeKernelRunRef = useRef<string | null>(null)
   // Generation counter + abort handle for the in-flight chat stream. Every send
   // opens a new generation; reset()/dismiss bumps the counter AND aborts the
   // fetch/reader, so a dismissed reply that is still draining can neither write
@@ -193,6 +205,26 @@ export function useChat(): UseChat {
       cancelled = true
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  // Read the chat engine once at mount into engineRef (main appSettings is the
+  // single source of truth). Guarded on the getter existing so the hook stays inert
+  // where the bridge isn't present (older preload / tests) — leaving the safe
+  // 'legacy_sse' default, which is what keeps the flag-OFF path byte-identical.
+  useEffect(() => {
+    const getEngine = window.omi.chatGetEngine
+    if (typeof getEngine !== 'function') return
+    let cancelled = false
+    void getEngine()
+      .then((engine) => {
+        if (!cancelled && engine) engineRef.current = engine
+      })
+      .catch(() => {
+        /* keep the legacy_sse default */
+      })
+    return () => {
+      cancelled = true
+    }
   }, [])
 
   // `stillValid`, when provided, is re-checked AFTER the async merge-read and
@@ -440,6 +472,153 @@ export function useChat(): UseChat {
     return true
   }
 
+  // Default chat routed through the agent kernel → managed-cloud pi-mono adapter
+  // (the 'pi_mono' engine). A SIBLING of tryAgentTask with the SAME C5 generation
+  // guards (myGen/isCurrent; every state write, persist, saveMessage, and
+  // setBusy(false) gated on isCurrent()); it consumes the mainChat event stream for
+  // live deltas and drives the terminal outcome off the awaited mainChatSend result
+  // (as tryAgentTask does off codingAgentRun). Because the kernel path — unlike
+  // /v2/messages — does NOT persist to the shared/mobile thread as a side-effect,
+  // it makes the explicit v2/desktop/messages saveMessage calls here (INV-CHAT-1):
+  // the RAW user text at turn start and the assistant text on completion.
+  const tryKernelChat = async (
+    baseHistory: ChatMsg[],
+    userMsg: ChatMsg,
+    fromVoice: boolean
+  ): Promise<void> => {
+    // send() bumped genRef just before calling us. reset()/dismiss bumps it again +
+    // cancels the run, so isCurrent() goes false and every write below is dropped.
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+
+    const requestId = crypto.randomUUID()
+    const assistantId = crypto.randomUUID()
+    let myRunId: string | null = null
+    let assistantText = ''
+
+    // INV-CHAT-1 site 1: persist the RAW user message to the shared thread at turn
+    // start (never the context-prepended prompt). Fire-and-forget; session_id is
+    // OMITTED (Windows default typed chat is always the default shared chat).
+    void saveDesktopMessage({
+      text: userMsg.content,
+      sender: 'human',
+      clientMessageId: userMsg.id,
+      messageSource: 'desktop_chat'
+    })
+
+    const writeAssistant = (content: string): void => {
+      if (!isCurrent()) return
+      setHistory((h) => {
+        const next = [...h]
+        const idx = next.findIndex((m) => m.id === assistantId)
+        if (idx >= 0) next[idx] = { id: assistantId, role: 'assistant', content }
+        return next
+      })
+    }
+    setHistory((h) => [...h, { id: assistantId, role: 'assistant', content: '' }])
+    void persistChat(
+      [...baseHistory, userMsg, { id: assistantId, role: 'assistant', content: '' }],
+      isCurrent
+    )
+
+    let lastPersist = Date.now()
+    const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
+      if (event.requestId !== requestId) return
+      // A dismissed turn (reset bumped the generation) drops all further renders and
+      // persists — events keep arriving until mainChatCancel lands.
+      if (!isCurrent()) return
+      if (event.type === 'accepted') {
+        myRunId = event.runId
+        activeKernelRunRef.current = event.runId
+      } else if (event.type === 'text_delta') {
+        assistantText += event.text
+        writeAssistant(assistantText)
+      }
+      // status / thinking_delta / tool_* / completed / run_finished are covered by
+      // the authoritative awaited mainChatSend result below (terminal + final text),
+      // exactly as tryAgentTask relies on codingAgentRun's return, not the stream.
+      if (Date.now() - lastPersist > 1500) {
+        lastPersist = Date.now()
+        void persistChat(
+          [...baseHistory, userMsg, { id: assistantId, role: 'assistant', content: assistantText }],
+          isCurrent
+        )
+      }
+    })
+
+    let errored = false
+    let errorLine = ''
+    try {
+      // Same hybrid context pre-step as the /v2/messages path (:578-591): prepend
+      // screen OCR + local KG context to the text SENT to the model, but persist
+      // only the raw user text. Plain string concat — never the context packet (§6).
+      const [screenContext, localContext] = await Promise.all([
+        readCurrentScreen(),
+        gatherLocalContext(userMsg.content)
+      ])
+      const contextParts = [screenContext, localContext].filter(Boolean)
+      const textToSend = contextParts.length
+        ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
+        : userMsg.content
+
+      const result = await window.omi.mainChatSend({
+        requestId,
+        prompt: textToSend,
+        cleanUserText: userMsg.content,
+        chatId: chatIdRef.current ?? 'default'
+      })
+      if (result.ok) {
+        if (result.text) assistantText = result.text
+      } else {
+        errored = true
+        errorLine = `Error: ${result.error ?? 'the chat engine could not answer.'}`
+      }
+    } catch (e) {
+      errored = true
+      errorLine = `Error: ${(e as Error).message}`
+    } finally {
+      // Cleanup that must ALWAYS run (even for a dismissed turn): release the run
+      // handle if it's still ours, and drop the listener.
+      if (activeKernelRunRef.current === myRunId) activeKernelRunRef.current = null
+      unsubscribe()
+      // State writes only for the still-current generation (a dismissed turn was
+      // already torn down by reset(): busy unlatched, history cleared, run cancelled).
+      if (isCurrent()) {
+        const hasRealText = assistantText.trim().length > 0
+        // Keep any partial streamed text on error (Mac keeps the partial); only show
+        // an error/no-reply line when nothing real arrived.
+        const displayContent = hasRealText
+          ? assistantText
+          : errored
+            ? errorLine
+            : "Omi didn't send a reply. Try again."
+        writeAssistant(displayContent)
+        void persistChat(
+          [
+            ...baseHistory,
+            userMsg,
+            { id: assistantId, role: 'assistant', content: displayContent }
+          ],
+          isCurrent
+        )
+        // INV-CHAT-1 site 2: persist the assistant turn to the shared thread — the
+        // full reply on success, the partial on a bridge error (Mac sites 4 + 5).
+        // Skip when there is no real assistant text so an error line never lands in
+        // the shared/mobile thread.
+        if (hasRealText) {
+          void saveDesktopMessage({
+            text: assistantText,
+            sender: 'ai',
+            clientMessageId: assistantId,
+            messageSource: 'desktop_chat'
+          })
+        }
+        if (!errored && hasRealText) maybeSpeak(assistantText, fromVoice)
+        setBusy(false)
+      }
+    }
+  }
+
   const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     // A send is allowed with text OR with staged attachments (Mac parity —
@@ -498,6 +677,16 @@ export function useChat(): UseChat {
     // Delegated coding-agent tasks take precedence over the UI-automation
     // planner and normal chat; tryAgentTask owns the latch when it handles one.
     if (await tryAgentTask(text, baseHistory, userMsg)) return
+
+    // pi_mono engine (DARK by default; the flag ships 'legacy_sse'): route default
+    // chat through the kernel instead of the legacy /v2/messages block below. A
+    // single early return — with the flag OFF this whole branch is skipped and the
+    // legacy path runs byte-identically. Attachment sends fall through to legacy:
+    // the kernel prompt has no PromptBlock/file_ids equivalent yet (§6 out of scope),
+    // so a message carrying attachments keeps using /v2/messages.
+    if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
+      return tryKernelChat(baseHistory, userMsg, fromVoice)
+    }
 
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
@@ -750,6 +939,12 @@ export function useChat(): UseChat {
     if (activeAgentTaskRef.current) {
       void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
       activeAgentTaskRef.current = null
+    }
+    // Esc while a pi_mono kernel run is streaming cancels the managed-cloud attempt
+    // on the server (parallels the agent-task cancel above), not just the UI.
+    if (activeKernelRunRef.current) {
+      void window.omi.mainChatCancel(activeKernelRunRef.current).catch(() => {})
+      activeKernelRunRef.current = null
     }
     setHistory([])
     setBusy(false)
