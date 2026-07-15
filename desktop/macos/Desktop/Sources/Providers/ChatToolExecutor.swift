@@ -688,9 +688,26 @@ class ChatToolExecutor {
     _ args: [String: Any],
     expectedOwnerID: String?
   ) async -> String {
+    return await executeSQL(args, dbQueue: nil, expectedOwnerID: expectedOwnerID)
+  }
+
+  static func executeSQL(
+    _ args: [String: Any],
+    dbQueue: DatabasePool?,
+    expectedOwnerID: String?
+  ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     guard let query = args["query"] as? String, !query.isEmpty else {
       return "Error: query is required"
+    }
+    let parameters: [String]
+    if let providedParameters = args["parameters"] {
+      guard let values = providedParameters as? [String] else {
+        return "Error: parameters must be an array of strings"
+      }
+      parameters = values
+    } else {
+      parameters = []
     }
 
     let trimmed = query.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -727,23 +744,29 @@ class ChatToolExecutor {
       return "Error: \(isUpdate ? "UPDATE" : "DELETE") without WHERE clause is not allowed"
     }
 
-    // Get database queue
-    guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
+    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
+    let databaseQueue: DatabasePool
+    if let dbQueue {
+      databaseQueue = dbQueue
+    } else if let dbQueue = await RewindDatabase.shared.getDatabaseQueue() {
+      databaseQueue = dbQueue
+    } else {
       return "Error: database not available"
     }
-    guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
     do {
       if isSelect {
         return try await executeSelectQuery(
           trimmed,
           upper: upper,
-          dbQueue: dbQueue,
+          parameters: parameters,
+          dbQueue: databaseQueue,
           expectedOwnerID: expectedOwnerID)
       } else if isInsert || isUpdate || isDelete {
         return try await executeWriteQuery(
           trimmed,
-          dbQueue: dbQueue,
+          parameters: parameters,
+          dbQueue: databaseQueue,
           expectedOwnerID: expectedOwnerID)
       } else {
         return "Error: only SELECT, INSERT, UPDATE, DELETE statements are allowed"
@@ -842,6 +865,7 @@ class ChatToolExecutor {
   private static func executeSelectQuery(
     _ query: String,
     upper: String,
+    parameters: [String],
     dbQueue: DatabasePool,
     expectedOwnerID: String?
   )
@@ -860,7 +884,7 @@ class ChatToolExecutor {
 
     let query = finalQuery
     let rows = try await dbQueue.read { db in
-      try Row.fetchAll(db, sql: query)
+      try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
@@ -909,6 +933,7 @@ class ChatToolExecutor {
   /// Execute a write (INSERT/UPDATE/DELETE) query
   static func executeWriteQuery(
     _ query: String,
+    parameters: [String] = [],
     dbQueue: DatabasePool,
     expectedOwnerID: String?,
     ownerIsCurrent: @escaping @Sendable (String?) -> Bool = { isExpectedOwnerCurrent($0) }
@@ -924,7 +949,7 @@ class ChatToolExecutor {
       changes = try await authorization.withCommitLease {
         try await dbQueue.write { db -> Int in
           try authorization.require()
-          try db.execute(sql: query)
+          try db.execute(sql: query, arguments: StatementArguments(parameters))
           try authorization.require()
           return db.changesCount
         }

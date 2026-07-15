@@ -10,6 +10,13 @@ enum OmiToolManifest {
         "query": [
           "type": "string",
           "description": "SQL query to execute",
+        ],
+        "parameters": [
+          "type": "array",
+          "description": "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+          "items": [
+            "type": "string",
+          ],
         ]
       ],
       required: [

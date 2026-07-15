@@ -141,6 +141,19 @@ describe("omi tool manifest", () => {
     );
   });
 
+  it("advertises optional positional parameters for execute_sql", () => {
+    const executeSql = mcpToolDefinitionsForAdapter("omi-tools-stdio").find(
+      (tool) => tool.name === "execute_sql",
+    );
+
+    expect(executeSql?.inputSchema.properties.parameters).toEqual({
+      type: "array",
+      items: { type: "string" },
+      description: "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+    });
+    expect(executeSql?.inputSchema.required).toEqual(["query"]);
+  });
+
   it("keeps schemas expressive enough for nested onboarding tools", () => {
     const saveKnowledgeGraph = toolsForAdapter("omi-tools-stdio", { onboarding: true }).find(
       (tool) => tool.name === "save_knowledge_graph",

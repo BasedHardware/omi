@@ -148,6 +148,42 @@ final class ChatToolExecutorSQLTests: XCTestCase {
         )
     }
 
+    func testExecuteSQLBindsApostropheDateAndLikeParameters() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("execute-sql-parameters-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+        try await pool.write { db in
+            try db.execute(sql: "CREATE TABLE probe (person TEXT NOT NULL, recorded_at TEXT NOT NULL, note TEXT NOT NULL)")
+            try db.execute(
+                sql: "INSERT INTO probe (person, recorded_at, note) VALUES (?, ?, ?)",
+                arguments: StatementArguments(["O'Connor", "2026-07-15", "review 100%_done"])
+            )
+        }
+
+        let apostropheResult = await ChatToolExecutor.executeSQL(
+            ["query": "SELECT person FROM probe WHERE person = ?", "parameters": ["O'Connor"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        let dateResult = await ChatToolExecutor.executeSQL(
+            ["query": "SELECT recorded_at FROM probe WHERE recorded_at = ?", "parameters": ["2026-07-15"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        let likeResult = await ChatToolExecutor.executeSQL(
+            ["query": "SELECT note FROM probe WHERE note LIKE ?", "parameters": ["%100%_done"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+
+        XCTAssertTrue(apostropheResult.contains("O'Connor"), apostropheResult)
+        XCTAssertTrue(dateResult.contains("2026-07-15"), dateResult)
+        XCTAssertTrue(likeResult.contains("review 100%_done"), likeResult)
+    }
+
     func testPostDMLOwnerRevocationRollsBackPrimarySQLWrite() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("owner-bound-sql-\(UUID().uuidString)", isDirectory: true)

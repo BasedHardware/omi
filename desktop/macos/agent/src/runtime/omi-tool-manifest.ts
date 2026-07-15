@@ -638,7 +638,18 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
       "Use semantic_search instead for fuzzy or conceptual queries about screen content.",
     ],
     latency: "fast local",
-    inputSchema: schema({ query: { type: "string", description: "SQL query to execute" } }, ["query"]),
+    inputSchema: schema(
+      {
+        query: { type: "string", description: "SQL query to execute" },
+        parameters: {
+          type: "array",
+          items: { type: "string" },
+          description:
+            "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals.",
+        },
+      },
+      ["query"],
+    ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
     executor: { kind: "swiftTool" },
