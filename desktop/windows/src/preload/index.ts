@@ -278,7 +278,11 @@ const omi: OmiBridgeApi = {
   byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
   // Live-validate the stored keys and reconcile backend BYOK activation. The
   // Firebase token is relayed from the renderer (its session owns it).
-  byokEnroll: (token: string): Promise<ByokEnrollResult> => ipcRenderer.invoke('byok:enroll', token),
+  byokEnroll: (token: string): Promise<ByokEnrollResult> =>
+    ipcRenderer.invoke('byok:enroll', token),
+  // Sign-out: drop the backend BYOK enrollment (local keys are cleared via
+  // byokClearAll in the teardown path). Best-effort.
+  byokDeactivate: (token: string): Promise<void> => ipcRenderer.invoke('byok:deactivate', token),
   onByokChanged: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('byok:changed', listener)

@@ -64,7 +64,20 @@ export async function signOutUser(): Promise<void> {
   // invalidation on a 401 — see authSession.forceReauth): tear down all
   // user-scoped local data FIRST so a second account on this machine can't see
   // it, THEN drop the Firebase session.
+  //
+  // Grab the token BEFORE signing out so we can deactivate BYOK server-side while
+  // the session is still valid: teardownUserData wipes the local keys, and this
+  // DELETE drops the matching backend enrollment so this account isn't left
+  // "enrolled" with no keys (which would 403 its own next requests). Best-effort.
+  const token = await auth.currentUser?.getIdToken().catch(() => undefined)
   await teardownUserData()
+  if (token) {
+    try {
+      await window.omi.byokDeactivate(token)
+    } catch {
+      /* best-effort; the backend heartbeat TTL also lapses the activation */
+    }
+  }
   await signOut(auth)
 }
 

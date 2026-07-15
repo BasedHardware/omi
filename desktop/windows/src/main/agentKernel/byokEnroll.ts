@@ -57,7 +57,11 @@ async function postActivate(
   }
 }
 
-async function deleteActivate(apiBase: string, token: string, fetchImpl: BackendFetch): Promise<void> {
+async function deleteActivate(
+  apiBase: string,
+  token: string,
+  fetchImpl: BackendFetch
+): Promise<void> {
   try {
     await fetchImpl(enrollUrl(apiBase), {
       method: 'DELETE',
@@ -108,4 +112,20 @@ export async function enrollByok(opts: {
   const posted = await postActivate(apiBase, token, fingerprints, backendFetch)
   if (!posted.ok) return { active: false, results, backendError: posted.error }
   return { active: true, results }
+}
+
+/**
+ * Best-effort server-side BYOK deactivation (DELETE). Used on sign-out: after
+ * the local keys are cleared we drop the backend enrollment too, so this account
+ * isn't left "enrolled" with fingerprints while its keys are gone — otherwise its
+ * next requests from this install would send no X-BYOK and be 403'd as an
+ * enrolled/partial mismatch. Never throws.
+ */
+export async function deactivateByok(opts: {
+  apiBase: string
+  token: string
+  backendFetch?: BackendFetch
+}): Promise<void> {
+  const backendFetch = opts.backendFetch ?? (globalThis.fetch as unknown as BackendFetch)
+  await deleteActivate(opts.apiBase, opts.token, backendFetch)
 }

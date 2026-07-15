@@ -9,7 +9,7 @@
 
 import { ipcMain, webContents } from 'electron'
 import { ByokKeyStore } from '../agentKernel/byokStore'
-import { enrollByok, type ByokEnrollResult } from '../agentKernel/byokEnroll'
+import { deactivateByok, enrollByok, type ByokEnrollResult } from '../agentKernel/byokEnroll'
 import type { ByokKeys, ByokProvider } from '../../shared/byok'
 
 let store: ByokKeyStore | null = null
@@ -64,5 +64,12 @@ export function registerByokHandlers(): void {
     })
     broadcastByokChanged()
     return result
+  })
+
+  // Sign-out: drop the backend enrollment (the local store is cleared separately
+  // by the teardown path). Best-effort; the token is relayed from the renderer
+  // while the session is still valid.
+  ipcMain.handle('byok:deactivate', async (_e, token: string): Promise<void> => {
+    await deactivateByok({ apiBase: apiBase(), token })
   })
 }

@@ -1119,6 +1119,9 @@ export type OmiBridgeApi = {
   /** Live-validate the stored keys and reconcile backend BYOK activation. The
    *  Firebase bearer token is relayed from the renderer's session. */
   byokEnroll: (token: string) => Promise<ByokEnrollResult>
+  /** Sign-out: drop the backend BYOK enrollment (local keys are cleared via
+   *  byokClearAll in the teardown path). Best-effort. */
+  byokDeactivate: (token: string) => Promise<void>
   /** Fires when the BYOK key set or activation changed (any window). Returns an
    *  unsubscribe fn. Carries no key material — reload via byokGetAll. */
   onByokChanged: (cb: () => void) => () => void

@@ -69,6 +69,19 @@ describe('ByokKeyStore', () => {
     expect(store.getAllKeys()).toEqual({})
   })
 
+  it('after sign-out (clearAll on a full set) getAllKeys is empty AND isActive is false', () => {
+    // Cross-account leak guard: a second account on this install must not inherit
+    // the prior user's keys (which the REST/chat/WS lanes would otherwise send).
+    store.setKey('openai', 'sk-openai')
+    store.setKey('anthropic', 'sk-ant')
+    store.setKey('gemini', 'gm-key')
+    store.setKey('deepgram', 'dg-key')
+    expect(store.isActive()).toBe(true)
+    store.clearAll()
+    expect(store.getAllKeys()).toEqual({})
+    expect(store.isActive()).toBe(false)
+  })
+
   it('isActive is true only at 4/4 providers', () => {
     expect(store.isActive()).toBe(false)
     store.setKey('openai', 'sk-openai')

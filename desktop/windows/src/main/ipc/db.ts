@@ -20,6 +20,7 @@ import {
 } from './dbRecovery'
 import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
+import { ByokKeyStore } from '../agentKernel/byokStore'
 import {
   insertVoiceTurnOn,
   listPendingVoiceTurnsOn,
@@ -934,6 +935,14 @@ export function setAppMeta(key: string, value: string): void {
 // under plain-node vitest, which can't load this module's Electron-ABI native dep.
 export function wipeUserData(): void {
   wipeUserDataOn(get())
+  // BYOK provider keys live in a separate encrypted file (not SQLite), but they
+  // are user-scoped too: drop them on an account wipe so a different account on
+  // this install never inherits — or transmits — the prior user's provider keys.
+  try {
+    new ByokKeyStore().clearAll()
+  } catch {
+    /* best-effort — the renderer teardown also clears the store */
+  }
 }
 
 export function getFileIndexStats(): { filesIndexed: number; byType: Record<string, number> } {

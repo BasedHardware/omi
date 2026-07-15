@@ -2,6 +2,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import {
   refreshByokKeys,
+  resetByokKeys,
   withByokHeadersIfActive,
   isByokActiveCached
 } from './byokKeys'
@@ -54,5 +55,15 @@ describe('withByokHeadersIfActive', () => {
     const out = withByokHeadersIfActive(input)
     expect(input).toEqual({ Authorization: 'Bearer t' })
     expect(out).not.toBe(input)
+  })
+
+  it('resetByokKeys empties the cache synchronously so no X-BYOK is attached after sign-out', async () => {
+    await loadCache(FULL)
+    expect(isByokActiveCached()).toBe(true)
+    resetByokKeys() // sign-out teardown
+    expect(isByokActiveCached()).toBe(false)
+    expect(withByokHeadersIfActive({ Authorization: 'Bearer t' })).toEqual({
+      Authorization: 'Bearer t'
+    })
   })
 })

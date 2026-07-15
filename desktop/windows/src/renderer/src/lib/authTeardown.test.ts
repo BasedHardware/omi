@@ -23,14 +23,20 @@ import { reconcileAccountForSignIn, teardownUserData } from './authTeardown'
 const LAST_UID_KEY = 'omi.lastSignedInUid'
 
 const wipeUserData = vi.fn(async () => {})
+const byokClearAll = vi.fn(async () => {})
 
 beforeEach(() => {
   wipeUserData.mockClear()
+  byokClearAll.mockClear()
   h.invalidateConversationsCache.mockClear()
   h.clearPendingConversations.mockClear()
   h.clearUserScopedPreferences.mockClear()
   h.clearMemoryCache.mockClear()
-  ;(globalThis as { window: { omi: unknown } }).window.omi = { wipeUserData }
+  ;(globalThis as { window: { omi: unknown } }).window.omi = {
+    wipeUserData,
+    byokClearAll,
+    byokGetAll: vi.fn(async () => ({}))
+  }
   localStorage.setItem('omi-chat-infinite-id', 'chat-123')
   localStorage.setItem('omi.syncBackfillPosts', '["a","b"]')
   localStorage.setItem('omi-windows-prefs-v1', '{"language":"en"}') // device blob — must survive
@@ -42,6 +48,8 @@ describe('teardownUserData', () => {
     await teardownUserData()
 
     expect(wipeUserData).toHaveBeenCalledTimes(1)
+    // BYOK keys must be cleared so a second account can't send them (leak fix).
+    expect(byokClearAll).toHaveBeenCalledTimes(1)
     expect(h.invalidateConversationsCache).toHaveBeenCalledTimes(1)
     expect(h.clearPendingConversations).toHaveBeenCalledTimes(1)
     expect(h.clearMemoryCache).toHaveBeenCalledTimes(1)
@@ -71,6 +79,8 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     await reconcileAccountForSignIn('userB')
 
     expect(wipeUserData).toHaveBeenCalledTimes(1)
+    // The prior account's BYOK keys are cleared before B's shell hydrates.
+    expect(byokClearAll).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
     // The uid pointer must survive teardown (it's machine-scoped, not in the
     // user-scoped key list) so the NEXT switch is still detected.

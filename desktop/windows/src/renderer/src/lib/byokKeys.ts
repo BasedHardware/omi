@@ -38,6 +38,15 @@ export function isByokActiveCached(): boolean {
   return isByokActive(cached)
 }
 
+/**
+ * Synchronously empty the cache. Called from the sign-out teardown so a second
+ * account on this install can't have the prior user's keys attached to its
+ * requests before the async `byok:changed` reload lands.
+ */
+export function resetByokKeys(): void {
+  cached = {}
+}
+
 // Self-initialize in the renderer: load once and keep in sync. Guarded on
 // `window` so importing this module in a non-renderer context (tests) is inert.
 if (typeof window !== 'undefined') {
