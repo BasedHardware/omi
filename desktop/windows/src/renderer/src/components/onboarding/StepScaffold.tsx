@@ -83,7 +83,9 @@ export function StepScaffold({
       </div>
 
       {eyebrow && (
-        <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-white/40">{eyebrow}</p>
+        <p className="mb-2 text-xs font-medium uppercase tracking-[0.2em] text-white/40">
+          {eyebrow}
+        </p>
       )}
       <h1 className="font-display text-3xl font-semibold text-white/95">{title}</h1>
       {subtitle && (
@@ -99,7 +101,9 @@ export function StepScaffold({
       )}
 
       {(onContinue || onBack) && (
-        <div className={'mt-8 flex items-center gap-3 ' + (left ? 'justify-start' : 'justify-center')}>
+        <div
+          className={'mt-8 flex items-center gap-3 ' + (left ? 'justify-start' : 'justify-center')}
+        >
           {onBack && (
             <button
               type="button"
