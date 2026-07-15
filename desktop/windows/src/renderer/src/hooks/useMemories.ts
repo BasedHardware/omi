@@ -25,6 +25,7 @@ export type Memory = {
   capture_device_ids?: string[]
   manually_added?: boolean
   capture_confidence?: number | null
+  app_id?: string | null
 }
 
 const cache = {
