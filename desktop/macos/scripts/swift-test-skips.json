@@ -3,8 +3,7 @@
   "allowed_tests": [
     "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
     "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
-    "APIClientRoutingTests/testDeleteConversationRoutesToPython",
-    "PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing"
+    "APIClientRoutingTests/testDeleteConversationRoutesToPython"
   ],
   "skips": [
     {
@@ -21,11 +20,6 @@
       "test": "APIClientRoutingTests/testDeleteConversationRoutesToPython",
       "issue": "https://github.com/BasedHardware/omi/issues/9031",
       "reason": "The client omits ?cascade=true; cascade is backend-gated behind owner sign-off, so flipping it is a data-deletion behavior change."
-    },
-    {
-      "test": "PiMonoWiringTests/testLocalAgentProviderDetectorMissingPromptIsUserFacing",
-      "issue": "https://github.com/BasedHardware/omi/issues/9033",
-      "reason": "The detector does not fully honor the injected environment/home, so the result depends on whether OpenClaw is installed on the runner."
     }
   ]
 }

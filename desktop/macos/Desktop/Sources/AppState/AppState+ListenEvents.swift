@@ -143,6 +143,39 @@ extension AppState {
     }
   }
 
+  /// Reject out-of-order versioned lifecycle events before they can mutate UI
+  /// or local-session display state. Events without the additive envelope keep
+  /// the established legacy identity/timestamp compatibility behavior.
+  func acceptsLifecycleEnvelope(
+    _ event: TranscriptionService.ListenEvent,
+    conversationId: String,
+    expectedLifecyclePhase: String,
+    expectedBackendId: String?
+  ) -> Bool {
+    let recordingSessionId = event.raw["recording_session_id"] as? String
+    let lifecycleVersion = event.raw["lifecycle_version"] as? Int
+    let lifecyclePhase = event.raw["lifecycle_phase"] as? String
+    let lifecycleSequence = event.raw["lifecycle_sequence"] as? Int
+    let lastAcceptedSequence = recordingSessionId.flatMap { lifecycleSequenceByRecordingSession[$0] }
+    guard DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+      recordingSessionId: recordingSessionId,
+      conversationId: conversationId,
+      lifecycleVersion: lifecycleVersion,
+      lifecyclePhase: lifecyclePhase,
+      lifecycleSequence: lifecycleSequence,
+      expectedLifecyclePhase: expectedLifecyclePhase,
+      expectedBackendId: expectedBackendId,
+      lastAcceptedSequence: lastAcceptedSequence
+    ) else {
+      log("Transcription: Ignoring stale or misbound versioned lifecycle event for \(conversationId)")
+      return false
+    }
+    if let recordingSessionId, let lifecycleSequence {
+      lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
+    }
+    return true
+  }
+
   /// Handle message events from Python backend `/v4/listen`
   func handleListenEvent(_ event: TranscriptionService.ListenEvent) {
     switch event.type {
@@ -163,6 +196,14 @@ extension AppState {
         log("Transcription: Ignoring conversation_session event without conversation_id")
         break
       }
+      guard acceptsLifecycleEnvelope(
+        event,
+        conversationId: backendId,
+        expectedLifecyclePhase: "in_progress",
+        expectedBackendId: currentClientConversationId
+      ) else {
+        break
+      }
       bindActiveSessionToBackendConversation(backendId)
 
     case "memory_processing_started":
@@ -170,6 +211,17 @@ extension AppState {
       let memory = event.raw["memory"] as? [String: Any]
       let processingId = memory?["id"] as? String ?? "?"
       let recordingSessionId = event.raw["recording_session_id"] as? String
+      let conversationId = event.raw["conversation_id"] as? String ?? processingId
+      guard conversationId == processingId,
+            acceptsLifecycleEnvelope(
+              event,
+              conversationId: conversationId,
+              expectedLifecyclePhase: "processing",
+              expectedBackendId: currentClientConversationId
+            )
+      else {
+        break
+      }
       guard DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
         memoryId: processingId,
         recordingSessionId: recordingSessionId,
@@ -195,6 +247,17 @@ extension AppState {
       let targetClientConversationId = finishedClientConversationId
       let targetStartTime = finishedRecordingStartTime
       let didBindLocalSession: Bool
+      let conversationId = event.raw["conversation_id"] as? String ?? memoryId
+      guard conversationId == memoryId,
+            acceptsLifecycleEnvelope(
+              event,
+              conversationId: conversationId,
+              expectedLifecyclePhase: "completed",
+              expectedBackendId: targetClientConversationId
+            )
+      else {
+        break
+      }
       if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
         memoryId: memoryId,
         recordingSessionId: recordingSessionId,

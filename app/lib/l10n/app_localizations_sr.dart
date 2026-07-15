@@ -9587,4 +9587,25 @@ class AppLocalizationsSr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Грешка при повезивању са Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Меморија уређаја';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% попуњено';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used од $total искоришћено';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free слободно';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Уређај је скоро пун — синхронизујте да ослободите простор.';
 }

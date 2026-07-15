@@ -7,18 +7,24 @@ import argparse
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Callable
 from urllib.error import HTTPError, URLError
 from urllib.parse import urlparse
 from urllib.request import Request, urlopen
 
+BACKEND_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(BACKEND_ROOT))
+
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID  # noqa: E402
+
 
 @dataclass(frozen=True)
 class SmokeConfig:
     base_url: str
-    uid: str
     admin_key: str
     timeout_seconds: float
+    cloud_run_identity_token: str = ''
 
 
 def _validate_base_url(value: str) -> str:
@@ -31,10 +37,16 @@ def _validate_base_url(value: str) -> str:
 
 def run_smoke(config: SmokeConfig, *, http_open: Callable = urlopen) -> int:
     url = f'{_validate_base_url(config.base_url)}/v1/what-matters-now'
+    headers = {
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {config.admin_key}{WHAT_MATTERS_NOW_SMOKE_UID}',
+    }
+    if config.cloud_run_identity_token:
+        headers['X-Serverless-Authorization'] = f'Bearer {config.cloud_run_identity_token}'
     request = Request(
         url,
         method='GET',
-        headers={'Accept': 'application/json', 'Authorization': f'Bearer {config.admin_key}{config.uid}'},
+        headers=headers,
     )
     try:
         with http_open(request, timeout=config.timeout_seconds) as response:
@@ -53,25 +65,32 @@ def run_smoke(config: SmokeConfig, *, http_open: Callable = urlopen) -> int:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url', required=True)
-    parser.add_argument('--uid-env', default='OMI_TASK_INTELLIGENCE_SMOKE_UID')
     parser.add_argument('--admin-key-env', default='ADMIN_KEY')
+    parser.add_argument(
+        '--cloud-run-identity-token-env',
+        default='',
+        help='optional environment variable holding an OIDC token for a tagged Cloud Run candidate',
+    )
     parser.add_argument('--timeout-seconds', type=float, default=30.0)
     args = parser.parse_args()
-    uid = os.environ.get(args.uid_env, '').strip()
     admin_key = os.environ.get(args.admin_key_env, '').strip()
-    if not uid:
-        print(f'ERROR: required smoke UID environment variable {args.uid_env} is empty', file=sys.stderr)
-        return 1
     if not admin_key:
         print(f'ERROR: required admin-key environment variable {args.admin_key_env} is empty', file=sys.stderr)
+        return 1
+    identity_token = os.environ.get(args.cloud_run_identity_token_env, '').strip()
+    if args.cloud_run_identity_token_env and not identity_token:
+        print(
+            f'ERROR: required Cloud Run identity token environment variable {args.cloud_run_identity_token_env} is empty',
+            file=sys.stderr,
+        )
         return 1
     try:
         run_smoke(
             SmokeConfig(
                 base_url=args.base_url,
-                uid=uid,
                 admin_key=admin_key,
                 timeout_seconds=args.timeout_seconds,
+                cloud_run_identity_token=identity_token,
             )
         )
     except (RuntimeError, ValueError) as exc:

@@ -3113,7 +3113,7 @@ class TestConversationFinalizerExecutor:
     def test_process_conversation_uses_postprocess_bulkhead(self):
         source = self._read_finalizer_source()
         assert 'postprocess_executor' in source
-        assert 'run_blocking(\n            postprocess_executor, process_conversation' in source
+        assert re.search(r'run_blocking\(\s+postprocess_executor, process_conversation', source)
 
 
 # ---------------------------------------------------------------------------

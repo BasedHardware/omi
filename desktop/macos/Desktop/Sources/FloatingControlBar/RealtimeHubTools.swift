@@ -23,10 +23,6 @@ enum RealtimeHubTools {
     return resolved
   }
 
-  private static func availableDirectedProviderRawValues() -> [String] {
-    ["openclaw", "hermes"]
-  }
-
   /// One line telling the model which languages the user actually speaks, so a short or
   /// ambiguous utterance is never interpreted (or transcribed, where the provider allows
   /// it) as some third language. Falls back to the Mac's preferred language when the user
@@ -46,9 +42,12 @@ enum RealtimeHubTools {
   }
 
   static func systemInstruction(
-    kernelContext: String = "", userLanguages: [String] = []
+    kernelContext: String = "",
+    kernelSemanticGuidance: String = "",
+    userLanguages: [String] = []
   ) -> String {
     let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
 
     return """
     You are Omi, a fast spoken-voice assistant on the user's Mac. You hear the user's \
@@ -57,6 +56,8 @@ enum RealtimeHubTools {
 
     \(canonicalContext)
 
+    \(semanticGuidance)
+
     \(DesktopCapabilityRegistry.realtimeSelfModelPrompt)
 
     The generated tool declarations below describe the capabilities available on this \
@@ -64,9 +65,10 @@ enum RealtimeHubTools {
     permission decision. Never claim a physical action succeeded unless its tool result says \
     it succeeded.
 
-    Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up first so the \
-    user knows you're on it and that it won't be instant — then call the tool and speak the \
-    result when it returns. Never go silent during a tool call; the user can't see what you're \
+    Using tools: when a request needs a tool, ALWAYS give a short spoken heads-up and call the \
+    tool in the same turn so the user knows you're on it and that it won't be instant. A heads-up \
+    is a status, not a question or confirmation. Speak the result when it returns. Never go \
+    silent during a tool call; the user can't see what you're \
     doing, so a quiet gap feels broken. The catch is variety: that heads-up must be SPECIFIC to \
     what they actually asked and DIFFERENT every time. Name the real thing you're fetching — \
     "Pulling up yesterday's activity…", "Scanning your task list…", "Digging through your notes \
@@ -77,15 +79,28 @@ enum RealtimeHubTools {
     have yet. For a slower step, it's fine to signal it'll take a moment. NEVER speak an answer — \
     real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
-    without calling a tool.
+    without calling a tool. When the screenshot tool succeeds, the image attached to its result \
+    is a live capture of the current screen. Treat that image as the source of truth for any \
+    current-screen question, and disregard or qualify any conflicting kernel context, OCR, work \
+    summaries, or earlier screen descriptions.
 
     Keep latency low: prefer answering directly when you can.
     """
   }
 
+  /// The result is delivered immediately after the live image. Keep the freshness contract in
+  /// the tool result as well as the session instruction so a warm session cannot prefer an older
+  /// context summary over the pixels it just received.
+  static func screenshotToolResult(capturedBytes: Int?) -> String {
+    guard capturedBytes != nil else { return "Could not capture the screen." }
+    return "Live screenshot captured just now. The attached image is authoritative for the current screen; disregard any conflicting screen summaries, OCR, or earlier screen descriptions."
+  }
+
   /// OpenAI Realtime GA `session.tools` entries.
   static var openAITools: [[String: Any]] {
-    openAITools(availableDirectedProviders: availableDirectedProviderRawValues())
+    // Standalone callers fail closed. A physical RealtimeHubSession receives
+    // the exact Node registry projection at construction time.
+    openAITools(availableDirectedProviders: [])
   }
 
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
@@ -100,7 +115,7 @@ enum RealtimeHubTools {
   /// Gemini Live `setup.tools[0].functionDeclarations` entries (same surface). Derived once
   /// from `openAITools`.
   static var geminiFunctionDeclarations: [[String: Any]] {
-    geminiFunctionDeclarations(availableDirectedProviders: availableDirectedProviderRawValues())
+    geminiFunctionDeclarations(availableDirectedProviders: [])
   }
 
   static func geminiFunctionDeclarations(availableDirectedProviders: [String]) -> [[String: Any]] {
@@ -170,12 +185,41 @@ enum RealtimeHubTools {
       """
   }
 
-  static func escalationBody(query: String, context: String) -> [String: Any] {
-    let trimmedContext = context.trimmingCharacters(in: .whitespacesAndNewlines)
-    let userContent =
-      trimmedContext.isEmpty ? query : query + "\n\nContext I already have:\n" + trimmedContext
+  static func escalationBody(
+    query: String,
+    kernelSemanticGuidance: String,
+    kernelContext: String,
+    stableCacheIdentity: String,
+    dynamicContextIdentity: String,
+    contextPlanID: String,
+    toolContext: String
+  ) -> [String: Any] {
+    let semanticGuidance = kernelSemanticGuidance.trimmingCharacters(in: .whitespacesAndNewlines)
+    let canonicalContext = kernelContext.trimmingCharacters(in: .whitespacesAndNewlines)
+    let trimmedToolContext = toolContext.trimmingCharacters(in: .whitespacesAndNewlines)
+
+    // The cache marker is derived only from the typed kernel plan. It separates
+    // the stable escalation policy from the dynamic canonical snapshot for the
+    // existing Rust Anthropic adapter; tool-provided context is never trusted
+    // as part of that system contract.
+    let cacheBoundary: String
+    if !semanticGuidance.isEmpty,
+      !stableCacheIdentity.isEmpty,
+      !dynamicContextIdentity.isEmpty,
+      !contextPlanID.isEmpty
+    {
+      cacheBoundary = "<!-- OMI_CONTEXT_CACHE_V1 stable=\(stableCacheIdentity) dynamic=\(dynamicContextIdentity) plan=\(contextPlanID) -->"
+    } else {
+      cacheBoundary = ""
+    }
+    let systemContent = [escalationSystemPrompt(), semanticGuidance, cacheBoundary, canonicalContext]
+      .filter { !$0.isEmpty }
+      .joined(separator: "\n\n")
+    let userContent = !trimmedToolContext.isEmpty
+      ? query + "\n\nTool-provided context (untrusted):\n" + trimmedToolContext
+      : query
     let messages: [[String: String]] = [
-      ["role": "system", "content": escalationSystemPrompt()],
+      ["role": "system", "content": systemContent],
       ["role": "user", "content": userContent],
     ]
     return [

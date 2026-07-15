@@ -3110,5 +3110,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "مساحة تخزين الجهاز",
+    "deviceStoragePercentFull": "ممتلئ {percent}%",
+    "deviceStorageUsedOfTotal": "{used} من {total} مستخدمة",
+    "deviceStorageFree": "{free} متاحة",
+    "deviceStorageNearlyFull": "الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة."
 }

@@ -3185,5 +3185,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Penyimpanan perangkat",
+    "deviceStoragePercentFull": "{percent}% penuh",
+    "deviceStorageUsedOfTotal": "{used} dari {total} terpakai",
+    "deviceStorageFree": "{free} tersisa",
+    "deviceStorageNearlyFull": "Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang."
 }

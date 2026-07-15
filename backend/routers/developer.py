@@ -56,6 +56,7 @@ from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.location import get_google_maps_location
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
@@ -1715,7 +1716,9 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
+        if not lifecycle_service.create_processing_conversation(
+            uid, create_conversation_obj.model_dump(), idempotent=True
+        ):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1752,7 +1755,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.model_dump())
+        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1907,9 +1910,9 @@ def update_conversation_endpoint(
 
     if request.discarded is not None:
         if request.discarded:
-            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+            lifecycle_service.discard(uid, conversation_id)
         else:
-            conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+            lifecycle_service.restore_discarded(uid, conversation_id)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:

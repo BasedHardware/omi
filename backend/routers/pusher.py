@@ -12,13 +12,19 @@ from starlette.websockets import WebSocketState
 import database.conversations as conversations_db
 from database import conversation_finalization_jobs as finalization_jobs_db
 from database import users as users_db
+from services.conversation_finalization import final_attempt_failed
 from utils.apps import is_audio_bytes_app_enabled
 from utils.app_integrations import (
     trigger_realtime_integrations,
     trigger_realtime_audio_bytes,
 )
 from utils.byok import set_byok_keys, set_byok_uid
-from utils.conversations.finalizer import ConversationFinalizationError, finalize_persisted_conversation
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.finalizer import (
+    ConversationFinalizationDisposition,
+    ConversationFinalizationError,
+    finalize_persisted_conversation,
+)
 from utils.executors import db_executor, storage_executor, run_blocking
 from utils.async_tasks import (
     supervise_tasks,
@@ -31,7 +37,7 @@ from utils.webhooks import (
     realtime_transcript_webhook,
     get_audio_bytes_webhook_seconds,
 )
-from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
 from utils.speaker_identification import extract_speaker_samples
@@ -127,11 +133,34 @@ async def _process_conversation_task(
     job_id: Optional[str] = None
     generation: Optional[int] = None
     lease_epoch: Optional[int] = None
+    attempt_count: int = 0
 
-    async def mark_retryable(failure_code: str) -> None:
+    async def record_failure(failure_code: str) -> bool:
+        """Release the lease. Returns whether this was the terminal attempt.
+
+        Inline dispatch has no Cloud Tasks worker to exhaust the attempt budget,
+        so the claimed attempt count is the only bound on a deterministically
+        failing job. Without a terminal state the conversation would stay
+        `processing` forever and be re-finalized by every later session.
+        """
         if job_id is None or generation is None or lease_epoch is None:
-            return
+            return False
+        terminal = attempt_count >= get_listen_finalization_tasks_max_attempts()
         try:
+            if terminal:
+                marked_dead_letter = await run_blocking(
+                    db_executor,
+                    final_attempt_failed,
+                    job_id,
+                    generation,
+                    lease_epoch,
+                    attempt_count,
+                )
+                if not marked_dead_letter:
+                    return False
+                return await run_blocking(
+                    db_executor, lifecycle_service.fail_and_discard_processing, uid, conversation_id
+                )
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,
@@ -142,11 +171,14 @@ async def _process_conversation_task(
             )
         except Exception:
             logger.error(
-                'pusher finalization recovery update failed uid=%s conversation=%s failure=%s',
+                'pusher finalization recovery update failed uid=%s conversation=%s failure=%s terminal=%s',
                 uid,
                 conversation_id,
                 failure_code,
+                terminal,
             )
+            return False
+        return False
 
     try:
         if not finalization_job_id or dispatch_generation is None:
@@ -169,12 +201,24 @@ async def _process_conversation_task(
             expected_conversation_id=conversation_id,
         )
         claim_status = claim['status']
+        if claim_status == 'fenced':
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
+            return
         if claim_status == 'completed':
             await send_result({'conversation_id': conversation_id, 'success': True})
             return
         if claim_status != 'claimed':
-            await send_result({'conversation_id': conversation_id, 'error': f'job_{claim_status}'})
+            await send_result(
+                {
+                    'conversation_id': conversation_id,
+                    'error': f'job_{claim_status}',
+                    # A dead-lettered job is never actionable again; telling the
+                    # live session it is terminal stops it from re-requesting.
+                    'terminal': claim_status in finalization_jobs_db.TERMINAL_JOB_STATUSES,
+                }
+            )
             return
+        attempt_count = claim['attempt_count']
         lease_epoch = claim['lease_epoch']
         if lease_epoch is None:
             logger.error(
@@ -183,35 +227,60 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
             return
 
-        await finalize_persisted_conversation(uid, conversation_id, language)
-
-        completed = await run_blocking(
-            db_executor,
-            finalization_jobs_db.mark_finalization_completed,
-            job_id,
-            generation,
-            lease_epoch,
+        disposition = await finalize_persisted_conversation(
+            uid,
+            conversation_id,
+            language,
+            finalization_job_id=job_id,
+            dispatch_generation=generation,
+            lease_epoch=lease_epoch,
         )
+
+        if disposition == ConversationFinalizationDisposition.fenced:
+            completed = await run_blocking(
+                db_executor,
+                lifecycle_service.complete_fenced_finalization,
+                job_id,
+                generation,
+                lease_epoch,
+            )
+        else:
+            completed = await run_blocking(
+                db_executor,
+                finalization_jobs_db.mark_finalization_completed,
+                job_id,
+                generation,
+                lease_epoch,
+            )
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
+        if disposition == ConversationFinalizationDisposition.fenced:
+            await send_result({'conversation_id': conversation_id, 'fenced': True})
+            return
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:
-        await mark_retryable('processing_failed')
+        terminal = await record_failure('processing_failed')
         logger.error(
-            'pusher finalization failed uid=%s conversation=%s failure=processing_failed', uid, conversation_id
+            'pusher finalization failed uid=%s conversation=%s failure=processing_failed terminal=%s',
+            uid,
+            conversation_id,
+            terminal,
         )
         try:
-            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})
         except Exception:
             pass
     except Exception:
-        await mark_retryable('worker_failed')
+        terminal = await record_failure('worker_failed')
         logger.error(
-            'pusher finalization task failed uid=%s conversation=%s failure=worker_failed', uid, conversation_id
+            'pusher finalization task failed uid=%s conversation=%s failure=worker_failed terminal=%s',
+            uid,
+            conversation_id,
+            terminal,
         )
         try:
-            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed'})
+            await send_result({'conversation_id': conversation_id, 'error': 'processing_failed', 'terminal': terminal})
         except Exception:
             pass
 

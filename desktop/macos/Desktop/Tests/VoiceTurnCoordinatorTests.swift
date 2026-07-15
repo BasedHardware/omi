@@ -4,6 +4,30 @@ import XCTest
 
 @MainActor
 final class VoiceTurnCoordinatorTests: XCTestCase {
+  func testNestedDeferredHubCommitQueuesWithoutSynchronousStateMutation() {
+    let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
+    var sawQueuedPreCommitState = false
+    coordinator.setEffectHandler { effect in
+      guard case .finalizeCapturedInput(let turnID) = effect else { return }
+      XCTAssertTrue(coordinator.canCommitHubTurn(turnID))
+
+      // The physical PTT finalizer runs while the coordinator drains this
+      // effect. Its commit-deferred event is deliberately FIFO-queued, so an
+      // immediate read still observes the pre-commit finalizing state.
+      coordinator.send(.hubCommitDeferred(turnID: turnID))
+      sawQueuedPreCommitState = coordinator.canCommitHubTurn(turnID)
+    }
+
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID())))
+    coordinator.send(.finalize(turnID: turnID))
+
+    XCTAssertTrue(sawQueuedPreCommitState)
+    XCTAssertEqual(coordinator.activeTurn?.phase, .awaitingResponse)
+    XCTAssertTrue(coordinator.activeTurn?.hubCommitPending == true)
+    XCTAssertEqual(coordinator.model.invalidTransitionCount, 0)
+  }
+
   func testNestedHubCommitClaimRunsProviderEffectAfterClaimStateIsApplied() {
     let coordinator = VoiceTurnCoordinator(scheduler: ManualVoiceTurnScheduler())
     var providerEffectTurn: VoiceTurn?
@@ -255,7 +279,7 @@ final class VoiceTurnCoordinatorTests: XCTestCase {
     coordinator.send(.hubReady(turnID: turnID, sessionID: sessionID))
 
     XCTAssertEqual(resolutions, 1)
-    XCTAssertEqual(coordinator.model.turn?.route, .hubWarmWait)
+    XCTAssertEqual(coordinator.model.turn?.route, .hub(sessionID: sessionID))
     XCTAssertEqual(
       coordinator.timelineSnapshot().filter { $0.event == "hub_ready" }.count,
       1)

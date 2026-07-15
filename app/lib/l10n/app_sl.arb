@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Shramba naprave",
+    "deviceStoragePercentFull": "{percent}% zasedeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} porabljeno",
+    "deviceStorageFree": "{free} prosto",
+    "deviceStorageNearlyFull": "Naprava je skoraj polna — sinhronizirajte za sprostitev prostora."
 }

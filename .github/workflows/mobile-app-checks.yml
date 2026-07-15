@@ -138,8 +138,78 @@ jobs:
           cache: true
 
       - name: Run Flutter tests
+        id: flutter_tests
         working-directory: app
-        run: bash test.sh
+        run: |
+          set -o pipefail
+          bash test.sh \
+            --reporter expanded \
+            --file-reporter "json:$GITHUB_WORKSPACE/flutter-test-results.json" \
+            2>&1 | tee "$GITHUB_WORKSPACE/flutter-test-output.log"
+
+      - name: Summarize failed Flutter tests
+        if: ${{ failure() && steps.flutter_tests.outcome == 'failure' }}
+        env:
+          FLUTTER_TEST_RESULTS: ${{ github.workspace }}/flutter-test-results.json
+        run: |
+          python3 - <<'PY'
+          import json
+          import os
+          from collections import defaultdict
+          from pathlib import Path
+
+          report = Path(os.environ['FLUTTER_TEST_RESULTS'])
+          summary = Path(os.environ['GITHUB_STEP_SUMMARY'])
+          tests = {}
+          errors = defaultdict(list)
+          failures = []
+
+          if report.exists():
+              for raw_line in report.read_text().splitlines():
+                  try:
+                      event = json.loads(raw_line)
+                  except json.JSONDecodeError:
+                      continue
+                  event_type = event.get('type')
+                  if event_type == 'testStart':
+                      test = event.get('test', {})
+                      tests[str(test.get('id'))] = test
+                  elif event_type == 'error':
+                      details = str(event.get('error', 'Unknown error'))
+                      if event.get('stackTrace'):
+                          details = f"{details}\n{event['stackTrace']}"
+                      errors[str(event.get('testID'))].append(details)
+                  elif event_type == 'testDone' and event.get('result') in {'failure', 'error'}:
+                      failures.append(event)
+
+          with summary.open('a') as output:
+              output.write('## Flutter test diagnostics\n\n')
+              if not failures:
+                  output.write(
+                      'Flutter exited unsuccessfully but emitted no failed-test event. '
+                      'Download the `flutter-test-diagnostics` artifact for the complete JSON stream and console log.\n'
+                  )
+              for failure in failures:
+                  test_id = str(failure.get('testID'))
+                  test = tests.get(test_id, {})
+                  name = test.get('name', f'Unknown test (id {test_id})')
+                  output.write(f'### {name}\n\n')
+                  details = '\n'.join(errors[test_id]).strip()
+                  if details:
+                      output.write('```text\n')
+                      output.write(details[-6000:].replace('```', '``\\`'))
+                      output.write('\n```\n\n')
+          PY
+
+      - name: Upload Flutter test diagnostics
+        if: ${{ failure() && steps.flutter_tests.outcome == 'failure' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: flutter-test-diagnostics
+          path: |
+            flutter-test-results.json
+            flutter-test-output.log
+          if-no-files-found: warn
 
   android-compile-smoke:
     name: Android Compile Smoke

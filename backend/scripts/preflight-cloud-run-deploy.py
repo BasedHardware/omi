@@ -28,6 +28,14 @@ class SecretBinding:
     version: str
 
 
+@dataclass(frozen=True)
+class RuntimeBindingContract:
+    """Expected pre-candidate Cloud Run binding state for one service."""
+
+    public_names: frozenset[str]
+    secret_references: dict[str, str]
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(description='Preflight checks for backend Cloud Run deploys.')
     parser.add_argument('--env', choices=('dev', 'prod'), required=True)
@@ -35,6 +43,8 @@ def main() -> int:
     parser.add_argument('--region', default=DEFAULT_REGION)
     parser.add_argument('--manifest', type=Path, default=DEFAULT_MANIFEST)
     parser.add_argument('--service', action='append', dest='services')
+    parser.add_argument('--migrate-legacy-public-binding', action='append', dest='legacy_public_binding_services')
+    parser.add_argument('--check-runtime-bindings', action='store_true')
     parser.add_argument('--check-secrets', action='store_true')
     parser.add_argument('--check-traffic', action='store_true')
     parser.add_argument('--repair-traffic', action='store_true')
@@ -45,6 +55,38 @@ def main() -> int:
 
     services = tuple(args.services or DEFAULT_SERVICES)
     exit_code = 0
+
+    if args.legacy_public_binding_services:
+        try:
+            migrated = migrate_legacy_public_bindings(
+                services=args.legacy_public_binding_services,
+                env=args.env,
+                project=args.project,
+                region=args.region,
+                manifest_path=args.manifest,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        for service in migrated:
+            print(f'migrated legacy GOOGLE_CLIENT_ID binding for {service}')
+
+    if args.check_runtime_bindings:
+        try:
+            drift = check_runtime_bindings(
+                services=services,
+                env=args.env,
+                project=args.project,
+                region=args.region,
+                manifest_path=args.manifest,
+            )
+        except ValueError as exc:
+            parser.error(str(exc))
+        if drift:
+            for error in drift:
+                print(f'ERROR [{error}]', file=sys.stderr)
+            exit_code = 1
+        else:
+            print('development Cloud Run runtime-binding contract passed')
 
     if args.check_secrets:
         missing = check_rendered_secrets(
@@ -92,6 +134,230 @@ def main() -> int:
                 exit_code = 1
 
     return exit_code
+
+
+DEVELOPMENT_PROJECT = 'based-hardware-dev'
+
+
+def migrate_legacy_public_bindings(
+    *,
+    services: tuple[str, ...] | list[str],
+    env: str,
+    project: str,
+    region: str,
+    manifest_path: Path = DEFAULT_MANIFEST,
+    runner: Any = subprocess.run,
+) -> list[str]:
+    _require_development_scope(env=env, project=project, check_name='Legacy public-binding migration')
+    service_configs = _cloud_run_service_configs(env=env, manifest_path=manifest_path)
+
+    migrated: list[str] = []
+    for service in services:
+        service_config = service_configs.get(service)
+        if not isinstance(service_config, dict):
+            raise ValueError(f'Missing Cloud Run service config for {service}')
+        public_env = service_config.get('env')
+        if not isinstance(public_env, dict):
+            raise ValueError(f'Missing public environment config for {service}')
+        public_binding_names = set(public_env)
+        document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
+        containers = _single_container(document, operation='Legacy public-binding migration')
+        legacy_binding_names = sorted(
+            entry['name']
+            for entry in _container_env_entries(containers, operation='Legacy public-binding migration')
+            if isinstance(entry, dict)
+            and entry.get('name') in public_binding_names
+            and entry.get('valueFrom', {}).get('secretKeyRef', {}).get('name') == entry.get('name')
+        )
+        if not legacy_binding_names:
+            continue
+        runner(
+            [
+                'gcloud',
+                'run',
+                'services',
+                'update',
+                service,
+                f'--project={project}',
+                f'--region={region}',
+                f'--remove-secrets={",".join(legacy_binding_names)}',
+                '--no-traffic',
+                '--quiet',
+            ],
+            check=True,
+        )
+        migrated.append(service)
+    return migrated
+
+
+def check_runtime_bindings(
+    *,
+    services: tuple[str, ...] | list[str],
+    env: str,
+    project: str,
+    region: str,
+    manifest_path: Path = DEFAULT_MANIFEST,
+    runner: Any = subprocess.run,
+) -> list[str]:
+    """Check only manifest-declared development bindings before candidate deploy.
+
+    The workflow removes legacy Secret Manager bindings for public values before
+    it deploys the candidate revision.  At this point a declared public value
+    is therefore valid when it is literal or absent; a Secret Manager or other
+    value source is still drift.  Declared secrets must already match exactly.
+    This is deliberately not a full live-service inventory: normal retained
+    Cloud Run bindings absent from runtime_env.yaml are outside this check.
+    """
+    _require_development_scope(env=env, project=project, check_name='Runtime binding check')
+    service_configs = _cloud_run_service_configs(env=env, manifest_path=manifest_path)
+    drift: list[str] = []
+
+    for service in services:
+        raw_service_config = service_configs.get(service)
+        service_config = render_backend_runtime_env._as_config_dict(raw_service_config)
+        if service_config is None:
+            raise ValueError(f'Missing Cloud Run service config for {service}')
+        expected = _expected_runtime_bindings(service=service, service_config=service_config)
+        declared_names = expected.public_names | set(expected.secret_references)
+        document = _describe_cloud_run_service(service=service, project=project, region=region, runner=runner)
+        container = _single_container(document, operation='Runtime binding check')
+        actual = _actual_runtime_bindings(
+            service=service,
+            env_entries=_container_env_entries(container, operation='Runtime binding check'),
+            declared_names=declared_names,
+            drift=drift,
+        )
+
+        for env_name in sorted(expected.public_names):
+            observed_binding = actual.get(env_name)
+            if observed_binding not in (None, 'public literal'):
+                drift.append(
+                    f'runtime-binding/{service}/{env_name}: expected public literal or absent before candidate deploy, '
+                    f'observed {observed_binding}'
+                )
+
+        for env_name in sorted(expected.secret_references):
+            expected_binding = expected.secret_references[env_name]
+            observed_binding = actual.get(env_name)
+            if observed_binding is None:
+                drift.append(f'runtime-binding/{service}/{env_name}: expected {expected_binding}, binding is missing')
+            elif observed_binding != expected_binding:
+                drift.append(
+                    f'runtime-binding/{service}/{env_name}: expected {expected_binding}, observed {observed_binding}'
+                )
+
+    return drift
+
+
+def _require_development_scope(*, env: str, project: str, check_name: str) -> None:
+    if env != 'dev' or project != DEVELOPMENT_PROJECT:
+        raise ValueError(f'{check_name} is development-only')
+
+
+def _cloud_run_service_configs(*, env: str, manifest_path: Path) -> dict[str, Any]:
+    manifest = render_backend_runtime_env._load_yaml(manifest_path)
+    environments = render_backend_runtime_env._as_config_dict(manifest.get('environments'))
+    if environments is None:
+        raise ValueError(f'Missing environments in {manifest_path}')
+    environment_config = render_backend_runtime_env._as_config_dict(environments.get(env))
+    if environment_config is None:
+        raise ValueError(f'Missing {env} environment in {manifest_path}')
+    cloud_run = render_backend_runtime_env._as_config_dict(environment_config.get('cloud_run'))
+    if cloud_run is None:
+        raise ValueError(f'Missing Cloud Run config for {env} in {manifest_path}')
+    service_configs = render_backend_runtime_env._as_config_dict(cloud_run.get('services'))
+    if service_configs is None:
+        raise ValueError(f'Missing Cloud Run services for {env} in {manifest_path}')
+    return service_configs
+
+
+def _expected_runtime_bindings(*, service: str, service_config: dict[str, Any]) -> RuntimeBindingContract:
+    public_env = render_backend_runtime_env._as_config_dict(service_config.get('env')) or {}
+    secrets = render_backend_runtime_env._as_config_dict(service_config.get('secrets')) or {}
+    public_names = frozenset(str(env_name) for env_name in public_env)
+    secret_names = {str(env_name) for env_name in secrets}
+    overlap = sorted(public_names & secret_names)
+    if overlap:
+        raise ValueError(f'Cloud Run service {service} has public/secret binding overlap: {", ".join(overlap)}')
+
+    secret_references: dict[str, str] = {}
+    for env_name, raw_secret in secrets.items():
+        secret = render_backend_runtime_env._as_config_dict(raw_secret)
+        if secret is None or not isinstance(secret.get('secret'), str) or not secret['secret']:
+            raise ValueError(f'Cloud Run secret binding {env_name} must have a secret entry')
+        secret_references[str(env_name)] = (
+            f'Secret Manager reference {secret["secret"]}:{secret.get("version", "latest")}'
+        )
+    return RuntimeBindingContract(public_names=public_names, secret_references=secret_references)
+
+
+def _describe_cloud_run_service(*, service: str, project: str, region: str, runner: Any) -> dict[str, Any]:
+    document = json.loads(
+        runner(
+            [
+                'gcloud',
+                'run',
+                'services',
+                'describe',
+                service,
+                f'--project={project}',
+                f'--region={region}',
+                '--format=json',
+            ],
+            check=True,
+            text=True,
+            capture_output=True,
+        ).stdout
+    )
+    if not isinstance(document, dict):
+        raise ValueError(f'Cloud Run service {service} describe did not return a mapping')
+    return cast(dict[str, Any], document)
+
+
+def _single_container(document: dict[str, Any], *, operation: str) -> dict[str, Any]:
+    spec = document.get('spec')
+    template = spec.get('template') if isinstance(spec, dict) else None
+    template_spec = template.get('spec') if isinstance(template, dict) else None
+    containers = template_spec.get('containers') if isinstance(template_spec, dict) else None
+    if not isinstance(containers, list) or len(containers) != 1 or not isinstance(containers[0], dict):
+        raise ValueError(f'{operation} requires exactly one container per Cloud Run service')
+    return cast(dict[str, Any], containers[0])
+
+
+def _container_env_entries(container: dict[str, Any], *, operation: str) -> list[Any]:
+    env_entries = container.get('env', [])
+    if not isinstance(env_entries, list):
+        raise ValueError(f'{operation} requires a list of Cloud Run environment bindings')
+    return env_entries
+
+
+def _actual_runtime_bindings(
+    *, service: str, env_entries: list[Any], declared_names: set[str] | frozenset[str], drift: list[str]
+) -> dict[str, str]:
+    actual: dict[str, str] = {}
+    for entry in env_entries:
+        if not isinstance(entry, dict) or not isinstance(entry.get('name'), str) or not entry['name']:
+            continue
+        env_name = entry['name']
+        if env_name not in declared_names:
+            continue
+        if env_name in actual:
+            drift.append(f'runtime-binding/{service}/{env_name}: duplicate Cloud Run environment binding')
+            continue
+        actual[env_name] = _observed_binding(entry)
+    return actual
+
+
+def _observed_binding(entry: dict[str, Any]) -> str:
+    if 'value' in entry:
+        return 'public literal'
+    value_from = entry.get('valueFrom')
+    secret_ref = value_from.get('secretKeyRef') if isinstance(value_from, dict) else None
+    secret_name = secret_ref.get('name') if isinstance(secret_ref, dict) else None
+    if isinstance(secret_name, str) and secret_name:
+        version = secret_ref.get('key', 'latest')
+        return f'Secret Manager reference {secret_name}:{version}'
+    return 'unsupported value source'
 
 
 def check_rendered_secrets(*, env: str, manifest_path: Path, project: str) -> list[SecretBinding]:

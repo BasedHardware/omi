@@ -238,7 +238,7 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
-  func testTransportReadyPreparesContextWithoutAdmittingHubRoute() {
+  func testTransportReadyBindsHubRouteAndPreparesContext() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
@@ -246,11 +246,47 @@ final class VoiceTurnReducerTests: XCTestCase {
 
     let ready = reduce(model, .hubReady(turnID: turnID, sessionID: sessionID))
 
-    XCTAssertEqual(ready.model.turn?.route, .hubWarmWait)
-    XCTAssertNil(ready.model.turn?.sessionID)
+    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(ready.model.turn?.sessionID, sessionID)
     XCTAssertEqual(ready.model.turn?.phase, .recording)
     XCTAssertTrue(ready.effects.contains(.cancelDeadline(turnID: turnID, deadline: .hubWarm)))
     XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+
+    // Binding the route is not an admission grant. `prepareHubInput` opens the
+    // context-fresh preparation the driver fences audio behind, so the provider
+    // connection is still closed until `providerReconnected` admits the input.
+    let reservation = reserveIdentity(ready.model, turnID: turnID)
+    let preparing = reduce(
+      reservation.model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: sessionID))
+    XCTAssertEqual(
+      preparing.model.turn?.providerConnection,
+      .reconnecting(identity: reservation.identity, previousSessionID: sessionID))
+  }
+
+  /// A turn released while the socket was still warming commits through
+  /// `commitBufferedRealtimeHubTurn`, which the PTT driver gates on a `.hub`
+  /// route. Leaving the route in warm-wait after `hubReady` stranded the turn in
+  /// `finalizing` forever — no commit, no reply, no transcription fallback.
+  func testBufferedWarmWaitTurnStaysCommittableAfterTransportReady() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubReady(turnID: turnID, sessionID: sessionID)).model
+
+    XCTAssertEqual(model.turn?.phase, .finalizing)
+    XCTAssertEqual(model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertFalse(model.turn?.hubCommitPending == true)
+
+    // The driver now owns the hub turn, so its deferred commit is accepted and
+    // the replayed audio is committed once admission lands.
+    let deferred = reduce(model, .hubCommitDeferred(turnID: turnID))
+    XCTAssertTrue(deferred.model.turn?.hubCommitPending == true)
   }
 
   func testHubAdmissionRejectionAfterTransportReadyFallsBackAfterRelease() {
@@ -386,7 +422,7 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(result.model.turn?.projection.isListening, false)
     XCTAssertEqual(result.model.turn?.projection.isThinking, false)
     XCTAssertEqual(result.model.turn?.projection.isResponseActive, false)
-    XCTAssertEqual(result.model.turn?.projection.hint, "Voice response failed — try again")
+    XCTAssertEqual(result.model.turn?.projection.hint, "Couldn't get a voice reply — try again")
     XCTAssertTrue(result.model.turn?.deadlines.contains(.hintVisibility) == true)
   }
 

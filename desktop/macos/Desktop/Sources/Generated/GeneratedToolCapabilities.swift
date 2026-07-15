@@ -221,6 +221,29 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "read_tool_output",
+      title: "Read Tool Output",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Read a bounded excerpt from a canonical Omi tool-output artifact.",
+      bullets: [
+      "Requires a canonical artifact id and keeps provider payloads bounded.",
+      "Use an artifactId returned by a toolResultEnvelope fullOutputRef or inspect_agent_artifacts.",
+      "The response is bounded; use search_tool_output for targeted retrieval."
+    ]
+    ),
+    Capability(
+      toolName: "search_tool_output",
+      title: "Search Tool Output",
+      latency: .fastLocal,
+      surfaces: Set([.desktopChat, .realtimeHub]),
+      summary: "Search a canonical Omi tool-output artifact without returning the complete artifact.",
+      bullets: [
+      "Requires a canonical artifact id and returns bounded matching lines.",
+      "Use after a truncated toolResultEnvelope to find the relevant local output."
+    ]
+    ),
+    Capability(
       toolName: "update_agent_artifact_lifecycle",
       title: "Update Agent Artifact Lifecycle",
       latency: .fastLocal,

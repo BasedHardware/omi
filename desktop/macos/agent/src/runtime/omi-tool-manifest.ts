@@ -1242,7 +1242,13 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     intendedForAgents: true,
     runtimePreconditions: ["Realtime voice only; requires Screen Recording permission."],
-    adapters: {},
+    // Realtime voice invokes this through the same pi-mono runtime capability
+    // fence as other kernel-authorized tools. The surface still limits the
+    // Swift executor to realtime voice; without this projection the runtime
+    // rejects every provider screenshot call as tool_not_allowed.
+    adapters: {
+      "pi-mono": { advertised: true },
+    },
   },
   {
     name: "point_click",
@@ -1394,6 +1400,29 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
         limit: { type: "number", description: "Maximum artifacts to return. Default 50." },
       },
       [],
+    ),
+  },
+  read_tool_output: {
+    realtimeDescription:
+      "Read a bounded excerpt from an Omi tool-output artifact referenced by a prior toolResultEnvelope. Never request an arbitrary file path.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        maxBytes: { type: "number", description: "Maximum excerpt size in bytes. Default 4096, max 8192." },
+      },
+      ["artifactId"],
+    ),
+  },
+  search_tool_output: {
+    realtimeDescription:
+      "Search a saved Omi tool-output artifact for matching lines without returning the complete artifact.",
+    schemaOverride: schema(
+      {
+        artifactId: { type: "string", description: "Canonical tool-output artifact id." },
+        query: { type: "string", description: "Text to find in the saved output." },
+        maxMatches: { type: "number", description: "Maximum matching lines. Default 5." },
+      },
+      ["artifactId", "query"],
     ),
   },
   update_agent_artifact_lifecycle: {

@@ -413,6 +413,48 @@ update_app_desktop_api_url() {
     substep "OMI_DESKTOP_API_URL=$EFFECTIVE_API_URL"
 }
 
+rewrite_bundled_dylib_load_path() {
+    local binary="$1"
+    local dylib_name="$2"
+    local bundled_load_path="@rpath/$dylib_name"
+    local current_load_path
+
+    current_load_path="$(otool -L "$binary" | awk -v dylib_name="$dylib_name" '
+        NR > 1 {
+            sub(/^[[:space:]]+/, "")
+            sub(/ \(compatibility version.*$/, "")
+            if ($0 ~ ("/" dylib_name "$")) {
+                print
+                exit
+            }
+        }
+    ')"
+
+    if [ -z "$current_load_path" ]; then
+        echo "ERROR: expected $binary to link $dylib_name" >&2
+        return 1
+    fi
+
+    if [ "$current_load_path" != "$bundled_load_path" ]; then
+        install_name_tool -change "$current_load_path" "$bundled_load_path" "$binary"
+        current_load_path="$(otool -L "$binary" | awk -v dylib_name="$dylib_name" '
+            NR > 1 {
+                sub(/^[[:space:]]+/, "")
+                sub(/ \(compatibility version.*$/, "")
+                if ($0 ~ ("/" dylib_name "$")) {
+                    print
+                    exit
+                }
+            }
+        ')"
+    fi
+
+    if [ "$current_load_path" != "$bundled_load_path" ]; then
+        echo "ERROR: $binary must load $dylib_name from $bundled_load_path, found ${current_load_path:-none}" >&2
+        return 1
+    fi
+}
+
 step "Killing existing instances..."
 auth_debug "BEFORE pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "BEFORE pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
@@ -691,6 +733,7 @@ if [ "$FAST_BUNDLE" = "1" ]; then
     cp -f "Desktop/.build/debug/$BINARY_NAME" "$PATCHED_BINARY"
     chmod +x "$PATCHED_BINARY"
     install_name_tool -add_rpath "@executable_path/../Frameworks" "$PATCHED_BINARY" 2>/dev/null || true
+    rewrite_bundled_dylib_load_path "$PATCHED_BINARY" "libwebp.7.dylib"
     mv -f "$PATCHED_BINARY" "$APP_PATH/Contents/MacOS/$BINARY_NAME"
     update_app_desktop_api_url "$APP_PATH/Contents/Resources/.env"
 
@@ -783,7 +826,7 @@ if [ -f "$WEBP_LIB" ]; then
         install_name_tool -id "@rpath/libsharpyuv.0.dylib" "$APP_BUNDLE/Contents/Frameworks/libsharpyuv.0.dylib"
     fi
     install_name_tool -id "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/Frameworks/libwebp.7.dylib"
-    install_name_tool -change "$WEBP_LIB" "@rpath/libwebp.7.dylib" "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME"
+    rewrite_bundled_dylib_load_path "$APP_BUNDLE/Contents/MacOS/$BINARY_NAME" "libwebp.7.dylib"
 fi
 
 substep "Copying Info.plist"

@@ -87,6 +87,7 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
     def fake_process_conversation(uid, language_code, conversation, **kwargs):
         conversations_db = sys.modules["database.conversations"]
         deserialize_conversation = sys.modules["utils.conversations.factory"].deserialize_conversation
+        lifecycle = sys.modules["utils.conversations.lifecycle"]
         structured = conversation.structured.model_dump()
         structured.update(
             {
@@ -98,8 +99,9 @@ def test_transcribe_reconnect_then_finalize_conversation_lifecycle(client, auth_
         conversations_db.update_conversation(
             uid,
             conversation.id,
-            {"structured": structured, "status": "completed", "finished_at": datetime.now(timezone.utc)},
+            {"structured": structured, "finished_at": datetime.now(timezone.utc)},
         )
+        lifecycle.complete(uid, conversation.id)
         return deserialize_conversation(conversations_db.get_conversation(uid, conversation.id))
 
     async def fake_trigger_external_integrations(uid, conversation):

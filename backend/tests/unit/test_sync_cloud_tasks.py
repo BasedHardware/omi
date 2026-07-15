@@ -688,7 +688,7 @@ class TestVerifyCloudTasksOidc:
             audience='https://backend-sync-backfill.example.com/v2/sync-jobs/run',
         )
 
-    def test_enqueue_account_deletion_task_is_named_by_uid(self):
+    def test_enqueue_account_deletion_task_is_named_by_job_id(self):
         cloud_tasks = _load_cloud_tasks()
         env = {
             'SYNC_TASKS_PROJECT': 'proj',
@@ -697,17 +697,57 @@ class TestVerifyCloudTasksOidc:
             'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
             'SYNC_TASKS_INVOKER_SA': 'invoker@proj.iam.gserviceaccount.com',
         }
-        uid_hash = hashlib.sha256(b'uid1').hexdigest()[:32]
-        task_id = f'account-delete-{uid_hash}-abc123'
-        with patch.dict(os.environ, env):
-            client = MagicMock()
-            client.task_path.return_value = f'projects/proj/locations/us-central1/queues/account-delete/tasks/{task_id}'
-            with patch.object(cloud_tasks, '_get_tasks_client', return_value=client), patch.object(
-                cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
-            ):
-                cloud_tasks.enqueue_account_deletion_wipe('uid1')
-        client.task_path.assert_called_once_with('proj', 'us-central1', 'account-delete', task_id)
-        client.create_task.assert_called_once()
+        job_hash = hashlib.sha256(b'job-1').hexdigest()[:32]
+        task_id = f'account-delete-{job_hash}-abc123'
+        with patch.dict(os.environ, env), patch.object(cloud_tasks, '_enqueue_named_task') as enqueue, patch.object(
+            cloud_tasks.uuid, 'uuid4', return_value=MagicMock(hex='abc123')
+        ):
+            cloud_tasks.enqueue_account_deletion_wipe('job-1')
+        enqueue.assert_called_once_with(
+            'account-delete',
+            'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+            task_id,
+            {'job_id': 'job-1'},
+            audience='https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+        )
+
+    def test_account_deletion_oidc_verification_uses_its_handler_audience(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_TASKS_INVOKER_SA': 'invoker@project.iam.gserviceaccount.com',
+            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+        }
+        claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+
+        with patch.dict(os.environ, env), patch.object(
+            cloud_tasks.id_token, 'verify_oauth2_token', return_value=claims
+        ) as verify:
+            assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
+                _request_with({'authorization': 'Bearer t'})
+            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='account_deletion')
+
+        assert verify.call_args.kwargs['audience'] == env['ACCOUNT_DELETION_HANDLER_URL']
+
+    def test_account_deletion_oidc_verification_accepts_only_the_legacy_sync_audience_as_compatibility(self):
+        cloud_tasks = _load_cloud_tasks()
+        env = {
+            'SYNC_TASKS_INVOKER_SA': 'invoker@project.iam.gserviceaccount.com',
+            'SYNC_TASKS_OIDC_AUDIENCE': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+        }
+        claims = {'email': env['SYNC_TASKS_INVOKER_SA'], 'email_verified': True}
+
+        with patch.dict(os.environ, env), patch.object(
+            cloud_tasks.id_token, 'verify_oauth2_token', side_effect=[ValueError('wrong audience'), claims]
+        ) as verify:
+            assert cloud_tasks.verify_account_deletion_cloud_tasks_oidc(
+                _request_with({'authorization': 'Bearer t'})
+            ) == cloud_tasks.AccountDeletionTaskAuthentication(retry_count=0, audience='legacy_sync')
+
+        assert [call.kwargs['audience'] for call in verify.call_args_list] == [
+            env['ACCOUNT_DELETION_HANDLER_URL'],
+            env['SYNC_TASKS_OIDC_AUDIENCE'],
+        ]
 
     def test_account_deletion_dispatch_flag_default_inline(self):
         cloud_tasks = _load_cloud_tasks()
@@ -716,6 +756,35 @@ class TestVerifyCloudTasksOidc:
             assert cloud_tasks.is_account_deletion_dispatch_enabled() is False
         with patch.dict(os.environ, {'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks'}):
             assert cloud_tasks.is_account_deletion_dispatch_enabled() is True
+
+    def test_account_deletion_startup_guard_rejects_inline_or_incomplete_prod_config(self):
+        cloud_tasks = _load_cloud_tasks()
+        complete_prod_env = {
+            'OMI_ENV_STAGE': 'prod',
+            'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks',
+            'SYNC_TASKS_PROJECT': 'proj',
+            'SYNC_TASKS_LOCATION': 'us-central1',
+            'SYNC_TASKS_INVOKER_SA': 'invoker@proj.iam.gserviceaccount.com',
+            'SYNC_TASKS_HANDLER_URL': 'https://backend-sync.example.com/v2/sync-jobs/run',
+            'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
+            'ACCOUNT_DELETION_HANDLER_URL': 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run',
+        }
+
+        with patch.dict(os.environ, complete_prod_env, clear=True):
+            cloud_tasks.validate_account_deletion_dispatch_configuration()
+
+        with patch.dict(os.environ, {**complete_prod_env, 'ACCOUNT_DELETION_DISPATCH_MODE': 'inline'}, clear=True):
+            with pytest.raises(RuntimeError, match='ACCOUNT_DELETION_DISPATCH_MODE=cloud_tasks'):
+                cloud_tasks.validate_account_deletion_dispatch_configuration()
+
+        incomplete = dict(complete_prod_env)
+        incomplete.pop('ACCOUNT_DELETION_HANDLER_URL')
+        with patch.dict(os.environ, incomplete, clear=True):
+            with pytest.raises(RuntimeError, match='ACCOUNT_DELETION_HANDLER_URL'):
+                cloud_tasks.validate_account_deletion_dispatch_configuration()
+
+        with patch.dict(os.environ, {'OMI_ENV_STAGE': 'dev', 'ACCOUNT_DELETION_DISPATCH_MODE': 'inline'}, clear=True):
+            cloud_tasks.validate_account_deletion_dispatch_configuration()
 
 
 # ---------------------------------------------------------------------------
@@ -733,6 +802,10 @@ class TestSyncRouterStructure:
         source = self._read(os.path.join('routers', 'sync.py'))
         assert '"/v2/sync-jobs/run"' in source
         assert 'Depends(verify_cloud_tasks_oidc)' in source
+
+    def test_startup_applies_the_account_deletion_dispatch_guard(self):
+        source = self._read('main.py')
+        assert 'validate_account_deletion_dispatch_configuration()' in source
 
     def test_handler_respects_terminal_statuses(self):
         source = self._read(os.path.join('routers', 'sync.py'))
@@ -763,7 +836,7 @@ class TestSyncRouterStructure:
         source = self._read(os.path.join('routers', 'users.py'))
         assert "'/v1/users/account-deletion-wipes/run'" in source
         handler = source[source.index('async def run_account_deletion_wipe') :]
-        assert 'Depends(verify_cloud_tasks_oidc)' in handler[:200]
+        assert 'Depends(verify_account_deletion_cloud_tasks_oidc)' in handler[:250]
         assert 'try_acquire_job_run_lock' in handler
         assert 'claim_deletion_wipe_for_task' in handler
         assert 'status_code=500' in handler

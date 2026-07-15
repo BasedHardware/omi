@@ -7,6 +7,7 @@ from firebase_admin import auth
 
 import database.mcp_api_key as mcp_api_key_db
 import database.dev_api_key as dev_api_key_db
+from utils.api_key_families import DEV_FAMILY, MCP_FAMILY, wrong_key_family_detail
 from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize
 from utils.observability.api_keys import record_api_key_repairs
@@ -49,6 +50,9 @@ async def get_uid_from_mcp_api_key(api_key: str = Security(api_key_header)) -> s
         )
 
     token = api_key.replace("Bearer ", "")
+    mismatch = wrong_key_family_detail(token, MCP_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
     auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
@@ -79,6 +83,9 @@ async def get_mcp_api_key_auth(api_key: str = Security(api_key_header)) -> "ApiK
         )
 
     token = api_key.replace("Bearer ", "")
+    mismatch = wrong_key_family_detail(token, MCP_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
     auth_result = await run_blocking(critical_executor, mcp_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="mcp", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context
@@ -171,6 +178,9 @@ async def get_api_key_auth(api_key: str = Security(api_key_header)) -> ApiKeyAut
         )
 
     token = api_key.replace("Bearer ", "")
+    mismatch = wrong_key_family_detail(token, DEV_FAMILY)
+    if mismatch:
+        raise HTTPException(status_code=401, detail=mismatch)
     auth_result = await run_blocking(critical_executor, dev_api_key_db.get_api_key_auth_result, token)
     record_api_key_repairs(key_kind="dev", operation="auth", repairs=auth_result.repairs, log=logger)
     user_data = auth_result.context

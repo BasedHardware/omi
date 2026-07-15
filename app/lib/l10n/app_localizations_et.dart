@@ -9570,4 +9570,25 @@ class AppLocalizationsEt extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Viga Ray-Ban Metaga ühendamisel: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Seadme salvestusruum';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% täis';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total kasutatud';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vaba';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.';
 }

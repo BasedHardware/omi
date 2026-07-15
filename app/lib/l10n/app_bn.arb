@@ -10721,5 +10721,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "ডিভাইস স্টোরেজ",
+    "deviceStoragePercentFull": "{percent}% পূর্ণ",
+    "deviceStorageUsedOfTotal": "{total}-এর মধ্যে {used} ব্যবহৃত",
+    "deviceStorageFree": "{free} খালি",
+    "deviceStorageNearlyFull": "ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।"
 }

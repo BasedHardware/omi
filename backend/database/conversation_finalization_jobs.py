@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Literal, TypedDict
+from typing import Any, Callable, Literal, Mapping, TypedDict
 
 from google.cloud import firestore
 
@@ -30,6 +30,23 @@ class FinalizationIntent(TypedDict):
     status: str
     dispatch_generation: int | None
     requires_byok: bool
+    fanout_key: str | None
+
+
+class FinalizationAdmission(TypedDict):
+    """Pure lifecycle-service decision evaluated inside the outbox transaction."""
+
+    accepted: bool
+    terminal: bool
+    reason: str
+    fanout_key: str | None
+
+
+class FinalizationFanoutClaim(TypedDict):
+    """Ownership result for the durable external-integration fanout."""
+
+    status: str
+    fanout_key: str | None
 
 
 class FinalizationClaim(TypedDict):
@@ -37,6 +54,7 @@ class FinalizationClaim(TypedDict):
 
     status: str
     lease_epoch: int | None
+    attempt_count: int
 
 
 def _now() -> datetime:
@@ -52,8 +70,8 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     return timedelta(seconds=max(30, seconds))
 
 
-def _claim_result(status: str, lease_epoch: int | None = None) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch}
+def _claim_result(status: str, lease_epoch: int | None = None, attempt_count: int = 0) -> FinalizationClaim:
+    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count}
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -86,7 +104,31 @@ def _intent_from_job(job_id: str, data: dict[str, Any]) -> FinalizationIntent:
         'status': str(data.get('status') or 'queued'),
         'dispatch_generation': int(data.get('dispatch_generation') or 1),
         'requires_byok': bool(data.get('requires_byok')),
+        'fanout_key': data.get('fanout_key') if isinstance(data.get('fanout_key'), str) else None,
     }
+
+
+def _no_finalization_intent(status: str) -> FinalizationIntent:
+    return {
+        'job_id': None,
+        'status': status,
+        'dispatch_generation': None,
+        'requires_byok': False,
+        'fanout_key': None,
+    }
+
+
+def _conversation_has_finalization_content(
+    conversation: Mapping[str, Any], conversation_ref: Any, transaction: Any
+) -> bool:
+    """Read current and pre-marker photo content within the admission transaction."""
+    if conversation.get('has_content') or conversation.get('transcript_segments') or conversation.get('photos'):
+        return True
+    # `has_content` was added after photo-only listen recordings already
+    # existed. Keep their durable child documents admissible until all legacy
+    # rows have naturally finalized, without moving the read outside this
+    # transaction's authoritative snapshot.
+    return next(iter(conversation_ref.collection('photos').limit(1).stream(transaction=transaction)), None) is not None
 
 
 def _create_or_get_finalization_intent_txn(
@@ -96,20 +138,27 @@ def _create_or_get_finalization_intent_txn(
     uid: str,
     conversation_id: str,
     requires_byok: bool,
+    finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
     now: datetime,
 ) -> FinalizationIntent:
     """Persist finalization ownership before any pusher or task handoff."""
     conversation_snapshot = conversation_ref.get(transaction=transaction)
     if not getattr(conversation_snapshot, 'exists', False):
-        return {'job_id': None, 'status': 'missing', 'dispatch_generation': None, 'requires_byok': False}
+        return _no_finalization_intent('missing')
 
     conversation = conversation_snapshot.to_dict() or {}
     if conversation.get('deferred'):
-        return {'job_id': None, 'status': 'deferred', 'dispatch_generation': None, 'requires_byok': False}
-    if not (conversation.get('transcript_segments') or conversation.get('photos')):
-        return {'job_id': None, 'status': 'no_content', 'dispatch_generation': None, 'requires_byok': False}
-    if conversation.get('status') == 'completed':
-        return {'job_id': None, 'status': 'completed', 'dispatch_generation': None, 'requires_byok': False}
+        return _no_finalization_intent('deferred')
+    if not _conversation_has_finalization_content(conversation, conversation_ref, transaction):
+        return _no_finalization_intent('no_content')
+
+    # The lifecycle service owns this pure decision, but it is evaluated while
+    # Firestore holds the conversation transaction snapshot. A late disconnect
+    # therefore cannot reopen a failed/discarded terminal row after a stale
+    # pre-transaction read.
+    admission = finalization_admission(conversation)
+    if admission['terminal']:
+        return _no_finalization_intent(admission['reason'])
 
     existing_job_id = conversation.get('finalization_job_id')
     if isinstance(existing_job_id, str) and existing_job_id:
@@ -117,6 +166,9 @@ def _create_or_get_finalization_intent_txn(
         existing_snapshot = existing_ref.get(transaction=transaction)
         if getattr(existing_snapshot, 'exists', False):
             return _intent_from_job(existing_job_id, existing_snapshot.to_dict() or {})
+
+    if not admission['accepted'] or not admission['fanout_key']:
+        return _no_finalization_intent(admission['reason'])
 
     revision = int(conversation.get('finalization_revision') or 0) + 1
     job_id = _job_id(uid, conversation_id, revision)
@@ -143,6 +195,8 @@ def _create_or_get_finalization_intent_txn(
         'finalization_revision': revision,
         'status': status,
         'requires_byok': requires_byok,
+        'fanout_key': admission['fanout_key'],
+        'fanout_status': 'pending',
         'dispatch_generation': 1,
         'attempt_count': 0,
         'task_retry_count': 0,
@@ -170,6 +224,7 @@ def create_or_get_finalization_intent(
     conversation_id: str,
     *,
     requires_byok: bool,
+    finalization_admission: Callable[[Mapping[str, Any]], FinalizationAdmission],
     firestore_client: Any = None,
 ) -> FinalizationIntent:
     client = _client(firestore_client)
@@ -183,6 +238,7 @@ def create_or_get_finalization_intent(
         uid,
         conversation_id,
         requires_byok,
+        finalization_admission,
         _now(),
     )
 
@@ -190,7 +246,13 @@ def create_or_get_finalization_intent(
 def _resume_blocked_byok_job_txn(transaction: Any, job_ref: Any, now: datetime) -> FinalizationIntent:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
-        return {'job_id': None, 'status': 'missing', 'dispatch_generation': None, 'requires_byok': False}
+        return {
+            'job_id': None,
+            'status': 'missing',
+            'dispatch_generation': None,
+            'requires_byok': False,
+            'fanout_key': None,
+        }
     job = snapshot.to_dict() or {}
     if job.get('status') == 'blocked_byok' and job.get('requires_byok'):
         transaction.update(
@@ -234,6 +296,8 @@ def _claim_finalization_job_txn(
         return _claim_result('identity_mismatch')
     if expected_conversation_id is not None and job.get('conversation_id') != expected_conversation_id:
         return _claim_result('identity_mismatch')
+    if status == 'completed' and job.get('finalization_outcome') == 'fenced':
+        return _claim_result('fenced')
     if status in TERMINAL_JOB_STATUSES:
         return _claim_result(status)
     if bool(job.get('requires_byok')) and not allow_byok:
@@ -251,6 +315,7 @@ def _claim_finalization_job_txn(
 
     lease_epoch = int(job.get('lease_epoch') or 0) + 1
     lease_expires_at = now + timedelta(seconds=lease_seconds)
+    attempt_count = int(job.get('attempt_count') or 0) + 1
 
     transaction.update(
         job_ref,
@@ -263,10 +328,12 @@ def _claim_finalization_job_txn(
             'lease_epoch': lease_epoch,
             'reconcile_after_at': (firestore.DELETE_FIELD if bool(job.get('requires_byok')) else lease_expires_at),
             'updated_at': now,
-            'attempt_count': int(job.get('attempt_count') or 0) + 1,
+            # The claimer owns the attempt budget: an inline (pusher) worker has
+            # no Cloud Tasks retry count to fence its terminal attempt with.
+            'attempt_count': attempt_count,
         },
     )
-    return _claim_result('claimed', lease_epoch)
+    return _claim_result('claimed', lease_epoch, attempt_count)
 
 
 def claim_finalization_job(
@@ -305,6 +372,8 @@ def _mark_finalization_completed_txn(
         return int(job.get('lease_epoch') or 0) == lease_epoch
     if not _is_current_lease(job, dispatch_generation, lease_epoch):
         return False
+    if job.get('fanout_status') != 'completed':
+        return False
     transaction.update(
         job_ref,
         {
@@ -325,6 +394,189 @@ def mark_finalization_completed(
     client = _client(firestore_client)
     transaction = client.transaction()
     transactional = firestore.transactional(_mark_finalization_completed_txn)
+    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
+
+
+def _mark_finalization_fenced_txn(
+    transaction: Any, job_ref: Any, dispatch_generation: int, lease_epoch: int, now: datetime
+) -> bool:
+    """Terminally complete a current lease that was fenced before fanout.
+
+    A discard or newer lifecycle generation can win after the job lease was
+    acquired. That is a successful no-fanout terminal outcome, not a retryable
+    processing failure. It must remain distinct from normal completion so a
+    replay cannot mistake it for a delivered external integration.
+    """
+    snapshot = job_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    job = snapshot.to_dict() or {}
+    if job.get('status') == 'completed':
+        return job.get('finalization_outcome') == 'fenced' and int(job.get('lease_epoch') or 0) == lease_epoch
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return False
+    if job.get('fanout_status') not in (None, 'pending'):
+        return False
+    transaction.update(job_ref, _fenced_finalization_update(now))
+    return True
+
+
+def mark_finalization_fenced(
+    job_id: str, dispatch_generation: int, lease_epoch: int, *, firestore_client: Any = None
+) -> bool:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_mark_finalization_fenced_txn)
+    return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
+
+
+def _fanout_key(job: dict[str, Any]) -> str:
+    key = job.get('fanout_key')
+    if isinstance(key, str) and key:
+        return key
+    # Backfill jobs created before the durable fanout boundary on their first
+    # retry. The key is deterministic per immutable finalization revision.
+    return f"conversation:{job.get('conversation_id', '')}:finalization:{int(job.get('finalization_revision') or 1)}"
+
+
+def _fenced_finalization_update(now: datetime) -> dict[str, Any]:
+    """Return the terminal no-fanout state shared by every fencing boundary."""
+    return {
+        'status': 'completed',
+        'completed_at': now,
+        'updated_at': now,
+        'lease_expires_at': now,
+        'reconcile_after_at': firestore.DELETE_FIELD,
+        'last_failure_code': None,
+        'finalization_outcome': 'fenced',
+        'fanout_status': 'fenced',
+        'fanout_fenced_at': now,
+    }
+
+
+def _fanout_claim(status: str, fanout_key: str | None) -> FinalizationFanoutClaim:
+    return {'status': status, 'fanout_key': fanout_key}
+
+
+def _conversation_admits_fanout(conversation: Mapping[str, Any], job: Mapping[str, Any], job_id: str) -> bool:
+    """Require the immutable job binding to still name a completed conversation."""
+    if conversation.get('discarded') or conversation.get('status') != 'completed':
+        return False
+    if conversation.get('finalization_job_id') != job_id:
+        return False
+    try:
+        return int(conversation.get('finalization_revision') or 0) == int(job.get('finalization_revision') or 0)
+    except (TypeError, ValueError):
+        return False
+
+
+def _claim_finalization_fanout_txn(
+    transaction: Any,
+    job_ref: Any,
+    dispatch_generation: int,
+    lease_epoch: int,
+    now: datetime,
+    conversation_ref_for_job: Callable[[str, str], Any],
+) -> FinalizationFanoutClaim:
+    """Claim fanout only if this job still owns the completed conversation.
+
+    Reading the conversation in this Firestore transaction makes a concurrent
+    discard or newer finalization revision retry the transaction before the
+    fanout lease can commit.  The losing state is terminally fenced here,
+    rather than leaving a retryable leased job for either worker to replay.
+    """
+    snapshot = job_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return _fanout_claim('missing', None)
+    job = snapshot.to_dict() or {}
+    fanout_key = _fanout_key(job)
+    if job.get('fanout_status') == 'completed':
+        return _fanout_claim('completed', fanout_key)
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return _fanout_claim('lease_conflict', fanout_key)
+
+    uid = job.get('uid')
+    conversation_id = job.get('conversation_id')
+    if not isinstance(uid, str) or not uid or not isinstance(conversation_id, str) or not conversation_id:
+        transaction.update(job_ref, _fenced_finalization_update(now))
+        return _fanout_claim('fenced', fanout_key)
+
+    conversation_ref = conversation_ref_for_job(uid, conversation_id)
+    conversation_snapshot = conversation_ref.get(transaction=transaction)
+    conversation = conversation_snapshot.to_dict() if getattr(conversation_snapshot, 'exists', False) else None
+    if not isinstance(conversation, Mapping) or not _conversation_admits_fanout(conversation, job, job_ref.id):
+        transaction.update(job_ref, _fenced_finalization_update(now))
+        return _fanout_claim('fenced', fanout_key)
+
+    transaction.update(
+        job_ref,
+        {
+            'fanout_key': fanout_key,
+            'fanout_status': 'leased',
+            'fanout_lease_epoch': lease_epoch,
+            'fanout_started_at': now,
+            'updated_at': now,
+        },
+    )
+    return _fanout_claim('claimed', fanout_key)
+
+
+def claim_finalization_fanout(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> FinalizationFanoutClaim:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_claim_finalization_fanout_txn)
+    return transactional(
+        transaction,
+        _job_ref(client, job_id),
+        dispatch_generation,
+        lease_epoch,
+        _now(),
+        lambda uid, conversation_id: _conversation_ref(client, uid, conversation_id),
+    )
+
+
+def _mark_finalization_fanout_completed_txn(
+    transaction: Any,
+    job_ref: Any,
+    dispatch_generation: int,
+    lease_epoch: int,
+    now: datetime,
+) -> bool:
+    snapshot = job_ref.get(transaction=transaction)
+    if not getattr(snapshot, 'exists', False):
+        return False
+    job = snapshot.to_dict() or {}
+    if job.get('fanout_status') == 'completed':
+        return int(job.get('fanout_lease_epoch') or 0) == lease_epoch
+    if not _is_current_lease(job, dispatch_generation, lease_epoch):
+        return False
+    transaction.update(
+        job_ref,
+        {
+            'fanout_status': 'completed',
+            'fanout_completed_at': now,
+            'updated_at': now,
+        },
+    )
+    return True
+
+
+def mark_finalization_fanout_completed(
+    job_id: str,
+    dispatch_generation: int,
+    lease_epoch: int,
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = _client(firestore_client)
+    transaction = client.transaction()
+    transactional = firestore.transactional(_mark_finalization_fanout_completed_txn)
     return transactional(transaction, _job_ref(client, job_id), dispatch_generation, lease_epoch, _now())
 
 
@@ -413,7 +665,13 @@ def _claim_finalization_replay_txn(
 ) -> FinalizationIntent:
     snapshot = job_ref.get(transaction=transaction)
     if not getattr(snapshot, 'exists', False):
-        return {'job_id': None, 'status': 'missing', 'dispatch_generation': None, 'requires_byok': False}
+        return {
+            'job_id': None,
+            'status': 'missing',
+            'dispatch_generation': None,
+            'requires_byok': False,
+            'fanout_key': None,
+        }
     job = snapshot.to_dict() or {}
     status = str(job.get('status') or '')
     if status == 'blocked_byok' or status in TERMINAL_JOB_STATUSES:

@@ -9620,4 +9620,25 @@ class AppLocalizationsRo extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Eroare la conectarea la Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Stocarea dispozitivului';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% plin';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used din $total utilizat';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free liber';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.';
 }

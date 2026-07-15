@@ -100,9 +100,40 @@ private actor GatedRuntimeStartupHarness {
 }
 
 final class AgentRuntimeProcessTests: XCTestCase {
+  func testKernelJournalMutationClosesTheRuntimeReplayBoundary() async throws {
+    let runtime = AgentRuntimeProcess()
+    let turn = try XCTUnwrap(KernelJournalTurn(dictionary: [
+      "conversationId": "conversation",
+      "turnId": "turn-terminal",
+      "turnSeq": 1,
+      "conversationGeneration": 1,
+      "generationBaseTurnSeq": 0,
+      "producerId": "producer",
+      "payloadHash": "hash",
+      "role": "assistant",
+      "surfaceKind": "main_chat",
+      "content": "Done",
+      "status": "completed",
+      "origin": "chat",
+      "contentBlocks": [],
+      "resources": [],
+      "metadataJson": "{}",
+      "createdAtMs": 1,
+      "updatedAtMs": 1,
+    ]))
+
+    await runtime.dispatchJournalTurnChangedForTesting(turn)
+
+    var lifecycle = await runtime.bridgeLifecycleSnapshotForTesting()
+    XCTAssertTrue(lifecycle.settledTurnIDs.contains("turn-terminal"))
+    XCTAssertEqual(
+      lifecycle.reduce(.walFrame(turnID: "turn-terminal")),
+      [.rejectWALFrame(turnID: "turn-terminal")])
+  }
+
   func testRuntimeHandshakeRejectsStaleV2RuntimeWithoutRequiredCapability() throws {
     let valid = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn"]}"#
+      #"{"type":"init","protocolVersion":2,"sessionId":"","agentControlTools":[],"runtimeVersion":"1.0.0","runtimeCapabilities":["journal_import_remote_turn","runtime_adapter_availability"]}"#
     ))
     let handshake = try AgentRuntimeProcess.validateRuntimeHandshake(valid)
     XCTAssertEqual(handshake.protocolVersion, AgentRuntimeProcess.expectedProtocolVersion)
@@ -940,47 +971,75 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertEqual(parsed.first?.requestId, "context-1")
   }
 
-  func testFailedRuntimeStartCleansUpLatchedRunningState() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
-
-    XCTAssertTrue(source.contains("cleanupFailedStart(process: proc, error: error)"))
-    XCTAssertTrue(source.contains("isRunning = false"))
-    XCTAssertTrue(source.contains("receivedInit = false"))
-    XCTAssertTrue(source.contains("resumeInitContinuations(throwing: BridgeError.stopped)"))
+  func testFailedRuntimeStartLeavesTypedRecoverableLifecycleState() {
+    var lifecycle = AgentRuntimeBridgeLifecycle()
+    XCTAssertEqual(lifecycle.reduce(.spawn), [.launchBridge])
+    XCTAssertEqual(
+      lifecycle.reduce(.spawnFailure(.exitedDuringStartup)),
+      [.surfaceFailedStart(.exitedDuringStartup)])
+    XCTAssertEqual(lifecycle.state, .failedStart)
+    XCTAssertEqual(lifecycle.startFailure, .exitedDuringStartup)
+    XCTAssertFalse(lifecycle.acceptsWALFrames)
   }
 
-  func testSharedRestartIsBlockedWhileRequestsAreActive() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+  func testProcessExitBeforeInitUsesTypedFailedStartRetryDisposition() {
+    var lifecycle = AgentRuntimeBridgeLifecycle()
+    XCTAssertEqual(lifecycle.reduce(.spawn), [.launchBridge])
 
-    XCTAssertTrue(source.contains("guard activeRequests.isEmpty, activeControlRequests.isEmpty else"))
-    XCTAssertTrue(source.contains("isRestarting = true"))
-    XCTAssertTrue(source.contains("guard !isRestarting, !isStopping else"))
-    XCTAssertTrue(source.contains("BridgeError.restarting"))
-    XCTAssertTrue(source.contains("BridgeError.requestAlreadyActive"))
+    let failure = AgentRuntimeProcess.startFailure(for: BridgeError.processExited)
+    XCTAssertEqual(failure, .exitedDuringStartup)
+    XCTAssertEqual(
+      lifecycle.reduce(.spawnFailure(failure)),
+      [.surfaceFailedStart(.exitedDuringStartup)],
+      "the production termination path emits this effect before it resumes the pending init waiter")
+    XCTAssertEqual(lifecycle.state, .failedStart)
+    XCTAssertEqual(lifecycle.startFailure, .exitedDuringStartup)
+    XCTAssertFalse(lifecycle.acceptsWALFrames)
   }
 
-  func testClientRegistrationWaitsForInitWhenProcessIsAlreadyRunning() throws {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
-    let source = try String(contentsOf: sourceURL, encoding: .utf8)
+  func testSharedRestartUsesReducerOwnedDrainAndRestartStates() {
+    var lifecycle = AgentRuntimeBridgeLifecycle()
+    _ = lifecycle.reduce(.spawn)
+    _ = lifecycle.reduce(.handshakeSucceeded)
+    XCTAssertEqual(lifecycle.reduce(.modeSwitchRequested), [.beginDrain])
+    XCTAssertEqual(lifecycle.reduce(.drainRequested), [.beginDrain])
+    XCTAssertEqual(lifecycle.state, .draining)
+    _ = lifecycle.reduce(.kill)
+    XCTAssertEqual(lifecycle.reduce(.restart), [.restartBridge])
+    XCTAssertEqual(lifecycle.state, .restarting)
+  }
 
-    XCTAssertTrue(source.contains("if isRunning {"))
-    XCTAssertTrue(source.contains("try await waitForInit(timeout: 30.0)"))
-    XCTAssertTrue(source.contains("try assertStartupAuthority("))
-    XCTAssertTrue(source.contains(
-      "try assertClientRegistration(clientId: clientId, registrationID: registrationID)"))
-    XCTAssertTrue(source.contains("case .initMessage:"))
-    XCTAssertTrue(source.contains("resolveInitContinuations()"))
+  func testAbandonedRestartAlwaysLeavesDrainStateRestartable() {
+    var lifecycle = AgentRuntimeBridgeLifecycle()
+    _ = lifecycle.reduce(.spawn)
+    _ = lifecycle.reduce(.handshakeSucceeded)
+    _ = lifecycle.reduce(.modeSwitchRequested)
+    _ = lifecycle.reduce(.drainRequested)
+    XCTAssertEqual(lifecycle.state, .draining)
+
+    // `AgentRuntimeProcess.restart` takes this path if its initiating client
+    // unregisters or is cancelled after it begins draining. The reducer must
+    // not leave the shared daemon wedged behind that departed client.
+    XCTAssertEqual(lifecycle.reduce(.kill), [.closeWAL])
+    XCTAssertEqual(lifecycle.state, .stopped)
+    XCTAssertEqual(lifecycle.reduce(.spawn), [.launchBridge])
+    XCTAssertEqual(lifecycle.state, .starting)
+  }
+
+  func testStartupAdmissionLaunchesTheFirstBridgeAndJoinsOnlyAnActiveFlight() {
+    XCTAssertFalse(AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: .stopped,
+      hasActiveStartupAttempt: false))
+    XCTAssertFalse(AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: .starting,
+      hasActiveStartupAttempt: false),
+      "the launch owner marks the reducer starting before its flight is installed")
+    XCTAssertTrue(AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: .starting,
+      hasActiveStartupAttempt: true))
+    XCTAssertTrue(AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: .running,
+      hasActiveStartupAttempt: false))
   }
 
   func testAppSurfacesUseDirectControlToolOnly() throws {
@@ -1131,7 +1190,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
   func testIsAliveRequiresUnderlyingProcessRunning() throws {
     let source = try agentRuntimeSource()
     XCTAssertTrue(source.contains("let processRunning = process?.isRunning ?? false"))
-    XCTAssertTrue(source.contains("return isRunning && processRunning"))
+    XCTAssertTrue(source.contains("return processRunning"))
     XCTAssertTrue(source.contains("recordAgentRuntimeStaleAliveCheck"))
   }
 

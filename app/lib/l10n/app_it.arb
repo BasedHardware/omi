@@ -3143,5 +3143,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Archiviazione del dispositivo",
+    "deviceStoragePercentFull": "{percent}% pieno",
+    "deviceStorageUsedOfTotal": "{used} di {total} utilizzati",
+    "deviceStorageFree": "{free} liberi",
+    "deviceStorageNearlyFull": "Dispositivo quasi pieno — sincronizza per liberare spazio."
 }

@@ -96,6 +96,17 @@ final class ScreenCaptureService: Sendable {
     return true
   }
 
+  enum ScreenRecordingRequestDestination: Equatable {
+    case alreadyGranted
+    case systemSettings
+  }
+
+  static func screenRecordingRequestDestination(
+    hasPermissionNow: Bool
+  ) -> ScreenRecordingRequestDestination {
+    hasPermissionNow ? .alreadyGranted : .systemSettings
+  }
+
   /// Legacy synchronous permission probe. Keep this as a TCC preflight wrapper
   /// so callers cannot accidentally make the UI depend on a child CLI process.
   static func testCapturePermission() -> Bool {
@@ -111,6 +122,8 @@ final class ScreenCaptureService: Sendable {
 
   /// Open System Preferences to Screen Recording settings
   static func openScreenRecordingPreferences() {
+    Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+
     if let url = URL(
       string: "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture")
     {
@@ -226,6 +239,10 @@ final class ScreenCaptureService: Sendable {
       }
     }
 
+    if !CGPreflightScreenCaptureAccess() {
+      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+    }
+
     // Note: callers are responsible for opening System Settings
     // (removed duplicate open that conflicted with caller's own open call)
   }
@@ -252,8 +269,13 @@ final class ScreenCaptureService: Sendable {
   /// never appeared in the list. Mirrors MemoryExportExecutor.requestScreenRecordingApprovalForCloudSetup, the existing register-while-frontmost path.
   @MainActor
   static func requestScreenRecordingAccessAndOpenSettings() {
-    requestAllScreenCapturePermissions()
-    openScreenRecordingPreferences()
+    switch screenRecordingRequestDestination(hasPermissionNow: checkPermission()) {
+    case .alreadyGranted:
+      NSApp.activate()
+    case .systemSettings:
+      requestAllScreenCapturePermissions()
+      openScreenRecordingPreferences()
+    }
   }
 
   /// Test if ScreenCaptureKit specifically works (macOS 14+)
@@ -739,6 +761,43 @@ final class ScreenCaptureService: Sendable {
     }
   }
 
+  /// Capture dimensions that preserve the window's aspect ratio, or nil for a
+  /// degenerate frame. `static` so it is synchronously unit-testable.
+  ///
+  /// A zero-width frame makes `aspectRatio` 0, so `configWidth / aspectRatio` is
+  /// NaN (0/0). NaN fails every comparison, so the `> maxSize` clamp does not fire
+  /// and `Int(NaN)` traps — an uncatchable crash, not a thrown error. Refuse to
+  /// capture a zero-area window instead.
+  static func captureDimensions(
+    width: CGFloat, height: CGFloat, maxSize: CGFloat
+  ) -> (width: Int, height: Int)? {
+    guard width > 0, height > 0 else { return nil }
+
+    let aspectRatio = width / height
+    var configWidth = min(width, maxSize)
+    var configHeight = configWidth / aspectRatio
+    if configHeight > maxSize {
+      configHeight = maxSize
+      configWidth = configHeight * aspectRatio
+    }
+    return (Int(configWidth), Int(configHeight))
+  }
+
+  /// Aspect-preserving stream configuration, or nil if the window has no area.
+  private func captureConfiguration(for window: SCWindow) -> SCStreamConfiguration? {
+    guard
+      let size = Self.captureDimensions(
+        width: window.frame.width, height: window.frame.height, maxSize: maxSize)
+    else { return nil }
+
+    let config = SCStreamConfiguration()
+    config.scalesToFit = true
+    config.showsCursor = false
+    config.width = size.width
+    config.height = size.height
+    return config
+  }
+
   /// Capture using ScreenCaptureKit (macOS 14.0+)
   @available(macOS 14.0, *)
   private func captureWithScreenCaptureKit(windowID: CGWindowID) async -> Data? {
@@ -753,23 +812,12 @@ final class ScreenCaptureService: Sendable {
         log("Window not found in SCShareableContent")
         return nil
       }
+      guard let config = captureConfiguration(for: window) else {
+        log("Skipping capture of zero-area window frame")
+        return nil
+      }
 
       let filter = SCContentFilter(desktopIndependentWindow: window)
-      let config = SCStreamConfiguration()
-      config.scalesToFit = true
-      config.showsCursor = false
-      // Calculate dimensions maintaining aspect ratio (don't create square canvas)
-      let windowWidth = window.frame.width
-      let windowHeight = window.frame.height
-      let aspectRatio = windowWidth / windowHeight
-      var configWidth = min(windowWidth, maxSize)
-      var configHeight = configWidth / aspectRatio
-      if configHeight > maxSize {
-        configHeight = maxSize
-        configWidth = configHeight * aspectRatio
-      }
-      config.width = Int(configWidth)
-      config.height = Int(configHeight)
 
       let image = try await SCScreenshotManager.captureImage(
         contentFilter: filter,
@@ -818,33 +866,21 @@ final class ScreenCaptureService: Sendable {
       }
 
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+        guard let window = content.windows.first(where: { $0.windowID == windowID }),
+          let config = captureConfiguration(for: window)
+        else {
           return nil
         }
 
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let config = SCStreamConfiguration()
-        config.scalesToFit = true
-        config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
-        }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
-        return (filter, config)
+        return (SCContentFilter(desktopIndependentWindow: window), config)
       }
 
       guard let (filter, config) = filterAndConfig else {
-        // Window ID no longer exists — the user closed a tab, dismissed a modal,
-        // or the app destroyed the window between resolution and capture. This is
-        // routine, not a capture failure. Caller should re-resolve and retry.
-        log("Window \(windowID) not found in SCShareableContent (window closed)")
+        // Window ID no longer exists, or it reports a zero-area frame — the user
+        // closed a tab, dismissed a modal, or the app destroyed the window between
+        // resolution and capture. This is routine, not a capture failure. Caller
+        // should re-resolve and retry.
+        log("Window \(windowID) not capturable in SCShareableContent (closed or zero-area)")
         return .windowGone
       }
 
@@ -877,26 +913,13 @@ final class ScreenCaptureService: Sendable {
       // accumulate in Swift concurrency's cooperative thread pool (which doesn't
       // drain autorelease pools between tasks).
       let filterAndConfig: (SCContentFilter, SCStreamConfiguration)? = autoreleasepool {
-        guard let window = content.windows.first(where: { $0.windowID == windowID }) else {
+        guard let window = content.windows.first(where: { $0.windowID == windowID }),
+          let config = captureConfiguration(for: window)
+        else {
           return nil
         }
 
-        let filter = SCContentFilter(desktopIndependentWindow: window)
-        let config = SCStreamConfiguration()
-        config.scalesToFit = true
-        config.showsCursor = false
-        let windowWidth = window.frame.width
-        let windowHeight = window.frame.height
-        let aspectRatio = windowWidth / windowHeight
-        var configWidth = min(windowWidth, maxSize)
-        var configHeight = configWidth / aspectRatio
-        if configHeight > maxSize {
-          configHeight = maxSize
-          configWidth = configHeight * aspectRatio
-        }
-        config.width = Int(configWidth)
-        config.height = Int(configHeight)
-        return (filter, config)
+        return (SCContentFilter(desktopIndependentWindow: window), config)
       }
 
       guard let (filter, config) = filterAndConfig else {

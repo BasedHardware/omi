@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -28,6 +29,8 @@ from models.product_memory import (
     MemoryItem,
 )
 from utils.memory.short_term_lifecycle import default_short_term_expiry
+
+logger = logging.getLogger(__name__)
 
 
 class ApplyStatus(str, Enum):
@@ -397,6 +400,20 @@ def _barrier_outbox_events(
     ]
 
 
+def _coerce_iso_timestamp(value: str, *, field: str) -> Optional[datetime]:
+    """Parse a stored ISO timestamp string, tolerating a trailing 'Z'.
+
+    Returns None on a malformed value so the caller can drop just that one field instead of
+    letting a single drifted string abort the whole patch. Logs the field name only, never the
+    raw value, which can carry memory text.
+    """
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("Dropping malformed timestamp field %s in long-term memory patch", field)
+        return None
+
+
 def apply_long_term_patch_transaction(
     *, control_state: MemoryControlState, operation: MemoryOperation, patch_payload: Dict[str, Any]
 ) -> ApplyResult:
@@ -427,9 +444,13 @@ def apply_long_term_patch_transaction(
             extra_item_updates[optional_key] = raw.pop(optional_key)
     for timestamp_key in ("last_corroborated_at", "captured_at", "updated_at", "expires_at"):
         if timestamp_key in extra_item_updates and isinstance(extra_item_updates[timestamp_key], str):
-            extra_item_updates[timestamp_key] = datetime.fromisoformat(
-                extra_item_updates[timestamp_key].replace("Z", "+00:00")
-            )
+            coerced = _coerce_iso_timestamp(extra_item_updates[timestamp_key], field=timestamp_key)
+            if coerced is None:
+                # Drop just the malformed field; the item keeps its existing (update path) or
+                # materialized (create path) value instead of the whole patch raising ValueError.
+                extra_item_updates.pop(timestamp_key)
+            else:
+                extra_item_updates[timestamp_key] = coerced
     if (
         "confidence" in extra_item_updates
         and extra_item_updates["confidence"] is not None

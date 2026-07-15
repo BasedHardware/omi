@@ -122,6 +122,11 @@ env:
     value: "memories-backend"
   - name: REDIS_DB_PORT
     value: "13151"
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: REDIS_DB_HOST
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -212,6 +217,14 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: MARKETPLACE_APP_REVIEWERS
+  - name: TYPESENSE_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: prod-omi-backend-config
+        key: TYPESENSE_HOST
+      # TYPESENSE_HOST is public runtime configuration. Clear a historical
+      # Secret-backed binding when Helm strategically merges this named env.
+      secretKeyRef: null
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY

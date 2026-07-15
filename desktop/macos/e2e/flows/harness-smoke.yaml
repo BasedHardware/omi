@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+Environment.swift
+  - desktop/macos/Desktop/Sources/AppBuild.swift
   - desktop/macos/Desktop/Sources/BundleEnvironment.swift
   - desktop/macos/Desktop/Sources/DesktopBackendEnvironment.swift
   - desktop/macos/Desktop/Sources/AuthService.swift
@@ -17,6 +18,7 @@ covers:
   - desktop/macos/Desktop/Sources/ClientDeviceService.swift
   - desktop/macos/Desktop/Sources/LocalAgentAPIServer.swift
   - desktop/macos/Desktop/Sources/AgentSyncService.swift
+  - desktop/macos/Desktop/Sources/AgentVMService.swift
   - desktop/macos/Desktop/Sources/APIKeyService.swift
   - desktop/macos/Desktop/Sources/FileIndexing/FileIndexerService.swift
   - desktop/macos/Desktop/Sources/StartupWarmupCoordinator.swift

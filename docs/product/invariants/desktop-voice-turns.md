@@ -95,6 +95,11 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift`
 
 ## Guard tests
@@ -110,6 +115,11 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBarVoicePlaybackService.swift`
 
 ## PR rule

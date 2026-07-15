@@ -25,6 +25,7 @@ from utils.memory.memory_system import MemorySystem
 from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
+from utils.conversations import lifecycle as lifecycle_service
 from utils.cloud_tasks import is_audio_merge_dispatch_enabled
 from utils.other.storage import (
     compute_audio_files_fingerprint,
@@ -267,7 +268,7 @@ def perform_merge_async(
         )
 
         # 7. Save stub conversation to database
-        conversations_db.upsert_conversation(uid, new_conversation.model_dump())
+        lifecycle_service.create_processing_conversation(uid, new_conversation.model_dump())
 
         # Build the conversation-level playback artifact for the merged conversation.
         # Fingerprint-named task: dedups with the enqueue process_conversation may
@@ -296,10 +297,10 @@ def perform_merge_async(
                 logger.error(f"Error processing merged conversation: {e}")
                 # Even if processing fails, continue with cleanup
                 # Mark conversation as completed
-                conversations_db.update_conversation_status(uid, new_conversation_id, ConversationStatus.completed)
+                lifecycle_service.complete(uid, new_conversation_id)
         else:
             # If not reprocessing, just mark as completed
-            conversations_db.update_conversation_status(uid, new_conversation_id, ConversationStatus.completed)
+            lifecycle_service.complete(uid, new_conversation_id)
 
         # 9. Delete ALL source conversations and their related data
         for conv in sorted_convs:
@@ -576,6 +577,6 @@ def _handle_merge_failure(uid: str, conversation_ids: List[str]) -> None:
     logger.error(f"Merge failed for conversations: {conversation_ids}")
     for conv_id in conversation_ids:
         try:
-            conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.completed)
+            lifecycle_service.complete(uid, conv_id)
         except Exception as e:
             logger.error(f"Error resetting status for {conv_id}: {e}")

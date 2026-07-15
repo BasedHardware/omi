@@ -187,6 +187,15 @@ final class ChatErrorStateTests: XCTestCase {
     )
   }
 
+  func testTypedBridgeStartFailureSurfacesARecoverableRetryCard() {
+    let error = BridgeError.failedToStart(.handshakeTimedOut)
+    XCTAssertEqual(
+      ChatErrorState.from(error),
+      .bridgeUnavailable(reason: .failedToStart(.handshakeTimedOut)))
+    XCTAssertEqual(ChatErrorState.from(error)?.primaryRecovery, .retry)
+    XCTAssertEqual(ChatErrorState.from(error)?.userFacingSummary, "AI took too long to start. Try again.")
+  }
+
   func testBridgeUnavailableReasonsCoverUnknown() {
     XCTAssertEqual(
       ChatErrorState.from(.notRunning),
@@ -280,6 +289,29 @@ final class ChatErrorStateTests: XCTestCase {
     let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
     XCTAssertTrue(source.contains("dashboardChatErrorCard"))
     XCTAssertTrue(source.contains("ChatErrorCard("))
+  }
+
+  /// Static tripwire for the Home chat layout. The shared ChatErrorCard belongs to
+  /// homePanelStage, below the composer; placing it inside homeChatPanel as well
+  /// visibly duplicates the sign-in recovery CTA for the same ChatProvider state.
+  func testDashboardHomeChatHasOneSharedErrorCardRenderSite() throws {
+    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    let panelStart = try XCTUnwrap(source.range(of: "private func homePanelStage"))
+    let chatStart = try XCTUnwrap(source.range(of: "private func homeChatPanel"))
+    let connectStart = try XCTUnwrap(source.range(of: "private func homeConnectPanel"))
+
+    let panelSource = String(source[panelStart.lowerBound..<chatStart.lowerBound])
+    let chatSource = String(source[chatStart.lowerBound..<connectStart.lowerBound])
+
+    XCTAssertEqual(
+      panelSource.components(separatedBy: "dashboardChatErrorCard").count - 1,
+      1,
+      "Home must have one canonical error-card owner outside the chat panel."
+    )
+    XCTAssertFalse(
+      chatSource.contains("dashboardChatErrorCard"),
+      "The embedded chat panel must not render a second copy of the shared auth gate."
+    )
   }
 
   func testFloatingBarReadsCurrentError() throws {

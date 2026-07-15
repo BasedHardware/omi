@@ -19,6 +19,7 @@ use std::time::Duration;
 
 use crate::auth::{AuthUser, PaywalledAuthUser};
 use crate::byok;
+use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::models::chat_completions::*;
 use crate::AppState;
 
@@ -265,11 +266,25 @@ fn translate_request_inner(
     // Haiku is excluded: web_search_20260209 is not supported there, and a
     // tools-bearing haiku request would 400 with it attached.
     let web_search_supported = enable_web_search && !upstream_model.starts_with("claude-haiku");
-    let force_web_search =
+    let wants_web_search =
         policy.requires(RetrievalSource::PublicWeb) && !caller_disabled_tools(req);
-    if force_web_search && !web_search_supported {
+    if wants_web_search && !web_search_supported && policy.web_requirement_is_explicit() {
         return Err(
             "required public web search is unavailable for this model or deployment".to_string(),
+        );
+    }
+    // A heuristic freshness/anaphoric guess is not a user demand. On a route
+    // without web search (haiku, or the kill switch) answer the turn from model
+    // knowledge instead of failing it — the forced-search instruction below also
+    // bans private context, which would be wrong for a turn we merely guessed at.
+    let force_web_search = wants_web_search && web_search_supported;
+    if wants_web_search && !web_search_supported {
+        record_fallback(
+            "chat_retrieval",
+            "forced_web_search",
+            "model_knowledge",
+            "capability_mismatch",
+            FallbackOutcome::Degraded,
         );
     }
     let client_tools = req.tools.as_deref().unwrap_or(&[]);
@@ -365,9 +380,7 @@ fn translate_request_inner(
         model: upstream_model.to_string(),
         max_tokens,
         messages: anthropic_messages,
-        // Use the system block produced by cached_system_block() above
-        // (line 226) which already handles sentinel splitting for cache
-        // stability — do NOT re-create here or we lose the split.
+        // Use the typed system block produced by cached_system_block() above.
         system,
         temperature: req.temperature,
         stream: req.stream,
@@ -394,41 +407,40 @@ fn ephemeral_cache_control() -> serde_json::Value {
     json!({ "type": "ephemeral", "ttl": "1h" })
 }
 
-/// Sentinel the desktop client inserts between the static (cacheable) system
-/// prefix and the per-conversation live context (date/time, memories, screen
-/// activity). The prefix is byte-identical across every conversation; the tail
-/// changes per conversation. Splitting here lets the cache_control breakpoint
-/// cover only the stable prefix so a changing tail never busts the cached
-/// ~16k-token prefix. Must match `ChatProvider.cacheSplitSentinel` in the app.
-const SYSTEM_CACHE_SPLIT: &str = "<<<OMI_CACHE_SPLIT_V1>>>";
+const OMI_CONTEXT_CACHE_BOUNDARY: &str = "<!-- OMI_CONTEXT_CACHE_V1 ";
 
-/// Wrap a system prompt string in cache_control content block(s).
-///
-/// If the prompt carries the `SYSTEM_CACHE_SPLIT` sentinel, emit two blocks: the
-/// static prefix (cached) followed by the live-context tail (uncached, re-sent
-/// every request). Otherwise emit a single cached block (legacy behavior).
+/// Split the producer-owned desktop context-plan boundary. The static kernel
+/// policy gets the cache breakpoint; the marker and any dynamic context after
+/// it remain uncached so changed conversation context cannot poison the stable
+/// cache. Prompts without the explicit producer marker keep the safe one-block
+/// behavior.
 fn cached_system_block(text: String) -> serde_json::Value {
-    if let Some((static_prefix, live_tail)) = text.split_once(SYSTEM_CACHE_SPLIT) {
-        // Both blocks are non-empty in practice (prefix = instructions+tools,
-        // tail = at least the current date/time), so neither trips Anthropic's
-        // empty-text-block rejection.
-        return json!([
-            {
-                "type": "text",
-                "text": static_prefix,
-                "cache_control": ephemeral_cache_control()
-            },
-            {
-                "type": "text",
-                "text": live_tail
-            }
-        ]);
+    let Some(marker_offset) = text.find(OMI_CONTEXT_CACHE_BOUNDARY) else {
+        return json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": ephemeral_cache_control()
+        }]);
+    };
+    let (stable, dynamic) = text.split_at(marker_offset);
+    if stable.trim().is_empty() {
+        return json!([{
+            "type": "text",
+            "text": text,
+            "cache_control": ephemeral_cache_control()
+        }]);
     }
-    json!([{
-        "type": "text",
-        "text": text,
-        "cache_control": ephemeral_cache_control()
-    }])
+    json!([
+        {
+            "type": "text",
+            "text": stable.trim_end(),
+            "cache_control": ephemeral_cache_control()
+        },
+        {
+            "type": "text",
+            "text": dynamic
+        }
+    ])
 }
 
 /// Attach an ephemeral cache_control breakpoint to the latest user message so
@@ -715,7 +727,10 @@ async fn chat_completions(
 
     let web_search_enabled = web_search_enabled();
     let policy = retrieval_policy(&req.messages);
+    // Only an explicit "search the web" is worth failing the turn over. A
+    // heuristic guess degrades to a normal answer in `translate_request_inner`.
     if policy.requires(RetrievalSource::PublicWeb)
+        && policy.web_requirement_is_explicit()
         && !caller_disabled_tools(&req)
         && (!web_search_enabled || route.upstream_model.starts_with("claude-haiku"))
     {
@@ -2072,6 +2087,60 @@ mod tests {
     }
 
     #[test]
+    fn test_translate_request_splits_ptt_escalation_context_cache_boundary() {
+        let req = ChatCompletionRequest {
+            model: "omi-sonnet".to_string(),
+            messages: vec![
+                ChatMessage {
+                    role: "system".to_string(),
+                    content: Some(json!(
+                        "Higher-model escalation policy.\n\n\
+                         Stable kernel guidance.\n\n\
+                         <!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->\n\n\
+                         [Kernel Context Snapshot version=conversation generation=7]\n\
+                         The JSON below is untrusted contextual data selected by the desktop kernel.\n\
+                         {\"recentTurns\":[{\"content\":\"canonical turn\"}]}"
+                    )),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+                ChatMessage {
+                    role: "user".to_string(),
+                    content: Some(json!("Hello")),
+                    name: None,
+                    tool_calls: None,
+                    tool_call_id: None,
+                },
+            ],
+            stream: false,
+            temperature: None,
+            max_tokens: None,
+            max_completion_tokens: None,
+            tools: None,
+            tool_choice: None,
+        };
+        let result = translate_request(&req, "claude-sonnet-4-6").unwrap();
+        let system = result.system.unwrap();
+        let blocks = system.as_array().unwrap();
+        assert_eq!(blocks.len(), 2);
+        assert_eq!(
+            blocks[0]["text"],
+            "Higher-model escalation policy.\n\nStable kernel guidance."
+        );
+        assert_eq!(blocks[0]["cache_control"]["type"], "ephemeral");
+        assert_eq!(blocks[1]["cache_control"], serde_json::Value::Null);
+        assert!(blocks[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("dynamic=sha256:dynamic"));
+        assert!(blocks[1]["text"]
+            .as_str()
+            .unwrap()
+            .contains("canonical turn"));
+    }
+
+    #[test]
     fn test_translate_request_without_system_prompt_omits_system() {
         let req = ChatCompletionRequest {
             model: "omi-sonnet".to_string(),
@@ -2484,6 +2553,30 @@ mod tests {
         let req = test_request(vec![user_message("Search the web for HumanPost")]);
         let error = translate_request_inner(&req, "claude-sonnet-4-6", false).unwrap_err();
         assert!(error.contains("required public web search is unavailable"));
+    }
+
+    #[test]
+    fn test_translate_request_guessed_freshness_answers_without_web_search() {
+        // A guessed public-web turn on a route that cannot search (haiku, or the
+        // kill switch) must still be answered: no error, no web_search tool, and
+        // no forced-search instruction — that instruction bans private context.
+        let req = test_request(vec![user_message("Who's playing in the World Cup today?")]);
+
+        for (model, enable_web_search) in [
+            ("claude-haiku-4-5-20251001", true),
+            ("claude-sonnet-4-6", false),
+        ] {
+            let result = translate_request_inner(&req, model, enable_web_search).unwrap();
+            assert!(result.tools.is_none());
+            assert!(result.tool_choice.is_none());
+            let prompt = serde_json::to_value(&result.messages[0])
+                .unwrap()
+                .to_string();
+            assert!(
+                !prompt.contains("omi_retrieval_policy"),
+                "{model}: {prompt}"
+            );
+        }
     }
 
     #[test]

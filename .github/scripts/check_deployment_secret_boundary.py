@@ -15,7 +15,7 @@ import re
 import subprocess
 import sys
 from dataclasses import dataclass
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Iterable
 
 
@@ -46,9 +46,14 @@ def _value_from_match(match: re.Match[str], group: int = 1) -> str:
     return match.group(group)
 
 
+def repository_relative_path(path: PurePath, root: PurePath) -> str:
+    """Use Git's POSIX repository-path shape on every host platform."""
+    return path.relative_to(root).as_posix()
+
+
 def _deployment_paths(root: Path) -> set[str]:
     paths = {
-        str(path.relative_to(root))
+        repository_relative_path(path, root)
         for path in (root / ".github" / "workflows").glob("*.y*ml")
         if path.is_file()
     }
@@ -58,7 +63,7 @@ def _deployment_paths(root: Path) -> set[str]:
     charts = root / "backend" / "charts"
     if charts.is_dir():
         paths.update(
-            str(path.relative_to(root))
+            repository_relative_path(path, root)
             for path in charts.glob("*/*_values.yaml")
             if path.is_file()
         )

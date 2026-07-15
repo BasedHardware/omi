@@ -43,9 +43,29 @@ actor AgentRuntimeStartupSingleFlight<Key: Equatable & Sendable, Output: Sendabl
     participantCount
   }
 
+  /// A reducer can enter `.starting` just before the owning task reaches this
+  /// actor. Callers must distinguish that short launch-admission window from a
+  /// real in-flight launch; treating both as "wait for init" strands the first
+  /// launch forever.
+  func hasActiveAttempt() -> Bool {
+    attempt != nil
+  }
+
   private func clearAttempt(id: UUID) {
     guard attempt?.id == id else { return }
     attempt = nil
+  }
+}
+
+/// Decides whether a caller joins an existing launch. `.starting` alone is not
+/// sufficient evidence: the reducer records admission before the single-flight
+/// actor has installed its attempt, and the first launcher must proceed.
+enum AgentRuntimeStartupAdmission {
+  static func shouldJoin(
+    lifecycleState: AgentRuntimeBridgeLifecycle.State,
+    hasActiveStartupAttempt: Bool
+  ) -> Bool {
+    lifecycleState == .running || (lifecycleState == .starting && hasActiveStartupAttempt)
   }
 }
 
@@ -214,7 +234,8 @@ actor AgentRuntimeProcess {
   static let shared = AgentRuntimeProcess()
   nonisolated static let expectedProtocolVersion = 2
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
-    "journal_import_remote_turn"
+    "journal_import_remote_turn",
+    "runtime_adapter_availability",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 
@@ -488,7 +509,6 @@ actor AgentRuntimeProcess {
   private var stdoutPipe: Pipe?
   private var stderrPipe: Pipe?
   private var stdoutBuffer = AgentRuntimeOrderedStdoutBuffer()
-  private var isRunning = false
   private var processGeneration: UInt64 = 0
   private var runtimeOwnerAuthorityEpoch: UInt64 = 0
   private var synchronizedRuntimeOwnerID: String?
@@ -511,20 +531,36 @@ actor AgentRuntimeProcess {
   private var authorizedRealtimeToolHandler: AuthorizedRealtimeToolHandler?
   private var initContinuations: [CheckedContinuation<Void, Error>] = []
   private let oomDiagnosticLatch = AgentRuntimeOOMDiagnosticLatch()
-  private var receivedInit = false
   private var advertisedAgentControlTools: Set<String> = []
+  private var runtimeAdapterIDs: Set<String> = []
   private var negotiatedProtocolVersion: Int?
   private var negotiatedRuntimeVersion: String?
-  private var isRestarting = false
-  private var isStopping = false
   private var stopFlight: StopFlight?
   private var expectedCancelledRequests: Set<RuntimeMessage.RequestKey> = []
+  // Lifecycle facts are reduced by the pure state machine; process/pipe handles
+  // remain local implementation resources rather than a second lifecycle truth.
+  private var bridgeLifecycle = AgentRuntimeBridgeLifecycle()
   private let startupSingleFlight =
     AgentRuntimeStartupSingleFlight<StartupKey, StartupReceipt>()
 
+  // `bridgeLifecycle` is the semantic source of truth. Process handles are
+  // intentionally only physical resources: they can be live before the JSONL
+  // handshake, but no request is admitted until the reducer reaches running.
+  private var isBridgeReady: Bool {
+    bridgeLifecycle.state == .running && process?.isRunning == true
+  }
+
+  private var isRestarting: Bool {
+    [.modeSwitching, .draining, .restarting].contains(bridgeLifecycle.state)
+  }
+
+  private var isStopping: Bool {
+    bridgeLifecycle.state == .draining
+  }
+
   var isAlive: Bool {
     let processRunning = process?.isRunning ?? false
-    if isRunning && !processRunning {
+    if process != nil && !processRunning {
       log(
         "AgentRuntimeProcess: stale alive latch — process no longer running "
           + "(failure_class=stale_alive_latch recovery_action=route_to_termination recovery_result=degraded)")
@@ -535,12 +571,12 @@ actor AgentRuntimeProcess {
       // hasn't fired (or is about to be ignored by generation mismatch).
       handleTermination(reason: .exit)
     }
-    return isRunning && processRunning
+    return processRunning
   }
 
   func diagnosticsSnapshot() -> DiagnosticsSnapshot {
     DiagnosticsSnapshot(
-      running: isRunning && process?.isRunning == true && receivedInit,
+      running: isBridgeReady,
       protocolVersion: negotiatedProtocolVersion,
       runtimeVersion: negotiatedRuntimeVersion
     )
@@ -551,8 +587,14 @@ actor AgentRuntimeProcess {
       epoch: runtimeOwnerAuthorityEpoch,
       ownerID: synchronizedRuntimeOwnerID,
       credentialOwnerID: synchronizedRuntimeCredentialOwnerID,
-      processRunning: isRunning && (process?.isRunning ?? false)
+      processRunning: process?.isRunning ?? false
     )
+  }
+
+  /// The Node registry is the authority for adapter activation. Swift must not
+  /// re-run local executable detection before advertising a realtime provider.
+  func registeredDirectedProviderIDs() -> [String] {
+    runtimeAdapterIDs.intersection(["hermes", "openclaw"]).sorted()
   }
 
   static func adapterId(forHarnessMode harnessMode: String) -> String? {
@@ -567,7 +609,7 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
-    guard !isRestarting, !isStopping else {
+    guard !isRestarting else {
       throw BridgeError.restarting
     }
     guard let authorizationSnapshot = authorizationSnapshot
@@ -586,7 +628,16 @@ actor AgentRuntimeProcess {
     registration.harnessMode = harnessMode
     clients[clientId] = registration
     do {
-      if isRunning {
+      let startupIsInFlight: Bool
+      if bridgeLifecycle.state == .starting {
+        startupIsInFlight = await startupSingleFlight.hasActiveAttempt()
+      } else {
+        startupIsInFlight = false
+      }
+      if AgentRuntimeStartupAdmission.shouldJoin(
+        lifecycleState: bridgeLifecycle.state,
+        hasActiveStartupAttempt: startupIsInFlight
+      ) {
         try await waitForInit(timeout: 30.0)
         try assertStartupAuthority(
           authorizationSnapshot,
@@ -660,32 +711,46 @@ actor AgentRuntimeProcess {
     harnessMode: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws {
-    guard !isRestarting, !isStopping else { throw BridgeError.restarting }
+    guard !isRestarting else { throw BridgeError.restarting }
     guard activeRequests.isEmpty, activeControlRequests.isEmpty else {
       log(
         "AgentRuntimeProcess: shared restart blocked while \(activeRequests.count) request(s) and \(activeControlRequests.count) control request(s) are active"
       )
       throw BridgeError.requestAlreadyActive
     }
-    isRestarting = true
-    defer { isRestarting = false }
+    // Validate before mutating the reducer. A caller can be unregistered
+    // between a UI restart action and this actor turn; that must leave the
+    // bridge usable for a later registration, not stranded in `.draining`.
     guard let registrationID = clients[clientId]?.registrationID else {
       throw BridgeError.stopped
     }
-    await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
-    try Task.checkCancellation()
-    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
-    else {
-      throw BridgeError.authMissing
+    _ = bridgeLifecycle.reduce(.modeSwitchRequested)
+    _ = bridgeLifecycle.reduce(.drainRequested)
+    do {
+      await stopProcessSingleFlight(resumeRequestsWith: BridgeError.stopped)
+      _ = bridgeLifecycle.reduce(.restart)
+      try Task.checkCancellation()
+      try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+      guard let authorizationSnapshot = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      else {
+        throw BridgeError.authMissing
+      }
+      try await startProcess(
+        preferredHarnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot,
+        admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
+      try assertAuthorization(authorizationSnapshot)
+      try assertClientRegistration(clientId: clientId, registrationID: registrationID)
+    } catch {
+      // A cancelled or unregistered caller cannot own a pending restart. Keep
+      // typed start failures intact, but return abandoned drain/restart paths
+      // to stopped so a subsequent registration can launch normally.
+      if [.draining, .restarting].contains(bridgeLifecycle.state) {
+        _ = bridgeLifecycle.reduce(.kill)
+      }
+      throw error
     }
-    try await startProcess(
-      preferredHarnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot,
-      admissionAuthorityEpoch: runtimeOwnerAuthorityEpoch)
-    try assertAuthorization(authorizationSnapshot)
-    try assertClientRegistration(clientId: clientId, registrationID: registrationID)
   }
 
   private func assertStartupAuthority(
@@ -708,9 +773,7 @@ actor AgentRuntimeProcess {
 
     let id = UUID()
     stopFlight = StopFlight(id: id)
-    isStopping = true
     await stopProcess(resumeRequestsWith: error)
-    isStopping = false
     finishStopFlight(id: id)
   }
 
@@ -937,7 +1000,7 @@ actor AgentRuntimeProcess {
         previousOwnerID: ownerID)
     } catch {
       log("AgentRuntimeProcess: owner revoke rejected invalid cleanup capability")
-      if isRunning {
+      if process?.isRunning == true {
         await stopProcessSingleFlight(resumeRequestsWith: .stopped)
       } else {
         markRuntimeOwnerAuthorityDirty()
@@ -946,10 +1009,10 @@ actor AgentRuntimeProcess {
     }
     await cancelAndDrainAuthorizedToolExecutionTasks()
     guard !ownerID.isEmpty else {
-      if isRunning { await stopProcessSingleFlight(resumeRequestsWith: .stopped) }
+      if process?.isRunning == true { await stopProcessSingleFlight(resumeRequestsWith: .stopped) }
       return
     }
-    guard isRunning else {
+    guard process?.isRunning == true else {
       markRuntimeOwnerAuthorityDirty()
       return
     }
@@ -1145,7 +1208,7 @@ actor AgentRuntimeProcess {
         previousOwnerID: binding.ownerID)
       // A cleanup capability may close only a run that already exists in the
       // live daemon. It must never start a new daemon or establish an owner.
-      guard isRunning else {
+      guard process?.isRunning == true else {
         throw ExternalSurfaceAuthorityError(code: "external_surface_runtime_unavailable")
       }
       authorizationSnapshot = nil
@@ -1519,7 +1582,7 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
     timeoutNanoseconds: UInt64? = nil
   ) async throws -> [String: Any] {
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     if let authorizationSnapshot {
       try assertAuthorization(authorizationSnapshot)
     }
@@ -1643,7 +1706,14 @@ actor AgentRuntimeProcess {
 
   /// Test-only projection seam; production events arrive from omi-agentd.
   func dispatchJournalTurnChangedForTesting(_ turn: KernelJournalTurn) {
+    recordLifecycleJournalMutation(turn)
     journalTurnChangedHandler?(turn)
+  }
+
+  /// Test-only observation seam for lifecycle events that production receives
+  /// through the JSONL runtime boundary.
+  func bridgeLifecycleSnapshotForTesting() -> AgentRuntimeBridgeLifecycle {
+    bridgeLifecycle
   }
 
   func recordJournalTurn(
@@ -1665,6 +1735,7 @@ actor AgentRuntimeProcess {
     guard let recorded = result.turn else {
       throw BridgeError.agentError("Kernel journal record returned no turn")
     }
+    recordLifecycleJournalMutation(recorded)
     return recorded
   }
 
@@ -1675,7 +1746,7 @@ actor AgentRuntimeProcess {
     turns: [KernelJournalTurnWrite],
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
-    try await journalOperation(
+    let result = try await journalOperation(
       type: "journal_record_exchange",
       operation: "record_exchange",
       clientId: clientId,
@@ -1684,6 +1755,10 @@ actor AgentRuntimeProcess {
       payload: ["turns": turns.map(\.dictionary)],
       authorizationSnapshot: authorizationSnapshot
     )
+    for recorded in result.turns {
+      recordLifecycleJournalMutation(recorded)
+    }
+    return result
   }
 
   func updateJournalTurn(
@@ -1705,6 +1780,7 @@ actor AgentRuntimeProcess {
     guard let updated = result.turn else {
       throw BridgeError.agentError("Kernel journal update returned no turn")
     }
+    recordLifecycleJournalMutation(updated)
     return updated
   }
 
@@ -1727,6 +1803,7 @@ actor AgentRuntimeProcess {
     guard let turn = result.turn else {
       throw BridgeError.agentError("Kernel journal terminalization returned no turn")
     }
+    recordLifecycleJournalMutation(turn)
     return turn
   }
 
@@ -1771,6 +1848,7 @@ actor AgentRuntimeProcess {
     guard let imported = result.turn else {
       throw BridgeError.agentError("Kernel journal import returned no turn")
     }
+    recordLifecycleJournalMutation(imported)
     return imported
   }
 
@@ -1804,7 +1882,7 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> JournalOperationResult {
     try assertAuthorization(authorizationSnapshot, expectedOwnerID: ownerID)
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     let dictionary = Self.journalOperationWireMessage(
@@ -2189,7 +2267,7 @@ actor AgentRuntimeProcess {
     onAuthRequired: @escaping AgentBridge.AuthRequiredHandler,
     onAuthSuccess: @escaping AgentBridge.AuthSuccessHandler
   ) async throws -> AgentBridge.QueryResult {
-    guard isRunning else { throw BridgeError.stopped }
+    guard isBridgeReady else { throw BridgeError.stopped }
     try assertAuthorization(authorizationSnapshot)
 
     return try await withCheckedThrowingContinuation { continuation in
@@ -2234,22 +2312,50 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     admissionAuthorityEpoch: UInt64
   ) async throws {
-    if isRunning {
+    let startupIsInFlight: Bool
+    if bridgeLifecycle.state == .starting {
+      startupIsInFlight = await startupSingleFlight.hasActiveAttempt()
+    } else {
+      startupIsInFlight = false
+    }
+    if AgentRuntimeStartupAdmission.shouldJoin(
+      lifecycleState: bridgeLifecycle.state,
+      hasActiveStartupAttempt: startupIsInFlight
+    ) {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return
     }
+    _ = bridgeLifecycle.reduce(.spawn)
     let key = StartupKey(
       authorizationSnapshot: authorizationSnapshot,
       admissionAuthorityEpoch: admissionAuthorityEpoch)
-    let receipt = try await startupSingleFlight.run(key: key) { [weak self] in
-      guard let self else { throw BridgeError.stopped }
-      return try await self.performStartProcess(
-        preferredHarnessMode: preferredHarnessMode,
-        authorizationSnapshot: authorizationSnapshot,
-        admissionAuthorityEpoch: admissionAuthorityEpoch)
+    let receipt: StartupReceipt
+    do {
+      receipt = try await startupSingleFlight.run(key: key) { [weak self] in
+        guard let self else { throw BridgeError.stopped }
+        return try await self.performStartProcess(
+          preferredHarnessMode: preferredHarnessMode,
+          authorizationSnapshot: authorizationSnapshot,
+          admissionAuthorityEpoch: admissionAuthorityEpoch)
+      }
+    } catch {
+      if [.starting, .failedStart].contains(bridgeLifecycle.state) {
+        let failure = Self.startFailure(for: error)
+        if bridgeLifecycle.state == .starting {
+          recordBridgeStartFailure(failure)
+        }
+        if let bridgeError = error as? BridgeError, case .authMissing = bridgeError {
+          throw error
+        }
+        if let bridgeError = error as? BridgeError, case .failedToStart(_) = bridgeError {
+          throw bridgeError
+        }
+        throw BridgeError.failedToStart(failure)
+      }
+      throw error
     }
-    guard isRunning, process?.isRunning == true,
+    guard bridgeLifecycle.state == .running, process?.isRunning == true,
       processGeneration == receipt.processGeneration,
       runtimeOwnerAuthorityEpoch == receipt.authorityEpoch,
       RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
@@ -2263,7 +2369,10 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     admissionAuthorityEpoch: UInt64
   ) async throws -> StartupReceipt {
-    guard !isRunning else {
+    // `startProcess` owns the launch through `startupSingleFlight`. Do not use
+    // the reducer's `.starting` state as a join signal here: the launch owner
+    // intentionally sets it *before* this operation is scheduled.
+    guard process?.isRunning != true else {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return StartupReceipt(
@@ -2274,7 +2383,7 @@ actor AgentRuntimeProcess {
     // task was still unwinding. Never launch/re-authorize a replacement daemon
     // until every old-owner Swift execution has actually returned.
     await cancelAndDrainAuthorizedToolExecutionTasks()
-    if isRunning {
+    if process?.isRunning == true {
       try await waitForInit(timeout: 30.0)
       try assertAuthorization(authorizationSnapshot)
       return StartupReceipt(
@@ -2293,8 +2402,8 @@ actor AgentRuntimeProcess {
     process = nil
     closePipes()
     lastExitWasOOM = false
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
     negotiatedProtocolVersion = nil
     negotiatedRuntimeVersion = nil
 
@@ -2452,7 +2561,6 @@ actor AgentRuntimeProcess {
 
     do {
       try proc.run()
-      isRunning = true
       markRuntimeOwnerAuthorityDirty()
       let launchedAuthorityEpoch = runtimeOwnerAuthorityEpoch
       if env["OMI_AUTH_TOKEN"]?.isEmpty == false {
@@ -2469,14 +2577,14 @@ actor AgentRuntimeProcess {
         processGeneration: expectedGeneration)
     } catch {
       await cleanupFailedStart(process: proc, error: error)
-      throw error
+      throw BridgeError.failedToStart(Self.startFailure(for: error))
     }
   }
 
   private func applyLocalAgentEnvironment(to env: inout [String: String]) {
     // Seed auto-discovered commands for every local adapter so the shared Node
     // process can route to Hermes or OpenClaw even when it was launched for a
-    // different adapter. registerClient returns early once isRunning, so the
+    // different adapter. registerClient returns early once the reducer is
     // startup adapter's env would otherwise be the only one the process sees.
     let home = NSHomeDirectory()
     if env["HOME"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true {
@@ -2500,14 +2608,23 @@ actor AgentRuntimeProcess {
     }
     env["PATH"] = pathElements.joined(separator: ":")
 
+    // The same injected PATH/home contract used by the testable detector feeds
+    // the Node registry. PTT receives only the registry projection later; it
+    // never performs a competing executable lookup of its own.
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let hermes = Self.firstExecutable(named: "hermes", in: adapterPathDirs)
+      case let .available(command: hermes) = LocalAgentProviderDetector.availability(
+        for: .hermes,
+        environment: env,
+        homeDirectory: home).status
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(Self.shellQuote(hermes)) acp"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      let openClaw = Self.firstExecutable(named: "openclaw", in: adapterPathDirs)
+      case let .available(command: openClaw) = LocalAgentProviderDetector.availability(
+        for: .openclaw,
+        environment: env,
+        homeDirectory: home).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
@@ -2628,6 +2745,48 @@ actor AgentRuntimeProcess {
     return nil
   }
 
+  static func startFailure(for error: Error) -> AgentRuntimeBridgeLifecycle.StartFailure {
+    guard let bridgeError = error as? BridgeError else { return .launchFailed }
+    switch bridgeError {
+    case .timeout:
+      return .handshakeTimedOut
+    case .processExited, .outOfMemory:
+      return .exitedDuringStartup
+    case .agentError:
+      return .incompatibleHandshake
+    case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError,
+         .failedToStart, .stopped, .restarting, .requestAlreadyActive,
+         .agentRuntimeFailure, .quotaExceeded, .authMissing:
+      return .launchFailed
+    }
+  }
+
+  /// A terminal kernel turn is a durable replay boundary. Feed the reducer at
+  /// the runtime boundary rather than maintaining a second ad-hoc set in each
+  /// chat or PTT surface.
+  private func recordLifecycleJournalMutation(_ turn: KernelJournalTurn) {
+    _ = bridgeLifecycle.reduce(
+      .kernelJournalWrite(
+        turnID: turn.turnId,
+        terminal: turn.status == .completed || turn.status == .failed))
+  }
+
+  private func recordBridgeStartFailure(_ failure: AgentRuntimeBridgeLifecycle.StartFailure) {
+    let effects = bridgeLifecycle.reduce(.spawnFailure(failure))
+    guard effects.contains(.surfaceFailedStart(failure)) else { return }
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "agent_runtime",
+      from: "starting",
+      to: "failed_start",
+      reason: failure.rawValue,
+      outcome: .exhausted,
+      extra: [
+        "failure_class": failure.rawValue,
+        "recovery_action": "retry_start",
+        "recovery_result": "exhausted",
+      ])
+  }
+
   private func cleanupFailedStart(process failedProcess: Process, error: Error) async {
     log("AgentRuntimeProcess: startup failed after launch: \(error)")
     if failedProcess.isRunning {
@@ -2647,11 +2806,11 @@ actor AgentRuntimeProcess {
       process = nil
     }
     closePipes()
-    isRunning = false
+    recordBridgeStartFailure(Self.startFailure(for: error))
     await cancelAndDrainAuthorizedToolExecutionTasks()
     markRuntimeOwnerAuthorityDirty()
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
     negotiatedProtocolVersion = nil
     negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: BridgeError.stopped)
@@ -2659,7 +2818,7 @@ actor AgentRuntimeProcess {
   }
 
   private func waitForInit(timeout: TimeInterval) async throws {
-    if receivedInit { return }
+    if bridgeLifecycle.state == .running { return }
 
     let timeoutTask = Task {
       do {
@@ -2677,7 +2836,7 @@ actor AgentRuntimeProcess {
   }
 
   private func storeInitContinuation(_ continuation: CheckedContinuation<Void, Error>) {
-    if receivedInit {
+    if bridgeLifecycle.state == .running {
       continuation.resume()
       return
     }
@@ -2722,9 +2881,9 @@ actor AgentRuntimeProcess {
     closePipes()
     lastExitWasOOM = false
     oomDiagnosticLatch.reset(generation: processGeneration)
-    isRunning = false
-    receivedInit = false
+    _ = bridgeLifecycle.reduce(.kill)
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
     negotiatedProtocolVersion = nil
     negotiatedRuntimeVersion = nil
     resumeAllRequests(throwing: error)
@@ -2807,7 +2966,8 @@ actor AgentRuntimeProcess {
           + "runtime=\(negotiatedRuntimeVersion ?? "unknown"))")
       let tools = message.payload["agentControlTools"] as? [String] ?? []
       advertisedAgentControlTools = Set(tools)
-      receivedInit = true
+      runtimeAdapterIDs = Set(message.payload["runtimeAdapterIds"] as? [String] ?? [])
+      _ = bridgeLifecycle.reduce(.handshakeSucceeded)
       resolveInitContinuations()
 
     case .authRequired:
@@ -2888,6 +3048,7 @@ actor AgentRuntimeProcess {
 
     case .journalTurnChanged:
       if messageOwnerIsCurrentlyAuthorized(message), let turn = journalTurn(from: message) {
+        recordLifecycleJournalMutation(turn)
         journalTurnChangedHandler?(turn)
       }
 
@@ -3691,10 +3852,17 @@ actor AgentRuntimeProcess {
       oom: likelyOOM
     )
     log("AgentRuntimeProcess: process terminated (code=\(exitCode), error=\(error))")
-    isRunning = false
+    if bridgeLifecycle.state == .starting {
+      // A launch is not a running bridge yet. Preserve the start-failure
+      // disposition before unblocking its initializer so ChatProvider can
+      // offer retry and diagnostics can record the typed fallback.
+      recordBridgeStartFailure(Self.startFailure(for: error))
+    } else {
+      _ = bridgeLifecycle.reduce(.crash)
+    }
     markRuntimeOwnerAuthorityDirty()
-    receivedInit = false
     advertisedAgentControlTools.removeAll()
+    runtimeAdapterIDs.removeAll()
     negotiatedProtocolVersion = nil
     negotiatedRuntimeVersion = nil
     closePipes()

@@ -3178,5 +3178,10 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Хранилище устройства",
+    "deviceStoragePercentFull": "заполнено {percent}%",
+    "deviceStorageUsedOfTotal": "использовано {used} из {total}",
+    "deviceStorageFree": "{free} свободно",
+    "deviceStorageNearlyFull": "Устройство почти заполнено — синхронизируйте, чтобы освободить место."
 }

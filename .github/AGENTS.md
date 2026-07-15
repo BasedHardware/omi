@@ -27,4 +27,5 @@ These rules apply to GitHub Actions workflows and custom actions under `.github/
 - Keep rollout checks close to the deploy step they verify, especially for `backend-listen`, `pusher`, `agent-proxy`, `llm-gateway`, `parakeet`, `diarizer`, and `vad`.
 - Use `backend/scripts/deploy_status_report.py` as a strict gate on success paths; use it with `|| true` only after a primary rollout/traffic command already failed.
 - Before restarting GKE workloads that depend on `backend-secrets`, wait for ExternalSecret Ready and run `backend/scripts/verify_k8s_secret_keys.py`; never print secret values.
+- Before any pusher Helm mutation, verify `${ENV}-omi-backend-config` exists so a missing shared runtime ConfigMap cannot replace the healthy replica.
 - When editing workflows, keep `actionlint` coverage in CI so YAML and GitHub expression mistakes fail before merge.
