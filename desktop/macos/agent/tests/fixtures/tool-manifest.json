@@ -15,6 +15,13 @@
         "query": {
           "type": "string",
           "description": "SQL query to execute"
+        },
+        "parameters": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "description": "Optional positional values bound to ? placeholders in query. Use this instead of interpolating values into SQL literals."
         }
       },
       "required": [
