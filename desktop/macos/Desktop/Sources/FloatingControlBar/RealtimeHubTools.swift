@@ -82,9 +82,11 @@ enum RealtimeHubTools {
     without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
     attached image is the only current visual source of truth. Disregard conflicting kernel \
     context, OCR, work summaries, and earlier screen descriptions. You MUST then call \
-    report_screen_observation with concise visual detail only. Never name or identify an app in \
-    the answer: the desktop renders app identity from native evidence. Do not speak or answer a \
-    current-screen question outside that report; the app will present an accepted report itself.
+    report_screen_observation with a concise grounding observation. That report is internal \
+    verification, not your user-facing reply. Once it succeeds, answer the user's original \
+    current-screen question naturally and conversationally from the attached image. Do not let \
+    the report replace the answer or fall back to a generic screen description when the user \
+    asked a specific question.
 
     Keep latency low: prefer answering directly when you can.
     """
@@ -104,13 +106,17 @@ enum RealtimeHubTools {
     }
     return jsonToolResult([
       "ok": true,
-      "instruction": "Use the attached image as the only current visual source. Call report_screen_observation with concise visual detail before answering.",
+      "instruction": "Use the attached image as the only current visual source. Call report_screen_observation with a concise grounding observation, then answer the user's original request naturally from this image.",
     ])
   }
 
   static func screenObservationResult(accepted: Bool) -> String {
     jsonToolResult(accepted
-      ? ["ok": true, "status": "screen_observation_accepted"]
+      ? [
+        "ok": true,
+        "status": "screen_observation_accepted",
+        "instruction": "Grounding verified. Now answer the user's original request naturally using the attached image; the observation was not the user-facing answer.",
+      ]
       : ["ok": false, "error": ["code": "screen_observation_rejected"]])
   }
 

@@ -95,7 +95,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -110,7 +110,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -124,7 +124,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -230,7 +230,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt()),
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -246,24 +246,18 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)
   }
 
-  func testContradictoryApplicationTextCannotReachNativePresentation() {
+  func testContradictoryApplicationTextCannotVerifyScreenGrounding() {
     let descriptor = evidence()
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: .awaitingReport(receipt(descriptor: descriptor)),
-      answer: "You are in Cursor.",
+      observation: "You are in Cursor.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
         knownApplicationNames: ["Codex", "Cursor"],
         now: freshNow)
-
     XCTAssertEqual(decision, .contradictoryApplication)
-    XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.presentedAnswer(
-        evidence: descriptor,
-        answer: "A dark editor window."),
-      "The frontmost app is Codex. A dark editor window.")
   }
 
   func testGenericApplicationLanguageDoesNotRejectFinderGroundedVisualDetail() {
@@ -272,7 +266,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt(descriptor: descriptor)),
-        answer: "I see a file manager window with multiple application windows on the left.",
+        observation: "I see a file manager window with multiple application windows on the left.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -288,7 +282,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt(descriptor: descriptor)),
-        answer: "A Cursor document is visible behind the Finder window.",
+        observation: "A Cursor document is visible behind the Finder window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -302,7 +296,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt()),
-        answer: " ",
+        observation: " ",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,

@@ -587,10 +587,10 @@ enum GeneratedToolCapabilities {
       title: "Report Screen Observation",
       latency: .fastLocal,
       surfaces: Set([.realtimeHub]),
-      summary: "Report a grounded current-screen answer.",
+      summary: "Verify grounding from the current-screen image.",
       bullets: [
       "Only call after screenshot returns the current image.",
-      "Put only visual detail in the answer; native evidence supplies application identity."
+      "Submit a concise visual observation, then answer the user's original request naturally."
     ]
     ),
     Capability(

@@ -87,18 +87,14 @@ struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
 }
 
 /// The screenshot half of a current-screen answer remains an active tool until
-/// native code either accepts the paired report or fails the protocol closed.
-/// Keeping this token in the reducer prevents a provider callback from turning
-/// a locally-authoritative screen answer into another provider wait.
+/// native code either verifies the paired report or fails the protocol closed.
+/// Keeping this token in the reducer prevents a provider callback from using a
+/// stale or cross-turn image, while a verified report still requires the
+/// provider to answer the user's original request.
 struct VoiceScreenEvidenceProtocolToken: Equatable, Sendable {
   let turnID: VoiceTurnID
   let screenshotCallID: VoiceToolCallID
   let screenshotIdentity: VoiceEffectIdentity
-}
-
-enum VoiceScreenEvidenceProtocolOutcome: Equatable, Sendable {
-  case verified(reportCallID: VoiceToolCallID, reportIdentity: VoiceEffectIdentity)
-  case failed
 }
 
 /// A local result may be the canonical user-visible answer for a tool-driven
@@ -106,7 +102,7 @@ enum VoiceScreenEvidenceProtocolOutcome: Equatable, Sendable {
 /// audio continuation.
 enum VoiceAuthoritativeLocalResultKind: Equatable, Sendable {
   case spawnReceipt
-  case screenEvidence(VoiceScreenEvidenceProtocolOutcome)
+  case screenEvidenceFailure
 }
 
 // MARK: - State
@@ -504,6 +500,15 @@ enum VoiceTurnEvent: Equatable, Sendable {
     identity: VoiceEffectIdentity,
     callID: VoiceToolCallID,
     kind: VoiceAuthoritativeLocalResultKind)
+  /// A screenshot/report pair has been verified for the active provider turn.
+  /// This closes the local provenance protocol only; the provider must still
+  /// continue and answer the original user request from that image.
+  case screenEvidenceReportVerifiedScoped(
+    turnID: VoiceTurnID,
+    screenshotIdentity: VoiceEffectIdentity,
+    screenshotCallID: VoiceToolCallID,
+    reportIdentity: VoiceEffectIdentity,
+    reportCallID: VoiceToolCallID)
   case screenEvidenceProtocolStartedScoped(
     turnID: VoiceTurnID,
     token: VoiceScreenEvidenceProtocolToken,
@@ -564,6 +569,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .providerTurnFinishedScoped(let turnID, _, _, _),
       .toolStartedScoped(let turnID, _, _),
       .authoritativeLocalResultAcceptedScoped(let turnID, _, _, _),
+      .screenEvidenceReportVerifiedScoped(let turnID, _, _, _, _),
       .screenEvidenceProtocolStartedScoped(let turnID, _, _),
       .toolFinishedScoped(let turnID, _, _),
       .playbackStartedScoped(let turnID, _), .transcriptChanged(let turnID, _),
@@ -618,6 +624,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerTurnFinishedScoped: return "provider_turn_finished_scoped"
     case .toolStartedScoped: return "tool_started_scoped"
     case .authoritativeLocalResultAcceptedScoped: return "authoritative_local_result_accepted_scoped"
+    case .screenEvidenceReportVerifiedScoped: return "screen_evidence_report_verified_scoped"
     case .screenEvidenceProtocolStartedScoped: return "screen_evidence_protocol_started_scoped"
     case .toolFinishedScoped: return "tool_finished_scoped"
     case .playbackStartedScoped: return "playback_started_scoped"
@@ -1230,7 +1237,7 @@ struct VoiceTurnReducer {
       switch kind {
       case .spawnReceipt:
         break
-      case .screenEvidence(let outcome):
+      case .screenEvidenceFailure:
         guard let token = turn.screenEvidenceProtocol,
           token.screenshotCallID == callID,
           token.screenshotIdentity == identity
@@ -1238,16 +1245,27 @@ struct VoiceTurnReducer {
           stale(&model, event: event, effects: &effects)
           return VoiceTurnReduction(model: model, effects: effects)
         }
-        if case .verified(let reportCallID, let reportIdentity) = outcome,
-          turn.toolEffectIdentities[reportCallID] != reportIdentity
-        {
-          stale(&model, event: event, effects: &effects)
-          return VoiceTurnReduction(model: model, effects: effects)
-        }
         model.turn?.screenEvidenceProtocol = nil
         cancel(.screenEvidenceProtocol, in: &model, effects: &effects)
       }
       acceptAuthoritativeLocalResult(in: &model, effects: &effects)
+
+    case .screenEvidenceReportVerifiedScoped(
+      _, let screenshotIdentity, let screenshotCallID, let reportIdentity, let reportCallID):
+      guard let token = turn.screenEvidenceProtocol,
+        token.screenshotCallID == screenshotCallID,
+        token.screenshotIdentity == screenshotIdentity,
+        turn.toolEffectIdentities[reportCallID] == reportIdentity,
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      // Verification proves the attached JPEG was current for this tool pair;
+      // it is not the answer. Keep the normal post-tool continuation fence so
+      // native realtime audio answers the user's original question.
+      model.turn?.screenEvidenceProtocol = nil
+      cancel(.screenEvidenceProtocol, in: &model, effects: &effects)
 
     case .screenEvidenceProtocolStartedScoped(_, let token, let expiresAfter):
       guard token.turnID == turn.id,

@@ -81,8 +81,10 @@ SwiftUI and floating-bar state are projections.
   paired screenshot/report is one reducer-owned protocol: it retains the
   screenshot effect identity until a verified report or deterministic failure
   closes it, and a completion failure terminalizes the turn rather than leaving
-  a pending screenshot tool. Either local result is authoritative and must close
-  the provider-continuation fence rather than wait for optional provider narration.
+  a pending screenshot tool. A verified report is internal grounding only: it
+  clears the screen protocol while preserving the provider-continuation fence,
+  so native realtime audio answers the user's original question from the image.
+  Only deterministic screen-verification failure is a local terminal result.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using

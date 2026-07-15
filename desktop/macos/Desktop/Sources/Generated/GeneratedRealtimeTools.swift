@@ -643,17 +643,17 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "report_screen_observation",
-    "description": "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+    "description": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
     "parameters": {
       "type": "object",
       "properties": {
-        "answer": {
+        "observation": {
           "type": "string",
-          "description": "Concise visual detail only; do not name or identify an app."
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
         }
       },
       "required": [
-        "answer"
+        "observation"
       ]
     }
   },

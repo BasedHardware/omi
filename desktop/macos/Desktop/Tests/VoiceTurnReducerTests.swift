@@ -733,8 +733,8 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(accepted.model.turn?.responseID, responseID)
   }
 
-  func testVerifiedScreenEvidenceCompletesWithoutProviderContinuation() {
-    let (startingModel, turnID, _, _) = awaitingHubResponse()
+  func testVerifiedScreenEvidenceRequiresProviderContinuationForTheOriginalRequest() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
     let screenshotIdentity = screenshotReservation.identity
     let screenshotCallID = VoiceToolCallID("screenshot")
@@ -761,22 +761,30 @@ final class VoiceTurnReducerTests: XCTestCase {
     model = reduce(
       reportReservation.model,
       .toolStartedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)).model
+    let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
     model = reduce(
       model,
-      .authoritativeLocalResultAcceptedScoped(
+      .providerTurnFinishedScoped(
         turnID: turnID,
-        identity: screenshotIdentity,
-        callID: screenshotCallID,
-        kind: .screenEvidence(.verified(reportCallID: reportCallID, reportIdentity: reportIdentity)))
+        identity: providerIdentity,
+        sessionID: sessionID,
+        responseID: responseID)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingTools)
+    model = reduce(
+      model,
+      .screenEvidenceReportVerifiedScoped(
+        turnID: turnID,
+        screenshotIdentity: screenshotIdentity,
+        screenshotCallID: screenshotCallID,
+        reportIdentity: reportIdentity,
+        reportCallID: reportCallID)
     ).model
 
     XCTAssertNil(model.turn?.screenEvidenceProtocol)
-    XCTAssertTrue(model.turn?.providerFinished == true)
-    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    XCTAssertFalse(model.turn?.providerFinished == true)
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
     XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
-    guard case .writing = model.turn?.journalFinalization else {
-      return XCTFail("the verified screen answer must open the journal fence")
-    }
+    XCTAssertEqual(model.turn?.journalFinalization, .pending)
 
     model = reduce(
       model,
@@ -786,7 +794,9 @@ final class VoiceTurnReducerTests: XCTestCase {
       model,
       .toolFinishedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
     ).model
-    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+    XCTAssertTrue(model.turn?.deadlines.contains(.providerResponse) == true)
+    XCTAssertEqual(model.turn?.journalFinalization, .pending)
   }
 
   func testFailedScreenEvidenceCompletesWithoutProviderContinuation() {
@@ -816,7 +826,7 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: screenshotIdentity,
         callID: screenshotCallID,
-        kind: .screenEvidence(.failed))
+        kind: .screenEvidenceFailure)
     ).model
 
     XCTAssertNil(model.turn?.screenEvidenceProtocol)
@@ -858,7 +868,7 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: screenshotIdentity,
         callID: screenshotCallID,
-        kind: .screenEvidence(.failed))
+        kind: .screenEvidenceFailure)
     ).model
 
     let lateReportReservation = reserveIdentity(model, turnID: turnID)
@@ -944,7 +954,7 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: screenshotIdentity,
         callID: screenshotCallID,
-        kind: .screenEvidence(.failed)))
+        kind: .screenEvidenceFailure))
 
     XCTAssertEqual(stale.model.turn?.id, replacementID)
     XCTAssertEqual(stale.model.turn?.phase, .recording)

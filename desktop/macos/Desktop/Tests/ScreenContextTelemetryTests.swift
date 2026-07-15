@@ -190,20 +190,16 @@ final class ScreenContextTelemetryTests: XCTestCase {
     )
   }
 
-  func testPTTTranscriptVocabularyDoesNotFallbackToStaleScreenshots() throws {
-    let source = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/PTTContextVocabularyProvider.swift"),
-      encoding: .utf8
-    )
+  func testPTTTranscriptVocabularyUsesOnlyTurnScopedOCRAndExplicitVocabulary() {
+    let snapshot = PTTContextVocabularyProvider.snapshot(
+      capturedAt: Date(timeIntervalSince1970: 1_000),
+      settingsVocabulary: ["Omi"],
+      immediateOCRText: "Codex is open on the current screen")
 
-    XCTAssertTrue(source.contains("transcription keyword"))
-    XCTAssertTrue(source.contains("loadRecentActivityScreenshots"))
-    XCTAssertTrue(source.contains("getScreenshots(\n        from: startDate"))
-    XCTAssertFalse(source.contains("getRecentScreenshots(limit: 8)"))
-    XCTAssertFalse(source.contains("return try await RewindDatabase.shared.getRecentScreenshots"))
+    XCTAssertEqual(snapshot.sourceCount, 1)
+    XCTAssertTrue(snapshot.keywords.contains("Omi"))
+    XCTAssertTrue(snapshot.keywords.contains("Codex"))
+    XCTAssertFalse(snapshot.keywords.contains("Cursor"))
   }
 
   func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {

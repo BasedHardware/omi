@@ -181,7 +181,7 @@ enum RealtimeScreenGroundingState: Equatable {
   }
 }
 
-/// `completeScreenEvidenceProtocol` must never silently leave the reducer-owned screenshot tool
+/// Screen-evidence completion must never silently leave the reducer-owned screenshot tool
 /// pending. Keep each fail-closed reason typed so the live PTT probe can distinguish a provider
 /// stall from an ownership or reducer transition failure without exposing user content.
 enum RealtimeScreenEvidenceProtocolCompletion: String, Equatable, Sendable {
@@ -334,7 +334,7 @@ enum RealtimeScreenGroundingPolicy {
 
   static func reportDecision(
     state: RealtimeScreenGroundingState,
-    answer: String,
+    observation: String,
     sourceObjectID: ObjectIdentifier,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
@@ -353,9 +353,9 @@ enum RealtimeScreenGroundingPolicy {
       activeResponseID: activeResponseID,
       currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
-    guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard !answerClaimsDifferentApplication(
-      answer,
+    guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
+    guard !observationClaimsDifferentApplication(
+      observation,
       frontmostApp: evidence.frontmostApp ?? "",
       knownApplicationNames: knownApplicationNames)
     else { return .contradictoryApplication }
@@ -363,22 +363,14 @@ enum RealtimeScreenGroundingPolicy {
   }
 
   /// The native descriptor—not model prose—owns application identity. The model can supply
-  /// detail from the image, but an answer that names a different active app fails closed.
-  static func presentedAnswer(
-    evidence: RealtimeScreenEvidenceDescriptor,
-    answer: String
-  ) -> String {
-    let app = evidence.frontmostApp?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let detail = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-    return detail.isEmpty ? "The frontmost app is \(app)." : "The frontmost app is \(app). \(detail)"
-  }
-
-  private static func answerClaimsDifferentApplication(
-    _ answer: String,
+  /// a visual grounding observation, but one that directly claims a different active app fails
+  /// closed before the provider continues to its conversational answer.
+  private static func observationClaimsDifferentApplication(
+    _ observation: String,
     frontmostApp: String,
     knownApplicationNames: [String]
   ) -> Bool {
-    let normalizedAnswer = RealtimeScreenEvidenceDescriptor.normalizedAppName(answer)
+    let normalizedObservation = RealtimeScreenEvidenceDescriptor.normalizedAppName(observation)
     let normalizedFrontmost = RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
     let commonDesktopApps = [
       "cursor", "codex", "xcode", "finder", "terminal", "safari", "google chrome",
@@ -389,9 +381,8 @@ enum RealtimeScreenGroundingPolicy {
       .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description
     // naturally says things such as "application windows" or can mention an app visible inside
-    // content; neither statement contradicts the native frontmost-app fact. The app prepends the
-    // native identity itself in `presentedAnswer`, so this guard protects provenance without
-    // requiring a model to repeat it.
+    // content; neither statement contradicts the native frontmost-app fact. This guard protects
+    // the report's grounding role without constraining the provider's later conversational answer.
     let foregroundClaimPrefixes = [
       "you are in ", "you're in ", "currently in ",
       "frontmost app is ", "frontmost application is ",
@@ -399,7 +390,7 @@ enum RealtimeScreenGroundingPolicy {
     ]
     return candidates.contains { candidate in
       foregroundClaimPrefixes.contains { prefix in
-        normalizedAnswer.contains(prefix + candidate)
+        normalizedObservation.contains(prefix + candidate)
       }
     }
   }

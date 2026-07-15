@@ -224,7 +224,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// bridge. This lets a PTT probe distinguish a provider wait from a local lifecycle failure.
   var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
-  var screenAnswerPresented = false
+  var screenFailurePresented = false
   private var voiceContextPrefetchTask: Task<Void, Never>?
   private var voiceContextRefreshGeneration: UInt64 = 0
   private var turnPreparationTask: Task<Void, Never>?
@@ -2350,11 +2350,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       operation)
   }
 
-  /// A native screen answer becomes visible before the provider can narrate it.
+  /// A deterministic screen-verification failure becomes visible before the provider can
+  /// continue. Successful reports do not use this path: they keep provider narration open.
   /// Register its canonical journal obligation through the same retained receipt
   /// path as other authoritative local results before the reducer closes the turn.
   @discardableResult
-  func enqueueAuthoritativeScreenEvidencePersistence(
+  func enqueueAuthoritativeScreenEvidenceFailurePersistence(
     ownerID: String,
     assistantText: String
   ) -> Task<Bool, Never> {
@@ -4566,9 +4567,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     arguments: [String: Any],
     expectedTurnEpoch: Int
   ) {
-    let answer = String(((arguments["answer"] as? String) ?? "").prefix(1_200))
+    // `answer` is accepted only for already-warm sessions created by a prior
+    // bundle. New generated schemas use `observation`, whose value is an
+    // internal grounding acknowledgement rather than the user-facing answer.
+    let observation = String(
+      ((arguments["observation"] as? String) ?? (arguments["answer"] as? String) ?? "").prefix(1_200))
     let accepted = resolveScreenObservation(
-      answer: answer,
+      observation: observation,
       source: source,
       turnID: turnID,
       expectedTurnEpoch: expectedTurnEpoch,
@@ -4584,7 +4589,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   @discardableResult
   private func resolveScreenObservation(
-    answer: String,
+    observation: String,
     source: RealtimeHubSession,
     turnID: VoiceTurnID,
     expectedTurnEpoch: Int,
@@ -4594,7 +4599,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     let knownApplicationNames = NSWorkspace.shared.runningApplications.compactMap(\.localizedName)
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: screenGroundingState,
-      answer: answer,
+      observation: observation,
       sourceObjectID: ObjectIdentifier(source),
       activeTurnID: turnID,
       activeResponseID: voiceResponseID,
@@ -4621,12 +4626,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     screenGroundingState = .accepted(receipt)
     logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
-    return completeScreenEvidenceProtocol(
+    return acceptScreenEvidenceReport(
       receipt.protocolToken,
-      outcome: .verified(
-        reportCallID: VoiceToolCallID(callID),
-        reportIdentity: reportIdentity),
-      answer: RealtimeScreenGroundingPolicy.presentedAnswer(evidence: receipt.descriptor, answer: answer))
+      reportCallID: VoiceToolCallID(callID),
+      reportIdentity: reportIdentity)
       == .completed
   }
 

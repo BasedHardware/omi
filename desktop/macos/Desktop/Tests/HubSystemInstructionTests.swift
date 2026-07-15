@@ -33,6 +33,30 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
     }
 
+    func testValidatedScreenObservationContinuesToTheOriginalUserAnswer() {
+        let instruction = RealtimeHubTools.systemInstruction()
+        let accepted = RealtimeHubTools.screenObservationResult(accepted: true)
+        let acceptedPayload = try? JSONSerialization.jsonObject(with: Data(accepted.utf8)) as? [String: Any]
+
+        XCTAssertTrue(instruction.contains("internal verification, not your user-facing reply"))
+        XCTAssertTrue(instruction.contains("answer the user's original"))
+        XCTAssertFalse(instruction.contains("app will present an accepted report itself"))
+        XCTAssertEqual(acceptedPayload?["ok"] as? Bool, true)
+        XCTAssertTrue((acceptedPayload?["instruction"] as? String ?? "").contains("original request naturally"))
+    }
+
+    func testScreenObservationSchemaCarriesGroundingInsteadOfAUserFacingAnswer() {
+        let tool = RealtimeHubTools.openAITools.first {
+            ($0["name"] as? String) == HubTool.reportScreenObservation.rawValue
+        }
+        let parameters = tool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+
+        XCTAssertNotNil(properties?["observation"])
+        XCTAssertNil(properties?["answer"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["observation"])
+    }
+
     func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
         let raw = RealtimeHubTools.screenshotToolResult(
             capturedBytes: 1)

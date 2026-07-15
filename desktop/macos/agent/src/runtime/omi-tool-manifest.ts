@@ -609,14 +609,14 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
   },
   report_screen_observation: {
     surfaces: ["realtime_voice"],
-    capabilityDoc: doc("Report Screen Observation", "Report a grounded current-screen answer.", [
+    capabilityDoc: doc("Report Screen Observation", "Verify grounding from the current-screen image.", [
       "Only call after screenshot returns the current image.",
-      "Put only visual detail in the answer; native evidence supplies application identity.",
+      "Submit a concise visual observation, then answer the user's original request naturally.",
     ]),
     executor: { kind: "swiftTool", executorName: "realtimeHub" },
     voice: {
       realtimeDescription:
-        "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+        "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
     },
   },
   point_click: {
@@ -1277,17 +1277,17 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     name: "report_screen_observation",
     label: "Report Screen Observation",
     description:
-      "Submit one current-screen observation after screenshot succeeds.",
-    promptSnippet: "report_screen_observation - Submit a grounded current-screen answer",
+      "Verify one current-screen observation after screenshot succeeds.",
+    promptSnippet: "report_screen_observation - Verify grounding before answering a current-screen request",
     latency: "fast local",
     inputSchema: schema(
       {
-        answer: {
+        observation: {
           type: "string",
-          description: "Concise visual detail only; do not name or identify an app.",
+          description: "Concise visual grounding observation from the attached image; this is not the user-facing answer.",
         },
       },
-      ["answer"],
+      ["observation"],
     ),
     annotations: readOnlyLocal,
     timeoutClass: "normal",
