@@ -184,13 +184,26 @@ export async function runMainChatTurn(
 
     // Per-session memory (Approach B): pi-mono's run does NOT thread a surfaceRef
     // through assembleTurnContext, so it never gets the per-chatId
-    // <conversation_history> tail — and pi holds ONE shared subprocess context, so
-    // switching chatId would otherwise not switch the model's memory. Inject the
-    // tail here: read THIS chatId's prior turns and prepend them to the prompt. The
-    // read happens BEFORE recordSurfaceTurn below so the just-sent user turn is not
-    // in the tail (no duplication). On a session's first turn the conversation is
-    // empty → no tail → prompt unchanged. Keyed by chatId + read from SQLite, so it
-    // is per-session and cross-restart durable, with no kernel-core edit.
+    // <conversation_history> tail. And a pi subprocess has no native resume
+    // (resumeFidelity:'none') — a restart drops its in-memory conversation. So we
+    // inject the tail here: read THIS chatId's prior turns and prepend them to the
+    // prompt. The read happens BEFORE recordSurfaceTurn below so the just-sent user
+    // turn is not in the tail (no duplication). On a session's first turn the
+    // conversation is empty → no tail → prompt unchanged. Keyed by chatId + read
+    // from SQLite, so it is per-session and cross-restart durable, with no
+    // kernel-core edit. (Verified live: chat A→B→A — B never sees A's context, A
+    // recalls after the detour; matches macOS's shipped multichat behavior.)
+    //
+    // Cross-session isolation holds because pi-mono is requiresPinnedWorker:true —
+    // each chatId pins its OWN worker+subprocess (workerPool.ts), so a live pi
+    // conversation is never shared between chats. KNOWN EDGE (not fixed here,
+    // shared latent with macOS): under pin-EVICTION — when concurrently-active
+    // pinned pi chats exceed the worker-pool cap — an evicted worker reassigned to a
+    // new chat keeps its still-alive subprocess (its old chat's turns), a narrow
+    // same-user context bleed. The tail injection does not address it (the bleed is
+    // pi's native in-memory accumulation on subprocess reuse); eviction hardening
+    // (new_session on pinned-worker reassignment + a small pi-mono maxWorkers cap)
+    // is a separable follow-up owned outside this PR.
     const tail = kernel.getMainChatTurnTail(ownerId, MAIN_CHAT_TAIL_LIMIT, chatId)
     const history = formatTranscriptTail(tail.turns)
     const effectivePrompt = history ? `${history}\n\n${args.prompt}` : args.prompt
