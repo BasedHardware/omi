@@ -456,6 +456,15 @@ final class AICloneService: ObservableObject {
       outcome: .stayedSilent, confidence: approval.confidence)
   }
 
+  /// Clears the activity log and any pending approvals. Chat modes and the
+  /// Beeper connection are untouched.
+  func clearActivity() {
+    pendingApprovals.removeAll()
+    configuration.activityLog.removeAll()
+    store.save(configuration)
+    objectWillChange.send()
+  }
+
   // MARK: Benchmark
 
   func runBenchmark(for chat: BeeperChat) async {

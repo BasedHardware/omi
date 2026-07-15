@@ -309,7 +309,14 @@ struct AICloneContent: View {
   private var activityCard: some View {
     card {
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
-        cardTitle("Activity")
+        HStack {
+          cardTitle("Activity")
+          Spacer()
+          if !service.configuration.activityLog.isEmpty || !service.pendingApprovals.isEmpty {
+            Button("Clear") { service.clearActivity() }
+              .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
+          }
+        }
         if service.configuration.activityLog.isEmpty {
           cardSubtitle("Nothing yet. When the clone drafts, sends, or declines a reply, it shows up here.")
         }
