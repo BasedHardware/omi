@@ -66,9 +66,14 @@ export type BarChatSurfaceProps = {
   onBack: () => void
   onClose: () => void
   draft: string
-  setDraft: (s: string) => void
-  /** Send the typed draft (typed turn — spoken=false). */
-  onSubmit: (text: string) => void
+  setDraft: React.Dispatch<React.SetStateAction<string>>
+  /** Send the typed draft (typed turn — spoken=false). Resolves to the
+   *  usage-limit notice when the send was REFUSED, else null. */
+  onSubmit: (text: string) => Promise<string | null>
+  /** The chat usage limit refused the last send — show the line inline, above the
+   *  input (Mac drops the same copy into the bar as a local assistant message).
+   *  The main window raises the shared upgrade modal in parallel. */
+  limitNotice?: string | null
   /** PTT gets first dibs on Space in the textarea (hold-to-talk). Returns true
    *  when it consumed the event (skip Enter/typing). */
   pttKeyDown: (e: React.KeyboardEvent) => boolean
@@ -87,6 +92,9 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
   const scrollRef = useRef<HTMLDivElement>(null)
   const messagesRef = useRef<HTMLDivElement>(null)
   const followRef = useRef(true)
+  // Monotonic submit id — a refused send may only restore its text if it is still
+  // the last thing the user asked (see submit()).
+  const submitSeq = useRef(0)
 
   // Focus the input whenever the conversation view opens.
   useEffect(() => {
@@ -135,7 +143,22 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
     if (!text) return
     props.setDraft('')
     followRef.current = true
-    props.onSubmit(text)
+    const seq = ++submitSeq.current
+    void props.onSubmit(text).then((notice) => {
+      // A REFUSED send never reaches the transcript, so clearing the input would
+      // just eat the user's question behind the amber notice — they'd have to
+      // retype it (Mac keeps the turn visible as a bubble instead). Put the text
+      // back so they can upgrade and resend.
+      //
+      // Only the LATEST submit may restore. Nothing disables the textarea while a
+      // check is in flight, so Enter can fire a second send while the first
+      // cold-start probe still awaits; both then refuse, and a first-come restore
+      // would drop its stale text into the input the second submit just cleared —
+      // the newer question would be the one lost. Belt-and-braces, never clobber
+      // text the user typed after the clear.
+      if (!notice || seq !== submitSeq.current) return
+      props.setDraft((current) => (current.trim() ? current : text))
+    })
   }
 
   if (view === 'list') {
@@ -225,6 +248,12 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
           Ask Omi anything, or hold Space to talk.
         </div>
       )}
+
+      {props.limitNotice ? (
+        <div role="status" className="px-4 pb-1 pt-1 text-xs leading-relaxed text-amber-300/90">
+          {props.limitNotice}
+        </div>
+      ) : null}
 
       <div className="flex items-end gap-2 px-3 pb-3 pt-2">
         <textarea

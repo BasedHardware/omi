@@ -1,25 +1,14 @@
 // src/renderer/src/lib/screenRedact.ts
-export const DEFAULT_DENYLIST: string[] = [
-  '1password', 'bitwarden', 'keepass', 'lastpass', 'dashlane',
-  'windows security', 'windows hello', 'log in', 'login', 'sign in',
-  'password', 'bank', 'chase', 'wells fargo', 'paypal', 'coinbase'
-]
-
-const PRIVATE_MARKERS = ['incognito', 'inprivate', 'private browsing']
-
-export function isPrivateWindow(windowTitle: string): boolean {
-  const t = windowTitle.toLowerCase()
-  return PRIVATE_MARKERS.some((m) => t.includes(m))
-}
-
-export function isDeniedContext(ctx: {
-  app: string
-  windowTitle: string
-  processName: string
-}): boolean {
-  const hay = `${ctx.app} ${ctx.windowTitle} ${ctx.processName}`.toLowerCase()
-  return DEFAULT_DENYLIST.some((n) => hay.includes(n))
-}
+//
+// The context predicates now live in `shared/screenPrivacy.ts` so the
+// main-process proactive assistants can apply the exact same gate before a
+// frame's pixels leave the device. Re-exported here so existing renderer
+// callers keep importing them from this module.
+export {
+  DEFAULT_DENYLIST,
+  isPrivateWindow,
+  isDeniedContext
+} from '../../../shared/screenPrivacy'
 
 const PATTERNS: RegExp[] = [
   /[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}/g,

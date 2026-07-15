@@ -20,6 +20,7 @@ import {
   batchTranscribeParams,
   RECORDING_TOO_LONG_MESSAGE
 } from './constants'
+import { consumePttKeywords, pttKeywordsParam } from './vocabulary'
 import type { BackendSegment } from '../../../../shared/types'
 
 /** Fire-and-forget token warm-up for key-down: Firebase caches the result, so
@@ -121,13 +122,54 @@ export async function startPttStream(cb: PttStreamCallbacks): Promise<PttStream>
   }
 }
 
+// Spoken-language feed-forward (A3). Default behavior is INERT: with no
+// `voiceLanguages` set, every turn uses the static `getPreferences().language`,
+// byte-identical to before. When the user pins a candidate set, we remember the
+// last provider-detected language (only when it is within that set) and hint it
+// on the NEXT turn — the realtime provider frequently mislabels short PTT
+// utterances (e.g. Russian rendered as Italian), and biasing toward a language
+// the user actually speaks corrects it.
+//
+// Deliberately NOT ported from macOS PTTLanguageIdentifier: on-device ASR
+// language ID and same-turn dual-transcript reconciliation — the Windows app
+// ships no on-device multilingual model, so there is nothing to reconcile
+// against within a turn. Feed-forward across turns is the achievable subset.
+let lastDetectedLanguage: string | null = null
+
+function resolveTranscribeLanguage(): string {
+  const prefs = getPreferences()
+  const candidates = prefs.voiceLanguages ?? []
+  if (candidates.length > 0 && lastDetectedLanguage && candidates.includes(lastDetectedLanguage)) {
+    return lastDetectedLanguage
+  }
+  return prefs.language
+}
+
+function rememberDetectedLanguage(language: string | undefined): void {
+  const candidates = getPreferences().voiceLanguages ?? []
+  if (candidates.length === 0) return // inert — no feed-forward when unset
+  if (language && candidates.includes(language)) lastDetectedLanguage = language
+}
+
+/** Test-only: clear the per-session detected-language memory. */
+export function __resetPttLanguageMemoryForTests(): void {
+  lastDetectedLanguage = null
+}
+
 /** POST the captured PCM to the batch transcription endpoint. Returns the
  *  transcript ('' when the backend heard nothing). One transparent retry on 401
  *  with a force-refreshed token (covers a just-expired cached token). */
 export async function batchTranscribe(pcm: Int16Array, signal: AbortSignal): Promise<string> {
-  const post = (): Promise<{ data?: { transcript?: string } }> =>
+  // Best-effort vocabulary boosting (A2): consume the terms collected at
+  // hold-start (see startPttKeywordCollection) and ship them as the `keywords`
+  // hint. Never load-bearing — consumePttKeywords is bounded and swallows every
+  // source failure, and the param always carries at least the "Omi,OMI" brand
+  // prepend. Consumed once here so a 401 retry reuses it rather than re-collecting.
+  const keywords = pttKeywordsParam(await consumePttKeywords())
+
+  const post = (): Promise<{ data?: { transcript?: string; language?: string } }> =>
     omiApi.post(BATCH_TRANSCRIBE_PATH, pcm.buffer, {
-      params: batchTranscribeParams(getPreferences().language),
+      params: batchTranscribeParams(resolveTranscribeLanguage(), keywords),
       headers: { 'Content-Type': 'application/octet-stream' },
       timeout: BATCH_TIMEOUT_MS,
       signal,
@@ -138,11 +180,13 @@ export async function batchTranscribe(pcm: Int16Array, signal: AbortSignal): Pro
 
   try {
     const res = await post()
+    rememberDetectedLanguage(res.data?.language)
     return res.data?.transcript ?? ''
   } catch (err) {
     if (axios.isAxiosError(err) && err.response?.status === 401 && auth.currentUser) {
       await auth.currentUser.getIdToken(true)
       const res = await post()
+      rememberDetectedLanguage(res.data?.language)
       return res.data?.transcript ?? ''
     }
     throw err

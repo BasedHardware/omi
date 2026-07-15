@@ -20,6 +20,7 @@ import App from './App'
 import { SandboxBadge } from './components/SandboxBadge'
 import { scrubEventPii } from '../../shared/sentryScrub'
 import { isSecondaryWindow } from './lib/windowRole'
+import { initFontScale } from './lib/fontScale'
 
 // Renderer-side crash reporting. Only initializes when a DSN is configured, so
 // dev builds (and any build without the env var) stay entirely offline. Emails
@@ -43,6 +44,10 @@ const IS_PRIMARY_WINDOW = !isSecondaryWindow()
 // transformers). Splits the startup headline into "bundle download + eval" vs
 // "render + first paint".
 if (IS_PRIMARY_WINDOW) window.omi?.perfMark('renderer:eval')
+
+// Apply the persisted UI font scale and register the Ctrl+font shortcuts before
+// first render — main window only (secondary windows are visually exempt).
+if (IS_PRIMARY_WINDOW) initFontScale()
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

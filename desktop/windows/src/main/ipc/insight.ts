@@ -12,8 +12,10 @@ import { insertInsight, recentInsights } from './db'
 import type { InsightPayload, InsightSettings } from '../../shared/types'
 
 // Show an insight using the user's chosen style: the in-app acrylic toast
-// ('omi') or a native Windows notification ('native').
-function deliverInsight(p: InsightPayload): void {
+// ('omi') or a native Windows notification ('native'). Exported so the proactive
+// assistants' notification throttle (assistants/core/notify.ts) delivers through
+// the same one place, rather than growing a second toast path.
+export function deliverInsight(p: InsightPayload): void {
   if (getInsightSettings().notificationStyle === 'native') fireNativeInsight(p)
   else showInsightToast(p)
 }

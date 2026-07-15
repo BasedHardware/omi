@@ -44,6 +44,10 @@ export type PttEvent =
 export type PttEffect =
   | { kind: 'startCapture' }
   | { kind: 'startStream' }
+  /** Kick off best-effort keyword collection at hold-start so the bounded OCR
+   *  overlaps the hold and is free by key-up (A2). The transcribe path consumes
+   *  the cached result — see startPttKeywordCollection in vocabulary.ts. */
+  | { kind: 'startVocabulary' }
   /** Stop appending audio; resolve the full buffer after DRAIN_MS. */
   | { kind: 'startDrain' }
   | { kind: 'stopCapture' }
@@ -89,7 +93,11 @@ const stay = (state: PttState): Step => ({ state, effects: [] })
 
 /** Everything a discarded capture must tear down. `abortBatch`/`stopStream` are
  *  no-ops in the hook when nothing is in flight. */
-const TEARDOWN: PttEffect[] = [{ kind: 'stopCapture' }, { kind: 'stopStream' }, { kind: 'abortBatch' }]
+const TEARDOWN: PttEffect[] = [
+  { kind: 'stopCapture' },
+  { kind: 'stopStream' },
+  { kind: 'abortBatch' }
+]
 
 export function reduce(s: PttState, e: PttEvent): Step {
   switch (e.type) {
@@ -97,7 +105,12 @@ export function reduce(s: PttState, e: PttEvent): Step {
       if (s.phase !== 'idle') return stay(s)
       return {
         state: { ...initialState, phase: 'holding' },
-        effects: [{ kind: 'startCapture' }, { kind: 'startStream' }, { kind: 'setLiveText', text: '' }]
+        effects: [
+          { kind: 'startCapture' },
+          { kind: 'startStream' },
+          { kind: 'startVocabulary' },
+          { kind: 'setLiveText', text: '' }
+        ]
       }
     }
 
@@ -120,7 +133,11 @@ export function reduce(s: PttState, e: PttEvent): Step {
       if (decision === 'too-short' || decision === 'dead-mic') {
         return {
           state: { ...s, phase: 'idle' },
-          effects: [{ kind: 'stopStream' }, { kind: 'showHint', hint: decision }, { kind: 'captureEnded' }]
+          effects: [
+            { kind: 'stopStream' },
+            { kind: 'showHint', hint: decision },
+            { kind: 'captureEnded' }
+          ]
         }
       }
       if (decision === 'silent') {
@@ -220,7 +237,11 @@ export function reduce(s: PttState, e: PttEvent): Step {
       if (s.phase === 'idle' || s.phase === 'holding') return stay(s)
       return {
         state: { ...s, phase: 'idle' },
-        effects: [...TEARDOWN, { kind: 'showError', message: 'Voice input timed out' }, { kind: 'captureEnded' }]
+        effects: [
+          ...TEARDOWN,
+          { kind: 'showError', message: 'Voice input timed out' },
+          { kind: 'captureEnded' }
+        ]
       }
     }
   }

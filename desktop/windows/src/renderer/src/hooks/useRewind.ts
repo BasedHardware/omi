@@ -26,9 +26,16 @@ export function useRewind(): RewindState {
   const [results, setResults] = useState<RewindSearchGroup[]>([])
   const playTimer = useRef<ReturnType<typeof setInterval> | null>(null)
   const framesRef = useRef(frames)
-  useEffect(() => { framesRef.current = frames }, [frames])
+  useEffect(() => {
+    framesRef.current = frames
+  }, [frames])
   const cursorRef = useRef(cursorTs)
-  useEffect(() => { cursorRef.current = cursorTs }, [cursorTs])
+  useEffect(() => {
+    cursorRef.current = cursorTs
+  }, [cursorTs])
+  // The query whose results are currently on screen, so a late-arriving semantic
+  // result for a superseded query can be dropped.
+  const queryRef = useRef('')
 
   const reload = useCallback(async () => {
     const b = await window.omi.rewindDayBounds()
@@ -88,8 +95,21 @@ export function useRewind(): RewindState {
     }
   }, [playing, frames])
 
+  // Keyword results, immediately — this never waits on the network. Semantic hits
+  // are merged in later by the subscription below, if they arrive at all.
   const search = useCallback(async (q: string) => {
+    queryRef.current = q.trim()
     setResults(await window.omi.rewindSearch(q))
+  }, [])
+
+  // Phase 2 of a search (see the rewind:search handler): the same list with
+  // semantic recall merged in. Applied only if it belongs to the query currently
+  // on screen — a slow round-trip for "invoice" must not overwrite the results
+  // the user is now looking at for "receipt".
+  useEffect(() => {
+    return window.omi.onRewindSearchResults(({ query, groups }) => {
+      if (query === queryRef.current) setResults(groups)
+    })
   }, [])
 
   return {

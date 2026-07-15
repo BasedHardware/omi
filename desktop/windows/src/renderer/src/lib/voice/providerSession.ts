@@ -4,12 +4,10 @@
 
 import type { RealtimeUsageBody } from './usageReport'
 
-/** Shared spoken-assistant persona. The server locks the MODEL at token mint;
- *  everything else is client session config. */
-export const OMI_VOICE_INSTRUCTIONS =
-  'You are Omi, a personal AI companion speaking with the user on their Windows computer. ' +
-  'Be warm, natural, and concise — this is a spoken conversation, so keep replies short ' +
-  'and conversational. If the user interrupts you, stop and listen.'
+// The per-session system instruction (persona, <about_user>, calendar context)
+// is assembled by the controller — see lib/voice/systemInstruction.ts — and
+// handed to whichever lane starts. The server locks the MODEL at token mint;
+// everything else, instructions included, is client session config.
 
 export type ProviderSessionCallbacks = {
   /** The provider session is up and audio is flowing both ways. */
