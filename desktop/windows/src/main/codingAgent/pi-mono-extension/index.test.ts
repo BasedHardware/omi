@@ -360,6 +360,9 @@ describe('classifyFileWrite (Windows)', () => {
     expect(classifyFileWrite('C:/Windows/System32/x')).toBeTruthy()
     expect(classifyFileWrite('C:\\Program Files\\app\\x.dll')).toBeTruthy()
     expect(classifyFileWrite('C:\\Program Files (x86)\\app\\x.dll')).toBeTruthy()
+    // Extended-length / namespace prefix must not bypass the drive-anchored rules.
+    expect(classifyFileWrite('\\\\?\\C:\\Windows\\System32\\x')).toBeTruthy()
+    expect(classifyFileWrite('\\\\?\\C:\\Program Files\\app\\x.dll')).toBeTruthy()
   })
 
   it('blocks SSH keys and cloud credential files', () => {

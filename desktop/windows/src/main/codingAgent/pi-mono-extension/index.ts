@@ -321,7 +321,11 @@ export function classifyFileWrite(filePath: string): DenyDecision | null {
   // Resolve to absolute to prevent ..\..\..\Windows traversal bypass, then
   // normalize any forward slashes to backslashes so the rules match regardless
   // of the separator the model used (`C:/Windows` vs `C:\Windows`).
-  const resolved = resolve(filePath).replace(/\//g, '\\')
+  const normalized = resolve(filePath).replace(/\//g, '\\')
+  // Strip a Windows extended-length / namespace prefix (`\\?\C:\...`,
+  // `\\?\UNC\server\share`) so `\\?\C:\Windows\System32\x` — which pi's fs-based
+  // write/edit tool honors — cannot slip past the drive-letter-anchored rules.
+  const resolved = normalized.replace(/^\\\\\?\\(UNC\\)?/i, (_m, unc) => (unc ? '\\\\' : ''))
   for (const rule of WRITE_PATH_DENY_RULES) {
     if (rule.pattern.test(resolved)) {
       return { blocked: true, reason: rule.reason }
