@@ -160,22 +160,28 @@ const until = async (label, fn, timeoutMs = 60_000) => {
   }
 }
 
-const SECONDARY = ['#/bar', '#/insight-toast', '#/capture']
+const SECONDARY = ['#/bar', '#/insight-toast', '#/capture', '#/glow']
 const isSecondary = (u) => SECONDARY.some((h) => u.includes(h))
 
+// Ready = the authed main window whose sidebar <nav> lists the Rewind item. (We key
+// on the nav item, not the collapse-toggle button — the win-nav-model change removed
+// the `aria-label$="sidebar"` selector older specs waited on.)
 async function mainPage(app) {
   await app.firstWindow()
   for (let i = 0; i < 150; i++) {
-    const page = (await app.windows()).find((w) => !isSecondary(w.url()))
-    if (page) {
-      const ok = await page
-        .evaluate(() => !!document.querySelector('nav button[aria-label$="sidebar"]'))
+    for (const w of await app.windows()) {
+      if (isSecondary(w.url())) continue
+      const ok = await w
+        .evaluate(() => {
+          const nav = document.querySelector('nav')
+          return !!nav && /Rewind/.test(nav.textContent || '')
+        })
         .catch(() => false)
-      if (ok) return page
+      if (ok) return w
     }
     await new Promise((r) => setTimeout(r, 100))
   }
-  throw new Error('main-window sidebar never mounted')
+  throw new Error('authed shell (sidebar with Rewind) never mounted')
 }
 
 test('day-scoped Rewind: browse, calendar, search results, drill-down, empty day', async (t) => {
