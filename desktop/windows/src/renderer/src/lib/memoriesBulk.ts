@@ -3,6 +3,10 @@ import type { Memory } from '../hooks/useMemories'
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms))
 
+// A raw axios response, narrowed to just what the pager's onResponse hook reads
+// (headers) — avoids coupling this module to the full axios type surface.
+type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
+
 // Page through every memory. GET /v3/memories clamps `limit` to at most 5000
 // and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
 // whenever offset is 0, regardless of the requested limit (see
@@ -15,11 +19,21 @@ const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms
 // early, silently truncating anything past the account's first 5000 memories.
 // Dedupes by id and stops when a page is empty or adds nothing new — guards
 // against a server that ignores `offset` entirely.
-export async function fetchAllMemories(): Promise<Memory[]> {
+//
+// `onResponse` fires for every raw page response so a caller (the Memories page)
+// can read capability headers off the first page — e.g.
+// X-Omi-Memory-Canonical-Lifecycle-Exposed, which gates the tier/device filters
+// — without a second request. It is the single source of truth for "fetch every
+// memory": the display hook (useMemories) and the bulk export/purge paths all go
+// through it, so the pagination contract can never drift between them again.
+export async function fetchAllMemoriesPaged(
+  onResponse?: (res: MemoriesResponse) => void
+): Promise<Memory[]> {
   const byId = new Map<string, Memory>()
   let offset = 0
   while (offset < 100_000) {
     const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
+    onResponse?.(r)
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
     if (page.length === 0) break
     let added = 0
@@ -33,6 +47,11 @@ export async function fetchAllMemories(): Promise<Memory[]> {
     offset += page.length
   }
   return [...byId.values()]
+}
+
+// Convenience wrapper for callers that only need the full list (export/purge).
+export function fetchAllMemories(): Promise<Memory[]> {
+  return fetchAllMemoriesPaged()
 }
 
 // Cap aligned with the backend's MEMORIES_BATCH_MAX (backend/routers/memories.py)
