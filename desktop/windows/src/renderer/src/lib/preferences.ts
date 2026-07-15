@@ -121,6 +121,11 @@ export type Preferences = {
   // `omniSTT`. Undefined ⇒ OFF; never defaulted true here (flipping the default is
   // a separate post-soak PR).
   pttHubEnabled?: boolean
+  // Tap-to-lock (macOS PushToTalkManager.doubleTapForLock): a quick double-tap of
+  // the summon hotkey latches hands-free listening (mic stays open, no key held)
+  // until the next tap. DEFAULT ON — read as `!== false` so an unset pref latches.
+  // Hold-to-talk is unchanged either way.
+  doubleTapForLock?: boolean
 }
 
 const defaults: Preferences = {
