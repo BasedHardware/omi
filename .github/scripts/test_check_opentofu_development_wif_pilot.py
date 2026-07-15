@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import importlib.util
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -41,6 +42,35 @@ class DevelopmentWifPilotFixture(unittest.TestCase):
         source = CHECKER.read(CHECKER.BOOTSTRAP_VARIABLES)
         errors = CHECKER.check_bootstrap_variables(source.replace('default     = "based-hardware-dev"', 'default     = "based-hardware"'))
         self.assertIn("based-hardware-dev", "\n".join(errors))
+
+    def test_bootstrap_rejects_non_immutable_github_identity(self) -> None:
+        source = CHECKER.read(CHECKER.BOOTSTRAP)
+        errors = CHECKER.check_bootstrap(source.replace("assertion.repository_id", "assertion.repository", 1))
+        self.assertIn("repository_id", "\n".join(errors))
+
+    def test_bootstrap_rejects_extra_open_tofu_files(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="omi-opentofu-pilot-") as temp_dir:
+            module_dir = Path(temp_dir)
+            for name in ("main.tf", "variables.tf", "elevated.tf", "hidden.tf.json"):
+                (module_dir / name).touch()
+            errors = CHECKER.check_module_files(module_dir, CHECKER.EXPECTED_PILOT_FILES, "bootstrap")
+        self.assertIn("elevated.tf", "\n".join(errors))
+        self.assertIn("hidden.tf.json", "\n".join(errors))
+
+    def test_bootstrap_plan_requires_exact_creates(self) -> None:
+        plan = {
+            "resource_changes": [
+                {"address": address, "change": {"actions": ["create"]}}
+                for address in sorted(CHECKER.EXPECTED_BOOTSTRAP_RESOURCES)
+            ]
+        }
+        self.assertEqual(CHECKER.check_plan(plan), [])
+
+        plan["resource_changes"].append(
+            {"address": "google_project_iam_member.escalation", "change": {"actions": ["create"]}}
+        )
+        errors = CHECKER.check_plan(plan)
+        self.assertIn("must be exactly", "\n".join(errors))
 
     def test_probe_rejects_resources_and_remote_state(self) -> None:
         source = CHECKER.read(CHECKER.PROBE)
