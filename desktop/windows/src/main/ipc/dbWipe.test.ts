@@ -65,7 +65,10 @@ const WIPE_EXEMPT = new Set<string>([
 // plain-node vitest). The `\s*\(` after the name keeps prose comments that merely
 // mention "CREATE TABLE" from matching — only real DDL is followed by a column list.
 function tablesDeclaredInSource(): string[] {
-  const src = ['./db.ts', './dbMigrations.ts']
+  // liveNotesStore.ts holds the PR8 LiveNotes DDL (transcription_sessions +
+  // live_notes) that db.ts execs via LIVE_NOTES_SCHEMA — scan it too so those
+  // tables are still required in USER_DATA_TABLES by the drift guard.
+  const src = ['./db.ts', './dbMigrations.ts', './liveNotesStore.ts']
     .map((f) => readFileSync(new URL(f, import.meta.url), 'utf8'))
     .join('\n')
   const names = new Set<string>()

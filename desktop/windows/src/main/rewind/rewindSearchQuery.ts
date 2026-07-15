@@ -70,15 +70,36 @@ function ftsPrefixTerm(part: string): string {
   return `"${part.replace(/"/g, '""')}"*`
 }
 
+/** The deduped, indexable parts one whitespace token expands into — the original
+ *  word plus its camelCase and digit sub-parts (length >= 2, at least one indexable
+ *  char), in that order. This is the raw material both the FTS MATCH builder and the
+ *  literal-highlight term list are derived from, so they can never drift apart. */
+export function rewindWordParts(word: string): string[] {
+  const parts = [word, ...splitCamelCase(word), ...splitOnDigits(word)]
+  return [...new Set(parts)].filter((p) => p.length >= 2 && hasAlnum(p))
+}
+
 /** Expand one whitespace token into an FTS5 sub-expression, or null when it
  *  carries no indexable content. Insertion order (original word, then camelCase
  *  parts, then digit parts) is preserved and deduped. */
 export function expandRewindSearchWord(word: string): string | null {
-  const parts = [word, ...splitCamelCase(word), ...splitOnDigits(word)]
-  const unique = [...new Set(parts)].filter((p) => p.length >= 2 && hasAlnum(p))
+  const unique = rewindWordParts(word)
   if (unique.length === 0) return null
   const terms = unique.map(ftsPrefixTerm)
   return terms.length === 1 ? terms[0] : `(${terms.join(' OR ')})`
+}
+
+/** The lowercased literal terms a result frame's OCR text can be substring-tested
+ *  against for snippet/representative selection and highlighting — every part
+ *  `buildRewindFtsMatch` prefix-searches, minus the FTS quoting/`*`. A frame that
+ *  matched ONLY via a sub-part (camelCase/digit split or a prefix) still highlights,
+ *  where testing the raw query as one literal substring would have missed it. */
+export function rewindMatchTerms(query: string): string[] {
+  const out = new Set<string>()
+  for (const word of tokenizeRewindSearchQuery(query)) {
+    for (const part of rewindWordParts(word)) out.add(part.toLowerCase())
+  }
+  return [...out]
 }
 
 /** Build the full FTS5 MATCH expression for a raw query, or null when the query

@@ -35,7 +35,11 @@ const RECOVER_WINDOW_MS = 60_000
 
 export function useWebglRecovery(
   hostRef: React.RefObject<HTMLElement | null>,
-  onContextLost?: () => void
+  onContextLost?: () => void,
+  // Fired when recovery gives up (its remount cap is hit within the window). The
+  // caller should surface an explicit fallback and drive its own retry — remounting
+  // here would just be the storm we are refusing to join.
+  onExhausted?: () => void
 ): number {
   const [recoveryKey, setRecoveryKey] = useState(0)
 
@@ -45,6 +49,8 @@ export function useWebglRecovery(
 
     const firedAt: number[] = []
     let timer: ReturnType<typeof setTimeout> | undefined
+    // The element we hid on the most recent loss, so the cap path can un-hide it.
+    let hidden: HTMLElement | null = null
 
     const scheduleRemount = (): void => {
       // Coalesce a burst (a GPU crash fires lost on every canvas at once) into a
@@ -58,6 +64,15 @@ export function useWebglRecovery(
         console.warn(
           '[webgl-recovery] context lost repeatedly — leaving fallback instead of remounting again'
         )
+        // Never leave a hidden canvas behind. If the context was actually restored
+        // (a transient loss under churn), the canvas is healthy but INVISIBLE with
+        // no error anywhere — a silent blank map. Un-hide it, and hand off to the
+        // caller's explicit fallback + retry (onExhausted) for the truly-dead case.
+        if (hidden) {
+          hidden.style.visibility = ''
+          hidden = null
+        }
+        onExhausted?.()
         return
       }
       timer = setTimeout(() => {
@@ -72,11 +87,13 @@ export function useWebglRecovery(
       // it down), so the remount can bind a fresh context to a fresh canvas.
       e.preventDefault()
       // Hide the now-broken canvas IMMEDIATELY so Chromium's broken-image
-      // placeholder never shows — not during the anti-storm debounce below, and
-      // not at all if we hit the remount cap (the host's own dark background
-      // stands in instead, matching the Orb's "hidden canvas, never a broken
-      // glyph" fallback). The remount replaces this element with a fresh one.
-      if (e.target instanceof HTMLElement) e.target.style.visibility = 'hidden'
+      // placeholder never shows during the anti-storm debounce below. The remount
+      // replaces this element with a fresh one; if we instead hit the cap, the
+      // branch above un-hides it so a recovered context is never stranded invisible.
+      if (e.target instanceof HTMLElement) {
+        e.target.style.visibility = 'hidden'
+        hidden = e.target
+      }
       onContextLost?.()
       scheduleRemount()
     }

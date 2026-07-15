@@ -18,7 +18,7 @@ import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
 import { installContextMenu } from './contextMenu'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
-import type { ConversationFolder } from '../shared/types'
+import type { ConversationFolder, LiveNote } from '../shared/types'
 import {
   registerOmiListenHandlers,
   startTestListenSession,
@@ -107,7 +107,9 @@ import { perfMark, flushPerfMarks } from '../shared/perf'
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
+import { registerMicPermissionHandlers } from './ipc/micPermission'
 import { isQuitting, quitApp } from './lifecycle'
+import { classifyChildProcessGone } from './childProcessGone'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
@@ -159,10 +161,22 @@ const startHidden = process.argv.includes('--hidden')
 // runner overrides OMI_PERF_LOG). Packaged builds write nothing unless the env
 // var is explicitly set — no silent prod telemetry file. Runs before app:start.
 if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
-// Dev GPU stability: render in software + keep WebGL on SwiftShader + never let a
-// GPU crash permanently blocklist WebGL, so the orb / brain map / blur / effects
-// stay reliable on flaky dev GPUs (hybrid laptop, asleep display, headless soak).
-// Must run before app ready. Packaged builds keep full hardware acceleration.
+// PRODUCTION TOO: never let a GPU-process crash permanently blocklist WebGL.
+// After a few GPU crashes Chromium domain-blocks 3D APIs for the origin "until
+// restart", so every subsequent context request returns null and the WebGL
+// surfaces (brain map, orb) are dead for the rest of the session — no remount can
+// recover them. Field evidence: crash.log carries genuine `child-process-gone
+// type=GPU reason=crashed` entries across Jul 10-14, under hardware GL AND under
+// SwiftShader (which runs INSIDE the GPU process, so it can crash too). Note the
+// `reason=killed` entries in that same log are NOT crashes — they are clean quits
+// (see childProcessGone.ts); don't read them as evidence of anything. Disabling the
+// block costs a healthy machine nothing and is what lets the renderer's recovery
+// remounts actually get a fresh context. Must run before app ready.
+app.disableDomainBlockingFor3DAPIs()
+// Dev GPU stability: render in software + keep WebGL on SwiftShader, so the orb /
+// brain map / blur / effects stay reliable on flaky dev GPUs (hybrid laptop,
+// asleep display, headless soak). Must run before app ready. Packaged builds keep
+// full hardware acceleration.
 if (import.meta.env.DEV) devBench.applyDevGpuStability()
 perfMark('app:start')
 
@@ -237,20 +251,28 @@ app.on('render-process-gone', (_e, wc, details) => {
 app.on('child-process-gone', (_e, details) => {
   // Include the utility's name/service (e.g. "Audio Service", "Video Capture")
   // so a Utility crash points at the actual subsystem rather than just "Utility".
-  logFatal(
-    'child-process-gone',
+  const summary =
     `type=${details.type}` +
-      (details.name ? ` name=${details.name}` : '') +
-      (details.serviceName ? ` service=${details.serviceName}` : '') +
-      ` reason=${details.reason} exitCode=${details.exitCode}`
-  )
+    (details.name ? ` name=${details.name}` : '') +
+    (details.serviceName ? ` service=${details.serviceName}` : '') +
+    ` reason=${details.reason} exitCode=${details.exitCode}`
+  // On Windows a normal quit kills children via TerminateProcess, which Chromium
+  // reports as `type=GPU reason=killed exitCode=1` — identical in every field to a
+  // real GPU kill. Without the isQuitting() check every clean quit wrote a fatal
+  // "GPU crash" to crash.log (five quits read as a five-crash loop) and broadcast
+  // context-loss at windows already being destroyed. See childProcessGone.ts.
+  const { fatal, broadcastGpuLoss } = classifyChildProcessGone(details, isQuitting())
+  if (!fatal) {
+    console.log(`[shutdown] child process gone during teardown: ${summary}`)
+    return
+  }
+  logFatal('child-process-gone', summary)
   // A GPU-process crash loses every live WebGL context, but the RENDERERS stay
   // alive — so render-process-gone (which reloads) never fires, and a WebGL
   // <canvas> (the brain map) is left painted as Chromium's broken-image
   // placeholder with nothing to recover it. Chromium restarts the GPU process on
   // its own; broadcast so WebGL surfaces remount and brand images re-decode.
-  // Clean exits are intentional teardown — skip.
-  if (details.type === 'GPU' && details.reason !== 'clean-exit') {
+  if (broadcastGpuLoss) {
     for (const w of BrowserWindow.getAllWindows()) {
       if (!w.isDestroyed()) w.webContents.send(GPU_CONTEXT_LOST_CHANNEL)
     }
@@ -301,11 +323,18 @@ import {
   replaceConversationFolders,
   upsertConversationFolder,
   deleteConversationFolder,
+  createTranscriptionSession,
+  createLiveNote,
+  updateLiveNote,
+  deleteLiveNote,
+  listLiveNotes,
   insertVoiceTurn,
   listPendingVoiceTurns,
   markVoiceTurnAcked,
   recordVoiceTurnFailure,
   pruneOrphanedRewindEmbeddings,
+  getDbRecoveryStatus,
+  initDatabase,
   wipeUserData
 } from './ipc/db'
 
@@ -467,6 +496,27 @@ app.whenReady().then(async () => {
   if (!gotSingleInstanceLock) return
   perfMark('main:ready')
 
+  // Open (and, if it is corrupt, recover) omi.db before anything else can touch
+  // it. This has to happen here, first: recovery REPLACES the database file, and
+  // both the read-only chat handle and the KG write worker's own connection open
+  // lazily later — swapping the file under them would strand them on a deleted
+  // inode. Single-instance lock is already held, so no other process has it open.
+  // Never fatal: a throw here would be an unstartable app, and the renderer can
+  // still run (every DB call surfaces its own error).
+  try {
+    const recovery = initDatabase()
+    if (recovery.recovered) {
+      console.error(
+        `[main] omi.db was corrupt and has been recovered: ` +
+          `${recovery.rowsRecovered} row(s) restored, reset=${recovery.reset}, ` +
+          `backup=${recovery.backupPath}`
+      )
+    }
+  } catch (e) {
+    console.error('[main] database init failed', e)
+  }
+  perfMark('main:db-ready')
+
   // Production only (dev uses the vite dev server): serve the packaged renderer
   // over localhost so Firebase auth sees an authorized origin. Must be up before
   // any window loads.
@@ -600,6 +650,18 @@ app.whenReady().then(async () => {
     async (_e, id: string, resetAttempts?: boolean) =>
       claimConversationForPosting(id, resetAttempts)
   )
+  // PR8: LiveNotes — AI + manual notes during a live recording (local-only).
+  ipcMain.handle(
+    'db:createTranscriptionSession',
+    async (_e, session: { id: string; startedAt: number; createdAt: number }) =>
+      createTranscriptionSession(session)
+  )
+  ipcMain.handle('db:createLiveNote', async (_e, note: LiveNote) => createLiveNote(note))
+  ipcMain.handle('db:updateLiveNote', async (_e, id: string, text: string, updatedAt: number) =>
+    updateLiveNote(id, text, updatedAt)
+  )
+  ipcMain.handle('db:deleteLiveNote', async (_e, id: string) => deleteLiveNote(id))
+  ipcMain.handle('db:listLiveNotes', async (_e, sessionId: string) => listLiveNotes(sessionId))
   // Track 2: Voice & PTT depth — durable voice-turn outbox (unconsumed until
   // Phase B / Track 1 wire the kernel-write path; see ipc/voiceTurnOutbox.ts).
   ipcMain.handle('db:insertVoiceTurn', async (_e, entry) => insertVoiceTurn(entry))
@@ -665,6 +727,22 @@ app.whenReady().then(async () => {
   // (push-during-load race), and opens the release notes in the system browser.
   ipcMain.handle('whatsnew:getPending', async () => getCurrentWhatsNew())
   ipcMain.on('whatsnew:openNotes', () => void shell.openExternal(releaseNotesUrl()))
+  // Onboarding mic-permission recovery: deep-link straight to Windows Settings →
+  // Privacy & security → Microphone. The target is a fixed literal (never a
+  // renderer-supplied URL), so no scheme allow-list is needed — unlike
+  // billing:openExternal, this cannot be steered at an arbitrary protocol handler.
+  ipcMain.on(
+    'settings:openMicPrivacy',
+    () => void shell.openExternal('ms-settings:privacy-microphone')
+  )
+  // Real Windows mic consent (Capability Access Manager registry). Chromium's
+  // permission layer knows nothing about the per-app privacy toggle and answers
+  // `granted` unconditionally, so onboarding must ask the OS, not the browser.
+  registerMicPermissionHandlers()
+  // Database corruption recovery: the renderer pulls this once on mount and tells
+  // the user what happened to their data. macOS declares the equivalent flag but
+  // never sets it, so its recovery UI can never fire; ours reports for real.
+  ipcMain.handle('db:recoveryStatus', () => getDbRecoveryStatus())
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
@@ -1033,6 +1111,14 @@ app.whenReady().then(async () => {
 
   // Renderer → quit for real (menu/button in the UI).
   ipcMain.on('app:quit', () => quitApp())
+
+  // Renderer → restart. Used by the database-corruption prompt: the repair can only
+  // run at startup (before the read-only handle and the KG worker's own connection
+  // exist), so the fix is one clean relaunch.
+  ipcMain.on('app:relaunch', () => {
+    app.relaunch()
+    quitApp()
+  })
 
   // Dev perf bench: after the renderer loads, record the startup-timing marks and
   // quit. Entirely dev-only — tree-shaken from packaged main (see dev/bench).

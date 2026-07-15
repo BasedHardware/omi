@@ -38,7 +38,8 @@ import type {
   CodingAgentId,
   CodingAgentRunArgs,
   VoiceTurnOutboxInput,
-  AiUserProfileRecord
+  AiUserProfileRecord,
+  LiveNote
 } from '../shared/types'
 import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -65,6 +66,14 @@ const omi: OmiBridgeApi = {
   deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
+  // --- PR8: LiveNotes (local-only AI + manual notes during a live recording) ---
+  createTranscriptionSession: (session: { id: string; startedAt: number; createdAt: number }) =>
+    ipcRenderer.invoke('db:createTranscriptionSession', session),
+  createLiveNote: (note: LiveNote) => ipcRenderer.invoke('db:createLiveNote', note),
+  updateLiveNote: (id: string, text: string, updatedAt: number) =>
+    ipcRenderer.invoke('db:updateLiveNote', id, text, updatedAt),
+  deleteLiveNote: (id: string) => ipcRenderer.invoke('db:deleteLiveNote', id),
+  listLiveNotes: (sessionId: string) => ipcRenderer.invoke('db:listLiveNotes', sessionId),
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   insertVoiceTurn: (entry: VoiceTurnOutboxInput) => ipcRenderer.invoke('db:insertVoiceTurn', entry),
   listPendingVoiceTurns: (limit?: number) => ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
@@ -180,6 +189,8 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('memories:deleteProgress', listener)
   },
   rewindFrames: (from: number, to: number) => ipcRenderer.invoke('rewind:frames', from, to),
+  rewindFramesSampled: (from: number, to: number) =>
+    ipcRenderer.invoke('rewind:framesSampled', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
@@ -236,6 +247,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('rewind:capture-directive', listener)
     return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
   },
+  dbRecoveryStatus: () => ipcRenderer.invoke('db:recoveryStatus'),
+  onDbCorruptionDetected: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('db:corruption-detected', listener)
+    return () => ipcRenderer.removeListener('db:corruption-detected', listener)
+  },
+  relaunchApp: () => ipcRenderer.send('app:relaunch'),
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
@@ -266,6 +284,8 @@ const omi: OmiBridgeApi = {
   },
   whatsNewGetPending: () => ipcRenderer.invoke('whatsnew:getPending'),
   whatsNewOpenNotes: () => ipcRenderer.send('whatsnew:openNotes'),
+  openMicPrivacySettings: () => ipcRenderer.send('settings:openMicPrivacy'),
+  getMicPermissionState: () => ipcRenderer.invoke('permissions:micState'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
   // Main-window chrome: whether the window was created with a Windows 11 Mica
@@ -414,6 +434,12 @@ const omiOverlay: OmiOverlayApi = {
     const listener = (): void => cb()
     ipcRenderer.on('overlay:voiceCaptured', listener)
     return () => ipcRenderer.removeListener('overlay:voiceCaptured', listener)
+  },
+  notifyVoiceFailed: (message: string) => ipcRenderer.send('overlay:voiceFailed', message),
+  onVoiceFailed: (cb: (message: string) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, message: string): void => cb(message)
+    ipcRenderer.on('overlay:voiceFailed', listener)
+    return () => ipcRenderer.removeListener('overlay:voiceFailed', listener)
   },
   notifyAsked: () => ipcRenderer.send('overlay:asked'),
   onAsked: (cb: () => void) => {

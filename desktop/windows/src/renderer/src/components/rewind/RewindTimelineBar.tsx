@@ -47,16 +47,23 @@ function localAxisTicks(minTs: number, maxTs: number, maxTicks: number): number[
   return axisTicks(minTs - off, maxTs - off, maxTicks).map((t) => t + off)
 }
 
+// macOS InteractiveTimelineBar draws search-result markers as thin yellow bars
+// (NSColor.yellow @ 0.8, 3pt) at each matched frame's position.
+const MARKER_COLOR = 'rgba(234, 179, 8, 0.8)'
+
 export function RewindTimelineBar({
   frames,
   bounds,
   cursorTs,
-  onSeek
+  onSeek,
+  markerTimes
 }: {
   frames: RewindFrame[]
   bounds: { min: number; max: number } | null
   cursorTs: number
   onSeek: (ts: number) => void
+  /** Timestamps of search hits to mark on the bar (macOS yellow @0.8, 3px). */
+  markerTimes?: number[]
 }): React.JSX.Element {
   const outerRef = useRef<HTMLDivElement>(null)
   const innerRef = useRef<HTMLDivElement>(null)
@@ -178,6 +185,14 @@ export function RewindTimelineBar({
                   key={`tick-${t}`}
                   className="absolute top-0 h-full w-px bg-white/15"
                   style={{ left: tsToX(t, mapping) }}
+                />
+              ))}
+            {mapping &&
+              markerTimes?.map((t) => (
+                <div
+                  key={`marker-${t}`}
+                  className="pointer-events-none absolute top-0 h-full rounded-full"
+                  style={{ left: tsToX(t, mapping) - 1.5, width: 3, backgroundColor: MARKER_COLOR }}
                 />
               ))}
             {mapping && (

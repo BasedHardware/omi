@@ -1,11 +1,24 @@
 import Database from 'better-sqlite3'
-import { app } from 'electron'
-import { basename, join } from 'path'
+import { app, BrowserWindow } from 'electron'
+import { basename, dirname, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
 import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
 import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
+import {
+  clearCorruptionFlags,
+  isCorruptionError,
+  isCorruptionSuspected,
+  markCorruptionSuspected,
+  NO_RECOVERY,
+  openDatabaseWithRecovery,
+  repairSuspectedCorruption,
+  type RecoveryDb,
+  type RecoveryDriver,
+  type RecoveryStatus
+} from './dbRecovery'
+import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
 import {
   insertVoiceTurnOn,
@@ -15,6 +28,16 @@ import {
   type VoiceTurnOutboxDb
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import {
+  LIVE_NOTES_SCHEMA,
+  createTranscriptionSessionOn,
+  endTranscriptionSessionOn,
+  createLiveNoteOn,
+  updateLiveNoteOn,
+  deleteLiveNoteOn,
+  listLiveNotesOn,
+  type LiveNotesDb
+} from './liveNotesStore'
 import {
   listConversationFoldersOn,
   replaceConversationFoldersOn,
@@ -33,6 +56,12 @@ import {
   rewindFramesNeedingEmbeddingSql,
   searchEmbeddingPageSql
 } from './rewindEmbeddingSql'
+import {
+  REWIND_SAMPLE_TARGET,
+  REWIND_DAY_COUNT_SQL,
+  rewindSampleStep,
+  buildRewindSampledSql
+} from './rewindSampleSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -50,6 +79,7 @@ import type {
   InsightPayload,
   InsightRecord,
   KgSqlResult,
+  LiveNote,
   KnowledgeGraph,
   LocalConversation,
   LocalKGStatus,
@@ -97,20 +127,221 @@ function dropIfMissingColumn(d: Database.Database, table: string, col: string): 
   if (!cols.some((c) => c.name === col)) d.exec(`DROP TABLE ${table}`)
 }
 
+// OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
+// never reads or writes the user's real omi.db.
+function dbFilePath(): string {
+  return process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
+}
+
+// Corrupt originals are archived next to the database (macOS: <dataDir>/backups),
+// keyed off the db file so a bench/test DB keeps its backups in its own temp dir.
+function backupsDir(): string {
+  return join(dirname(dbFilePath()), 'backups')
+}
+
+// The production driver for dbRecovery's seam. The casts bridge better-sqlite3's
+// generically-typed statement methods to the structural RecoveryDb surface —
+// same duck-typing idiom as voiceTurnDb() below and the node:sqlite test drivers.
+const betterSqliteDriver: RecoveryDriver = {
+  open: (file) => new Database(file) as unknown as RecoveryDb,
+  openReadonly: (file) =>
+    new Database(file, { readonly: true, fileMustExist: true }) as unknown as RecoveryDb
+}
+
+let recoveryStatus: RecoveryStatus = NO_RECOVERY
+
+// --- The runtime corruption trip ---------------------------------------------
+//
+// A damaged DATA page is invisible to the startup open+sanity check: the DB opens,
+// the schema reads, and only the damaged table throws SQLITE_CORRUPT — every time
+// it is queried, forever. Without this trip nothing would ever notice, and the
+// salvage engine could never run on the one class of corruption where it saves the
+// user's data (measured: sibling tables intact, ~99% of the damaged table's rows
+// still recoverable).
+//
+// So: arm every statement on the shared connection. A corrupt error from ANY live
+// query persists a suspicion flag and asks the user to restart; the repair itself
+// runs at the next startup, where it is safe. The error is always RETHROWN — this
+// observes, it never swallows.
+//
+// macOS has the same design (reportQueryError -> maxQueryIOErrorsBeforeRecovery)
+// with zero callers. This is the wiring it never got.
+
+let corruptionNoticed = false
+
+/** Persist the suspicion and tell the user, once per session. Never throws: it
+ *  runs from inside a failing query's catch block. */
+function noteCorruption(handle: Database.Database, err: unknown): void {
+  if (corruptionNoticed) return
+  corruptionNoticed = true
+  console.error('db: a live query raised a corruption error — flagging for repair on restart', err)
+  captureError(err, { area: 'db_corruption_runtime', extra: { file: dbFilePath() } })
+  try {
+    markCorruptionSuspected(handle as unknown as RecoveryDb)
+  } catch {
+    // Too damaged even to record it; the startup detector covers that class.
+  }
+  // Ask the user to restart. The repair cannot run now — the KG worker and the
+  // read-only handle are live, and replacing the file under them would strand them.
+  for (const w of BrowserWindow.getAllWindows()) {
+    if (!w.isDestroyed()) w.webContents.send('db:corruption-detected')
+  }
+}
+
+/**
+ * Wrap `prepare`/`exec` so a corrupt error from any query trips the flag. The
+ * error is rethrown unchanged, so caller behavior is identical — this is a pure
+ * observer on the failure path, and adds nothing to the success path beyond a
+ * try/catch.
+ */
+function armCorruptionTrip(handle: Database.Database): Database.Database {
+  const watch = <T>(run: () => T): T => {
+    try {
+      return run()
+    } catch (err) {
+      if (isCorruptionError(err)) noteCorruption(handle, err)
+      throw err
+    }
+  }
+
+  const originalPrepare = handle.prepare.bind(handle)
+  handle.prepare = ((sql: string) => {
+    const stmt = watch(() => originalPrepare(sql))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver methods are variadic/overloaded
+    const raw = stmt as any
+    for (const method of ['all', 'get', 'run', 'iterate', 'pluck'] as const) {
+      const original = raw[method]
+      if (typeof original !== 'function') continue
+      raw[method] = (...args: unknown[]): unknown =>
+        watch(() => (original as (...a: unknown[]) => unknown).apply(stmt, args))
+    }
+    return stmt
+  }) as typeof handle.prepare
+
+  const originalExec = handle.exec.bind(handle)
+  handle.exec = ((sql: string) => watch(() => originalExec(sql))) as typeof handle.exec
+
+  return handle
+}
+
+/** What happened to the database on this launch: whether corruption was detected,
+ *  how many rows were salvaged, and whether it had to be reset. Surfaced to the
+ *  user over IPC (`db:recoveryStatus`) — unlike macOS, whose equivalent flag is
+ *  declared but never set, so its recovery UI can never fire. */
+export function getDbRecoveryStatus(): RecoveryStatus {
+  return recoveryStatus
+}
+
+/**
+ * Open the database (recovering it first if it is corrupt) before anything else
+ * touches it. Called once at startup.
+ *
+ * This must run before the KG write worker (`kgWorker.ts`, which opens its OWN
+ * better-sqlite3 handle to the same path in a worker_thread) and before the
+ * read-only `roDb` handle below. Recovery replaces the file on disk; doing that
+ * under a live handle would leave that handle pointing at a deleted inode. All of
+ * those open lazily and later, so running recovery here — single-threaded, before
+ * any window exists — is what makes the swap safe by construction.
+ */
+export function initDatabase(): RecoveryStatus {
+  get()
+  return recoveryStatus
+}
+
 function get(): Database.Database {
   if (db) return db
-  // OMI_DB_PATH lets the bench harness point at a throwaway DB so benchmarking
-  // never reads or writes the user's real omi.db.
-  const file = process.env.OMI_DB_PATH ?? join(app.getPath('userData'), 'omi.db')
-  db = new Database(file)
+  const file = dbFilePath()
+  const backups = backupsDir()
+  const log = (m: string): void => console.log(m)
+  const reopen = (): RecoveryDb =>
+    openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backups }).db
+  // Detect + recover corruption BEFORE any schema work. A healthy database is
+  // opened untouched; only a positively-classified corrupt one is backed up,
+  // salvaged and replaced. See dbRecovery.ts.
+  const opened = openDatabaseWithRecovery(file, betterSqliteDriver, {
+    backupsDir: backups,
+    hooks: {
+      log,
+      onCorruption: (err) => {
+        // Silent UX healing is fine; silent ops is not (AGENTS.md). No Windows
+        // recordFallback emitter exists, so this is console + Sentry.
+        console.error('db: CORRUPTION DETECTED in omi.db — recovering', err)
+        captureError(err, { area: 'db_corruption', extra: { file } })
+      }
+    }
+  })
+  let handle = opened.db
+  recoveryStatus = opened.status
+
+  // The next-launch half of the runtime trip: a previous session saw a live query
+  // raise a corrupt error and flagged it. The flag is only a SUSPICION — repair
+  // re-verifies that the damage still reproduces, refuses to rebuild into a worse
+  // state, and gives up after MAX_REPAIR_ATTEMPTS rather than looping forever.
+  if (!recoveryStatus.recovered && isCorruptionSuspected(handle)) {
+    const hooks = {
+      log,
+      onCorruption: (err: unknown) => {
+        console.error('db: corruption confirmed on restart — repairing', err)
+        captureError(err, { area: 'db_corruption_confirmed', extra: { file } })
+      }
+    }
+    const outcome = repairSuspectedCorruption(handle, file, betterSqliteDriver, {
+      backupsDir: backups,
+      hooks
+    })
+    if (outcome.action === 'repaired') {
+      handle = reopen()
+      recoveryStatus = outcome.status
+      // The salvage copied app_meta across, flag and all — clear it on the repaired DB.
+      clearCorruptionFlags(handle)
+    } else if (outcome.action === 'abandoned' || outcome.action === 'kept_original') {
+      // Confirmed damage we deliberately did NOT rebuild. Leave the DB alone, tell
+      // the user, and report — never silently keep limping.
+      const reason =
+        outcome.action === 'abandoned'
+          ? `repair budget exhausted after ${outcome.attempts} attempts`
+          : // kept_original covers two safe-direction outcomes: a rebuild would have
+            // lost rows a working table still serves, OR the corrupt file could not
+            // be moved aside so we refused to touch it. Either way, nothing changed.
+            'a safe rebuild was not possible (would lose readable rows, or the corrupt file could not be archived)'
+      console.error(`db: corruption confirmed but NOT repaired — ${reason}`)
+      captureError(new Error(`db corruption unrepaired: ${reason}`), {
+        area: 'db_corruption_unrepaired',
+        extra: { file, damaged: outcome.damaged }
+      })
+      recoveryStatus = {
+        ...NO_RECOVERY,
+        unrepairable: true,
+        damagedTables: outcome.damaged,
+        backupPath: outcome.action === 'kept_original' ? outcome.backupPath : null
+      }
+      // The handle was closed by the repair on the kept_original path; reopen.
+      if (outcome.action === 'kept_original') {
+        handle = reopen()
+      }
+    }
+    // 'no_repair_needed' (false alarm) leaves the handle and the DB untouched.
+  }
+
+  // Arm the trip so a corrupt error from any live query flags the DB for repair at
+  // the next launch. Must wrap the FINAL handle (post-repair).
+  db = armCorruptionTrip(handle as unknown as Database.Database)
   // WAL mode: allows main-thread reads to proceed concurrently while the KG
   // write worker holds the write lock. Synchronous stays at the default FULL so
   // non-KG tables (local_conversation etc.) are not at power-loss risk.
   // The worker sets synchronous=NORMAL only on its own connection.
   db.pragma('journal_mode = WAL')
+  // Wait out a concurrent writer (the KG worker) instead of failing with
+  // SQLITE_BUSY. macOS sets the same 5s timeout.
+  db.pragma('busy_timeout = 5000')
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
+  // PR8 LiveNotes: PR0 shipped a dead, FK-less `live_notes` (no `updated_at`) and
+  // no `transcription_sessions`. The table has never held data, so drop the old
+  // shape and recreate it (below, via LIVE_NOTES_SCHEMA) with the cascading FK +
+  // `updated_at`, mirroring the macOS schema.
+  dropIfMissingColumn(db, 'live_notes', 'updated_at')
   // Track 4 (Rewind semantic search): drop-then-create, as one ordered unit, in a
   // module the schema tests can actually load. See rewindEmbeddingSchema.ts — a
   // PR0-era rewind_embeddings has no `hash` column, and indexing it would throw
@@ -275,17 +506,9 @@ function get(): Database.Database {
       PRIMARY KEY (conversation_id, speaker_id)
     );
 
-    -- --- Track 4: Live notes (meeting minutes; AI-generated or manual) ---
-    CREATE TABLE IF NOT EXISTS live_notes (
-      id TEXT PRIMARY KEY,
-      session_id TEXT NOT NULL,
-      text TEXT NOT NULL,
-      is_ai INTEGER NOT NULL DEFAULT 0,
-      seg_start INTEGER,
-      seg_end INTEGER,
-      created_at INTEGER NOT NULL
-    );
-    CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
+    -- --- PR8: LiveNotes tables (transcription_sessions + live_notes) are created
+    -- from LIVE_NOTES_SCHEMA below, not here — the DDL lives in liveNotesStore.ts
+    -- so production and the CRUD tests run byte-identical statements. ---
 
     -- --- Track 4: Crash-rescue live-segment buffer ---
     CREATE TABLE IF NOT EXISTS rescue_segments (
@@ -375,6 +598,10 @@ function get(): Database.Database {
       PRIMARY KEY (source, item_id)
     );
   `)
+  // PR8 LiveNotes: transcription_sessions + live_notes (with the cascading FK).
+  // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
+  // the drop-if-old above recreated any FK-less PR0 table before this runs.
+  db.exec(LIVE_NOTES_SCHEMA)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
@@ -395,6 +622,19 @@ function get(): Database.Database {
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
+  // After a salvage the FTS index is empty: salvage skips virtual tables (copying
+  // FTS shadow tables raw would produce a corrupt index) and preserves
+  // user_version, so migration v2's backfill does not re-run. The bootstrap block
+  // above has just recreated the vtable + triggers, so rebuild the index from the
+  // recovered rewind_frames rows — same 'rebuild' idiom as migration v2. Never let
+  // this block startup.
+  if (recoveryStatus.recovered && !recoveryStatus.reset) {
+    try {
+      db.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
+    } catch (e) {
+      console.error('db: FTS rebuild after recovery failed (search may be stale)', e)
+    }
+  }
   return db
 }
 
@@ -557,6 +797,43 @@ export function updateLocalConversationTitle(id: string, title: string): void {
     .run(title.trim() || null, id)
 }
 
+// --- PR8: LiveNotes CRUD ---
+// Thin wrappers over the driver-agnostic CRUD in liveNotesStore.ts (extracted so
+// the SQL is unit-testable under plain-node vitest with node:sqlite). get()
+// returns a better-sqlite3 Database whose prepared statements satisfy the
+// LiveNotesDb shape structurally — same cast idiom as the folder wrappers.
+function liveNotesDb(): LiveNotesDb {
+  return get() as unknown as LiveNotesDb
+}
+
+export function createTranscriptionSession(session: {
+  id: string
+  startedAt: number
+  createdAt: number
+}): void {
+  createTranscriptionSessionOn(liveNotesDb(), session)
+}
+
+export function endTranscriptionSession(id: string, endedAt: number): void {
+  endTranscriptionSessionOn(liveNotesDb(), id, endedAt)
+}
+
+export function createLiveNote(note: LiveNote): void {
+  createLiveNoteOn(liveNotesDb(), note)
+}
+
+export function updateLiveNote(id: string, text: string, updatedAt: number): void {
+  updateLiveNoteOn(liveNotesDb(), id, text, updatedAt)
+}
+
+export function deleteLiveNote(id: string): void {
+  deleteLiveNoteOn(liveNotesDb(), id)
+}
+
+export function listLiveNotes(sessionId: string): LiveNote[] {
+  return listLiveNotesOn(liveNotesDb(), sessionId)
+}
+
 export function getLocalConversation(id: string): LocalConversation | null {
   return timed('getLocalConversation', () => {
     const row = get()
@@ -591,9 +868,10 @@ export function remapConversationId(fromId: string, toId: string): number {
 // Load path → modified_at (ms) for the whole index. Drives both the retention
 // diff (which existing paths still exist on disk) and the incremental mtime-skip.
 export function loadIndexedFileMtimes(): Map<string, number> {
-  const rows = get()
-    .prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files')
-    .all() as { path: string; modifiedAt: number }[]
+  const rows = get().prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files').all() as {
+    path: string
+    modifiedAt: number
+  }[]
   const map = new Map<string, number>()
   for (const r of rows) map.set(r.path, r.modifiedAt)
   return map
@@ -797,8 +1075,14 @@ export function getLocalKGStatus(): LocalKGStatus {
 // connection first (get()) so the file/tables exist before we open it.
 function getReadonly(): Database.Database {
   if (roDb) return roDb
-  get() // ensure the db file + schema exist before opening read-only
-  roDb = new Database(join(app.getPath('userData'), 'omi.db'), { readonly: true })
+  // get() first: it ensures the file + schema exist, and — critically — that any
+  // corruption recovery (which REPLACES the file) has already run, so this handle
+  // can never be left pointing at a deleted inode.
+  get()
+  // dbFilePath(), not a hardcoded userData path: this used to ignore OMI_DB_PATH,
+  // so the bench/e2e harness opened the user's REAL omi.db read-only while the
+  // writable handle used the throwaway one.
+  roDb = new Database(dbFilePath(), { readonly: true })
   return roDb
 }
 
@@ -1073,6 +1357,26 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
         .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
         .all(from, to) as RewindFrame[]
   )
+}
+
+/**
+ * A day's frames, evenly down-sampled to ~`target` (macOS getScreenshotsSampled).
+ * `<= target` returns them all; a busier day returns every Nth by timestamp so the
+ * timeline stays ~target frames instead of pulling an unbounded row count into one
+ * IPC round-trip. Always oldest-first. See rewindSampleSql.ts for the contract.
+ */
+export function listRewindFramesSampled(
+  from: number,
+  to: number,
+  target = REWIND_SAMPLE_TARGET
+): RewindFrame[] {
+  return timed('listRewindFramesSampled', () => {
+    const d = get()
+    const { n } = d.prepare(REWIND_DAY_COUNT_SQL).get(from, to) as { n: number }
+    if (n <= target) return listRewindFrames(from, to)
+    const step = rewindSampleStep(n, target)
+    return d.prepare(buildRewindSampledSql(REWIND_COLUMNS)).all(from, to, step) as RewindFrame[]
+  })
 }
 
 // --- Track 4: Rewind FTS5 search ---

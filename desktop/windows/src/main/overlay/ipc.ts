@@ -57,6 +57,18 @@ export function registerOverlayHandlers(focusMain: () => void): void {
     }
   })
 
+  // The bar reports a push-to-talk capture that FAILED (mic unavailable, batch
+  // transcription error, pipeline timeout). The bar itself shows no error strip,
+  // so without this relay a failed capture is invisible everywhere — and the
+  // onboarding voice step, which waits for 'voiceCaptured', would wait forever on
+  // a gesture the user performed correctly.
+  ipcMain.on('overlay:voiceFailed', (_e, message: string) => {
+    const text = typeof message === 'string' ? message : ''
+    for (const w of BrowserWindow.getAllWindows()) {
+      if (!w.isDestroyed()) w.webContents.send('overlay:voiceFailed', text)
+    }
+  })
+
   // The bar reports any message sent (typed or spoken); relay it so the
   // onboarding demo step knows the user asked something in the bar.
   ipcMain.on('overlay:asked', () => {

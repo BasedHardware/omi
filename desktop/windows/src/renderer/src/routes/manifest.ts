@@ -12,6 +12,7 @@ import { Goals } from '../pages/Goals'
 import { Apps } from '../pages/Apps'
 import { Rewind } from '../pages/Rewind'
 import { LiveConversation } from '../pages/LiveConversation'
+import { KnowledgeGraph } from '../pages/KnowledgeGraph'
 
 // Single source of truth for the app's page routing. Both MainViews (what renders
 // in the content area) and Sidebar (the nav rail) are driven off this array, so a
@@ -105,6 +106,14 @@ export const routeManifest: RouteEntry[] = [
     // just components). Type-checking is identical — rename ConversationDetail's
     // `conversationId` and this line stops compiling.
     render: (params) => createElement(ConversationDetail, { conversationId: params.id })
+  },
+  {
+    // Full-screen interactive brain map (BrainGraph mounted with OrbitControls).
+    // Reached from the expand affordance on the Memories inline Brain Map card.
+    id: 'knowledge-graph',
+    kind: 'exclusive',
+    match: (pathname) => (pathname === '/knowledge-graph' ? {} : null),
+    render: () => createElement(KnowledgeGraph)
   },
 
   // Panel routes (kept mounted; inactive ones hidden). Declaration order = DOM

@@ -102,8 +102,7 @@ export function ShortcutSetupStep({
       <div className="mt-2 flex w-full max-w-[420px] flex-col items-center gap-3 rounded-2xl border border-white/5 bg-white/[0.03] px-6 py-8">
         {recorder.recording ? (
           <div className="flex h-[52px] items-center text-sm text-white/60">
-            Recording… press your keys{' '}
-            <span className="ml-2 text-white/35">(Esc to cancel)</span>
+            Recording… press your keys <span className="ml-2 text-white/35">(Esc to cancel)</span>
           </div>
         ) : (
           <div className="flex items-center gap-2">

@@ -181,6 +181,15 @@ export function BarApp(): React.JSX.Element {
     restoreDraft: (snapshot) => setDraft(snapshot),
     getDraft: () => draftRef.current
   })
+  // A capture that FAILS (mic unavailable → the machine cancels, so no
+  // captureEnded ever fires; or a batch/pipeline error) leaves the bar silent —
+  // the pill shows no error strip by design. Relay the message so the onboarding
+  // voice step can say what went wrong rather than waiting forever for a capture
+  // that will never arrive.
+  useEffect(() => {
+    if (ptt.error) window.omiOverlay.notifyVoiceFailed(ptt.error)
+  }, [ptt.error])
+
   // Main drives PTT for the summon-hotkey hold; read the latest handlers.
   const beginHoldRef = useRef(ptt.beginHold)
   const endHoldRef = useRef(ptt.endHold)

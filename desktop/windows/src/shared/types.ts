@@ -366,9 +366,10 @@ export type OmiOverlayApi = {
   suspendShortcut: () => void
   /** Re-claim the current accelerator after recording (or cancelling). */
   resumeShortcut: () => Promise<boolean>
-  /** Subscribe to the overlay's open/focused state (broadcast to every window),
-   *  so the onboarding voice step can switch between "press the hotkey" and "hold
-   *  Space". Returns an unsubscribe fn. */
+  /** Subscribe to the overlay's open/focused state (broadcast to every window).
+   *  NOTE `active` (focused) is only ever true for the EXPANDED bar — a peek/PTT
+   *  pill is deliberately non-focusable — so no step may gate its instructions on
+   *  it. Returns an unsubscribe fn. */
   onVisibilityChange: (cb: (state: OverlayVisibility) => void) => () => void
   /** Tell main a push-to-talk transcript was just captured (called from the
    *  overlay), so it can broadcast it to the onboarding window. */
@@ -376,6 +377,13 @@ export type OmiOverlayApi = {
   /** Subscribe to push-to-talk capture events (broadcast to every window).
    *  Returns an unsubscribe fn. */
   onVoiceCaptured: (cb: () => void) => () => void
+  /** Tell main a push-to-talk capture FAILED (mic unavailable, transcription
+   *  error): the user performed the gesture but it produced nothing. Broadcast so
+   *  onboarding can say what went wrong instead of leaving the step silent. */
+  notifyVoiceFailed: (message: string) => void
+  /** Subscribe to push-to-talk failures (broadcast to every window). Returns an
+   *  unsubscribe fn. */
+  onVoiceFailed: (cb: (message: string) => void) => () => void
   /** Tell main the user sent a message from the overlay (typed or spoken), so it
    *  can broadcast it to onboarding. Fired from the overlay's send choke-point. */
   notifyAsked: () => void
@@ -597,6 +605,21 @@ export type OmiBridgeApi = {
   upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
   /** Drop a folder from the cache (optimistic delete). */
   deleteConversationFolder: (id: string) => Promise<void>
+  // --- PR8: LiveNotes (AI + manual notes during a live recording; local-only) ---
+  /** Persist the session anchor when a recording starts (idempotent on id). */
+  createTranscriptionSession: (session: {
+    id: string
+    startedAt: number
+    createdAt: number
+  }) => Promise<void>
+  /** Insert one note (AI or manual). Always an INSERT — never overwrites a row. */
+  createLiveNote: (note: LiveNote) => Promise<void>
+  /** Update a note's text (explicit user edit). */
+  updateLiveNote: (id: string, text: string, updatedAt: number) => Promise<void>
+  /** Delete a note (explicit user delete). */
+  deleteLiveNote: (id: string) => Promise<void>
+  /** All notes for a session, oldest-first (crash-recovery reload). */
+  listLiveNotes: (sessionId: string) => Promise<LiveNote[]>
   // --- Track 2: Voice & PTT depth (voice turn outbox) ---
   /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
    *  delivery. A re-enqueue for the same key updates the assistant text /
@@ -766,6 +789,10 @@ export type OmiBridgeApi = {
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
+  /** A day's frames, evenly down-sampled to ~500 (macOS parity). The day-scoped
+   *  timeline loads through this; `rewindFrames` stays the unsampled primitive for
+   *  the small incremental live-append on today. */
+  rewindFramesSampled: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   /** Total captured frames, all time — a COUNT(*), not a row fetch. */
   rewindFrameCount: () => Promise<number>
@@ -803,6 +830,14 @@ export type OmiBridgeApi = {
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
+  /** What happened to omi.db at startup — whether it was found corrupt and had to
+   *  be repaired or reset. Read once on mount to tell the user. */
+  dbRecoveryStatus: () => Promise<DbRecoveryStatus>
+  /** Main → renderer: a live query just raised a database-corruption error. The
+   *  repair can only run at startup, so the UI asks the user to restart. */
+  onDbCorruptionDetected: (cb: () => void) => () => void
+  /** Restart the app (used by the corruption prompt). */
+  relaunchApp: () => void
   insightGetSettings: () => Promise<InsightSettings>
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>
@@ -835,6 +870,14 @@ export type OmiBridgeApi = {
   whatsNewGetPending: () => Promise<WhatsNewPayload | null>
   /** Toast renderer → main: open the GitHub release notes in the browser. */
   whatsNewOpenNotes: () => void
+  /** Open Windows Settings → Privacy & security → Microphone (denied-mic recovery
+   *  in onboarding). Fixed `ms-settings:` target, no caller-supplied URL. */
+  openMicPrivacySettings: () => void
+  /** The REAL Windows microphone permission, read from the Capability Access Manager
+   *  registry in main. `navigator.permissions.query` is NOT usable for this — Electron
+   *  answers 'granted' unconditionally, so onboarding used to false-grant the mic step.
+   *  'unknown' = never set / unreadable, and must be treated as NOT granted. */
+  getMicPermissionState: () => Promise<MicPermissionState>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
   /** True when the main window was created with the Win11 Mica background
@@ -1370,7 +1413,16 @@ export type RewindSearchGroup = {
   frames: RewindFrame[]
   representative: RewindFrame
   matchSnippet: string
+  /** True when this group surfaced ONLY via semantic (vector) recall — no frame in
+   *  it was a keyword/FTS hit. Lets the UI distinguish a fuzzy "related" match from
+   *  an exact keyword match. Set only on the phase-2 (merged) results. */
+  matchedSemantically?: boolean
 }
+
+/** The real Windows microphone consent, read from the registry in main.
+ *  'unknown' = the user has never been asked (or the key is unreadable). Callers MUST
+ *  treat 'unknown' as not-granted — never as a grant. */
+export type MicPermissionState = 'granted' | 'denied' | 'unknown'
 
 export type RewindSettings = {
   captureEnabled: boolean
@@ -1445,6 +1497,7 @@ export type LiveNote = {
   segStart?: number | null
   segEnd?: number | null
   createdAt: number
+  updatedAt: number
 }
 
 /** A buffered live transcript segment persisted for crash recovery
@@ -1460,6 +1513,27 @@ export type RescueSegment = {
 export type InsightCategory = 'productivity' | 'communication' | 'learning' | 'health' | 'other'
 
 // One insight as shown in the toast (mirrors macOS ExtractedInsight).
+/** Outcome of the startup corruption check on omi.db (see main/ipc/dbRecovery.ts).
+ *  Shared so the renderer's recovery notice and the main-process recovery agree on
+ *  one shape. */
+export type DbRecoveryStatus = {
+  /** Corruption was detected and handled on this launch. */
+  recovered: boolean
+  /** Nothing was salvageable — the database was reset to an empty schema. */
+  reset: boolean
+  rowsRecovered: number
+  /** Rows recovered per table (only tables that yielded at least one row). */
+  tablesRecovered: Record<string, number>
+  /** Where the corrupt original was archived, if the backup succeeded. */
+  backupPath: string | null
+  /** Corruption was CONFIRMED but deliberately not repaired — either the repair
+   *  budget was exhausted (boot-loop guard) or a rebuild would have lost rows a
+   *  working table still serves. The database is left exactly as it was. */
+  unrepairable?: boolean
+  /** Tables whose reads actually throw (populated on the confirmed-damage paths). */
+  damagedTables?: string[]
+}
+
 export type InsightPayload = {
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars

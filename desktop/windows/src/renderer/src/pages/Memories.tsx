@@ -1,5 +1,17 @@
 import { useEffect, useRef, useState } from 'react'
-import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Pencil, Globe, Lock } from 'lucide-react'
+import { useNavigate } from 'react-router-dom'
+import {
+  Brain,
+  Plus,
+  Loader2,
+  CheckSquare,
+  Trash2,
+  X,
+  Pencil,
+  Globe,
+  Lock,
+  Maximize2
+} from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -14,7 +26,9 @@ import { isAppIndexMemory } from '../lib/memoryCleanup'
 const RENDER_CAP = 400
 
 export function Memories(): React.JSX.Element {
-  const { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh } = useMemories()
+  const navigate = useNavigate()
+  const { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh } =
+    useMemories()
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -142,7 +156,8 @@ export function Memories(): React.JSX.Element {
       return n
     })
   const selectAllFiltered = (): void => setSelected(new Set(filtered.map((m) => m.id)))
-  const selectJunk = (): void => setSelected(new Set(source.filter(isAppIndexMemory).map((m) => m.id)))
+  const selectJunk = (): void =>
+    setSelected(new Set(source.filter(isAppIndexMemory).map((m) => m.id)))
   const clearSel = (): void => setSelected(new Set())
 
   const deleteSelected = async (): Promise<void> => {
@@ -175,7 +190,9 @@ export function Memories(): React.JSX.Element {
     setDeleting(false)
     toast(`Deleted ${res.deleted} of ${ids.length}`, {
       tone: res.failed ? 'warn' : 'success',
-      body: res.failed ? `${res.failed} failed${res.firstError ? ` — ${res.firstError}` : ''}.` : undefined
+      body: res.failed
+        ? `${res.failed} failed${res.firstError ? ` — ${res.firstError}` : ''}.`
+        : undefined
     })
     await refresh()
   }
@@ -201,11 +218,19 @@ export function Memories(): React.JSX.Element {
             </button>
           ) : (
             <div className="flex items-center gap-2">
-              <button onClick={enterManage} className="btn-ghost px-3 py-2" title="Select & delete memories">
+              <button
+                onClick={enterManage}
+                className="btn-ghost px-3 py-2"
+                title="Select & delete memories"
+              >
                 <CheckSquare className="h-4 w-4" />
                 Select
               </button>
-              <button onClick={() => setComposing((c) => !c)} className="btn-primary px-3 py-2" title="Create a memory">
+              <button
+                onClick={() => setComposing((c) => !c)}
+                className="btn-primary px-3 py-2"
+                title="Create a memory"
+              >
                 <Plus className="h-4 w-4" />
                 New
               </button>
@@ -222,13 +247,25 @@ export function Memories(): React.JSX.Element {
             placeholder="Filter by text (e.g. local projects include)…"
             className="input-field max-w-xs flex-1 py-1.5 text-sm"
           />
-          <button onClick={selectJunk} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting}>
+          <button
+            onClick={selectJunk}
+            className="btn-ghost px-3 py-1.5 text-sm"
+            disabled={deleting}
+          >
             Select file-index junk
           </button>
-          <button onClick={selectAllFiltered} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting}>
+          <button
+            onClick={selectAllFiltered}
+            className="btn-ghost px-3 py-1.5 text-sm"
+            disabled={deleting}
+          >
             Select all {q ? 'matching' : ''} ({filtered.length})
           </button>
-          <button onClick={clearSel} className="btn-ghost px-3 py-1.5 text-sm" disabled={deleting || !selected.size}>
+          <button
+            onClick={clearSel}
+            className="btn-ghost px-3 py-1.5 text-sm"
+            disabled={deleting || !selected.size}
+          >
             Clear
           </button>
           <div className="ml-auto flex items-center gap-2">
@@ -237,7 +274,10 @@ export function Memories(): React.JSX.Element {
                 <span className="text-sm text-text-tertiary">
                   Deleting {tally.deleted}/{selected.size + tally.deleted}…
                 </span>
-                <button onClick={() => (stopRef.stop = true)} className="btn-ghost px-3 py-1.5 text-sm">
+                <button
+                  onClick={() => (stopRef.stop = true)}
+                  className="btn-ghost px-3 py-1.5 text-sm"
+                >
                   Stop
                 </button>
               </>
@@ -247,7 +287,11 @@ export function Memories(): React.JSX.Element {
               disabled={deleting || selected.size === 0}
               className="btn-primary px-4 py-1.5 text-sm disabled:opacity-40"
             >
-              {deleting ? <Loader2 className="h-4 w-4 animate-spin" /> : <Trash2 className="h-4 w-4" />}
+              {deleting ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <Trash2 className="h-4 w-4" />
+              )}
               Delete selected ({selected.size})
             </button>
           </div>
@@ -256,7 +300,9 @@ export function Memories(): React.JSX.Element {
 
       <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {error && (
-          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">Failed to load memories: {error}</div>
+          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">
+            Failed to load memories: {error}
+          </div>
         )}
 
         {!manage && hasGraph && (
@@ -304,6 +350,16 @@ export function Memories(): React.JSX.Element {
                   }}
                 />
               </div>
+              {/* Expand to the full-screen, interactive (orbit/pan/zoom) brain
+                  map. Sits above the non-interactive card canvas. */}
+              <button
+                onClick={() => navigate('/knowledge-graph')}
+                className="btn-ghost absolute right-3 top-3 z-10 p-2"
+                title="Open the full-screen brain map"
+                aria-label="Open the full-screen brain map"
+              >
+                <Maximize2 className="h-4 w-4" />
+              </button>
             </div>
           </div>
         )}
@@ -332,7 +388,11 @@ export function Memories(): React.JSX.Element {
                 <button onClick={closeCompose} className="btn-ghost px-3 py-2" disabled={saving}>
                   Cancel
                 </button>
-                <button onClick={save} disabled={saving || !draft.trim()} className="btn-primary px-4 py-2 disabled:opacity-40">
+                <button
+                  onClick={save}
+                  disabled={saving || !draft.trim()}
+                  className="btn-primary px-4 py-2 disabled:opacity-40"
+                >
                   {saving ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
                 </button>
               </div>
@@ -401,7 +461,11 @@ export function Memories(): React.JSX.Element {
                             disabled={savingEditId === m.id || !editDraft.trim()}
                             className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
                           >
-                            {savingEditId === m.id ? <Loader2 className="h-4 w-4 animate-spin" /> : 'Save'}
+                            {savingEditId === m.id ? (
+                              <Loader2 className="h-4 w-4 animate-spin" />
+                            ) : (
+                              'Save'
+                            )}
                           </button>
                         </div>
                       </div>
@@ -417,9 +481,13 @@ export function Memories(): React.JSX.Element {
                         )}
                         <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
                           <time>{new Date(m.created_at).toLocaleString()}</time>
-                          {m.category && <span className="badge text-text-tertiary">{m.category}</span>}
+                          {m.category && (
+                            <span className="badge text-text-tertiary">{m.category}</span>
+                          )}
                           {m.tags && m.tags.length > 0 && (
-                            <span className="truncate text-text-quaternary">{m.tags.join(' · ')}</span>
+                            <span className="truncate text-text-quaternary">
+                              {m.tags.join(' · ')}
+                            </span>
                           )}
                         </div>
                       </>
