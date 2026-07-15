@@ -11,6 +11,7 @@
 #   swift-format-wrapper.sh version     — print version after bootstrap
 #   swift-format-wrapper.sh digest      — print the pinned commit SHA
 #   swift-format-wrapper.sh lint FILE…  — lint --strict (exit 1 on findings)
+#   swift-format-wrapper.sh scope       — list first-party Swift files (excludes Generated/)
 #   swift-format-wrapper.sh format -i FILE… — format in-place
 #
 # Cache: ${SWIFT_FORMAT_CACHE_DIR:-${HOME}/.cache/omi-swift-format}/<version>-<commit12>
@@ -26,6 +27,12 @@ SWIFT_FORMAT_REPO="https://github.com/swiftlang/swift-format.git"
 CACHE_DIR="${SWIFT_FORMAT_CACHE_DIR:-${HOME}/.cache/omi-swift-format}"
 COMMIT12="${SWIFT_FORMAT_COMMIT:0:12}"
 BUILD_DIR="${CACHE_DIR}/${SWIFT_FORMAT_VERSION}-${COMMIT12}"
+
+# ── Project paths ─────────────────────────────────────────────────────
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+CONFIG_FILE="$MACOS_DIR/Desktop/.swift-format"
+GENERATED_DIR="$MACOS_DIR/Desktop/Sources/Generated"
 BINARY="${BUILD_DIR}/.build/release/swift-format"
 
 # ── Fail-closed helpers ────────────────────────────────────────────────
@@ -107,18 +114,28 @@ case "$cmd" in
   lint)
     shift
     bootstrap >&2
-    exec "$BINARY" lint --strict "$@"
+    exec "$BINARY" lint --strict --configuration "$CONFIG_FILE" "$@"
     ;;
   format)
     shift
     bootstrap >&2
-    exec "$BINARY" format "$@"
+    exec "$BINARY" format --configuration "$CONFIG_FILE" "$@"
+    ;;
+  scope)
+    # List all first-party hand-written Swift files, excluding generated sources.
+    find "$MACOS_DIR/Desktop/Sources" "$MACOS_DIR/Desktop/Tests" \
+      -name '*.swift' \
+      -not -path "$GENERATED_DIR/*" \
+      | sort
     ;;
   binary-path)
     # Print the binary path without bootstrapping (for cache key computation).
     echo "$BINARY"
     ;;
+  config-path)
+    echo "$CONFIG_FILE"
+    ;;
   *)
-    die "unknown subcommand: $cmd (expected bootstrap|version|digest|lint|format|binary-path)"
+    die "unknown subcommand: $cmd (expected bootstrap|version|digest|lint|format|scope|binary-path|config-path)"
     ;;
 esac

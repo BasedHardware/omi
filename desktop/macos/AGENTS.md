@@ -123,6 +123,15 @@ enforces this via `scripts/check-sources-root-layout.py`.
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
 
+### Swift Formatting
+
+Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
+`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
+config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
+Generated sources under `Desktop/Sources/Generated/` are excluded from the
+formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
+Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
+
 ### Synchronous state-machine callbacks
 
 - A reducer transition is atomic through model assignment, effect delivery, UI

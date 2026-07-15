@@ -101,9 +101,10 @@ The pre-commit hook (installed by `make setup`) auto-formats staged files. Verif
 | ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
 | C/C++ (firmware) | `clang-format -i <files>` |
 | Rust (`desktop/macos/Backend-Rust/`) | `rustfmt --edition 2021 <files>` |
+| Swift (`desktop/macos/Desktop/`) | `desktop/macos/scripts/swift-format-wrapper.sh format -i <files>` |
 | Web (`web/`) | `npx prettier --write <files>` |
 
-Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
+Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually. Swift files under `Desktop/Sources/Generated/` are excluded from the formatter scope.
 
 ## Computer Control
 
