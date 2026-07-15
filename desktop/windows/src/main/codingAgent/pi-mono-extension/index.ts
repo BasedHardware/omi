@@ -98,6 +98,18 @@ const DANGEROUS_TARGET =
   `|[a-zA-Z]:[\\\\/]?${TARGET_END}` +
   // native system path "C:\\Windows", "C:/Program Files/..."
   `|[a-zA-Z]:[\\\\/]${WIN_SYS_DIR}(?:[\\\\/][^\\s;&|'"]*)?${TARGET_END}` +
+  // parent-traversal root escape "../.." or "..\\.." (restored from macOS —
+  // classifyBash cannot resolve `..`, so this literal guard is the only defense
+  // against `rm -rf ../../../../`).
+  `|\\.\\.[\\\\/]\\.\\.` +
+  // cmd env-var system dirs (any subpath) and the whole home (bare only)
+  `|%(?:windir|systemroot|programfiles(?:\\(x86\\))?|programdata)%` +
+  `|%userprofile%[\\\\/]?${TARGET_END}` +
+  // PowerShell env-var system dirs (any subpath) and the whole home (bare only).
+  // Single-quoted in bash so bash does not expand them; PowerShell expands them
+  // at run time — the idiomatic way PowerShell names these paths.
+  `|\\$env:(?:windir|systemroot|programfiles(?:\\(x86\\))?|programdata|allusersprofile)\\b` +
+  `|\\$env:(?:userprofile|homepath|homedrive)[\\\\/]?${TARGET_END}` +
   // home: "~", "~/", "~\\"
   `|~[\\\\/]?${TARGET_END}` +
   // "$HOME", "${HOME}", "$USERPROFILE", "${USERPROFILE}"
@@ -141,19 +153,20 @@ export const BASH_DENY_RULES: DenyRule[] = [
       'working tree instead.'
   },
   {
-    // PowerShell / cmd delete of a dangerous target: Remove-Item, rd, rmdir,
-    // del, erase — targeting a system path or the whole home. Catches
-    // `Remove-Item -Recurse -Force C:\Windows`. The bare `ri` alias is
-    // deliberately omitted: `\bri\b` collides with common flags like grep's
-    // `-ri`, and Remove-Item is the realistic form.
+    // PowerShell / cmd delete-or-move of a dangerous target: Remove-Item, rd,
+    // rmdir, del, erase, plus Move-Item / move / mv (moving a system tree away
+    // bricks it just like deleting it) — targeting a system path or the whole
+    // home. Catches `Remove-Item -Recurse -Force C:\Windows`. The bare `ri`
+    // alias is deliberately omitted: `\bri\b` collides with common flags like
+    // grep's `-ri`, and Remove-Item is the realistic form.
     pattern: new RegExp(
-      `\\b(?:Remove-Item|rmdir|rd|del|erase)\\b[^\\n]*?${TARGET_QUOTE}${DANGEROUS_TARGET}`,
+      `\\b(?:Remove-Item|rmdir|rd|del|erase|Move-Item|move|mv)\\b[^\\n]*?${TARGET_QUOTE}${DANGEROUS_TARGET}`,
       'i'
     ),
     reason:
-      'Deleting a drive root, C:\\Windows / Program Files, or the whole user ' +
-      'home with Remove-Item/del/rmdir is blocked. Delete a specific ' +
-      'subdirectory under the working tree instead.'
+      'Deleting or moving a drive root, C:\\Windows / Program Files, or the ' +
+      'whole user home (Remove-Item/del/rmdir/Move-Item/mv) is blocked. Operate ' +
+      'on a specific subdirectory under the working tree instead.'
   },
   {
     // Destructive delete with command/process substitution — the target is not
@@ -243,6 +256,16 @@ export const BASH_DENY_RULES: DenyRule[] = [
     reason:
       'Executing a downloaded string via Invoke-Expression is blocked. Download ' +
       'the script to a file, review it, then run it.'
+  },
+  {
+    // Base64-encoded PowerShell command: `powershell -enc <b64>`,
+    // `pwsh -EncodedCommand ...`. The payload is opaque to any content-based
+    // classifier, so an encoded command is inherently unverifiable — block it
+    // outright (same philosophy as blocking command substitution).
+    pattern: /\b(?:powershell|powershell\.exe|pwsh)\b[^\n]*?\s-(?:e|en|enc|encodedcommand|ec)\b/i,
+    reason:
+      'Running a base64-encoded PowerShell command (-EncodedCommand) is blocked — ' +
+      'its payload cannot be inspected. Pass the command as readable text instead.'
   },
   {
     // takeown / icacls of a drive root or system tree.
