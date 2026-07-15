@@ -181,6 +181,24 @@ Examples:
 - Build failure notification → reactive / error
 - Linear ticket assigned to user → external_system / project_tool`
 
+/** The STATIC capture-policy trailer Mac appends AFTER the injected context
+ *  sections (TaskAssistant.swift:952-963) — the fixed instruction block that ends
+ *  every full user turn and guides how the model fills `extract_task`'s
+ *  classification fields (duplicate_of / refines_task / capture_kind). Ported
+ *  VERBATIM from the running oracle. No leading newline (the preceding context
+ *  block supplies the separation) and no trailing newline (Mac's `"""` literal
+ *  closes right after the last line), so the loop appends it directly after
+ *  buildUserPrompt(...) + the assembled context block. */
+export const TASK_CAPTURE_POLICY_TRAILER = `Analyze this screenshot. If you see a potential request, search for duplicates first.
+If there is clearly no request on screen (~90% of screenshots), call no_task_found immediately.
+
+CANONICAL CAPTURE POLICY (overrides older/custom duplicate instructions):
+- A matching active task is evidence, not a reason to discard the observation.
+- Exact duplicate with useful new evidence: call extract_task with duplicate_of set to its task id.
+- A follow-up that changes an active task: call extract_task with refines_task set to its task id.
+- Evidence that an active task was completed: call extract_task with capture_kind already_done and refines_task set to its task id.
+- Use reject_task only for a previously rejected/deleted item or a true no-op with no useful new evidence.`
+
 /** The messaging-app reminder block Mac appends when the app is one of the six
  *  `messagingApps` (TaskAssistant.swift:893-908). Verbatim; trailing newline as
  *  in the Swift multiline literal. */
