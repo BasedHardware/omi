@@ -51,7 +51,22 @@ function regQueryValue(key: string): Promise<string | null> {
   })
 }
 
+const STATES: MicPermissionState[] = ['granted', 'denied', 'unknown']
+
+/** E2E seam. The onboarding E2E must be able to drive a denied / never-asked microphone
+ *  without touching the tester's real Windows privacy settings — and it must NOT do so by
+ *  stubbing `navigator.permissions`, which is the very API whose lie caused this bug (the
+ *  old spec stubbed it and stayed green through a total false-grant). Honored only under
+ *  OMI_E2E, so the shipped app always reads the real registry. */
+function e2eOverride(): MicPermissionState | null {
+  if (process.env.OMI_E2E !== '1') return null
+  const v = process.env.OMI_E2E_MIC_STATE as MicPermissionState | undefined
+  return v && STATES.includes(v) ? v : null
+}
+
 export async function readMicPermissionState(): Promise<MicPermissionState> {
+  const override = e2eOverride()
+  if (override) return override
   if (process.platform !== 'win32') return 'unknown'
   try {
     const [root, nonPackaged] = await Promise.all([
