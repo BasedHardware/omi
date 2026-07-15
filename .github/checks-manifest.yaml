@@ -196,6 +196,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
     lanes: ["local", "ci"]
     reason: "conversation lifecycle has one mutation owner"
+  - id: desktop-swift-ci-contract
+    command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
