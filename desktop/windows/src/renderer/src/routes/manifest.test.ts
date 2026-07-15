@@ -13,6 +13,7 @@ vi.mock('../pages/Goals', () => ({ Goals: () => null }))
 vi.mock('../pages/Apps', () => ({ Apps: () => null }))
 vi.mock('../pages/Rewind', () => ({ Rewind: () => null }))
 vi.mock('../pages/LiveConversation', () => ({ LiveConversation: () => null }))
+vi.mock('../pages/KnowledgeGraph', () => ({ KnowledgeGraph: () => null }))
 
 import {
   resolveRoute,
@@ -98,6 +99,12 @@ describe('route manifest', () => {
     // MainViews.test.tsx, where the route is actually rendered. It is also enforced
     // at COMPILE time now: the manifest entry renders <ConversationDetail
     // conversationId={params.id} /> itself, so renaming that prop breaks the build.
+  })
+
+  it('resolves /knowledge-graph to the full-screen brain-map route', () => {
+    const r = resolveRoute('/knowledge-graph')
+    expect(r && 'entry' in r ? r.entry.id : undefined).toBe('knowledge-graph')
+    expect(r && 'entry' in r ? r.entry.kind : undefined).toBe('exclusive')
   })
 
   it('resolves a panel route', () => {
