@@ -17,6 +17,7 @@ import {
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
 import {
+  conversationIdForOwnedSurfaceSession,
   conversationIdForSession,
 } from "./conversation-turns.js";
 import {
@@ -28,6 +29,7 @@ import {
 import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
 import {
   bindProducingJournalTurn,
+  searchJournalConversation,
   validateProducingJournalTurnAdmission,
 } from "./conversation-journal.js";
 import type {
@@ -243,6 +245,58 @@ export class KernelCore {
 
   assertLiveRunToolCapability(input: { capabilityRef: string; activeOwnerId: string }) {
     return this.toolCapabilities.assertLiveCapability(input.capabilityRef, input.activeOwnerId);
+  }
+
+  /**
+   * Parent-kernel dispatch for the chat-first local history tool. The stdio
+   * child only relays its request; this method requires the already-admitted
+   * one-use invocation before it can read the caller's journal.
+   */
+  searchAuthorizedChatHistory(input: {
+    invocation: AuthorizedRunToolInvocation;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: () => string;
+  }) {
+    const { invocation } = input;
+    if (
+      invocation.canonicalToolName !== "search_chat_history"
+      || invocation.surfaceKind !== "main_chat"
+      || invocation.chatFirstUi !== true
+      || !Number.isSafeInteger(invocation.chatFirstControlGeneration)
+      || invocation.tool.executor.kind !== "nodeTool"
+    ) {
+      throw new Error("search_chat_history requires an enabled main-Chat tool capability");
+    }
+    const toolInput = chatHistorySearchToolInput(input.toolInput);
+    const lease = this.acquireRunToolExecutionLease(invocation, input.activeOwnerId);
+    try {
+      lease.assertCurrentAuthority();
+      const session = this.readSession(invocation.sessionId);
+      this.assertSessionOwner(session, invocation.ownerId);
+      if (session.surfaceKind !== "main_chat") {
+        throw new Error("search_chat_history requires the caller's main Chat session");
+      }
+      if (invocation.externalRefKind !== "chat" || !invocation.externalRefId) {
+        throw new Error("search_chat_history requires the caller's canonical Chat reference");
+      }
+      const conversationId = conversationIdForOwnedSurfaceSession(this.store, {
+        ownerId: invocation.ownerId,
+        sessionId: session.sessionId,
+        surfaceKind: "main_chat",
+        externalRefKind: invocation.externalRefKind,
+        externalRefId: invocation.externalRefId,
+      });
+      if (!conversationId) throw new Error("search_chat_history requires an exact canonical Chat conversation");
+      const matches = searchJournalConversation(this.store, {
+        ownerId: invocation.ownerId,
+        conversationId,
+        ...toolInput,
+      });
+      lease.assertCurrentAuthority();
+      return { matches };
+    } finally {
+      lease.release();
+    }
   }
 
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
@@ -2645,6 +2699,31 @@ function requiredExternalIdentity(value: string, field: string): string {
     throw new ExternalSurfaceAuthorityError("invalid_external_request", `External surface ${field} is required`);
   }
   return normalized;
+}
+
+function chatHistorySearchToolInput(input: Record<string, unknown>): {
+  query: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+} {
+  if (typeof input.query !== "string") {
+    throw new Error("search_chat_history requires a query string");
+  }
+  const readOptionalString = (value: unknown, field: string): string | undefined => {
+    if (value === undefined) return undefined;
+    if (typeof value !== "string") throw new Error(`search_chat_history ${field} must be a string`);
+    return value;
+  };
+  if (input.limit !== undefined && (typeof input.limit !== "number" || !Number.isSafeInteger(input.limit))) {
+    throw new Error("search_chat_history limit must be an integer");
+  }
+  return {
+    query: input.query,
+    startDate: readOptionalString(input.start_date, "start_date"),
+    endDate: readOptionalString(input.end_date, "end_date"),
+    ...(typeof input.limit === "number" ? { limit: input.limit } : {}),
+  };
 }
 
 function stableExternalSpawnPillId(invocationId: string): string {

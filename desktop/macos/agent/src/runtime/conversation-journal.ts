@@ -242,6 +242,31 @@ export interface JournalTurnRange {
   turns: ConversationTurn[];
 }
 
+/**
+ * The model may recover bounded context from its own main-Chat journal without
+ * widening the prompt window or granting a child process SQLite access.
+ * Results intentionally contain only replay-safe transcript fields.
+ */
+export interface ChatHistorySearchMatch {
+  timestamp: string;
+  role: ConversationTurnRole;
+  excerpt: string;
+}
+
+export interface SearchJournalConversationInput {
+  ownerId: string;
+  conversationId: string;
+  query: string;
+  startDate?: string;
+  endDate?: string;
+  limit?: number;
+}
+
+const MAX_CHAT_HISTORY_SEARCH_SCAN = 500;
+const DEFAULT_CHAT_HISTORY_SEARCH_LIMIT = 10;
+const MAX_CHAT_HISTORY_SEARCH_LIMIT = 20;
+const MAX_CHAT_HISTORY_SEARCH_EXCERPT = 320;
+
 export interface JournalTurnChangedWake {
   ownerId: string;
   conversationGeneration: number;
@@ -1175,6 +1200,101 @@ export function listJournalTurns(
     highWaterTurnSeq: state.highWaterTurnSeq,
     turns,
   };
+}
+
+/**
+ * Search only the current journal generation, newest first. This is deliberately
+ * not an FTS endpoint: it bounds local work to the most recent transcript
+ * window and never exposes metadata, outbox rows, or a different conversation.
+ */
+export function searchJournalConversation(
+  store: AgentStore,
+  input: SearchJournalConversationInput,
+): ChatHistorySearchMatch[] {
+  assertConversationOwner(store, input.conversationId, input.ownerId);
+  const query = requiredChatHistorySearchQuery(input.query);
+  const startAtMs = parseChatHistorySearchDate(input.startDate, "start_date");
+  const endAtMs = parseChatHistorySearchDate(input.endDate, "end_date");
+  if (startAtMs !== null && endAtMs !== null && startAtMs > endAtMs) {
+    throw new Error("search_chat_history start_date must not be after end_date");
+  }
+  const limit = boundedChatHistorySearchLimit(input.limit);
+  store.execute(
+    `INSERT INTO conversation_journal_state(
+       conversation_id, generation, high_water_turn_seq, updated_at_ms
+     ) VALUES (?, 1, 0, ?)
+     ON CONFLICT(conversation_id) DO NOTHING`,
+    [input.conversationId, Date.now()],
+  );
+  const state = requireJournalState(store, input.conversationId);
+  const rows = store.allRows(
+    `SELECT turn_json
+     FROM conversation_turn_revisions
+     WHERE conversation_id = ? AND generation = ?
+     ORDER BY turn_seq DESC
+     LIMIT ?`,
+    [input.conversationId, state.generation, MAX_CHAT_HISTORY_SEARCH_SCAN],
+  );
+  const matches: ChatHistorySearchMatch[] = [];
+  for (const row of rows) {
+    const turn = JSON.parse(String(row.turn_json)) as ConversationTurn;
+    if ((startAtMs !== null && turn.createdAtMs < startAtMs) || (endAtMs !== null && turn.createdAtMs > endAtMs)) {
+      continue;
+    }
+    const excerpt = chatHistorySearchExcerpt(turn.content, query);
+    if (!excerpt) continue;
+    matches.push({
+      timestamp: new Date(turn.createdAtMs).toISOString(),
+      role: turn.role,
+      excerpt,
+    });
+    if (matches.length >= limit) break;
+  }
+  return matches;
+}
+
+function requiredChatHistorySearchQuery(value: string): string {
+  const query = value.trim();
+  if (!query) throw new Error("search_chat_history query must not be empty");
+  if (query.length > 512) throw new Error("search_chat_history query is too long");
+  return query;
+}
+
+function parseChatHistorySearchDate(value: string | undefined, field: "start_date" | "end_date"): number | null {
+  if (value === undefined) return null;
+  const normalized = value.trim();
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(?:\.\d{1,3})?(?:Z|[+-]\d{2}:\d{2})$/.test(normalized)) {
+    throw new Error(`search_chat_history ${field} must be an ISO timestamp`);
+  }
+  const parsed = Date.parse(normalized);
+  if (!Number.isFinite(parsed)) throw new Error(`search_chat_history ${field} must be an ISO timestamp`);
+  return parsed;
+}
+
+function boundedChatHistorySearchLimit(value: number | undefined): number {
+  if (value === undefined) return DEFAULT_CHAT_HISTORY_SEARCH_LIMIT;
+  if (!Number.isSafeInteger(value) || value < 1) {
+    throw new Error("search_chat_history limit must be a positive integer");
+  }
+  return Math.min(value, MAX_CHAT_HISTORY_SEARCH_LIMIT);
+}
+
+function chatHistorySearchExcerpt(content: string, query: string): string | null {
+  const normalizedContent = content.trim();
+  if (!normalizedContent) return null;
+  const lowerContent = normalizedContent.toLocaleLowerCase();
+  const lowerQuery = query.toLocaleLowerCase();
+  let matchIndex = lowerContent.indexOf(lowerQuery);
+  if (matchIndex < 0) {
+    const keywords = lowerQuery.split(/\s+/).filter(Boolean);
+    if (keywords.length === 0 || !keywords.every((keyword) => lowerContent.includes(keyword))) return null;
+    matchIndex = lowerContent.indexOf(keywords[0]!);
+  }
+  const start = Math.max(0, matchIndex - Math.floor(MAX_CHAT_HISTORY_SEARCH_EXCERPT / 3));
+  const end = Math.min(normalizedContent.length, start + MAX_CHAT_HISTORY_SEARCH_EXCERPT);
+  const prefix = start > 0 ? "…" : "";
+  const suffix = end < normalizedContent.length ? "…" : "";
+  return `${prefix}${normalizedContent.slice(start, end).trim()}${suffix}`;
 }
 
 export function clearJournalConversation(

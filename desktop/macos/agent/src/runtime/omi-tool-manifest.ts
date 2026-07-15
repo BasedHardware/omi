@@ -1608,6 +1608,51 @@ export const chatFirstToolManifest: OmiToolManifestEntry[] = [
     ],
     adapters: stdioOnly(),
   },
+  {
+    name: "search_chat_history",
+    label: "Search Chat History",
+    description: "Search a bounded window of the current main Chat journal for an older decision.",
+    promptSnippet: "search_chat_history - Search the current Chat's older journaled turns",
+    promptGuidelines: [
+      "Use only when an older Chat decision is outside the retained recent context.",
+      "Search terms and optional ISO date bounds are scoped to this one main Chat transcript.",
+    ],
+    latency: "fast local",
+    inputSchema: schema({
+      query: {
+        type: "string",
+        description: "Required keyword or phrase to search in this Chat's local journal.",
+      },
+      start_date: {
+        type: "string",
+        description: "Optional inclusive ISO timestamp lower bound.",
+      },
+      end_date: {
+        type: "string",
+        description: "Optional inclusive ISO timestamp upper bound.",
+      },
+      limit: {
+        type: "integer",
+        minimum: 1,
+        maximum: 20,
+        description: "Optional result count; defaults to 10 and is capped at 20.",
+      },
+    }, ["query"]),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "nodeTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Search Chat History", "Recover a bounded older decision from the current Chat transcript.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+      "The parent kernel searches only the caller-owned current journal generation.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Search is authorized by the parent kernel before it reads local journal state.",
+    ],
+    adapters: stdioOnly(),
+  },
 ] satisfies OmiToolManifestEntry[];
 
 export const allOmiToolManifest: OmiToolManifestEntry[] = [

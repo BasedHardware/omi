@@ -356,6 +356,18 @@ async function handleJsonRpc(
             },
           });
         }
+      } else if (toolName === "search_chat_history") {
+        // This remains a relay request, not a child-process SQLite read. The
+        // parent kernel rechecks the run capability then scopes the search to
+        // the caller's current main-Chat journal generation.
+        const result = await requestSwiftTool(toolName, args);
+        if (!isNotification) {
+          send({
+            jsonrpc: "2.0",
+            id,
+            result: { content: [{ type: "text", text: result }] },
+          });
+        }
       } else if (isAgentControlToolName(toolName)) {
         // Runtime control tools are handled by the Node parent/kernel. They
         // still travel over the relay so MCP clients use the same tool path.
