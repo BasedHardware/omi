@@ -163,9 +163,10 @@ struct AICloneContent: View {
   private var tokenEntry: some View {
     VStack(alignment: .leading, spacing: OmiSpacing.md) {
       VStack(alignment: .leading, spacing: OmiSpacing.xs) {
-        setupStep("1.", "Install and open Beeper Desktop from beeper.com and sign in to your chat networks.")
-        setupStep("2.", "In Beeper, open Settings, then Developer, enable the Desktop API and create an access token.")
-        setupStep("3.", "Paste the token below.")
+        setupStep("1.", "Install and open Beeper Desktop from beeper.com and link your chat networks (Telegram, WhatsApp, iMessage).")
+        setupStep("2.", "In Beeper, open Settings, then Desktop API, and turn on Allow connections.")
+        setupStep("3.", "Under Approved connections, tap the plus button to create an access token, then copy it.")
+        setupStep("4.", "Paste the token below.")
       }
       HStack(spacing: OmiSpacing.sm) {
         SecureField("Beeper access token", text: $tokenInput)

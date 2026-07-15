@@ -47,7 +47,10 @@ final class AICloneService: ObservableObject {
 
   private let store: AICloneConfigurationStore
   private var replyEngine: AICloneReplyEngine
-  private var clientFactory: (String) -> BeeperDesktopClient
+  private var clientFactory: (String, URL) -> BeeperDesktopClient
+  /// Base URL discovered from Beeper's public /v1/info (self-corrects the port
+  /// across Beeper versions). Defaults to the current known port until probed.
+  private var resolvedBaseURL = BeeperDesktopClient.defaultBaseURL
   private var socketTask: URLSessionWebSocketTask?
   private var listenLoopTask: Task<Void, Never>?
   private var reconnectAttempts = 0
@@ -72,7 +75,7 @@ final class AICloneService: ObservableObject {
     store: AICloneConfigurationStore = AICloneConfigurationStore(
       directory: DesktopLocalProfile.applicationSupportURL().appendingPathComponent("AIClone", isDirectory: true)),
     replyEngine: AICloneReplyEngine = AICloneReplyEngine(),
-    clientFactory: @escaping (String) -> BeeperDesktopClient = { BeeperDesktopClient(accessToken: $0) }
+    clientFactory: @escaping (String, URL) -> BeeperDesktopClient = { BeeperDesktopClient(accessToken: $0, baseURL: $1) }
   ) {
     self.store = store
     self.replyEngine = replyEngine
@@ -107,7 +110,7 @@ final class AICloneService: ObservableObject {
     guard let token = storedAccessToken(), !token.isEmpty else {
       throw BeeperClientError.notConfigured
     }
-    return clientFactory(token)
+    return clientFactory(token, resolvedBaseURL)
   }
 
   // MARK: Connect (functional probe, INV-INT-1)
@@ -117,6 +120,11 @@ final class AICloneService: ObservableObject {
   func connect() async {
     connectionState = .connecting
     do {
+      // Locate the running Beeper Desktop API first (public, no token needed),
+      // then run the authed probe against the port it actually reports.
+      if let discovered = await BeeperDesktopClient.discoverBaseURL() {
+        resolvedBaseURL = discovered
+      }
       let client = try client()
       _ = try await client.probeInfo()
       let accounts = try await client.listAccounts()

@@ -136,6 +136,19 @@ final class BeeperDesktopClientTests: XCTestCase {
     XCTAssertEqual(event?.entries?.first?.text, "hello")
   }
 
+  func testDiscoverBaseURLAdoptsPortFromPublicInfo() async {
+    // /v1/info is public and reports the authoritative base_url; the client
+    // must adopt it so a Beeper port change (23373 -> 23374) self-corrects.
+    BeeperStubURLProtocol.stubs[BeeperStubURLProtocol.key("GET", "/v1/info")] = .init(
+      statusCode: 200,
+      body: Data(#"{"server":{"base_url":"http://127.0.0.1:23374","port":23374}}"#.utf8))
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [BeeperStubURLProtocol.self]
+    let discovered = await BeeperDesktopClient.discoverBaseURL(
+      session: URLSession(configuration: config))
+    XCTAssertEqual(discovered?.absoluteString, "http://127.0.0.1:23374")
+  }
+
   func testSubscriptionPayloadMatchesWireContract() throws {
     let payload = try BeeperDesktopClient.subscriptionsSetPayload(chatIDs: ["*"], requestID: "r1")
     let object = try JSONSerialization.jsonObject(with: Data(payload.utf8)) as? [String: Any]
