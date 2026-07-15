@@ -18,6 +18,10 @@ import '@fontsource-variable/jetbrains-mono/wght-italic.css'
 // dead weight in the bundle (font-synthesis:none only bites where italics are used).
 import '@fontsource-variable/newsreader/opsz.css'
 import './styles/globals.css'
+// Side-effect: registers the Connections panel as the Hub's Connect-stage content
+// (hubConnectSlot). Imported for effect before createRoot so the tray is in place
+// the first time the Hub opens the Connect stage. Inert in secondary windows.
+import './components/home/hub/connections/ConnectionsPanel'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
