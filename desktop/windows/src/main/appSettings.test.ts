@@ -15,7 +15,13 @@ vi.mock('electron', () => ({
   }
 }))
 
-import { getAppSettings, setAppSettings, sanitizeAppSettings, _resetForTests } from './appSettings'
+import {
+  getAppSettings,
+  setAppSettings,
+  sanitizeAppSettings,
+  onAppSettingsChanged,
+  _resetForTests
+} from './appSettings'
 
 afterAll(() => rmSync(dir, { recursive: true, force: true }))
 
@@ -52,15 +58,68 @@ describe('appSettings', () => {
     expect(getAppSettings().recordHotkey).toBe('Ctrl+Shift+O')
   })
 
+  it('round-trips the record-hotkey enabled flag (default on)', () => {
+    expect(getAppSettings().recordHotkeyEnabled).toBe(true)
+    setAppSettings({ recordHotkeyEnabled: false })
+    _resetForTests()
+    expect(getAppSettings().recordHotkeyEnabled).toBe(false)
+  })
+
+  // The proactive coordinator's master toggle would otherwise be one-way: it
+  // re-reads the setting each tick (so OFF works), but only a listener can
+  // re-arm the loop when it goes back ON.
+  it('notifies listeners on every write, and a throwing listener does not lose the write', () => {
+    const seen: boolean[] = []
+    onAppSettingsChanged(() => {
+      throw new Error('boom')
+    })
+    onAppSettingsChanged((s) => seen.push(s.screenAnalysisEnabled))
+    vi.spyOn(console, 'warn').mockImplementation(() => {})
+
+    setAppSettings({ screenAnalysisEnabled: false })
+    setAppSettings({ screenAnalysisEnabled: true })
+
+    expect(seen).toEqual([false, true])
+    expect(getAppSettings().screenAnalysisEnabled).toBe(true)
+  })
+
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
+      recordHotkeyEnabled: true,
       summonHotkey: 'Shift+Space',
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
-      lastShownChangelogVersion: null
+      lastShownChangelogVersion: null,
+      aiProfileEnabled: false,
+      glowOverlayEnabled: true,
+      screenAnalysisEnabled: true,
+      notificationsEnabled: true,
+      notificationFrequency: 0
     })
+    // Proactive notifications default to Off (level 0) — an assistant may only
+    // interrupt once the user has chosen a frequency. Anything that is not a
+    // valid level falls back to Off, never to the NEAREST level: clamping a
+    // corrupt file (or a backend sync sending 10) up to 5 would mean "no
+    // throttle" — unthrottled toasts for a user whose default was silence.
+    expect(sanitizeAppSettings({ notificationFrequency: 4 }).notificationFrequency).toBe(4)
+    expect(sanitizeAppSettings({ notificationFrequency: 9 }).notificationFrequency).toBe(0)
+    expect(sanitizeAppSettings({ notificationFrequency: -2 }).notificationFrequency).toBe(0)
+    expect(sanitizeAppSettings({ notificationFrequency: 2.5 }).notificationFrequency).toBe(0)
+    expect(
+      sanitizeAppSettings({ notificationFrequency: 'max' } as never).notificationFrequency
+    ).toBe(0)
+    // Screen analysis is opt-OUT: on unless the user turns it off.
+    expect(sanitizeAppSettings({ screenAnalysisEnabled: false }).screenAnalysisEnabled).toBe(false)
+    // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
+    // appears in response to a Focus verdict, and it is click-through.
+    expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
+    // The AI user profile is the one opt-IN flag: it defaults OFF until a
+    // consumer and a Settings toggle exist, so only an explicit true enables it
+    // (everything else here is opt-out). See the AppSettings field comment.
+    expect(sanitizeAppSettings({ aiProfileEnabled: true }).aiProfileEnabled).toBe(true)
+    expect(sanitizeAppSettings({ aiProfileEnabled: 'yes' } as never).aiProfileEnabled).toBe(false)
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')
@@ -69,6 +128,12 @@ describe('appSettings', () => {
       sanitizeAppSettings({ closeToTrayNoticeShown: 'yes' } as never).closeToTrayNoticeShown
     ).toBe(false)
     expect(sanitizeAppSettings(null).recordHotkey).toBe('Ctrl+Space')
+    // recordHotkeyEnabled defaults ON; only an explicit false disables it.
+    expect(sanitizeAppSettings(null).recordHotkeyEnabled).toBe(true)
+    expect(sanitizeAppSettings({ recordHotkeyEnabled: false }).recordHotkeyEnabled).toBe(false)
+    expect(sanitizeAppSettings({ recordHotkeyEnabled: 'nope' } as never).recordHotkeyEnabled).toBe(
+      true
+    )
     // HUD capture-exclusion defaults ON and only an explicit false disables it.
     expect(sanitizeAppSettings(null).hudContentProtection).toBe(true)
     expect(sanitizeAppSettings({ hudContentProtection: false }).hudContentProtection).toBe(false)

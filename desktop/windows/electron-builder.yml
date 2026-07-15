@@ -14,6 +14,7 @@ files:
   - '!{tailwind.config.ts,postcss.config.js}'
   - '!resources/win-ocr-helper/*.pdb'
   - '!resources/win-automation-helper/*.pdb'
+  - '!resources/win-audio-helper/*.pdb'
 asarUnpack:
   - resources/**
   # koffi loads its native .node at runtime, resolved relative to its own package

@@ -13,11 +13,7 @@ import type { RealtimeItem } from '@openai/agents-realtime'
 import { acquireMicStream } from '../audio'
 import { OPENAI_REALTIME_MODEL } from './tokenMint'
 import { mapOpenAiUsage } from './usageReport'
-import {
-  OMI_VOICE_INSTRUCTIONS,
-  type ProviderSessionCallbacks,
-  type ProviderSessionHandle
-} from './providerSession'
+import { type ProviderSessionCallbacks, type ProviderSessionHandle } from './providerSession'
 
 /**
  * Map a raw realtime server event (data channel) to an echo-gate speaking
@@ -51,6 +47,8 @@ export function completedAssistantText(item: RealtimeItem): string | null {
 
 export async function startOpenAiSession(args: {
   clientSecret: string
+  /** The assembled per-session system instruction (systemInstruction.ts). */
+  instructions: string
   /** true when Omi's voice plays on open speakers (far_field noise reduction). */
   onSpeakers: boolean
   sinkId?: string
@@ -70,7 +68,7 @@ export async function startOpenAiSession(args: {
 
   const mediaStream = await acquireMicStream()
   const transport = new OpenAIRealtimeWebRTC({ mediaStream, audioElement })
-  const agent = new RealtimeAgent({ name: 'Omi', instructions: OMI_VOICE_INSTRUCTIONS })
+  const agent = new RealtimeAgent({ name: 'Omi', instructions: args.instructions })
   const session = new RealtimeSession(agent, {
     transport,
     model: OPENAI_REALTIME_MODEL,
