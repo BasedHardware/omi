@@ -2,6 +2,11 @@
 # Values use JSON scalars/lists within this stdlib-parsed YAML subset.
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
 checks:
+  - id: pre-push-final-pr-diff
+    command: ["bash", "scripts/test-pre-push-diff-base.sh"]
+    triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
@@ -47,6 +52,11 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: omi-macos-dev-cli
+    command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
+    triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
+    lanes: ["local", "ci"]
+    reason: "agent-facing macOS development hygiene CLI remains safe and deterministic"
   - id: desktop-e2e-flow-coverage
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
