@@ -588,25 +588,37 @@ export function remapConversationId(fromId: string, toId: string): number {
   return r.changes
 }
 
-// Replace the whole index in batches of 500 (matches macOS commit cadence),
-// wrapped per batch in a transaction for speed.
-export function replaceIndexedFiles(records: IndexedFileRecord[]): void {
+// Load path → modified_at (ms) for the whole index. Drives both the retention
+// diff (which existing paths still exist on disk) and the incremental mtime-skip.
+export function loadIndexedFileMtimes(): Map<string, number> {
+  const rows = get()
+    .prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files')
+    .all() as { path: string; modifiedAt: number }[]
+  const map = new Map<string, number>()
+  for (const r of rows) map.set(r.path, r.modifiedAt)
+  return map
+}
+
+// Apply an incremental file-index diff ATOMICALLY: delete the gone paths and
+// upsert the new/changed records inside ONE transaction. This is the core
+// data-loss guard — a crash mid-apply can never leave a partially-wiped index,
+// and (unlike the old clear-then-insert) a transient unreadable root only means
+// its rows are absent from `toDelete`, so they survive untouched.
+export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: string[]): void {
   const d = get()
   const insert = d.prepare(
     `INSERT OR REPLACE INTO indexed_files
        (path, filename, extension, file_type, size_bytes, folder, depth, created_at, modified_at, target_path, indexed_at)
      VALUES (@path, @filename, @extension, @fileType, @sizeBytes, @folder, @depth, @createdAt, @modifiedAt, @targetPath, @indexedAt)`
   )
+  const del = d.prepare('DELETE FROM indexed_files WHERE path = ?')
   const indexedAt = Date.now()
-  const writeBatch = d.transaction((rows: IndexedFileRecord[]) => {
+  const apply = d.transaction(() => {
+    for (const path of toDelete) del.run(path)
     // Default the optional field so better-sqlite3 never sees `undefined`.
-    for (const r of rows) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
+    for (const r of toUpsert) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
   })
-  for (let i = 0; i < records.length; i += 500) writeBatch(records.slice(i, i + 500))
-}
-
-export function clearIndexedFiles(): void {
-  get().prepare('DELETE FROM indexed_files').run()
+  apply()
 }
 
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
