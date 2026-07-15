@@ -108,11 +108,13 @@ struct BeeperInfo: Codable, Equatable {
 
 struct BeeperLiveEvent: Codable, Equatable {
   let type: String  // message.upserted | message.deleted | chat.upserted | chat.deleted | ready | ...
-  var seq: Int?
-  var ts: Double?
   var chatID: String?
   var ids: [String]?
   var entries: [BeeperMessage]?
+  // NOTE: the wire also carries `seq` and `ts`, but Beeper sends `ts` as an
+  // ISO-8601 STRING on live events (and a number elsewhere). They are not
+  // declared here on purpose: unknown JSON keys are ignored, so a variable
+  // `ts`/`seq` type can never fail decoding of the whole event.
 }
 
 // MARK: - Client
@@ -159,8 +161,9 @@ struct BeeperDesktopClient {
   ) async -> URL? {
     for port in candidatePorts {
       guard let candidate = URL(string: "http://127.0.0.1:\(port)") else { continue }
-      guard let info = try? await BeeperDesktopClient(accessToken: "probe", baseURL: candidate, session: session)
-        .probeInfo()
+      guard
+        let info = try? await BeeperDesktopClient(accessToken: "probe", baseURL: candidate, session: session)
+          .probeInfo()
       else { continue }
       if let advertised = info.server?.baseURL, let url = URL(string: advertised) {
         return url

@@ -138,6 +138,17 @@ final class BeeperDesktopClientTests: XCTestCase {
     )
     XCTAssertEqual(event?.type, "message.upserted")
     XCTAssertEqual(event?.entries?.first?.text, "hello")
+
+    // Regression: real Beeper live events send `ts` as an ISO-8601 STRING (not
+    // the numeric form in the docs). A strict numeric `ts` model silently
+    // dropped every live event, so no reply was ever drafted.
+    let liveEvent = BeeperDesktopClient.decodeLiveEvent(
+      #"{"type":"message.upserted","chatID":"!room:beeper.local","ids":["275"],"entries":[{"id":"275","chatID":"!room:beeper.local","accountID":"telegram","senderID":"@t:beeper.local","senderName":"Tanu","timestamp":"2026-07-15T09:01:48.000Z","sortKey":"318","type":"TEXT","text":"what have you been working on?","isSender":false,"isDeleted":false}],"seq":8,"ts":"2026-07-15T09:02:31.943Z"}"#
+    )
+    XCTAssertEqual(liveEvent?.type, "message.upserted")
+    XCTAssertEqual(liveEvent?.chatID, "!room:beeper.local")
+    XCTAssertEqual(liveEvent?.entries?.first?.text, "what have you been working on?")
+    XCTAssertEqual(liveEvent?.entries?.first?.senderName, "Tanu")
   }
 
   func testDiscoverBaseURLAdoptsPortFromPublicInfo() async {
