@@ -59,7 +59,7 @@ export function StickyNotesConnector(): React.JSX.Element {
     <ConnectorRow
       iconNode={<ConnectorBrandMark brand="sticky" />}
       title="Sticky Notes"
-      description="Turn your Windows Sticky Notes into durable memories — notes never leave your PC."
+      description="Turn your Sticky Notes into durable memories — they never leave your PC."
       action={
         count > 0 ? (
           <PillButton tone="primary" onClick={runImport} disabled={importing}>

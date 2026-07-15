@@ -41,7 +41,12 @@ export function ConnectorRow(props: {
       </span>
       <div className="min-w-0 flex-1">
         <div className="text-[14px] font-semibold text-home-ink">{title}</div>
-        <div className="mt-0.5 text-[12.5px] leading-snug text-home-muted">{description}</div>
+        {/* One line, clamped: a longer status/description must never make one row
+            taller than its siblings (the Sticky Notes row used to wrap and stand
+            proud of the list). */}
+        <div className="mt-0.5 line-clamp-1 text-[12.5px] leading-snug text-home-muted">
+          {description}
+        </div>
       </div>
       {action && <div className="flex shrink-0 items-center gap-2">{action}</div>}
     </div>
