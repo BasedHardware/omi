@@ -1,5 +1,5 @@
 {
-  "schema_version": 2,
+  "schema_version": 3,
   "configuration": {
     "source": "repository_config",
     "path": "config/public-build-values.json",
@@ -10,6 +10,36 @@
       "service": "omi-admin-dashboard",
       "dockerfile": "web/admin/Dockerfile",
       "workflow": ".github/workflows/gcp_admin.yml",
+      "deployment": {
+        "region": "us-central1",
+        "build_context": "web/admin",
+        "platforms": ["linux/amd64"],
+        "flags": ["--memory=2Gi", "--cpu=1", "--timeout=3600"],
+        "runtime_secrets": {
+          "FIREBASE_PROJECT_ID": "WEB_ADMIN_FIREBASE_PROJECT_ID:latest",
+          "FIREBASE_CLIENT_EMAIL": "WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest",
+          "FIREBASE_PRIVATE_KEY": "WEB_ADMIN_FIREBASE_PRIVATE_KEY:latest",
+          "OMI_API_SECRET_KEY": "WEB_ADMIN_OMI_API_SECRET_KEY:latest",
+          "TYPESENSE_HOST": "WEB_ADMIN_TYPESENSE_HOST:latest",
+          "TYPESENSE_API_KEY": "WEB_ADMIN_TYPESENSE_API_KEY:latest",
+          "STRIPE_SECRET_KEY": "WEB_ADMIN_STRIPE_SECRET_KEY:latest",
+          "STRIPE_UNLIMITED_MONTHLY_PRICE_ID": "WEB_ADMIN_STRIPE_UNLIMITED_MONTHLY_PRICE_ID:latest",
+          "STRIPE_UNLIMITED_ANNUAL_PRICE_ID": "WEB_ADMIN_STRIPE_UNLIMITED_ANNUAL_PRICE_ID:latest",
+          "REDIS_HOST": "WEB_ADMIN_REDIS_HOST:latest",
+          "REDIS_PORT": "WEB_ADMIN_REDIS_PORT:latest",
+          "REDIS_PASSWORD": "WEB_ADMIN_REDIS_PASSWORD:latest",
+          "SHIPBOB_API_KEY": "WEB_ADMIN_SHIPBOB_API_KEY:latest",
+          "SHOPIFY_STORE": "WEB_ADMIN_SHOPIFY_STORE:latest",
+          "SHOPIFY_ACCESS_TOKEN": "WEB_ADMIN_SHOPIFY_ACCESS_TOKEN:latest",
+          "MIXPANEL_SECRET": "WEB_ADMIN_MIXPANEL_SECRET:latest",
+          "OPENAI_API_KEY": "WEB_ADMIN_OPENAI_API_KEY:latest",
+          "POSTHOG_PERSONAL_API_KEY": "WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest",
+          "POSTHOG_PROJECT_ID": "WEB_ADMIN_POSTHOG_PROJECT_ID:latest",
+          "POSTHOG_HOST": "WEB_ADMIN_POSTHOG_HOST:latest",
+          "GOAFFPRO_ACCESS_TOKEN": "GOAFFPRO_ACCESS_TOKEN:latest",
+          "CRON_SECRET": "WEB_ADMIN_CRON_SECRET:latest"
+        }
+      },
       "canary_component": "web/admin/components/public-build-canary.tsx",
       "inputs": [
         {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "required": true, "source": "repository_config", "allowed_scopes": ["repository"]},
@@ -32,6 +62,13 @@
       "service": "omi-web-app",
       "dockerfile": "web/app/Dockerfile",
       "workflow": ".github/workflows/gcp_app.yml",
+      "deployment": {
+        "region": "us-central1",
+        "build_context": ".",
+        "platforms": ["linux/amd64"],
+        "flags": [],
+        "runtime_secrets": {}
+      },
       "canary_component": "web/app/src/components/public-build-canary.tsx",
       "inputs": [
         {"name": "NEXT_PUBLIC_API_BASE_URL", "required": true, "source": "repository_config", "allowed_scopes": ["repository"]},
@@ -54,6 +91,15 @@
       "service": "frontend",
       "dockerfile": "web/frontend/Dockerfile",
       "workflow": ".github/workflows/gcp_frontend.yml",
+      "deployment": {
+        "region": "us-central1",
+        "build_context": ".",
+        "platforms": ["linux/amd64"],
+        "flags": [],
+        "runtime_secrets": {
+          "OPENAI_API_KEY": "OPENAI_API_KEY:latest"
+        }
+      },
       "canary_component": "web/frontend/src/components/public-build-canary.tsx",
       "inputs": [
         {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "required": true, "source": "repository_config", "allowed_scopes": ["repository"]},
@@ -75,6 +121,19 @@
       "service": "omi-web",
       "dockerfile": "web/personas-open-source/Dockerfile",
       "workflow": ".github/workflows/gcp_personas.yml",
+      "deployment": {
+        "region": "us-central1",
+        "build_context": ".",
+        "platforms": ["linux/amd64"],
+        "flags": [],
+        "runtime_secrets": {
+          "RAPIDAPI_KEY": "NEXT_PUBLIC_RAPIDAPI_KEY:latest",
+          "RAPIDAPI_HOST": "NEXT_PUBLIC_RAPIDAPI_HOST:latest",
+          "LINKEDIN_API_KEY": "NEXT_PUBLIC_LINKEDIN_API_KEY:latest",
+          "LINKEDIN_API_HOST": "NEXT_PUBLIC_LINKEDIN_API_HOST:latest",
+          "OPENROUTER_API_KEY": "OPENROUTER_API_KEY:latest"
+        }
+      },
       "canary_component": "web/personas-open-source/src/components/public-build-canary.tsx",
       "inputs": [
         {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "required": true, "source": "repository_config", "allowed_scopes": ["repository"]},
