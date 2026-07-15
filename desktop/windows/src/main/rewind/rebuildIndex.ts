@@ -95,13 +95,30 @@ async function rebuildDayDir(dayName: string): Promise<number> {
   return inserted
 }
 
+// Single-flight guard. A rebuild snapshots each day dir's existing image paths and
+// THEN inserts the missing rows; two rebuilds overlapping would share the same
+// pre-insert snapshot and each insert the same orphans → duplicate rows (the exact
+// corruption this feature undoes). A call made WHILE a rebuild is in flight joins
+// that run and returns its count instead of starting a second scan. It blocks only
+// CONCURRENT runs — the ref is cleared on completion (success OR failure), so a
+// later sequential re-run always runs fresh.
+let inFlight: Promise<number> | null = null
+
 /**
  * Re-create missing `rewind_frames` rows from the JPEGs on disk across every day
  * dir. Returns the number of rows inserted. Safe to call any time — it only fills
  * gaps (idempotent) — but it exists for the post-recovery case where rewind_frames
- * was wiped while the JPEGs survived.
+ * was wiped while the JPEGs survived. Single-flighted (see above).
  */
-export async function rebuildRewindIndexFromDisk(): Promise<number> {
+export function rebuildRewindIndexFromDisk(): Promise<number> {
+  if (inFlight) return inFlight
+  inFlight = runRebuild().finally(() => {
+    inFlight = null
+  })
+  return inFlight
+}
+
+async function runRebuild(): Promise<number> {
   let dayNames: string[]
   try {
     dayNames = (await readdir(rewindRoot())).filter((n) => DAY_DIR_RE.test(n))

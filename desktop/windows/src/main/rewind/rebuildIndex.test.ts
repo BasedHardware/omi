@@ -166,4 +166,32 @@ describe('rebuildRewindIndexFromDisk', () => {
     await rebuildRewindIndexFromDisk()
     expect(fsMock.unlink).not.toHaveBeenCalled()
   })
+
+  // MUTATION GUARD (single-flight): two rebuilds started at once share ONE run, so
+  // each orphan is inserted exactly once. Both callers snapshot the same empty
+  // "existing paths" set before inserting, so without the guard each would insert
+  // every orphan → duplicate rows (the corruption this whole feature undoes). Remove
+  // the `if (inFlight) return inFlight` guard in rebuildIndex.ts and this sees 4
+  // inserts, not 2.
+  it('single-flights concurrent runs — each orphan inserted exactly once', async () => {
+    seed({ days: { '2026-07-14': ['1000.jpg', '2000.jpg'] } })
+    const [a, b] = await Promise.all([
+      rebuildRewindIndexFromDisk(),
+      rebuildRewindIndexFromDisk()
+    ])
+    expect(a).toBe(2)
+    expect(b).toBe(2) // the second caller joined the same run, same count
+    expect(db.insertRewindFrame).toHaveBeenCalledTimes(2) // once per orphan, not per caller
+  })
+
+  it('does NOT block a sequential re-run — the guard clears on completion', async () => {
+    seed({ days: { '2026-07-14': ['1000.jpg'] } })
+    await rebuildRewindIndexFromDisk()
+    const afterFirst = fsMock.readdir.mock.calls.length
+    expect(afterFirst).toBeGreaterThan(0)
+    // A call after the first RESOLVED must scan again — the in-flight ref must have
+    // been released, not stuck (which would make later rebuilds silent no-ops).
+    await rebuildRewindIndexFromDisk()
+    expect(fsMock.readdir.mock.calls.length).toBeGreaterThan(afterFirst)
+  })
 })
