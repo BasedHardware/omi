@@ -83,7 +83,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
     requestGeneration &+= 1
     let generation = requestGeneration
     requestTask = Task { [weak self, driver] in
-      guard let self, let driver else { return }
+      guard let self else { return }
       await self.materialize(using: driver, windowForeground: windowForeground, generation: generation)
       if self.requestGeneration == generation {
         self.requestTask = nil

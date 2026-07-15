@@ -188,16 +188,16 @@ final class ChatFirstShellNavigation: ObservableObject {
   @Published private(set) var isSidebarCollapsed: Bool
 
   private let defaults: UserDefaults
-  private let analytics: (ChatFirstAnalyticsEvent) -> Void
+  private let analytics: @MainActor (ChatFirstAnalyticsEvent) -> Void
 
   init(
     defaults: UserDefaults = .standard,
-    analytics: @escaping (ChatFirstAnalyticsEvent) -> Void = { event in
-      AnalyticsManager.shared.chatFirst(event)
-    }
+    analytics: (@MainActor (ChatFirstAnalyticsEvent) -> Void)? = nil
   ) {
     self.defaults = defaults
-    self.analytics = analytics
+    self.analytics = analytics ?? { event in
+      AnalyticsManager.shared.chatFirst(event)
+    }
     if let data = defaults.data(forKey: Self.storageKey),
       let persisted = try? JSONDecoder().decode(ChatFirstPersistedNavigation.self, from: data)
     {
