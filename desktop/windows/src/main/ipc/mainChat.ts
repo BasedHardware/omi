@@ -11,12 +11,17 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
+import { formatTranscriptTail } from '../agentKernel/turnContext'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
 import type { MainChatEvent, MainChatResult, MainChatSendArgs } from '../../shared/types'
 
 /** The main_chat surface the kernel resolves a turn against. */
 const MAIN_CHAT_ADAPTER_ID = 'pi-mono'
+
+/** How many prior transcript turns to inject as the per-session context tail.
+ *  Matches getMainChatTurnTail's default (kernelSessions.ts). */
+const MAIN_CHAT_TAIL_LIMIT = 8
 
 /** Kernel run-lifecycle event types that mean the turn is over. */
 const TERMINAL_RUN_EVENT_TYPES = new Set(['run.succeeded', 'run.failed', 'run.cancelled'])
@@ -177,6 +182,19 @@ export async function runMainChatTurn(
       defaultAdapterId: MAIN_CHAT_ADAPTER_ID
     })
 
+    // Per-session memory (Approach B): pi-mono's run does NOT thread a surfaceRef
+    // through assembleTurnContext, so it never gets the per-chatId
+    // <conversation_history> tail — and pi holds ONE shared subprocess context, so
+    // switching chatId would otherwise not switch the model's memory. Inject the
+    // tail here: read THIS chatId's prior turns and prepend them to the prompt. The
+    // read happens BEFORE recordSurfaceTurn below so the just-sent user turn is not
+    // in the tail (no duplication). On a session's first turn the conversation is
+    // empty → no tail → prompt unchanged. Keyed by chatId + read from SQLite, so it
+    // is per-session and cross-restart durable, with no kernel-core edit.
+    const tail = kernel.getMainChatTurnTail(ownerId, MAIN_CHAT_TAIL_LIMIT, chatId)
+    const history = formatTranscriptTail(tail.turns)
+    const effectivePrompt = history ? `${history}\n\n${args.prompt}` : args.prompt
+
     // Record the clean user turn on the kernel transcript (empty assistant text →
     // only the user turn is appended; the run appends the assistant turn at
     // completion). Idempotency-keyed on requestId so a retried send with the same
@@ -209,7 +227,7 @@ export async function runMainChatTurn(
       ownerId,
       clientId,
       requestId,
-      prompt: args.prompt,
+      prompt: effectivePrompt,
       adapterId: MAIN_CHAT_ADAPTER_ID
     })
 

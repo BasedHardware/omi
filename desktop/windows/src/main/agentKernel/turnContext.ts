@@ -635,7 +635,11 @@ function formatTranscriptLine(turn: ConversationTurn): string {
   return `${attribution} ${role}: ${turn.content}`
 }
 
-function formatTranscriptTail(turns: readonly ConversationTurn[]): string | null {
+// Exported for the main-chat run path (mainChat.ts): pi-mono's run does NOT
+// thread a surfaceRef through assembleTurnContext, so the per-session
+// `<conversation_history>` tail is injected main-side by reading getMainChatTurnTail
+// and formatting it here — reusing the exact same block assembleTurnContext emits.
+export function formatTranscriptTail(turns: readonly ConversationTurn[]): string | null {
   if (turns.length === 0) return null
   const lines = turns.map(formatTranscriptLine)
   return `<conversation_history>
