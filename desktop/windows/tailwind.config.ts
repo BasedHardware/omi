@@ -101,12 +101,24 @@ export default {
         pulseRing: {
           '0%, 100%': { transform: 'scale(1)', opacity: '0.4' },
           '50%': { transform: 'scale(1.12)', opacity: '0.15' }
+        },
+        // Modal (ui/Modal.tsx) entrance — card scales up from 0.96 + fades; the
+        // scrim just fades. Keyed off Radix Dialog data-state=open.
+        modalIn: {
+          '0%': { opacity: '0', transform: 'scale(0.96)' },
+          '100%': { opacity: '1', transform: 'scale(1)' }
+        },
+        modalOverlayIn: {
+          '0%': { opacity: '0' },
+          '100%': { opacity: '1' }
         }
       },
       animation: {
         'fade-in': 'fadeIn 0.4s cubic-bezier(0.22, 1, 0.36, 1) both',
         shimmer: 'shimmer 2s ease-in-out infinite',
-        'pulse-ring': 'pulseRing 2s ease-in-out infinite'
+        'pulse-ring': 'pulseRing 2s ease-in-out infinite',
+        'modal-in': 'modalIn 140ms var(--ease-out)',
+        'modal-overlay-in': 'modalOverlayIn 140ms var(--ease-out)'
       }
     }
   },

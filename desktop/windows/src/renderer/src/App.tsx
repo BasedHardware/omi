@@ -36,6 +36,7 @@ import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
+import { PrimitivesGallery } from './components/ui/__gallery/PrimitivesGallery'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
 import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
 
@@ -272,6 +273,10 @@ function App(): React.JSX.Element {
         {/* The hidden capture window. Ungated (like /overlay) — it owns capture
             regardless of the UI auth gate; its hosts self-gate on auth. */}
         <Route path="/capture" element={<CaptureApp />} />
+        {/* Dev-only visual harness for the shared ui/* primitives. DEV-gated so
+            it tree-shakes out of packaged renderer builds; placed before the
+            auth-gated catch-all so it renders without sign-in. */}
+        {import.meta.env.DEV && <Route path="/__ui-gallery" element={<PrimitivesGallery />} />}
         <Route
           path="/login"
           element={

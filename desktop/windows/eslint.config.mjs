@@ -53,7 +53,12 @@ export default defineConfig(
     // (e.g. src/main/agentKernel/omi-mcp-entry.mjs) are plain JavaScript run
     // verbatim by Node — they cannot carry a TS return-type annotation at all,
     // so the rule is unsatisfiable there, not merely noisy.
-    files: ['scripts/**/*.{ts,js,mjs,cjs}', 'src/**/*.{mjs,cjs}', '**/*.test.{ts,tsx,mjs}'],
+    files: [
+      'scripts/**/*.{ts,js,mjs,cjs}',
+      'tests/**/*.{ts,js,mjs,cjs}',
+      'src/**/*.{mjs,cjs}',
+      '**/*.test.{ts,tsx,mjs}'
+    ],
     rules: {
       '@typescript-eslint/explicit-function-return-type': 'off'
     }
