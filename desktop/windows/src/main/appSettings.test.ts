@@ -62,6 +62,16 @@ describe('appSettings', () => {
     expect(sanitizeAppSettings(null).chatEngine).toBe('legacy_sse')
   })
 
+  it('chatScreenshotSharingEnabled defaults ON and round-trips an explicit off', () => {
+    expect(getAppSettings().chatScreenshotSharingEnabled).toBe(true)
+    setAppSettings({ chatScreenshotSharingEnabled: false })
+    _resetForTests()
+    expect(getAppSettings().chatScreenshotSharingEnabled).toBe(false)
+    // Absent / junk stays ON (opt-out) — only an explicit false disables it.
+    expect(sanitizeAppSettings(null).chatScreenshotSharingEnabled).toBe(true)
+    expect(sanitizeAppSettings({} as never).chatScreenshotSharingEnabled).toBe(true)
+  })
+
   it('round-trips a rebound record hotkey', () => {
     setAppSettings({ recordHotkey: 'Ctrl+Shift+O' })
     _resetForTests()
@@ -116,7 +126,8 @@ describe('appSettings', () => {
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
       memoryExcludedApps: [],
-      chatEngine: 'legacy_sse'
+      chatEngine: 'legacy_sse',
+      chatScreenshotSharingEnabled: true
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
     // interrupt once the user has chosen a frequency. Anything that is not a

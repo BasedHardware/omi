@@ -140,6 +140,9 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  getChatScreenshotSharing: () => ipcRenderer.invoke('chat:getScreenshotSharing'),
+  setChatScreenshotSharing: (enabled: boolean) =>
+    ipcRenderer.invoke('chat:setScreenshotSharing', enabled),
   openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
   openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),

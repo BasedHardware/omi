@@ -1105,7 +1105,7 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     timeoutClass: 'normal',
     executor: { kind: 'swiftTool' },
     intendedForAgents: true,
-    runtimePreconditions: ['Requires macOS Screen Recording permission.'],
+    runtimePreconditions: ["Requires 'Screen Sharing in Chat' enabled in Settings → Privacy."],
     adapters: {
       'pi-mono': { advertised: true },
       'omi-tools-stdio': { advertised: true, condition: 'screenContext' }
