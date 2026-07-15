@@ -4,8 +4,9 @@
 // the real renderer — real drag-drop (browser File + DataTransfer → File.arrayBuffer
 // → addAttachments), real chip rendering, real remove, real 4-file cap, and the
 // attachment-only Send affordance. Hermetic: OMI_E2E_FAKE_AUTH boots an offline
-// authed shell; the /v2/files upload is route-stubbed so chips reach 'uploaded'
-// without a backend. The native file picker is intentionally NOT clicked (it would
+// authed shell; the /v2/files upload is stubbed via a window.fetch override so
+// chips reach 'uploaded' without a backend. The native file picker is intentionally
+// NOT clicked (it would
 // block on a native dialog) — drag-drop exercises the same addAttachments path.
 // Screenshots land in .playwright-mcp/ for the skeptical reviewer.
 //
@@ -96,14 +97,25 @@ describe('Hub attachments', () => {
     try {
       const page = await mainPage(app)
 
-      // Stub the upload so chips settle to 'uploaded' without a backend.
-      await page.route('**/v2/files', (route) =>
-        route.fulfill({
-          status: 200,
-          contentType: 'application/json',
-          body: JSON.stringify([{ id: 'stub-file-id', name: 'photo.png', mime_type: 'image/png' }])
-        })
-      )
+      // Stub the /v2/files upload in-renderer so chips settle to 'uploaded' without
+      // a backend. page.route doesn't intercept the app's request scheme in this
+      // harness, so override window.fetch directly — uploadChatFile uses the global
+      // fetch, and the later hash change to #/home does not reload (override sticks).
+      await page.evaluate(() => {
+        const orig = window.fetch.bind(window)
+        window.fetch = (input, init) => {
+          const url = typeof input === 'string' ? input : (input && input.url) || ''
+          if (url.includes('/v2/files')) {
+            return Promise.resolve(
+              new Response(
+                JSON.stringify([{ id: 'stub-file-id', name: 'photo.png', mime_type: 'image/png' }]),
+                { status: 200, headers: { 'Content-Type': 'application/json' } }
+              )
+            )
+          }
+          return orig(input, init)
+        }
+      })
 
       // Land on the Hub home and wait for the ask bar + its paperclip.
       await page.evaluate(() => {
@@ -118,7 +130,8 @@ describe('Hub attachments', () => {
       await dropFiles(page, ['photo.png', 'notes.pdf'])
       await page.waitForFunction(
         () =>
-          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ?? 0) === 2,
+          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ??
+            0) === 2,
         undefined,
         { timeout: 10000 }
       )
@@ -136,7 +149,8 @@ describe('Hub attachments', () => {
       await page.click('[aria-label="Remove notes.pdf"]')
       await page.waitForFunction(
         () =>
-          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ?? 0) === 1,
+          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ??
+            0) === 1,
         undefined,
         { timeout: 10000 }
       )
@@ -147,7 +161,8 @@ describe('Hub attachments', () => {
       await dropFiles(page, ['a.png', 'b.png', 'c.png'])
       await page.waitForFunction(
         () =>
-          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ?? 0) === 4,
+          (document.querySelector('[data-testid="hub-attachment-chips"]')?.childElementCount ??
+            0) === 4,
         undefined,
         { timeout: 10000 }
       )

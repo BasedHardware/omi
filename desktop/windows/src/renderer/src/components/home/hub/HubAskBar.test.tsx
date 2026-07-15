@@ -57,13 +57,16 @@ const renderBar = (over?: Partial<Props>): void => {
 
 beforeEach(() => {
   mockPending = []
-  addAttachments.mockClear()
+  addAttachments.mockReset()
+  addAttachments.mockReturnValue({ accepted: [], rejected: [] })
   removeAttachment.mockClear()
   filesToPickedChatFiles.mockReset()
   ;(window as unknown as { omi: unknown }).omi = {
     openChatFiles: vi
       .fn()
-      .mockResolvedValue([{ name: 'a.png', mimeType: 'image/png', size: 3, bytes: new Uint8Array([1]) }])
+      .mockResolvedValue([
+        { name: 'a.png', mimeType: 'image/png', size: 3, bytes: new Uint8Array([1]) }
+      ])
   }
 })
 afterEach(cleanup)
@@ -130,5 +133,22 @@ describe('HubAskBar — attachments', () => {
     // The chip is present and the remove control still works while uploading.
     expect(screen.getByText('big.pdf')).not.toBeNull()
     expect(screen.getByLabelText('Remove big.pdf')).not.toBeNull()
+  })
+
+  it('does NOT offer Send when the only attachments have all FAILED and text is empty', () => {
+    // A failed-only set would post an empty message; the button must not invite it.
+    mockPending = [att({ id: 'x1', status: 'failed' })]
+    renderBar({ value: '' })
+    expect(screen.queryByLabelText('Send')).toBeNull()
+  })
+
+  it('surfaces a note when the attachment layer rejects files (not a silent drop)', async () => {
+    addAttachments.mockReturnValue({
+      accepted: [],
+      rejected: [{ name: 'huge.zip', reason: 'too_large' }]
+    })
+    renderBar()
+    fireEvent.click(screen.getByLabelText('Attach files'))
+    await waitFor(() => expect(screen.getByText(/25 MB/)).not.toBeNull())
   })
 })

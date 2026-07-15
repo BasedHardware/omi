@@ -4,11 +4,22 @@ import { cn } from '../../../lib/utils'
 import {
   addAttachments,
   removeAttachment,
-  MAX_CHAT_ATTACHMENTS
+  MAX_CHAT_ATTACHMENTS,
+  type RejectReason
 } from '../../../lib/chatAttachments'
 import { filesToPickedChatFiles } from '../../../lib/chatDropFiles'
 import { usePendingAttachments } from '../../../hooks/usePendingAttachments'
 import { AttachmentChip } from './AttachmentChip'
+import type { PickedChatFile } from '../../../../../shared/types'
+
+// A one-line summary of what the attachment layer rejected, so files never drop
+// silently (Mac surfaces these). Reasons are ranked by how actionable they are.
+function describeRejections(rejected: { reason: RejectReason }[]): string {
+  const reasons = new Set(rejected.map((r) => r.reason))
+  if (reasons.has('too_large')) return 'Some files exceed the 25 MB limit.'
+  if (reasons.has('cap_exceeded')) return `You can attach up to ${MAX_CHAT_ATTACHMENTS} files.`
+  return "Some files couldn't be added."
+}
 
 // The Hub's ask bar. It is the ONLY chat input on the Hub — it re-docks to the
 // bottom of the chat panel rather than being replaced by a second bar, so there
@@ -37,27 +48,34 @@ export function HubAskBar(props: {
    *  goes nowhere. */
   autoFocus?: boolean
 }): React.JSX.Element {
-  const {
-    value,
-    onChange,
-    onSubmit,
-    onFocus,
-    sending,
-    connectActive,
-    onToggleConnect,
-    autoFocus
-  } = props
+  const { value, onChange, onSubmit, onFocus, sending, connectActive, onToggleConnect, autoFocus } =
+    props
   const [focused, setFocused] = useState(false)
   const [dragging, setDragging] = useState(false)
+  const [rejectNote, setRejectNote] = useState<string | null>(null)
   const attachments = usePendingAttachments()
   const atCap = attachments.length >= MAX_CHAT_ATTACHMENTS
-  // A send is allowed with text, with attachments, or both — never while a reply
-  // is streaming. (useChat.send applies the same rule; this drives the button.)
-  const canSend = (value.trim().length > 0 || attachments.length > 0) && !sending
+  // Send is allowed with text OR at least one attachment that hasn't failed —
+  // never while a reply streams, and never a failed-only set (that would post an
+  // empty message). useChat.send applies the same rule plus a post-upload
+  // recheck; this just drives the button.
+  const canSend =
+    (value.trim().length > 0 || attachments.some((a) => a.status !== 'failed')) && !sending
+
+  // Stage picked/dropped files and surface anything the attachment layer rejected
+  // (over the 4-file cap, over 25 MB, or unreadable) rather than dropping silently.
+  const stage = (picked: PickedChatFile[]): void => {
+    const { rejected } = addAttachments(picked)
+    setRejectNote(rejected.length > 0 ? describeRejections(rejected) : null)
+  }
 
   const pickFiles = async (): Promise<void> => {
-    const picked = await window.omi.openChatFiles()
-    if (picked.length > 0) addAttachments(picked)
+    try {
+      const picked = await window.omi.openChatFiles()
+      if (picked.length > 0) stage(picked)
+    } catch {
+      // The picker IPC threw (rare); nothing to stage — don't leak a rejection.
+    }
   }
 
   const onDrop = async (e: React.DragEvent): Promise<void> => {
@@ -65,7 +83,7 @@ export function HubAskBar(props: {
     setDragging(false)
     const files = Array.from(e.dataTransfer.files)
     if (files.length === 0) return
-    addAttachments(await filesToPickedChatFiles(files))
+    stage(await filesToPickedChatFiles(files))
   }
 
   return (
@@ -121,7 +139,7 @@ export function HubAskBar(props: {
             'focus-ring mr-1 flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full',
             'transition-colors duration-150',
             atCap
-              ? 'cursor-not-allowed text-home-faint'
+              ? 'cursor-not-allowed text-home-muted opacity-40'
               : 'text-home-muted hover:bg-white/10 hover:text-home-ink'
           )}
         >
@@ -198,6 +216,11 @@ export function HubAskBar(props: {
           </button>
         )}
       </div>
+      {rejectNote && (
+        <p className="mt-1.5 px-1 text-[11px] text-home-muted" role="status">
+          {rejectNote}
+        </p>
+      )}
     </div>
   )
 }

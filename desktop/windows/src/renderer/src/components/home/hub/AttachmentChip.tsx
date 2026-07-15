@@ -1,4 +1,4 @@
-import { Loader2, Paperclip, TriangleAlert, X } from 'lucide-react'
+import { File as FileIcon, Loader2, TriangleAlert, X } from 'lucide-react'
 import type { PendingAttachment } from '../../../lib/chatAttachments'
 import { cn } from '../../../lib/utils'
 
@@ -20,8 +20,11 @@ export function AttachmentChip(props: {
       className={cn(
         'flex h-8 max-w-[190px] items-center gap-1.5 rounded-full border pl-2.5 pr-1',
         'text-[12px] font-medium',
+        // A failed upload keeps the neutral chip surface with a subtle red edge +
+        // a warning glyph — a clear "this one failed" signal, not an alarming
+        // full-red error banner (most chips are the neutral uploaded state).
         failed
-          ? 'border-error/40 bg-error/[0.12] text-home-ink'
+          ? 'border-error/35 bg-home-tile text-home-ink'
           : 'border-home-hairline bg-home-tile text-home-ink'
       )}
     >
@@ -30,7 +33,7 @@ export function AttachmentChip(props: {
       ) : failed ? (
         <TriangleAlert className="h-3 w-3 shrink-0 text-error" strokeWidth={2.5} />
       ) : (
-        <Paperclip className="h-3 w-3 shrink-0 text-home-muted" strokeWidth={2.5} />
+        <FileIcon className="h-3 w-3 shrink-0 text-home-muted" strokeWidth={2.25} />
       )}
       <span
         className="min-w-0 flex-1 truncate"

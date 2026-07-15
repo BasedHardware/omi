@@ -466,6 +466,14 @@ export function useChat(): UseChat {
         name: a.name,
         mimeType: a.mimeType
       }))
+      // Guard the attachment-only path: if EVERY upload failed there are no
+      // file_ids, and with empty text this would POST an empty message + render a
+      // blank user bubble. Abort instead, and leave the failed attachments in the
+      // composer so the user can retry or remove them (don't clear).
+      if (!text.trim() && sendFileIds.length === 0) {
+        setBusy(false)
+        return
+      }
       // The message now owns these files; clear the composer's pending list.
       clearAttachments()
     }
