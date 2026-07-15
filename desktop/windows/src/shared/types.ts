@@ -737,6 +737,10 @@ export type OmiBridgeApi = {
   /** Read/write the foreground-monitor opt-out flag. */
   usageGetSettings: () => Promise<UsageSettings>
   usageSetSettings: (next: UsageSettings) => Promise<UsageSettings>
+  /** Read/write "Screen Sharing in Chat" (default ON) — the consent gate for the
+   *  model-invoked capture_screen tool. Returns the stored value. */
+  getChatScreenshotSharing: () => Promise<boolean>
+  setChatScreenshotSharing: (enabled: boolean) => Promise<boolean>
   /** Open a Stripe Checkout URL in a modal in-app window; resolves when the flow
    *  completes ('success'/'cancel' at the backend redirect) or the user closes it
    *  ('closed'). Only displays Stripe's hosted page — completes no payment. */
