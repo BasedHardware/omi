@@ -24,6 +24,7 @@ import { BarApp } from './components/bar/BarApp'
 import { GlowWindow } from './components/glow/GlowWindow'
 import { CaptureApp } from './capture/CaptureApp'
 import { LiveMirrorHost } from './components/recording/LiveMirrorHost'
+import { LiveNotesHost } from './components/recording/LiveNotesHost'
 import { auth, onAuthStateChanged } from './lib/firebase'
 import { invalidateConversationsCache } from './lib/pageCache'
 import { startOutboxSweep, stopOutboxSweep } from './lib/sync/outboxSweep'
@@ -114,6 +115,9 @@ function AppShellInner(): React.JSX.Element {
           run the on-save UI side effects. Capture itself (Rewind, mic, PTT, screen)
           runs in the hidden capture window now. */}
       <LiveMirrorHost />
+      {/* Generates live AI notes off the mirrored transcript, app-root scoped so
+          generation isn't gated on the notes panel being open. */}
+      <LiveNotesHost />
       {/* One-time background/privacy consent for existing (already-onboarded)
           users. Self-gates via shouldShowBackgroundConsent. */}
       <BackgroundConsentInterstitial />
