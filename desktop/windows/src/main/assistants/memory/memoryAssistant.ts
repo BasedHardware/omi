@@ -18,7 +18,7 @@ import { notificationsActive } from '../core/notify'
 import { getBackendSession, getSessionEpoch } from '../core/session'
 import { recentMemories } from '../../ipc/db'
 import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
-import type { MemoryCategory, RewindFrame } from '../../../shared/types'
+import type { RewindFrame } from '../../../shared/types'
 import { intervalElapsed } from '../insight/gating'
 import { extractMemory } from './gemini'
 import { MEMORY_SYSTEM_PROMPT, buildUserPrompt } from './prompt'
@@ -158,14 +158,13 @@ export class MemoryAssistant implements ProactiveAssistant {
     }
     this.lastCommittedSeq = mySeq
 
-    // Map the model's category to our two-value enum (Mac: `.interesting`
-    // ? "interesting" : "system"). Anything not 'interesting' is 'system'.
-    const category: MemoryCategory = mem.category === 'interesting' ? 'interesting' : 'system'
-
     persistMemory(
       {
         content: mem.content,
-        category,
+        // Already narrowed to the two Mac values ('system' | 'interesting') by
+        // parseMemory — a bad category is dropped there, never coerced — so use it
+        // directly, like Focus (analysis.status) and Insight (insight.category).
+        category: mem.category,
         // Prefer the model's source_app; fall back to the frame's app when the
         // model left it blank (Mac uses memory.sourceApp directly, but an empty
         // string here would lose real provenance we already have).
@@ -178,7 +177,9 @@ export class MemoryAssistant implements ProactiveAssistant {
       },
       sessionEpoch
     )
-    console.log(`[memory] extracted category=${category} conf=${Math.round(mem.confidence * 100)}%`)
+    console.log(
+      `[memory] extracted category=${mem.category} conf=${Math.round(mem.confidence * 100)}%`
+    )
   }
 
   /** Dev/QA hook: force one extraction of a given frame, bypassing ONLY the
