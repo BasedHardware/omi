@@ -189,6 +189,29 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     XCTAssertFalse(closed.isOpen, "a closed transport must become non-sendable before its controller handles the error")
   }
 
+  func testTerminalOpenAISessionDoesNotResurrectFromLateReadiness() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    let transport = URLSession.shared.webSocketTask(with: URL(string: "wss://example.com")!)
+
+    session.sendAudio(Data([1, 2, 3, 4]))
+    session.commitInputTurn()
+    let buffered = await session.inputLifecycleSnapshot()
+    XCTAssertEqual(buffered.pendingAudioChunkCount, 1)
+    XCTAssertTrue(buffered.pendingCommit)
+
+    session.urlSession(URLSession.shared, webSocketTask: transport, didCloseWith: .normalClosure, reason: nil)
+    _ = await session.inputLifecycleSnapshot()
+    await session.receiveOpenAIEventForTesting(["type": "session.updated"])
+    await Task.yield()
+
+    let afterLateReadiness = await session.inputLifecycleSnapshot()
+    XCTAssertFalse(afterLateReadiness.isOpen)
+    XCTAssertEqual(afterLateReadiness.pendingAudioChunkCount, 1, "a terminal session must not flush buffered audio")
+    XCTAssertTrue(afterLateReadiness.pendingCommit, "a terminal session must not commit buffered input")
+    XCTAssertEqual(delegate.connectCount, 0, "a terminal session must not report a late connection")
+  }
+
   func testOpenAICancelReclaimsActiveResponseIdentity() async {
     let delegate = RealtimeHubSessionDelegateSpy()
     let session = makeSession(provider: .openai, delegate: delegate)
@@ -242,7 +265,9 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
 
 @MainActor
 private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {
-  func hubDidConnect(source: RealtimeHubSession) {}
+  private(set) var connectCount = 0
+
+  func hubDidConnect(source: RealtimeHubSession) { connectCount += 1 }
   func hubDidReceiveInputTranscript(
     _ text: String, isFinal: Bool, identity: RealtimeHubEventIdentity?, source: RealtimeHubSession
   ) {}
