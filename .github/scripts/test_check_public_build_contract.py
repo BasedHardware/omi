@@ -17,6 +17,7 @@ ROOT = Path(__file__).resolve().parents[2]
 STATIC_PATH = ROOT / ".github" / "scripts" / "check_public_build_contract.py"
 PREFLIGHT_PATH = ROOT / ".github" / "scripts" / "preflight_public_build_config.py"
 SMOKE_PATH = ROOT / ".github" / "scripts" / "smoke_public_build_browser.py"
+RUNTIME_PREFLIGHT_PATH = ROOT / ".github" / "scripts" / "preflight_public_build_runtime.py"
 
 
 def load_module(name: str, path: Path):
@@ -32,11 +33,12 @@ def load_module(name: str, path: Path):
 STATIC = load_module("check_public_build_contract", STATIC_PATH)
 PREFLIGHT = load_module("preflight_public_build_config", PREFLIGHT_PATH)
 SMOKE = load_module("smoke_public_build_browser", SMOKE_PATH)
+RUNTIME_PREFLIGHT = load_module("preflight_public_build_runtime", RUNTIME_PREFLIGHT_PATH)
 
 
 def fixture_contract() -> dict:
     return {
-        "schema_version": 2,
+        "schema_version": 3,
         "configuration": {
             "source": "repository_config",
             "path": "config/public-build-values.json",
@@ -47,6 +49,13 @@ def fixture_contract() -> dict:
                 "service": "fake-service",
                 "dockerfile": "web/fake/Dockerfile",
                 "workflow": ".github/workflows/gcp_fake.yml",
+                "deployment": {
+                    "region": "us-central1",
+                    "build_context": ".",
+                    "platforms": ["linux/amd64"],
+                    "flags": [],
+                    "runtime_secrets": {"FAKE_RUNTIME_SECRET": "FAKE_RUNTIME_SECRET:latest"},
+                },
                 "canary_component": "web/fake/public-build-canary.tsx",
                 "inputs": [
                     {
@@ -103,21 +112,19 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         self.write(
             ".github/workflows/gcp_fake.yml",
             """steps:
-  - id: public-build
-    uses: ./.github/actions/prepare-public-build
-  - uses: docker/build-push-action@v6
-    with:
-      build-args: ${{ steps.public-build.outputs.build_args }}
-  - uses: google-github-actions/deploy-cloudrun@v2
-    with:
-      no_traffic: true
-      flags: --revision-suffix=fake --tag=fake
-  - uses: ./.github/actions/public-build-candidate-promotion
+  - uses: ./.github/actions/deploy-public-build
 """,
         )
         self.write(
             "web/fake/public-build-canary.tsx",
             '<span data-omi-public-build-canary="fake:ready" />\n',
+        )
+        self.write(
+            ".github/workflows/public-build-config-preflight.yml",
+            """on:
+  pull_request:
+  workflow_dispatch:
+""",
         )
 
     def tearDown(self) -> None:
@@ -137,8 +144,111 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
     def errors(self) -> list[str]:
         return STATIC.validate_target(self.root, self.target(), {"FAKE_PUBLIC_INPUT"})
 
-    def test_accepts_shared_preparation_and_candidate_promotion(self) -> None:
+    def test_accepts_centralized_public_build_deployment(self) -> None:
         self.assertEqual(self.errors(), [])
+
+    def test_rejects_direct_build_or_deploy_wiring(self) -> None:
+        self.write(
+            ".github/workflows/gcp_fake.yml",
+            (self.root / ".github/workflows/gcp_fake.yml").read_text(encoding="utf-8")
+            + "  - uses: docker/build-push-action@v6\n",
+        )
+
+        self.assertIn("bypasses centralized public-build deployment", "\n".join(self.errors()))
+
+    def test_rejects_missing_declared_build_context(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["build_context"] = "web/missing"
+        self.write_json("config/public-build-contract.json", contract)
+
+        self.assertIn("Docker build context is missing", "\n".join(self.errors()))
+
+    def test_rejects_scheduled_public_build_reconciliation(self) -> None:
+        self.write(
+            ".github/workflows/public-build-config-preflight.yml",
+            """on:
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: '* * * * *'
+""",
+        )
+
+        self.assertIn("must not schedule drift checks", "\n".join(STATIC.validate_jit_preflight_workflow(self.root)))
+
+    def test_runtime_preflight_rejects_literal_binding(self) -> None:
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {"name": "FAKE_RUNTIME_SECRET", "value": "not-a-secret-reference"},
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            [
+                "fake: runtime binding FAKE_RUNTIME_SECRET is a literal; expected Secret Manager "
+                "FAKE_RUNTIME_SECRET:latest"
+            ],
+        )
+
+    def test_runtime_preflight_accepts_absent_or_matching_binding(self) -> None:
+        matching_service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "FAKE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), {"template": {}}), [])
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), matching_service), [])
+
+    def test_runtime_preflight_accepts_v1_secret_binding(self) -> None:
+        service = {
+            "spec": {
+                "template": {
+                    "spec": {
+                        "containers": [
+                            {
+                                "env": [
+                                    {
+                                        "name": "FAKE_RUNTIME_SECRET",
+                                        "valueFrom": {
+                                            "secretKeyRef": {"name": "FAKE_RUNTIME_SECRET", "key": "latest"}
+                                        },
+                                    }
+                                ]
+                            }
+                        ]
+                    }
+                }
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
+
+    def test_runtime_preflight_rejects_disabled_secret_version(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+        RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "DISABLED"}
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_secret_versions(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(errors, ["fake: required Secret Manager version FAKE_RUNTIME_SECRET:latest is not enabled"])
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")

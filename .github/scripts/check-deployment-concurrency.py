@@ -123,6 +123,7 @@ WRITER_MARKERS = (
     "gcloud run jobs deploy ",
     "gcloud run jobs update ",
 )
+PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 
 PUSHER_CHART_MARKER = "backend/charts/pusher"
 PUSHER_CONFIGMAP_PREFLIGHT = (
@@ -339,7 +340,17 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
 
 
 def is_persistent_writer(text: str) -> bool:
-    return any(marker in text for marker in WRITER_MARKERS) or has_firestore_index_writer(text)
+    return (
+        any(marker in text for marker in WRITER_MARKERS)
+        or any(
+            any(
+                PUBLIC_BUILD_DEPLOY_ACTION in line and not line.lstrip().startswith("#")
+                for line in step
+            )
+            for step in workflow_steps(text)
+        )
+        or has_firestore_index_writer(text)
+    )
 
 
 def resolve_environment(group: str, environment: str) -> str:
@@ -535,6 +546,16 @@ jobs:
     )
     if is_persistent_writer(non_firestore_firebase_deploy):
         raise PolicyError("a functions-only Firebase deploy was classified as a Firestore writer")
+    centralized_public_build_writer = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - uses: ./.github/actions/deploy-public-build
+"""
+    if not is_persistent_writer(centralized_public_build_writer):
+        raise PolicyError("centralized public-build deployment bypassed persistent-writer detection")
+    if is_persistent_writer(centralized_public_build_writer.replace("      - uses:", "      # - uses:")):
+        raise PolicyError("a commented centralized public-build deployment was classified as a writer")
     gcloud_list = direct_firebase_writer.replace(
         "npx firebase deploy --only firestore:indexes",
         "gcloud firestore indexes composite list",

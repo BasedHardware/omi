@@ -17,6 +17,7 @@ DEFAULT_CONTRACT = ROOT / "config" / "public-build-contract.json"
 DEFAULT_VALUES = ROOT / "config" / "public-build-values.json"
 DEFAULT_CLASSIFICATION = ROOT / "config" / "deployment-setting-classification.json"
 NAME = re.compile(r"[A-Z][A-Z0-9_]*\Z")
+SECRET_REFERENCE = re.compile(r"[A-Za-z0-9_-]+:(?:latest|[1-9][0-9]*)\Z")
 ARG = re.compile(r"^\s*ARG\s+([A-Z][A-Z0-9_]*)\s*$", re.MULTILINE)
 GUARD = re.compile(r'^\s*ENV\s+OMI_REQUIRED_PUBLIC_BUILD_INPUTS="([A-Z0-9_ ]*)"\s*$', re.MULTILINE)
 WEB_WORKFLOWS = frozenset(
@@ -27,10 +28,13 @@ WEB_WORKFLOWS = frozenset(
         ".github/workflows/gcp_personas.yml",
     }
 )
+DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 PREPARE_ACTION = "uses: ./.github/actions/prepare-public-build"
 PROMOTION_ACTION = "uses: ./.github/actions/public-build-candidate-promotion"
+DEPLOY_ACTION_PATH = ".github/actions/deploy-public-build/action.yml"
 PREPARE_ACTION_PATH = ".github/actions/prepare-public-build/action.yml"
 PROMOTION_ACTION_PATH = ".github/actions/public-build-candidate-promotion/action.yml"
+JIT_PREFLIGHT_WORKFLOW_PATH = ".github/workflows/public-build-config-preflight.yml"
 
 
 @dataclass(frozen=True)
@@ -48,11 +52,21 @@ class CandidateAcceptance:
 
 
 @dataclass(frozen=True)
+class Deployment:
+    region: str
+    build_context: str
+    platforms: tuple[str, ...]
+    flags: tuple[str, ...]
+    runtime_secrets: dict[str, str]
+
+
+@dataclass(frozen=True)
 class Target:
     name: str
     service: str
     dockerfile: str
     workflow: str
+    deployment: Deployment
     canary_component: str
     inputs: tuple[PublicInput, ...]
     candidate_acceptance: CandidateAcceptance
@@ -93,9 +107,44 @@ def _parse_input(raw_input: Any, *, target_name: str) -> PublicInput:
     return PublicInput(name=name, required=required, source=source, allowed_scopes=tuple(raw_scopes))
 
 
+def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
+    if not isinstance(raw_deployment, Mapping):
+        raise ValueError(f"target {target_name} must declare deployment")
+    region = _require_string(raw_deployment.get("region"), field=f"target {target_name} deployment region")
+    build_context = _require_string(
+        raw_deployment.get("build_context"), field=f"target {target_name} deployment build_context"
+    )
+    raw_platforms = raw_deployment.get("platforms")
+    if not isinstance(raw_platforms, list) or not raw_platforms or not all(
+        isinstance(platform, str) and platform for platform in raw_platforms
+    ):
+        raise ValueError(f"target {target_name} deployment platforms must be non-empty strings")
+    raw_flags = raw_deployment.get("flags")
+    if not isinstance(raw_flags, list) or not all(
+        isinstance(flag, str) and flag.startswith("--") and "\n" not in flag and "\r" not in flag for flag in raw_flags
+    ):
+        raise ValueError(f"target {target_name} deployment flags must be safe gcloud flags")
+    raw_runtime_secrets = raw_deployment.get("runtime_secrets")
+    if not isinstance(raw_runtime_secrets, Mapping) or not all(
+        isinstance(name, str)
+        and NAME.fullmatch(name)
+        and isinstance(reference, str)
+        and SECRET_REFERENCE.fullmatch(reference)
+        for name, reference in raw_runtime_secrets.items()
+    ):
+        raise ValueError(f"target {target_name} deployment runtime_secrets must map environment names to secret:version")
+    return Deployment(
+        region=region,
+        build_context=build_context,
+        platforms=tuple(raw_platforms),
+        flags=tuple(raw_flags),
+        runtime_secrets=dict(raw_runtime_secrets),
+    )
+
+
 def load_contract(path: Path) -> Contract:
     raw = _read_json(path)
-    if not isinstance(raw, Mapping) or raw.get("schema_version") != 2:
+    if not isinstance(raw, Mapping) or raw.get("schema_version") != 3:
         raise ValueError(f"{path}: unsupported public-build contract schema")
     configuration = raw.get("configuration")
     if not isinstance(configuration, Mapping) or configuration.get("source") != "repository_config":
@@ -137,6 +186,7 @@ def load_contract(path: Path) -> Contract:
             service=_require_string(raw_target.get("service"), field=f"target {target_name} service"),
             dockerfile=_require_string(raw_target.get("dockerfile"), field=f"target {target_name} dockerfile"),
             workflow=_require_string(raw_target.get("workflow"), field=f"target {target_name} workflow"),
+            deployment=_parse_deployment(raw_target.get("deployment"), target_name=target_name),
             canary_component=_require_string(
                 raw_target.get("canary_component"), field=f"target {target_name} canary_component"
             ),
@@ -242,6 +292,9 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
     dockerfile_path = root / target.dockerfile
     if not dockerfile_path.is_file():
         return errors + [f"{target.name}: Dockerfile is missing: {target.dockerfile}"]
+    build_context_path = root / target.deployment.build_context
+    if not build_context_path.is_dir():
+        errors.append(f"{target.name}: Docker build context is missing: {target.deployment.build_context}")
     dockerfile = dockerfile_path.read_text(encoding="utf-8")
     docker_args = _docker_public_args(dockerfile, classified_public)
     errors.extend(f"{target.dockerfile}: required public ARG {name} is missing" for name in sorted(names - docker_args))
@@ -266,15 +319,28 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
     if not workflow_path.is_file():
         return errors + [f"{target.name}: workflow is missing: {target.workflow}"]
     workflow = workflow_path.read_text(encoding="utf-8")
-    for marker in (PREPARE_ACTION, "id: public-build", "build-args: ${{ steps.public-build.outputs.build_args }}"):
-        if marker not in workflow:
-            errors.append(f"{target.workflow}: missing shared public-build preparation {marker!r}")
+    if DEPLOY_ACTION not in workflow:
+        errors.append(f"{target.workflow}: missing centralized public-build deployment {DEPLOY_ACTION!r}")
     for name in sorted(names):
         if f"vars.{name}" in workflow:
             errors.append(f"{target.workflow}: input {name} bypasses repository_config via GitHub vars")
-    for marker in ("no_traffic: true", "--revision-suffix=", "--tag=", PROMOTION_ACTION):
+    for marker in (
+        PREPARE_ACTION,
+        PROMOTION_ACTION,
+        "docker/build-push-action@",
+        "google-github-actions/deploy-cloudrun@",
+        "gcloud auth configure-docker",
+        "docker build",
+        "docker push",
+        "gcloud run deploy",
+        "no_traffic: true",
+        "--revision-suffix=",
+        "--tag=",
+        "gcloud run services update-traffic",
+    ):
         if marker not in workflow:
-            errors.append(f"{target.workflow}: missing candidate promotion marker {marker!r}")
+            continue
+        errors.append(f"{target.workflow}: bypasses centralized public-build deployment via {marker!r}")
     if "revision_traffic:" in workflow or "LATEST=100" in workflow:
         errors.append(f"{target.workflow}: must not promote direct traffic during candidate deployment")
     if target.candidate_acceptance.command[1] != ".github/scripts/smoke_public_build_browser.py":
@@ -294,6 +360,35 @@ def validate_target(root: Path, target: Target, classified_public: set[str]) -> 
 
 def validate_shared_actions(root: Path) -> list[str]:
     errors: list[str] = []
+    deploy_path = root / DEPLOY_ACTION_PATH
+    if not deploy_path.is_file():
+        errors.append(f"centralized public-build deployment action is missing: {DEPLOY_ACTION_PATH}")
+    else:
+        deploy = deploy_path.read_text(encoding="utf-8")
+        required_markers = (
+            "config/public-build-contract.json",
+            ".deployment.runtime_secrets",
+            PREPARE_ACTION,
+            "google-github-actions/auth@",
+            "preflight_public_build_runtime.py",
+            "docker/build-push-action@",
+            "google-github-actions/deploy-cloudrun@",
+            "no_traffic: true",
+            "--revision-suffix=",
+            "--tag=",
+            PROMOTION_ACTION,
+        )
+        for marker in required_markers:
+            if marker not in deploy:
+                errors.append(f"{DEPLOY_ACTION_PATH}: missing centralized deployment marker {marker!r}")
+        build_index = deploy.find("docker/build-push-action@")
+        runtime_preflight_index = deploy.find("preflight_public_build_runtime.py")
+        promotion_index = deploy.find(PROMOTION_ACTION)
+        if runtime_preflight_index == -1 or build_index == -1 or runtime_preflight_index > build_index:
+            errors.append(f"{DEPLOY_ACTION_PATH}: runtime preflight must run before image build")
+        if promotion_index == -1 or build_index == -1 or promotion_index < build_index:
+            errors.append(f"{DEPLOY_ACTION_PATH}: candidate promotion must follow image build")
+
     prepare_path = root / PREPARE_ACTION_PATH
     if not prepare_path.is_file():
         errors.append(f"shared public-build preparation action is missing: {PREPARE_ACTION_PATH}")
@@ -325,6 +420,21 @@ def validate_shared_actions(root: Path) -> list[str]:
     return errors
 
 
+def validate_jit_preflight_workflow(root: Path) -> list[str]:
+    workflow_path = root / JIT_PREFLIGHT_WORKFLOW_PATH
+    if not workflow_path.is_file():
+        return [f"JIT public-build preflight workflow is missing: {JIT_PREFLIGHT_WORKFLOW_PATH}"]
+    workflow = workflow_path.read_text(encoding="utf-8")
+    errors: list[str] = []
+    if "pull_request:" not in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must validate public-build changes in pull requests")
+    if "workflow_dispatch:" not in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must support explicit JIT validation")
+    if "schedule:" in workflow:
+        errors.append(f"{JIT_PREFLIGHT_WORKFLOW_PATH}: must not schedule drift checks; validation is JIT only")
+    return errors
+
+
 def validate(root: Path, contract: Contract, classified_public: set[str]) -> list[str]:
     errors: list[str] = []
     workflows = {target.workflow for target in contract.targets.values()}
@@ -333,6 +443,7 @@ def validate(root: Path, contract: Contract, classified_public: set[str]) -> lis
     for target in contract.targets.values():
         errors.extend(validate_target(root, target, classified_public))
     errors.extend(validate_shared_actions(root))
+    errors.extend(validate_jit_preflight_workflow(root))
     values_path = root / contract.config_path
     try:
         values = load_values(values_path)
