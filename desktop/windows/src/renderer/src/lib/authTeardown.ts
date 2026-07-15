@@ -12,6 +12,7 @@ import { clearPendingConversations, invalidateConversationsCache } from './pageC
 import { clearUserScopedPreferences } from './preferences'
 import { CHAT_INFINITE_ID_KEY } from './chatStorageKeys'
 import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
+import { resetByokKeys } from './byokKeys'
 
 // Standalone user-scoped localStorage keys (the device-prefs blob and sidebar
 // collapse state are machine-scoped and NOT listed here).
@@ -28,13 +29,26 @@ export async function teardownUserData(): Promise<void> {
   } catch (e) {
     console.warn('[auth-teardown] wipeUserData failed:', (e as Error).message)
   }
-  // 2. In-memory module caches so the current window reflects the wipe without a
+  // 2. BYOK provider keys: clear the encrypted store (main) AND the in-memory
+  //    header cache (this window) so a second account on this install can never
+  //    attach the prior user's provider keys to its REST/chat/WS requests. The
+  //    store lives outside SQLite, so wipeUserData above doesn't cover it. This
+  //    runs on both user sign-out AND the account-switch guard — local only.
+  //    Server-side deactivation (DELETE) happens in signOutUser, where the
+  //    signing-out user's token is still valid.
+  try {
+    await window.omi?.byokClearAll?.()
+  } catch (e) {
+    console.warn('[auth-teardown] byokClearAll failed:', (e as Error).message)
+  }
+  resetByokKeys()
+  // 3. In-memory module caches so the current window reflects the wipe without a
   //    relaunch (the Conversations list, pending placeholders, the chat-grounding
   //    memory cache).
   invalidateConversationsCache()
   clearPendingConversations()
   clearMemoryCache()
-  // 3. User-scoped localStorage keys.
+  // 4. User-scoped localStorage keys.
   for (const key of USER_SCOPED_LOCALSTORAGE_KEYS) {
     try {
       localStorage.removeItem(key)
@@ -42,7 +56,7 @@ export async function teardownUserData(): Promise<void> {
       /* privacy mode / quota */
     }
   }
-  // 4. User-identity fields inside the shared prefs blob (name, chosen goal) so
+  // 5. User-identity fields inside the shared prefs blob (name, chosen goal) so
   //    the next account doesn't briefly inherit them. Device settings, consents,
   //    and onboarding state in the same blob are preserved.
   clearUserScopedPreferences()

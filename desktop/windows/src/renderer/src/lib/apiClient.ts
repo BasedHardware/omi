@@ -5,6 +5,7 @@ import axios, {
 } from 'axios'
 import { auth } from './firebase'
 import { forceReauth, refreshIdToken } from './authSession'
+import { withByokHeadersIfActive } from './byokKeys'
 
 // Retried statuses: 429 (rate limited) and 503 (transient). Anything else fails
 // fast as before. 401 is handled separately (refresh → retry → reauth).
@@ -130,6 +131,12 @@ function makeClient(baseURL: string): AxiosInstance {
     if (user) {
       const token = await user.getIdToken()
       config.headers.Authorization = `Bearer ${token}`
+    }
+    // BYOK: when the user has a full key set, attach X-BYOK-* (all-or-none) so
+    // Omi-managed lanes run on their own provider keys. No-op when inactive.
+    const byokHeaders = withByokHeadersIfActive<Record<string, string>>({})
+    for (const [name, value] of Object.entries(byokHeaders)) {
+      config.headers[name] = value
     }
     return config
   })

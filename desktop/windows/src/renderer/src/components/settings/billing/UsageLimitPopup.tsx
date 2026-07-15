@@ -5,9 +5,9 @@ import { onUsageLimit, dismissUsageLimit, type UsageLimitReason } from '../../..
 import { requestSettingsTab } from '../../../lib/settingsNav'
 
 // Fixed headline + per-reason body (UsageLimitPopupView parity). Mac's Upgrade
-// button is purple and it also offers a "Bring your own keys" action — Windows
-// has no BYOK UI, so that button is omitted and Upgrade is the app's neutral
-// white primary (INV-UI-1: no purple).
+// button is purple; Windows uses the app's neutral white primary (INV-UI-1: no
+// purple). Like Mac, a secondary "Bring your own keys" action deep-links into
+// Settings → Advanced (the Developer API Keys / BYOK subsection).
 const HEADLINE = "You've hit your monthly limit"
 
 const BODY: Record<UsageLimitReason, string> = {
@@ -37,6 +37,12 @@ export function UsageLimitPopup(): React.JSX.Element | null {
     navigate('/settings')
   }
 
+  const onBringYourOwnKeys = (): void => {
+    dismissUsageLimit()
+    requestSettingsTab('advanced')
+    navigate('/settings')
+  }
+
   return (
     <div
       className="fixed inset-0 z-[110] flex items-center justify-center bg-black/55 p-6 backdrop-blur-md"
@@ -63,6 +69,12 @@ export function UsageLimitPopup(): React.JSX.Element | null {
           className="mt-6 w-full rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-black transition hover:opacity-90"
         >
           Upgrade
+        </button>
+        <button
+          onClick={onBringYourOwnKeys}
+          className="mt-2 w-full rounded-2xl px-4 py-2.5 text-sm font-medium text-text-tertiary transition hover:text-text-primary"
+        >
+          Bring your own keys
         </button>
       </div>
     </div>

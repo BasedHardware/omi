@@ -48,7 +48,7 @@ import type {
   TaskDashboardSlices,
   LiveNote
 } from '../shared/types'
-import type { ByokProvider } from '../shared/byok'
+import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -307,6 +307,18 @@ const omi: OmiBridgeApi = {
   byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
   byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
   byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
+  // Live-validate the stored keys and reconcile backend BYOK activation. The
+  // Firebase token is relayed from the renderer (its session owns it).
+  byokEnroll: (token: string): Promise<ByokEnrollResult> =>
+    ipcRenderer.invoke('byok:enroll', token),
+  // Sign-out: drop the backend BYOK enrollment (local keys are cleared via
+  // byokClearAll in the teardown path). Best-effort.
+  byokDeactivate: (token: string): Promise<void> => ipcRenderer.invoke('byok:deactivate', token),
+  onByokChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('byok:changed', listener)
+    return () => ipcRenderer.removeListener('byok:changed', listener)
+  },
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),

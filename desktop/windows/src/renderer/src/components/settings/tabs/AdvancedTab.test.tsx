@@ -48,7 +48,13 @@ beforeEach(() => {
     memoryImportParse: vi.fn().mockResolvedValue([]),
     memoryExportObsidian: vi.fn(),
     memoryExportFile: vi.fn(),
-    memoryExportNotion: vi.fn()
+    memoryExportNotion: vi.fn(),
+    // AdvancedTab now embeds the BYOK "Developer API Keys" subsection, which
+    // reads stored keys on mount (and would enroll/clear on interaction).
+    byokGetAll: vi.fn().mockResolvedValue({}),
+    byokSet: vi.fn().mockResolvedValue(undefined),
+    byokClearAll: vi.fn().mockResolvedValue(undefined),
+    byokEnroll: vi.fn().mockResolvedValue({ active: false, results: {} })
   }
 })
 
