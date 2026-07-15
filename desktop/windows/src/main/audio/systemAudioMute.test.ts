@@ -172,6 +172,18 @@ describe('systemAudioMuteBridge — live helper', () => {
 
     await systemAudioMuteBridge.muteSystemAudio()
     expect(opcodes).not.toContain(OP_MUTE) // never muted through the stale helper
+
+    // The stale-helper degrade is also durable: exactly one Sentry diagnostic,
+    // behind the unavailable guard, naming the protocol-mismatch reason.
+    expect(captureMessageMock).toHaveBeenCalledTimes(1)
+    expect(captureMessageMock).toHaveBeenCalledWith(
+      expect.stringContaining('protocol mismatch'),
+      expect.objectContaining({
+        area: 'ptt-audio-mute',
+        level: 'warning',
+        extra: expect.objectContaining({ reason: 'protocol_mismatch' })
+      })
+    )
   })
 })
 
