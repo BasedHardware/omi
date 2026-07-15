@@ -15,6 +15,7 @@ struct ChatPage: View {
   @State private var citedConversation: ServerConversation?
   @State private var isLoadingCitation = false
   @State private var copied = false
+  @State private var didReportChatFirstTranscriptPage = false
 
   init(
     appProvider: AppProvider,
@@ -98,6 +99,12 @@ struct ChatPage: View {
         .padding(.bottom, OmiSpacing.xxl)
     }
     .background(OmiColors.backgroundPrimary)
+    .onAppear { reportChatFirstTranscriptPageIfReady() }
+    .onDisappear {
+      didReportChatFirstTranscriptPage = false
+      chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptDidDisappear()
+    }
+    .onChange(of: chatProvider.isMainChatJournalFirstPageReady) { _, _ in reportChatFirstTranscriptPageIfReady() }
     .sheet(item: $citedConversation) { conversation in
       ConversationDetailView(
         conversation: conversation,
@@ -170,6 +177,15 @@ struct ChatPage: View {
         }
       }
     }
+  }
+
+  private func reportChatFirstTranscriptPageIfReady() {
+    guard !didReportChatFirstTranscriptPage,
+      chatFirstRichBlockContext != nil,
+      chatProvider.isMainChatJournalFirstPageReady
+    else { return }
+    didReportChatFirstTranscriptPage = true
+    chatFirstRichBlockContext?.promptMaterializationCoordinator.chatTranscriptFirstPageDidLoad()
   }
 
   // MARK: - Header

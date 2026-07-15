@@ -1,3 +1,4 @@
+import AppKit
 import SwiftUI
 import OmiTheme
 
@@ -9,6 +10,7 @@ struct ChatFirstShell: View {
   let viewModelContainer: ViewModelContainer
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingID: String?
+  @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
 
   var body: some View {
     HStack(spacing: 0) {
@@ -29,6 +31,20 @@ struct ChatFirstShell: View {
     }
     .background(OmiColors.backgroundPrimary)
     .environmentObject(navigation)
+    .onAppear {
+      promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
+      guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }
+      promptMaterializationCoordinator.mainWindowDidBecomeForeground()
+    }
+    .onReceive(NotificationCenter.default.publisher(for: NSWindow.didBecomeKeyNotification)) { notification in
+      guard let window = notification.object as? NSWindow,
+        window === NSApp.mainWindow,
+        window.isVisible
+      else { return }
+      promptMaterializationCoordinator.mainWindowDidBecomeForeground()
+    }
     .onExitCommand {
       guard navigation.route != .chat else { return }
       OmiMotion.withGated(.easeOut(duration: 0.12)) {
@@ -47,7 +63,8 @@ struct ChatFirstShell: View {
         chatFirstRichBlockContext: ChatFirstRichBlockContext(
           navigation: navigation,
           tasksStore: viewModelContainer.tasksStore,
-          chatProvider: viewModelContainer.chatProvider
+          chatProvider: viewModelContainer.chatProvider,
+          promptMaterializationCoordinator: promptMaterializationCoordinator
         )
       )
       .accessibilityIdentifier("chat-first-route-chat")

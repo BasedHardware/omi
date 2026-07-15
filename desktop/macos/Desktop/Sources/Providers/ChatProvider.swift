@@ -1157,6 +1157,9 @@ class ChatProvider: ObservableObject {
   }
   @Published var isLoading = false
   @Published var isLoadingSessions = true  // Start true since we load sessions on init
+  /// Root-only prompt materialization waits for the current main-chat journal
+  /// replay, never for an unrelated legacy session load.
+  @Published private(set) var isMainChatJournalFirstPageReady = false
   @Published var isSending = false
   @Published var isStopping = false
   @Published private(set) var activeTurnOwner: ChatTurnOwner?
@@ -2404,6 +2407,7 @@ class ChatProvider: ObservableObject {
     currentSession = session
     isInDefaultChat = false
     isLoading = true
+    isMainChatJournalFirstPageReady = false
     errorMessage = nil
     hasMoreMessages = false
 
@@ -2420,6 +2424,7 @@ class ChatProvider: ObservableObject {
     messagesPaginationOffset = messages.count
     hasMoreMessages = false
     log("ChatProvider loaded \(messages.count) kernel journal messages for session \(session.id)")
+    isMainChatJournalFirstPageReady = true
 
     isLoading = false
   }
@@ -3114,6 +3119,7 @@ class ChatProvider: ObservableObject {
   /// by the bounded, checkpointed legacy importer on first migration.
   func loadDefaultChatMessages() async {
     isLoading = true
+    isMainChatJournalFirstPageReady = false
     errorMessage = nil
     hasMoreMessages = false
 
@@ -3132,6 +3138,7 @@ class ChatProvider: ObservableObject {
     hasMoreMessages = false
     sessionsLoadError = nil
     log("ChatProvider loaded \(messages.count) default kernel journal messages")
+    isMainChatJournalFirstPageReady = true
     isLoading = false
   }
 
@@ -3839,6 +3846,93 @@ class ChatProvider: ObservableObject {
         questionID: normalizedQuestionID,
         optionID: normalizedOptionID
       )
+    )
+  }
+
+  /// Root-only prompt materialization is inert until this main-chat surface
+  /// has a current cohort capability projection.
+  func chatFirstMaterializationContext() -> ChatFirstMaterializationContext? {
+    guard let ownerID = runtimeOwnerId else { return nil }
+    let surface = mainChatSurfaceReference()
+    guard let capability = chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) else {
+      return nil
+    }
+    return ChatFirstMaterializationContext(
+      ownerID: ownerID,
+      controlGeneration: capability.controlGeneration
+    )
+  }
+
+  func pendingChatFirstMaterializationReceipts() async throws -> [ChatFirstMaterializationReceipt] {
+    guard let session = try await chatFirstMaterializationSession() else { return [] }
+    return try await resolvedAgentClient().listChatFirstMaterializationReceipts(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration
+    )
+  }
+
+  @discardableResult
+  func acknowledgeChatFirstMaterializationReceipts(
+    _ receipts: [ChatFirstMaterializationReceipt]
+  ) async throws -> Int {
+    guard !receipts.isEmpty, let session = try await chatFirstMaterializationSession() else { return 0 }
+    return try await resolvedAgentClient().acknowledgeChatFirstMaterializationReceipts(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration,
+      receipts: receipts
+    )
+  }
+
+  /// The local kernel owns every replay-visible effect; this is only its
+  /// capability-fenced bridge adapter.
+  @discardableResult
+  func materializeChatFirstIntents(
+    _ intents: [ChatFirstPromptIntent]
+  ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization? {
+    guard let session = try await chatFirstMaterializationSession(),
+      !intents.isEmpty,
+      intents.count <= 8,
+      intents.allSatisfy({ $0.accountGeneration == session.capability.controlGeneration })
+    else { return nil }
+    let result = try await resolvedAgentClient().materializeChatFirstIntents(
+      surface: session.surface,
+      ownerID: session.ownerID,
+      sessionID: session.agentSession.sessionId,
+      controlGeneration: session.capability.controlGeneration,
+      intents: intents
+    )
+    if result.accepted {
+      await kernelTurnProjection.refresh(surface: session.surface)
+    }
+    return result
+  }
+
+  private struct ChatFirstMaterializationSession {
+    let ownerID: String
+    let capability: ChatFirstCapabilityProjection
+    let surface: AgentSurfaceReference
+    let agentSession: AgentSurfaceSession
+  }
+
+  private func chatFirstMaterializationSession() async throws -> ChatFirstMaterializationSession? {
+    guard let ownerID = runtimeOwnerId else { return nil }
+    let surface = mainChatSurfaceReference()
+    guard let capability = chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) else {
+      return nil
+    }
+    let agentSession = try await resolveAgentSurfaceSession(surface)
+    guard runtimeOwnerId == ownerID,
+      chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) == capability
+    else { return nil }
+    return ChatFirstMaterializationSession(
+      ownerID: ownerID,
+      capability: capability,
+      surface: surface,
+      agentSession: agentSession
     )
   }
 

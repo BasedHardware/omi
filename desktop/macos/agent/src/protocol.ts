@@ -397,11 +397,59 @@ export interface AppendChatFirstBlocksMessage extends ProtocolEnvelope {
 /** Kernel-owned selection for one persisted, tail-actionable question card. */
 export interface RecordQuestionInteractionReplyMessage extends ProtocolEnvelope {
   type: "record_question_interaction_reply";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
   ownerId: string;
   sessionId: string;
   questionId: string;
   optionId: string;
   controlGeneration: number;
+}
+
+/**
+ * Privileged local receipt for an ordered server-owned deterministic-tier
+ * batch. Swift only transports typed server responses; the kernel derives
+ * journal identities and enforces tail suppression in one transaction.
+ */
+export interface MaterializeChatFirstIntentsMessage extends ProtocolEnvelope {
+  type: "materialize_chat_first_intents";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  intents: Array<{
+    intentId: string;
+    continuityKey: string;
+    source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment";
+    blocks: unknown[];
+  }>;
+}
+
+/** Read restart-safe kernel receipts to include in the next server fetch/ack. */
+export interface ListChatFirstMaterializationReceiptsMessage extends ProtocolEnvelope {
+  type: "list_chat_first_materialization_receipts";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  limit?: number;
+}
+
+/** Drop only receipts that the server accepted in a successful fetch/ack call. */
+export interface AcknowledgeChatFirstMaterializationReceiptsMessage extends ProtocolEnvelope {
+  type: "acknowledge_chat_first_materialization_receipts";
+  surfaceKind: string;
+  externalRefKind: string;
+  externalRefId: string;
+  ownerId: string;
+  sessionId: string;
+  controlGeneration: number;
+  receipts: Array<{ intentId: string; receiptId: string }>;
 }
 
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
@@ -503,6 +551,9 @@ export type InboundMessage =
   | JournalClearTurnsMessage
   | AppendChatFirstBlocksMessage
   | RecordQuestionInteractionReplyMessage
+  | MaterializeChatFirstIntentsMessage
+  | ListChatFirstMaterializationReceiptsMessage
+  | AcknowledgeChatFirstMaterializationReceiptsMessage
   | EnsureAgentSpawnJournalMessage
   | JournalBackendSyncResultMessage
   | JournalBackendDeleteResultMessage
@@ -933,7 +984,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "record_question_interaction_reply";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks" | "record_question_interaction_reply" | "materialize_chat_first_intents" | "list_chat_first_materialization_receipts" | "acknowledge_chat_first_materialization_receipts";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;
@@ -948,6 +999,11 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   accepted?: boolean;
   duplicate?: boolean;
   continuityKey?: string | null;
+  suppressedByTailQuestion?: boolean;
+  suppressedByStreamingTail?: boolean;
+  materializationStoppedByTail?: boolean;
+  materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  acknowledgedReceiptCount?: number;
 }
 
 export interface JournalTurnChangedMessage extends OutboundEnvelope {

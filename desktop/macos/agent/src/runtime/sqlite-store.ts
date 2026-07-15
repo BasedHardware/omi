@@ -70,6 +70,7 @@ const CONTEXT_SOURCE_SURFACE_SCOPE_MIGRATION_VERSION = 25;
 const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
 const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
 const CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION = 28;
+const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -510,6 +511,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION)) {
       runChatFirstDeferralOutboxMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstMaterializationReceiptsMigration(this.db, this.nowMs());
     }
   }
 
@@ -3190,6 +3194,37 @@ function runChatFirstDeferralOutboxMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Kernel materialization receipts are deliberately separate from both the
+ * transcript reconciliation outbox and question deferrals. The server only
+ * marks an intent delivered after this receipt is observed, while the local
+ * receipt survives a process crash after its assistant row committed.
+ */
+function runChatFirstMaterializationReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_materialization_receipts(
+        intent_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        turn_id TEXT NOT NULL,
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_materialization_receipts_owner_idx
+        ON chat_first_materialization_receipts(owner_id, conversation_id, control_generation, created_at_ms ASC);
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

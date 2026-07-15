@@ -60,6 +60,9 @@ import type {
   JournalClearTurnsMessage,
   AppendChatFirstBlocksMessage,
   RecordQuestionInteractionReplyMessage,
+  MaterializeChatFirstIntentsMessage,
+  ListChatFirstMaterializationReceiptsMessage,
+  AcknowledgeChatFirstMaterializationReceiptsMessage,
   EnsureAgentSpawnJournalMessage,
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
@@ -138,6 +141,9 @@ import {
   journalTurnChangedWakes,
   importRemoteJournalTurn,
   listJournalTurns,
+  listChatFirstMaterializationReceipts,
+  acknowledgeChatFirstMaterializationReceipts,
+  materializeChatFirstIntents,
   recordJournalExchange,
   recordQuestionInteractionReply,
   recordJournalTurn,
@@ -2521,7 +2527,8 @@ async function main(): Promise<void> {
         try {
           const ownerId = resolveActiveOwner(request.ownerId);
           if (
-            typeof request.sessionId !== "string" || !request.sessionId.trim()
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
             || typeof request.questionId !== "string" || !request.questionId.trim()
             || typeof request.optionId !== "string" || !request.optionId.trim()
             || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
@@ -2598,6 +2605,160 @@ async function main(): Promise<void> {
             clientId: request.clientId,
             message: envelope.message,
             failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "materialize_chat_first_intents": {
+        const request = msg as MaterializeChatFirstIntentsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Array.isArray(request.intents) || request.intents.length < 1 || request.intents.length > 8
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first materialization request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first materialization session is stale");
+          const intents = request.intents.map((intent) => {
+            if (
+              !intent || typeof intent.intentId !== "string" || !intent.intentId.trim()
+              || typeof intent.continuityKey !== "string" || !intent.continuityKey.trim()
+              || !Array.isArray(intent.blocks)
+            ) throw new Error("Chat-first materialization intent is invalid");
+            return {
+              ownerId, conversationId: resolved.conversationId, controlGeneration: request.controlGeneration,
+              intentId: intent.intentId, continuityKey: intent.continuityKey,
+              source: intent.source, blocks: intent.blocks,
+            };
+          });
+          const result = materializeChatFirstIntents(store, intents);
+          const committedTurns = result.results
+            .filter((candidate) => candidate.accepted && !candidate.duplicate && candidate.turn)
+            .map((candidate) => candidate.turn!);
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId,
+            afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "materialize_chat_first_intents", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId,
+            turn: committedTurns.at(-1) ? journalTurnProjection(committedTurns.at(-1)!) : undefined,
+            turns: committedTurns.map(journalTurnProjection), clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: result.results.some((candidate) => candidate.accepted),
+            duplicate: result.results.every((candidate) => candidate.duplicate),
+            suppressedByTailQuestion: result.results.some((candidate) => candidate.suppressedByTailQuestion),
+            suppressedByStreamingTail: result.results.some((candidate) => candidate.suppressedByStreamingTail),
+            materializationStoppedByTail: result.stoppedByTail,
+            materializationReceipts: result.results.flatMap((candidate) => candidate.receipt ? [candidate.receipt] : []),
+          });
+          if (committedTurns.length > 0) {
+            for (const turn of committedTurns) for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+              send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "list_chat_first_materialization_receipts": {
+        const request = msg as ListChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) throw new Error("Chat-first receipt listing request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "list_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            materializationReceipts: listChatFirstMaterializationReceipts(store, {
+              ownerId, controlGeneration: request.controlGeneration, limit: request.limit,
+            }),
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "acknowledge_chat_first_materialization_receipts": {
+        const request = msg as AcknowledgeChatFirstMaterializationReceiptsMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            request.surfaceKind !== "main_chat"
+            || typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+            || !Array.isArray(request.receipts) || request.receipts.length > 16
+          ) throw new Error("Chat-first receipt acknowledgement request is invalid");
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const resolved = resolveJournalSurface({
+            ownerId, surfaceKind: "main_chat",
+            externalRefKind: request.externalRefKind, externalRefId: request.externalRefId,
+          });
+          if (resolved.agentSessionId !== request.sessionId) throw new Error("Chat-first receipt session is stale");
+          const receipts = request.receipts.map((receipt) => ({
+            intentId: typeof receipt?.intentId === "string" ? receipt.intentId : "",
+            receiptId: typeof receipt?.receiptId === "string" ? receipt.receiptId : "",
+          }));
+          const acknowledgedReceiptCount = acknowledgeChatFirstMaterializationReceipts(store, {
+            ownerId, controlGeneration: request.controlGeneration, receipts,
+          });
+          const range = listJournalTurns(store, {
+            ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,
+          });
+          send({
+            type: "journal_operation_result", protocolVersion: request.protocolVersion,
+            requestId: request.requestId, clientId: request.clientId,
+            operation: "acknowledge_chat_first_materialization_receipts", conversationId: resolved.conversationId,
+            surfaceKind: "main_chat", externalRefKind: request.externalRefKind,
+            externalRefId: request.externalRefId, turns: [], clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation, acknowledgedReceiptCount,
+          });
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error", protocolVersion: request.protocolVersion, requestId: request.requestId,
+            clientId: request.clientId, message: envelope.message, failure: envelope.failure,
           });
         }
         break;
