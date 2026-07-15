@@ -4705,6 +4705,55 @@
     }
   },
   {
+    "name": "report_screen_observation",
+    "label": "Report Screen Observation",
+    "description": "Submit one current-screen observation after screenshot succeeds.",
+    "promptSnippet": "report_screen_observation - Submit a grounded current-screen answer",
+    "latency": "fast local",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "answer": {
+          "type": "string",
+          "description": "Concise visual detail only; do not name or identify an app."
+        }
+      },
+      "required": [
+        "answer"
+      ],
+      "additionalProperties": false
+    },
+    "annotations": {
+      "readOnlyHint": true,
+      "destructiveHint": false,
+      "openWorldHint": false
+    },
+    "timeoutClass": "normal",
+    "executor": {
+      "kind": "swiftTool",
+      "executorName": "realtimeHub"
+    },
+    "intendedForAgents": true,
+    "runtimePreconditions": [
+      "Realtime voice only; screenshot evidence must belong to the active PTT turn."
+    ],
+    "adapters": {},
+    "surfaces": [
+      "realtime_voice"
+    ],
+    "capabilityDoc": {
+      "title": "Report Screen Observation",
+      "summary": "Report a grounded current-screen answer.",
+      "bullets": [
+        "Only call after screenshot returns the current image.",
+        "Put only visual detail in the answer; native evidence supplies application identity."
+      ]
+    },
+    "voice": {
+      "realtimeDescription": "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report."
+    }
+  },
+  {
     "name": "point_click",
     "label": "Point Click",
     "description": "Click at on-screen pixel coordinates.",
