@@ -2134,6 +2134,24 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "agent_lifecycle_convergence_snapshot",
+      summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
+      params: ["runIds"],
+      category: "read",
+      surfaces: ["floating_bar", "main_chat", "realtime"],
+      safety: "read_only"
+    ) { params in
+      let runIDs = Set(
+        (params["runIds"] ?? "")
+          .split(separator: ",")
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+          .prefix(20)
+      )
+      return ["snapshot": await AgentPillsManager.shared.lifecycleConvergenceSnapshot(runIDs: runIDs)]
+    }
+
+    register(
       name: "coordinator_inspect_run",
       summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
       params: ["runId"]

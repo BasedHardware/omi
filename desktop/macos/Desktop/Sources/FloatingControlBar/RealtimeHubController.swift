@@ -4259,6 +4259,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     }
     audioReceivedThisTurn = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
+    // The reducer's drain deadline is an inactivity watchdog. Refresh it only
+    // after this exact PCM chunk reached the player, so long healthy native
+    // replies are not cut off at a fixed duration while a stalled stream still
+    // fails closed.
+    _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
     responseGlowGate.markPlaybackActive(lease: lease)
   }
 

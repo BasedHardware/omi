@@ -511,6 +511,12 @@ enum VoiceTurnEvent: Equatable, Sendable {
   case toolFinishedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
   case playbackStartedScoped(turnID: VoiceTurnID, lease: VoiceOutputLease)
+  /// Native provider output is still arriving for this exact lease. This is a
+  /// liveness heartbeat, not a second playback start: long valid replies must
+  /// not hit the drain watchdog solely because their first PCM chunk was over
+  /// thirty seconds ago.
+  case playbackProgressScoped(
+    turnID: VoiceTurnID, identity: VoiceEffectIdentity, leaseID: VoiceLeaseID)
   case playbackDrainedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, leaseID: VoiceLeaseID)
   case playbackFailedScoped(
@@ -561,6 +567,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .screenEvidenceProtocolStartedScoped(let turnID, _, _),
       .toolFinishedScoped(let turnID, _, _),
       .playbackStartedScoped(let turnID, _), .transcriptChanged(let turnID, _),
+      .playbackProgressScoped(let turnID, _, _),
       .playbackDrainedScoped(let turnID, _, _),
       .playbackFailedScoped(let turnID, _, _, _),
       .transcriptionFinalizationStarted(let turnID, _),
@@ -614,6 +621,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .screenEvidenceProtocolStartedScoped: return "screen_evidence_protocol_started_scoped"
     case .toolFinishedScoped: return "tool_finished_scoped"
     case .playbackStartedScoped: return "playback_started_scoped"
+    case .playbackProgressScoped: return "playback_progress_scoped"
     case .playbackDrainedScoped: return "playback_drained_scoped"
     case .playbackFailedScoped: return "playback_failed_scoped"
     case .transcriptionFinalizationStarted: return "transcription_finalization_started"
@@ -1280,6 +1288,19 @@ struct VoiceTurnReducer {
       model.turn?.projection.isThinking = false
       model.turn?.projection.isResponseWaiting = false
       model.turn?.projection.isResponseActive = true
+      schedule(.playbackDrain, after: deadlines.playbackDrain, in: &model, effects: &effects)
+
+    case .playbackProgressScoped(_, let identity, let leaseID):
+      guard turn.activeLease?.identity == identity,
+        turn.activeLease?.id == leaseID,
+        turn.phase == .playing(turn.activeLease?.lane ?? .nativeRealtime)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      // `VoiceTurnCoordinator.schedule` atomically replaces the existing task
+      // for this key. The deadline therefore remains an inactivity watchdog,
+      // not a maximum duration for a healthy streaming answer.
       schedule(.playbackDrain, after: deadlines.playbackDrain, in: &model, effects: &effects)
 
     case .playbackDrainedScoped(_, let identity, let leaseID):

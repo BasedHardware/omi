@@ -4088,6 +4088,25 @@ class FloatingControlBarManager {
         await historyChatProvider?.kernelTurnProjection.refresh(surface: surface)
     }
 
+    /// Read the projected journal receipt for one pill/run without exposing its
+    /// prompt or final output. AgentPills uses this as the durable half of the
+    /// completion invariant; its local terminal message alone is not enough to
+    /// prove that the next PTT turn can retrieve the child result.
+    func hasMaterializedAgentCompletion(pillID: UUID, runID: String?) -> Bool {
+        guard let provider = historyChatProvider else { return false }
+        let expectedRunID = runID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return provider.messages.contains { message in
+            message.contentBlocks.contains { block in
+                guard case .agentCompletion(_, let recordedPillID, _, let recordedRunID, _, _, _, _) = block
+                else { return false }
+                if !expectedRunID.isEmpty {
+                    return recordedRunID?.trimmingCharacters(in: .whitespacesAndNewlines) == expectedRunID
+                }
+                return recordedPillID == pillID
+            }
+        }
+    }
+
     /// Enrich the assistant turn that produced this pill's `agentSpawn` with one
     /// deterministic terminal block. This method never stages or records a
     /// second timeline row; SQLite journal revision replay updates every UI.

@@ -1390,10 +1390,9 @@ const controlVoicePatches: Partial<Record<AgentControlManifestTool["name"], OmiT
   },
   list_agent_sessions: {
     realtimeDescription:
-      "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
+      "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     schemaOverride: schema(
       {
-        status: { type: "string", enum: ["open", "archived", "closed"], description: "Optional session status filter." },
         surfaceKind: {
           type: "string",
           enum: ["main_chat", "task_chat", "realtime", "delegated_agent", "background_agent", "floating_bar", "floating_pill"],

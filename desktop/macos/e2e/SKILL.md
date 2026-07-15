@@ -63,6 +63,16 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+For a background-agent/voice regression, use the read-only cross-surface probe after
+the child run reaches a terminal state:
+```bash
+./scripts/omi-ctl action agent_lifecycle_convergence_snapshot runIds=<canonical-run-id>
+```
+It reports only run identity and state—not prompts or output—and passes only when the
+canonical terminal run, visible pill, and producing journal completion have converged.
+The continuity gauntlet uses this before it asserts the exact one-spawn/one-completion
+journal receipt, so new PTT work should extend that contract rather than add UI sleeps.
+
 ### 2b.1 Probe a current-screen PTT turn
 
 `ptt_test_turn` is the first-class, non-production PTT controller probe. It captures the
@@ -253,9 +263,10 @@ The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen
 calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
 `quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
 `reset_onboarding`), delayed so the action's HTTP response flushes before the process
-terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
-`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
-app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+terminates. The relaunch waits for the old PID to exit before invoking `open <bundle>`;
+on non-prod it uses `open -n` only after that handoff and re-passes
+`--automation-port=<current port>` as an argv. The reopened app therefore **rebinds the
+SAME port** you launched with (argv beats any launchd-inherited
 `OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
 
 Two traps make a naive `wait-ready` lie, so the recipe below guards against both:

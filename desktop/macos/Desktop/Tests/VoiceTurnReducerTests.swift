@@ -986,6 +986,23 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(failed.model.turn?.projection.hint, "Audio playback failed")
   }
 
+  func testNativePlaybackProgressRefreshesDrainWatchdogWithoutChangingLease() {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: lease)).model
+
+    let refreshed = reducer.reduce(
+      playing,
+      .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
+
+    XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
+    XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
+    XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
+    XCTAssertTrue(
+      refreshed.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .playbackDrain, after: reducer.deadlines.playbackDrain)))
+  }
+
   func testCompetingPlaybackLeaseIsRejectedAsInvalidTransition() {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     var model = reduce(

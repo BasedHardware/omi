@@ -149,6 +149,89 @@ struct AgentPillProducerJournalIntent: Sendable {
     let assistantText: String
 }
 
+/// One policy controls when a visible pill needs another canonical read. A
+/// terminal child run is not converged until its visible pill is terminal and
+/// the producing journal turn carries the corresponding completion block.
+@MainActor
+struct AgentPillLifecycleConvergencePolicy {
+    static func requiresCanonicalReconciliation(
+        status: AgentPill.Status,
+        requiresJournalCompletion: Bool,
+        hasTerminalJournalCompletion: Bool,
+        hasTerminalJournalMaterializationFailure: Bool,
+        hasPendingFollowUp: Bool
+    ) -> Bool {
+        hasPendingFollowUp || !status.isFinished
+            || (requiresJournalCompletion && !hasTerminalJournalCompletion
+                && !hasTerminalJournalMaterializationFailure)
+    }
+
+    static func shouldStartCanonicalPoll(
+        projectedStatusIsTerminal: Bool,
+        pillStatus: AgentPill.Status,
+        hasCanonicalTerminalDetail: Bool,
+        isPolling: Bool
+    ) -> Bool {
+        guard !isPolling else { return false }
+        // A successful list projection proves only the run's status. Its
+        // completion text remains owned by `get_agent_run`; poll exactly once
+        // when that text has not reached the local terminal message yet.
+        // Cancellation and failure receipts have deterministic local text, so
+        // they do not need a second canonical read.
+        if projectedStatusIsTerminal {
+            return pillStatus == .done && !hasCanonicalTerminalDetail
+        }
+        return !pillStatus.isFinished
+    }
+}
+
+enum AgentPillTerminalJournalMaterializationDecision: Equatable {
+    case materialize(status: String, output: String)
+    case awaitingCanonicalDetail
+    case unavailable
+}
+
+/// The runtime session list is status-only. A successful completion is not
+/// journal-ready until the corresponding `get_agent_run` result has supplied
+/// its canonical final output. This small pure policy is intentionally shared
+/// by the materializer and its ordering regression test.
+struct AgentPillTerminalJournalMaterializationPolicy {
+    static func decision(
+        status: AgentPill.Status,
+        canonicalRunID: String?,
+        canonicalDetailRunID: String?,
+        canonicalDetailOutput: String?
+    ) -> AgentPillTerminalJournalMaterializationDecision {
+        switch status {
+        case .done:
+            guard let canonicalRunID, !canonicalRunID.isEmpty else { return .unavailable }
+            guard canonicalDetailRunID == canonicalRunID else { return .awaitingCanonicalDetail }
+            let output = canonicalDetailOutput?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            return .materialize(status: "completed", output: output.isEmpty ? "Done." : output)
+        case .stopped:
+            return .materialize(status: "stopped", output: "Stopped by user")
+        case .failed(let error):
+            return .materialize(status: "failed", output: "Background agent failed: \(error)")
+        case .queued, .starting, .running:
+            return .unavailable
+        }
+    }
+}
+
+private struct AgentPillLifecycleConvergenceEntry: Codable {
+    let runId: String
+    let canonicalStatus: String
+    let projectedStatus: String?
+    let completionMaterialized: Bool
+    let converged: Bool
+}
+
+private struct AgentPillLifecycleConvergenceSnapshot: Codable {
+    let entries: [AgentPillLifecycleConvergenceEntry]
+    let missingRequestedRunIds: [String]
+    let canonicalReadError: String?
+}
+
 @MainActor
 final class AgentPillsManager: ObservableObject {
     static let shared = AgentPillsManager()
@@ -170,7 +253,34 @@ final class AgentPillsManager: ObservableObject {
 
     private var projectionSyncCancellable: AnyCancellable?
     private var projectionRefreshTask: Task<Void, Never>?
+    private let projectionBootstrapAttempts = 20
+    /// A long-running child can outlive the one-shot poll that created its
+    /// Swift pill (for example during a PTT replacement). Reconciliation is a
+    /// single owner-scoped repair loop over canonical run state, not a second
+    /// lifecycle store or another source of completion truth.
+    private var canonicalReconciliationTask: Task<Void, Never>?
+    private var canonicalReconciliationGeneration = 0
+    /// Completion is only durable once the producing assistant journal turn
+    /// contains the matching `agentCompletion` block. A terminal pill message
+    /// is useful UI, but it is not evidence that PTT can retrieve the result.
+    private var terminalJournalMaterializedPillIDs = Set<UUID>()
+    private struct CanonicalTerminalRunDetail {
+        let runID: String
+        let finalText: String
+    }
+    /// A completed session-list row has status truth but not its final output.
+    /// This records the exact run whose canonical detail has been applied, so
+    /// a status-only row can never journal the placeholder "Done." first.
+    private var terminalCanonicalDetailsByPill = [UUID: CanonicalTerminalRunDetail]()
+    /// A legacy/historical pill can outlive the journal row that originally
+    /// produced it. `appendAgentCompletion` already makes a bounded retry; do
+    /// not turn a definitive miss into an app-lifetime control-plane poll.
+    /// Canonical run state remains the visible terminal truth in that case.
+    private var terminalJournalMaterializationFailedPillIDs = Set<UUID>()
+    private var terminalJournalMaterializationTasks = [UUID: Task<Void, Never>]()
+    private var terminalJournalMaterializationGenerationByPill = [UUID: Int]()
     private var ownerChangeCancellable: AnyCancellable?
+    private var runtimeReadyCancellable: AnyCancellable?
 
     private init() {
         projectionSyncCancellable = AgentRuntimeStatusStore.shared.$projectionsBySurface
@@ -178,14 +288,17 @@ final class AgentPillsManager: ObservableObject {
             .sink { [weak self] _ in
                 self?.applyRuntimeProjections()
             }
-        projectionRefreshTask = Task { @MainActor [weak self] in
-            await self?.refreshProjectedPillsFromKernel()
-        }
+        scheduleProjectionBootstrap()
         ownerChangeCancellable = NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
             .sink { [weak self] _ in
                 MainActor.assumeIsolated {
                     self?.resetOwnerProjection()
                 }
+            }
+        runtimeReadyCancellable = NotificationCenter.default.publisher(for: .agentRuntimeDidBecomeReady)
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.scheduleProjectionBootstrap()
             }
     }
 
@@ -206,6 +319,14 @@ final class AgentPillsManager: ObservableObject {
     func resetOwnerProjection() {
         projectionRefreshTask?.cancel()
         projectionRefreshTask = nil
+        canonicalReconciliationTask?.cancel()
+        canonicalReconciliationTask = nil
+        canonicalReconciliationGeneration &+= 1
+        for task in terminalJournalMaterializationTasks.values { task.cancel() }
+        terminalJournalMaterializationTasks.removeAll()
+        terminalJournalMaterializedPillIDs.removeAll()
+        terminalCanonicalDetailsByPill.removeAll()
+        terminalJournalMaterializationFailedPillIDs.removeAll()
         for task in runTasksByPill.values { task.cancel() }
         for item in viewedExpirationWorkItemsByPill.values { item.cancel() }
         runTasksByPill.removeAll()
@@ -214,9 +335,37 @@ final class AgentPillsManager: ObservableObject {
         pendingFollowUpsByPill.removeAll()
         producingJournalSurfaceByPill.removeAll()
         pills.removeAll()
+        scheduleProjectionBootstrap()
+    }
+
+    /// The floating bar is created before auth restoration can publish the
+    /// runtime owner. A one-shot refresh in that window silently returned with
+    /// an empty local projection, leaving completed canonical children absent
+    /// until some unrelated UI interaction rehydrated them.
+    private func scheduleProjectionBootstrap() {
+        projectionRefreshTask?.cancel()
+        log("AgentPills: scheduling canonical projection bootstrap")
         projectionRefreshTask = Task { @MainActor [weak self] in
-            await Task.yield()
-            await self?.refreshProjectedPillsFromKernel()
+            guard let self else { return }
+            log("AgentPills: canonical projection bootstrap started")
+            for _ in 0..<projectionBootstrapAttempts {
+                guard !Task.isCancelled else { return }
+                guard RuntimeOwnerIdentity.currentOwnerId() != nil else {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    continue
+                }
+                guard await AgentRuntimeProcess.shared.isReadyForDirectControl() else {
+                    try? await Task.sleep(nanoseconds: 250_000_000)
+                    continue
+                }
+                log("AgentPills: canonical projection bootstrap requesting control read")
+                if await refreshProjectedPillsFromKernel() {
+                    return
+                }
+                try? await Task.sleep(nanoseconds: 250_000_000)
+            }
+            guard !Task.isCancelled else { return }
+            log("AgentPills: projection bootstrap did not reach a ready runtime")
         }
     }
 
@@ -538,8 +687,12 @@ final class AgentPillsManager: ObservableObject {
                     return
                 }
                 pill.canonicalSessionId = accepted.sessionId
-                pill.canonicalRunId = accepted.runId
-                pill.canonicalAttemptId = accepted.attemptId
+                self.updateCanonicalRun(
+                    for: pill,
+                    runId: accepted.runId,
+                    attemptId: accepted.attemptId,
+                    preservingAttemptForSameRun: false
+                )
                 pill.title = accepted.title
                 pill.status = .running
                 pill.completedAt = nil
@@ -554,6 +707,7 @@ final class AgentPillsManager: ObservableObject {
                     attemptId: accepted.attemptId,
                     statusText: "Working…"
                 )
+                self.ensureCanonicalReconciliation()
                 if fromVoice {
                     if let acknowledgement = producerJournalIntent?.assistantText,
                        !acknowledgement.isEmpty {
@@ -698,27 +852,33 @@ final class AgentPillsManager: ObservableObject {
         runTasksByPill[pill.id] = runTask
     }
 
+    private func terminalJournalMaterializationDecision(
+        for pill: AgentPill
+    ) -> AgentPillTerminalJournalMaterializationDecision {
+        let canonicalDetail = terminalCanonicalDetailsByPill[pill.id]
+        return AgentPillTerminalJournalMaterializationPolicy.decision(
+            status: pill.status,
+            canonicalRunID: pill.canonicalRunId,
+            canonicalDetailRunID: canonicalDetail?.runID,
+            canonicalDetailOutput: canonicalDetail?.finalText
+        )
+    }
+
     private func persistTerminalProjection(for pill: AgentPill) async -> Bool {
-        guard pill.status.isFinished else { return false }
+        guard pill.status.isFinished, pill.producingJournalSurface != nil else { return false }
+        let expectedRunID = pill.canonicalRunId
         let message = pill.conversationMessages.last(where: { $0.sender == .ai && !$0.isStreaming })
         let resources = message?.displayResources ?? []
         let status: String
         let output: String
-        switch pill.status {
-        case .done:
-            status = "completed"
-            output = message?.text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
-                ? message!.text : "Done."
-        case .stopped:
-            status = "stopped"
-            output = "Stopped by user"
-        case .failed(let error):
-            status = "failed"
-            output = "Background agent failed: \(error)"
-        case .queued, .starting, .running:
+        switch terminalJournalMaterializationDecision(for: pill) {
+        case .materialize(let resolvedStatus, let resolvedOutput):
+            status = resolvedStatus
+            output = resolvedOutput
+        case .awaitingCanonicalDetail, .unavailable:
             return false
         }
-        return await FloatingControlBarManager.shared.recordPillTerminalCompletion(
+        let accepted = await FloatingControlBarManager.shared.recordPillTerminalCompletion(
             ownerID: pill.ownerID,
             pillID: pill.id,
             producingSurface: pill.producingJournalSurface,
@@ -729,6 +889,63 @@ final class AgentPillsManager: ObservableObject {
             status: status,
             resources: resources
         )
+        guard accepted,
+              pill.canonicalRunId == expectedRunID,
+              pills.contains(where: { $0.id == pill.id })
+        else { return false }
+        terminalJournalMaterializedPillIDs.insert(pill.id)
+        terminalJournalMaterializationFailedPillIDs.remove(pill.id)
+        return true
+    }
+
+    private func ensureTerminalJournalMaterialization(for pill: AgentPill) {
+        guard pill.status.isFinished,
+              pill.producingJournalSurface != nil,
+              !terminalJournalMaterializedPillIDs.contains(pill.id),
+              !terminalJournalMaterializationFailedPillIDs.contains(pill.id),
+              terminalJournalMaterializationTasks[pill.id] == nil
+        else { return }
+        switch terminalJournalMaterializationDecision(for: pill) {
+        case .awaitingCanonicalDetail:
+            // `mergeProjectedPills` has already started the one canonical
+            // poll that owns this successful run's final output.
+            return
+        case .unavailable:
+            terminalJournalMaterializationFailedPillIDs.insert(pill.id)
+            log("AgentPills: terminal journal materialization unavailable; retaining canonical terminal pill")
+            return
+        case .materialize:
+            break
+        }
+        let pillID = pill.id
+        let runID = pill.canonicalRunId
+        let generation = (terminalJournalMaterializationGenerationByPill[pillID] ?? 0) + 1
+        terminalJournalMaterializationGenerationByPill[pillID] = generation
+        terminalJournalMaterializationTasks[pillID] = Task { @MainActor [weak self, weak pill] in
+            defer {
+                if let self,
+                   self.terminalJournalMaterializationGenerationByPill[pillID] == generation {
+                    self.terminalJournalMaterializationTasks[pillID] = nil
+                    self.terminalJournalMaterializationGenerationByPill[pillID] = nil
+                }
+            }
+            guard let self, let pill,
+                  pill.canonicalRunId == runID,
+                  self.pills.contains(where: { $0.id == pillID })
+            else { return }
+            let materialized = await self.persistTerminalProjection(for: pill)
+            guard pill.canonicalRunId == runID,
+                  self.pills.contains(where: { $0.id == pillID })
+            else { return }
+            if !materialized {
+                // The shared kernel helper has already retried the lookup. This
+                // can only be an unrecoverable historical producer mismatch for
+                // this stable run; keeping the canonical done pill is safer than
+                // repeatedly spending direct-control capacity forever.
+                self.terminalJournalMaterializationFailedPillIDs.insert(pillID)
+                log("AgentPills: terminal journal materialization unavailable; retaining canonical terminal pill")
+            }
+        }
     }
 
     private enum ActiveRunCancellationResult {
@@ -756,6 +973,11 @@ final class AgentPillsManager: ObservableObject {
         let previousRunId = pill.canonicalRunId
         pill.canonicalRunId = nextRunId
         if nextRunId != previousRunId {
+            terminalJournalMaterializationTasks[pill.id]?.cancel()
+            terminalJournalMaterializationTasks[pill.id] = nil
+            terminalJournalMaterializedPillIDs.remove(pill.id)
+            terminalCanonicalDetailsByPill[pill.id] = nil
+            terminalJournalMaterializationFailedPillIDs.remove(pill.id)
             pill.canonicalAttemptId = nextAttemptId
         } else if preservingAttemptForSameRun {
             pill.canonicalAttemptId = nextAttemptId ?? pill.canonicalAttemptId
@@ -823,18 +1045,7 @@ final class AgentPillsManager: ObservableObject {
             surface: .floatingPill(pillId: pillID),
             message: "Stopped by user"
         )
-        Task {
-            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
-                ownerID: pill.ownerID,
-                pillID: pill.id,
-                producingSurface: pill.producingJournalSurface,
-                runId: runId,
-                userText: pill.query,
-                title: pill.title,
-                assistantText: "Stopped by user",
-                status: "stopped"
-            )
-        }
+        ensureTerminalJournalMaterialization(for: pill)
         if let runId, !runId.isEmpty {
             Task {
                 _ = try? await DesktopCoordinatorService.shared.cancelAgentRun(runId: runId)
@@ -968,6 +1179,11 @@ final class AgentPillsManager: ObservableObject {
         let runId = pill?.canonicalRunId
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        terminalJournalMaterializationTasks[pillID]?.cancel()
+        terminalJournalMaterializationTasks[pillID] = nil
+        terminalJournalMaterializedPillIDs.remove(pillID)
+        terminalCanonicalDetailsByPill[pillID] = nil
+        terminalJournalMaterializationFailedPillIDs.remove(pillID)
         runAttemptGenerationByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
@@ -984,6 +1200,11 @@ final class AgentPillsManager: ObservableObject {
     private func removeRenderedProjection(pillID: UUID) {
         runTasksByPill[pillID]?.cancel()
         runTasksByPill[pillID] = nil
+        terminalJournalMaterializationTasks[pillID]?.cancel()
+        terminalJournalMaterializationTasks[pillID] = nil
+        terminalJournalMaterializedPillIDs.remove(pillID)
+        terminalCanonicalDetailsByPill[pillID] = nil
+        terminalJournalMaterializationFailedPillIDs.remove(pillID)
         runAttemptGenerationByPill[pillID] = nil
         viewedExpirationWorkItemsByPill[pillID]?.cancel()
         viewedExpirationWorkItemsByPill[pillID] = nil
@@ -1024,16 +1245,19 @@ final class AgentPillsManager: ObservableObject {
             }
     }
 
-    func refreshProjectedPillsFromKernel() async {
-        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+    @discardableResult
+    func refreshProjectedPillsFromKernel() async -> Bool {
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return false }
         do {
             let floating = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
-            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
             mergeProjectedPills(from: floating)
+            return true
         } catch {
-            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+            guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return false }
             logError("AgentPills: failed to refresh projected pills from kernel", error: error)
             applyRuntimeProjections()
+            return false
         }
     }
 
@@ -1105,6 +1329,9 @@ final class AgentPillsManager: ObservableObject {
     /// Test hook: replace in-memory pills without kernel I/O.
     func replacePillsForTesting(_ next: [AgentPill]) {
         pills = next
+        terminalJournalMaterializedPillIDs.removeAll()
+        terminalCanonicalDetailsByPill.removeAll()
+        terminalJournalMaterializationFailedPillIDs.removeAll()
         objectWillChange.send()
     }
 
@@ -1246,9 +1473,13 @@ final class AgentPillsManager: ObservableObject {
             pill.canonicalSessionId = trimmedSession
         }
         if !trimmedRun.isEmpty {
-            pill.canonicalRunId = trimmedRun
-        }
-        if let attemptId, !attemptId.isEmpty {
+            updateCanonicalRun(
+                for: pill,
+                runId: trimmedRun,
+                attemptId: attemptId,
+                preservingAttemptForSameRun: true
+            )
+        } else if let attemptId, !attemptId.isEmpty {
             pill.canonicalAttemptId = attemptId
         }
         pill.applyCanonicalProviderIdentity(provider)
@@ -1285,8 +1516,12 @@ final class AgentPillsManager: ObservableObject {
         }
         pill.title = title.isEmpty ? "Background agent" : title
         pill.canonicalSessionId = sessionId
-        pill.canonicalRunId = runId
-        pill.canonicalAttemptId = attemptId
+        updateCanonicalRun(
+            for: pill,
+            runId: runId,
+            attemptId: attemptId,
+            preservingAttemptForSameRun: false
+        )
         pill.applyCanonicalProviderIdentity(provider)
         if let producingJournalSurface {
             bindProducingJournalSurface(pillID: pill.id, surface: producingJournalSurface)
@@ -1306,6 +1541,7 @@ final class AgentPillsManager: ObservableObject {
             attemptId: attemptId,
             statusText: "Working…"
         )
+        ensureCanonicalReconciliation()
         startCanonicalRunPolling(for: pill)
         objectWillChange.send()
     }
@@ -1322,11 +1558,22 @@ final class AgentPillsManager: ObservableObject {
     private func mergeProjectedPills(from floating: [[String: Any]]) {
         guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
         var seen = Set<UUID>()
+        var missingPillIDCount = 0
+        var missingSessionIDCount = 0
+        var missingRunIDCount = 0
         for entry in floating {
-            guard let pillId = canonicalPillId(from: entry),
-                  let sessionId = canonicalString(entry["sessionId"]),
-                  let runId = canonicalString(entry["runId"])
-            else { continue }
+            guard let pillId = canonicalPillId(from: entry) else {
+                missingPillIDCount += 1
+                continue
+            }
+            guard let sessionId = canonicalString(entry["sessionId"]) else {
+                missingSessionIDCount += 1
+                continue
+            }
+            guard let runId = canonicalString(entry["runId"]) else {
+                missingRunIDCount += 1
+                continue
+            }
             seen.insert(pillId)
             let query = (entry["query"] as? String) ?? (entry["latestActivity"] as? String) ?? ""
             let model = ShortcutSettings.shared.selectedModel.isEmpty
@@ -1347,8 +1594,12 @@ final class AgentPillsManager: ObservableObject {
                 pill.title = title
             }
             pill.canonicalSessionId = sessionId
-            pill.canonicalRunId = runId
-            pill.canonicalAttemptId = canonicalString(entry["attemptId"])
+            updateCanonicalRun(
+                for: pill,
+                runId: runId,
+                attemptId: canonicalString(entry["attemptId"]),
+                preservingAttemptForSameRun: false
+            )
             pill.applyCanonicalProviderIdentity(canonicalString(entry["provider"]))
             let projectedStatus = (entry["status"] as? String) ?? "running"
             applyProjectedStatus(projectedStatus, to: pill)
@@ -1356,7 +1607,15 @@ final class AgentPillsManager: ObservableObject {
                 pill.latestActivity = activity
             }
             reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)
+            ensureTerminalJournalMaterialization(for: pill)
             pill.markContentChanged()
+        }
+        if !floating.isEmpty {
+            log(
+                "AgentPills: canonical projection source=\(floating.count) accepted=\(seen.count) "
+                    + "missing_pill_id=\(missingPillIDCount) missing_session_id=\(missingSessionIDCount) "
+                    + "missing_run_id=\(missingRunIDCount)"
+            )
         }
         let removable = pills.filter { pill in
             Self.shouldRemoveRenderedProjection(
@@ -1370,6 +1629,7 @@ final class AgentPillsManager: ObservableObject {
             removeRenderedProjection(pillID: pill.id)
         }
         objectWillChange.send()
+        ensureCanonicalReconciliation()
     }
 
     /// Runtime session lists are intentionally an active-work snapshot and can
@@ -1427,10 +1687,12 @@ final class AgentPillsManager: ObservableObject {
 
     private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String) -> Bool {
         guard pill.canonicalRunId?.isEmpty == false else { return false }
-        if isTerminalProjectedStatus(projectedStatus) {
-            return !Self.hasTerminalAssistantMessage(for: pill)
-        }
-        return !pill.status.isFinished && runTasksByPill[pill.id] == nil
+        return AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll(
+            projectedStatusIsTerminal: isTerminalProjectedStatus(projectedStatus),
+            pillStatus: pill.status,
+            hasCanonicalTerminalDetail: terminalCanonicalDetailsByPill[pill.id]?.runID == pill.canonicalRunId,
+            isPolling: runTasksByPill[pill.id] != nil
+        )
     }
 
     private func isTerminalProjectedStatus(_ status: String) -> Bool {
@@ -1455,6 +1717,106 @@ final class AgentPillsManager: ObservableObject {
 
     private func hasLocalTransientState(pillID: UUID) -> Bool {
         pendingFollowUpsByPill[pillID]?.isEmpty == false
+    }
+
+    private func hasTerminalJournalCompletion(for pill: AgentPill) -> Bool {
+        let materialized = FloatingControlBarManager.shared.hasMaterializedAgentCompletion(
+            pillID: pill.id,
+            runID: pill.canonicalRunId
+        )
+        if materialized {
+            terminalJournalMaterializedPillIDs.insert(pill.id)
+        } else {
+            terminalJournalMaterializedPillIDs.remove(pill.id)
+        }
+        return materialized
+    }
+
+    private func hasTerminalJournalMaterializationFailure(for pill: AgentPill) -> Bool {
+        terminalJournalMaterializationFailedPillIDs.contains(pill.id)
+    }
+
+    private func needsCanonicalReconciliation() -> Bool {
+        pills.contains { pill in
+            AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+                status: pill.status,
+                requiresJournalCompletion: pill.producingJournalSurface != nil,
+                hasTerminalJournalCompletion: hasTerminalJournalCompletion(for: pill),
+                hasTerminalJournalMaterializationFailure: hasTerminalJournalMaterializationFailure(for: pill),
+                hasPendingFollowUp: hasLocalTransientState(pillID: pill.id)
+            )
+        }
+    }
+
+    private func ensureCanonicalReconciliation() {
+        guard canonicalReconciliationTask == nil,
+              needsCanonicalReconciliation(),
+              let ownerID = RuntimeOwnerIdentity.currentOwnerId()
+        else { return }
+        canonicalReconciliationGeneration &+= 1
+        let generation = canonicalReconciliationGeneration
+        canonicalReconciliationTask = Task { @MainActor [weak self] in
+            defer {
+                if let self, self.canonicalReconciliationGeneration == generation {
+                    self.canonicalReconciliationTask = nil
+                }
+            }
+            while !Task.isCancelled {
+                guard let self, RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+                await self.refreshProjectedPillsFromKernel()
+                guard self.needsCanonicalReconciliation() else { return }
+                try? await Task.sleep(nanoseconds: 750_000_000)
+            }
+        }
+    }
+
+    /// Non-production automation reads this cross-surface contract without
+    /// returning prompts, completion text, or other raw agent output.
+    func lifecycleConvergenceSnapshot(runIDs: Set<String>) async -> String {
+        do {
+            let canonical = try await DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)
+            let requested = Set(runIDs.filter { !$0.isEmpty })
+            let entries = canonical.compactMap { entry -> AgentPillLifecycleConvergenceEntry? in
+                guard let runId = canonicalString(entry["runId"]), requested.isEmpty || requested.contains(runId) else {
+                    return nil
+                }
+                let canonicalStatus = canonicalString(entry["status"]) ?? "unknown"
+                let pill = pills.first(where: { $0.canonicalRunId == runId })
+                let projectedStatus = pill?.status.machineLabel
+                let completionMaterialized = pill.map { hasTerminalJournalCompletion(for: $0) } ?? false
+                let canonicalTerminal = isTerminalProjectedStatus(canonicalStatus)
+                return AgentPillLifecycleConvergenceEntry(
+                    runId: runId,
+                    canonicalStatus: canonicalStatus,
+                    projectedStatus: projectedStatus,
+                    completionMaterialized: completionMaterialized,
+                    converged: !canonicalTerminal || (pill?.status.isFinished == true && completionMaterialized)
+                )
+            }
+            let returned = Set(entries.map(\.runId))
+            let snapshot = AgentPillLifecycleConvergenceSnapshot(
+                entries: entries.sorted { $0.runId < $1.runId },
+                missingRequestedRunIds: requested.subtracting(returned).sorted(),
+                canonicalReadError: nil
+            )
+            return encodeLifecycleConvergenceSnapshot(snapshot)
+        } catch {
+            let snapshot = AgentPillLifecycleConvergenceSnapshot(
+                entries: [],
+                missingRequestedRunIds: runIDs.sorted(),
+                canonicalReadError: error.localizedDescription
+            )
+            return encodeLifecycleConvergenceSnapshot(snapshot)
+        }
+    }
+
+    private func encodeLifecycleConvergenceSnapshot(_ snapshot: AgentPillLifecycleConvergenceSnapshot) -> String {
+        let encoder = JSONEncoder()
+        encoder.outputFormatting = [.sortedKeys]
+        guard let data = try? encoder.encode(snapshot), let json = String(data: data, encoding: .utf8) else {
+            return #"{"entries":[],"missingRequestedRunIds":[],"canonicalReadError":"encoding_failed"}"#
+        }
+        return json
     }
 
     func snapshotJSON(limit: Int = 20) -> String {
@@ -1583,6 +1945,12 @@ final class AgentPillsManager: ObservableObject {
             pill.latestActivity = inspection.status == "cancelling" ? "Stopping…" : "Working…"
             Self.ensureStreamingAssistantMessage(for: pill)
         case "succeeded", "completed":
+            if let canonicalRunID = pill.canonicalRunId, !canonicalRunID.isEmpty {
+                terminalCanonicalDetailsByPill[pill.id] = CanonicalTerminalRunDetail(
+                    runID: canonicalRunID,
+                    finalText: inspection.finalText ?? ""
+                )
+            }
             finish(
                 pill: pill,
                 finalText: inspection.finalText,
@@ -1594,18 +1962,7 @@ final class AgentPillsManager: ObservableObject {
             pill.completedAt = Date()
             Self.clearStreamingAssistantMessage(for: pill)
             pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
-            Task {
-                await FloatingControlBarManager.shared.recordPillTerminalCompletion(
-                    ownerID: pill.ownerID,
-                    pillID: pill.id,
-                    producingSurface: pill.producingJournalSurface,
-                    runId: pill.canonicalRunId,
-                    userText: pill.query,
-                    title: pill.title,
-                    assistantText: "Stopped by user",
-                    status: "stopped"
-                )
-            }
+            ensureTerminalJournalMaterialization(for: pill)
         case "failed", "timed_out", "orphaned":
             fail(pill: pill, errorText: inspection.errorMessage ?? "Agent failed")
         default:
@@ -1641,20 +1998,7 @@ final class AgentPillsManager: ObservableObject {
         pill.completedAt = Date()
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
-        let terminalText = trimmed.isEmpty ? "Done." : trimmed
-        Task {
-            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
-                ownerID: pill.ownerID,
-                pillID: pill.id,
-                producingSurface: pill.producingJournalSurface,
-                runId: pill.canonicalRunId,
-                userText: pill.query,
-                title: pill.title,
-                assistantText: terminalText,
-                status: "completed",
-                resources: resources
-            )
-        }
+        ensureTerminalJournalMaterialization(for: pill)
     }
 
     private func fail(pill: AgentPill, errorText: String) {
@@ -1668,18 +2012,7 @@ final class AgentPillsManager: ObservableObject {
         Self.ensureFailureMessage(sanitized, for: pill)
         pill.suggestedFollowUps = AgentPillsManager.deriveFollowUps(for: pill)
         pill.markContentChanged()
-        Task {
-            await FloatingControlBarManager.shared.recordPillTerminalCompletion(
-                ownerID: pill.ownerID,
-                pillID: pill.id,
-                producingSurface: pill.producingJournalSurface,
-                runId: pill.canonicalRunId,
-                userText: pill.query,
-                title: pill.title,
-                assistantText: "Background agent failed: \(sanitized)",
-                status: "failed"
-            )
-        }
+        ensureTerminalJournalMaterialization(for: pill)
     }
 
     private static func ensureStreamingAssistantMessage(for pill: AgentPill) {
@@ -1745,11 +2078,6 @@ final class AgentPillsManager: ObservableObject {
         return pill.conversationMessages.last { message in
             message.sender == .ai && hasVisibleAssistantContent(message)
         }
-    }
-
-    private static func hasTerminalAssistantMessage(for pill: AgentPill) -> Bool {
-        guard let message = currentAssistantMessage(for: pill) else { return false }
-        return !message.isStreaming && hasVisibleAssistantContent(message)
     }
 
     private static func hasVisibleAssistantContent(_ message: ChatMessage) -> Bool {
