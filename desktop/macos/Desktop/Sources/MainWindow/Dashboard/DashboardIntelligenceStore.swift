@@ -218,7 +218,8 @@ final class DashboardIntelligenceStore: ObservableObject {
     }
     let taskID = UUID()
     let task = Task { [weak self] in
-      await self?.performLoad(ownerScope: ownerScope)
+      guard let self else { return }
+      await self.performLoad(ownerScope: ownerScope)
     }
     activeLoadTask = task
     activeLoadTaskID = taskID
