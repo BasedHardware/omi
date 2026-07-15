@@ -57,6 +57,7 @@
     "@agentclientprotocol/claude-agent-acp": "^0.58.1",
     "@electron-toolkit/preload": "^3.0.2",
     "@fontsource-variable/inter": "^5.2.8",
+    "@fontsource-variable/jetbrains-mono": "^5.2.8",
     "@electron-toolkit/utils": "^4.0.0",
     "@google/genai": "^2.11.0",
     "@openai/agents-realtime": "^0.13.1",
