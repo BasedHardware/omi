@@ -124,6 +124,7 @@ import {
 } from './shortcuts'
 import { getAppSettings, setAppSettings } from './appSettings'
 import { showBestEffortNotification } from './notify'
+import { buildHotkeyConflictNotice } from './hotkeyNotice'
 
 // Default main-window content size. Single source of truth for both window
 // creation and the Settings → Font Size "Reset Window Size" affordance
@@ -1053,6 +1054,26 @@ app.whenReady().then(async () => {
   )
   if (recordShortcutEnabled && !recordState.registered) {
     console.warn(`[shortcut] record chord "${recordState.accelerator}" is unavailable (in use?)`)
+  }
+
+  // Surface a failed startup registration to the user ONCE (same first-run pattern
+  // as maybeShowCloseToTrayNotice): the console.warns above only reach the logs and
+  // the conflict is otherwise visible only in Settings → Shortcuts, which a new
+  // user never opens — so a taken summon/record chord leaves their hotkey silently
+  // dead. Shown once ever, and only after a real conflict, so a user who first hits
+  // it later is still told.
+  const hotkeyNotice = buildHotkeyConflictNotice([
+    { name: 'Summon', accelerator: summonAccel, registered: shortcutOk },
+    {
+      name: 'Record',
+      accelerator: recordState.accelerator,
+      registered: recordState.registered,
+      enabled: recordShortcutEnabled
+    }
+  ])
+  if (hotkeyNotice && !getAppSettings().hotkeyConflictNoticeShown) {
+    setAppSettings({ hotkeyConflictNoticeShown: true })
+    showBestEffortNotification(hotkeyNotice.title, hotkeyNotice.body)
   }
 
   // Renderer → tray: reflect the reported listening state on the tray icon/menu.

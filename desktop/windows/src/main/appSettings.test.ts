@@ -86,6 +86,7 @@ describe('appSettings', () => {
   it('sanitizes bad input back to safe defaults', () => {
     expect(sanitizeAppSettings({} as never)).toEqual({
       closeToTrayNoticeShown: false,
+      hotkeyConflictNoticeShown: false,
       recordHotkey: 'Ctrl+Space',
       recordHotkeyEnabled: true,
       summonHotkey: 'Shift+Space',
