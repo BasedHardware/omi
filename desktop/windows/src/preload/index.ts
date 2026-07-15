@@ -38,6 +38,8 @@ import type {
   CodingAgentEvent,
   CodingAgentId,
   CodingAgentRunArgs,
+  MainChatEvent,
+  MainChatSendArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
   LiveNote
@@ -255,6 +257,14 @@ const omi: OmiBridgeApi = {
     const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
+  },
+  chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
+  mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
+  mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
+  onMainChatEvent: (cb: (event: MainChatEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: MainChatEvent): void => cb(event)
+    ipcRenderer.on('mainChat:event', listener)
+    return () => ipcRenderer.removeListener('mainChat:event', listener)
   },
   // pi-mono managed-cloud chat session relay: the Firebase token lives only in
   // the renderer, so push it (and re-push on ~hourly refresh) to the main-side

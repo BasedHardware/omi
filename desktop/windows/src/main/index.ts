@@ -80,6 +80,7 @@ import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
+import { registerMainChatHandlers } from './ipc/mainChat'
 import { registerByokHandlers } from './ipc/byok'
 import { registerPiMonoHandlers } from './ipc/pimono'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
@@ -806,6 +807,9 @@ app.whenReady().then(async () => {
   // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
   // only when a task actually runs).
   registerCodingAgentHandlers()
+  // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
+  // renderer calls it yet; default typed chat still routes through /v2/messages.
+  registerMainChatHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
   // pi-mono managed-cloud chat session relay (cheap handler registration). The

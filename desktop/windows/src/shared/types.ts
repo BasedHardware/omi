@@ -1084,6 +1084,20 @@ export type OmiBridgeApi = {
   /** Sign out of Claude Code (drop only its stored credentials). */
   codingAgentSignOut: () => Promise<CodingAgentAuthStatus>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  // --- Main chat (kernel-routed pi-mono) ---
+  /** Which engine the main typed-chat should use: 'legacy_sse' (the existing
+   *  /v2/messages path) or 'pi_mono' (the kernel-routed managed-cloud door).
+   *  PR-E2 reads this to branch; DARK until then. */
+  chatGetEngine: () => Promise<'legacy_sse' | 'pi_mono'>
+  /** Run one main-chat turn through the kernel + pi-mono adapter; resolves with the
+   *  final outcome. Streaming progress arrives via onMainChatEvent, keyed by runId
+   *  (and tagged with the caller's requestId). DARK: no renderer consumer yet. */
+  mainChatSend: (args: MainChatSendArgs) => Promise<MainChatResult>
+  /** Request cancellation of an in-flight main-chat run. Resolves true when the
+   *  kernel accepted the cancellation. */
+  mainChatCancel: (runId: string) => Promise<boolean>
+  /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
+  onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
    *  main-side pi-mono session store on sign-in and on every id-token refresh;
@@ -1202,6 +1216,83 @@ export type CodingAgentResult = {
   /** Agent that produced the outcome; null when none could run. */
   adapterId: CodingAgentId | null
   text: string
+  costUsd?: number
+  error?: string
+}
+
+// --- Main chat (kernel-routed, pi-mono managed-cloud) ---
+// The DARK door PR-E2 will call to run a default-chat turn through the agent
+// kernel and the managed-cloud pi-mono adapter, instead of the legacy /v2/messages
+// SSE path. Wire shapes parallel CodingAgent* but key events by `runId` (the
+// kernel's run identity) rather than `taskId`, because a chat turn IS a kernel run
+// and cancellation targets the runId. Every event also carries the caller's
+// `requestId` so the renderer can correlate a streaming turn to its send before
+// the server-assigned `runId` is known (the `accepted` event delivers that runId).
+
+export type MainChatSendArgs = {
+  /** Caller-generated correlation id, echoed on every MainChatEvent and used as
+   *  the kernel run's requestId. Lets the renderer match a streaming turn to its
+   *  send before the run's server-assigned runId arrives. */
+  requestId: string
+  /** The already-context-prepended user prompt. PR-E2 assembles OCR/history
+   *  context; the main-chat door forwards this string to the adapter verbatim. */
+  prompt: string
+  /** The raw user message, BEFORE any OCR/context prepend. The main-chat door
+   *  records THIS (not `prompt`) as the user turn on the kernel transcript, so the
+   *  stored transcript stays clean of the contexted prompt while the adapter still
+   *  receives `prompt` verbatim. */
+  cleanUserText: string
+  /** Main-chat conversation id; maps to the main_chat/chat/<chatId> surface.
+   *  Defaults to 'default' when omitted. */
+  chatId?: string
+}
+
+export type MainChatEvent =
+  /** The run has been accepted and assigned a runId — the first event of a turn.
+   *  Carries the runId so the caller can later cancel it via mainChatCancel. */
+  | { type: 'accepted'; requestId: string; runId: string }
+  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  | { type: 'status'; requestId: string; runId: string; message: string }
+  /** An assistant text chunk; accumulate in order to render the streaming reply. */
+  | { type: 'text_delta'; requestId: string; runId: string; text: string }
+  /** A reasoning/thinking chunk (shown separately from the reply). */
+  | { type: 'thinking_delta'; requestId: string; runId: string; text: string }
+  /** A tool invocation's lifecycle transition. */
+  | {
+      type: 'tool_activity'
+      requestId: string
+      runId: string
+      name: string
+      status: 'started' | 'completed' | 'failed'
+      toolUseId?: string
+      input?: Record<string, unknown>
+    }
+  /** A tool's rendered output. */
+  | {
+      type: 'tool_result_display'
+      requestId: string
+      runId: string
+      toolUseId: string
+      name: string
+      output: string
+    }
+  /** The final assistant text (emitted on a successful turn before run_finished). */
+  | { type: 'completed'; requestId: string; runId: string; text: string }
+  /** Terminal event — the turn is done. The renderer stops the spinner here. */
+  | {
+      type: 'run_finished'
+      requestId: string
+      runId: string
+      status: 'succeeded' | 'failed' | 'cancelled'
+      error?: string
+    }
+
+export type MainChatResult = {
+  runId: string
+  requestId: string
+  ok: boolean
+  text: string
+  terminalStatus: 'succeeded' | 'failed' | 'cancelled'
   costUsd?: number
   error?: string
 }
