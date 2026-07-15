@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Generates the asarUnpack glob list for pi-mono's full runtime closure.
+// Regenerates the COMMITTED pi-mono asarUnpack closure list.
 //
 // Why this exists: pi-mono (@earendil-works/pi-coding-agent) is spawned as a
 // plain-Node child (ELECTRON_RUN_AS_NODE) by src/main/codingAgent/piMono.ts, so
@@ -7,24 +7,22 @@
 // plain-Node child cannot read scripts from asar. pi's closure is ~128 packages
 // (AWS SDK, google-auth-library, protobufjs, openai, @mistralai/mistralai,
 // @google/genai, jiti, undici, the native @mariozechner/clipboard-* addon, the
-// @silvia-odwyer/photon-node WASM, …). Hand-listing that many globs in YAML
-// silently drifts on a pi-mono version bump: a new transitive dep upstream →
-// ERR_MODULE_NOT_FOUND in production with ZERO build-time signal.
+// @silvia-odwyer/photon-node WASM, …).
 //
-// This module walks pi's dependency graph (dependencies + optionalDependencies,
-// transitively) over the installed node_modules tree and emits the resolvable
-// package set as `node_modules/<pkg>/**` globs. optionalDependencies MUST be
-// included: native per-platform addons (e.g. @mariozechner/clipboard-win32-x64-msvc)
-// ship as optional deps. Packages already covered by a broader existing
-// asarUnpack glob (koffi, the ACP closure) are skipped to avoid duplicates.
+// THIS SCRIPT IS A MANUAL TOOL, not part of install/build. Run it ONLY when you
+// change pi-mono's dependencies (bump @earendil-works/*, or a dep bump alters the
+// transitive closure), then COMMIT the updated scripts/pimono-asar-unpack.generated.json.
+// The committed file is what makes a closure change visible in code review, and
+// what verify-pimono-unpack.mjs diffs a fresh walk against to fail loud on drift.
+// Do NOT wire this into postinstall/build — regenerating there would overwrite the
+// committed file and make the drift diff vacuous (the exact bug this design fixes).
 //
-// `computeUnpackGlobs()` is pure (no side effects) so electron-builder.config.mjs
-// and verify-pimono-unpack.mjs can both consume it. The CLI writes
-// build/pimono-asar-unpack.generated.json (gitignored; regenerated at
-// install/build time) for inspection and as the artifact the staleness check
-// diffs against.
+// electron-builder.config.mjs does NOT read the committed file — it recomputes the
+// closure fresh at pack time via computeUnpackGlobs(), so the shipped build is
+// always correct regardless of the committed file. The committed file exists for
+// review visibility + the hermetic drift guard.
 //
-//   node scripts/gen-pimono-unpack.mjs           # write the generated file
+//   node scripts/gen-pimono-unpack.mjs           # regenerate + write the committed file
 //   node scripts/gen-pimono-unpack.mjs --print   # print globs to stdout, no write
 
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
@@ -33,10 +31,16 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 export const WIN_ROOT = resolve(HERE, '..')
-export const GENERATED_FILE = join(WIN_ROOT, 'build', 'pimono-asar-unpack.generated.json')
+export const GENERATED_FILE = join(WIN_ROOT, 'scripts', 'pimono-asar-unpack.generated.json')
 
 // Roots of pi-mono's runtime closure — the two packages piMono.ts spawns/loads.
-const ROOTS = ['@earendil-works/pi-coding-agent', '@earendil-works/pi-ai']
+export const ROOTS = ['@earendil-works/pi-coding-agent', '@earendil-works/pi-ai']
+
+// Sanity floor for the traversed closure size. The real number is ~128; a broken
+// or partial install collapses it toward ~2 (roots only) or 0. 100 catches that
+// collapse with generous headroom for normal dependency churn (the closure may
+// grow freely; only a large SHRINK is suspicious).
+export const CLOSURE_MIN = 100
 
 // Package names already covered by a broader glob in electron-builder.config.mjs's
 // static asarUnpack list — don't emit duplicate globs for these. Any package
@@ -84,17 +88,29 @@ function readPkg(pkgDir) {
 }
 
 // Walk pi's dependency graph and return the sorted asarUnpack globs plus stats.
-// Pure: reads node_modules, writes nothing.
+// Pure: reads node_modules, writes nothing. FAILS LOUD (throws) on a broken tree —
+// an unresolved root or a collapsed closure — so a partial install can never
+// silently produce a near-empty asarUnpack list (which config.mjs would then spread
+// into the build with zero signal).
 export function computeUnpackGlobs() {
-  // Graph traversal is keyed by the resolved real DIR (so a package reached via
-  // several paths, or a nested version-conflict copy, is walked exactly once).
-  // But the OUTPUT globs are keyed by package NAME at top level
-  // (node_modules/<name>/**), NOT the source dir — see the note below.
   const visitedDirs = new Set()
   const names = new Set() // canonical package names in the closure
+  const unresolvedRoots = []
   let closureSize = 0
 
-  const queue = ROOTS.map((name) => [name, WIN_ROOT])
+  // Seed the queue, tracking whether each ROOT itself resolves.
+  const queue = []
+  for (const root of ROOTS) {
+    if (resolvePackageDir(root, WIN_ROOT) === null) unresolvedRoots.push(root)
+    queue.push([root, WIN_ROOT])
+  }
+  if (unresolvedRoots.length > 0) {
+    throw new Error(
+      `pi-mono root package(s) do not resolve in node_modules: ${unresolvedRoots.join(', ')}. ` +
+        `Run \`pnpm install\` from desktop/windows/.`
+    )
+  }
+
   while (queue.length > 0) {
     const [name, fromDir] = queue.shift()
     const pkgDir = resolvePackageDir(name, fromDir)
@@ -108,6 +124,13 @@ export function computeUnpackGlobs() {
     if (!pkg) continue
     const deps = { ...(pkg.dependencies || {}), ...(pkg.optionalDependencies || {}) }
     for (const dep of Object.keys(deps)) queue.push([dep, pkgDir])
+  }
+
+  if (closureSize < CLOSURE_MIN) {
+    throw new Error(
+      `pi-mono closure collapsed to ${closureSize} packages (floor ${CLOSURE_MIN}). ` +
+        `node_modules is likely partial/broken — run \`pnpm install\` from desktop/windows/.`
+    )
   }
 
   // Emit `node_modules/<name>/**` by TOP-LEVEL package name — NOT the pnpm source
@@ -141,21 +164,27 @@ function writeGenerated() {
   mkdirSync(dirname(GENERATED_FILE), { recursive: true })
   writeFileSync(GENERATED_FILE, JSON.stringify(globs, null, 2) + '\n')
   console.log(
-    `[gen-pimono-unpack] wrote ${globs.length} globs to build/pimono-asar-unpack.generated.json ` +
-      `(${closureSize} packages in closure, ${coveredCount} already covered).`
+    `[gen-pimono-unpack] wrote ${globs.length} globs to scripts/pimono-asar-unpack.generated.json ` +
+      `(${closureSize} packages in closure, ${coveredCount} already covered). ` +
+      `Commit this file.`
   )
 }
 
 // CLI entrypoint (only when run directly, never on import).
 if (import.meta.url === pathToFileURL(process.argv[1] ?? '').href) {
-  if (process.argv.includes('--print')) {
-    const { globs, closureSize, coveredCount } = computeUnpackGlobs()
-    for (const g of globs) console.log(g)
-    console.error(
-      `\n[gen-pimono-unpack] ${globs.length} globs; ${closureSize} packages in closure; ` +
-        `${coveredCount} skipped (already covered).`
-    )
-  } else {
-    writeGenerated()
+  try {
+    if (process.argv.includes('--print')) {
+      const { globs, closureSize, coveredCount } = computeUnpackGlobs()
+      for (const g of globs) console.log(g)
+      console.error(
+        `\n[gen-pimono-unpack] ${globs.length} globs; ${closureSize} packages in closure; ` +
+          `${coveredCount} skipped (already covered).`
+      )
+    } else {
+      writeGenerated()
+    }
+  } catch (err) {
+    console.error(`\n[gen-pimono-unpack] FAILED: ${err instanceof Error ? err.message : err}\n`)
+    process.exit(1)
   }
 }

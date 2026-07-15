@@ -12,9 +12,11 @@
 // into asarUnpack. See scripts/gen-pimono-unpack.mjs and verify-pimono-unpack.mjs.
 //
 // electron-builder v26 supports .mjs config files (do NOT name it
-// electron-builder.js — that name conflicts with the package itself). This file
-// is auto-detected; the package.json build scripts invoke electron-builder with
-// no --config flag.
+// electron-builder.js — that name conflicts with the package itself).
+// IMPORTANT: electron-builder only AUTO-detects electron-builder.<ext> (yml/json/
+// js/cjs/mjs/ts), NOT the electron-builder.config.* name, so every build:* script
+// in package.json MUST pass `--config electron-builder.config.mjs` explicitly.
+// Removing that flag silently drops this whole config (and the pi-mono closure).
 
 import { computeUnpackGlobs } from './scripts/gen-pimono-unpack.mjs'
 
