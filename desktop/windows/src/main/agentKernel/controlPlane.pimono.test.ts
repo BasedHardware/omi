@@ -60,6 +60,11 @@ function lastPiMonoAuthToken(): unknown {
   return (calls.at(-1)?.[0] as { authToken?: unknown } | undefined)?.authToken
 }
 
+function lastPiMonoBaseUrl(): unknown {
+  const calls = vi.mocked(PiMonoAdapter).mock.calls
+  return (calls.at(-1)?.[0] as { omiApiBaseUrl?: unknown } | undefined)?.omiApiBaseUrl
+}
+
 describe('ensurePiMonoAdapterRegistered', () => {
   beforeEach(() => {
     resetControlPlaneForTests()
@@ -117,5 +122,25 @@ describe('ensurePiMonoAdapterRegistered', () => {
     // the cleared session and refuse, not spawn with a stale captured token.
     configurePiMonoSession(null)
     expect(() => buildPiMonoRuntimeAdapter()).toThrow(/cleared/)
+  })
+
+  // Regression: the relayed `desktopApiBase` is version-less (VITE_OMI_DESKTOP_API_BASE
+  // is a BARE host — no `/v2`). The factory must bake `/v2` into the adapter's
+  // OMI_API_BASE_URL, or pi's openai-completions SDK hits `<host>/chat/completions`
+  // (404) instead of `<host>/v2/chat/completions`. The previous fixtures used a base
+  // that already had `/v2`, so they never caught the missing segment.
+  it('appends /v2 to the bare relayed base so the adapter targets /v2/chat/completions', () => {
+    configurePiMonoSession({
+      token: 'tok1',
+      desktopApiBase: 'https://desktop-backend-hhibjajaja-uc.a.run.app'
+    })
+    buildPiMonoRuntimeAdapter()
+    expect(lastPiMonoBaseUrl()).toBe('https://desktop-backend-hhibjajaja-uc.a.run.app/v2')
+  })
+
+  it('does not double up the slash when the relayed base has a trailing slash', () => {
+    configurePiMonoSession({ token: 'tok1', desktopApiBase: 'https://api.omi.me/' })
+    buildPiMonoRuntimeAdapter()
+    expect(lastPiMonoBaseUrl()).toBe('https://api.omi.me/v2')
   })
 })

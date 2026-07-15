@@ -10,7 +10,7 @@ import { OpenClawRuntimeAdapter } from './openclaw'
 import { HermesRuntimeAdapter } from './hermes'
 import { CodexRuntimeAdapter } from './codex'
 import { PiMonoAdapter, PiMonoRuntimeAdapter } from './piMono'
-import { getPiMonoByokEnv, getPiMonoSession } from './piMonoSession'
+import { getPiMonoByokEnv, getPiMonoSession, piMonoManagedApiBaseUrl } from './piMonoSession'
 import {
   adapterCapabilitiesFor,
   type AdapterCapabilities,
@@ -87,7 +87,7 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
       }
       return new PiMonoRuntimeAdapter(
         new PiMonoAdapter({
-          omiApiBaseUrl: session.desktopApiBase,
+          omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
           authToken: session.token,
           byokEnv: getPiMonoByokEnv(),
           onRestart: (reason) => log(`[pi-mono] restart: ${reason}`)

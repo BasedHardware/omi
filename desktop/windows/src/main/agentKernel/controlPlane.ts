@@ -38,6 +38,7 @@ import { PiMonoAdapter, PiMonoRuntimeAdapter } from '../codingAgent/piMono'
 import {
   getPiMonoByokEnv,
   getPiMonoSession,
+  piMonoManagedApiBaseUrl,
   registerPiMonoAdapter
 } from '../codingAgent/piMonoSession'
 import type { RuntimeAdapter } from '../codingAgent/interface'
@@ -156,7 +157,7 @@ export function buildPiMonoRuntimeAdapter(): RuntimeAdapter {
     throw new Error('pi-mono session was cleared before the adapter started.')
   }
   const harness = new PiMonoAdapter({
-    omiApiBaseUrl: session.desktopApiBase,
+    omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
     authToken: session.token,
     byokEnv: getPiMonoByokEnv(),
     onRestart: (reason) => console.log(`[pi-mono] restart: ${reason}`)
