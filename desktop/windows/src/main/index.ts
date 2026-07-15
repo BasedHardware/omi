@@ -90,6 +90,7 @@ import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
+import { registerFocusAssistant } from './assistants/focus/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -834,6 +835,12 @@ app.whenReady().then(async () => {
     // timer. No-ops until the renderer has pushed a session (Firebase token lives
     // renderer-side) and is gated on the aiProfileEnabled setting.
     maybeGenerateAiProfileOnStartup()
+    // Track 3 (Focus assistant): register it with the coordinator, which brings
+    // up the shared screen-analysis loop (gated on screenAnalysisEnabled). The
+    // loop only polls frames once an assistant is registered, so this is the call
+    // that turns the proactive stack on. The glow window above is pre-created; the
+    // renderer relays a session that Focus (and the AI profile) read.
+    registerFocusAssistant()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon

@@ -159,6 +159,11 @@ const omi: OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
   aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
   aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
+  // Dev/QA only (handler registered on dev builds): force one Focus analysis of
+  // the latest captured frame, so the pipeline + halo can be exercised without
+  // waiting for a natural context switch.
+  focusAnalyzeNow: () =>
+    ipcRenderer.invoke('focus:analyzeNow') as Promise<{ ok: boolean; reason?: string }>,
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (

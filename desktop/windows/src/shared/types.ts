@@ -679,6 +679,10 @@ export type OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
+  /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
+   *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
+   *  the handler is absent entirely on production builds. */
+  focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>
