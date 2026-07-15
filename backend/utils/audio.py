@@ -48,6 +48,12 @@ class AudioRingBuffer:
         start_offset = int((actual_start - buffer_start_ts) * self.bytes_per_second)
         end_offset = int((actual_end - buffer_start_ts) * self.bytes_per_second)
 
+        # Align the start to the PCM16 2-byte sample boundary. actual_start is an arbitrary float
+        # timestamp, so start_offset is odd roughly half the time; an odd offset begins the copy on a
+        # sample's high byte and byte-shifts every int16 sample into noise. length below is already
+        # forced even, so flooring the start to an even offset is what keeps whole samples intact.
+        start_offset -= start_offset % 2
+
         # Ensure even number of bytes (PCM16)
         length = ((end_offset - start_offset) // 2) * 2
         if length <= 0:
