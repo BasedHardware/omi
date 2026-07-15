@@ -63,6 +63,26 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+### 2b.1 Probe a current-screen PTT turn
+
+`ptt_test_turn` is the first-class, non-production PTT controller probe. It captures the
+same one pre-overlay screen image used by a physical PTT press and drives the real hub turn.
+Its added screen-protocol diagnostics expose only safe lifecycle state—never pixels, app names,
+or evidence IDs. Use it to reproduce and diagnose a screen-answer stall without coordinate
+clicking:
+
+```bash
+cd desktop/macos
+OMI_AUTOMATION_PORT=47920 bash ./scripts/ptt-screen-probe.sh
+```
+
+The probe emits only the safe state needed to diagnose its result. For a successful screen report,
+expect `screen_evidence_last_completion=completed`, `screen_evidence_protocol_active=false`,
+and `pending_tool_count=0`. A non-`completed` completion class identifies the local fail-closed
+boundary; `terminal_reason=tool_timeout` is always a regression. This validates the controller
+and capture/transport lifecycle; use a natural authenticated physical PTT press as the final UX
+validation.
+
 ### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
 After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
 saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`

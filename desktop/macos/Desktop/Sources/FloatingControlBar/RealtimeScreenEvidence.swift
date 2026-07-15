@@ -74,9 +74,10 @@ struct RealtimeScreenEvidenceAttachment {
   let jpeg: Data
 }
 
-/// A PTT-down image is current-screen authority only for a short, bounded interval. Both
-/// receipt minting and native report admission use this same policy so a transport or provider
-/// stall cannot turn an old frozen image into a present-tense answer.
+/// A PTT-down image is current-screen authority only for a short, bounded interval. Freshness
+/// is checked at the physical-capture → provider-transport boundary: after the exact immutable
+/// JPEG is locally enqueued while fresh, provider reasoning latency cannot retroactively turn
+/// that already-authorized image into a different screen observation.
 enum RealtimeScreenEvidenceFreshnessPolicy {
   static let maximumAge: TimeInterval = 5
 
@@ -88,6 +89,13 @@ enum RealtimeScreenEvidenceFreshnessPolicy {
   static func remainingLifetime(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> TimeInterval {
     max(0, descriptor.capturedAt.addingTimeInterval(maximumAge).timeIntervalSince(now))
   }
+}
+
+/// The report half of an already-admitted screen protocol has its own bounded deadline. This is
+/// intentionally separate from capture freshness: the provider must be given time to inspect the
+/// JPEG that was dispatched while fresh, but a missing report still cannot hold a PTT turn open.
+enum RealtimeScreenEvidenceProtocolPolicy {
+  static let maximumReportWait: TimeInterval = 8
 }
 
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
@@ -159,6 +167,31 @@ enum RealtimeScreenGroundingState: Equatable {
       return token
     }
   }
+
+  /// Safe, bounded state for the automation bridge. It deliberately excludes raw evidence IDs,
+  /// app names, captured pixels, and model text so a failed PTT turn can be diagnosed remotely.
+  var diagnosticsLabel: String {
+    switch self {
+    case .inactive: return "inactive"
+    case .awaitingScreenshot: return "awaiting_screenshot"
+    case .awaitingReport: return "awaiting_report"
+    case .accepted: return "accepted"
+    case .rejected: return "rejected"
+    }
+  }
+}
+
+/// `completeScreenEvidenceProtocol` must never silently leave the reducer-owned screenshot tool
+/// pending. Keep each fail-closed reason typed so the live PTT probe can distinguish a provider
+/// stall from an ownership or reducer transition failure without exposing user content.
+enum RealtimeScreenEvidenceProtocolCompletion: String, Equatable, Sendable {
+  case notRun = "not_run"
+  case completed
+  case turnNotActive = "turn_not_active"
+  case protocolNotActive = "protocol_not_active"
+  case ownerNotCurrent = "owner_not_current"
+  case emptyAnswer = "empty_answer"
+  case reducerDidNotResolve = "reducer_did_not_resolve"
 }
 
 /// A screenshot request belongs to one provider response and one tool epoch. The model never
@@ -233,7 +266,6 @@ enum RealtimeScreenReportDecision: Equatable {
   case evidenceUnavailable
   case transportNotDispatched
   case staleReceipt
-  case evidenceExpired
   case contradictoryApplication
   case emptyAnswer
 }
@@ -308,7 +340,7 @@ enum RealtimeScreenGroundingPolicy {
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
     knownApplicationNames: [String] = [],
-    now: Date = Date()
+    now _: Date = Date()
   ) -> RealtimeScreenReportDecision {
     guard case .awaitingReport(let receipt) = state else {
       return .evidenceUnavailable
@@ -321,9 +353,6 @@ enum RealtimeScreenGroundingPolicy {
       activeResponseID: activeResponseID,
       currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
-    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(evidence, now: now) else {
-      return .evidenceExpired
-    }
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
     guard !answerClaimsDifferentApplication(
       answer,

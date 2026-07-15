@@ -785,6 +785,56 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
   }
 
+  func testFailedScreenEvidenceRejectsLateProviderToolWithoutReopeningTheTurn() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = screenshotReservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      screenshotReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)).model
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidence(.failed))
+    ).model
+
+    let lateReportReservation = reserveIdentity(model, turnID: turnID)
+    let lateReport = reduce(
+      lateReportReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: lateReportReservation.identity,
+        callID: VoiceToolCallID("report-screen-observation")))
+
+    XCTAssertEqual(lateReport.model.staleEventCount, lateReportReservation.model.staleEventCount + 1)
+    XCTAssertEqual(lateReport.model.turn?.pendingToolCallIDs, Set([screenshotCallID]))
+    XCTAssertTrue(lateReport.model.turn?.providerFinished == true)
+    XCTAssertFalse(lateReport.model.turn?.postToolContinuationRequired == true)
+
+    model = reduce(
+      lateReport.model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+  }
+
   func testScreenEvidenceProtocolDeadlineEmitsExactFailureEffect() {
     let (startingModel, turnID, _, _) = awaitingHubResponse()
     let reservation = reserveIdentity(startingModel, turnID: turnID)

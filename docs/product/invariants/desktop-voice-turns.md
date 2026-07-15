@@ -65,13 +65,15 @@ SwiftUI and floating-bar state are projections.
   only a reducer-admitted screenshot call seals visual output. The provider may
   propose visual detail only after native code has locally enqueued the exact
   JPEG function-response wire for the same session/response/call/epoch receipt.
-  That frozen image must be less than five seconds old both when native code
-  mints the receipt and when it accepts the report; expiration fails closed into
-  the deterministic screen-verification failure. The paired screenshot/report is
-  one reducer-owned protocol: it retains the screenshot effect identity until a
-  verified report or deterministic failure closes it. Either local result is
-  authoritative and must close the provider-continuation fence rather than wait
-  for optional provider narration.
+  That frozen image must be less than five seconds old when native code mints
+  the transport receipt. Once that exact receipt exists, a separate bounded
+  report deadline—not the capture timestamp—limits provider reasoning latency;
+  expiry fails closed into the deterministic screen-verification failure. The
+  paired screenshot/report is one reducer-owned protocol: it retains the
+  screenshot effect identity until a verified report or deterministic failure
+  closes it, and a completion failure terminalizes the turn rather than leaving
+  a pending screenshot tool. Either local result is authoritative and must close
+  the provider-continuation fence rather than wait for optional provider narration.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using

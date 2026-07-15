@@ -1476,6 +1476,17 @@ class PushToTalkManager: ObservableObject {
     return evidence.preOverlayImage
   }
 
+  /// Non-production PTT probes use the same pre-overlay capture path as a physical shortcut
+  /// press. The turn ID is supplied by the controller harness because it deliberately bypasses
+  /// the floating overlay, but it still captures once, before `beginTurn` can send provider
+  /// input. This makes current-screen regressions reproducible without synthetic screenshots.
+  func captureScreenEvidenceForAutomation(turnID: VoiceTurnID) -> Bool {
+    guard voiceTurnCoordinator.activeTurnID == turnID else { return false }
+    let evidence = RealtimeScreenEvidenceCapture.capture(for: turnID)
+    RealtimeHubController.shared.installScreenEvidence(evidence)
+    return evidence.preOverlayImage != nil
+  }
+
   private func startAudioTranscription() {
     if automationCaptureBypass, let turnID = currentVoiceTurnID {
       micCaptureGeneration &+= 1

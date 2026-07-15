@@ -70,6 +70,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingState.rejected(receipt.descriptor, receipt.protocolToken).protocolToken,
       request.protocolToken)
+    XCTAssertEqual(RealtimeScreenGroundingState.awaitingReport(receipt).diagnosticsLabel, "awaiting_report")
   }
 
   func testFreshnessRemainingLifetimeEndsAtTheSameFiveSecondBoundary() {
@@ -223,7 +224,9 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       .notAdmitted)
   }
 
-  func testReportFailsClosedWhenEvidenceExpiresAfterTransportReceipt() {
+  func testReportRemainsAdmissibleAfterFreshTransportReceiptExpires() {
+    // The JPEG crossed into the provider transport at <5 seconds. Its later model report must
+    // be bounded by the dedicated report deadline, not reclassified as an older screen.
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt()),
@@ -233,7 +236,14 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeResponseID: responseID,
         currentTurnEpoch: 7,
         now: Date(timeIntervalSince1970: 1_005)),
-      .evidenceExpired)
+      .accepted)
+  }
+
+  func testReportDeadlineIsIndependentOfCaptureFreshness() {
+    XCTAssertEqual(RealtimeScreenEvidenceProtocolPolicy.maximumReportWait, 8)
+    XCTAssertLessThan(
+      RealtimeScreenEvidenceFreshnessPolicy.maximumAge,
+      RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)
   }
 
   func testContradictoryApplicationTextCannotReachNativePresentation() {

@@ -220,6 +220,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var screenEvidence: RealtimeScreenEvidence?
   var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
   var screenGroundingState: RealtimeScreenGroundingState = .inactive
+  /// Latest safe protocol disposition, surfaced only through the non-production automation
+  /// bridge. This lets a PTT probe distinguish a provider wait from a local lifecycle failure.
+  var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
   var screenAnswerPresented = false
   private var voiceContextPrefetchTask: Task<Void, Never>?
@@ -999,7 +1002,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     DesktopAutomationActionRegistry.shared.register(
       name: "ptt_test_turn",
       summary: "Drive a real PTT hub turn from a PCM16/16k mono file through the controller "
-        + "(language ID + provider hint + bubble fallback); returns turn diagnostics.",
+        + "with the production pre-overlay screen capture; returns safe lifecycle and screen-protocol diagnostics.",
       params: ["pcm", "timeout", "force_transcript", "text_only"]
     ) { [weak self] params in
       guard let path = params["pcm"],
@@ -1008,9 +1011,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let timeout = Double(params["timeout"] ?? "") ?? 30
       let textOnly = params["text_only"] == "1"
       guard let self else { return ["error": "hub controller unavailable"] }
-      return await self.runHeadlessPTTTurn(
+      var result = await self.runHeadlessPTTTurn(
         pcm16k: data, timeout: timeout, forceTranscript: params["force_transcript"],
         textOnly: textOnly)
+      for (key, value) in self.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
     }
   }
 
@@ -1053,6 +1060,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)
       VoiceTurnCoordinator.shared.send(
         .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      let screenEvidenceCaptured = PushToTalkManager.shared.captureScreenEvidenceForAutomation(turnID: turnID)
+      log(
+        "RealtimeHub: headless PTT screen evidence capture="
+          + (screenEvidenceCaptured ? "available" : "unavailable"))
       beginTurn(turnID: turnID)
       testProviderTranscriptOverride = forceTranscript
       let forcedSelection = RealtimeAutomationTranscriptOverridePolicy.select(
@@ -1114,8 +1125,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
           terminal.turnID == turnID
         {
-          if terminal.reason == .success, !lastTurnDiagnostics.isEmpty {
-            return lastTurnDiagnostics
+          if terminal.reason == .success {
+            var result = lastTurnDiagnostics
+            result["terminal_reason"] = terminal.reason.rawValue
+            return result
           }
           return ["error": "voice turn terminated with \(terminal.reason.rawValue)"]
         }
@@ -4417,7 +4430,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       case .evidenceUnavailable: reason = "evidence_unavailable"
       case .transportNotDispatched: reason = "transport_not_dispatched"
       case .staleReceipt: reason = "stale_receipt"
-      case .evidenceExpired: reason = "evidence_expired"
       case .contradictoryApplication: reason = "contradictory_application"
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"
@@ -4439,6 +4451,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         reportCallID: VoiceToolCallID(callID),
         reportIdentity: reportIdentity),
       answer: RealtimeScreenGroundingPolicy.presentedAnswer(evidence: receipt.descriptor, answer: answer))
+      == .completed
   }
 
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {

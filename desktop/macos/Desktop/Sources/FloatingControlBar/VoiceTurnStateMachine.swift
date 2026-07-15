@@ -1162,6 +1162,7 @@ struct VoiceTurnReducer {
     case .toolStartedScoped(_, let identity, let callID):
       guard turn.reservedEffectIdentities.contains(identity),
         turn.toolEffectIdentities[callID] == nil,
+        !turn.providerFinished,
         acceptsProviderOutput(turn.phase)
       else {
         stale(&model, event: event, effects: &effects)

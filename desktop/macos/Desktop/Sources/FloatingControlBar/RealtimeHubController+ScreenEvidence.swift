@@ -14,6 +14,7 @@ extension RealtimeHubController {
     let replacesRawCapture = screenEvidence?.descriptor.evidenceID == evidence.descriptor.evidenceID
     screenEvidence = evidence
     if !replacesRawCapture {
+      lastScreenEvidenceProtocolCompletion = .notRun
       logScreenEvidence(stage: "captured", evidence: evidence.descriptor)
       if !evidence.encodingFinished {
         startScreenEvidenceEncoding(evidence)
@@ -83,9 +84,10 @@ extension RealtimeHubController {
       turnID: turnID,
       screenshotCallID: VoiceToolCallID(callID),
       screenshotIdentity: screenshotIdentity)
-    let expiresAfter = screenEvidence.map {
-      RealtimeScreenEvidenceFreshnessPolicy.remainingLifetime($0.descriptor, now: Date())
-    } ?? 0
+    // Capture freshness is enforced when the exact JPEG enters the provider transport. Once it
+    // is enqueued while fresh, the report gets this separate bounded wait rather than inheriting
+    // a nearly-expired capture timestamp and failing before the model can inspect the image.
+    let expiresAfter = screenEvidence == nil ? 0 : RealtimeScreenEvidenceProtocolPolicy.maximumReportWait
     VoiceTurnCoordinator.shared.send(
       .screenEvidenceProtocolStartedScoped(
         turnID: turnID,
@@ -183,10 +185,21 @@ extension RealtimeHubController {
       reason: "capability_mismatch",
       outcome: .exhausted,
       extra: ["screen_evidence_reason": reason, "user_visible": true])
-    _ = completeScreenEvidenceProtocol(
+    let completion = completeScreenEvidenceProtocol(
       token,
       outcome: .failed,
       answer: RealtimeScreenGroundingPolicy.failureText)
+    guard completion != .completed else { return }
+
+    // A screenshot tool is intentionally held pending until this protocol reaches a local
+    // terminal state. Never discard a failed completion: otherwise the reducer keeps that tool
+    // pending, the provider has already finished, and the turn can only end in tool_timeout.
+    if VoiceTurnCoordinator.shared.activeTurnID == token.turnID,
+      VoiceTurnCoordinator.shared.activeTurn?.pendingToolCallIDs.contains(token.screenshotCallID) == true
+    {
+      log("RealtimeHub: ptt_screen_evidence completion_failed=\(completion.rawValue) action=terminal_fail_closed")
+      VoiceTurnCoordinator.shared.send(.finish(turnID: token.turnID, reason: .providerFailed))
+    }
   }
 
   /// A provider terminal/error may arrive without the report half of the screen
@@ -210,9 +223,9 @@ extension RealtimeHubController {
     return VoiceTurnCoordinator.shared.activeTurn?.providerFinished == true
   }
 
-  /// The five-second freshness boundary is a protocol deadline, not a generic
-  /// provider timeout. Its reducer-issued token makes a stale delayed callback
-  /// unable to affect a replacement turn.
+  /// The bounded post-transport report deadline is distinct from the five-second capture
+  /// freshness gate. Its reducer-issued token makes a delayed callback unable to affect a
+  /// replacement turn.
   func expireScreenEvidenceProtocol(turnID: VoiceTurnID, token: VoiceScreenEvidenceProtocolToken) {
     guard token.turnID == turnID,
       VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token,
@@ -227,7 +240,7 @@ extension RealtimeHubController {
     case .inactive, .accepted, .rejected:
       return
     }
-    rejectScreenEvidence(evidence, reason: "freshness_expired")
+    rejectScreenEvidence(evidence, reason: "report_deadline_expired")
   }
 
   /// Registers the one canonical journal obligation before changing reducer
@@ -238,13 +251,20 @@ extension RealtimeHubController {
     _ token: VoiceScreenEvidenceProtocolToken,
     outcome: VoiceScreenEvidenceProtocolOutcome,
     answer: String
-  ) -> Bool {
-    guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID,
-      VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token,
-      let ownerID = VoiceTurnCoordinator.shared.requireCurrentOwner(for: token.turnID)
-    else { return false }
+  ) -> RealtimeScreenEvidenceProtocolCompletion {
+    guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID else {
+      return recordScreenEvidenceProtocolCompletion(.turnNotActive)
+    }
+    guard VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token else {
+      return recordScreenEvidenceProtocolCompletion(.protocolNotActive)
+    }
+    guard let ownerID = VoiceTurnCoordinator.shared.requireCurrentOwner(for: token.turnID) else {
+      return recordScreenEvidenceProtocolCompletion(.ownerNotCurrent)
+    }
     let presentedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !presentedAnswer.isEmpty else { return false }
+    guard !presentedAnswer.isEmpty else {
+      return recordScreenEvidenceProtocolCompletion(.emptyAnswer)
+    }
 
     assistantText = presentedAnswer
     _ = enqueueAuthoritativeScreenEvidencePersistence(
@@ -258,7 +278,9 @@ extension RealtimeHubController {
         kind: .screenEvidence(outcome)))
     guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID,
       VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == nil
-    else { return false }
+    else {
+      return recordScreenEvidenceProtocolCompletion(.reducerDidNotResolve)
+    }
 
     presentScreenEvidenceAnswer(presentedAnswer)
     VoiceTurnCoordinator.shared.send(
@@ -266,7 +288,53 @@ extension RealtimeHubController {
         turnID: token.turnID,
         identity: token.screenshotIdentity,
         callID: token.screenshotCallID))
-    return true
+    return recordScreenEvidenceProtocolCompletion(.completed)
+  }
+
+  @discardableResult
+  private func recordScreenEvidenceProtocolCompletion(
+    _ completion: RealtimeScreenEvidenceProtocolCompletion
+  ) -> RealtimeScreenEvidenceProtocolCompletion {
+    lastScreenEvidenceProtocolCompletion = completion
+    log("RealtimeHub: ptt_screen_evidence protocol_completion=\(completion.rawValue)")
+    return completion
+  }
+
+  /// Non-production bridge diagnostics deliberately expose state labels and outcome classes
+  /// only. They are enough to pinpoint a stuck protocol without logging pixels, app identity,
+  /// evidence IDs, transcripts, or model text.
+  func automationScreenEvidenceDiagnostics() -> [String: String] {
+    [
+      "screen_evidence_state": screenGroundingState.diagnosticsLabel,
+      "screen_evidence_protocol_active": screenGroundingState.protocolToken == nil ? "false" : "true",
+      "screen_evidence_last_completion": lastScreenEvidenceProtocolCompletion.rawValue,
+    ]
+  }
+
+  /// Typed, bounded PTT state for both the read-only snapshot action and a completed headless
+  /// turn. Keeping the fields here prevents the probe from inferring completion from UI copy or
+  /// raw logs, and makes a successful authoritative screen answer distinguishable from a generic
+  /// chat turn that happens not to have persisted a text diagnostic yet.
+  func automationPTTDiagnostics() -> [String: String] {
+    let coordinator = VoiceTurnCoordinator.shared
+    let turn = coordinator.model.turn
+    let terminalReason = turn?.terminalReason?.rawValue ?? ""
+    let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
+    let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
+    var snapshot = [
+      "phase": phase,
+      "route": route,
+      "terminal_reason": terminalReason,
+      "stale_event_count": "\(coordinator.model.staleEventCount)",
+      "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
+      "pending_tool_count": "\(turn?.pendingToolCallIDs.count ?? 0)",
+      "post_tool_continuation_required": turn?.postToolContinuationRequired == true ? "true" : "false",
+      "provider_finished": turn?.providerFinished == true ? "true" : "false",
+    ]
+    for (key, value) in automationScreenEvidenceDiagnostics() {
+      snapshot[key] = value
+    }
+    return snapshot
   }
 
   func presentScreenEvidenceAnswer(_ answer: String) {

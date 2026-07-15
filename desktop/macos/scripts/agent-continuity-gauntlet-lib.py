@@ -3741,6 +3741,7 @@ def self_check() -> int:
         "restore_test_owner",
         "clear_owner_surface_state",
         "kernel_turn_tail",
+        "ptt_turn_snapshot",
     }
     hub_actions = {"ptt_test_turn"}
     bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
