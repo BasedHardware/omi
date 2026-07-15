@@ -3,6 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { AgentsTab } from './AgentsTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
+import { __resetClaudeSignIn } from '../../../lib/claudeSignIn'
 
 // SettingRow reads the settings-search context; provide it so the tab mounts.
 const renderTab = (): void => {
@@ -40,6 +41,7 @@ beforeEach(() => {
     .mockResolvedValue({ ok: true, status: { connected: true, expiresAt: null } })
   codingAgentSignOut.mockReset().mockResolvedValue({ connected: false, expiresAt: null })
   onCodingAgentEvent.mockReset().mockReturnValue(() => {})
+  __resetClaudeSignIn()
   ;(globalThis as unknown as { window: { omi: unknown } }).window.omi = {
     codingAgentList,
     codingAgentTest,

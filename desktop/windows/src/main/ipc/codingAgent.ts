@@ -104,9 +104,11 @@ async function runClaudeAuthOnce(): Promise<CodingAgentStartAuthResult> {
     const validated = validateClaudeOAuthUrl(flow.authUrl)
     if (!validated) {
       flow.cancel()
+      // Fail-closed (macOS parity): don't hand the browser a URL that isn't the
+      // exact claude.ai PKCE loopback request; surface the same generic copy.
       return {
         ok: false,
-        error: 'Could not start Claude sign-in (invalid authorization URL).',
+        error: 'Unable to start Claude sign-in. Try again.',
         status: claudeAuthStatus()
       }
     }

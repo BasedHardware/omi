@@ -9,6 +9,7 @@ import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
+import { beginClaudeSignIn } from '../../../lib/claudeSignIn'
 import type { CodingAgentAuthStatus, CodingAgentId } from '../../../../../shared/types'
 
 type ExternalAgentId = Exclude<CodingAgentId, 'acp'>
@@ -75,14 +76,11 @@ export function AgentsTab(): React.JSX.Element {
   const signInToClaude = (): void => {
     setClaudeAuth((a) => ({ ...a, busy: true, error: undefined }))
     setTests((t) => ({ ...t, acp: { running: false } }))
-    void window.omi
-      .codingAgentStartAuth()
-      .then((r) =>
-        setClaudeAuth({ status: r.status, busy: false, error: r.ok ? undefined : r.error })
-      )
-      .catch((e: Error) =>
-        setClaudeAuth((a) => ({ ...a, busy: false, error: e.message }))
-      )
+    // Routes through the shared upsell sheet + parallel OAuth (macOS parity);
+    // onResult reflects the post-sign-in status or surfaces a failure here.
+    beginClaudeSignIn((r) =>
+      setClaudeAuth({ status: r.status, busy: false, error: r.ok ? undefined : r.error })
+    )
   }
 
   const signOutOfClaude = (): void => {
