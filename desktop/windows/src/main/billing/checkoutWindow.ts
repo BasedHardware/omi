@@ -1,6 +1,7 @@
 import { BrowserWindow, ipcMain, shell } from 'electron'
 import type { CheckoutOutcome } from '../../shared/types'
 import { isAllowedExternalScheme } from '../externalUrl'
+import { installContextMenu } from '../contextMenu'
 
 // Stripe checkout / customer-portal support for the Plan & Usage settings tab.
 //
@@ -66,6 +67,12 @@ export function openCheckoutWindow(url: string): Promise<CheckoutOutcome> {
       sandbox: true
     }
   })
+
+  // Right-click → Paste, on card / coupon / postcode fields. Without this the
+  // payment form is the one place in the app where pasting a code the user just
+  // copied has no mouse affordance at all. Safe on remote content: the menu is
+  // built from Chromium roles only and exposes nothing of the app.
+  installContextMenu(win)
 
   return new Promise<CheckoutOutcome>((resolve) => {
     let settled = false
