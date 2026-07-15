@@ -41,11 +41,17 @@ import type {
 } from './kernelTypes'
 
 export class KernelSessions extends KernelArtifacts {
+  /**
+   * The authority a session confers on its caller. `ownerId` is part of it
+   * because the model-facing MCP bridge binds identity from here rather than
+   * accepting it off the wire (see controlMcpBridge.ts).
+   */
   executionPolicyForSession(
     sessionId: string
-  ): Pick<AgentSession, 'executionRole' | 'providerBoundary' | 'defaultAdapterId'> {
+  ): Pick<AgentSession, 'ownerId' | 'executionRole' | 'providerBoundary' | 'defaultAdapterId'> {
     const session = this.readSession(sessionId)
     return {
+      ownerId: session.ownerId,
       executionRole: session.executionRole,
       providerBoundary: session.providerBoundary,
       defaultAdapterId: session.defaultAdapterId
