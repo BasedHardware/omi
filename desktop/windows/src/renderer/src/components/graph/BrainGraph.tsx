@@ -12,7 +12,6 @@ import {
 } from '../../lib/useGraphSimulation'
 import { nodeColor } from './nodeColor'
 import { useWebglRecovery } from '../../lib/useWebglRecovery'
-import { isWebglAvailable } from '../../lib/webglSupport'
 import { BrainGraphFallback } from './BrainGraphFallback'
 import { ErrorBoundary } from '../ui/ErrorBoundary'
 import { trackEvent } from '../../lib/analytics'
@@ -468,35 +467,81 @@ export function BrainGraph({
   // it to useWebglRecovery doesn't re-run that hook's effect every render.
   const handleContextLost = useCallback(() => onVisibleChangeRef.current?.(false), [])
 
+  // renderFailed: the last mount attempt could not get a live WebGL context (the
+  // Canvas threw, or recovery exhausted its remount budget). It drives the heal
+  // loop below; handleCreated clears it the instant a context is really obtained.
+  const [renderFailed, setRenderFailed] = useState(false)
+  // retryTick: bump to REMOUNT the boundary + Canvas. The remount IS the probe —
+  // three.js re-attempts context creation and either succeeds (onCreated) or throws
+  // (onError). We never create a throwaway probe context (that was the fail-CLOSED
+  // mistake that could exhaust the pool); we just retry the real thing.
+  const [retryTick, setRetryTick] = useState(0)
+  const retry = useCallback(() => setRetryTick((t) => t + 1), [])
+
   // Remount the canvas subtree on webglcontextlost so a GPU-process crash
   // (SwiftShader included) yields a fresh context instead of Chromium's
   // broken-image placeholder. Covers direct mounts (Onboarding) that bypass
-  // LazyBrainGraph's own recovery wrapper. onContextLost reports the loss to
-  // the caller (e.g. Memories.tsx) immediately, ahead of the debounced remount.
-  const recoveryKey = useWebglRecovery(hostRef, handleContextLost)
+  // LazyBrainGraph's own recovery wrapper. onContextLost reports the loss to the
+  // caller (e.g. Memories.tsx) immediately, ahead of the debounced remount.
+  // onExhausted fires when recovery gives up (its remount cap) — we then surface the
+  // fallback and force one fresh mount so a hidden/dead canvas is never left stranded.
+  const handleExhausted = useCallback((): void => {
+    setRenderFailed(true)
+    retry()
+  }, [retry])
+  const recoveryKey = useWebglRecovery(hostRef, handleContextLost, handleExhausted)
 
-  // Can we get a WebGL context AT ALL right now? A GPU crash loop (the real field
-  // failure — five `child-process-gone type=GPU` in 30s) blows through the remount
-  // cap above, and once Chromium refuses new 3D contexts three.js's WebGLRenderer
-  // THROWS on construction. Probing first means we show a deliberate static mark
-  // instead of a black void, and the ErrorBoundary below catches the throw if the
-  // context dies between the probe and the mount.
-  const [glAvailable, setGlAvailable] = useState(isWebglAvailable)
-  // Every recoveryKey bump is a post-crash remount attempt (debounced, so the GPU
-  // process has had a chance to restart) — the one moment worth re-probing. Skip
-  // the initial run: useState already probed. A recovered GPU therefore heals the
-  // fallback back into a live canvas; an unrecovered one keeps the mark.
-  const firstProbe = useRef(true)
+  // HEAL. A recovered GPU emits NO event of its own — useWebglRecovery only re-fires
+  // on another context LOSS, and its post-loss remount is debounced just 600ms, far
+  // shorter than a real GPU/SwiftShader restart takes to accept new contexts. So a
+  // single post-loss attempt can land while creation is still refused, and without
+  // this the fallback would latch for the life of the mount (onboarding never
+  // unmounts its map). While failed, retry the REAL mount on a capped backoff and
+  // whenever the window/tab becomes visible again; a success clears renderFailed and
+  // stops the loop. Backoff (not a fixed tight interval) so a genuinely GPU-less
+  // machine isn't remounting a throwing renderer every few seconds forever.
   useEffect(() => {
-    if (firstProbe.current) {
-      firstProbe.current = false
-      return
+    if (!renderFailed) return
+    let attempt = 0
+    let timer: ReturnType<typeof setTimeout>
+    const schedule = (): void => {
+      const delay = Math.min(3000 * 2 ** attempt, 30_000)
+      attempt += 1
+      timer = setTimeout(() => {
+        retry()
+        schedule()
+      }, delay)
     }
-    setGlAvailable(isWebglAvailable())
-  }, [recoveryKey])
+    schedule()
+    const onVisible = (): void => {
+      if (document.visibilityState === 'visible') retry()
+    }
+    document.addEventListener('visibilitychange', onVisible)
+    return () => {
+      clearTimeout(timer)
+      document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [renderFailed, retry])
 
-  // Rendering mode change (WebGL → static, or back): report it. Transition-only, so
-  // a persistently GPU-less machine emits once, not once per render.
+  // FAIL OPEN. We do NOT pre-probe for a WebGL context to decide whether to mount
+  // the graph, and must never go back to doing so. A probe has to CREATE a context
+  // to answer, and live contexts are a capped, shared resource (the bar Orb and this
+  // map already hold some). Near that cap the probe's own extra context is the one
+  // that fails — so the probe returns "WebGL is broken" on a perfectly healthy
+  // machine and suppresses a graph that would have rendered. It manufactures the
+  // failure it reports. (It also asks for a bare webgl2 context, which is not the
+  // request three.js makes, so its answer was never evidence about the real canvas.)
+  //
+  // three.js is the ground truth instead: if a context truly cannot be had,
+  // WebGLRenderer THROWS on construction ("Error creating WebGL context.", pinned in
+  // webglRendererThrows.test.ts) and the boundary below catches THAT. A false "GPU is
+  // fine" costs nothing (the boundary still catches the real failure); a false "GPU is
+  // broken" costs the user their entire brain map. So only a definite, observed
+  // failure may show the fallback.
+  //
+  // Corollary: an empty-looking canvas must never trigger the fallback either. The
+  // graph currently paints nothing on some healthy contexts — a separate render bug —
+  // and a fallback that fired on "looks blank" would mask it permanently.
   const degraded = useRef(false)
   const reportMode = useCallback((webgl: boolean, reason: string): void => {
     if (degraded.current === !webgl) return
@@ -509,49 +554,58 @@ export function BrainGraph({
       outcome: webgl ? 'recovered' : 'degraded'
     })
   }, [])
-  useEffect(() => {
-    reportMode(glAvailable, 'gpu_unavailable')
-    // The static fallback IS the finished surface in this mode. Callers gate a
-    // loading placeholder on onReady (Memories crossfades on it), so without this
-    // the mark would sit invisible behind a spinner until their bounded timeout.
-    if (!glAvailable) onReadyRef.current?.()
-  }, [glAvailable, reportMode])
+
+  const handleRendererFailed = useCallback((): void => {
+    reportMode(false, 'renderer_init_failed')
+    setRenderFailed(true) // arm the heal loop
+    // The static mark IS the finished surface in this mode. Callers gate a loading
+    // placeholder on onReady (Memories crossfades on it), so without this the mark
+    // would sit invisible behind a spinner until their bounded timeout.
+    onReadyRef.current?.()
+  }, [reportMode])
+
+  const handleCreated = useCallback((): void => {
+    // A context was really obtained — we are live. Clear the failed flag (stops the
+    // heal loop) and, if we had degraded, report the recovery.
+    setRenderFailed(false)
+    reportMode(true, 'renderer_init_failed')
+    onReadyRef.current?.()
+  }, [reportMode])
 
   return (
     <div ref={hostRef} className="absolute inset-0">
-      {showCanvas &&
-        (glAvailable ? (
-          // Keyed with recoveryKey so a post-crash remount also RESETS a boundary
-          // that has already caught a throw — otherwise one bad mount would pin the
-          // fallback forever, even on a GPU that came back.
-          <ErrorBoundary
-            key={recoveryKey}
-            label="BrainGraph"
-            fallback={<BrainGraphFallback />}
-            onError={() => reportMode(false, 'renderer_init_failed')}
+      {showCanvas && (
+        // Keyed with BOTH recoveryKey (post-crash canvas remount) and retryTick (the
+        // heal loop's retry). A caught throw latches this boundary's own `failed`
+        // state; the only way to clear it is a fresh boundary instance, so every heal
+        // attempt must bump the key. Without retryTick a boundary that caught once
+        // would pin the fallback for the life of the mount even on a recovered GPU.
+        <ErrorBoundary
+          key={`${recoveryKey}:${retryTick}`}
+          label="BrainGraph"
+          fallback={<BrainGraphFallback />}
+          onError={handleRendererFailed}
+        >
+          <Canvas
+            // Narrow FOV: a wide FOV projects off-center spheres into ellipses
+            // ("deformed" nodes); this keeps them as round circles. CameraRig derives
+            // its distance from the FOV, so the framing/zoom is unchanged.
+            camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
+            dpr={[1, 2]}
+            frameloop={frameLoop}
+            gl={{ antialias: true, alpha: true }}
+            onCreated={handleCreated}
           >
-            <Canvas
-              // Narrow FOV: a wide FOV projects off-center spheres into ellipses
-              // ("deformed" nodes); this keeps them as round circles. CameraRig derives
-              // its distance from the FOV, so the framing/zoom is unchanged.
-              camera={{ position: [0, 0, 700], fov: 28, near: 1, far: 20000 }}
-              dpr={[1, 2]}
-              frameloop={frameLoop}
-              gl={{ antialias: true, alpha: true }}
-              onCreated={() => onReady?.()}
-            >
-              <GraphScene
-                graph={graph}
-                centerNodeId={centerNodeId}
-                interactive={interactive}
-                shuffleKey={shuffleKey}
-                frameLoop={frameLoop}
-              />
-            </Canvas>
-          </ErrorBoundary>
-        ) : (
-          <BrainGraphFallback />
-        ))}
+            <GraphScene
+              graph={graph}
+              centerNodeId={centerNodeId}
+              interactive={interactive}
+              shuffleKey={shuffleKey}
+              frameLoop={frameLoop}
+            />
+          </Canvas>
+        </ErrorBoundary>
+      )}
     </div>
   )
 }
