@@ -15,15 +15,17 @@ enum OmiLogPathResolver {
       of: #"[^A-Za-z0-9._-]+"#,
       with: "-",
       options: .regularExpression)
-    return "/private/tmp/omi/\(safeBundleID)/\(launchID(processID: processID)).log"
+    return "/private/tmp/omi-dev-\(safeBundleID)-\(processID).log"
   }
 }
 
+private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
+private let logProcessID = getpid()
 private let logFile: String = OmiLogPathResolver.logPath(
   isNonProduction: AppBuild.isNonProduction,
-  bundleIdentifier: Bundle.main.bundleIdentifier,
-  processID: getpid())
-private let logLaunchID = OmiLogPathResolver.launchID(processID: getpid())
+  bundleIdentifier: logBundleIdentifier,
+  processID: logProcessID)
+private let logLaunchID = OmiLogPathResolver.launchID(processID: logProcessID)
 /// The on-disk app-log path for the current build. Single source of truth for
 /// the log location so callers (feedback export, diagnostics bundle) don't
 /// re-derive it. Owner-only permissions are enforced by `ensureLogFileOwnerOnly`.
@@ -114,11 +116,13 @@ func ensureLogDirectoryOwnerOnly(atPath path: String) -> Bool {
 private var didEnsureLogFilePermissions = false
 
 private func ensureLogParentDirectories() -> Bool {
-  guard AppBuild.isNonProduction else { return true }
-  let bundleDirectory = (logFile as NSString).deletingLastPathComponent
-  let rootDirectory = (bundleDirectory as NSString).deletingLastPathComponent
-  return ensureLogDirectoryOwnerOnly(atPath: rootDirectory)
-    && ensureLogDirectoryOwnerOnly(atPath: bundleDirectory)
+  // Non-production logs live as owner-only files directly under private tmp.
+  // Do not chmod `/private/tmp`: it is shared infrastructure owned by macOS.
+  true
+}
+
+private func logLine(timestamp: String, category: String, message: String) -> String {
+  "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
 }
 
 /// Shared file-write implementation (must be called on logQueue)
@@ -148,7 +152,7 @@ private func writeToLogFile(_ data: Data) {
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
   let timestamp = dateFormatter.string(from: Date())
-  var parts = ["[\(timestamp)] [perf] \(message)"]
+  var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
   if let duration = duration {
     parts.append(String(format: "(%.1fms)", duration * 1000))
@@ -218,7 +222,7 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
   let timestamp = dateFormatter.string(from: Date())
-  let line = "[\(timestamp)] [app] \(message)"
+  let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
 
@@ -234,7 +238,7 @@ func logSync(_ message: String) {
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
   let timestamp = dateFormatter.string(from: Date())
-  let line = "[\(timestamp)] [app] \(message)"
+  let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
 
@@ -351,7 +355,7 @@ func logError(_ message: String, error: Error? = nil) {
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
-  let line = "[\(timestamp)] [error] \(fullMessage)"
+  let line = logLine(timestamp: timestamp, category: "error", message: fullMessage)
   print(line)
   fflush(stdout)
 

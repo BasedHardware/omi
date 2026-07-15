@@ -126,6 +126,24 @@ omi_fast_bundle_stamp_matches() {
   [ "$(sed -n 's/^fingerprint=//p' "$stamp" | head -1)" = "$expected_fingerprint" ]
 }
 
+# Emit one stable eligibility reason. Callers can safely surface this to agents
+# without attempting a full package build merely to discover why reuse failed.
+omi_fast_bundle_eligibility_reason() {
+  local app_path="$1"
+  local stamp="$2"
+  local expected_fingerprint="$3"
+
+  if [ ! -d "$app_path/Contents" ]; then
+    printf '%s\n' "no_installed_bundle"
+  elif [ ! -f "$stamp" ]; then
+    printf '%s\n' "missing_fast_fingerprint"
+  elif ! omi_fast_bundle_stamp_matches "$stamp" "$expected_fingerprint"; then
+    printf '%s\n' "fast_fingerprint_mismatch"
+  else
+    printf '%s\n' "reusable"
+  fi
+}
+
 omi_fast_bundle_write_stamp() {
   local stamp="$1"
   local fingerprint="$2"

@@ -1,0 +1,553 @@
+#!/usr/bin/env python3
+"""Agent-oriented diagnostics and safe cleanup for macOS Omi dev bundles.
+
+This tool intentionally manages only identity-derived `com.omi.omi-*` bundles.
+It never reads Keychain data, database content, or the shared legacy Omi root.
+JSON is the default stdout contract; use --human for interactive inspection.
+"""
+
+from __future__ import annotations
+
+import argparse
+import hashlib
+import json
+import os
+import plistlib
+import re
+import shutil
+import stat
+import subprocess
+import sys
+import time
+import urllib.error
+import urllib.request
+from pathlib import Path
+from typing import Any
+
+
+SCHEMA_VERSION = 1
+NAMED_PREFIX = "com.omi.omi-"
+PROTECTED_BUNDLE_IDS = {"com.omi.computer-macos", "com.omi.desktop-dev"}
+MANIFEST_NAME = ".omi-dev-runtime.json"
+
+
+def home() -> Path:
+    return Path(os.environ.get("OMI_MACOS_DEV_HOME", str(Path.home()))).expanduser()
+
+
+def app_roots() -> list[Path]:
+    configured = os.environ.get("OMI_MACOS_DEV_APP_ROOTS")
+    raw_roots = configured.split(os.pathsep) if configured else ["/Applications", str(home() / "Applications")]
+    return [Path(item).expanduser() for item in raw_roots if item]
+
+
+def support_root() -> Path:
+    return home() / "Library" / "Application Support" / "Omi Dev Bundles"
+
+
+def legacy_root() -> Path:
+    return home() / "Library" / "Application Support" / "Omi"
+
+
+def log_roots() -> list[Path]:
+    configured = os.environ.get("OMI_MACOS_DEV_LOG_ROOTS")
+    return [Path(item) for item in configured.split(os.pathsep)] if configured else [Path("/private/tmp"), Path("/private/tmp/omi")]
+
+
+def candidate(bundle_id: object) -> bool:
+    return isinstance(bundle_id, str) and re.fullmatch(r"com\.omi\.omi-[A-Za-z0-9.-]+", bundle_id) is not None
+
+
+def resolved(path: Path) -> Path:
+    return path.expanduser().resolve(strict=False)
+
+
+def under(path: Path, root: Path) -> bool:
+    try:
+        resolved(path).relative_to(resolved(root))
+        return True
+    except ValueError:
+        return False
+
+
+def bytes_used(path: Path) -> int:
+    if not path.exists() or path.is_symlink():
+        return 0
+    if path.is_file():
+        return path.stat().st_size
+    total = 0
+    for current, directories, files in os.walk(path, followlinks=False):
+        directories[:] = [name for name in directories if not (Path(current) / name).is_symlink()]
+        for name in files:
+            file_path = Path(current) / name
+            try:
+                info = file_path.lstat()
+            except FileNotFoundError:
+                continue
+            if stat.S_ISREG(info.st_mode):
+                total += info.st_size
+    return total
+
+
+def safe_mtime(path: Path) -> float:
+    try:
+        return path.stat().st_mtime
+    except FileNotFoundError:
+        return 0
+
+
+def process_alive(pid: object) -> bool:
+    if not isinstance(pid, int) or pid <= 0:
+        return False
+    try:
+        os.kill(pid, 0)
+    except ProcessLookupError:
+        return False
+    except PermissionError:
+        return True
+    return True
+
+
+def app_info(path: Path) -> dict[str, Any] | None:
+    info_path = path / "Contents" / "Info.plist"
+    try:
+        with info_path.open("rb") as handle:
+            info = plistlib.load(handle)
+    except (FileNotFoundError, plistlib.InvalidFileException, OSError):
+        return None
+    bundle_id = info.get("CFBundleIdentifier")
+    if not candidate(bundle_id):
+        return None
+    return {
+        "app_name": info.get("CFBundleDisplayName") or info.get("CFBundleName") or path.stem,
+        "bundle_id": bundle_id,
+        "installed_app_path": str(path),
+        "app_bytes": bytes_used(path),
+        "app_mtime": safe_mtime(path),
+    }
+
+
+def iter_apps(root: Path):
+    if not root.is_dir():
+        return
+    try:
+        children = sorted(root.iterdir(), key=lambda item: item.name.lower())
+    except OSError:
+        return
+    for child in children:
+        if child.suffix == ".app":
+            yield child
+        elif child.is_dir() and not child.is_symlink():
+            try:
+                for grandchild in sorted(child.iterdir(), key=lambda item: item.name.lower()):
+                    if grandchild.suffix == ".app":
+                        yield grandchild
+            except OSError:
+                continue
+
+
+def apps() -> dict[str, dict[str, Any]]:
+    collected: dict[str, dict[str, Any]] = {}
+    for root in app_roots():
+        for path in iter_apps(root) or []:
+            info = app_info(path)
+            if info:
+                # Multiple installed copies of an identity are diagnostically useful.
+                key = f"{info['bundle_id']}:{info['installed_app_path']}"
+                collected[key] = info
+    return dict(sorted(collected.items()))
+
+
+def expected_profile(bundle_id: str) -> Path:
+    return support_root() / bundle_id
+
+
+def read_manifest(profile: Path, bundle_id: str) -> tuple[dict[str, Any] | None, str | None]:
+    path = profile / MANIFEST_NAME
+    if not path.is_file() or path.is_symlink():
+        return None, "missing"
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return None, "invalid_json"
+    required = {"schemaVersion", "bundleIdentifier", "processID", "appPath", "profileRoot", "logPath", "automationPort"}
+    if not isinstance(payload, dict) or not required.issubset(payload):
+        return None, "invalid_shape"
+    if payload["schemaVersion"] != SCHEMA_VERSION or payload["bundleIdentifier"] != bundle_id:
+        return None, "identity_mismatch"
+    return payload, None
+
+
+def lsof_holders(paths: list[Path]) -> tuple[dict[str, list[int]], str | None]:
+    if not paths:
+        return {}, None
+    executable = os.environ.get("OMI_MACOS_DEV_LSOF", "lsof")
+    normalized = {str(resolved(path)): [] for path in paths}
+    try:
+        result = subprocess.run(
+            [executable, "-Fpn", *normalized], text=True, capture_output=True, check=False, timeout=0.5)
+    except OSError as exc:
+        return normalized, f"unavailable:{exc.__class__.__name__}"
+    except subprocess.TimeoutExpired:
+        return normalized, "timed_out"
+    if result.returncode not in (0, 1):
+        return normalized, f"failed:{result.returncode}"
+
+    current_pid: int | None = None
+    for line in result.stdout.splitlines():
+        if not line:
+            continue
+        if line.startswith("p") and line[1:].isdigit():
+            current_pid = int(line[1:])
+            continue
+        if line.startswith("n") and current_pid is not None:
+            path = str(resolved(Path(line[1:])))
+            if path in normalized:
+                normalized[path].append(current_pid)
+    return {path: sorted(set(holders)) for path, holders in normalized.items()}, None
+
+
+def database_paths(profile: Path) -> list[Path]:
+    if not profile.is_dir() or profile.is_symlink():
+        return []
+    return [path for path in [profile / "omi.db", *sorted(profile.glob("users/*/omi.db"))] if path.is_file()]
+
+
+def profile_databases(
+    profile: Path,
+    holder_map: dict[str, list[int]],
+    holder_error: str | None,
+) -> list[dict[str, Any]]:
+    entries: list[dict[str, Any]] = []
+    for path in database_paths(profile):
+        entries.append({
+            "path": str(path),
+            "bytes": bytes_used(path),
+            "holders": holder_map.get(str(resolved(path)), []),
+            "holder_check": "ok" if holder_error is None else holder_error,
+        })
+    return entries
+
+
+def automation_health(port: object) -> dict[str, Any]:
+    if not isinstance(port, int) or not 1 <= port <= 65535:
+        return {"status": "unavailable", "reason": "invalid_port"}
+    request = urllib.request.Request(f"http://127.0.0.1:{port}/health", headers={"Host": f"127.0.0.1:{port}"})
+    try:
+        with urllib.request.urlopen(request, timeout=0.8) as response:
+            payload = json.loads(response.read().decode("utf-8"))
+    except (urllib.error.URLError, TimeoutError, json.JSONDecodeError, OSError) as exc:
+        return {"status": "unavailable", "reason": exc.__class__.__name__}
+    return {
+        "status": "ok",
+        "desktop_backend_url": payload.get("rustBackendURL"),
+        "python_backend_url": payload.get("pythonBackendURL"),
+        "backend_environment": payload.get("backendEnvironment"),
+    }
+
+
+def logs_for_bundle(bundle_id: str) -> list[dict[str, Any]]:
+    safe_id = "".join(character if character.isalnum() or character in ".-_" else "-" for character in bundle_id)
+    found: list[dict[str, Any]] = []
+    for root in log_roots():
+        patterns = [f"omi-dev-{safe_id}-*.log", f"{safe_id}/pid-*.log"]
+        for pattern in patterns:
+            for path in sorted(root.glob(pattern)):
+                try:
+                    info = path.lstat()
+                except FileNotFoundError:
+                    continue
+                if stat.S_ISREG(info.st_mode) and info.st_uid == os.getuid():
+                    found.append({"bundle_id": bundle_id, "path": str(path), "bytes": info.st_size, "mtime": info.st_mtime})
+    return found
+
+
+def record_for(bundle_id: str, app: dict[str, Any] | None) -> dict[str, Any]:
+    profile = expected_profile(bundle_id)
+    manifest, manifest_error = read_manifest(profile, bundle_id)
+    active = process_alive(manifest.get("processID")) if manifest else False
+    manifest_profile = Path(manifest["profileRoot"]) if manifest else profile
+    isolated = manifest is not None and resolved(manifest_profile) == resolved(profile)
+    isolation_status = "isolated" if isolated else ("missing_manifest" if manifest_error == "missing" else "shared_or_invalid")
+    health = automation_health(manifest.get("automationPort")) if active and manifest else {"status": "unavailable", "reason": "inactive"}
+    return {
+        "app_name": app.get("app_name") if app else None,
+        "bundle_id": bundle_id,
+        "installed_app_path": app.get("installed_app_path") if app else None,
+        "pid": manifest.get("processID") if manifest else None,
+        "active": active,
+        "automation_port": manifest.get("automationPort") if manifest else None,
+        "backend": health,
+        "profile_root": str(manifest_profile if manifest else profile),
+        "profile_root_expected": str(profile),
+        "profile_bytes": bytes_used(profile),
+        "databases": [],
+        "isolation": isolation_status,
+        "manifest": {"path": str(profile / MANIFEST_NAME), "status": manifest_error or "ok"},
+        "logs": logs_for_bundle(bundle_id),
+    }
+
+
+def process_command(pid: int) -> str:
+    try:
+        result = subprocess.run(["ps", "-p", str(pid), "-o", "command="], text=True, capture_output=True, check=False)
+    except OSError:
+        return ""
+    return result.stdout.strip() if result.returncode == 0 else ""
+
+
+def inventory(selected_bundle: str | None = None) -> dict[str, Any]:
+    app_records = apps()
+    by_id: dict[str, dict[str, Any]] = {}
+    for app in app_records.values():
+        by_id.setdefault(app["bundle_id"], app)
+    if support_root().is_dir():
+        try:
+            profiles = list(support_root().iterdir())
+        except OSError:
+            profiles = []
+        for path in profiles:
+            if path.is_dir() and candidate(path.name):
+                by_id.setdefault(path.name, None)
+    bundle_ids = sorted(by_id)
+    if selected_bundle:
+        bundle_ids = [bundle_id for bundle_id in bundle_ids if bundle_id == selected_bundle or by_id[bundle_id] and by_id[bundle_id]["app_name"] == selected_bundle]
+    records = [record_for(bundle_id, by_id[bundle_id]) for bundle_id in bundle_ids]
+    profiles = [expected_profile(record["bundle_id"]) for record in records]
+    legacy_profile = legacy_root()
+    all_database_paths = [path for profile in [*profiles, legacy_profile] for path in database_paths(profile)]
+    holder_map, holder_error = lsof_holders(all_database_paths)
+    for record, profile in zip(records, profiles):
+        record["databases"] = profile_databases(profile, holder_map, holder_error)
+    legacy_databases = profile_databases(legacy_profile, holder_map, holder_error)
+    legacy_holders = {pid for database in legacy_databases for pid in database["holders"]}
+    for record in records:
+        app_path = record["installed_app_path"]
+        if app_path and any(app_path in process_command(pid) for pid in legacy_holders):
+            record["isolation"] = "shared_legacy_storage"
+    shared = [record["bundle_id"] for record in records if record["isolation"] in {"shared_or_invalid", "shared_legacy_storage"}]
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "protected_bundle_ids": sorted(PROTECTED_BUNDLE_IDS),
+        "legacy_shared_root": str(legacy_root()),
+        "legacy_shared_bytes": bytes_used(legacy_root()),
+        "legacy_databases": legacy_databases,
+        "bundles": records,
+        "shared_storage_bundle_ids": shared,
+        "diagnostic": "shared_named_bundle_storage" if shared else None,
+    }
+
+
+def log_bundle_id(path: Path) -> str | None:
+    if path.name.startswith("omi-dev-") and path.suffix == ".log":
+        bundle_id, separator, pid = path.name[len("omi-dev-"):-len(".log")].rpartition("-")
+        if separator and pid.isdigit() and candidate(bundle_id):
+            return bundle_id
+    if re.fullmatch(r"pid-\d+\.log", path.name) and candidate(path.parent.name):
+        return path.parent.name
+    return None
+
+
+def all_logs() -> list[dict[str, Any]]:
+    found: dict[str, dict[str, Any]] = {}
+    for root in log_roots():
+        candidates = [*root.glob("omi-dev-*.log"), *root.glob("com.omi.omi-*/pid-*.log")]
+        for path in sorted(set(candidates)):
+            try:
+                info = path.lstat()
+            except FileNotFoundError:
+                continue
+            bundle_id = log_bundle_id(path)
+            if not bundle_id or not stat.S_ISREG(info.st_mode) or info.st_uid != os.getuid():
+                continue
+            found[str(path)] = {"bundle_id": bundle_id, "path": str(path), "bytes": info.st_size, "mtime": info.st_mtime}
+    return [found[path] for path in sorted(found)]
+
+
+def old_logs(older_than_days: int) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+    cutoff = time.time() - older_than_days * 86400
+    active_log_paths = {
+        log["path"]
+        for record in inventory()["bundles"] if record["active"]
+        for log in record["logs"]
+    }
+    eligible: list[dict[str, Any]] = []
+    retained: list[dict[str, Any]] = []
+    for entry in all_logs():
+        if entry["mtime"] >= cutoff:
+            continue
+        # Retain a long-running bundle's current log even if it crosses the age threshold.
+        if entry["path"] in active_log_paths:
+            retained.append(entry)
+        else:
+            eligible.append(entry)
+    return eligible, retained
+
+
+def clean_plan(older_than_days: int) -> dict[str, Any]:
+    cutoff = time.time() - older_than_days * 86400
+    state = inventory()
+    actions: list[dict[str, Any]] = []
+    for record in state["bundles"]:
+        bundle_id = record["bundle_id"]
+        app_path = record["installed_app_path"]
+        profile = expected_profile(bundle_id)
+        if record["active"]:
+            continue
+        if any(database["holders"] or database["holder_check"] != "ok" for database in record["databases"]):
+            continue
+        if app_path and safe_mtime(Path(app_path)) < cutoff:
+            actions.append({"kind": "delete_bundle", "bundle_id": bundle_id, "path": app_path, "bytes": bytes_used(Path(app_path))})
+            if profile.exists() and safe_mtime(profile) < cutoff:
+                actions.append({"kind": "delete_profile", "bundle_id": bundle_id, "path": str(profile), "bytes": bytes_used(profile)})
+        elif not app_path and profile.exists() and safe_mtime(profile) < cutoff:
+            actions.append({"kind": "delete_profile", "bundle_id": bundle_id, "path": str(profile), "bytes": bytes_used(profile)})
+    logs, _ = old_logs(older_than_days)
+    actions.extend({"kind": "delete_log", **entry} for entry in logs)
+    actions.sort(key=lambda item: (item["kind"], item["path"]))
+    canonical = json.dumps(actions, sort_keys=True, separators=(",", ":"))
+    return {
+        "schema_version": SCHEMA_VERSION,
+        "older_than_days": older_than_days,
+        "actions": actions,
+        "reclaimable_bytes": sum(action["bytes"] for action in actions),
+        "plan": hashlib.sha256(canonical.encode()).hexdigest(),
+        "legacy_shared_root": str(legacy_root()),
+        "legacy_shared_root_touched": False,
+    }
+
+
+def delete_action(action: dict[str, Any]) -> None:
+    path = Path(action["path"])
+    kind = action["kind"]
+    if kind == "delete_profile":
+        if not candidate(action["bundle_id"]) or resolved(path) != resolved(expected_profile(action["bundle_id"])):
+            raise RuntimeError("unsafe_profile_path")
+        shutil.rmtree(path)
+    elif kind == "delete_bundle":
+        if not candidate(action["bundle_id"]) or not any(under(path, root) for root in app_roots()):
+            raise RuntimeError("unsafe_bundle_path")
+        shutil.rmtree(path)
+    elif kind == "delete_log":
+        if (
+            not candidate(action.get("bundle_id"))
+            or log_bundle_id(path) != action["bundle_id"]
+            or not any(under(path, root) for root in log_roots())
+            or not path.is_file()
+            or path.is_symlink()
+        ):
+            raise RuntimeError("unsafe_log_path")
+        path.unlink()
+    else:
+        raise RuntimeError("unknown_action")
+
+
+def cleanup_tcc(apply: bool) -> dict[str, Any]:
+    command = [str(Path(__file__).with_name("cleanup-omi-tcc.sh")), "--json"]
+    if apply:
+        command.append("--apply-tccutil")
+    environment = os.environ.copy()
+    environment["OMI_TCC_HOME"] = str(home())
+    environment["OMI_TCC_APP_ROOTS"] = os.pathsep.join(str(root) for root in app_roots())
+    result = subprocess.run(command, text=True, capture_output=True, env=environment, check=False)
+    try:
+        payload = json.loads(result.stdout)
+    except json.JSONDecodeError:
+        payload = {"raw_stdout": result.stdout.strip()}
+    return {"returncode": result.returncode, "inventory": payload, "stderr": result.stderr.strip()}
+
+
+def emit(payload: dict[str, Any], human: bool) -> None:
+    if human:
+        print(json.dumps(payload, indent=2, sort_keys=True))
+    else:
+        print(json.dumps(payload, sort_keys=True, separators=(",", ":")))
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(prog="omi-macos-dev")
+    parser.add_argument("--human", action="store_true", help="pretty-print JSON for interactive use")
+    subparsers = parser.add_subparsers(dest="command", required=True)
+    doctor = subparsers.add_parser("doctor")
+    doctor.add_argument("--bundle")
+    bundle = subparsers.add_parser("bundle")
+    bundle_subparsers = bundle.add_subparsers(dest="bundle_command", required=True)
+    bundle_subparsers.add_parser("list")
+    permissions = subparsers.add_parser("permissions")
+    permission_subparsers = permissions.add_subparsers(dest="permission_command", required=True)
+    permission_subparsers.add_parser("list")
+    reset = permission_subparsers.add_parser("reset")
+    reset.add_argument("--apply", action="store_true")
+    reset.add_argument("--yes", action="store_true")
+    logs = subparsers.add_parser("logs")
+    logs_subparsers = logs.add_subparsers(dest="logs_command", required=True)
+    logs_subparsers.add_parser("list")
+    prune = logs_subparsers.add_parser("prune")
+    prune.add_argument("--older-than", type=int, default=14)
+    prune.add_argument("--apply", action="store_true")
+    prune.add_argument("--yes", action="store_true")
+    clean = subparsers.add_parser("clean")
+    clean_subparsers = clean.add_subparsers(dest="clean_command", required=True)
+    plan = clean_subparsers.add_parser("plan")
+    plan.add_argument("--older-than", type=int, default=14)
+    apply = clean_subparsers.add_parser("apply")
+    apply.add_argument("--older-than", type=int, default=14)
+    apply.add_argument("--plan", required=True)
+    apply.add_argument("--yes", action="store_true")
+    args = parser.parse_args()
+
+    if args.command == "doctor":
+        payload = inventory(args.bundle)
+        emit(payload, args.human)
+        return 10 if payload["shared_storage_bundle_ids"] else 0
+    if args.command == "bundle":
+        emit(inventory(), args.human)
+        return 0
+    if args.command == "permissions":
+        if args.permission_command == "reset" and (not args.apply or not args.yes):
+            emit({"error": "permissions reset requires --apply --yes"}, args.human)
+            return 2
+        result = cleanup_tcc(args.permission_command == "reset")
+        emit(result, args.human)
+        return result["returncode"]
+    if args.command == "logs":
+        if args.logs_command == "list":
+            emit({"logs": all_logs()}, args.human)
+            return 0
+        if args.older_than < 1:
+            emit({"error": "--older-than must be at least 1"}, args.human)
+            return 2
+        logs, retained = old_logs(args.older_than)
+        if args.apply and args.yes:
+            for entry in logs:
+                delete_action({"kind": "delete_log", **entry})
+        elif args.apply:
+            emit({"error": "logs prune --apply requires --yes"}, args.human)
+            return 2
+        emit({"older_than_days": args.older_than, "actions": logs, "retained": retained, "applied": bool(args.apply and args.yes)}, args.human)
+        return 0
+    if args.command == "clean":
+        if args.older_than < 1:
+            emit({"error": "--older-than must be at least 1"}, args.human)
+            return 2
+        planned = clean_plan(args.older_than)
+        if args.clean_command == "plan":
+            emit(planned, args.human)
+            return 0
+        if not args.yes:
+            emit({"error": "clean apply requires --yes", "current_plan": planned["plan"]}, args.human)
+            return 2
+        if args.plan != planned["plan"]:
+            emit({"error": "plan_mismatch", "provided_plan": args.plan, "current_plan": planned["plan"]}, args.human)
+            return 12
+        completed: list[dict[str, Any]] = []
+        for action in planned["actions"]:
+            delete_action(action)
+            completed.append(action)
+        emit({"plan": planned["plan"], "completed": completed, "reclaimed_bytes": sum(item["bytes"] for item in completed)}, args.human)
+        return 0
+    raise AssertionError("unreachable")
+
+
+if __name__ == "__main__":
+    sys.exit(main())
