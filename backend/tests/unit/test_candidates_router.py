@@ -3,6 +3,7 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from fastapi.testclient import TestClient
 from jsonschema import ValidationError as JsonSchemaValidationError, validate
 
 import database.candidates as candidates_db
@@ -35,10 +36,18 @@ def _record(*, candidate_id='candidate-1', proposal=None, created_at=None):
     )
 
 
-def test_candidate_router_publishes_complete_lifecycle_openapi():
+@pytest.fixture(scope='module')
+def candidate_router_openapi():
+    """Build the expensive schema once as shared file setup, not per-test work."""
+
     app = FastAPI()
     app.include_router(candidates_router.router)
-    paths = app.openapi()['paths']
+    return app.openapi()
+
+
+def test_candidate_router_publishes_complete_lifecycle_openapi(candidate_router_openapi):
+    spec = candidate_router_openapi
+    paths = spec['paths']
 
     assert set(paths['/v1/candidates']) == {'get', 'post'}
     assert set(paths['/v1/candidates/{candidate_id}']) == {'get'}
@@ -60,24 +69,99 @@ def test_candidate_router_publishes_complete_lifecycle_openapi():
     }
     list_parameters = paths['/v1/candidates']['get']['parameters']
     assert {'status', 'limit', 'offset', 'surface'}.issubset({parameter['name'] for parameter in list_parameters})
-    candidate_schema = app.openapi()['components']['schemas']['CandidateCreate']
+    candidate_schema = spec['components']['schemas']['CandidateCreate']
     assert 'oneOf' in candidate_schema
     assert candidate_schema['discriminator']['propertyName'] == 'subject_kind'
     assert candidate_schema['discriminator']['mapping'] == {
         'task': '#/components/schemas/TaskCandidate',
         'workstream': '#/components/schemas/WorkstreamCreateCandidate',
     }
-    task_union = app.openapi()['components']['schemas']['TaskCandidate']
+    task_union = spec['components']['schemas']['TaskCandidate']
     assert task_union['discriminator']['propertyName'] == 'proposed_action'
     assert len(task_union['oneOf']) == 5
-    assert len(app.openapi()['components']['schemas']['CandidateRecord']['oneOf']) == 6
+    assert len(spec['components']['schemas']['CandidateRecord']['oneOf']) == 6
+    workflow_control_schema = spec['components']['schemas']['TaskWorkflowControl']
+    assert 'chat_first_ui' in workflow_control_schema['properties']
+    assert 'chat_first_ui_enabled' not in workflow_control_schema['properties']
 
 
-def test_candidate_workflow_control_exposes_current_mode_and_generation(monkeypatch):
+def _workflow_control_client() -> TestClient:
+    app = FastAPI()
+    app.include_router(candidates_router.router)
+    app.dependency_overrides[candidates_router.auth.get_current_user_uid] = lambda: 'user-1'
+    return TestClient(app)
+
+
+def test_candidate_workflow_control_exposes_composed_chat_first_ui_capability(monkeypatch):
+    control = TaskWorkflowControl(workflow_mode='read', account_generation=8, chat_first_ui_enabled=True)
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'workflow_mode': 'read',
+        'account_generation': 8,
+        'chat_first_ui': True,
+    }
+
+
+def test_candidate_workflow_control_fails_closed_when_chat_first_composition_raises(monkeypatch):
+    control = TaskWorkflowControl(workflow_mode='read', account_generation=8, chat_first_ui_enabled=True)
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: (_ for _ in ()).throw(RuntimeError('canonical selector unavailable')),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json()['chat_first_ui'] is False
+    assert 'chat_first_ui_enabled' not in response.json()
+
+
+def test_candidate_workflow_control_fails_closed_when_control_lookup_raises(monkeypatch):
+    def unavailable(_uid):
+        raise RuntimeError('task workflow control unavailable')
+
+    monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', unavailable)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: pytest.fail('a missing control record must not attempt cohort resolution'),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json() == {
+        'workflow_mode': 'off',
+        'account_generation': 0,
+        'chat_first_ui': False,
+    }
+
+
+def test_candidate_workflow_control_defaults_chat_first_ui_off_when_the_flag_is_missing(monkeypatch):
     control = TaskWorkflowControl(workflow_mode='read', account_generation=8)
     monkeypatch.setattr(candidates_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
+    monkeypatch.setattr(
+        candidates_router,
+        'resolve_task_intelligence_for_user',
+        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
+    )
 
-    assert candidates_router.get_candidate_workflow_control(uid='user-1') == control
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 200
+    assert response.json()['chat_first_ui'] is False
+    assert 'chat_first_ui_enabled' not in response.json()
 
 
 def test_candidate_record_serialization_satisfies_its_response_schema():

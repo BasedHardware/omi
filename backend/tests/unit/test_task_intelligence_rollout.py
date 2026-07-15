@@ -3,7 +3,11 @@ import pytest
 from models.task_intelligence import TaskWorkflowMode
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 from utils.task_intelligence import rollout as rollout_module
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user, resolve_task_intelligence_rollout
+from utils.task_intelligence.rollout import (
+    resolve_chat_first_ui,
+    resolve_task_intelligence_for_user,
+    resolve_task_intelligence_rollout,
+)
 from utils.memory.memory_system import MemorySystem
 
 
@@ -24,6 +28,19 @@ def test_rollout_matrix_keeps_workflow_and_memory_axes_independent(mode, memory_
     assert decision.compatibility_projection_required is (mode == TaskWorkflowMode.read)
     assert decision.intelligence_evaluation_enabled is (memory_eligible and mode != TaskWorkflowMode.off)
     assert decision.intelligence_product_enabled is (memory_eligible and mode == TaskWorkflowMode.read)
+
+
+@pytest.mark.parametrize('mode', list(TaskWorkflowMode))
+@pytest.mark.parametrize('memory_eligible', [False, True])
+@pytest.mark.parametrize('ui_flag_enabled', [False, True])
+def test_chat_first_ui_requires_the_complete_read_mode_canonical_cohort(mode, memory_eligible, ui_flag_enabled):
+    rollout = resolve_task_intelligence_rollout(
+        uid='user-1', workflow_mode=mode, memory_cohort_eligible=memory_eligible, account_generation=7
+    )
+
+    assert resolve_chat_first_ui(rollout, ui_flag_enabled) is (
+        mode == TaskWorkflowMode.read and memory_eligible and ui_flag_enabled
+    )
 
 
 def test_production_resolver_uses_authoritative_memory_selector(monkeypatch):

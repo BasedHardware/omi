@@ -125,6 +125,21 @@ INDEX_ONLY_REQUIREMENTS = (
         'COLLECTION',
         (_asc('discarded'), _asc('status'), _asc('structured.category'), _desc('created_at'), _desc('__name__')),
     ),
+    # `GET /v1/conversations?sources=...` retains the legacy
+    # `include_discarded=true` default, so this is distinct from the archive
+    # query below that explicitly excludes discarded captures.
+    FirestoreIndexRequirement(
+        'conversations_source_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
+    FirestoreIndexRequirement(
+        'conversations_discarded_source_status_created',
+        'conversations',
+        'COLLECTION',
+        (_asc('discarded'), _asc('source'), _asc('status'), _desc('created_at'), _desc('__name__')),
+    ),
     FirestoreIndexRequirement(
         'memory_items_tier_status_updated',
         'memory_items',

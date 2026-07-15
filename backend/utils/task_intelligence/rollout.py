@@ -77,4 +77,14 @@ def resolve_task_intelligence_for_user(
     )
 
 
-__all__ = ['resolve_task_intelligence_for_user', 'resolve_task_intelligence_rollout']
+def resolve_chat_first_ui(rollout: TaskIntelligenceRolloutDecision, ui_flag_enabled: bool) -> bool:
+    """Return the server-owned Chat-first capability for one resolved user.
+
+    The explicit UI flag is necessary but never sufficient: only the canonical
+    read-mode task-intelligence product cohort may receive the new shell.
+    """
+
+    return bool(rollout.intelligence_product_enabled and ui_flag_enabled)
+
+
+__all__ = ['resolve_chat_first_ui', 'resolve_task_intelligence_for_user', 'resolve_task_intelligence_rollout']

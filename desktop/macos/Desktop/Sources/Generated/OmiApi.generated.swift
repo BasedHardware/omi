@@ -3819,21 +3819,25 @@ public enum OmiAPI {
 
   public struct TaskWorkflowControl: Codable {
     public let accountGeneration: Int?
+    public let chatFirstUi: Bool?
     public let workflowMode: TaskWorkflowMode?
 
     private enum CodingKeys: String, CodingKey {
       case accountGeneration = "account_generation"
+      case chatFirstUi = "chat_first_ui"
       case workflowMode = "workflow_mode"
     }
 
     public init(from decoder: Decoder) throws {
       let c = try decoder.container(keyedBy: CodingKeys.self)
       accountGeneration = try c.decodeIfPresent(Int.self, forKey: .accountGeneration)
+      chatFirstUi = try c.decodeIfPresent(Bool.self, forKey: .chatFirstUi)
       workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
     }
 
-    public init(accountGeneration: Int?, workflowMode: TaskWorkflowMode?) {
+    public init(accountGeneration: Int?, chatFirstUi: Bool?, workflowMode: TaskWorkflowMode?) {
       self.accountGeneration = accountGeneration
+      self.chatFirstUi = chatFirstUi
       self.workflowMode = workflowMode
     }
   }
@@ -6709,7 +6713,7 @@ public enum OmiAPI {
     return try JSONDecoder().decode(CandidateResolutionReceipt.self, from: data)
   }
 
-  public static func getConversationsV1ConversationsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, statuses: String? = nil, includeDiscarded: Bool? = nil, startDate: String? = nil, endDate: String? = nil, folderId: String? = nil, starred: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [Conversation] {
+  public static func getConversationsV1ConversationsGet(client: OmiApiClient, limit: Int? = nil, offset: Int? = nil, statuses: String? = nil, includeDiscarded: Bool? = nil, sources: String? = nil, startDate: String? = nil, endDate: String? = nil, folderId: String? = nil, starred: Bool? = nil, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> [Conversation] {
     let _path = "/v1/conversations"
     guard var components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
@@ -6726,6 +6730,9 @@ public enum OmiAPI {
     }
     if let includeDiscarded {
       queryItems.append(URLQueryItem(name: "include_discarded", value: String(includeDiscarded)))
+    }
+    if let sources {
+      queryItems.append(URLQueryItem(name: "sources", value: String(sources)))
     }
     if let startDate {
       queryItems.append(URLQueryItem(name: "start_date", value: String(startDate)))

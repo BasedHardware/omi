@@ -19674,13 +19674,18 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Per-user universal-contract migration control; defaults preserve legacy behavior.",
+        "description": "Per-user task-intelligence control plus its fail-closed API capability.\n\n``chat_first_ui_enabled`` is the persisted, operator-owned rollout input.\n``chat_first_ui`` is a response-only derived capability: it is composed in\nthe candidates router from the explicit flag and the authoritative\ncanonical-memory/task-intelligence rollout decision.  Persistence must use\n:meth:`persisted_payload` so the derived response value can never become a\nlocal or stale source of truth.",
         "properties": {
           "account_generation": {
             "default": 0,
             "minimum": 0.0,
             "title": "Account Generation",
             "type": "integer"
+          },
+          "chat_first_ui": {
+            "default": false,
+            "title": "Chat First Ui",
+            "type": "boolean"
           },
           "workflow_mode": {
             "$ref": "#/components/schemas/TaskWorkflowMode",
@@ -30296,6 +30301,24 @@
             }
           },
           {
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+            "in": "query",
+            "name": "sources",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
+              "title": "Sources"
+            }
+          },
+          {
             "description": "Filter by start date (inclusive)",
             "in": "query",
             "name": "start_date",
@@ -30637,7 +30660,7 @@
             }
           },
           {
-            "description": "Comma-separated source filter (e.g. friend,omi)",
+            "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
             "in": "query",
             "name": "sources",
             "required": false,
@@ -30650,7 +30673,7 @@
                   "type": "null"
                 }
               ],
-              "description": "Comma-separated source filter (e.g. friend,omi)",
+              "description": "Comma-separated source filter (e.g. friend,omi); combine with statuses only for one source.",
               "title": "Sources"
             }
           },

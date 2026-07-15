@@ -20,6 +20,11 @@ def load_script():
     return module
 
 
+@pytest.fixture
+def script():
+    return load_script()
+
+
 class _Snapshot:
     def __init__(self, data=None):
         self._data = data
@@ -85,15 +90,18 @@ class _HttpResponse:
         return json.dumps(self._payload).encode('utf-8')
 
 
-def test_missing_control_plans_explicit_read_at_default_generation():
-    script = load_script()
+def test_missing_control_plans_explicit_read_at_default_generation(script):
     db = _Db()
 
     current = script.read_control(db, uid=script.TASK_INTELLIGENCE_DOGFOOD_UID)
-    plan = script.build_activation_plan(script.TASK_INTELLIGENCE_DOGFOOD_UID, current)
+    plan = script.build_activation_plan(
+        script.TASK_INTELLIGENCE_DOGFOOD_UID,
+        current,
+        chat_first_ui_enabled=True,
+    )
 
-    assert plan.current_control == {'workflow_mode': 'off', 'account_generation': 0}
-    assert plan.target_control == {'workflow_mode': 'read', 'account_generation': 0}
+    assert plan.current_control == {'workflow_mode': 'off', 'account_generation': 0, 'chat_first_ui_enabled': False}
+    assert plan.target_control == {'workflow_mode': 'read', 'account_generation': 0, 'chat_first_ui_enabled': True}
     assert plan.canonical_memory_whitelisted is True
     assert db.read_timeouts == [script.DEFAULT_FIRESTORE_RPC_TIMEOUT_SECONDS]
 
@@ -108,12 +116,14 @@ def test_activation_preserves_existing_generation_and_is_idempotent(monkeypatch)
         db,
         uid=script.TASK_INTELLIGENCE_DOGFOOD_UID,
         expected_account_generation=7,
+        chat_first_ui_enabled=True,
     )
-    assert db.docs[path] == {'workflow_mode': 'read', 'account_generation': 7}
+    assert db.docs[path] == {'workflow_mode': 'read', 'account_generation': 7, 'chat_first_ui_enabled': True}
     assert not script.apply_activation(
         db,
         uid=script.TASK_INTELLIGENCE_DOGFOOD_UID,
         expected_account_generation=7,
+        chat_first_ui_enabled=True,
     )
     assert len(db.writes) == 1
 
@@ -129,6 +139,7 @@ def test_activation_rejects_stale_generation_without_a_write(monkeypatch):
             db,
             uid=script.TASK_INTELLIGENCE_DOGFOOD_UID,
             expected_account_generation=2,
+            chat_first_ui_enabled=True,
         )
 
     assert db.writes == []
@@ -140,6 +151,52 @@ def test_tool_rejects_any_non_dogfood_uid():
 
     with pytest.raises(ValueError, match='restricted'):
         script.build_activation_plan('another-user', script.TaskWorkflowControl())
+
+
+def test_apply_requires_an_explicit_chat_first_ui_value(monkeypatch):
+    script = load_script()
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--apply',
+            '--confirm-uid',
+            script.TASK_INTELLIGENCE_DOGFOOD_UID,
+            '--confirm-workflow-mode',
+            'read',
+            '--expected-account-generation',
+            '0',
+        ],
+    )
+
+    with pytest.raises(SystemExit, match='--chat-first-ui-enabled is required'):
+        script.main()
+
+
+def test_apply_requires_an_exact_chat_first_ui_confirmation(monkeypatch):
+    script = load_script()
+    monkeypatch.setattr(
+        sys,
+        'argv',
+        [
+            str(SCRIPT),
+            '--apply',
+            '--confirm-uid',
+            script.TASK_INTELLIGENCE_DOGFOOD_UID,
+            '--confirm-workflow-mode',
+            'read',
+            '--expected-account-generation',
+            '0',
+            '--chat-first-ui-enabled',
+            'true',
+            '--confirm-chat-first-ui-enabled',
+            'false',
+        ],
+    )
+
+    with pytest.raises(SystemExit, match='must exactly match'):
+        script.main()
 
 
 def test_gcloud_user_transport_uses_current_document_precondition_and_never_reports_token():
@@ -164,12 +221,15 @@ def test_gcloud_user_transport_uses_current_document_precondition_and_never_repo
         http_open=http_open,
         access_token='short-lived-token',
     )
-    assert snapshot.control == script.TaskWorkflowControl(workflow_mode='off', account_generation=7)
+    assert snapshot.control == script.TaskWorkflowControl(
+        workflow_mode='off', account_generation=7, chat_first_ui_enabled=False
+    )
 
     assert script.apply_activation_with_gcloud_user_token(
         firestore_project='based-hardware',
         uid=script.TASK_INTELLIGENCE_DOGFOOD_UID,
         expected_account_generation=7,
+        chat_first_ui_enabled=True,
         current=snapshot,
         rpc_timeout_seconds=5,
         http_open=http_open,
@@ -182,4 +242,5 @@ def test_gcloud_user_transport_uses_current_document_precondition_and_never_repo
     assert 'currentDocument.updateTime=2026-07-12T00%3A00%3A00.000000Z' in patch_request.full_url
     assert b'"workflow_mode": {"stringValue": "read"}' in patch_request.data
     assert b'"account_generation": {"integerValue": "7"}' in patch_request.data
+    assert b'"chat_first_ui_enabled": {"booleanValue": true}' in patch_request.data
     assert b'short-lived-token' not in patch_request.data
