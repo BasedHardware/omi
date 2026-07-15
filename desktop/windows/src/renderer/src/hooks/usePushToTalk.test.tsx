@@ -680,6 +680,27 @@ describe('tap-to-lock latch (hotkey path)', () => {
     expect(onCommit).toHaveBeenCalledWith('hands free dictation')
   })
 
+  it('flag on — a locked capture delegates to the hub and a finalizing tap ends the hub turn', async () => {
+    const delegate = { enabled: () => true, begin: vi.fn(), end: vi.fn(), cancel: vi.fn() }
+    const { result } = setup({ hubDelegate: delegate })
+    // Double-tap to latch.
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    await advance(150)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(true)
+    // The locked hands-free capture delegates to the hub — no local capture job.
+    expect(delegate.begin).toHaveBeenCalledTimes(1)
+    expect(h.startPttCapture).not.toHaveBeenCalled()
+    act(() => result.current.endHold()) // key-up ignored while locked
+    // Finalizing tap ends the DELEGATED turn (there is no local job to RELEASE).
+    await advance(500)
+    act(() => result.current.beginHold())
+    expect(result.current.locked).toBe(false)
+    expect(delegate.end).toHaveBeenCalledTimes(1)
+  })
+
   it('a long hold via the hotkey is a normal PTT turn (never latches)', async () => {
     const { result, onCommit } = setup()
     act(() => result.current.beginHold())
