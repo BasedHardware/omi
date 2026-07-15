@@ -195,6 +195,15 @@ def test_backend_test_runner_defaults_python_to_utf8():
     assert runner.index(utf8_export) < runner.index('PYTHON_BIN="${PYTHON:-}"')
 
 
+def test_typecheck_prefers_the_project_venv_over_an_active_environment():
+    """Static tripwire for pre-push: Hermes must not select its own interpreter."""
+    typecheck = (BACKEND_DIR / 'scripts/typecheck.sh').read_text(encoding='utf-8')
+
+    project_venv = 'if [[ -x ".venv/bin/python" ]]; then'
+    active_venv = 'elif [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then'
+    assert typecheck.index(project_venv) < typecheck.index(active_venv)
+
+
 def test_pre_push_requires_backend_python_lazily():
     pre_push = (BACKEND_DIR.parent / "scripts/pre-push").read_text(encoding="utf-8")
     setup_prefix = pre_push[: pre_push.index("run_step()")]

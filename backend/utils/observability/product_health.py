@@ -5,9 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import Enum
 from time import monotonic, time
-from typing import Callable
-
-from prometheus_client import REGISTRY, Counter, Histogram
+from prometheus_client import Counter, Histogram
 
 
 class ProductJourney(str, Enum):
@@ -21,54 +19,33 @@ class ProductJourneyOutcome(str, Enum):
     failed = 'failed'
 
 
-def _registered_metric_or_create(name: str, factory: Callable[[], Counter | Histogram]) -> Counter | Histogram:
-    """Reuse collectors when isolated router tests reload this module."""
-
-    try:
-        return factory()
-    except ValueError:
-        collector = REGISTRY._names_to_collectors.get(name)
-        if collector is None:
-            raise
-        return collector
-
-
-PRODUCT_JOURNEY_ACCEPTED_TOTAL = _registered_metric_or_create(
+PRODUCT_JOURNEY_ACCEPTED_TOTAL = Counter(
     'omi_product_journey_accepted_total',
-    lambda: Counter(
-        'omi_product_journey_accepted_total',
-        'Accepted real-traffic product journeys by closed journey name',
-        ['journey'],
-    ),
+    'Accepted real-traffic product journeys by closed journey name',
+    ['journey'],
 )
 
-PRODUCT_JOURNEY_TERMINAL_TOTAL = _registered_metric_or_create(
+PRODUCT_JOURNEY_TERMINAL_TOTAL = Counter(
     'omi_product_journey_terminal_total',
-    lambda: Counter(
-        'omi_product_journey_terminal_total',
-        'Terminal real-traffic product journeys by closed journey name and outcome',
-        ['journey', 'outcome'],
-    ),
+    'Terminal real-traffic product journeys by closed journey name and outcome',
+    ['journey', 'outcome'],
 )
 
-PRODUCT_JOURNEY_LATENCY_SECONDS = _registered_metric_or_create(
+PRODUCT_JOURNEY_LATENCY_SECONDS = Histogram(
     'omi_product_journey_latency_seconds',
-    lambda: Histogram(
-        'omi_product_journey_latency_seconds',
-        'End-to-end latency for terminal real-traffic product journeys',
-        ['journey', 'outcome'],
-        buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600),
-    ),
+    'End-to-end latency for terminal real-traffic product journeys',
+    ['journey', 'outcome'],
+    buckets=(0.1, 0.25, 0.5, 1, 2.5, 5, 10, 30, 60, 120, 300, 900, 3600),
 )
 
 
-def _require_journey(journey: ProductJourney) -> ProductJourney:
+def _require_journey(journey: object) -> ProductJourney:
     if not isinstance(journey, ProductJourney):
         raise ValueError('journey must be a ProductJourney')
     return journey
 
 
-def _require_outcome(outcome: ProductJourneyOutcome) -> ProductJourneyOutcome:
+def _require_outcome(outcome: object) -> ProductJourneyOutcome:
     if not isinstance(outcome, ProductJourneyOutcome):
         raise ValueError('outcome must be a ProductJourneyOutcome')
     return outcome

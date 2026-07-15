@@ -9,7 +9,7 @@ from __future__ import annotations
 
 import os
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable, Literal, Mapping, TypedDict
+from typing import Any, Callable, Literal, Mapping, NotRequired, TypedDict
 
 from google.cloud import firestore
 
@@ -31,6 +31,7 @@ class FinalizationIntent(TypedDict):
     dispatch_generation: int | None
     requires_byok: bool
     fanout_key: str | None
+    newly_created: NotRequired[bool]
 
 
 class FinalizationAdmission(TypedDict):
@@ -227,7 +228,9 @@ def _create_or_get_finalization_intent_txn(
             'finalization_status': status,
         },
     )
-    return _intent_from_job(job_id, job) | {'newly_created': True}
+    intent = _intent_from_job(job_id, job)
+    intent['newly_created'] = True
+    return intent
 
 
 def create_or_get_finalization_intent(

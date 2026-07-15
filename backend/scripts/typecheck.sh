@@ -7,10 +7,10 @@ cd "$ROOT_DIR"
 
 PYRIGHT_PYTHON="${PYRIGHT_PYTHON:-}"
 if [[ -z "$PYRIGHT_PYTHON" ]]; then
-  if [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then
-    PYRIGHT_PYTHON="$VIRTUAL_ENV/bin/python"
-  elif [[ -x ".venv/bin/python" ]]; then
+  if [[ -x ".venv/bin/python" ]]; then
     PYRIGHT_PYTHON=".venv/bin/python"
+  elif [[ -n "${VIRTUAL_ENV:-}" && -x "$VIRTUAL_ENV/bin/python" ]]; then
+    PYRIGHT_PYTHON="$VIRTUAL_ENV/bin/python"
   else
     PYRIGHT_PYTHON="python3"
   fi
