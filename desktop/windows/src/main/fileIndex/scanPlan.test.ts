@@ -42,7 +42,7 @@ describe('planScan — data-loss retention guard', () => {
 
     const fs = makeFs({
       dirs: { [downloads]: [FILE('keep.txt')] }, // removed.txt is gone from disk
-      stats: { [keep]: stat() },
+      stats: { [keep]: stat(10, 2000) }, // mtime moved since last scan → upsert
       failing: [documents] // Documents throws on enumeration this run
     })
 
@@ -123,7 +123,13 @@ describe('planScan — walk behavior', () => {
       stats: { [good]: stat(42, 7000) }
     })
 
-    const plan = await planScan({ roots: [filesRoot(root)], absentRootPaths: [], existing: new Map(), fs, sep })
+    const plan = await planScan({
+      roots: [filesRoot(root)],
+      absentRootPaths: [],
+      existing: new Map(),
+      fs,
+      sep
+    })
     const paths = plan.toUpsert.map((r) => r.path)
 
     expect(paths).toContain(good)
@@ -163,7 +169,13 @@ describe('planScan — walk behavior', () => {
       stats: { [deepFile]: stat(), [tooDeep]: stat() }
     })
 
-    const plan = await planScan({ roots: [filesRoot(root)], absentRootPaths: [], existing: new Map(), fs, sep })
+    const plan = await planScan({
+      roots: [filesRoot(root)],
+      absentRootPaths: [],
+      existing: new Map(),
+      fs,
+      sep
+    })
     const paths = plan.toUpsert.map((r) => r.path)
     expect(paths).toContain(deepFile)
     expect(paths).not.toContain(tooDeep)
@@ -176,8 +188,47 @@ describe('planScan — walk behavior', () => {
       dirs: { [root]: [FILE('ok.txt'), FILE('locked.bin')] },
       stats: { [ok]: stat() }
     })
-    const plan = await planScan({ roots: [filesRoot(root)], absentRootPaths: [], existing: new Map(), fs, sep })
+    const plan = await planScan({
+      roots: [filesRoot(root)],
+      absentRootPaths: [],
+      existing: new Map(),
+      fs,
+      sep
+    })
     expect(plan.toUpsert.map((r) => r.path)).toEqual([ok])
+  })
+
+  it('incrementally skips unchanged files but upserts new + mtime-changed ones', async () => {
+    const unchanged = join(root, 'unchanged.txt')
+    const changed = join(root, 'changed.txt')
+    const fresh = join(root, 'fresh.txt')
+
+    const fs = makeFs({
+      dirs: { [root]: [FILE('unchanged.txt'), FILE('changed.txt'), FILE('fresh.txt')] },
+      stats: {
+        [unchanged]: stat(10, 1000), // same mtime as existing → skip upsert
+        [changed]: stat(10, 2000), // mtime moved → upsert
+        [fresh]: stat(10, 3000) // brand new → upsert
+      }
+    })
+    const existing = new Map<string, number>([
+      [unchanged, 1000],
+      [changed, 1500] // old mtime
+    ])
+
+    const plan = await planScan({
+      roots: [filesRoot(root)],
+      absentRootPaths: [],
+      existing,
+      fs,
+      sep
+    })
+    const upserted = plan.toUpsert.map((r) => r.path).sort()
+
+    expect(upserted).toEqual([changed, fresh].sort())
+    expect(upserted).not.toContain(unchanged)
+    // The unchanged file is still "seen", so it is NOT pruned by the retention diff.
+    expect(plan.toDelete).not.toContain(unchanged)
   })
 
   it('indexes Start-Menu .lnk shortcuts as apps with resolved targets', async () => {

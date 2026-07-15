@@ -1,5 +1,11 @@
 import { basename, extname, join } from 'path'
-import { shouldVisitDir, shouldIndexFile, isHiddenEntry, pathsToDelete, MAX_DEPTH } from './scanRules'
+import {
+  shouldVisitDir,
+  shouldIndexFile,
+  isHiddenEntry,
+  pathsToDelete,
+  MAX_DEPTH
+} from './scanRules'
 import { categorizeExtension } from './fileTypes'
 import type { ScanRoot } from './scanRoots'
 import type { IndexedFileRecord } from '../../shared/types'
@@ -53,9 +59,14 @@ export async function planScan(opts: PlanScanOptions): Promise<ScanPlan> {
   // Seed with absent candidate roots so a vanished/unmounted root protects its subtree.
   const failedPrefixes = new Set<string>(absentRootPaths)
 
-  // Record a file: mark it seen, then queue it for upsert.
+  // Record a file: always mark it seen (so the retention diff keeps it), but
+  // queue it for upsert ONLY when it is new or its mtime changed. An unchanged
+  // row is left untouched — the incremental skip that avoids rewriting the whole
+  // index every scan (mirrors macOS's mtime-equality skip).
   const recordFile = (rec: IndexedFileRecord): void => {
     scannedPaths.add(rec.path)
+    const prev = existing.get(rec.path)
+    if (prev !== undefined && prev === rec.modifiedAt) return
     toUpsert.push(rec)
   }
 

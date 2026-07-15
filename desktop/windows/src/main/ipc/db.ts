@@ -621,6 +621,20 @@ export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: stri
   apply()
 }
 
+// --- app_meta: durable app-level key/value flags (survives sign-out) ---------
+// Kept out of USER_DATA_TABLES so values like the file-index last-run timestamp
+// persist across restarts (see the app_meta DDL + dbWipe rationale).
+export function getAppMeta(key: string): string | null {
+  const row = get().prepare('SELECT value FROM app_meta WHERE key = ?').get(key) as
+    | { value: string | null }
+    | undefined
+  return row?.value ?? null
+}
+
+export function setAppMeta(key: string, value: string): void {
+  get().prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(key, value)
+}
+
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
 // wipeUserDataOn lives in the better-sqlite3-free dbWipe.ts so it is unit-testable
 // under plain-node vitest, which can't load this module's Electron-ABI native dep.

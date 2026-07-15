@@ -3,12 +3,23 @@ import { sep } from 'path'
 import { shell } from 'electron'
 import { resolveScanRoots, candidateScanRoots, type ScanEnv } from './scanRoots'
 import { planScan, type ScanFs } from './scanPlan'
-import { applyFileIndexDiff, loadIndexedFileMtimes, getFileIndexStats } from '../ipc/db'
+import {
+  applyFileIndexDiff,
+  loadIndexedFileMtimes,
+  getFileIndexStats,
+  getAppMeta,
+  setAppMeta
+} from '../ipc/db'
 import type { FileIndexStatus } from '../../shared/types'
 
+// app_meta keys — persisted so status survives a restart (the in-memory-only
+// values used to reset to null on every launch, making a populated index report
+// "never run").
+const META_LAST_RUN_AT = 'fileIndex.lastRunAt'
+const META_LAST_DURATION_MS = 'fileIndex.lastDurationMs'
+
 let running = false
-let lastRunAt: number | null = null
-let lastDurationMs: number | null = null
+let startupTimer: ReturnType<typeof setTimeout> | null = null
 
 // Resolve a .lnk to its target executable. Best-effort: returns undefined when
 // the shortcut can't be read (e.g. MSIX/UWP shortcuts have no file target).
@@ -43,9 +54,20 @@ function scanEnv(): ScanEnv {
   }
 }
 
+function numMeta(key: string): number | null {
+  const v = getAppMeta(key)
+  return v == null ? null : Number(v)
+}
+
 export function getStatus(): FileIndexStatus {
   const { filesIndexed, byType } = getFileIndexStats()
-  return { filesIndexed, byType, lastRunAt, lastDurationMs, running }
+  return {
+    filesIndexed,
+    byType,
+    lastRunAt: numMeta(META_LAST_RUN_AT),
+    lastDurationMs: numMeta(META_LAST_DURATION_MS),
+    running
+  }
 }
 
 // Re-scan: walk the roots, diff against the existing index, and apply the diff
@@ -68,10 +90,38 @@ export async function runFileIndex(): Promise<FileIndexStatus> {
     const plan = await planScan({ roots, absentRootPaths, existing, fs: nodeScanFs, sep })
     applyFileIndexDiff(plan.toUpsert, plan.toDelete)
 
-    lastRunAt = Date.now()
-    lastDurationMs = lastRunAt - t0
+    const finishedAt = Date.now()
+    setAppMeta(META_LAST_RUN_AT, String(finishedAt))
+    setAppMeta(META_LAST_DURATION_MS, String(finishedAt - t0))
     return getStatus()
   } finally {
     running = false
+  }
+}
+
+// Existing-user startup backfill: after launch, refresh the index ONCE so files
+// created/deleted while the app was closed are reflected. Gated on an
+// already-populated index so a brand-new user's files are never scanned before
+// the onboarding consent step runs its first scan. Cheap now that rescans are
+// incremental (unchanged rows are not rewritten) and safe (the retention diff
+// won't purge on a transient read failure). unref()'d so it never holds the
+// process open; cancelable on quit.
+export function scheduleStartupRescan(delayMs = 30_000): void {
+  if (startupTimer) return
+  startupTimer = setTimeout(() => {
+    startupTimer = null
+    try {
+      if (getFileIndexStats().filesIndexed > 0) void runFileIndex().catch(() => {})
+    } catch {
+      /* never let a backfill failure crash startup */
+    }
+  }, delayMs)
+  startupTimer.unref?.()
+}
+
+export function cancelStartupRescan(): void {
+  if (startupTimer) {
+    clearTimeout(startupTimer)
+    startupTimer = null
   }
 }

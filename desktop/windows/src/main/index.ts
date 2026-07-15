@@ -27,6 +27,7 @@ import { registerCaptureBridge } from './ipc/captureBridge'
 import { registerSoak } from './soak'
 import { createCaptureWindow, getCaptureWindow, getCaptureWc } from './captureWindow'
 import { registerFileIndexHandlers } from './ipc/fileIndex'
+import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
 import { registerKgHandlers } from './ipc/kg'
@@ -1048,6 +1049,7 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  cancelStartupRescan()
   stopMeetingMonitor()
   destroyTray()
   destroyBar()
