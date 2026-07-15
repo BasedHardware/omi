@@ -394,6 +394,18 @@ class MemoriesViewModel: ObservableObject {
   // MARK: - Initialization
 
   init() {
+    // Owner fencing: an in-place account switch posts only
+    // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
+    // previous owner's memories keep rendering until the container's deferred
+    // startup reset runs. Mirrors TasksStore.resetSessionState's subscription.
+    NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)
+      .sink { [weak self] _ in
+        MainActor.assumeIsolated {
+          self?.resetSessionState()
+        }
+      }
+      .store(in: &cancellables)
+
     // Refresh memories when app becomes active
     NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)
       .sink { [weak self] _ in
