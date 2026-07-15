@@ -26,7 +26,7 @@ from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
-from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
+from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
 
@@ -232,7 +232,26 @@ def migrate_staged_candidates(
 
 @router.get('/v1/candidates/control', response_model=TaskWorkflowControl, tags=['candidates'])
 def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)) -> TaskWorkflowControl:
-    return task_control_db.get_task_workflow_control(uid)
+    try:
+        control = task_control_db.get_task_workflow_control(uid)
+    except Exception:
+        # This endpoint selects a shell. An unavailable control record must not
+        # expose a partial new experience or hide the legacy-safe response.
+        return TaskWorkflowControl()
+
+    try:
+        rollout = resolve_task_intelligence_for_user(
+            uid=uid,
+            workflow_mode=control.workflow_mode,
+            account_generation=control.account_generation,
+        )
+        chat_first_ui = resolve_chat_first_ui(rollout, control.chat_first_ui_enabled)
+    except Exception:
+        # Cohort resolution is intentionally fail-closed: a backend outage or
+        # stale selector keeps this user in the existing shell.
+        chat_first_ui = False
+
+    return control.model_copy(update={'chat_first_ui': chat_first_ui})
 
 
 @router.post('/v1/candidates/integrations/drain', tags=['candidates'])

@@ -25,6 +25,23 @@ def test_memory_firestore_indexes_are_checked_in_for_unified_memory_store():
     assert "memory_archive" not in collection_groups
 
     assert (
+        "conversations",
+        "COLLECTION",
+        (("source", "ASCENDING"), ("status", "ASCENDING"), ("created_at", "DESCENDING"), ("__name__", "DESCENDING")),
+    ) in signatures
+    assert (
+        "conversations",
+        "COLLECTION",
+        (
+            ("discarded", "ASCENDING"),
+            ("source", "ASCENDING"),
+            ("status", "ASCENDING"),
+            ("created_at", "DESCENDING"),
+            ("__name__", "DESCENDING"),
+        ),
+    ) in signatures
+
+    assert (
         "memory_items",
         "COLLECTION",
         (("tier", "ASCENDING"), ("status", "ASCENDING"), ("updated_at", "DESCENDING"), ("__name__", "ASCENDING")),
