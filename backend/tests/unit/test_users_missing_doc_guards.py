@@ -9,14 +9,14 @@ race). These getters now use the file's existing `.to_dict() or {}` guard so a m
 the same default as a missing field instead of crashing. These cover the pure getter behavior.
 """
 
-import importlib.util
 import os
-import sys
-import types
 from pathlib import Path
+from types import ModuleType
 from unittest.mock import MagicMock, patch
 
 import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
 
 BACKEND_DIR = Path(__file__).resolve().parent.parent.parent
 
@@ -26,59 +26,42 @@ os.environ.setdefault(
 )
 
 
-def _pkg(name):
-    mod = sys.modules.get(name)
-    if mod is None or not hasattr(mod, "__path__"):
-        mod = types.ModuleType(name)
-        mod.__path__ = []
-        sys.modules[name] = mod
-    return mod
-
-
-def _mod(name, **attrs):
-    mod = types.ModuleType(name)
+def _module(name: str, **attrs: object) -> ModuleType:
+    mod = ModuleType(name)
     for key, value in attrs.items():
         setattr(mod, key, value)
-    sys.modules[name] = mod
     return mod
 
 
-# Stub the heavy leaves database/users.py imports so the real module loads; the @transactional /
-# CachePolicy module-level constructs become harmless mocks. None are exercised by the getters here.
-for _p in ["google", "google.cloud", "database", "models", "utils"]:
-    _pkg(_p)
-_mod("google.cloud.firestore", SERVER_TIMESTAMP=MagicMock())
-_mod("google.cloud.firestore_v1", FieldFilter=MagicMock(), transactional=lambda fn: fn)
-_mod("database._client", db=MagicMock(), document_id_from_seed=lambda seed: "id")
-_mod("database.read_boundary", parse_snapshot_or_none=MagicMock(), parse_snapshot_strict=MagicMock())
-_mod("database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock())
-_mod(
-    "database.redis_db",
-    try_acquire_client_device_write_lock=MagicMock(return_value=True),
-    try_acquire_user_platform_write_lock=MagicMock(return_value=True),
-)
-_mod(
-    "models.users",
-    Subscription=MagicMock(),
-    PlanLimits=MagicMock(),
-    PlanType=MagicMock(),
-    SubscriptionStatus=MagicMock(),
-)
-_mod("utils.subscription", get_default_basic_subscription=MagicMock())
-_mod("models.other", Person=MagicMock())
-
-
-def _load():
-    # Load under the real package-qualified name so the module's `from ._client import ...` relative
-    # import resolves against the stubbed `database` package above.
-    spec = importlib.util.spec_from_file_location("database.users", str(BACKEND_DIR / "database" / "users.py"))
-    mod = importlib.util.module_from_spec(spec)
-    sys.modules["database.users"] = mod
-    spec.loader.exec_module(mod)
-    return mod
-
-
-users = _load()
+@pytest.fixture(scope="module")
+def users():
+    """Load database.users with import-time leaves faked in a restoring context."""
+    firestore = _module("google.cloud.firestore", SERVER_TIMESTAMP=MagicMock())
+    firestore_v1 = _module("google.cloud.firestore_v1", FieldFilter=MagicMock(), transactional=lambda fn: fn)
+    fakes = {
+        "google.cloud.firestore": firestore,
+        "google.cloud.firestore_v1": firestore_v1,
+        "database._client": _module("database._client", db=MagicMock(), document_id_from_seed=lambda seed: "id"),
+        "database.firestore_cache": _module(
+            "database.firestore_cache", CachePolicy=MagicMock(), get_or_fetch=MagicMock(), invalidate=MagicMock()
+        ),
+        "database.redis_db": _module(
+            "database.redis_db",
+            try_acquire_client_device_write_lock=MagicMock(return_value=True),
+            try_acquire_user_platform_write_lock=MagicMock(return_value=True),
+        ),
+        "models.users": _module(
+            "models.users",
+            Subscription=MagicMock(),
+            PlanLimits=MagicMock(),
+            PlanType=MagicMock(),
+            SubscriptionStatus=MagicMock(),
+        ),
+        "utils.subscription": _module("utils.subscription", get_default_basic_subscription=MagicMock()),
+        "models.other": _module("models.other", Person=MagicMock()),
+    }
+    with stub_modules(fakes):
+        yield load_module_fresh("database.users", str(BACKEND_DIR / "database" / "users.py"))
 
 
 def _db_for(to_dict_result):
@@ -102,7 +85,7 @@ CASES = [
 
 
 @pytest.mark.parametrize("fn,field,default,present", CASES)
-def test_missing_user_doc_returns_default_not_crash(fn, field, default, present):
+def test_missing_user_doc_returns_default_not_crash(users, fn, field, default, present):
     # to_dict() is None when the user document does not exist; the getter must return the default
     # rather than raising AttributeError (which previously became a 500).
     func = getattr(users, fn)
@@ -111,7 +94,7 @@ def test_missing_user_doc_returns_default_not_crash(fn, field, default, present)
 
 
 @pytest.mark.parametrize("fn,field,default,present", CASES)
-def test_existing_user_doc_returns_field_value(fn, field, default, present):
+def test_existing_user_doc_returns_field_value(users, fn, field, default, present):
     # Happy path is unchanged: a present field is returned as-is.
     func = getattr(users, fn)
     with patch.object(users, "db", _db_for({field: present})):
@@ -119,7 +102,7 @@ def test_existing_user_doc_returns_field_value(fn, field, default, present):
 
 
 @pytest.mark.parametrize("fn,field,default,present", CASES)
-def test_doc_present_but_field_absent_returns_default(fn, field, default, present):
+def test_doc_present_but_field_absent_returns_default(users, fn, field, default, present):
     # A doc that exists but lacks the field still yields the default (also unchanged behavior).
     func = getattr(users, fn)
     with patch.object(users, "db", _db_for({"unrelated": 1})):
