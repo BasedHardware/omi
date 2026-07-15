@@ -67,11 +67,14 @@ def _runner(*, modes: dict[str, str | None]) -> FakeCloudRunner:
     return FakeCloudRunner(service_documents=service_documents, revision_documents=revision_documents)
 
 
-def _config(desired_mode: str) -> verifier.TransitionVerificationConfig:
+def _config(
+    desired_mode: str, *, allow_tagged_no_percent_targets: bool = False
+) -> verifier.TransitionVerificationConfig:
     return verifier.TransitionVerificationConfig(
         project='omi-prod',
         region='us-central1',
         desired_mode=desired_mode,
+        allow_tagged_no_percent_targets=allow_tagged_no_percent_targets,
     )
 
 
@@ -112,7 +115,7 @@ def test_ignores_complete_tag_only_candidate_before_serving_traffic() -> None:
     runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
     runner.service_documents['backend'] = _tagged_candidate_status_fixture()
 
-    result = verifier.verify_transition(_config('active'), runner=runner)
+    result = verifier.verify_transition(_config('active', allow_tagged_no_percent_targets=True), runner=runner)
 
     assert result.serving_revisions[0].revision == 'backend-serving'
     described_revisions = [
@@ -120,6 +123,16 @@ def test_ignores_complete_tag_only_candidate_before_serving_traffic() -> None:
     ]
     assert 'backend-candidate' not in described_revisions
     assert described_revisions == [f'{service}-serving' for service in verifier.SERVICES]
+
+
+def test_rejects_tag_only_candidate_without_dev_opt_in_before_describing_a_revision() -> None:
+    runner = _runner(modes={service: 'active' for service in verifier.SERVICES})
+    runner.service_documents['backend'] = _tagged_candidate_status_fixture()
+
+    with pytest.raises(verifier.FenceTransitionVerificationError, match='non-integer Cloud Run traffic percentage'):
+        verifier.verify_transition(_config('active'), runner=runner)
+
+    assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
 
 
 def test_rejects_malformed_tag_only_target_before_describing_a_revision() -> None:
@@ -130,7 +143,7 @@ def test_rejects_malformed_tag_only_target_before_describing_a_revision() -> Non
     ]
 
     with pytest.raises(verifier.FenceTransitionVerificationError, match='malformed tag-only'):
-        verifier.verify_transition(_config('active'), runner=runner)
+        verifier.verify_transition(_config('active', allow_tagged_no_percent_targets=True), runner=runner)
 
     assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
 
@@ -168,7 +181,7 @@ def test_tag_only_candidate_does_not_relax_serving_traffic_validation(traffic: l
     runner.service_documents['backend']['status']['traffic'] = traffic
 
     with pytest.raises(verifier.FenceTransitionVerificationError, match=error):
-        verifier.verify_transition(_config('active'), runner=runner)
+        verifier.verify_transition(_config('active', allow_tagged_no_percent_targets=True), runner=runner)
 
     assert not any(command[:4] == ['gcloud', 'run', 'revisions', 'describe'] for command in runner.commands)
 
