@@ -4377,6 +4377,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       case .evidenceUnavailable: reason = "evidence_unavailable"
       case .transportNotDispatched: reason = "transport_not_dispatched"
       case .staleReceipt: reason = "stale_receipt"
+      case .evidenceExpired: reason = "evidence_expired"
       case .contradictoryApplication: reason = "contradictory_application"
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"

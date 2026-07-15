@@ -102,18 +102,24 @@ extension RealtimeHubController {
     callID: String,
     turnEpoch: Int
   ) {
-    guard let receipt = RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+    let receiptDecision = RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
       state: screenGroundingState,
       attachment: attachment,
       sourceObjectID: ObjectIdentifier(source),
       activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
       activeResponseID: voiceResponseID,
       currentTurnEpoch: realtimeToolTurnEpoch,
-      callID: callID),
-      turnEpoch == realtimeToolTurnEpoch
-    else { return }
-    screenGroundingState = .awaitingReport(receipt)
-    logScreenEvidence(stage: "tool_wire_enqueued", evidence: attachment.descriptor, callID: callID)
+      enqueuedTurnEpoch: turnEpoch,
+      callID: callID)
+    switch receiptDecision {
+    case .accepted(let receipt):
+      screenGroundingState = .awaitingReport(receipt)
+      logScreenEvidence(stage: "tool_wire_enqueued", evidence: attachment.descriptor, callID: callID)
+    case .evidenceExpired(let evidence):
+      rejectScreenEvidence(evidence, reason: "evidence_expired")
+    case .notAdmitted:
+      return
+    }
   }
 
   func logScreenEvidence(

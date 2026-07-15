@@ -74,6 +74,18 @@ struct RealtimeScreenEvidenceAttachment {
   let jpeg: Data
 }
 
+/// A PTT-down image is current-screen authority only for a short, bounded interval. Both
+/// receipt minting and native report admission use this same policy so a transport or provider
+/// stall cannot turn an old frozen image into a present-tense answer.
+enum RealtimeScreenEvidenceFreshnessPolicy {
+  static let maximumAge: TimeInterval = 5
+
+  static func isFresh(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> Bool {
+    let age = now.timeIntervalSince(descriptor.capturedAt)
+    return age >= 0 && age < maximumAge
+  }
+}
+
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
 /// main PTT path. CGImage is immutable/CoreGraphics-owned; access to the result itself is
 /// serialized by the lock and semaphore.
@@ -199,8 +211,18 @@ enum RealtimeScreenReportDecision: Equatable {
   case evidenceUnavailable
   case transportNotDispatched
   case staleReceipt
+  case evidenceExpired
   case contradictoryApplication
   case emptyAnswer
+}
+
+/// Transport enqueue is the first of two freshness boundaries. Keep expiry distinct from an
+/// ownership mismatch so the current turn fails closed immediately, while a stale callback from
+/// an old turn stays a no-op.
+enum RealtimeScreenTransportEnqueueDecision: Equatable {
+  case accepted(RealtimeScreenObservationReceipt)
+  case notAdmitted
+  case evidenceExpired(RealtimeScreenEvidenceDescriptor)
 }
 
 /// A suspended screenshot tool execution may resume after a barge-in. A stale execution is
@@ -236,9 +258,12 @@ enum RealtimeScreenGroundingPolicy {
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
-    callID: String
-  ) -> RealtimeScreenObservationReceipt? {
-    guard case .awaitingScreenshot(let request) = state,
+    enqueuedTurnEpoch: Int,
+    callID: String,
+    now: Date = Date()
+  ) -> RealtimeScreenTransportEnqueueDecision {
+    guard enqueuedTurnEpoch == currentTurnEpoch,
+      case .awaitingScreenshot(let request) = state,
       request.acceptsTransportDispatch(
         attachment: attachment,
         sourceObjectID: sourceObjectID,
@@ -246,8 +271,11 @@ enum RealtimeScreenGroundingPolicy {
         activeResponseID: activeResponseID,
         currentTurnEpoch: currentTurnEpoch,
         callID: callID)
-    else { return nil }
-    return RealtimeScreenObservationReceipt(request: request, descriptor: attachment.descriptor)
+    else { return .notAdmitted }
+    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(attachment.descriptor, now: now) else {
+      return .evidenceExpired(attachment.descriptor)
+    }
+    return .accepted(RealtimeScreenObservationReceipt(request: request, descriptor: attachment.descriptor))
   }
 
   static func reportDecision(
@@ -257,7 +285,8 @@ enum RealtimeScreenGroundingPolicy {
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
-    knownApplicationNames: [String] = []
+    knownApplicationNames: [String] = [],
+    now: Date = Date()
   ) -> RealtimeScreenReportDecision {
     guard case .awaitingReport(let receipt) = state else {
       return .evidenceUnavailable
@@ -270,6 +299,9 @@ enum RealtimeScreenGroundingPolicy {
       activeResponseID: activeResponseID,
       currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
+    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(evidence, now: now) else {
+      return .evidenceExpired
+    }
     guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
     guard !answerClaimsDifferentApplication(
       answer,

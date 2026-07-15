@@ -6,6 +6,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
   private let turnID = VoiceTurnID(UUID(uuidString: "00000000-0000-0000-0000-000000000001")!)
   private let responseID = VoiceResponseID("response-1")
   private let sessionObjectID = ObjectIdentifier(RealtimeScreenEvidenceTests.self)
+  private let freshNow = Date(timeIntervalSince1970: 1_004)
 
   private func evidence(
     id: String = "evidence-1",
@@ -66,7 +67,8 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
-        currentTurnEpoch: 7),
+        currentTurnEpoch: 7,
+        now: freshNow),
       .accepted)
   }
 
@@ -126,15 +128,6 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     let attachment = RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3]))
     let state = RealtimeScreenGroundingState.awaitingScreenshot(request(descriptor: descriptor))
 
-    XCTAssertNil(
-      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
-        state: state,
-        attachment: attachment,
-        sourceObjectID: sessionObjectID,
-        activeTurnID: turnID,
-        activeResponseID: responseID,
-        currentTurnEpoch: 7,
-        callID: "different-screenshot-call"))
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
         state: state,
@@ -143,8 +136,73 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        callID: "screenshot-1")?.screenshotCallID,
-      "screenshot-1")
+        enqueuedTurnEpoch: 7,
+        callID: "different-screenshot-call"),
+      .notAdmitted)
+    guard case .accepted(let receipt) =
+      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+        state: state,
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        enqueuedTurnEpoch: 7,
+        callID: "screenshot-1",
+        now: Date(timeIntervalSince1970: 1_004.999))
+    else {
+      return XCTFail("Expected the matching transport enqueue to mint a receipt")
+    }
+    XCTAssertEqual(receipt.screenshotCallID, "screenshot-1")
+  }
+
+  func testTransportEnqueueFailsClosedWhenFrozenEvidenceExpires() {
+    let descriptor = evidence()
+    let attachment = RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3]))
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+        state: .awaitingScreenshot(request(descriptor: descriptor)),
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        enqueuedTurnEpoch: 7,
+        callID: "screenshot-1",
+        now: Date(timeIntervalSince1970: 1_005)),
+      .evidenceExpired(descriptor))
+  }
+
+  func testExpiredEvidenceFromOldEnqueueEpochCannotRejectCurrentTurn() {
+    let descriptor = evidence()
+    let attachment = RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3]))
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+        state: .awaitingScreenshot(request(descriptor: descriptor)),
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        enqueuedTurnEpoch: 6,
+        callID: "screenshot-1",
+        now: Date(timeIntervalSince1970: 1_005)),
+      .notAdmitted)
+  }
+
+  func testReportFailsClosedWhenEvidenceExpiresAfterTransportReceipt() {
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt()),
+        answer: "A dark editor window.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        now: Date(timeIntervalSince1970: 1_005)),
+      .evidenceExpired)
   }
 
   func testContradictoryApplicationTextCannotReachNativePresentation() {
@@ -152,11 +210,12 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: .awaitingReport(receipt(descriptor: descriptor)),
       answer: "You are in Cursor.",
-      sourceObjectID: sessionObjectID,
-      activeTurnID: turnID,
-      activeResponseID: responseID,
-      currentTurnEpoch: 7,
-      knownApplicationNames: ["Codex", "Cursor"])
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        knownApplicationNames: ["Codex", "Cursor"],
+        now: freshNow)
 
     XCTAssertEqual(decision, .contradictoryApplication)
     XCTAssertEqual(
@@ -177,7 +236,8 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Codex", "Cursor"]),
+        knownApplicationNames: ["Finder", "Codex", "Cursor"],
+        now: freshNow),
       .accepted)
   }
 
@@ -192,7 +252,8 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Cursor"]),
+        knownApplicationNames: ["Finder", "Cursor"],
+        now: freshNow),
       .accepted)
   }
 
@@ -204,7 +265,8 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
-        currentTurnEpoch: 7),
+        currentTurnEpoch: 7,
+        now: freshNow),
       .emptyAnswer)
   }
 

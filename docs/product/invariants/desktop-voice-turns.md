@@ -65,6 +65,9 @@ SwiftUI and floating-bar state are projections.
   only a reducer-admitted screenshot call seals visual output. The provider may
   propose visual detail only after native code has locally enqueued the exact
   JPEG function-response wire for the same session/response/call/epoch receipt.
+  That frozen image must be less than five seconds old both when native code
+  mints the receipt and when it accepts the report; expiration fails closed into
+  the deterministic screen-verification failure.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using
@@ -121,6 +124,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Tests/VoiceTurnReducerTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeHubBargeInContinuityTests.swift`
+- `desktop/macos/Desktop/Tests/RealtimeScreenEvidenceTests.swift`
 - `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
 
