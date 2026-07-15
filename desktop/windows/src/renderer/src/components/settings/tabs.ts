@@ -9,6 +9,7 @@ import {
   AudioLines,
   CreditCard,
   Keyboard,
+  KeyRound,
   Info,
   type LucideIcon
 } from 'lucide-react'
@@ -22,6 +23,7 @@ export type SettingsTabId =
   | 'privacy'
   | 'account'
   | 'plan-usage'
+  | 'developer-keys'
   | 'shortcuts'
   | 'advanced'
   | 'about'
@@ -35,6 +37,7 @@ export const SETTINGS_TABS: { id: SettingsTabId; label: string; Icon: LucideIcon
   { id: 'privacy', label: 'Privacy', Icon: ShieldCheck },
   { id: 'account', label: 'Account', Icon: CircleUserRound },
   { id: 'plan-usage', label: 'Plan & Usage', Icon: CreditCard },
+  { id: 'developer-keys', label: 'Developer Keys', Icon: KeyRound },
   { id: 'shortcuts', label: 'Shortcuts', Icon: Keyboard },
   { id: 'advanced', label: 'Advanced', Icon: SlidersHorizontal },
   { id: 'about', label: 'About', Icon: Info }
