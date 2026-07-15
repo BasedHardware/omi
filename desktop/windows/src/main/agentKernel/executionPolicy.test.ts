@@ -39,12 +39,18 @@ describe('executionPolicy — leaf-role guards', () => {
 })
 
 describe('executionPolicy — provider boundaries', () => {
-  it('derives a local_user boundary for every Windows adapter', () => {
-    // Windows ships only local-user adapters (no managed_cloud pi-mono).
+  it('derives a local_user boundary for every local-user Windows adapter', () => {
     expect(providerBoundaryForAdapter('acp')).toBe('local_user:acp')
     expect(providerBoundaryForAdapter('openclaw')).toBe('local_user:openclaw')
     expect(providerBoundaryForAdapter('hermes')).toBe('local_user:hermes')
     expect(providerBoundaryForAdapter('codex')).toBe('local_user:codex')
+  })
+
+  it('pins the managed-cloud pi-mono adapter to the managed_cloud boundary', () => {
+    // PR-D registered pi-mono as a managed_cloud production adapter, so its
+    // production-ness + credential scope now flow through isProductionAdapterId
+    // (the MANAGED_CLOUD_ADAPTER_IDS special-case was deleted).
+    expect(providerBoundaryForAdapter('pi-mono')).toBe('managed_cloud')
   })
 
   it('maps a boundary back to a credential scope', () => {
@@ -97,6 +103,41 @@ describe('executionPolicy — provider boundaries', () => {
         requestedAdapterId: 'nope'
       })
     ).toThrow(/Unknown production adapter/)
+  })
+
+  it('resolves pi-mono within the managed_cloud boundary (no longer an unknown adapter)', () => {
+    // Before PR-D, resolveAdapterWithinBoundary threw "Unknown production adapter:
+    // pi-mono" because isProductionAdapterId('pi-mono') was false. The matrix entry
+    // makes the managed_cloud boundary fully reachable.
+    expect(
+      resolveAdapterWithinBoundary({
+        providerBoundary: 'managed_cloud',
+        defaultAdapterId: 'pi-mono',
+        requestedAdapterId: 'pi-mono'
+      })
+    ).toBe('pi-mono')
+  })
+
+  it('honors the managed_cloud pin: a local adapter cannot run in the managed boundary', () => {
+    expect(() =>
+      resolveAdapterWithinBoundary({
+        providerBoundary: 'managed_cloud',
+        defaultAdapterId: 'pi-mono',
+        requestedAdapterId: 'openclaw'
+      })
+    ).toThrow(/Managed Omi agents can only use Omi cloud routing/)
+  })
+
+  it('rejects rerouting a pinned local session to the managed pi-mono adapter', () => {
+    // Cross-boundary reroute stays rejected: a session pinned to local acp may not
+    // jump to the managed-cloud provider.
+    expect(() =>
+      resolveAdapterWithinBoundary({
+        providerBoundary: 'local_user:acp',
+        defaultAdapterId: 'acp',
+        requestedAdapterId: 'pi-mono'
+      })
+    ).toThrow(/pinned to acp/)
   })
 
   it('lets a non-production (test) adapter keep only its own identity', () => {

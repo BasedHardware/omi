@@ -85,6 +85,18 @@ describe('AdapterRegistry — registry API', () => {
     )
     expect(() => registry.get('missing')).toThrow(/not registered/)
   })
+
+  it('registers pi-mono as a production adapter (its managed_cloud scope is declared)', () => {
+    // pi-mono is a matrix member, so register() runs the production guard
+    // (assertProductionAdapterScopeDeclared). It passes because the matrix entry
+    // declares credentialScope: 'managed_cloud'. This is the kernel-side half of
+    // PR-D's registration (controlPlane wires the real factory).
+    const registry = new AdapterRegistry()
+    expect(() =>
+      registry.register('pi-mono', () => fakeAdapter({ adapterId: 'pi-mono' }))
+    ).not.toThrow()
+    expect(registry.has('pi-mono')).toBe(true)
+  })
 })
 
 describe('AdapterRegistry — contract checking', () => {

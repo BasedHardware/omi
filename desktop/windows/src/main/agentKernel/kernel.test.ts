@@ -1254,13 +1254,11 @@ describe('AgentRuntimeKernel — provider boundary enforced through executeRun (
     })
     expect(session.providerBoundary).toBe('managed_cloud')
 
-    // NOTE the error text. Windows registers no managed-cloud adapter yet, so
-    // 'pi-mono' is not in ADAPTER_CAPABILITY_MATRIX and resolveAdapterWithinBoundary
-    // takes its non-production branch — which refuses any adapter other than the
-    // session's own. The run is still refused (that is what matters here), just via
-    // that branch rather than the managed_cloud one. When a real pi-mono adapter
-    // lands, this becomes 'Local Claude is available only when the User Claude mode
-    // is selected.' and this expectation should be updated with it.
+    // NOTE the error text. PR-D registered pi-mono as a managed_cloud production
+    // adapter, so 'pi-mono' IS now in ADAPTER_CAPABILITY_MATRIX and
+    // resolveAdapterWithinBoundary takes its production branch: a managed_cloud
+    // session refuses local Claude ('acp') with the User-Claude-mode error. The run
+    // is still refused (that is what matters here), now via the managed_cloud branch.
     await expect(
       kernel.executeRun(
         runInput({
@@ -1271,7 +1269,7 @@ describe('AgentRuntimeKernel — provider boundary enforced through executeRun (
           defaultAdapterId: 'pi-mono'
         })
       )
-    ).rejects.toThrow(/Adapter acp is outside the owning execution boundary/)
+    ).rejects.toThrow(/Local Claude is available only when the User Claude mode is selected/)
 
     expect(
       Number(
