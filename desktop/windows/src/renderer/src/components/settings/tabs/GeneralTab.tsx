@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { MessagesSquare, Mic, Monitor, Power, Presentation } from 'lucide-react'
+import { LayoutDashboard, MessagesSquare, Mic, Monitor, Power, Presentation } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
@@ -38,6 +38,7 @@ export function GeneralTab(): React.JSX.Element {
           </select>
         }
       />
+      <LegacyHomeRow />
       <MeetingDetectionRow />
       <LaunchAtLoginRow />
       <FontSizeCard />
@@ -104,6 +105,29 @@ function AudioRecordingRow(): React.JSX.Element {
   )
 }
 
+// Escape hatch back to the original Home screen. The Home page subscribes to this
+// preference, so the switch takes effect immediately — no restart.
+function LegacyHomeRow(): React.JSX.Element {
+  const [legacy, setLegacy] = useState(!!getPreferences().useLegacyHomeDesign)
+
+  const change = (next: boolean): void => {
+    setLegacy(next)
+    setPreferences({ useLegacyHomeDesign: next })
+  }
+
+  return (
+    <SettingRow
+      icon={LayoutDashboard}
+      dot={legacy ? 'off' : 'on'}
+      title="New Home screen"
+      subtitle="The redesigned Home — one stage with your stats, an ask bar, and suggestions. Turn this off to go back to the previous Home."
+      keywords="hub home dashboard layout redesign legacy old classic"
+      control={
+        <Toggle on={!legacy} onChange={(on) => change(!on)} label="Use the new Home screen" />
+      }
+    />
+  )
+}
 // Meeting detection (Phase 5): off / ask (default) / auto. Per-app overrides
 // live in the same settings object (userData/app-settings.json → meeting.perApp,
 // keyed by pattern id) — editable as JSON; no dedicated UI yet.

@@ -180,6 +180,7 @@ const omi: OmiBridgeApi = {
   },
   rewindFrames: (from: number, to: number) => ipcRenderer.invoke('rewind:frames', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
+  rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
   // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
   // with semantic hits merged in, pushed if/when the embedding round-trip lands.

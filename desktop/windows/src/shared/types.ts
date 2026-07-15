@@ -742,6 +742,8 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
+  /** Total captured frames, all time — a COUNT(*), not a row fetch. */
+  rewindFrameCount: () => Promise<number>
   /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
    *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>

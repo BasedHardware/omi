@@ -18,6 +18,7 @@ import {
   refreshCloudConversations,
   getPendingConversations,
   reconcilePending,
+  publishConversationsCache,
   type ConversationRow
 } from '../lib/pageCache'
 import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
@@ -249,7 +250,7 @@ export function Conversations(): React.JSX.Element {
       if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
       // Only the default view is the canonical shared cache.
       if (isDefaultView(folderFilter, dateRange)) {
-        conversationsCache.rows = merged
+        publishConversationsCache(merged)
         conversationsCache.loaded = true
       }
       setRows(merged)
@@ -315,7 +316,7 @@ export function Conversations(): React.JSX.Element {
               (a, b) => b.sortAt - a.sortAt
             )
             if (isDefaultView(folderFilter, dateRange)) {
-              conversationsCache.rows = merged
+              publishConversationsCache(merged)
             }
             return merged
           })

@@ -1095,6 +1095,14 @@ export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   })
 }
 
+/** Total captured frames, all time. A COUNT(*) rather than a row fetch: the Hub's
+ *  stat ribbon needs the number only, and listRewindFrames would drag full rows
+ *  (OCR text included) across IPC just to take a length. */
+export function rewindFrameCount(): number {
+  const row = get().prepare('SELECT COUNT(*) AS n FROM rewind_frames').get() as { n: number }
+  return row.n
+}
+
 export function rewindDayBounds(): { min: number; max: number } | null {
   const row = get().prepare('SELECT MIN(ts) AS min, MAX(ts) AS max FROM rewind_frames').get() as {
     min: number | null

@@ -112,6 +112,14 @@
        the `font-mono` Tailwind utility (see tailwind.config.ts). */
     --font-code: 'JetBrains Mono Variable', 'Cascadia Code', Consolas, 'Liberation Mono', monospace;
 
+    /* Serif accent. The Mac Hub sets a handful of things in the system serif (New
+       York): the stat-ribbon numerals, the Connect column headers, and the "Try
+       asking" headline. New York is Apple-only, so we bundle Newsreader Variable
+       (OFL) — a Times/New-York-class transitional serif — as the analog. It is an
+       ACCENT face only: body text stays --font-app. (The omi wordmark is NOT serif;
+       Mac renders it with design:.rounded.) */
+    --font-serif: 'Newsreader Variable', Georgia, 'Times New Roman', serif;
+
     /* ── Mac-parity palette (INV-UI-1 Windows carve-out, ruling B 2026-07-14).
        Purple ports as-is from macOS OmiColors; these are NEW named tokens for
        Hub/chat/brain-graph surfaces. --accent stays neutral white (above). ── */
@@ -127,18 +135,27 @@
     --speaker-4: #4a3728;
     --speaker-5: #3d2e4a;
     --speaker-6: #4a3a2d;
-    /* HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage) */
-    --home-paper: #050506;
-    --home-panel: #0c0c0d;
+    /* HomePalette — redesigned-Home (Hub) surface tokens (macOS DashboardPage).
+       Values are the Swift RGB floats rounded to 8-bit; four were off by one
+       (paper/panel/ink/hairline) and are corrected here against the source. */
+    --home-paper: #050505; /* rgb(0.018,0.019,0.021) */
+    --home-panel: #0b0c0d; /* rgb(0.045,0.046,0.052) */
     --home-tile: #141416;
     --home-tile-hover: #1d1a24; /* intentionally leans violet (R/G/B not equal) */
-    --home-ink: #f0ebe3; /* warm off-white primary text */
+    --home-ink: #f0ece3; /* warm off-white primary text; rgb(0.94,0.925,0.89) */
     --home-secondary: #c7c3b9;
     --home-muted: #7d786e;
     --home-faint: #5c5954;
-    --home-hairline: #27272c;
+    --home-hairline: #28282c; /* rgb(0.155,0.155,0.172) */
     --home-green: #2bc761;
     --home-stage-glow: #7a4df2; /* ambient violet glow (ruling B); rgb(0.48,0.30,0.95) */
+
+    /* Channel triplets for the two Home colors that are used at many alphas (the
+       canvas glows, the ask-bar focus ring/shadows, the vignette). Lets a call
+       site write rgb(var(--home-stage-glow-rgb) / 0.075) instead of re-typing the
+       hue as a literal rgba() — so the hue lives in exactly one place. */
+    --home-paper-rgb: 5 5 5;
+    --home-stage-glow-rgb: 122 77 242;
   }
 
   /* A/B hook used by the Phase 8 typography comparison harness (and an easy

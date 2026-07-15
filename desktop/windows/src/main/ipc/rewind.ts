@@ -6,6 +6,7 @@ import {
   listRewindFrames,
   searchRewindFrames,
   rewindDayBounds,
+  rewindFrameCount,
   getRewindFrameOcrLines,
   searchRewindEmbeddings,
   rewindFramesByIds
@@ -61,6 +62,7 @@ export function registerRewindHandlers(): void {
     listRewindFrames(from, to)
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
+  ipcMain.handle('rewind:frameCount', async () => rewindFrameCount())
   // Hybrid search, in TWO PHASES.
   //
   // Phase 1 (this handler, synchronous): keyword results (FTS5/BM25), returned

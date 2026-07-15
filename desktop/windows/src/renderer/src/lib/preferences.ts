@@ -83,6 +83,9 @@ export type Preferences = {
   // AudioSessionHost); PTT is passthrough regardless. Undefined = enabled
   // (gated), the macOS-faithful default. Set false to send all audio ungated.
   vadGateEnabled?: boolean
+  // Fall back to the original Home screen instead of the Hub. Undefined = off, so
+  // the Hub is what a user sees by default; Settings → Appearance can switch back.
+  useLegacyHomeDesign?: boolean
   // Mute other apps' system audio while push-to-talk is capturing (macOS
   // SystemAudioMuteController parity — so a playing video doesn't bleed into the
   // mic and you can hear yourself think). Undefined = ON, the macOS-faithful
