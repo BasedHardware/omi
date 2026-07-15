@@ -28,7 +28,7 @@
 //   node scripts/gen-pimono-unpack.mjs --print   # print globs to stdout, no write
 
 import { existsSync, mkdirSync, readFileSync, realpathSync, writeFileSync } from 'node:fs'
-import { dirname, join, relative, resolve, sep } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
@@ -86,8 +86,13 @@ function readPkg(pkgDir) {
 // Walk pi's dependency graph and return the sorted asarUnpack globs plus stats.
 // Pure: reads node_modules, writes nothing.
 export function computeUnpackGlobs() {
+  // Graph traversal is keyed by the resolved real DIR (so a package reached via
+  // several paths, or a nested version-conflict copy, is walked exactly once).
+  // But the OUTPUT globs are keyed by package NAME at top level
+  // (node_modules/<name>/**), NOT the source dir — see the note below.
   const visitedDirs = new Set()
-  const collected = new Map() // realDir -> package name
+  const names = new Set() // canonical package names in the closure
+  let closureSize = 0
 
   const queue = ROOTS.map((name) => [name, WIN_ROOT])
   while (queue.length > 0) {
@@ -96,28 +101,37 @@ export function computeUnpackGlobs() {
     if (!pkgDir) continue // optional/platform dep not installed here — skip cleanly
     if (visitedDirs.has(pkgDir)) continue
     visitedDirs.add(pkgDir)
-    collected.set(pkgDir, name)
+    closureSize++
     const pkg = readPkg(pkgDir)
+    // Use the authoritative name from package.json (falls back to the resolver key).
+    names.add(pkg?.name ?? name)
     if (!pkg) continue
     const deps = { ...(pkg.dependencies || {}), ...(pkg.optionalDependencies || {}) }
     for (const dep of Object.keys(deps)) queue.push([dep, pkgDir])
   }
 
+  // Emit `node_modules/<name>/**` by TOP-LEVEL package name — NOT the pnpm source
+  // path. Reason: pnpm's node-linker=hoisted keeps a few version-conflict copies
+  // NESTED in the source tree (e.g. @earendil-works/pi-coding-agent/node_modules/jiti),
+  // but electron-builder RE-FLATTENS the dependency tree when it packs, hoisting
+  // those to top-level node_modules/<name> in the app. asarUnpack globs match the
+  // PACKED layout, so a source-path glob would silently miss the flattened copy,
+  // leaving it inside the asar → ERR_MODULE_NOT_FOUND when the plain-Node pi child
+  // require()s it. verify-pimono-packaged-spawn.mjs asserts this against the real
+  // packaged tree as the backstop.
   const globs = new Set()
   const skippedCovered = new Set()
-  for (const [realDir, name] of collected) {
+  for (const name of names) {
     if (isAlreadyCovered(name)) {
       skippedCovered.add(name)
       continue
     }
-    const rel = relative(WIN_ROOT, realDir).split(sep).join('/')
-    if (!rel.startsWith('node_modules/')) continue // resolved outside the tree — ignore
-    globs.add(`${rel}/**`)
+    globs.add(`node_modules/${name}/**`)
   }
 
   return {
     globs: [...globs].sort(),
-    closureSize: collected.size,
+    closureSize,
     coveredCount: skippedCovered.size
   }
 }
