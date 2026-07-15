@@ -87,8 +87,21 @@ actor RewindIndexer {
         }
     }
 
+    /// Reconcile the cached `isInitialized` flag against the authoritative
+    /// database readiness. `RewindDatabase` self-recovers by closing its pool
+    /// after repeated I/O or corruption errors; when it does, our cached flag is
+    /// stale and would otherwise short-circuit reinitialization, leaving frames
+    /// to emit repeated `databaseNotInitialized` errors until the 6-hourly
+    /// cleanup happens to call `RewindDatabase.initialize()` again.
+    private func reconcileDatabaseReadiness() async {
+        guard isInitialized, await !RewindDatabase.shared.isInitialized else { return }
+        log("RewindIndexer: Database closed after self-recovery; reinitializing")
+        isInitialized = false
+    }
+
     /// Try to initialize with exponential backoff. Returns true if initialized.
-    private func ensureInitialized() async -> Bool {
+    func ensureInitialized() async -> Bool {
+        await reconcileDatabaseReadiness()
         if isInitialized { return true }
 
         // Check backoff timer - skip if too soon after last failure
@@ -645,7 +658,8 @@ actor RewindIndexer {
     func rebuildFromVideoFiles(progressCallback: @escaping (Double) -> Void) async throws {
         log("RewindIndexer: Starting database rebuild from video files...")
 
-        // Ensure initialized
+        // Ensure initialized (reopen if the database self-recovered/closed).
+        await reconcileDatabaseReadiness()
         if !isInitialized {
             try await initialize()
         }
