@@ -79,8 +79,10 @@ async function load(): Promise<{
 }> {
   vi.resetModules()
   const mod = await import('./encryptedAuthPersistence')
+  // Firebase treats the export as a class and constructs one instance; do the same.
+  const Cls = mod.encryptedAuthPersistence as unknown as new () => Internal
   return {
-    persistence: mod.encryptedAuthPersistence as unknown as Internal,
+    persistence: new Cls(),
     scrub: mod.scrubLegacyPlaintextAuth
   }
 }
@@ -104,6 +106,14 @@ describe('encryptedAuthPersistence', () => {
     expect(persistence.type).toBe('LOCAL')
     // Without this Firebase never migrates the plaintext session in / deletes it.
     expect(persistence._shouldAllowMigration).toBe(true)
+  })
+
+  it('export is a CLASS with a static type (Firebase _getInstance requires a constructor)', async () => {
+    vi.resetModules()
+    const mod = await import('./encryptedAuthPersistence')
+    // A plain object here throws "Expected a class definition" at Firebase init.
+    expect(typeof mod.encryptedAuthPersistence).toBe('function')
+    expect((mod.encryptedAuthPersistence as unknown as { type: string }).type).toBe('LOCAL')
   })
 
   it('_set → _get round-trips an object value (JSON over the bridge)', async () => {

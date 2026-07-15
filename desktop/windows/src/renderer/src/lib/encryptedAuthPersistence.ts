@@ -2,11 +2,18 @@
 // tokens) ENCRYPTED at rest via the main process (safeStorage/DPAPI), instead of
 // Firebase's default plaintext localStorage.
 //
-// How it plugs in: firebase.ts passes `[encryptedAuthPersistence,
+// How it plugs in: firebase.ts passes `[EncryptedAuthPersistence,
 // browserLocalPersistence]` to initializeAuth. Firebase's PersistenceUserManager
 // auto-migrates on init — it finds an existing plaintext user in browserLocal,
 // re-`_set`s it into THIS (encrypted) persistence, and `_remove`s the plaintext
 // copy. Readers (auth.currentUser.getIdToken()) are untouched.
+//
+// CRITICAL — this MUST be a CLASS, not a plain object. Firebase's `_getInstance`
+// asserts `cls instanceof Function` ("Expected a class definition") and constructs
+// ONE cached instance via `new`. A plain object throws an INTERNAL ASSERTION at
+// init and Firebase silently falls back to getAuth's default (IndexedDB) — the
+// encrypted store is never used. Mirror the shape of Firebase's own
+// BrowserLocalPersistence: a class with a static `type` plus instance fields.
 //
 // CRITICAL: `_shouldAllowMigration = true`. Firebase only migrates INTO a
 // persistence that opts in (see persistence_user_manager: migrationHierarchy =
@@ -59,35 +66,40 @@ function emitDegradedFallbackOnce(reason: string): void {
   })
 }
 
-// Per-key listener sets. A single bridge subscription fans authStore:changed out
-// to them, re-reading the (decrypted) value so listeners see the new state —
-// mirroring how browserLocalPersistence reacts to cross-tab storage events.
-const listeners = new Map<string, Set<StorageEventListener>>()
-let unsubscribeChanged: (() => void) | null = null
+// Firebase constructs ONE instance of this class (cached by `_getInstance`) and
+// calls its methods. Mirrors BrowserLocalPersistence: static `type` for the
+// pre-instantiation type check, instance `type` + `_shouldAllowMigration`, and the
+// PersistenceInternal method surface.
+class EncryptedAuthPersistence implements PersistenceInternal {
+  static type = 'LOCAL' as const
+  readonly type = 'LOCAL' as const
+  readonly _shouldAllowMigration = true
 
-function ensureChangeSubscription(): void {
-  if (unsubscribeChanged) return
-  const api = bridge()
-  if (!api) return
-  unsubscribeChanged = api.onChanged((key) => {
-    const set = listeners.get(key)
-    if (!set || set.size === 0) return
-    void (async () => {
-      let value: PersistenceValue | null = null
-      try {
-        const raw = await api.get(key)
-        value = raw != null ? (JSON.parse(raw) as PersistenceValue) : null
-      } catch {
-        value = null
-      }
-      for (const listener of set) listener(value)
-    })()
-  })
-}
+  // Per-key listener sets. A single bridge subscription fans authStore:changed out
+  // to them, re-reading the (decrypted) value so listeners see the new state —
+  // mirroring how browserLocalPersistence reacts to cross-tab storage events.
+  private readonly listeners = new Map<string, Set<StorageEventListener>>()
+  private unsubscribeChanged: (() => void) | null = null
 
-const impl: PersistenceInternal = {
-  type: 'LOCAL',
-  _shouldAllowMigration: true,
+  private ensureChangeSubscription(): void {
+    if (this.unsubscribeChanged) return
+    const api = bridge()
+    if (!api) return
+    this.unsubscribeChanged = api.onChanged((key) => {
+      const set = this.listeners.get(key)
+      if (!set || set.size === 0) return
+      void (async () => {
+        let value: PersistenceValue | null = null
+        try {
+          const raw = await api.get(key)
+          value = raw != null ? (JSON.parse(raw) as PersistenceValue) : null
+        } catch {
+          value = null
+        }
+        for (const listener of set) listener(value)
+      })()
+    })
+  }
 
   async _isAvailable(): Promise<boolean> {
     const api = bridge()
@@ -100,13 +112,13 @@ const impl: PersistenceInternal = {
       emitDegradedFallbackOnce('bridge_error')
       return false
     }
-  },
+  }
 
   async _set(key: string, value: PersistenceValue): Promise<void> {
     const api = bridge()
     if (!api) throw new Error('authStore bridge unavailable')
     await api.set(key, JSON.stringify(value))
-  },
+  }
 
   async _get<T extends PersistenceValue>(key: string): Promise<T | null> {
     const api = bridge()
@@ -118,34 +130,38 @@ const impl: PersistenceInternal = {
     } catch {
       return null
     }
-  },
+  }
 
   async _remove(key: string): Promise<void> {
     const api = bridge()
     if (!api) return
     await api.remove(key)
-  },
+  }
 
   _addListener(key: string, listener: StorageEventListener): void {
-    ensureChangeSubscription()
-    let set = listeners.get(key)
+    this.ensureChangeSubscription()
+    let set = this.listeners.get(key)
     if (!set) {
       set = new Set()
-      listeners.set(key, set)
+      this.listeners.set(key, set)
     }
     set.add(listener)
-  },
+  }
 
   _removeListener(key: string, listener: StorageEventListener): void {
-    const set = listeners.get(key)
+    const set = this.listeners.get(key)
     if (!set) return
     set.delete(listener)
-    if (set.size === 0) listeners.delete(key)
+    if (set.size === 0) this.listeners.delete(key)
   }
 }
 
-/** The persistence to pass to initializeAuth. Cast to the public type. */
-export const encryptedAuthPersistence = impl as unknown as Persistence
+/**
+ * The persistence to pass to initializeAuth. This is the CLASS itself (not an
+ * instance) — Firebase's `_getInstance` requires a constructor and news it once.
+ * Cast to the public `Persistence` type the SDK expects in its config.
+ */
+export const encryptedAuthPersistence = EncryptedAuthPersistence as unknown as Persistence
 
 /**
  * Belt-and-suspenders plaintext scrub. Firebase's persistence array already
