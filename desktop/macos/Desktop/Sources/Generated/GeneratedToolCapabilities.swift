@@ -583,17 +583,6 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "report_screen_observation",
-      title: "Report Screen Observation",
-      latency: .fastLocal,
-      surfaces: Set([.realtimeHub]),
-      summary: "Report a grounded current-screen answer.",
-      bullets: [
-      "Only call after screenshot returns the current image.",
-      "Put only visual detail in the answer; native evidence supplies application identity."
-    ]
-    ),
-    Capability(
       toolName: "point_click",
       title: "Point Click",
       latency: .fastLocal,
@@ -649,6 +638,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }
