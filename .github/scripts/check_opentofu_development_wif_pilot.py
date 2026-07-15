@@ -3,26 +3,66 @@
 
 from __future__ import annotations
 
+import argparse
+import json
 import re
 import sys
 from pathlib import Path
+from typing import Any, Sequence
 
 
 ROOT = Path(__file__).resolve().parents[2]
-BOOTSTRAP = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-plan" / "main.tf"
-BOOTSTRAP_VARIABLES = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-plan" / "variables.tf"
-PROBE = ROOT / "infrastructure" / "opentofu" / "probes" / "development-project-read" / "main.tf"
+PILOT_DIR = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-plan"
+PROBE_DIR = ROOT / "infrastructure" / "opentofu" / "probes" / "development-project-read"
+BOOTSTRAP = PILOT_DIR / "main.tf"
+BOOTSTRAP_VARIABLES = PILOT_DIR / "variables.tf"
+PROBE = PROBE_DIR / "main.tf"
 WORKFLOW = ROOT / ".github" / "workflows" / "opentofu-development-wif-pilot.yml"
 VALIDATION_WORKFLOW = ROOT / ".github" / "workflows" / "opentofu-development-wif-pilot-validate.yml"
 
-EXPECTED_BOOTSTRAP_RESOURCES = {
-    "google_service_account.plan",
-    "google_iam_workload_identity_pool.github",
-    "google_iam_workload_identity_pool_provider.github",
-    "google_service_account_iam_member.github_plan_impersonation",
-    "google_project_iam_member.plan_project_browser",
-}
+EXPECTED_PILOT_FILES = frozenset({"main.tf", "variables.tf"})
+EXPECTED_PROBE_FILES = frozenset({"main.tf"})
+EXPECTED_BOOTSTRAP_RESOURCES = frozenset(
+    {
+        "google_service_account.plan",
+        "google_iam_workload_identity_pool.github",
+        "google_iam_workload_identity_pool_provider.github",
+        "google_service_account_iam_member.github_plan_impersonation",
+        "google_project_iam_member.plan_project_browser",
+    }
+)
 RESOURCE = re.compile(r'^\s*resource\s+"(?P<type>[^"]+)"\s+"(?P<name>[^"]+)"', re.MULTILINE)
+DATA = re.compile(r'^\s*data\s+"(?P<type>[^"]+)"\s+"(?P<name>[^"]+)"', re.MULTILINE)
+MODULE = re.compile(r'^\s*module\s+"(?P<name>[^"]+)"', re.MULTILINE)
+PROVIDER = re.compile(r'^\s*provider\s+"(?P<name>[^"]+)"', re.MULTILINE)
+PROVISIONER = re.compile(r'^\s*provisioner\s+"(?P<name>[^"]+)"', re.MULTILINE)
+
+
+def read(path: Path) -> str:
+    return path.read_text(encoding="utf-8")
+
+
+def module_files(module_dir: Path) -> list[Path]:
+    return sorted(path for path in module_dir.rglob("*.tf") if path.is_file())
+
+
+def module_config_files(module_dir: Path) -> list[Path]:
+    return sorted(
+        path
+        for path in module_dir.rglob("*")
+        if path.is_file() and (path.name.endswith(".tf") or path.name.endswith(".tf.json"))
+    )
+
+
+def check_module_files(module_dir: Path, expected_names: frozenset[str], label: str) -> list[str]:
+    names = {path.relative_to(module_dir).as_posix() for path in module_config_files(module_dir)}
+    if names != expected_names:
+        return [f"{label} files must be exactly {sorted(expected_names)}, found {sorted(names)}"]
+    return []
+
+
+def module_source(module_dir: Path) -> str:
+    return "\n".join(read(path) for path in module_files(module_dir))
 
 
 def resource_body(text: str, address: str) -> str | None:
@@ -35,24 +75,31 @@ def resource_body(text: str, address: str) -> str | None:
     return None if match is None else match.group("body")
 
 
-def read(path: Path) -> str:
-    return path.read_text(encoding="utf-8")
-
-
 def check_bootstrap(text: str) -> list[str]:
     errors: list[str] = []
     resources = {f"{match.group('type')}.{match.group('name')}" for match in RESOURCE.finditer(text)}
     if resources != EXPECTED_BOOTSTRAP_RESOURCES:
         errors.append(f"bootstrap resources must be exactly {sorted(EXPECTED_BOOTSTRAP_RESOURCES)}")
-    if re.search(r"^\s*data\s+", text, re.MULTILINE):
+    if DATA.search(text):
         errors.append("bootstrap must not declare data sources")
+    if MODULE.search(text):
+        errors.append("bootstrap must not declare modules")
+    if PROVISIONER.search(text):
+        errors.append("bootstrap must not declare provisioners")
+    providers = {match.group("name") for match in PROVIDER.finditer(text)}
+    if providers != {"google"}:
+        errors.append("bootstrap must declare exactly one google provider")
     for required in (
         'backend "gcs" {}',
-        'project = var.project_id',
-        'roles/iam.workloadIdentityUser',
-        'roles/browser',
-        'assertion.ref == \'refs/heads/main\'',
-        'https://token.actions.githubusercontent.com',
+        "project = var.project_id",
+        "roles/iam.workloadIdentityUser",
+        "roles/browser",
+        "assertion.repository_id == '${var.github_repository_id}'",
+        "assertion.repository_owner_id == '${var.github_repository_owner_id}'",
+        "assertion.ref == 'refs/heads/main'",
+        "assertion.workflow_ref == '${var.github_workflow_ref}'",
+        "assertion.environment == 'development'",
+        "https://token.actions.githubusercontent.com",
     ):
         if required not in text:
             errors.append(f"bootstrap is missing required pilot contract {required!r}")
@@ -74,19 +121,21 @@ def check_bootstrap(text: str) -> list[str]:
             errors.append(f"bootstrap contains forbidden permission or release/secret-value reference {forbidden!r}")
 
     expected_blocks = {
-        "google_service_account.plan": ('account_id   = var.plan_service_account_id',),
-        "google_iam_workload_identity_pool.github": ('workload_identity_pool_id = var.workload_identity_pool_id',),
+        "google_service_account.plan": ("account_id   = var.plan_service_account_id",),
+        "google_iam_workload_identity_pool.github": ("workload_identity_pool_id = var.workload_identity_pool_id",),
         "google_iam_workload_identity_pool_provider.github": (
             "workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id",
             'workload_identity_pool_provider_id = "github"',
-            '"google.subject"       = "assertion.sub"',
-            '"attribute.repository" = "assertion.repository"',
-            "attribute_condition = \"assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main'\"",
+            '"google.subject"                = "assertion.sub"',
+            '"attribute.repository_id"       = "assertion.repository_id"',
+            '"attribute.repository_owner_id" = "assertion.repository_owner_id"',
+            '"attribute.workflow_ref"        = "assertion.workflow_ref"',
+            '"attribute.environment"         = "assertion.environment"',
         ),
         "google_service_account_iam_member.github_plan_impersonation": (
             "service_account_id = google_service_account.plan.name",
             'role               = "roles/iam.workloadIdentityUser"',
-            "attribute.repository/${var.github_repository}",
+            "attribute.repository_id/${var.github_repository_id}",
         ),
         "google_project_iam_member.plan_project_browser": (
             "project = var.project_id",
@@ -106,11 +155,19 @@ def check_bootstrap(text: str) -> list[str]:
 
 def check_probe(text: str) -> list[str]:
     errors: list[str] = []
-    if re.search(r"^\s*resource\s+", text, re.MULTILINE):
+    if RESOURCE.search(text):
         errors.append("development probe must not declare resources")
+    if MODULE.search(text):
+        errors.append("development probe must not declare modules")
+    if PROVISIONER.search(text):
+        errors.append("development probe must not declare provisioners")
+    if {match.group("name") for match in PROVIDER.finditer(text)} != {"google"}:
+        errors.append("development probe must declare exactly one google provider")
     if len(re.findall(r'^\s*data\s+"google_project"\s+"development"', text, re.MULTILINE)) != 1:
         errors.append("development probe must contain exactly one google_project development data source")
-    for required in ('default     = "based-hardware-dev"', 'project = var.project_id', 'project_id = var.project_id'):
+    if len(list(DATA.finditer(text))) != 1:
+        errors.append("development probe must not contain other data sources")
+    for required in ('default     = "based-hardware-dev"', "project = var.project_id", "project_id = var.project_id"):
         if required not in text:
             errors.append(f"development probe is missing required contract {required!r}")
     if 'backend "gcs"' in text:
@@ -125,8 +182,12 @@ def check_bootstrap_variables(text: str) -> list[str]:
         'condition     = var.project_id == "based-hardware-dev"',
         'default     = "1031333818730"',
         'condition     = var.project_number == "1031333818730"',
-        'default     = "BasedHardware/omi"',
-        'condition     = var.github_repository == "BasedHardware/omi"',
+        'default     = "776121034"',
+        'condition     = var.github_repository_id == "776121034"',
+        'default     = "162546372"',
+        'condition     = var.github_repository_owner_id == "162546372"',
+        'default     = "BasedHardware/omi/.github/workflows/opentofu-development-wif-pilot.yml@refs/heads/main"',
+        'condition     = var.github_workflow_ref == "BasedHardware/omi/.github/workflows/opentofu-development-wif-pilot.yml@refs/heads/main"',
         'default     = "omi-opentofu-9842-dev"',
         'condition     = var.workload_identity_pool_id == "omi-opentofu-9842-dev"',
         'default     = "omi-tofu-plan-dev-9842"',
@@ -134,6 +195,34 @@ def check_bootstrap_variables(text: str) -> list[str]:
     ):
         if required not in text:
             errors.append(f"bootstrap variables are missing immutable pilot contract {required!r}")
+    return errors
+
+
+def check_plan(plan: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    changes = plan.get("resource_changes")
+    if not isinstance(changes, list):
+        return ["bootstrap plan resource_changes must be a list"]
+
+    actual: dict[str, list[str]] = {}
+    for change in changes:
+        if not isinstance(change, dict):
+            errors.append("bootstrap plan contains a malformed resource change")
+            continue
+        address = change.get("address")
+        action = change.get("change", {}).get("actions") if isinstance(change.get("change"), dict) else None
+        if not isinstance(address, str) or not isinstance(action, list) or not all(isinstance(item, str) for item in action):
+            errors.append("bootstrap plan contains a malformed address or action")
+            continue
+        if address in actual:
+            errors.append(f"bootstrap plan contains duplicate change {address}")
+        actual[address] = action
+
+    if set(actual) != EXPECTED_BOOTSTRAP_RESOURCES:
+        errors.append(f"bootstrap plan resources must be exactly {sorted(EXPECTED_BOOTSTRAP_RESOURCES)}")
+    for address, actions in actual.items():
+        if actions != ["create"]:
+            errors.append(f"bootstrap plan {address} must have only a create action, found {actions}")
     return errors
 
 
@@ -169,9 +258,13 @@ def check_validation_workflow(text: str) -> list[str]:
         "-backend=false",
         "-lock=false",
         "-refresh=false",
+        "-out=",
+        "--plan-json",
     ):
         if required not in text:
             errors.append(f"pilot validation workflow is missing required offline contract {required!r}")
+    if not re.search(r"tofu\s+-chdir=[^\n]+\s+show\s+-json", text):
+        errors.append("pilot validation workflow is missing required offline plan JSON rendering")
     token_values = re.findall(r"^\s*GOOGLE_OAUTH_ACCESS_TOKEN:\s*(?P<value>\S.*)$", text, re.MULTILINE)
     if token_values != ["offline-validation-only"]:
         errors.append("pilot validation workflow may contain only the invalid offline-validation-only token literal")
@@ -191,14 +284,33 @@ def check_validation_workflow(text: str) -> list[str]:
     return errors
 
 
-def main() -> int:
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("--plan-json", type=Path)
+    args = parser.parse_args(argv)
+
+    bootstrap = module_source(PILOT_DIR)
+    probe = module_source(PROBE_DIR)
     errors = (
-        check_bootstrap(read(BOOTSTRAP))
+        check_module_files(PILOT_DIR, EXPECTED_PILOT_FILES, "bootstrap")
+        + check_bootstrap(bootstrap)
         + check_bootstrap_variables(read(BOOTSTRAP_VARIABLES))
-        + check_probe(read(PROBE))
+        + check_module_files(PROBE_DIR, EXPECTED_PROBE_FILES, "development probe")
+        + check_probe(probe)
         + check_workflow(read(WORKFLOW))
         + check_validation_workflow(read(VALIDATION_WORKFLOW))
     )
+    if args.plan_json is not None:
+        try:
+            plan = json.loads(read(args.plan_json))
+        except (OSError, json.JSONDecodeError) as exc:
+            errors.append(f"could not read bootstrap plan JSON {args.plan_json}: {exc}")
+        else:
+            if not isinstance(plan, dict):
+                errors.append(f"bootstrap plan JSON {args.plan_json} must be an object")
+            else:
+                errors.extend(check_plan(plan))
+
     if errors:
         print("Development WIF pilot check failed:", file=sys.stderr)
         print("\n".join(f"- {error}" for error in errors), file=sys.stderr)
