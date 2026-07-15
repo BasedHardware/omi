@@ -42,7 +42,7 @@ const PNG: Partial<Record<ConnectorBrand, string>> = {
 // read on the dark tile — matching the modern monochrome OpenAI mark.
 function OpenAIMark(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" className="h-[19px] w-[19px]" aria-hidden role="img">
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
       <path
         fill="#ececec"
         d="M22.28 9.82a5.98 5.98 0 0 0-.52-4.91 6.05 6.05 0 0 0-6.51-2.9A6.07 6.07 0 0 0 4.98 4.18a5.98 5.98 0 0 0-3.99 2.9 6.05 6.05 0 0 0 .74 7.1 5.98 5.98 0 0 0 .51 4.91 6.05 6.05 0 0 0 6.52 2.9A5.98 5.98 0 0 0 13.26 22a6.06 6.06 0 0 0 5.77-4.21 5.99 5.99 0 0 0 4-2.9 6.06 6.06 0 0 0-.75-7.07zm-9.02 12.6a4.48 4.48 0 0 1-2.88-1.04l.14-.08 4.78-2.76a.79.79 0 0 0 .39-.68v-6.74l2.02 1.17a.07.07 0 0 1 .04.05v5.58a4.5 4.5 0 0 1-4.5 4.5zM3.6 18.23a4.47 4.47 0 0 1-.54-3.01l.14.09 4.78 2.76a.77.77 0 0 0 .78 0l5.84-3.37v2.33a.08.08 0 0 1-.03.06L9.74 22a4.5 4.5 0 0 1-6.14-1.65zM2.34 7.9a4.49 4.49 0 0 1 2.34-1.97V11.6a.77.77 0 0 0 .39.68l5.8 3.35-2.02 1.17a.08.08 0 0 1-.07 0l-4.83-2.79A4.5 4.5 0 0 1 2.34 7.9zm16.6 3.86l-5.84-3.4L15.12 7.2a.08.08 0 0 1 .07 0l4.83 2.79a4.49 4.49 0 0 1-.68 8.1v-5.68a.79.79 0 0 0-.4-.65zm2.01-3.02l-.14-.09-4.77-2.78a.78.78 0 0 0-.79 0L9.42 9.24V6.9a.07.07 0 0 1 .03-.06l4.83-2.78a4.5 4.5 0 0 1 6.68 4.66zM8.32 12.9L6.3 11.73a.08.08 0 0 1-.04-.05V6.1a4.5 4.5 0 0 1 7.38-3.45l-.14.08L8.72 5.5a.79.79 0 0 0-.4.68v6.72zm1.1-2.36l2.6-1.5 2.6 1.5v3l-2.6 1.5-2.6-1.5v-3z"
@@ -56,7 +56,7 @@ function OpenAIMark(): React.JSX.Element {
 function ClaudeMark(): React.JSX.Element {
   const rays = Array.from({ length: 12 }, (_, i) => (i * 360) / 12)
   return (
-    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" aria-hidden role="img">
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
       <g stroke="#D97757" strokeWidth="1.7" strokeLinecap="round">
         {rays.map((deg) => (
           <line key={deg} x1="12" y1="12" x2="12" y2="3.2" transform={`rotate(${deg} 12 12)`} />
@@ -69,7 +69,7 @@ function ClaudeMark(): React.JSX.Element {
 // Notion mark — white rounded square with the black angular "N".
 function NotionMark(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" className="h-[19px] w-[19px]" aria-hidden role="img">
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
       <rect x="2" y="2" width="20" height="20" rx="4.5" fill="#fbfbfa" />
       <path
         d="M8 7.2v9.6M8 7.2l8 9.6M16 7.2v9.6"
@@ -84,15 +84,30 @@ function NotionMark(): React.JSX.Element {
 }
 
 // X (Twitter) — the wordmark glyph, exactly as macOS renders it (no logo asset).
+// Drawn as SVG text so it scales to fill the brand chip like every other mark.
 function XMark(): React.JSX.Element {
-  return <span className="text-[15px] font-bold leading-none text-home-ink">𝕏</span>
+  return (
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
+      <text
+        x="12"
+        y="12"
+        textAnchor="middle"
+        dominantBaseline="central"
+        fontSize="20"
+        fontWeight="700"
+        fill="#f0ece3"
+      >
+        𝕏
+      </text>
+    </svg>
+  )
 }
 
 // Windows Sticky Notes — no macOS equivalent (it stands in for Apple Notes). A
 // clean folded-note mark in the Sticky Notes yellow.
 function StickyMark(): React.JSX.Element {
   return (
-    <svg viewBox="0 0 24 24" className="h-[18px] w-[18px]" aria-hidden role="img">
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
       <path
         d="M4.5 4.5h15v10L14 20H4.5z"
         fill="#F5C518"
@@ -114,7 +129,7 @@ function OmiMark(): React.JSX.Element {
     return { cx: 12 + 6.6 * Math.sin(a), cy: 12 - 6.6 * Math.cos(a) }
   })
   return (
-    <svg viewBox="0 0 24 24" className="h-[17px] w-[17px]" aria-hidden role="img">
+    <svg viewBox="0 0 24 24" className="h-full w-full" aria-hidden role="img">
       {dots.map((d, i) => (
         <circle key={i} cx={d.cx} cy={d.cy} r="1.55" fill="#f0ece3" />
       ))}
@@ -125,7 +140,9 @@ function OmiMark(): React.JSX.Element {
 export function ConnectorBrandMark({ brand }: { brand: ConnectorBrand }): React.JSX.Element {
   const png = PNG[brand]
   if (png) {
-    return <BrandImage src={png} alt="" className="h-[22px] w-[22px] object-contain" />
+    // Fill the brand chip's inset content box (the chip owns size + padding), so every
+    // logo — glyph or full-bleed square — sits within a consistent frame.
+    return <BrandImage src={png} alt="" className="h-full w-full object-contain" />
   }
   switch (brand) {
     case 'chatgpt':

@@ -32,8 +32,11 @@ export function ConnectorRow(props: {
 
   const inner = (
     <div className="flex items-center gap-3.5 py-3.5">
+      {/* A uniform brand chip — dark rounded square + hairline, the mark inset ~18%
+          so every logo (glyph or full-bleed PNG) reads as one treatment. Ports
+          macOS's ConnectorBrandIcon. Lucide fallbacks keep their own size. */}
       <span
-        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px]"
+        className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] border border-white/[0.06] p-1.5"
         style={{ backgroundColor: 'rgb(255 255 255 / 0.05)' }}
       >
         {iconNode ??

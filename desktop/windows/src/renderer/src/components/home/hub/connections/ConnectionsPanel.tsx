@@ -202,10 +202,10 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
     <DetailShell title={title} onBack={back} onDismiss={onDismiss}>
       <div className="flex flex-col items-center gap-4 py-10 text-center">
         <span
-          className="flex h-14 w-14 items-center justify-center rounded-[16px]"
+          className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/[0.06]"
           style={{ backgroundColor: 'rgb(255 255 255 / 0.05)' }}
         >
-          <span className="scale-[1.6]">
+          <span className="h-8 w-8">
             <ConnectorBrandMark brand={brand} />
           </span>
         </span>

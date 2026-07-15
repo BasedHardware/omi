@@ -32,8 +32,12 @@ export function TrayTile(props: {
           <Plus className="h-[15px] w-[15px] text-home-ink" strokeWidth={2.25} />
         </span>
       ) : (
+        // A uniform brand chip — dark rounded square + hairline, the mark inset ~18%
+        // so even full-bleed logos (Hermes) show the chip frame. Ports macOS's
+        // ConnectorBrandIcon so every mark reads as one treatment, not mixed glyphs
+        // and colored squares.
         <span
-          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px]"
+          className="flex h-7 w-7 shrink-0 items-center justify-center rounded-[8px] border border-white/[0.06] p-[5px]"
           style={{ backgroundColor: 'rgb(255 255 255 / 0.05)' }}
         >
           {brand && <ConnectorBrandMark brand={brand} />}
