@@ -74,18 +74,25 @@ const AppCard = memo(function AppCard({
           {app.author && <div className="text-[11px] text-white/45">{app.author}</div>}
         </div>
       </div>
-      <p className="mb-4 line-clamp-3 flex-1 text-xs leading-relaxed text-white/65">
+      <p
+        className="mb-4 line-clamp-3 flex-1 text-xs leading-relaxed text-white/65"
+        title={app.description}
+      >
         {app.description}
       </p>
       <div className="flex items-center justify-between gap-2">
-        <div className="flex items-center gap-2 text-[11px] text-white/45">
+        <div className="flex min-w-0 flex-1 items-center gap-2 text-[11px] text-white/45">
           {app.rating_avg ? (
-            <span className="flex items-center gap-1">
+            <span className="flex shrink-0 items-center gap-1">
               <Star className="h-3 w-3" />
               {app.rating_avg.toFixed(1)}
             </span>
           ) : null}
-          {app.category && <span className="badge">{formatCategory(app.category)}</span>}
+          {app.category && (
+            <span className="badge min-w-0 max-w-full" title={formatCategory(app.category)}>
+              <span className="min-w-0 truncate">{formatCategory(app.category)}</span>
+            </span>
+          )}
         </div>
         <button
           onClick={() => onToggle(app)}
