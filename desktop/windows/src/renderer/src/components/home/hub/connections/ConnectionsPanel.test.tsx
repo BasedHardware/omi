@@ -11,6 +11,9 @@ vi.mock('../../../../lib/apiClient', () => ({
   omiApi: { get: omiGet, post: vi.fn(), delete: vi.fn() },
   desktopApi: { post: vi.fn() }
 }))
+// The X tile/row mints a session from Firebase; keep it signed-out (null) here so
+// the X status/run probes never fire.
+vi.mock('../../../../lib/firebase', () => ({ auth: { currentUser: null } }))
 
 import { ConnectionsPanel } from './ConnectionsPanel'
 import { getHubConnectContent } from '../hubConnectSlot'
@@ -23,7 +26,12 @@ beforeEach(() => {
   ;(window as unknown as { omi: Record<string, unknown> }).omi = {
     openExternalUrl,
     readStickyNotes: vi.fn(),
-    googleStatus: vi.fn().mockResolvedValue({ connected: false })
+    googleStatus: vi.fn().mockResolvedValue({ connected: false }),
+    xStatus: vi
+      .fn()
+      .mockResolvedValue({ connected: false, postCount: 0, memoryCount: 0, syncing: false }),
+    xRunState: vi.fn().mockResolvedValue({ phase: 'idle', postCount: 0, memoryCount: 0 }),
+    onXProgress: vi.fn().mockReturnValue(() => {})
   }
 })
 
@@ -52,6 +60,7 @@ describe('ConnectionsPanel tray (top level)', () => {
       'tray-tile-gmail',
       'tray-tile-calendar',
       'tray-tile-sticky-notes',
+      'tray-tile-x-twitter',
       'tray-tile-omi-device',
       'tray-tile-more-imports',
       'tray-tile-ask-omi',
@@ -76,11 +85,18 @@ describe('ConnectionsPanel tray (top level)', () => {
     expect(screen.getByText('Connect data')).toBeTruthy()
   })
 
+  it('drills into the X connector detail', async () => {
+    renderPanel()
+    fireEvent.click(screen.getByTestId('tray-tile-x-twitter'))
+    await waitFor(() => expect(screen.getByText('X (Twitter)')).toBeTruthy())
+    expect(screen.getByTestId('connections-back')).toBeTruthy()
+  })
+
   it('opens the full Imports list from the left "+ More"', async () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-more-imports'))
     await waitFor(() => expect(screen.getByText('Imports')).toBeTruthy())
-    for (const title of ['Calendar', 'Email', 'Sticky Notes', 'ChatGPT', 'Claude']) {
+    for (const title of ['Calendar', 'Email', 'Sticky Notes', 'X (Twitter)', 'ChatGPT', 'Claude']) {
       expect(screen.getByText(title)).toBeTruthy()
     }
   })

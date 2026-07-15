@@ -5,6 +5,7 @@ import type { HubConnectSlotProps } from '../hubConnectSlot'
 import { CalendarConnector } from './CalendarConnector'
 import { GmailConnector } from './GmailConnector'
 import { StickyNotesConnector } from './StickyNotesConnector'
+import { XConnector } from './XConnector'
 import { PasteImportConnector } from './PasteImportConnector'
 import { ExportsConnector } from './ExportsConnector'
 import { ConnectorRow } from './ConnectorRow'
@@ -24,6 +25,8 @@ import { ConnectTray } from './ConnectTray'
 //
 // All connect/sync/import/export logic is shared with Settings via the lib/* services
 // each connector imports — this panel adds only Hub-native presentation + navigation.
+// Import order mirrors Mac's static curated array (calendar, email, notes, x, chatgpt,
+// claude); Windows drops Local Files and maps Apple Notes → Sticky Notes.
 //
 // SLOT CONTRACT: mount at 100%/100%, own the internal scroll (the Hub panel is
 // overflow-hidden), never set an outer fixed size. Registered lazily from register.ts.
@@ -32,7 +35,7 @@ const OMI_DEVICE_URL = 'https://www.omi.me'
 
 type View =
   | { kind: 'tray' }
-  | { kind: 'source'; id: 'gmail' | 'calendar' | 'sticky' }
+  | { kind: 'source'; id: 'gmail' | 'calendar' | 'sticky' | 'x' }
   | { kind: 'imports' }
   | { kind: 'exports' }
   | { kind: 'comingSoon'; id: 'openclaw' | 'hermes' }
@@ -152,6 +155,8 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
         <GmailConnector />
       ) : view.id === 'calendar' ? (
         <CalendarConnector />
+      ) : view.id === 'x' ? (
+        <XConnector />
       ) : (
         <StickyNotesConnector />
       )
@@ -170,7 +175,7 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
           <CalendarConnector />
           <GmailConnector />
           <StickyNotesConnector />
-          {/* X/Twitter row lands here in the stacked follow-up connector PR. */}
+          <XConnector />
           <PasteImportConnector source="chatgpt" />
           <PasteImportConnector source="claude" />
         </div>
