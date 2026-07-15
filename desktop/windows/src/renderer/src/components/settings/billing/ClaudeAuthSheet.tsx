@@ -28,7 +28,10 @@ export function ClaudeAuthSheet(): React.JSX.Element {
       size="sm"
       footer={
         <>
-          <button onClick={dismissClaudeSignIn} className="btn-ghost">
+          <button
+            onClick={dismissClaudeSignIn}
+            className="rounded-2xl px-4 py-2 text-sm font-medium text-text-tertiary transition hover:text-text-secondary"
+          >
             Cancel
           </button>
           <button
