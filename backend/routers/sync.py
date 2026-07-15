@@ -78,6 +78,7 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
 )
 from utils.observability.fallback import record_fallback
+from utils.multipart import MultipartMaxPartSizeRoute, SYNC_AUDIO_MAX_PART_SIZE, max_part_size
 from utils.metrics import (
     OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
@@ -137,7 +138,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 _CAPTURE_PROVENANCE_SLOP_SECONDS = 30 * 60
 
@@ -471,6 +472,7 @@ def download_audio_file_endpoint(
 # response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
 # the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files(
     request: Request,
     response: Response,
@@ -832,6 +834,7 @@ async def sync_local_files(
 
 
 @router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),

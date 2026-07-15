@@ -223,9 +223,16 @@ class TestFencedJobMutations:
 
         assert mutation.applied is True
         assert mutation.job == {'job_id': 'job-1', 'status': 'processing'}
-        script, key_count, lock_key, job_key, token, expected_raw, next_raw, ttl_seconds = (
-            mock_redis.eval.call_args.args
-        )
+        (
+            script,
+            key_count,
+            lock_key,
+            job_key,
+            token,
+            expected_raw,
+            next_raw,
+            ttl_seconds,
+        ) = mock_redis.eval.call_args.args
         assert key_count == 2
         assert lock_key == 'sync_job_lock:job-1'
         assert job_key == 'sync_job:job-1'
@@ -862,6 +869,7 @@ def _load_sync_router_for_fast_path():
     import contextvars
     import importlib.util
     from io import BytesIO
+    from fastapi.routing import APIRoute
     from pydantic import BaseModel
     from database.sync_jobs import SyncLedgerFenceMode
     from utils.stt import outcomes as actual_outcomes
@@ -912,6 +920,7 @@ def _load_sync_router_for_fast_path():
         'utils.metrics',
         'utils.log_sanitizer',
         'utils.http_client',
+        'utils.multipart',
         'utils.request_validation',
         'utils.sync.files',
         'utils.sync.playback',
@@ -929,6 +938,10 @@ def _load_sync_router_for_fast_path():
         saved_modules[mod_name] = sys.modules.get(mod_name)
         sys.modules[mod_name] = MagicMock()
 
+    sys.modules['utils'].__path__ = []
+    sys.modules['utils.multipart'].MultipartMaxPartSizeRoute = APIRoute
+    sys.modules['utils.multipart'].SYNC_AUDIO_MAX_PART_SIZE = 200 * 1024 * 1024
+    sys.modules['utils.multipart'].max_part_size = lambda _size: lambda endpoint: endpoint
     sys.modules['python_multipart'].__version__ = '0.0.99'
     sys.modules['python_multipart.multipart'].parse_options_header = MagicMock(return_value={})
 

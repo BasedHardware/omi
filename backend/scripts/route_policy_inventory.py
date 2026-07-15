@@ -806,9 +806,12 @@ def generate_backend_route_inventory() -> dict:
     logging.disable(logging.CRITICAL)
     try:
         os.chdir(BACKEND_DIR)
-        fake_firestore, fake_redis, get_mock_firestore, get_fake_redis = (
-            export_openapi.install_hermetic_dependency_patches()
-        )
+        (
+            fake_firestore,
+            fake_redis,
+            get_mock_firestore,
+            get_fake_redis,
+        ) = export_openapi.install_hermetic_dependency_patches()
         with record_and_block_all_network() as network_attempts:
             backend_main = importlib.import_module('main')
 
