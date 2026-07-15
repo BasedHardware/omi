@@ -1,5 +1,6 @@
 #include "ota.h"
 #include "config.h"
+#include "ota_certs.h"
 
 #include <WiFi.h>
 #include <WiFiClientSecure.h>
@@ -265,8 +266,18 @@ static bool download_and_install_firmware() {
             ota_notify_status(OTA_STATUS_DOWNLOAD_FAILED);
             return false;
         }
-        // Skip certificate validation for testing (TODO: add proper certs for production)
+#ifdef OTA_ALLOW_INSECURE_TLS
+        // Opt-in insecure mode for local testing only. Never enable in shipped builds:
+        // it disables server authentication and allows a network MITM to serve a
+        // malicious firmware image.
+        Serial.println("OTA: WARNING - TLS certificate validation disabled (OTA_ALLOW_INSECURE_TLS)");
         secureClient->setInsecure();
+#else
+        // Validate the download server against the embedded root CA bundle so a MITM
+        // on the device's WiFi cannot substitute a malicious firmware image. Covers the
+        // github.com -> *.githubusercontent.com redirect used for release-asset downloads.
+        secureClient->setCACert(OTA_ROOT_CA_BUNDLE);
+#endif
         client = secureClient;
     } else {
         client = new WiFiClient;
