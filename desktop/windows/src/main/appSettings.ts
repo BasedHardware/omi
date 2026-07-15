@@ -77,10 +77,13 @@ export type AppSettings = {
    *  post-migration default (`NotificationService.defaultFrequencyLevel`). */
   notificationFrequency: number
   /** Track 3 (Memory assistant): whether the interval-based memory extractor
-   *  judges the screen at all. Default ON, mirroring Mac's
-   *  `memoryAssistantEnabled`. Gated further by the shared `notificationsActive()`
-   *  — see the AND-gate in memoryAssistant.isEnabled (a glow-less assistant, so
-   *  gating on notifications also prevents silent Gemini spend, like Insight). */
+   *  judges the screen at all. Default OFF — the screen-memory scraper is opt-in,
+   *  matching Mac's net behavior (Mac gates it behind `notificationsEnabled`, which
+   *  defaults off). Conversation-derived memories populate the store regardless;
+   *  this is the supplementary on-screen source. It is the SOLE gate for the Memory
+   *  assistant (see memoryAssistant.isEnabled) — decoupled from notifications, since
+   *  memory writes durable facts whether or not a toast ever fires. The master
+   *  "may I send screenshots to Gemini" lever remains `screenAnalysisEnabled`. */
   memoryEnabled: boolean
   /** Track 3 (Memory): minutes between extraction attempts, Mac's
    *  `memoryExtractionInterval` (600s = 10 min). Default 10. */
@@ -191,7 +194,7 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
     notificationsEnabled: r.notificationsEnabled !== false,
     notificationFrequency: sanitizeFrequency(r.notificationFrequency),
-    memoryEnabled: r.memoryEnabled !== false,
+    memoryEnabled: r.memoryEnabled === true,
     // Reuses the cooldown sanitizer: same contract (positive integer minutes,
     // default 10, capped at a day). A junk interval falls back to 10, never 0.
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),

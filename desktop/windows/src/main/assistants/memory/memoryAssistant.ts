@@ -14,7 +14,6 @@
 import { getAppSettings } from '../../appSettings'
 import { mayAnalyzeFrame } from '../core/privacy'
 import { readFrameImageBase64 } from '../core/frameImage'
-import { notificationsActive } from '../core/notify'
 import { getBackendSession, getSessionEpoch } from '../core/session'
 import { recentMemories } from '../../ipc/db'
 import type { AssistantResult, ProactiveAssistant } from '../core/coordinator'
@@ -37,17 +36,22 @@ export class MemoryAssistant implements ProactiveAssistant {
   private lastCommittedSeq = -1
   private stopped = false
 
-  /** Master gate. DEVIATION from Mac's `memoryAssistantEnabled &&
-   *  memoryNotificationsEnabled`: Mac gates memory extraction on its own
-   *  `notificationsEnabled` ("no notification, no Gemini call"). Windows's
-   *  equivalent of that master notification switch is the shared
-   *  `notificationsActive()` (master on AND frequency > 0 AND not snoozed). Memory
-   *  has no glow, so — exactly like Insight — a run whose output can't be delivered
-   *  is pure wasted Gemini spend; gating here means default-off extraction until
-   *  the user enables notifications, which is faithful to Mac's off-by-default. */
+  /** Master gate: just `memoryEnabled` (default OFF — opt-in, matching Mac's net
+   *  off-by-default). Memory extraction is NOT coupled to notifications: unlike
+   *  Insight (ephemeral toast advice, pure waste when no toast can fire), memory
+   *  writes DURABLE FACTS the user browses on the Memories page whether or not a
+   *  notification ever shows. Screen-scraped memories are a supplementary source
+   *  alongside conversation-derived memories; gating them on the toast dial would
+   *  needlessly starve a persistent-value feature (with notificationFrequency=0 by
+   *  default, that left extraction dead). The "am I allowed to send screenshots to
+   *  Gemini at all" master lever is the coordinator's `screenAnalysisEnabled`,
+   *  which already gates the whole loop for all three assistants. DEVIATION from
+   *  Mac only in mechanism: Mac gates extraction on `notificationsEnabled` (net
+   *  off-by-default); Windows uses one clean `memoryEnabled` toggle (also off by
+   *  default) instead of conflating "show toasts" with "extract memories". */
   isEnabled(): boolean {
     if (this.stopped) return false
-    return getAppSettings().memoryEnabled && notificationsActive(this.identifier)
+    return getAppSettings().memoryEnabled
   }
 
   /** Memory's only cadence control: the fixed extraction interval (Mac's

@@ -101,7 +101,7 @@ describe('appSettings', () => {
       screenAnalysisEnabled: true,
       notificationsEnabled: true,
       notificationFrequency: 0,
-      memoryEnabled: true,
+      memoryEnabled: false,
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
       memoryExcludedApps: []

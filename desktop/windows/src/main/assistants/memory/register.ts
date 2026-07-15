@@ -28,15 +28,15 @@ export function registerMemoryAssistant(): void {
       return { ok: true }
     })
 
-    // Observability for the isEnabled AND-gate: return the REAL isEnabled()
-    // alongside the two inputs that decide it.
+    // Observability for the gate: the REAL isEnabled() (decided solely by
+    // memoryEnabled) alongside the coordinator's master screen-analysis lever,
+    // which gates whether the loop runs at all.
     ipcMain.handle('memory:debugIsEnabled', async () => {
       const settings = getAppSettings()
       return {
         isEnabled: getMemoryAssistant().isEnabled(),
         memoryEnabled: settings.memoryEnabled,
-        notificationsEnabled: settings.notificationsEnabled,
-        notificationFrequency: settings.notificationFrequency
+        screenAnalysisEnabled: settings.screenAnalysisEnabled
       }
     })
   }

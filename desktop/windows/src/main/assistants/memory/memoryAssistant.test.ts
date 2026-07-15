@@ -84,15 +84,16 @@ beforeEach(() => {
 
 afterEach(() => vi.restoreAllMocks())
 
-describe('isEnabled — the master AND-gate', () => {
-  it('is true only when BOTH memoryEnabled and notificationsActive are on', () => {
+describe('isEnabled — gated solely by memoryEnabled', () => {
+  it('tracks memoryEnabled and is decoupled from notifications', () => {
     const a = new MemoryAssistant()
+    expect(a.isEnabled()).toBe(true) // memoryEnabled is on in the harness
+
+    // Notifications being off must NOT disable extraction — memory writes durable
+    // facts whether or not a toast can fire (unlike Insight).
+    h.notificationsActive.mockReturnValue(false)
     expect(a.isEnabled()).toBe(true)
 
-    h.notificationsActive.mockReturnValue(false)
-    expect(a.isEnabled()).toBe(false) // no deliverable notification → no Gemini spend
-
-    h.notificationsActive.mockReturnValue(true)
     h.settings.memoryEnabled = false
     expect(a.isEnabled()).toBe(false)
   })
