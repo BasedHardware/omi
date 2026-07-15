@@ -40,6 +40,7 @@ from utils.webhooks import (
 from utils.cloud_tasks import get_listen_finalization_tasks_max_attempts, is_audio_merge_dispatch_enabled
 from utils.other.storage import maybe_invalidate_conversation_playback, upload_audio_chunks_batch
 from utils.metrics import PUSHER_ACTIVE_WS_CONNECTIONS
+from utils.observability.journeys import JourneyAttempt, JourneyOutcome, record_capture_finalization_terminal
 from utils.speaker_identification import extract_speaker_samples
 import logging
 
@@ -78,6 +79,15 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
+
+
+def pusher_session_outcome(close_code: int, *, application_failed: bool = False) -> JourneyOutcome:
+    """Classify accepted sessions without counting normal disconnects as failures."""
+    if application_failed or close_code == 1011:
+        return 'failure'
+    if close_code in {1000, 1001}:
+        return 'success'
+    return 'cancelled'
 
 
 class _SpeakerSampleRequest(TypedDict):
@@ -256,8 +266,10 @@ async def _process_conversation_task(
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
         if disposition == ConversationFinalizationDisposition.fenced:
+            record_capture_finalization_terminal('stale', claim.get('created_at'))
             await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
+        record_capture_finalization_terminal('success', claim.get('created_at'))
         await send_result({'conversation_id': conversation_id, 'success': True})
     except ConversationFinalizationError:
         terminal = await record_failure('processing_failed')
@@ -299,20 +311,29 @@ async def _websocket_util_trigger(
         await websocket.close(code=1011, reason="Dirty state")
         return
 
+    journey_attempt = JourneyAttempt('pusher_session')
     websocket_active = True
     shutdown_event = asyncio.Event()
     websocket_close_code = 1000
+    application_failed = False
 
-    # audio bytes
-    audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
-    audio_bytes_trigger_delay_seconds = 4
-    has_audio_apps_enabled = await run_blocking(db_executor, is_audio_bytes_app_enabled, uid)
-    private_cloud_sync_enabled = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
-    cached_protection_level = (
-        (await run_blocking(db_executor, users_db.get_data_protection_level, uid))
-        if private_cloud_sync_enabled
-        else None
-    )
+    try:
+        # audio bytes
+        audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
+        audio_bytes_trigger_delay_seconds = 4
+        has_audio_apps_enabled = await run_blocking(db_executor, is_audio_bytes_app_enabled, uid)
+        private_cloud_sync_enabled = await run_blocking(db_executor, users_db.get_user_private_cloud_sync_enabled, uid)
+        cached_protection_level = (
+            (await run_blocking(db_executor, users_db.get_data_protection_level, uid))
+            if private_cloud_sync_enabled
+            else None
+        )
+    except asyncio.CancelledError:
+        journey_attempt.finish('cancelled')
+        raise
+    except Exception:
+        journey_attempt.finish('failure')
+        raise
 
     # Track background tasks to cancel on cleanup (prevents memory leaks from fire-and-forget tasks)
     bg_tasks: Set[asyncio.Task[Any]] = set()
@@ -566,6 +587,7 @@ async def _websocket_util_trigger(
     async def receive_tasks() -> None:
         nonlocal websocket_active
         nonlocal websocket_close_code
+        nonlocal application_failed
         nonlocal speaker_sample_queue
         nonlocal transcript_queue
         nonlocal audio_bytes_queue
@@ -582,7 +604,10 @@ async def _websocket_util_trigger(
                     data = await asyncio.wait_for(websocket.receive_bytes(), timeout=WS_RECEIVE_TIMEOUT)
                 except asyncio.TimeoutError:
                     logger.warning(f"WebSocket receive timeout ({WS_RECEIVE_TIMEOUT}s), closing connection {uid}")
-                    websocket_close_code = 1000
+                    # This is a dead upstream, not a normal remote close. Keep its
+                    # terminal outcome distinct from protocol close codes 1000/1001.
+                    websocket_close_code = 1011
+                    application_failed = True
                     break
                 header_type = struct.unpack('<I', data[:4])[0]
 
@@ -755,11 +780,13 @@ async def _websocket_util_trigger(
                         audiobuffer = bytearray()
                     continue
 
-        except WebSocketDisconnect:
+        except WebSocketDisconnect as exc:
+            websocket_close_code = exc.code or 1006
             logger.info("WebSocket disconnected")
         except Exception as e:
             logger.error(f'Could not process audio: error {e}')
             websocket_close_code = 1011
+            application_failed = True
         finally:
             # Flush any remaining private cloud sync buffer before shutdown
             if private_cloud_sync_enabled and current_conversation_id and len(private_cloud_sync_buffer) > 0:
@@ -797,6 +824,11 @@ async def _websocket_util_trigger(
             label="pusher",
         )
         logger.info(f"Supervisor exited: reason={exit_result.reason} task={exit_result.task_name} {uid}")
+        if exit_result.reason in {'crash', 'lifetime_done'}:
+            # A background worker dying or unexpectedly returning ends an accepted
+            # session abnormally even though the socket itself has no close frame.
+            websocket_close_code = 1011
+            application_failed = True
 
         if receive_task.done() and not receive_task.cancelled():
             exc = receive_task.exception()
@@ -814,8 +846,13 @@ async def _websocket_util_trigger(
         shutdown_event.set()
         await drain_tasks(bg_main_tasks, timeout=BG_DRAIN_TIMEOUT, label="pusher_bg", cancel=False)
 
+    except asyncio.CancelledError:
+        websocket_close_code = 1006
+        raise
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
+        websocket_close_code = 1011
+        application_failed = True
     finally:
         shutdown_event.set()
         websocket_active = False
@@ -825,6 +862,8 @@ async def _websocket_util_trigger(
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
+
+        journey_attempt.finish(pusher_session_outcome(websocket_close_code, application_failed=application_failed))
 
         if websocket.client_state == WebSocketState.CONNECTED:
             try:
