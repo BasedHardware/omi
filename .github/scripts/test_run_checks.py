@@ -12,7 +12,17 @@ from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
 
-from run_checks import Check, execute_checks, load_manifest, resolve_checks, validate_manifest
+from run_checks import (
+    VALID_PLATFORMS,
+    Check,
+    Manifest,
+    detect_platform,
+    execute_checks,
+    load_manifest,
+    resolve_checks,
+    skipped_platform_checks,
+    validate_manifest,
+)
 
 
 SCRIPT_DIR = Path(__file__).resolve().parent
@@ -168,6 +178,50 @@ class RunnerBehaviorTests(unittest.TestCase):
                 )
             self.assertEqual(result, 1)
 
+
+
+class PlatformTests(unittest.TestCase):
+    """Tests for the platform-aware manifest model (#9843 Ticket 02)."""
+
+    def test_macos_check_selected_on_macos(self):
+        manifest = Manifest(checks=(
+            Check(id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)),
+        ), exempt=())
+        selected = resolve_checks(manifest, ["any/file"], "ci", "macos")
+        self.assertEqual([c.id for c in selected], ["mac-only"])
+
+    def test_macos_check_skipped_on_linux(self):
+        manifest = Manifest(checks=(
+            Check(id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)),
+        ), exempt=())
+        selected = resolve_checks(manifest, ["any/file"], "ci", "linux")
+        self.assertEqual(selected, [])
+
+    def test_no_platforms_means_all_platforms(self):
+        manifest = Manifest(checks=(
+            Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="t"),
+        ), exempt=())
+        for plat in ("macos", "linux"):
+            selected = resolve_checks(manifest, ["any/file"], "ci", plat)
+            self.assertEqual([c.id for c in selected], ["portable"])
+
+    def test_skipped_platform_checks_reports_macos_on_linux(self):
+        manifest = Manifest(checks=(
+            Check(id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)),
+        ), exempt=())
+        skipped = skipped_platform_checks(manifest, ["any/file"], "ci", "linux")
+        self.assertEqual([c.id for c in skipped], ["mac-only"])
+
+    def test_invalid_platform_rejected_by_validation(self):
+        manifest = Manifest(checks=(
+            Check(id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("windows",)),
+        ), exempt=())
+        errors = validate_manifest(manifest, REPO_ROOT)
+        self.assertTrue(any("invalid platforms" in e for e in errors))
+
+    def test_detect_platform_returns_known_value(self):
+        plat = detect_platform()
+        self.assertIn(plat, VALID_PLATFORMS - {"all"})
 
 class DeferredMarkerTests(unittest.TestCase):
     def test_new_marker_requires_tracking_issue(self) -> None:
