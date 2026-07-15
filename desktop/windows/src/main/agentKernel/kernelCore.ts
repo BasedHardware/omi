@@ -151,6 +151,7 @@ export class KernelCore {
   protected readonly runtimeNodeId: string
   protected readonly artifactStorage?: OmiArtifactStorage
   protected readonly recoverRunInput?: AgentRuntimeKernelOptions['recoverRunInput']
+  protected readonly controlMcpServers?: AgentRuntimeKernelOptions['controlMcpServers']
   protected readonly subscribers = new Set<KernelEventSubscriber>()
   protected readonly activeExecutions = new Map<string, ActiveExecution>()
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>()
@@ -163,6 +164,27 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? 'desktop-local'
     this.artifactStorage = options.artifactStorage
     this.recoverRunInput = options.recoverRunInput
+    this.controlMcpServers = options.controlMcpServers
+  }
+
+  /**
+   * The MCP servers a binding is opened/resumed with: the caller's own, plus the
+   * agent-control server that makes the control plane reachable by the model.
+   *
+   * The control server is deliberately NOT part of `bindingMetadata`'s hash — that
+   * hashes `input.mcpServers` only — so adding it does not invalidate binding
+   * reuse, and its per-binding pipe/token env is already excluded from the hash by
+   * `REQUEST_SCOPED_MCP_ENV_KEYS`.
+   */
+  protected bindingMcpServers(
+    input: ExecuteAgentRunInput,
+    sessionId: string,
+    adapterId: string
+  ): Record<string, unknown>[] {
+    return [
+      ...mcpServersForBinding(input.mcpServers ?? [], sessionId, adapterId, this.runtimeNodeId),
+      ...(this.controlMcpServers?.(sessionId, adapterId) ?? [])
+    ]
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -1124,11 +1146,10 @@ export class KernelCore {
         cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? process.cwd(),
         model: input.input.model ?? binding.modelId ?? undefined,
         systemPrompt: input.input.systemPrompt,
-        mcpServers: mcpServersForBinding(
-          input.input.mcpServers ?? [],
+        mcpServers: this.bindingMcpServers(
+          input.input,
           input.session.sessionId,
-          input.adapterId,
-          this.runtimeNodeId
+          input.adapterId
         ),
         metadata: {
           ...(input.input.metadata ?? {}),
@@ -1190,12 +1211,7 @@ export class KernelCore {
       cwd: input.input.cwd ?? input.session.defaultCwd ?? process.cwd(),
       model: input.input.model,
       systemPrompt: input.input.systemPrompt,
-      mcpServers: mcpServersForBinding(
-        input.input.mcpServers ?? [],
-        input.session.sessionId,
-        input.adapterId,
-        this.runtimeNodeId
-      ),
+      mcpServers: this.bindingMcpServers(input.input, input.session.sessionId, input.adapterId),
       metadata: {
         ...(input.input.metadata ?? {}),
         executionRole: input.session.executionRole,
