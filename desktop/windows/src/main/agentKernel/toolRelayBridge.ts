@@ -47,6 +47,7 @@ import {
   type AgentControlToolContext
 } from './controlTools'
 import { productManifestEntry, type OmiToolTimeoutClass } from './omiToolManifest'
+import { createCaptureScreenExecutor } from './captureScreenExecutor'
 
 /** A single frame may not exceed this. Hostile input must not exhaust main's heap. */
 const MAX_FRAME_BYTES = 1024 * 1024
@@ -93,17 +94,20 @@ export type ProductToolExecutor = (
  * tool-registration projection should advertise only these to pi so the model does
  * not waste turns on tools that will only degrade.
  *
- * EMPTY for this PR — a deliberate, conservative choice. macOS services product
- * tools by handing them to Swift over a second process boundary; Windows has no
- * such boundary, and the only in-process product-tool backend that exists today
- * (Insight's execute_sql in ../assistants/insight/sql.ts) is table-restricted to
- * the rewind frame tables and is semantically NOT the product `execute_sql` (which
- * queries the whole omi.db). Wiring it would be wrong, and building new backends is
- * out of scope here. So every product tool degrades cleanly (see the "not available
- * on Windows yet" path) with fallback telemetry, and the 18 control tools — all
- * serviceable via handleAgentControlToolCall — are the meaningful surface for now.
+ * `capture_screen` is the FIRST serviceable product tool (PR-F). It captures the
+ * screen locally and returns a file PATH, mirroring macOS' capture tool; its own
+ * "Screen Sharing in Chat" consent gate lives inside the executor (see
+ * captureScreenExecutor.ts), enforced here at dispatch. Every other product tool
+ * still degrades cleanly (the "not available on Windows yet" path) with fallback
+ * telemetry — macOS services those by handing them to Swift over a second process
+ * boundary that Windows does not have, and building new backends is out of scope.
+ * DARK: this map only decides what the relay WOULD dispatch; nothing connects a pi
+ * client to the relay in production yet (see the file header).
  */
-export const defaultProductToolExecutors: ReadonlyMap<string, ProductToolExecutor> = new Map()
+export const defaultProductToolExecutors: ReadonlyMap<string, ProductToolExecutor> = new Map<
+  string,
+  ProductToolExecutor
+>([['capture_screen', createCaptureScreenExecutor()]])
 
 /** The advertised-serviceable allowlist, derived from the default registry so the
  *  two can never drift. Consumed by the extension's projection layer. */
