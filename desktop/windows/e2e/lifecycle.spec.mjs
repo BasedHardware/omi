@@ -12,7 +12,7 @@ import { _electron as electron } from 'playwright'
 import electronPath from 'electron'
 import { spawn } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdtempSync, rmSync, readFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import path from 'node:path'
 
@@ -113,6 +113,62 @@ test('single instance, tray, close-hides-to-tray, and app:quit really quits', as
     new Promise((resolve) => setTimeout(() => resolve('timeout'), 15000))
   ])
   assert.equal(result, 'closed', 'app:quit should terminate the app')
+})
+
+test('crash sentinel: clean quit writes clean, next boot reads it (no false crash), and a forced-dirty flag is detected', async (t) => {
+  const dir = tempUserDataDir()
+  const sentinelPath = path.join(dir, 'clean-exit-sentinel.json')
+  t.after(() => {
+    try {
+      rmSync(dir, { recursive: true, force: true })
+    } catch {
+      /* best-effort */
+    }
+  })
+
+  // --- Boot 1: fresh profile (no sentinel) --------------------------------
+  const app1 = await launch(dir)
+  await app1.firstWindow()
+  // First launch ever: no prior sentinel → NOT reported as a crash.
+  const crashed1 = await app1.evaluate(() => globalThis.__omiE2E.crashDetectedOnBoot())
+  assert.equal(crashed1, false, 'first launch (no sentinel) must not be flagged as a crash')
+  // Boot marked this session dirty/running.
+  assert.equal(
+    JSON.parse(readFileSync(sentinelPath, 'utf-8')).cleanExit,
+    false,
+    'boot should mark the session dirty (cleanExit=false)'
+  )
+  // Clean quit → will-quit writes cleanExit=true.
+  const closed1 = new Promise((resolve) => app1.on('close', () => resolve('closed')))
+  await app1.evaluate(({ ipcMain }) => ipcMain.emit('app:quit'))
+  await Promise.race([closed1, new Promise((r) => setTimeout(() => r('timeout'), 15000))])
+  assert.equal(
+    JSON.parse(readFileSync(sentinelPath, 'utf-8')).cleanExit,
+    true,
+    'clean quit should mark cleanExit=true'
+  )
+
+  // --- Boot 2: same profile, previous exit was clean ----------------------
+  const app2 = await launch(dir)
+  await app2.firstWindow()
+  const crashed2 = await app2.evaluate(() => globalThis.__omiE2E.crashDetectedOnBoot())
+  assert.equal(crashed2, false, 'a clean previous exit must not be flagged as a crash on next boot')
+  const closed2 = new Promise((resolve) => app2.on('close', () => resolve('closed')))
+  await app2.evaluate(({ ipcMain }) => ipcMain.emit('app:quit'))
+  await Promise.race([closed2, new Promise((r) => setTimeout(() => r('timeout'), 15000))])
+
+  // --- Boot 3: simulate a crash by leaving the flag dirty -----------------
+  // A real crash never reaches will-quit; emulate that end state by forcing the
+  // sentinel dirty on disk, then boot and assert detection fires.
+  const { writeFileSync } = await import('node:fs')
+  writeFileSync(sentinelPath, JSON.stringify({ cleanExit: false }), 'utf-8')
+  const app3 = await launch(dir)
+  await app3.firstWindow()
+  const crashed3 = await app3.evaluate(() => globalThis.__omiE2E.crashDetectedOnBoot())
+  assert.equal(crashed3, true, 'a dirty sentinel from a prior crash must be detected on boot')
+  const closed3 = new Promise((resolve) => app3.on('close', () => resolve('closed')))
+  await app3.evaluate(({ ipcMain }) => ipcMain.emit('app:quit'))
+  await Promise.race([closed3, new Promise((r) => setTimeout(() => r('timeout'), 15000))])
 })
 
 test('hidden title bar: overlay chrome + maximize/restore keeps sane bounds', async (t) => {

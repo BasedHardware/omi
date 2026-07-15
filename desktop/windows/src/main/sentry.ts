@@ -37,6 +37,22 @@ export function captureError(
   })
 }
 
+/** Report a developer-facing telemetry MESSAGE (not an exception, no user banner):
+ *  e.g. "a crash was detected on the previous launch", or "a renderer went
+ *  unresponsive". No-ops when Sentry is not initialized/enabled, exactly like the
+ *  exception path — so dev and self-builds report nothing. Scrubbing is applied by
+ *  the beforeSend hook above. */
+export function captureMessage(
+  message: string,
+  context: { area: string; level?: Sentry.SeverityLevel; extra?: Record<string, unknown> }
+): void {
+  Sentry.captureMessage(message, {
+    level: context.level ?? 'info',
+    tags: { area: context.area },
+    extra: context.extra
+  })
+}
+
 let initialized = false
 
 export function initSentry(): void {

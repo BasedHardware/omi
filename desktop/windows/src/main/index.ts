@@ -106,8 +106,9 @@ import { perfMark, flushPerfMarks } from '../shared/perf'
 // Dev-only benchmarking / sandbox machinery. Every call below is behind
 // `import.meta.env.DEV`, so this module is tree-shaken out of packaged main.
 import * as devBench from './dev/bench'
-import { initSentry } from './sentry'
+import { initSentry, captureMessage } from './sentry'
 import { registerMicPermissionHandlers } from './ipc/micPermission'
+import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
 import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
@@ -278,6 +279,38 @@ app.on('child-process-gone', (_e, details) => {
     }
   }
 })
+// A HUNG (not crashed) UI thread never fires render-process-gone — the process is
+// alive but wedged, so none of the handlers above see it. Electron surfaces this
+// as the webContents 'unresponsive' event (there is no app-level equivalent), so
+// attach it as each webContents is created — covering every window (main /bar
+// /capture /insight-toast /glow) uniformly. Log + report to Sentry at message
+// level, mirroring the crash handlers above. Purely OBSERVATIONAL: we do NOT kill
+// or force-reload the window — a hang often self-clears (recorded by 'responsive'),
+// and auto-killing a wedged-but-recoverable UI is a heavier behavior change out of
+// scope here.
+app.on('web-contents-created', (_e, wc) => {
+  const urlOf = (): string => {
+    try {
+      return wc.getURL()
+    } catch {
+      return '?'
+    }
+  }
+  wc.on('unresponsive', () => {
+    logFatal('unresponsive', `url=${urlOf()} webContents=${wc.id}`)
+    captureMessage('Renderer unresponsive', {
+      area: 'lifecycle-unresponsive',
+      level: 'warning',
+      extra: { url: urlOf(), webContentsId: wc.id }
+    })
+  })
+  // The recovery signal — a transient hang that cleared. Console-only (not a fatal
+  // event, and we don't Sentry-report heals, matching how render-process-gone
+  // skips clean exits) so crash.log stays a log of things that actually went wrong.
+  wc.on('responsive', () => {
+    console.log(`[lifecycle] renderer responsive again: url=${urlOf()} webContents=${wc.id}`)
+  })
+})
 
 // Desktop-automation bridge (real Windows UI actions). ON by default; set
 // OMI_AUTOMATION='0' as a kill-switch to disable it. Gates both the IPC
@@ -308,6 +341,15 @@ if (import.meta.env.DEV && gotSingleInstanceLock) devBench.clearStaleGpuCaches()
 // process doesn't pay SDK setup; no-op unless a DSN is configured, and only
 // enabled for packaged builds (see sentry.ts).
 if (gotSingleInstanceLock) initSentry()
+
+// Clean-shutdown sentinel: detect a crash on the PREVIOUS launch (a hard crash /
+// OS kill / main-process death that bypassed uncaughtException leaves no trace
+// otherwise) and report it to Sentry as a message — developer-facing telemetry
+// only, no user banner (macOS lastSessionCleanExit + detectAndReportCrash parity).
+// After Sentry init so a detected crash can report, and gated on the lock so a
+// losing duplicate process (same userData → same sentinel file) never reads or
+// rewrites the live instance's flag. The clean-exit write is in will-quit below.
+if (gotSingleInstanceLock) initCrashSentinel()
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -867,7 +909,10 @@ app.whenReady().then(async () => {
       },
       // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
       // phase, so the toast + capture wiring is drivable without real Zoom.
-      meeting: meetingDebug()
+      meeting: meetingDebug(),
+      // Crash sentinel: whether THIS boot detected the previous session as a crash
+      // (the sentinel file itself is asserted directly from userDataDir).
+      crashDetectedOnBoot: () => crashDetectedOnBoot()
     }
   }
 
@@ -1150,6 +1195,12 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  // Mark this session as a clean exit FIRST (cheap synchronous write) so the next
+  // launch's crash sentinel doesn't false-report. Gated on the lock: a losing
+  // duplicate process shares this profile's sentinel file and must never overwrite
+  // the live instance's dirty flag with "clean". A crash never reaches here → the
+  // flag stays dirty → correctly detected next launch.
+  if (gotSingleInstanceLock) markCleanExit()
   cancelStartupRescan()
   stopMeetingMonitor()
   destroyTray()
