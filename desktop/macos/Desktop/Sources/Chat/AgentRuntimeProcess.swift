@@ -343,6 +343,7 @@ actor AgentRuntimeProcess {
       case journalBackendSync
       case journalBackendDelete
       case journalBackendReconcile
+      case chatFirstDeferralDelivery
       case defaultExecutionProfileConfigured
       case surfaceSessionResolved
       case sessionExecutionProfileMigrated
@@ -403,6 +404,7 @@ actor AgentRuntimeProcess {
       case "journal_backend_sync": return .journalBackendSync
       case "journal_backend_delete": return .journalBackendDelete
       case "journal_backend_reconcile": return .journalBackendReconcile
+      case "chat_first_deferral_delivery": return .chatFirstDeferralDelivery
       case "default_execution_profile_configured": return .defaultExecutionProfileConfigured
       case "surface_session_resolved": return .surfaceSessionResolved
       case "session_execution_profile_migrated": return .sessionExecutionProfileMigrated
@@ -513,6 +515,18 @@ actor AgentRuntimeProcess {
     let highWaterTurnSeq: Int
     let conversationGeneration: Int
     let generationBaseTurnSeq: Int
+    let accepted: Bool? = nil
+    let duplicate: Bool? = nil
+    let continuityKey: String? = nil
+  }
+
+  struct QuestionInteractionReply: Sendable {
+    let accepted: Bool
+    let duplicate: Bool
+    let continuityKey: String
+    let parentTurn: KernelJournalTurn?
+    let userTurn: KernelJournalTurn
+    let assistantTurn: KernelJournalTurn
   }
 
   typealias JournalTurnChangedHandler = @Sendable (KernelJournalTurn) -> Void
@@ -1968,6 +1982,61 @@ actor AgentRuntimeProcess {
     return turn
   }
 
+  /// The journal derives the stored question payload and only accepts the
+  /// current main-Chat tail. Swift cannot send an answer string or select an
+  /// arbitrary parent row through this operation.
+  func recordQuestionInteractionReply(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    questionID: String,
+    optionID: String,
+    controlGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> QuestionInteractionReply {
+    guard surface.surfaceKind == "main_chat",
+      controlGeneration >= 0,
+      !sessionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      !questionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
+      !optionID.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    else {
+      throw BridgeError.agentError("Invalid question interaction")
+    }
+    let result = try await journalOperation(
+      type: "record_question_interaction_reply",
+      operation: "record_question_interaction_reply",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "sessionId": sessionID,
+        "questionId": questionID,
+        "optionId": optionID,
+        "controlGeneration": controlGeneration,
+      ],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard result.accepted == true,
+      let continuityKey = result.continuityKey,
+      let userTurn = result.turns.first(where: { $0.role == "user" }),
+      let assistantTurn = result.turns.first(where: { $0.role == "assistant" })
+    else {
+      throw BridgeError.agentError("Question is no longer actionable")
+    }
+    for turn in [result.turn, userTurn, assistantTurn] {
+      if let turn { recordLifecycleJournalMutation(turn) }
+    }
+    return QuestionInteractionReply(
+      accepted: true,
+      duplicate: result.duplicate == true,
+      continuityKey: continuityKey,
+      parentTurn: result.turn,
+      userTurn: userTurn,
+      assistantTurn: assistantTurn
+    )
+  }
+
   private func journalOperation(
     type: String,
     operation: String,
@@ -3210,6 +3279,9 @@ actor AgentRuntimeProcess {
     case .journalBackendReconcile:
       if messageOwnerIsCurrentlyAuthorized(message) { handleJournalBackendReconcile(message) }
 
+    case .chatFirstDeferralDelivery:
+      if messageOwnerIsCurrentlyAuthorized(message) { handleChatFirstDeferralDelivery(message) }
+
     case .defaultExecutionProfileConfigured, .surfaceSessionResolved,
       .sessionExecutionProfileMigrated, .contextSourceUpdated, .contextSnapshot,
       .legacyMainChatSessionsImported,
@@ -3609,7 +3681,10 @@ actor AgentRuntimeProcess {
         clearedCount: message.payload["clearedCount"] as? Int ?? 0,
         highWaterTurnSeq: highWaterTurnSeq,
         conversationGeneration: conversationGeneration,
-        generationBaseTurnSeq: generationBaseTurnSeq
+        generationBaseTurnSeq: generationBaseTurnSeq,
+        accepted: message.payload["accepted"] as? Bool,
+        duplicate: message.payload["duplicate"] as? Bool,
+        continuityKey: message.payload["continuityKey"] as? String
       ))
   }
 
@@ -3626,6 +3701,73 @@ actor AgentRuntimeProcess {
       conversationGenerationFallback: message.payload["conversationGeneration"] as? Int ?? 1,
       generationBaseTurnSeqFallback: message.payload["generationBaseTurnSeq"] as? Int ?? 0
     )
+  }
+
+  private func handleChatFirstDeferralDelivery(_ message: RuntimeMessage) {
+    guard let request = ChatFirstDeferralDeliveryRequest(payload: message.payload) else {
+      sendChatFirstDeferralDeliveryResult(
+        requestId: message.requestId,
+        clientId: message.clientId,
+        ownerID: message.payload["ownerId"] as? String,
+        continuityKey: message.payload["continuityKey"] as? String ?? "",
+        deliveryGeneration: message.payload["deliveryGeneration"] as? Int ?? 0,
+        payloadHash: message.payload["payloadHash"] as? String ?? "",
+        ok: false,
+        errorCode: "chat_first_deferral_malformed"
+      )
+      return
+    }
+    Task { [weak self] in
+      do {
+        try await APIClient.shared.recordChatFirstDeferral(request)
+        await self?.sendChatFirstDeferralDeliveryResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerID: request.ownerID,
+          continuityKey: request.continuityKey,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          ok: true,
+          errorCode: nil
+        )
+      } catch {
+        await self?.sendChatFirstDeferralDeliveryResult(
+          requestId: message.requestId,
+          clientId: message.clientId,
+          ownerID: request.ownerID,
+          continuityKey: request.continuityKey,
+          deliveryGeneration: request.deliveryGeneration,
+          payloadHash: request.payloadHash,
+          ok: false,
+          errorCode: Self.boundedChatFirstDeferralErrorCode(for: error)
+        )
+      }
+    }
+  }
+
+  private func sendChatFirstDeferralDeliveryResult(
+    requestId: String?,
+    clientId: String?,
+    ownerID: String?,
+    continuityKey: String,
+    deliveryGeneration: Int,
+    payloadHash: String,
+    ok: Bool,
+    errorCode: String?
+  ) {
+    var payload: [String: Any] = [
+      "type": "chat_first_deferral_delivery_result",
+      "protocolVersion": 2,
+      "continuityKey": continuityKey,
+      "deliveryGeneration": deliveryGeneration,
+      "payloadHash": payloadHash,
+      "ok": ok,
+    ]
+    if let requestId { payload["requestId"] = requestId }
+    if let clientId { payload["clientId"] = clientId }
+    if let ownerID { payload["ownerId"] = ownerID }
+    if let errorCode { payload["errorCode"] = errorCode }
+    sendJson(payload)
   }
 
   private func handleJournalBackendSync(_ message: RuntimeMessage) {

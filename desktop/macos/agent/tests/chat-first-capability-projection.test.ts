@@ -29,6 +29,8 @@ describe("chat-first admitted capability projection", () => {
       chatFirstUi: true,
       chatFirstControlGeneration: 19,
     });
+    expect(kernel.hasChatFirstMainCapability("owner")).toBe(true);
+    expect(kernel.hasChatFirstMainCapability("other-owner")).toBe(false);
 
     adapter.deferResult();
     const runPromise = kernel.executeRun({
@@ -85,6 +87,7 @@ describe("chat-first admitted capability projection", () => {
       chatFirstUi: false,
       chatFirstControlGeneration: null,
     });
+    expect(kernel.hasChatFirstMainCapability("owner")).toBe(false);
     expect(admittedContextSnapshot.capabilities.allowedToolNames).not.toEqual(
       expect.arrayContaining(CHAT_FIRST_DYNAMIC_TOOLS),
     );

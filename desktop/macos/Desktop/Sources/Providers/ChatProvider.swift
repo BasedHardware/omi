@@ -1,4 +1,5 @@
 import Combine
+import CryptoKit
 import CoreGraphics
 @preconcurrency import GRDB
 import OmiSupport
@@ -324,7 +325,15 @@ enum ChatContentBlock: Identifiable {
   case thinking(id: String, text: String)
   /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
-  case questionCard(id: String, questionId: String, text: String, subjectKind: String, subjectId: String, options: [[String: Any]])
+  case questionCard(
+    id: String,
+    questionId: String,
+    text: String,
+    subjectKind: String,
+    subjectId: String,
+    options: [[String: Any]],
+    selectedOptionId: String? = nil
+  )
   case taskCard(id: String, taskId: String)
   case goalLink(id: String, goalId: String, summary: String)
   case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
@@ -354,7 +363,7 @@ enum ChatContentBlock: Identifiable {
     case .toolCall(let id, _, _, _, _, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
-    case .questionCard(let id, _, _, _, _, _): return id
+    case .questionCard(let id, _, _, _, _, _, _): return id
     case .taskCard(let id, _): return id
     case .goalLink(let id, _, _): return id
     case .captureLink(let id, _, _, _): return id
@@ -838,13 +847,17 @@ struct ChatMessage: Identifiable {
   /// Kernel journal lifecycle when this message was projected from a journal
   /// row. Failed turns get a light visual treatment so they don't look completed.
   var journalStatus: KernelJournalTurnStatus?
+  /// A journal-first continuation can reserve its assistant row before the
+  /// query begins. It stays out of the transcript until real output arrives.
+  var hidesEmptyStreamingPlaceholder: Bool
 
   init(
     id: String = UUID().uuidString, clientTurnId: String? = nil, text: String, createdAt: Date = Date(),
     sender: ChatSender, isStreaming: Bool = false, rating: Int? = nil, isSynced: Bool = false,
     citations: [Citation] = [], contentBlocks: [ChatContentBlock] = [], metadata: MessageMetadata? = nil,
     notificationContext: String? = nil, notificationScreenshot: Data? = nil, attachments: [ChatAttachment] = [],
-    resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil, journalStatus: KernelJournalTurnStatus? = nil
+    resources: [ChatResource] = [], turnOwner: ChatTurnOwner? = nil, journalStatus: KernelJournalTurnStatus? = nil,
+    hidesEmptyStreamingPlaceholder: Bool = false
   ) {
     self.id = id
     self.turnOwner = turnOwner
@@ -863,6 +876,62 @@ struct ChatMessage: Identifiable {
     self.attachments = attachments
     self.resources = resources
     self.journalStatus = journalStatus
+    self.hidesEmptyStreamingPlaceholder = hidesEmptyStreamingPlaceholder
+  }
+}
+
+/// IDs are the only caller-provided inputs for a suggestion selection. The
+/// kernel derives all visible reply content transactionally.
+struct ChatQuestionCardSelection: Sendable {
+  let questionID: String
+  let optionID: String
+}
+
+/// Receipt for resuming an already-admitted question reply after an app crash.
+struct ChatQuestionCardContinuation: Sendable {
+  let continuityKey: String
+  let preparedAnswer: String
+  let userTurnID: String
+  let assistantTurnID: String
+
+  init?(continuityKey: String, preparedAnswer: String, userTurnID: String, assistantTurnID: String) {
+    guard !continuityKey.isEmpty, !preparedAnswer.isEmpty, !userTurnID.isEmpty, !assistantTurnID.isEmpty else {
+      return nil
+    }
+    self.continuityKey = continuityKey
+    self.preparedAnswer = preparedAnswer
+    self.userTurnID = userTurnID
+    self.assistantTurnID = assistantTurnID
+  }
+
+  init?(receipt: AgentRuntimeProcess.QuestionInteractionReply) {
+    self.init(
+      continuityKey: receipt.continuityKey,
+      preparedAnswer: receipt.userTurn.content,
+      userTurnID: receipt.userTurn.turnId,
+      assistantTurnID: receipt.assistantTurn.turnId
+    )
+  }
+
+  static func tailResumeCandidate(from messages: [ChatMessage]) -> ChatQuestionCardContinuation? {
+    guard let assistant = messages.last,
+      assistant.sender == .ai,
+      assistant.isStreaming,
+      assistant.hidesEmptyStreamingPlaceholder,
+      assistant.text.isEmpty,
+      assistant.contentBlocks.isEmpty,
+      let continuityKey = assistant.clientTurnId,
+      continuityKey.hasPrefix("qri_"),
+      messages.count >= 2
+    else { return nil }
+    let user = messages[messages.count - 2]
+    guard user.sender == .user, user.clientTurnId == continuityKey else { return nil }
+    return ChatQuestionCardContinuation(
+      continuityKey: continuityKey,
+      preparedAnswer: user.text,
+      userTurnID: user.id,
+      assistantTurnID: assistant.id
+    )
   }
 }
 
@@ -899,7 +968,7 @@ extension ChatContentBlock {
     case .discoveryCard(_, let title, _, let fullText):
       let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
-    case .questionCard(_, _, let text, _, _, _):
+    case .questionCard(_, _, let text, _, _, _, _):
       let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? nil : trimmed
     case .taskCard:
@@ -3410,6 +3479,32 @@ class ChatProvider: ObservableObject {
       if $0.createdAt == $1.createdAt { return $0.id < $1.id }
       return $0.createdAt < $1.createdAt
     }
+    resumeTailQuestionContinuationIfNeeded()
+  }
+
+  /// Resumes a kernel-admitted suggestion reply only when it remains the
+  /// current final chat event and the account is still in the gated cohort.
+  private func resumeTailQuestionContinuationIfNeeded() {
+    guard !isSending,
+      let ownerID = runtimeOwnerId,
+      let continuation = ChatQuestionCardContinuation.tailResumeCandidate(from: messages)
+    else { return }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    Task { @MainActor [weak self] in
+      guard let self,
+        !self.isSending,
+        self.messages.last?.id == continuation.assistantTurnID,
+        self.chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil
+      else { return }
+      _ = await self.sendMessage(
+        "",
+        surfaceRef: surface,
+        turnOwner: .mainChat,
+        clientTurnId: continuation.continuityKey,
+        questionContinuation: continuation
+      )
+    }
   }
 
   func resetJournalProjection(surface: AgentSurfaceReference) {
@@ -3691,6 +3786,53 @@ class ChatProvider: ObservableObject {
 
   // MARK: - Send Message
 
+  /// Question-card controls are only live on a completed assistant turn at
+  /// the conversation tail. A later user response retires its choices.
+  func isQuestionCardActionable(
+    messageID: String,
+    questionID: String,
+    selectedOptionID: String?
+  ) -> Bool {
+    guard selectedOptionID == nil, !isSending, let ownerID = runtimeOwnerId else { return false }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil,
+      let tail = messages.last,
+      tail.id == messageID,
+      tail.sender == .ai,
+      tail.journalStatus == .completed,
+      !tail.isStreaming
+    else { return false }
+    return tail.contentBlocks.contains { block in
+      guard case .questionCard(_, let candidateID, _, _, _, _, let candidateSelection) = block else {
+        return false
+      }
+      return candidateID == questionID && candidateSelection == nil
+    }
+  }
+
+  /// The click is immediately sent through the normal single-send lock; the
+  /// kernel owns validation and derives the persisted user reply.
+  func selectQuestionCardOption(questionID: String, optionID: String) async {
+    let normalizedQuestionID = questionID.trimmingCharacters(in: .whitespacesAndNewlines)
+    let normalizedOptionID = optionID.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedQuestionID.isEmpty, !normalizedOptionID.isEmpty, let ownerID = runtimeOwnerId else { return }
+    let surface = mainChatSurfaceReference()
+    guard chatFirstMainChatProjectionGate.capability(for: surface, ownerID: ownerID) != nil else { return }
+    _ = await sendMessage(
+      "",
+      surfaceRef: surface,
+      turnOwner: .mainChat,
+      clientTurnId: Self.questionInteractionContinuityKey(
+        questionID: normalizedQuestionID,
+        optionID: normalizedOptionID
+      ),
+      questionInteraction: ChatQuestionCardSelection(
+        questionID: normalizedQuestionID,
+        optionID: normalizedOptionID
+      )
+    )
+  }
+
   /// Send a message and get AI response via Claude Agent SDK bridge
   /// Persists both user and AI messages to backend
   /// - Parameters:
@@ -3707,11 +3849,14 @@ class ChatProvider: ObservableObject {
     imageData: Data? = nil,
     turnOwner: ChatTurnOwner = .mainChat,
     clientTurnId: String = UUID().uuidString,
+    questionInteraction: ChatQuestionCardSelection? = nil,
+    questionContinuation: ChatQuestionCardContinuation? = nil,
     onAccepted: (@MainActor () -> Void)? = nil,
     onJournalFinalized: (@MainActor (_ accepted: Bool) -> Void)? = nil
   ) async -> String? {
     let trimmedText = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmedText.isEmpty else { return nil }
+    guard !trimmedText.isEmpty || questionInteraction != nil || questionContinuation != nil else { return nil }
+    var effectivePrompt = trimmedText
     guard let capturedRuntimeOwnerID = runtimeOwnerId else {
       errorMessage = "Sign in again to continue."
       return nil
@@ -3803,6 +3948,7 @@ class ChatProvider: ObservableObject {
         telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
         clearChatTelemetryState(for: sendGen)
         releaseSendLock(sendGeneration: sendGen)
+
         return nil
       }
       guard let sid = currentSessionId else {
@@ -4036,6 +4182,61 @@ class ChatProvider: ObservableObject {
       usageLimiter.recordQuery()
     }
 
+    var preAdmittedQuestionReply = questionContinuation
+    if let questionContinuation {
+      guard questionContinuation.continuityKey == turnAttemptId,
+        questionContinuation.userTurnID == Self.messageIds(forAttemptId: turnAttemptId).user,
+        questionContinuation.assistantTurnID == Self.messageIds(forAttemptId: turnAttemptId).assistant
+      else {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+      effectivePrompt = questionContinuation.preparedAnswer
+    }
+    if let questionInteraction {
+      guard resolvedSurface.surfaceKind == "main_chat",
+        let capability = chatFirstMainChatProjectionGate.capability(
+          for: resolvedSurface,
+          ownerID: capturedRuntimeOwnerID
+        )
+      else {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+      do {
+        let receipt = try await resolvedAgentClient().recordQuestionInteractionReply(
+          surface: resolvedSurface,
+          ownerID: capturedRuntimeOwnerID,
+          sessionID: pinnedSession.sessionId,
+          questionID: questionInteraction.questionID,
+          optionID: questionInteraction.optionID,
+          controlGeneration: capability.controlGeneration
+        )
+        guard receipt.continuityKey == turnAttemptId,
+          receipt.userTurn.turnId == Self.messageIds(forAttemptId: turnAttemptId).user,
+          receipt.assistantTurn.turnId == Self.messageIds(forAttemptId: turnAttemptId).assistant,
+          let continuation = ChatQuestionCardContinuation(receipt: receipt)
+        else {
+          throw BridgeError.agentError("Question interaction continuity mismatch")
+        }
+        effectivePrompt = continuation.preparedAnswer
+        preAdmittedQuestionReply = continuation
+        await kernelTurnProjection.refresh(surface: resolvedSurface)
+      } catch {
+        errorMessage = "That suggestion is no longer available."
+        telemetryAttempt.fail(errorClass: .sessionSetup)
+        clearChatTelemetryState(for: sendGen)
+        releaseSendLock(sendGeneration: sendGen)
+        return nil
+      }
+    }
+
     // Attempt-derived IDs are the canonical journal identities. Backend
     // delivery preserves them through the outbox instead of minting a
     // second writer identity.
@@ -4048,7 +4249,7 @@ class ChatProvider: ObservableObject {
     let userMessage = ChatMessage(
       id: userMessageId,
       clientTurnId: turnAttemptId,
-      text: trimmedText,
+      text: effectivePrompt,
       sender: .user,
       attachments: attachmentsForMessage,
       turnOwner: turnOwner
@@ -4064,17 +4265,23 @@ class ChatProvider: ObservableObject {
     )
     // Both visible halves enter the journal under one SQLite transaction.
     // If either identity/payload is rejected, neither row can project.
-    let recordedExchange = await recordStreamingJournalExchange(
-      surface: resolvedSurface,
-      ownerID: capturedRuntimeOwnerID,
-      continuityKey: turnAttemptId,
-      userMessage: userMessage,
-      assistantMessage: aiMessage,
-      origin: journalOrigin,
-      appId: capturedAppId,
-      sessionId: capturedSessionId,
-      messageSource: journalOrigin
-    )
+    let recordedExchange: Bool
+    if preAdmittedQuestionReply != nil {
+      // The runtime already wrote the exact pair transactionally.
+      recordedExchange = true
+    } else {
+      recordedExchange = await recordStreamingJournalExchange(
+        surface: resolvedSurface,
+        ownerID: capturedRuntimeOwnerID,
+        continuityKey: turnAttemptId,
+        userMessage: userMessage,
+        assistantMessage: aiMessage,
+        origin: journalOrigin,
+        appId: capturedAppId,
+        sessionId: capturedSessionId,
+        messageSource: journalOrigin
+      )
+    }
     if recordedExchange {
       journalOwnerByMessageID[aiMessageId] = capturedRuntimeOwnerID
       journalTerminalTargets.register(
@@ -4117,7 +4324,7 @@ class ChatProvider: ObservableObject {
     // Track onboarding user-message shape without content.
     if isOnboarding {
       AnalyticsManager.shared.onboardingChatMessageDetailed(
-        role: "user", text: trimmedText, step: "chat"
+        role: "user", text: effectivePrompt, step: "chat"
       )
     }
 
@@ -4164,7 +4371,7 @@ class ChatProvider: ObservableObject {
       var screenPayload: [String: Any]?
       if effectiveImageData == nil,
         let screenContextReason = ScreenContextAutoIncludePolicy.reason(
-          userText: trimmedText,
+          userText: effectivePrompt,
           systemPromptStyle: systemPromptStyle,
           turnOwner: turnOwner
         )
@@ -4466,7 +4673,7 @@ class ChatProvider: ObservableObject {
       let queryResult: AgentClient.QueryResult
       do {
         queryResult = try await resolvedAgentClient().query(
-          prompt: trimmedText,
+          prompt: effectivePrompt,
           session: kernelContext.session,
           surface: resolvedSurface,
           mode: chatMode.rawValue,
@@ -4758,7 +4965,7 @@ class ChatProvider: ObservableObject {
       }
 
       // Fire-and-forget: check if user's message mentions goal progress
-      let chatText = trimmedText
+      let chatText = effectivePrompt
       Task.detached(priority: .background) {
         await GoalsAIService.shared.extractProgressFromAllGoals(text: chatText)
       }
@@ -4953,7 +5160,7 @@ class ChatProvider: ObservableObject {
         }
         AnalyticsManager.shared.onboardingChatMessageDetailed(
           role: onboardingRole,
-          text: trimmedText,
+          text: effectivePrompt,
           step: "chat",
           error: onboardingRole == "error" ? String(describing: error) : nil
         )
@@ -5002,7 +5209,7 @@ class ChatProvider: ObservableObject {
         let card = ChatErrorState.from(bridgeError)
       {
         currentError = card
-        lastFailedPrompt = trimmedText
+        lastFailedPrompt = effectivePrompt
         errorMessage = nil
       } else {
         errorMessage = error.localizedDescription
@@ -5059,7 +5266,28 @@ class ChatProvider: ObservableObject {
     user: String,
     assistant: String
   ) {
-    (user: attemptId, assistant: "\(attemptId)-assistant")
+    if attemptId.hasPrefix("qri_") {
+      return (
+        user: questionInteractionTurnID(continuityKey: attemptId, role: "user"),
+        assistant: questionInteractionTurnID(continuityKey: attemptId, role: "assistant")
+      )
+    }
+    return (user: attemptId, assistant: "\(attemptId)-assistant")
+  }
+
+  nonisolated static func questionInteractionContinuityKey(questionID: String, optionID: String) -> String {
+    "qri_\(sha256Prefix("\(questionID)\u{0}\(optionID)", byteCount: 16))"
+  }
+
+  nonisolated private static func questionInteractionTurnID(continuityKey: String, role: String) -> String {
+    "turn_\(sha256Prefix("\(continuityKey)\u{0}\(role)", byteCount: 8))"
+  }
+
+  nonisolated private static func sha256Prefix(_ value: String, byteCount: Int) -> String {
+    SHA256.hash(data: Data(value.utf8))
+      .prefix(byteCount)
+      .map { String(format: "%02x", $0) }
+      .joined()
   }
 
   @discardableResult

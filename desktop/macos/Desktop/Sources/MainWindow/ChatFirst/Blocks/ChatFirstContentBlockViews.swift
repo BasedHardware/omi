@@ -3,8 +3,9 @@ import OmiTheme
 
 // MARK: - Question card
 
-/// T07 intentionally renders choices as information-only pills. T08 owns the
-/// journal-first selection transaction, tail gating, and option retirement.
+/// Choices are controls only while the kernel-backed parent is the completed
+/// tail of Main Chat. The runtime remains authoritative at selection time;
+/// this view's gate simply avoids presenting obsolete choices as actionable.
 struct QuestionCardView: View {
   private struct Option: Identifiable {
     let id: String
@@ -24,6 +25,9 @@ struct QuestionCardView: View {
   let questionID: String
   let text: String
   let options: [[String: Any]]
+  let selectedOptionID: String?
+  let isActionable: Bool
+  let onSelect: (String) -> Void
 
   private var validOptions: [Option] { options.compactMap(Option.init) }
 
@@ -34,23 +38,29 @@ struct QuestionCardView: View {
         .foregroundStyle(OmiColors.textPrimary)
         .fixedSize(horizontal: false, vertical: true)
 
-      if !validOptions.isEmpty {
+      // A completed question remains useful transcript context, but its
+      // suggestions disappear as soon as an answer exists or another bubble
+      // has taken the tail. We never leave stale chips that look tappable.
+      if isActionable, selectedOptionID == nil, !validOptions.isEmpty {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(validOptions) { option in
-            Text(option.label)
-              .scaledFont(size: OmiType.caption, weight: .medium)
-              .foregroundStyle(OmiColors.textSecondary)
-              .padding(.horizontal, OmiSpacing.md)
-              .padding(.vertical, OmiSpacing.sm)
-              .omiControlSurface(
-                fill: OmiColors.backgroundPrimary.opacity(0.7),
-                radius: OmiChrome.chipRadius,
-                stroke: OmiColors.border.opacity(0.65)
-              )
-              // Options are deliberately not Buttons until T08 installs the
-              // atomic journal selection operation.
-              .accessibilityLabel("Suggestion: \(option.label)")
-              .accessibilityIdentifier("chat-first-question-\(questionID)-option-\(option.id)")
+            Button {
+              onSelect(option.id)
+            } label: {
+              Text(option.label)
+                .scaledFont(size: OmiType.caption, weight: .medium)
+                .foregroundStyle(OmiColors.textSecondary)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
+                .omiControlSurface(
+                  fill: OmiColors.backgroundPrimary.opacity(0.7),
+                  radius: OmiChrome.chipRadius,
+                  stroke: OmiColors.border.opacity(0.65)
+                )
+            }
+            .buttonStyle(.plain)
+            .accessibilityLabel("Send suggestion: \(option.label)")
+            .accessibilityIdentifier("chat-first-question-\(questionID)-option-\(option.id)")
           }
         }
       }
@@ -143,7 +153,7 @@ struct TaskCardView: View {
               navigation.open(focus: .goal(id: goalID))
             }
           }
-          if let conversationID = task.conversationId, !conversationID.isEmpty {
+          if let conversationID = ChatFirstCaptureLinkPolicy.captureID(for: task) {
             ChatFirstDestinationBadge(
               title: "Capture",
               systemImage: "waveform",
@@ -352,7 +362,10 @@ private struct ChatFirstLinkBlockView: View {
   }
 }
 
-private struct ChatFirstDestinationBadge: View {
+/// A compact typed destination control shared by rich Chat cards and the
+/// cohort-only Tasks page. Its closure is intentionally the only navigation
+/// surface: callers supply typed shell focus rather than model text or URLs.
+struct ChatFirstDestinationBadge: View {
   let title: String
   let systemImage: String
   let accessibilityID: String

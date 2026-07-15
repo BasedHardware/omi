@@ -241,6 +241,24 @@ enum AgentClient {
       )
     }
 
+    func recordQuestionInteractionReply(
+      surface: AgentSurfaceReference,
+      ownerID: String,
+      sessionID: String,
+      questionID: String,
+      optionID: String,
+      controlGeneration: Int
+    ) async throws -> AgentRuntimeProcess.QuestionInteractionReply {
+      try await bridge.recordQuestionInteractionReply(
+        surface: surface,
+        ownerID: ownerID,
+        sessionID: sessionID,
+        questionID: questionID,
+        optionID: optionID,
+        controlGeneration: controlGeneration
+      )
+    }
+
     func updateJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,

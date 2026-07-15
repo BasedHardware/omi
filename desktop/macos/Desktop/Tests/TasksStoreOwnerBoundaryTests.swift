@@ -619,6 +619,169 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   }
 
   @MainActor
+  func testChatFirstUpdateRollsBackRejectedRenameThroughStoreSeam() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+    let probe = TasksStoreOperationProbe()
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      remoteFailureBehavior: .rollbackForChatFirst,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { ownerID in
+          XCTAssertEqual(ownerID, "owner-a")
+          probe.localWrites += 1
+          return optimistic
+        },
+        updateRemote: { ownerID in
+          XCTAssertEqual(ownerID, "owner-a")
+          probe.remoteRequests += 1
+          throw TasksStoreOwnerBoundaryFailure.backendRejected
+        },
+        syncRemote: { _, _ in probe.remoteSyncs += 1 },
+        rollbackLocal: { probe.rollbacks += 1 }
+      )
+    )
+
+    XCTAssertEqual(outcome, .rolledBackAfterRemoteFailure)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 1)
+    XCTAssertEqual(store.incompleteTasks, [original])
+  }
+
+  @MainActor
+  func testLegacyUpdatePreservesItsLocalEditAfterRemoteFailure() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-legacy-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Locally renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+    let probe = TasksStoreOperationProbe()
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { _ in
+          probe.localWrites += 1
+          return optimistic
+        },
+        updateRemote: { _ in
+          probe.remoteRequests += 1
+          throw TasksStoreOwnerBoundaryFailure.backendRejected
+        },
+        syncRemote: { _, _ in probe.remoteSyncs += 1 },
+        rollbackLocal: { probe.rollbacks += 1 }
+      )
+    )
+
+    XCTAssertEqual(outcome, .preservedLocalAfterRemoteFailure)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 0)
+    XCTAssertEqual(store.incompleteTasks, [optimistic])
+  }
+
+  @MainActor
+  func testChatFirstUpdateCannotRollBackIntoReplacementOwner() async {
+    let defaults = UserDefaults.standard
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-owner-update")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    let replacement = task(id: "owner-b-chat-first-sentinel")
+    store.incompleteTasks = [original]
+    let gate = TasksStorePauseGate()
+    let probe = TasksStoreOperationProbe()
+
+    let operation = Task { @MainActor in
+      await store.updateTask(
+        original,
+        description: optimistic.description,
+        remoteFailureBehavior: .rollbackForChatFirst,
+        operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+          updateLocal: { _ in
+            probe.localWrites += 1
+            return optimistic
+          },
+          updateRemote: { _ in
+            probe.remoteRequests += 1
+            await gate.pause()
+            throw TasksStoreOwnerBoundaryFailure.backendRejected
+          },
+          syncRemote: { _, _ in probe.remoteSyncs += 1 },
+          rollbackLocal: { probe.rollbacks += 1 }
+        )
+      )
+    }
+    await gate.waitUntilStarted()
+    illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
+    store.incompleteTasks = [replacement]
+    await gate.release()
+    let outcome = await operation.value
+
+    XCTAssertEqual(outcome, .ownerChanged)
+    XCTAssertEqual(probe.localWrites, 1)
+    XCTAssertEqual(probe.remoteRequests, 1)
+    XCTAssertEqual(probe.remoteSyncs, 0)
+    XCTAssertEqual(probe.rollbacks, 0)
+    XCTAssertEqual(store.incompleteTasks, [replacement])
+    XCTAssertNil(store.error)
+  }
+
+  @MainActor
+  func testChatFirstUpdateReportsRollbackFailureWithoutPretendingTheOwnerChanged() async {
+    let store = TasksStore.shared
+    await prepareOwnerBoundaryTest(store: store)
+
+    let original = task(id: "owner-a-chat-first-rollback-failure")
+    let optimistic = TaskActionItem(
+      id: original.id,
+      description: "Renamed task",
+      completed: false,
+      createdAt: original.createdAt)
+    store.incompleteTasks = [original]
+
+    let outcome = await store.updateTask(
+      original,
+      description: optimistic.description,
+      remoteFailureBehavior: .rollbackForChatFirst,
+      operationOverrides: TasksStore.TaskUpdateOperationOverrides(
+        updateLocal: { _ in optimistic },
+        updateRemote: { _ in throw TasksStoreOwnerBoundaryFailure.backendRejected },
+        syncRemote: { _, _ in },
+        rollbackLocal: { throw TasksStoreOwnerBoundaryFailure.backendRejected }
+      )
+    )
+
+    XCTAssertEqual(outcome, .rollbackFailed)
+    XCTAssertEqual(store.incompleteTasks, [optimistic])
+    XCTAssertEqual(store.error, "backend rejected")
+  }
+
+  @MainActor
   private func task(id: String, completed: Bool = false) -> TaskActionItem {
     TaskActionItem(
       id: id,

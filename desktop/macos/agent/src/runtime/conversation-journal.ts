@@ -108,6 +108,41 @@ export interface AppendChatFirstBlocksInput {
   blocks: readonly ConversationContentBlock[];
 }
 
+/**
+ * The sole durable answer path for a chat-first question card. Swift supplies
+ * only opaque IDs; this journal transaction re-derives the prepared answer,
+ * subject, and exact tail parent from persisted canonical block data.
+ */
+export interface RecordQuestionInteractionReplyInput {
+  ownerId: string;
+  sessionId: string;
+  questionId: string;
+  optionId: string;
+  controlGeneration: number;
+  nowMs?: number;
+}
+
+export interface QuestionInteractionReplyReceipt {
+  accepted: boolean;
+  duplicate: boolean;
+  continuityKey: string | null;
+  parentTurn: ConversationTurn | null;
+  userTurn: ConversationTurn | null;
+  assistantTurn: ConversationTurn | null;
+}
+
+export interface ChatFirstDeferralDelivery {
+  continuityKey: string;
+  ownerId: string;
+  conversationId: string;
+  controlGeneration: number;
+  subject: { kind: "task" | "goal" | "capture"; id: string };
+  question: Extract<ConversationContentBlock, { type: "questionCard" }>;
+  payloadHash: string;
+  attemptCount: number;
+  deliveryGeneration: number;
+}
+
 export interface TerminalizeJournalTurnInput {
   ownerId: string;
   conversationId: string;
@@ -677,6 +712,230 @@ export function appendChatFirstBlocksToProducingTurn(
       producingAttemptId: input.attemptId,
       appendContentBlocks: input.blocks,
     });
+  });
+}
+
+/**
+ * Select a tail question option, journal its exact ordinary user answer and
+ * hidden streaming target, then (only for Ask me later) enqueue canonical
+ * deferral delivery. Every mutation happens under one SQLite transaction so a
+ * process death can expose neither a half-selection nor a duplicate reply.
+ */
+export function recordQuestionInteractionReply(
+  store: AgentStore,
+  input: RecordQuestionInteractionReplyInput,
+): QuestionInteractionReplyReceipt {
+  const questionId = nonEmpty(input.questionId, "question ID");
+  const optionId = nonEmpty(input.optionId, "question option ID");
+  if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
+    throw new Error("Question interaction requires a valid control generation");
+  }
+  const now = input.nowMs ?? Date.now();
+  return store.withTransaction(() => {
+    const surface = store.getOptionalRow(
+      `SELECT conversation_id
+       FROM surface_conversations
+       WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+       ORDER BY last_active_at_ms DESC LIMIT 1`,
+      [input.ownerId, input.sessionId],
+    );
+    if (!surface) throw new Error("Question interaction requires the current owner-bound main Chat session");
+    const conversationId = String(surface.conversation_id);
+    assertConversationOwner(store, conversationId, input.ownerId);
+
+    // A completed selection is the idempotency receipt. It is intentionally
+    // checked before tail actionability because retry arrives after its new
+    // assistant placeholder has become the tail.
+    const selected = findSelectedQuestionBlock(store, conversationId, questionId);
+    if (selected) {
+      const continuityKey = questionInteractionContinuityKey(questionId, selected.optionId);
+      const childTurns = questionInteractionTurns(store, conversationId, continuityKey);
+      if (selected.optionId === optionId && childTurns.user && childTurns.assistant) {
+        return {
+          accepted: true,
+          duplicate: true,
+          continuityKey,
+          parentTurn: selected.turn,
+          userTurn: childTurns.user,
+          assistantTurn: childTurns.assistant,
+        };
+      }
+      return emptyQuestionInteractionReceipt();
+    }
+
+    const tailRow = store.getOptionalRow(
+      `SELECT turn_id FROM conversation_turns
+       WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+      [conversationId],
+    );
+    if (!tailRow) return emptyQuestionInteractionReceipt();
+    const parent = requireJournalTurn(store, conversationId, String(tailRow.turn_id));
+    if (parent.role !== "assistant" || parent.status !== "completed") {
+      return emptyQuestionInteractionReceipt();
+    }
+    const questionIndex = parent.contentBlocks.findIndex((block) => (
+      block.type === "questionCard" && block.questionId === questionId && block.selectedOptionId === undefined
+    ));
+    if (questionIndex < 0) return emptyQuestionInteractionReceipt();
+    const question = parent.contentBlocks[questionIndex] as Extract<ConversationContentBlock, { type: "questionCard" }>;
+    const option = question.options.find((candidate) => candidate.optionId === optionId);
+    if (!option) return emptyQuestionInteractionReceipt();
+
+    const continuityKey = questionInteractionContinuityKey(questionId, optionId);
+    const selectedQuestion: Extract<ConversationContentBlock, { type: "questionCard" }> = {
+      ...structuredClone(question),
+      selectedOptionId: optionId,
+    };
+    const selectedBlocks = parent.contentBlocks.map((block, index) => (
+      index === questionIndex ? selectedQuestion : structuredClone(block)
+    ));
+    const selectedParent = updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId,
+      turnId: parent.turnId,
+      replaceContentBlocks: selectedBlocks,
+      nowMs: now,
+    });
+
+    const userTurnId = stableQuestionInteractionTurnID(continuityKey, "user");
+    const assistantTurnId = stableQuestionInteractionTurnID(continuityKey, "assistant");
+    const exchange = recordJournalExchange(store, {
+      ownerId: input.ownerId,
+      conversationId,
+      turns: [
+        {
+          turnId: userTurnId,
+          role: "user",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "completed",
+          content: option.preparedAnswer,
+          contentBlocks: [{ type: "text", id: `${userTurnId}:text`, text: option.preparedAnswer }],
+          metadataJson: JSON.stringify({ continuityKey }),
+          createdAtMs: now,
+        },
+        {
+          turnId: assistantTurnId,
+          role: "assistant",
+          surfaceKind: "main_chat",
+          origin: "typed_chat",
+          status: "streaming",
+          content: "",
+          contentBlocks: [],
+          metadataJson: JSON.stringify({ continuityKey, hiddenUntilOutput: true }),
+          createdAtMs: now + 1,
+        },
+      ],
+    });
+    const userTurn = exchange.turns.find((turn) => turn.turnId === userTurnId) ?? null;
+    const assistantTurn = exchange.turns.find((turn) => turn.turnId === assistantTurnId) ?? null;
+    if (!userTurn || !assistantTurn) throw new Error("Question interaction did not record both journal turns");
+
+    if (option.defer === true) {
+      enqueueChatFirstDeferral(store, {
+        ownerId: input.ownerId,
+        conversationId,
+        controlGeneration: input.controlGeneration,
+        continuityKey,
+        question: selectedQuestion,
+        nowMs: now,
+      });
+    }
+    return {
+      accepted: true,
+      duplicate: false,
+      continuityKey,
+      parentTurn: selectedParent,
+      userTurn,
+      assistantTurn,
+    };
+  });
+}
+
+/** Claim a bounded batch from the deferral-only transport. */
+export function drainChatFirstDeferralOutbox(
+  store: AgentStore,
+  input: { ownerId: string; limit?: number; nowMs?: number },
+): ChatFirstDeferralDelivery[] {
+  const now = input.nowMs ?? Date.now();
+  const limit = Math.max(1, Math.min(input.limit ?? 20, 50));
+  return store.withTransaction(() => {
+    const rows = store.allRows(
+      `SELECT continuity_key, owner_id, conversation_id, control_generation, subject_kind, subject_id,
+              question_json, payload_hash, attempt_count, delivery_generation
+       FROM chat_first_deferral_outbox
+       WHERE owner_id = ? AND status IN ('pending', 'retrying') AND available_at_ms <= ?
+       ORDER BY created_at_ms ASC LIMIT ?`,
+      [input.ownerId, now, limit],
+    );
+    return rows.map((row) => {
+      const continuityKey = String(row.continuity_key);
+      const deliveryGeneration = Number(row.delivery_generation) + 1;
+      const attemptCount = Number(row.attempt_count) + 1;
+      store.execute(
+        `UPDATE chat_first_deferral_outbox
+         SET status = 'delivering', attempt_count = ?, delivery_generation = ?,
+             lease_expires_at_ms = ?, updated_at_ms = ?
+         WHERE continuity_key = ? AND owner_id = ?`,
+        [attemptCount, deliveryGeneration, now + DEFAULT_OUTBOX_LEASE_MS, now, continuityKey, input.ownerId],
+      );
+      const question = JSON.parse(String(row.question_json)) as Extract<ConversationContentBlock, { type: "questionCard" }>;
+      return {
+        continuityKey,
+        ownerId: String(row.owner_id),
+        conversationId: String(row.conversation_id),
+        controlGeneration: Number(row.control_generation),
+        subject: { kind: String(row.subject_kind) as "task" | "goal" | "capture", id: String(row.subject_id) },
+        question,
+        payloadHash: String(row.payload_hash),
+        attemptCount,
+        deliveryGeneration,
+      };
+    });
+  });
+}
+
+/** Settle only the current claimed delivery generation; stale replies are ignored. */
+export function settleChatFirstDeferralOutbox(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    continuityKey: string;
+    deliveryGeneration: number;
+    payloadHash: string;
+    ok: boolean;
+    errorCode?: string;
+    nowMs?: number;
+  },
+): boolean {
+  const now = input.nowMs ?? Date.now();
+  return store.withTransaction(() => {
+    const row = store.getOptionalRow(
+      `SELECT attempt_count FROM chat_first_deferral_outbox
+       WHERE continuity_key = ? AND owner_id = ? AND delivery_generation = ?
+         AND payload_hash = ? AND status = 'delivering'`,
+      [input.continuityKey, input.ownerId, input.deliveryGeneration, input.payloadHash],
+    );
+    if (!row) return false;
+    const attempts = Number(row.attempt_count);
+    if (input.ok) {
+      store.execute(
+        `UPDATE chat_first_deferral_outbox
+         SET status = 'delivered', lease_expires_at_ms = NULL, last_error_code = NULL,
+             delivered_at_ms = ?, updated_at_ms = ? WHERE continuity_key = ?`,
+        [now, now, input.continuityKey],
+      );
+    } else {
+      const retryable = !input.errorCode?.endsWith("_4xx") && attempts < 5;
+      store.execute(
+        `UPDATE chat_first_deferral_outbox
+         SET status = ?, available_at_ms = ?, lease_expires_at_ms = NULL,
+             last_error_code = ?, updated_at_ms = ? WHERE continuity_key = ?`,
+        [retryable ? "retrying" : "failed", retryable ? now + Math.min(30_000, attempts * 1_000) : now,
+          boundedOutboxError(input.errorCode), now, input.continuityKey],
+      );
+    }
+    return true;
   });
 }
 
@@ -2591,6 +2850,127 @@ function journalDeliveryForSurface(surfaceKind: string): JournalDeliveryDestinat
   return LOCAL_ONLY_SURFACES.has(surfaceKind) ? "local" : "backend";
 }
 
+function emptyQuestionInteractionReceipt(): QuestionInteractionReplyReceipt {
+  return {
+    accepted: false,
+    duplicate: false,
+    continuityKey: null,
+    parentTurn: null,
+    userTurn: null,
+    assistantTurn: null,
+  };
+}
+
+function questionInteractionContinuityKey(questionId: string, optionId: string): string {
+  return `qri_${createHash("sha256").update(`${questionId}\u0000${optionId}`).digest("hex").slice(0, 32)}`;
+}
+
+function stableQuestionInteractionTurnID(continuityKey: string, role: "user" | "assistant"): string {
+  return `turn_${createHash("sha256").update(`${continuityKey}\u0000${role}`).digest("hex").slice(0, 16)}`;
+}
+
+function findSelectedQuestionBlock(
+  store: AgentStore,
+  conversationId: string,
+  questionId: string,
+): { turn: ConversationTurn; optionId: string } | null {
+  const rows = store.allRows(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ? AND role = 'assistant' ORDER BY turn_seq DESC`,
+    [conversationId],
+  );
+  for (const row of rows) {
+    const turn = requireJournalTurn(store, conversationId, String(row.turn_id));
+    const block = turn.contentBlocks.find((candidate) => (
+      candidate.type === "questionCard"
+      && candidate.questionId === questionId
+      && typeof candidate.selectedOptionId === "string"
+      && candidate.selectedOptionId.length > 0
+    ));
+    if (block?.type === "questionCard" && block.selectedOptionId) {
+      return { turn, optionId: block.selectedOptionId };
+    }
+  }
+  return null;
+}
+
+function questionInteractionTurns(
+  store: AgentStore,
+  conversationId: string,
+  continuityKey: string,
+): { user: ConversationTurn | null; assistant: ConversationTurn | null } {
+  const user = store.getOptionalRow(
+    "SELECT turn_id FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+    [conversationId, stableQuestionInteractionTurnID(continuityKey, "user")],
+  );
+  const assistant = store.getOptionalRow(
+    "SELECT turn_id FROM conversation_turns WHERE conversation_id = ? AND turn_id = ?",
+    [conversationId, stableQuestionInteractionTurnID(continuityKey, "assistant")],
+  );
+  return {
+    user: user ? requireJournalTurn(store, conversationId, String(user.turn_id)) : null,
+    assistant: assistant ? requireJournalTurn(store, conversationId, String(assistant.turn_id)) : null,
+  };
+}
+
+function enqueueChatFirstDeferral(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    conversationId: string;
+    controlGeneration: number;
+    continuityKey: string;
+    question: Extract<ConversationContentBlock, { type: "questionCard" }>;
+    nowMs: number;
+  },
+): void {
+  const question = structuredClone(input.question);
+  // The backend schema deliberately does not carry renderer state. Selection
+  // is transcript-local; the verbatim question payload remains canonical.
+  delete question.selectedOptionId;
+  const payload = {
+    controlGeneration: input.controlGeneration,
+    subject: question.subject,
+    question,
+  };
+  const payloadHash = sha256(stableJson(payload));
+  const existing = store.getOptionalRow(
+    "SELECT payload_hash FROM chat_first_deferral_outbox WHERE continuity_key = ?",
+    [input.continuityKey],
+  );
+  if (existing) {
+    if (String(existing.payload_hash) !== payloadHash) {
+      throw new Error("Question deferral continuity key was reused with different content");
+    }
+    return;
+  }
+  store.execute(
+    `INSERT INTO chat_first_deferral_outbox(
+       continuity_key, owner_id, conversation_id, control_generation, subject_kind, subject_id,
+       question_json, payload_hash, status, attempt_count, delivery_generation,
+       available_at_ms, lease_expires_at_ms, last_error_code, created_at_ms, updated_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 'pending', 0, 0, ?, NULL, NULL, ?, ?)`,
+    [
+      input.continuityKey,
+      input.ownerId,
+      input.conversationId,
+      input.controlGeneration,
+      question.subject.kind,
+      question.subject.id,
+      JSON.stringify(question),
+      payloadHash,
+      input.nowMs,
+      input.nowMs,
+      input.nowMs,
+    ],
+  );
+}
+
+function boundedOutboxError(errorCode?: string): string {
+  const value = typeof errorCode === "string" ? errorCode.trim() : "chat_first_deferral_failed";
+  return (value || "chat_first_deferral_failed").slice(0, 128);
+}
+
 function validateContentBlocks(blocks: readonly ConversationContentBlock[]): ConversationContentBlock[] {
   const ids = new Set<string>();
   return blocks.map((block) => {
@@ -2617,6 +2997,9 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
         if (option.defer === true) defers += 1;
       }
       if (defers > 1) throw new Error("Question card may contain at most one defer option");
+      if (block.selectedOptionId !== undefined && !optionIds.has(block.selectedOptionId)) {
+        throw new Error("Question card selected option is invalid");
+      }
     } else if (block.type === "taskCard") {
       nonEmpty(block.taskId, "task ID");
     } else if (block.type === "goalLink") {

@@ -59,10 +59,12 @@ import type {
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
   AppendChatFirstBlocksMessage,
+  RecordQuestionInteractionReplyMessage,
   EnsureAgentSpawnJournalMessage,
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
+  ChatFirstDeferralDeliveryResultMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
@@ -128,6 +130,7 @@ import {
   classifyBackendTurnResultDisposition,
   drainBackendConversationDeleteOutbox,
   drainBackendTurnOutbox,
+  drainChatFirstDeferralOutbox,
   failBackendConversationDeleteOutbox,
   failBackendReconcile,
   failBackendTurnOutbox,
@@ -136,10 +139,12 @@ import {
   importRemoteJournalTurn,
   listJournalTurns,
   recordJournalExchange,
+  recordQuestionInteractionReply,
   recordJournalTurn,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
+  settleChatFirstDeferralOutbox,
   updateJournalTurn,
 } from "./runtime/conversation-journal.js";
 import { DirectControlExecutionBroker } from "./runtime/direct-control-execution.js";
@@ -1559,6 +1564,33 @@ async function main(): Promise<void> {
           payloadHash: delivery.payloadHash,
         });
       }
+      // This deliberately remains distinct from backend_turn_outbox: a
+      // deferral is task-intelligence state, never a second transcript write.
+      // Do not even claim an outbox row until the server-sampled Main Chat
+      // capability is present in this process. A fresh capability-off launch
+      // must leave chat-first background work entirely dormant.
+      if (kernel.hasChatFirstMainCapability(activeOwnerId)) {
+        for (const delivery of drainChatFirstDeferralOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+          send({
+            type: "chat_first_deferral_delivery",
+            requestId: `chat-first-deferral:${delivery.continuityKey}:${delivery.deliveryGeneration}`,
+            clientId: "kernel-chat-first",
+            ownerId: delivery.ownerId,
+            continuityKey: delivery.continuityKey,
+            controlGeneration: delivery.controlGeneration,
+            subject: delivery.subject,
+            question: {
+              questionId: delivery.question.questionId,
+              text: delivery.question.text,
+              subject: delivery.question.subject,
+              options: delivery.question.options,
+            },
+            attemptCount: delivery.attemptCount,
+            deliveryGeneration: delivery.deliveryGeneration,
+            payloadHash: delivery.payloadHash,
+          });
+        }
+      }
     } catch (error) {
       logErr(`Journal outbox pump failed: ${error}`);
     } finally {
@@ -2484,6 +2516,93 @@ async function main(): Promise<void> {
         break;
       }
 
+      case "record_question_interaction_reply": {
+        const request = msg as RecordQuestionInteractionReplyMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (
+            typeof request.sessionId !== "string" || !request.sessionId.trim()
+            || typeof request.questionId !== "string" || !request.questionId.trim()
+            || typeof request.optionId !== "string" || !request.optionId.trim()
+            || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
+          ) {
+            throw new Error("Question interaction request is invalid");
+          }
+          kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
+          const receipt = recordQuestionInteractionReply(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            questionId: request.questionId,
+            optionId: request.optionId,
+            controlGeneration: request.controlGeneration,
+          });
+          const conversationId = receipt.parentTurn?.conversationId
+            ?? store.getOptionalRow(
+              `SELECT conversation_id FROM surface_conversations
+               WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+               ORDER BY last_active_at_ms DESC LIMIT 1`,
+              [ownerId, request.sessionId],
+            )?.conversation_id;
+          if (typeof conversationId !== "string" || !conversationId) {
+            throw new Error("Question interaction has no canonical main Chat conversation");
+          }
+          const surface = store.getRow(
+            `SELECT external_ref_kind, external_ref_id FROM surface_conversations
+             WHERE owner_id = ? AND agent_session_id = ? AND surface_kind = 'main_chat'
+             ORDER BY last_active_at_ms DESC LIMIT 1`,
+            [ownerId, request.sessionId],
+          );
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId,
+            afterTurnSeq: 0,
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "record_question_interaction_reply",
+            conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: String(surface.external_ref_kind),
+            externalRefId: String(surface.external_ref_id),
+            turn: receipt.parentTurn ? journalTurnProjection(receipt.parentTurn) : undefined,
+            turns: [receipt.userTurn, receipt.assistantTurn]
+              .filter((turn): turn is ConversationTurn => turn !== null)
+              .map(journalTurnProjection),
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+            accepted: receipt.accepted,
+            duplicate: receipt.duplicate,
+            continuityKey: receipt.continuityKey,
+          });
+          if (receipt.accepted && !receipt.duplicate) {
+            for (const turn of [receipt.parentTurn, receipt.userTurn, receipt.assistantTurn]) {
+              if (!turn) continue;
+              for (const wake of journalTurnChangedWakes(store, ownerId, turn)) {
+                send({ type: "journal_turn_changed", ...wake, turn: journalTurnProjection(wake.turn) });
+              }
+            }
+            pumpJournalOutbox();
+          }
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
       case "journal_terminalize_turn": {
         const request = msg as JournalTerminalizeTurnMessage;
         try {
@@ -3058,6 +3177,32 @@ async function main(): Promise<void> {
           triggerBackendReconcile({ ownerId: currentOwnerId });
           pumpJournalOutbox();
         }
+        break;
+      }
+
+      case "chat_first_deferral_delivery_result": {
+        const result = msg as ChatFirstDeferralDeliveryResultMessage;
+        const ownerId = resolveActiveOwner(result.ownerId);
+        if (
+          typeof result.continuityKey !== "string" || !result.continuityKey
+          || !Number.isSafeInteger(result.deliveryGeneration) || result.deliveryGeneration <= 0
+          || typeof result.payloadHash !== "string" || !result.payloadHash
+          || typeof result.ok !== "boolean"
+        ) {
+          throw new Error("Chat-first deferral delivery result is invalid");
+        }
+        const settled = settleChatFirstDeferralOutbox(store, {
+          ownerId,
+          continuityKey: result.continuityKey,
+          deliveryGeneration: result.deliveryGeneration,
+          payloadHash: result.payloadHash,
+          ok: result.ok,
+          errorCode: result.errorCode,
+        });
+        if (!settled) {
+          logErr(`Ignoring stale chat-first deferral delivery result key=${result.continuityKey}`);
+        }
+        pumpJournalOutbox();
         break;
       }
 

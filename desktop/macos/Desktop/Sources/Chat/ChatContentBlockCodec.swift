@@ -85,7 +85,17 @@ enum ChatContentBlockCodec {
           let subjectId = subject["id"] as? String,
           let options = dict["options"] as? [[String: Any]]
         else { continue }
-        blocks.append(.questionCard(id: id, questionId: questionId, text: text, subjectKind: subjectKind, subjectId: subjectId, options: options))
+        blocks.append(
+          .questionCard(
+            id: id,
+            questionId: questionId,
+            text: text,
+            subjectKind: subjectKind,
+            subjectId: subjectId,
+            options: options,
+            selectedOptionId: dict["selectedOptionId"] as? String
+          )
+        )
       case "taskCard":
         guard let taskId = dict["taskId"] as? String else { continue }
         blocks.append(.taskCard(id: id, taskId: taskId))
@@ -210,11 +220,13 @@ enum ChatContentBlockCodec {
         "summary": summary,
         "fullText": fullText,
       ]
-    case .questionCard(let id, let questionId, let text, let subjectKind, let subjectId, let options):
-      return [
+    case .questionCard(let id, let questionId, let text, let subjectKind, let subjectId, let options, let selectedOptionId):
+      var dictionary: [String: Any] = [
         "type": "questionCard", "id": id, "questionId": questionId, "text": text,
         "subject": ["kind": subjectKind, "id": subjectId], "options": options,
       ]
+      if let selectedOptionId { dictionary["selectedOptionId"] = selectedOptionId }
+      return dictionary
     case .taskCard(let id, let taskId):
       return ["type": "taskCard", "id": id, "taskId": taskId]
     case .goalLink(let id, let goalId, let summary):

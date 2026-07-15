@@ -1362,6 +1362,31 @@ actor AgentBridge {
     )
   }
 
+  func recordQuestionInteractionReply(
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    questionID: String,
+    optionID: String,
+    controlGeneration: Int,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentRuntimeProcess.QuestionInteractionReply {
+    let authorization = try resolveAuthorization(
+      authorizationSnapshot,
+      expectedOwnerID: ownerID)
+    try await start(authorizationSnapshot: authorization)
+    return try await runtime.recordQuestionInteractionReply(
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      sessionID: sessionID,
+      questionID: questionID,
+      optionID: optionID,
+      controlGeneration: controlGeneration,
+      authorizationSnapshot: authorization
+    )
+  }
+
   func updateJournalTurn(
     surface: AgentSurfaceReference,
     ownerID: String? = nil,

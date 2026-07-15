@@ -36,6 +36,29 @@ class TasksStore: ObservableObject {
     let rollbackLocal: () async throws -> Void
   }
 
+  /// Legacy surfaces deliberately preserve a local edit while offline; the
+  /// cohort-only inline task controls roll a rejected mutation back instead.
+  enum TaskUpdateRemoteFailureBehavior: Equatable, Sendable {
+    case preserveLocalEdit
+    case rollbackForChatFirst
+  }
+
+  enum TaskUpdateOutcome: Equatable, Sendable {
+    case updated
+    case preservedLocalAfterRemoteFailure
+    case rolledBackAfterRemoteFailure
+    case rollbackFailed
+    case localWriteFailed
+    case ownerChanged
+  }
+
+  struct TaskUpdateOperationOverrides {
+    let updateLocal: (_ ownerID: String) async throws -> TaskActionItem
+    let updateRemote: (_ ownerID: String) async throws -> TaskActionItem
+    let syncRemote: (_ task: TaskActionItem, _ ownerID: String) async throws -> Void
+    let rollbackLocal: () async throws -> Void
+  }
+
   /// Controllable seams for owner-bound reads and writes. Production callers
   /// use the defaults; tests suspend individual operations to prove that an
   /// owner change fences every later cache/UI/defaults publication.
@@ -2702,6 +2725,7 @@ class TasksStore: ObservableObject {
     }
   }
 
+  @discardableResult
   func updateTask(
     _ task: TaskActionItem,
     description: String? = nil,
@@ -2709,88 +2733,150 @@ class TasksStore: ObservableObject {
     clearDueAt: Bool = false,
     priority: String? = nil,
     recurrenceRule: String? = nil,
-    expectedOwnerID: String? = nil
-  ) async {
-    guard let lease = captureOwnerLease(expectedOwnerID: expectedOwnerID) else { return }
-    // Track manual edits: if description is changed, mark as manually edited
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    remoteFailureBehavior: TaskUpdateRemoteFailureBehavior = .preserveLocalEdit,
+    beforeLocalMutation: (() async -> Void)? = nil,
+    operationOverrides: TaskUpdateOperationOverrides? = nil
+  ) async -> TaskUpdateOutcome {
+    guard let lease = captureOwnerLease(
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot
+    ) else { return .ownerChanged }
+    if let beforeLocalMutation { await beforeLocalMutation() }
+    guard isCurrent(lease) else { return .ownerChanged }
+
     var metadata: [String: Any]? = nil
     if description != nil {
       metadata = ["manually_edited": true]
-      // Preserve existing tags in metadata
-      if !task.tags.isEmpty {
-        metadata?["tags"] = task.tags
-      }
+      if !task.tags.isEmpty { metadata?["tags"] = task.tags }
     }
 
-    // 1. Local-first: update SQLite immediately so auto-refresh reads correct state
-    var localUpdateSucceeded = true
     do {
-      try await ActionItemStorage.shared.updateActionItemFields(
-        backendId: task.id,
-        description: description,
-        dueAt: dueAt,
-        clearDueAt: clearDueAt,
-        priority: priority,
-        metadataBox: ActionItemMetadataBox(metadata),
-        recurrenceRule: recurrenceRule,
-        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-      )
+      let updatedTask: TaskActionItem?
+      if let operationOverrides {
+        updatedTask = try await operationOverrides.updateLocal(lease.ownerID)
+      } else {
+        try await ActionItemStorage.shared.updateActionItemFields(
+          backendId: task.id,
+          description: description,
+          dueAt: dueAt,
+          clearDueAt: clearDueAt,
+          priority: priority,
+          metadataBox: ActionItemMetadataBox(metadata),
+          recurrenceRule: recurrenceRule,
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+        updatedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id)
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      if let updatedTask {
+        replaceTaskInMemory(updatedTask, originalTask: task)
+      } else if remoteFailureBehavior == .rollbackForChatFirst {
+        error = "Could not verify the task update locally."
+        return .localWriteFailed
+      }
     } catch {
-      guard isCurrent(lease) else { return }
+      guard isCurrent(lease) else { return .ownerChanged }
       logError("TasksStore: Failed to update task locally", error: error)
       self.error = error.localizedDescription
-      localUpdateSucceeded = false
+      if remoteFailureBehavior == .rollbackForChatFirst { return .localWriteFailed }
     }
 
-    // 2. Read back from SQLite and update in-memory arrays immediately
-    if localUpdateSucceeded,
-      let updatedTask = try? await ActionItemStorage.shared.getLocalActionItem(byBackendId: task.id)
-    {
-      guard isCurrent(lease) else { return }
-      if task.completed {
-        if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
-          completedTasks[index] = updatedTask
-        }
-      } else {
-        if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
-          incompleteTasks[index] = updatedTask
-        }
-      }
-    }
-
-    // 3. Call API in background
     do {
-      let apiResult = try await APIClient.shared.updateActionItem(
-        id: task.id,
-        description: description,
-        dueAt: dueAt,
-        clearDueAt: clearDueAt,
-        priority: priority,
-        metadataBox: ActionItemMetadataBox(metadata),
-        recurrenceRule: recurrenceRule,
-        expectedOwnerId: lease.ownerID,
+      let apiResult: TaskActionItem
+      if let operationOverrides {
+        apiResult = try await operationOverrides.updateRemote(lease.ownerID)
+      } else {
+        apiResult = try await APIClient.shared.updateActionItem(
+          id: task.id,
+          description: description,
+          dueAt: dueAt,
+          clearDueAt: clearDueAt,
+          priority: priority,
+          metadataBox: ActionItemMetadataBox(metadata),
+          recurrenceRule: recurrenceRule,
+          expectedOwnerId: lease.ownerID,
+          authorizationSnapshot: lease.authorizationSnapshot
+        )
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      if let operationOverrides {
+        try await operationOverrides.syncRemote(apiResult, lease.ownerID)
+      } else {
+        try await ActionItemStorage.shared.syncTaskActionItems(
+          [apiResult],
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+      }
+      guard isCurrent(lease) else { return .ownerChanged }
+      replaceTaskInMemory(apiResult, originalTask: task)
+      return .updated
+    } catch {
+      guard isCurrent(lease) else { return .ownerChanged }
+      if remoteFailureBehavior == .preserveLocalEdit {
+        self.error = error.localizedDescription
+        logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
+        return .preservedLocalAfterRemoteFailure
+      }
+      let rolledBack = await rollbackTaskUpdateAfterBackendFailure(
+        task: task,
+        backendError: error,
+        expectedOwnerID: lease.ownerID,
+        authorizationSnapshot: lease.authorizationSnapshot,
+        rollbackStorage: operationOverrides?.rollbackLocal
+      )
+      if rolledBack { return .rolledBackAfterRemoteFailure }
+      return isCurrent(lease) ? .rollbackFailed : .ownerChanged
+    }
+  }
+
+  @discardableResult
+  func rollbackTaskUpdateAfterBackendFailure(
+    task: TaskActionItem,
+    backendError: Error,
+    expectedOwnerID: String,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    rollbackStorage: (() async throws -> Void)? = nil
+  ) async -> Bool {
+    guard let lease = captureOwnerLease(
+      expectedOwnerID: expectedOwnerID,
+      authorizationSnapshot: authorizationSnapshot
+    ) else { return false }
+    do {
+      if let rollbackStorage {
+        try await rollbackStorage()
+      } else {
+        try await ActionItemStorage.shared.syncTaskActionItems(
+          [task],
+          authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
+        )
+      }
+      guard isCurrent(lease) else { return false }
+      replaceTaskInMemory(task, originalTask: task)
+      await loadDashboardTasks(
+        expectedOwnerID: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )
-      guard isCurrent(lease) else { return }
-      // Sync API result to store server-side timestamps
-      try await ActionItemStorage.shared.syncTaskActionItems(
-        [apiResult],
-        authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
-      )
-      guard isCurrent(lease) else { return }
-      // Keep in-memory arrays aligned with server echo immediately.
-      if task.completed {
-        if let index = completedTasks.firstIndex(where: { $0.id == task.id }) {
-          completedTasks[index] = apiResult
-        }
-      } else if let index = incompleteTasks.firstIndex(where: { $0.id == task.id }) {
-        incompleteTasks[index] = apiResult
-      }
+      guard isCurrent(lease) else { return false }
+      error = backendError.localizedDescription
+      logError("TasksStore: Failed to update task on backend, reverted Chat-first edit", error: backendError)
+      return true
     } catch {
-      guard isCurrent(lease) else { return }
-      // Local change persists; next successful sync will reconcile
+      guard isCurrent(lease) else { return false }
       self.error = error.localizedDescription
-      logError("TasksStore: Failed to update task on backend (local update preserved)", error: error)
+      logError("TasksStore: Failed to roll back Chat-first task update", error: error)
+      return false
+    }
+  }
+
+  private func replaceTaskInMemory(_ updatedTask: TaskActionItem, originalTask: TaskActionItem) {
+    if originalTask.completed {
+      if let index = completedTasks.firstIndex(where: { $0.id == originalTask.id }) {
+        completedTasks[index] = updatedTask
+      }
+    } else if let index = incompleteTasks.firstIndex(where: { $0.id == originalTask.id }) {
+      incompleteTasks[index] = updatedTask
     }
   }
 

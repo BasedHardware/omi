@@ -88,13 +88,21 @@ struct ChatBubble: View {
   }
 
   var body: some View {
-    let groupedBlocks = ContentBlockGroup.visibleChatGroups(
-      message.contentBlocks,
-      isStreaming: message.isStreaming,
-      richBlockRenderingEnabled: chatFirstRichBlockContext != nil
-    )
+    if message.hidesEmptyStreamingPlaceholder,
+      message.isStreaming,
+      message.text.isEmpty,
+      message.contentBlocks.isEmpty
+    {
+      EmptyView()
+        .accessibilityHidden(true)
+    } else {
+      let groupedBlocks = ContentBlockGroup.visibleChatGroups(
+        message.contentBlocks,
+        isStreaming: message.isStreaming,
+        richBlockRenderingEnabled: chatFirstRichBlockContext != nil
+      )
 
-    HStack(alignment: .top, spacing: OmiSpacing.md) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
       if message.sender == .ai {
         // App avatar
         if let app = app {
@@ -139,9 +147,10 @@ struct ChatBubble: View {
           .background(OmiColors.backgroundTertiary)
           .clipShape(Circle())
       }
+      }
+      .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
+      .contentShape(Rectangle())
     }
-    .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
-    .contentShape(Rectangle())
   }
 
   @ViewBuilder
@@ -290,8 +299,19 @@ struct ChatBubble: View {
           text: text,
           options: options,
           selectedOptionID: selectedOptionID,
-          isActionable: false,
-          onSelect: { _ in }
+          isActionable: chatFirstRichBlockContext.chatProvider.isQuestionCardActionable(
+            messageID: message.id,
+            questionID: questionID,
+            selectedOptionID: selectedOptionID
+          ),
+          onSelect: { optionID in
+            Task { @MainActor in
+              await chatFirstRichBlockContext.chatProvider.selectQuestionCardOption(
+                questionID: questionID,
+                optionID: optionID
+              )
+            }
+          }
         )
       )
     case .taskCard(_, let taskID):

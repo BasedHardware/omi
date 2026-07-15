@@ -8,9 +8,15 @@ import Foundation
 struct ChatFirstRichBlockContext {
   let navigation: ChatFirstShellNavigation
   let tasksStore: TasksStore
+  let chatProvider: ChatProvider
 
-  init(navigation: ChatFirstShellNavigation, tasksStore: TasksStore = .shared) {
+  init(
+    navigation: ChatFirstShellNavigation,
+    tasksStore: TasksStore = .shared,
+    chatProvider: ChatProvider
+  ) {
     self.navigation = navigation
     self.tasksStore = tasksStore
+    self.chatProvider = chatProvider
   }
 }

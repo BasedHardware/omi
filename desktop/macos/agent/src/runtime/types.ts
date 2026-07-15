@@ -112,6 +112,11 @@ export type ConversationContentBlock =
       text: string;
       subject: { kind: "task" | "goal" | "capture"; id: string };
       options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>;
+      /**
+       * Kernel-owned selection receipt. A question remains readable after an
+       * answer, but this durable value retires its options on every projection.
+       */
+      selectedOptionId?: string;
     }
   | { type: "taskCard"; id: string; taskId: string }
   | { type: "goalLink"; id: string; goalId: string; summary: string }
