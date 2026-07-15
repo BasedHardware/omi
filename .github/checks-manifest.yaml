@@ -1,6 +1,8 @@
 # Single source of truth for deterministic, diff-scoped, stdlib-or-repo-only checks.
 # Values use JSON scalars/lists within this stdlib-parsed YAML subset.
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
+# Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
+# push runs exclude only that category because no authoritative PR body is available.
 checks:
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
@@ -41,11 +43,13 @@ checks:
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "changed paths determine required invariant citations"
   - id: failure-class-protocol
     command: ["python3", "scripts/failure-class", "validate", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "fix commits declare a validated semantic failure class"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
