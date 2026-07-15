@@ -564,12 +564,18 @@ class SyncLocalFilesResponse {
   int totalSegments;
   List<String> errors;
 
+  /// Client-side batches that could not be uploaded. Unlike [failedSegments],
+  /// these failures leave WALs retryable locally and must re-arm foreground
+  /// recovery rather than presenting a completed sync.
+  int localUploadFailures;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
+    this.localUploadFailures = 0,
   });
 
   bool get hasPartialFailure => failedSegments > 0;
