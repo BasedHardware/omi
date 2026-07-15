@@ -849,6 +849,8 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
+  static let desktopAutomationSetConversationsSearchRequested = Notification.Name(
+    "desktopAutomationSetConversationsSearchRequested")
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")

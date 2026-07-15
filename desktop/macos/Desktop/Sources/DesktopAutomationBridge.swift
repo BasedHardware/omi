@@ -2438,6 +2438,20 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "set_conversations_search",
+      summary: "Set the Conversations page search query (drives the real debounced search path)",
+      params: ["query"]
+    ) { params in
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationSetConversationsSearchRequested,
+        object: nil,
+        userInfo: ["query": params["query"] ?? ""]
+      )
+      return ["query": params["query"] ?? ""]
+    }
+
+    register(
       name: "open_latest_conversation",
       summary: "Open the most recently loaded conversation detail view",
       params: ["showTranscript", "timeoutMs"]
