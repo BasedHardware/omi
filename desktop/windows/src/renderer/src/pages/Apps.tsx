@@ -578,8 +578,8 @@ export function Apps(): React.JSX.Element {
                     />
                     {view.apps.length > SEARCH_LIMIT && (
                       <p className="mt-3 text-center text-xs text-white/45">
-                        Showing the first {SEARCH_LIMIT} of {view.apps.length} matches. Refine your
-                        search to narrow results.
+                        Showing the first {SEARCH_LIMIT} of {view.apps.length}. Narrow with search or
+                        filters.
                       </p>
                     )}
                   </>
