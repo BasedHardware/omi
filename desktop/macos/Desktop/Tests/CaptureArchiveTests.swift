@@ -163,8 +163,10 @@ final class CaptureArchiveTests: XCTestCase {
     let controller = CapturePlaybackController(provider: provider)
     let capture = archiveCapture(id: "omi-1")
 
-    XCTAssertEqual(await controller.prepare(for: capture), pending)
-    XCTAssertEqual(await controller.prepare(for: capture, forceRefresh: true), ready)
+    let firstResolution = await controller.prepare(for: capture)
+    XCTAssertEqual(firstResolution, pending)
+    let refreshedResolution = await controller.prepare(for: capture, forceRefresh: true)
+    XCTAssertEqual(refreshedResolution, ready)
     XCTAssertEqual(provider.resolveCount, 2)
   }
 

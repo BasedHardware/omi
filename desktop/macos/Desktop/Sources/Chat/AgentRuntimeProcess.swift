@@ -515,15 +515,53 @@ actor AgentRuntimeProcess {
     let highWaterTurnSeq: Int
     let conversationGeneration: Int
     let generationBaseTurnSeq: Int
-    let accepted: Bool? = nil
-    let duplicate: Bool? = nil
-    let continuityKey: String? = nil
-    let suppressedByTailQuestion: Bool = false
-    let suppressedByStreamingTail: Bool = false
-    let materializationStoppedByTail: Bool = false
-    let materializationReceipts: [ChatFirstMaterializationReceipt] = []
-    let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = []
-    let acknowledgedReceiptCount: Int = 0
+    let accepted: Bool?
+    let duplicate: Bool?
+    let continuityKey: String?
+    let suppressedByTailQuestion: Bool
+    let suppressedByStreamingTail: Bool
+    let materializationStoppedByTail: Bool
+    let materializationReceipts: [ChatFirstMaterializationReceipt]
+    let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt]
+    let acknowledgedReceiptCount: Int
+
+    init(
+      operation: String,
+      conversationId: String,
+      turn: KernelJournalTurn?,
+      turns: [KernelJournalTurn],
+      clearedCount: Int,
+      highWaterTurnSeq: Int,
+      conversationGeneration: Int,
+      generationBaseTurnSeq: Int,
+      accepted: Bool? = nil,
+      duplicate: Bool? = nil,
+      continuityKey: String? = nil,
+      suppressedByTailQuestion: Bool = false,
+      suppressedByStreamingTail: Bool = false,
+      materializationStoppedByTail: Bool = false,
+      materializationReceipts: [ChatFirstMaterializationReceipt] = [],
+      coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = [],
+      acknowledgedReceiptCount: Int = 0
+    ) {
+      self.operation = operation
+      self.conversationId = conversationId
+      self.turn = turn
+      self.turns = turns
+      self.clearedCount = clearedCount
+      self.highWaterTurnSeq = highWaterTurnSeq
+      self.conversationGeneration = conversationGeneration
+      self.generationBaseTurnSeq = generationBaseTurnSeq
+      self.accepted = accepted
+      self.duplicate = duplicate
+      self.continuityKey = continuityKey
+      self.suppressedByTailQuestion = suppressedByTailQuestion
+      self.suppressedByStreamingTail = suppressedByStreamingTail
+      self.materializationStoppedByTail = materializationStoppedByTail
+      self.materializationReceipts = materializationReceipts
+      self.coldStartSequenceTerminalReceipts = coldStartSequenceTerminalReceipts
+      self.acknowledgedReceiptCount = acknowledgedReceiptCount
+    }
   }
 
   struct QuestionInteractionReply: Sendable {
