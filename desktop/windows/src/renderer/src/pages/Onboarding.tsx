@@ -163,7 +163,14 @@ export function Onboarding(): React.JSX.Element {
     if (step === 4) {
       // Background/privacy consent: always-on listening, tray residence, and
       // launch-at-login, established up front for this tray-resident companion.
-      return <BackgroundPrivacyStep stepIndex={step} totalSteps={TOTAL_STEPS} onContinue={next} />
+      return (
+        <BackgroundPrivacyStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onBack={back}
+        />
+      )
     }
     if (step === 5) {
       return (
@@ -171,13 +178,14 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
+          onBack={back}
           onSkip={next}
         />
       )
     }
     if (step === 6) {
-      // The old DiskAccessStep (button-driven file scan) is hidden; this
-      // discovery step scans automatically with the orbit animation instead.
+      // Discovery step: scans automatically with the orbit animation (it replaced
+      // the old button-driven DiskAccessStep, now deleted).
       return (
         <BuildProfileStep
           stepIndex={step}
@@ -193,6 +201,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
+          onBack={back}
           onSkip={next}
         />
       )
@@ -203,6 +212,7 @@ export function Onboarding(): React.JSX.Element {
           stepIndex={step}
           totalSteps={TOTAL_STEPS}
           onContinue={next}
+          onBack={back}
           onSkip={next}
         />
       )
@@ -270,18 +280,42 @@ export function Onboarding(): React.JSX.Element {
 
   return (
     <div className="app-canvas relative flex h-full">
-      <div className="flex flex-1 items-center justify-center p-8">{renderStep()}</div>
+      {/* Mac's split shape (OnboardingStepScaffold.swift: content pane
+          `.frame(minWidth: 470, idealWidth: 520, maxWidth: 560)`, graph pane
+          `.frame(maxWidth: .infinity)`): the CONTENT pane is bounded by its own
+          constraints and the map takes whatever is left — never the reverse.
+          Below `lg` the map is hidden and the content pane relaxes to the full
+          window (a split pane is nonsense near the 500px minWidth).
+          `min-w-0` is load-bearing on the map pane: a flex item defaults to
+          min-width:auto, so it cannot shrink below its content's intrinsic
+          width. The old map square was sized off the pane HEIGHT, so it demanded
+          ~780px and squeezed the step card to ~200px at 1024px wide. */}
       <div
+        data-testid="onboarding-content-pane"
+        className={
+          // The bounded basis only applies when the map is actually beside it.
+          // On map-less steps the card owns the whole canvas and stays centered
+          // on the window (Mac's `.centered` layout mode).
+          hideBrainMap
+            ? 'flex w-full min-w-0 items-center justify-center p-8'
+            : 'flex w-full min-w-0 shrink-0 items-center justify-center p-8 lg:w-[520px] lg:min-w-[470px] lg:max-w-[560px]'
+        }
+      >
+        {renderStep()}
+      </div>
+      <div
+        data-testid="onboarding-map-pane"
         className={
           hideBrainMap
             ? 'hidden'
-            : 'flex flex-1 items-center justify-center border-l border-white/5 p-8'
+            : 'hidden min-w-0 flex-1 items-center justify-center border-l border-white/5 p-8 lg:flex'
         }
       >
-        {/* Sized container for the brain map. The graph fills this box (and is
-            framed to it), so its on-screen size is controlled here: change the
-            max-h value to make it expand more or less. */}
-        <div className="relative aspect-square h-full max-h-[760px] max-w-full -translate-x-8">
+        {/* Sized container for the brain map. WIDTH-driven (never height-driven),
+            so the square can always shrink with its pane instead of forcing the
+            pane open. The cap keeps it from outgrowing the viewport height —
+            raise/lower 760px to make the map expand more or less. */}
+        <div className="relative aspect-square w-full max-w-[min(760px,calc(100vh-4rem))]">
           <BrainGraph graph={graph} centerNodeId="user" interactive={false} shuffleKey={step} />
         </div>
       </div>
