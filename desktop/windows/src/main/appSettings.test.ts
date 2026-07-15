@@ -105,7 +105,11 @@ describe('appSettings', () => {
       memoryEnabled: false,
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
-      memoryExcludedApps: []
+      memoryExcludedApps: [],
+      taskEnabled: false,
+      taskFallbackIntervalMin: 10,
+      taskMinConfidence: 0.75,
+      taskExcludedApps: []
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
     // interrupt once the user has chosen a frequency. Anything that is not a
@@ -165,6 +169,25 @@ describe('appSettings', () => {
       sanitizeAppSettings({ memoryExcludedApps: ['Zoom', '', '  Music  '] as never })
         .memoryExcludedApps
     ).toEqual(['Zoom', 'Music'])
+    // Task: master flag is opt-IN (default OFF, only an explicit true enables it);
+    // interval reuses the cooldown sanitizer (junk → 10); min-confidence clamps to
+    // [0,1] with a 0.75 floor (vs Memory's 0.7); excluded-apps sanitize.
+    expect(sanitizeAppSettings(null).taskEnabled).toBe(false)
+    expect(sanitizeAppSettings({ taskEnabled: true }).taskEnabled).toBe(true)
+    expect(sanitizeAppSettings({ taskEnabled: 'yes' } as never).taskEnabled).toBe(false)
+    expect(sanitizeAppSettings(null).taskFallbackIntervalMin).toBe(10)
+    expect(sanitizeAppSettings({ taskFallbackIntervalMin: 15 }).taskFallbackIntervalMin).toBe(15)
+    expect(sanitizeAppSettings({ taskFallbackIntervalMin: 0 }).taskFallbackIntervalMin).toBe(10)
+    expect(sanitizeAppSettings(null).taskMinConfidence).toBe(0.75)
+    expect(sanitizeAppSettings({ taskMinConfidence: 0.9 }).taskMinConfidence).toBe(0.9)
+    expect(sanitizeAppSettings({ taskMinConfidence: 2 }).taskMinConfidence).toBe(1)
+    expect(sanitizeAppSettings({ taskMinConfidence: -1 }).taskMinConfidence).toBe(0)
+    expect(sanitizeAppSettings({ taskMinConfidence: 'high' } as never).taskMinConfidence).toBe(0.75)
+    expect(sanitizeAppSettings(null).taskExcludedApps).toEqual([])
+    expect(
+      sanitizeAppSettings({ taskExcludedApps: ['Slack', '', '  Notion  '] as never })
+        .taskExcludedApps
+    ).toEqual(['Slack', 'Notion'])
     expect(sanitizeAppSettings({ summonHotkey: '  ' } as never).summonHotkey).toBe('Shift+Space')
     expect(sanitizeAppSettings({ summonHotkey: 'Alt+K' } as never).summonHotkey).toBe('Alt+K')
     expect(sanitizeAppSettings({ recordHotkey: '  ' } as never).recordHotkey).toBe('Ctrl+Space')

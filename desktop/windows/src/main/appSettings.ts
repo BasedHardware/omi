@@ -99,6 +99,26 @@ export type AppSettings = {
    *  on top of the capture-time and privacy exclusions. Mac's
    *  `memoryExcludedApps`. Default []. */
   memoryExcludedApps: string[]
+  /** Track 3 (Task assistant): whether the screen→task extractor judges the
+   *  screen at all. Default OFF — like the Memory scraper, any screen→AI feature
+   *  is opt-in on Windows (a deliberate deviation from Mac's default-ON
+   *  `taskAssistantEnabled`; one-line flip to ON if wanted). It is the SOLE gate
+   *  for the Task assistant (see taskAssistant.isEnabled) — decoupled from
+   *  notifications, since extraction stages durable tasks whether or not a toast
+   *  ever fires (Mac keeps a separate `taskNotificationsEnabled`; quiet discovery
+   *  is never gated on the notification setting). The master "may I send
+   *  screenshots to Gemini" lever remains `screenAnalysisEnabled`. */
+  taskEnabled: boolean
+  /** Track 3 (Task): apps the user never wants the task extractor to look at, on
+   *  top of the capture-time and privacy exclusions. Mirrors `memoryExcludedApps`.
+   *  Default []. */
+  taskExcludedApps: string[]
+  /** Track 3 (Task): minutes between fallback extraction attempts, Mac's
+   *  `extractionInterval` (600s = 10 min). Default 10. */
+  taskFallbackIntervalMin: number
+  /** Track 3 (Task): minimum confidence an extracted task must clear to be
+   *  staged, Mac's `minConfidence`. Default 0.75. */
+  taskMinConfidence: number
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -157,11 +177,11 @@ function sanitizeExcludedApps(raw: unknown): string[] {
   return out
 }
 
-// Min confidence: a number in [0, 1], else Mac's default 0.7. Junk/out-of-range
-// clamps rather than disabling the gate (a 0 floor would keep every low-quality
-// memory the model emits; a >1 floor would keep none).
-function sanitizeMinConfidence(raw: unknown): number {
-  if (typeof raw !== 'number' || !Number.isFinite(raw)) return 0.7
+// Min confidence: a number in [0, 1], else the caller's default (Memory 0.7,
+// Task 0.75). Junk/out-of-range clamps rather than disabling the gate (a 0 floor
+// would keep every low-quality item the model emits; a >1 floor would keep none).
+function sanitizeMinConfidence(raw: unknown, fallback = 0.7): number {
+  if (typeof raw !== 'number' || !Number.isFinite(raw)) return fallback
   return Math.min(1, Math.max(0, raw))
 }
 
@@ -204,7 +224,16 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // default 10, capped at a day). A junk interval falls back to 10, never 0.
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
-    memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps)
+    memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
+    // Opt-IN (=== true): default OFF, mirroring the Memory scraper — any
+    // screen→AI feature is opt-in on Windows (Mac's `taskAssistantEnabled` is ON).
+    taskEnabled: r.taskEnabled === true,
+    // Reuses the cooldown sanitizer: same contract (positive integer minutes,
+    // default 10, capped at a day). A junk interval falls back to 10, never 0.
+    taskFallbackIntervalMin: sanitizeCooldownMinutes(r.taskFallbackIntervalMin),
+    // Task's floor is 0.75 (vs Memory's 0.7) — pass it as the junk/absent fallback.
+    taskMinConfidence: sanitizeMinConfidence(r.taskMinConfidence, 0.75),
+    taskExcludedApps: sanitizeExcludedApps(r.taskExcludedApps)
   }
 }
 
