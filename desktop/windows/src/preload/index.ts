@@ -319,6 +319,21 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('byok:changed', listener)
     return () => ipcRenderer.removeListener('byok:changed', listener)
   },
+  // Encrypted-at-rest Firebase auth persistence (main-process safeStorage/DPAPI).
+  // Backs lib/encryptedAuthPersistence — Firebase drives the read/write/migrate
+  // lifecycle over these channels; token values never touch plaintext localStorage.
+  authStore: {
+    isAvailable: () => ipcRenderer.invoke('authStore:isAvailable'),
+    get: (key: string) => ipcRenderer.invoke('authStore:get', key),
+    set: (key: string, value: string) => ipcRenderer.invoke('authStore:set', key, value),
+    remove: (key: string) => ipcRenderer.invoke('authStore:remove', key),
+    onChanged: (cb: (key: string) => void) => {
+      const listener = (_e: Electron.IpcRendererEvent, payload: { key: string }): void =>
+        cb(payload.key)
+      ipcRenderer.on('authStore:changed', listener)
+      return () => ipcRenderer.removeListener('authStore:changed', listener)
+    }
+  },
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),

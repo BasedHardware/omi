@@ -10,6 +10,7 @@ import {
   type User
 } from 'firebase/auth'
 import { teardownUserData } from './authTeardown'
+import { encryptedAuthPersistence, scrubLegacyPlaintextAuth } from './encryptedAuthPersistence'
 
 const app = initializeApp({
   apiKey: import.meta.env.VITE_FIREBASE_API_KEY as string,
@@ -24,15 +25,29 @@ const app = initializeApp({
 // Falls back to getAuth in non-browser environments (node/Vitest), where
 // initializeAuth's browser persistence can't initialize — keeps importing
 // modules that touch firebase unit-testable without changing runtime behavior.
+// Persistence hierarchy: the encrypted-at-rest store (safeStorage/DPAPI via the
+// main process) is primary; browserLocalPersistence stays as a permanent fallback
+// so a machine without OS encryption degrades to plaintext rather than locking the
+// user out. Firebase auto-migrates any existing plaintext session INTO the
+// encrypted store on init and deletes the plaintext copy (see
+// encryptedAuthPersistence — _shouldAllowMigration).
 export const auth = (() => {
   try {
     return initializeAuth(app, {
-      persistence: browserLocalPersistence
+      persistence: [encryptedAuthPersistence, browserLocalPersistence]
     })
   } catch {
     return getAuth(app)
   }
 })()
+
+// Belt-and-suspenders: once auth init has settled, sweep any lingering plaintext
+// `firebase:authUser:*` key that Firebase's own migration didn't clear (e.g. a
+// window that loaded mid-migration). Guarded so it only removes a key the
+// encrypted store already holds. Fire-and-forget; never blocks boot.
+onAuthStateChanged(auth, () => {
+  void scrubLegacyPlaintextAuth()
+})
 
 /**
  * Google sign-in via the backend-mediated OAuth flow in the SYSTEM browser.

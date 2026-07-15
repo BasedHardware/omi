@@ -83,6 +83,7 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerMainChatHandlers } from './ipc/mainChat'
 import { registerByokHandlers } from './ipc/byok'
+import { registerAuthStoreHandlers } from './ipc/authStore'
 import { registerPiMonoHandlers } from './ipc/pimono'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
 import { registerAgentControlIpc } from './ipc/agentControl'
@@ -818,6 +819,10 @@ app.whenReady().then(async () => {
   registerMainChatHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
+  // Firebase auth token store IPC (encrypted-at-rest ID/refresh tokens). Backs the
+  // renderer's custom Firebase Persistence so the session never sits in plaintext
+  // localStorage. Cheap handler registration; the store is constructed lazily.
+  registerAuthStoreHandlers()
   // pi-mono managed-cloud chat session relay (cheap handler registration). The
   // renderer pushes the Firebase session (token lives renderer-side); the store
   // is inert until then and nothing spawns pi-mono until PR-D registers it.

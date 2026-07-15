@@ -1145,6 +1145,23 @@ export type OmiBridgeApi = {
   /** Fires when the BYOK key set or activation changed (any window). Returns an
    *  unsubscribe fn. Carries no key material — reload via byokGetAll. */
   onByokChanged: (cb: () => void) => () => void
+  // --- Encrypted-at-rest Firebase auth persistence ---
+  /** Main-process encrypted store (safeStorage/DPAPI) backing a custom Firebase
+   *  Persistence, so ID/refresh tokens never sit in plaintext localStorage. Keyed
+   *  by Firebase's namespaced persistence key; values are opaque JSON strings. */
+  authStore: {
+    /** True when OS-backed encryption (DPAPI) is available on this machine. */
+    isAvailable: () => Promise<boolean>
+    /** Decrypt + return one entry's value, or null if unset/undecryptable. */
+    get: (key: string) => Promise<string | null>
+    /** Encrypt + persist one entry's value. */
+    set: (key: string, value: string) => Promise<void>
+    /** Remove one entry. */
+    remove: (key: string) => Promise<void>
+    /** Subscribe to cross-window change events (key only, never the value).
+     *  Returns an unsubscribe function. */
+    onChanged: (cb: (key: string) => void) => () => void
+  }
   // --- Track 6 (UI surfaces) additions ---
   /** Settings → General → Font Size "Reset Window Size": restore the main window
    *  to its default content size (1280×820) and re-center it. */

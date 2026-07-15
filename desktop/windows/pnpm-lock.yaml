@@ -220,24 +220,6 @@ importers:
         specifier: ^3.2.4
         version: 3.2.6(@types/debug@4.1.13)(@types/node@22.19.19)(jiti@1.21.7)(jsdom@29.1.1)(yaml@2.9.0)
 
-  dist/win-unpacked/resources/app.asar.unpacked/out/main/pi-mono-extension:
-    dependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^0.80.6
-        version: 0.80.7(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-coding-agent':
-        specifier: ^0.80.6
-        version: 0.80.7(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-
-  out/main/pi-mono-extension:
-    dependencies:
-      '@earendil-works/pi-ai':
-        specifier: ^0.80.6
-        version: 0.80.7(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-      '@earendil-works/pi-coding-agent':
-        specifier: ^0.80.6
-        version: 0.80.7(@modelcontextprotocol/sdk@1.29.0(zod@4.4.3))(ws@8.21.0)(zod@4.4.3)
-
   src/main/codingAgent/pi-mono-extension:
     dependencies:
       '@earendil-works/pi-ai':
