@@ -2983,7 +2983,6 @@ final class DesktopAutomationActionRegistry {
       case "5", "rewind": item = .rewind
       case "6", "apps": item = .apps
       case ",", "comma", "settings": item = .settings
-      case "clone", "ai_clone", "aiclone": item = .aiClone
       default: item = nil
       }
       guard let item else {

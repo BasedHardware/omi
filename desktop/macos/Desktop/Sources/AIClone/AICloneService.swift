@@ -137,7 +137,7 @@ final class AICloneService: ObservableObject {
     case BeeperClientError.notConfigured:
       return "Paste your Beeper access token first."
     case BeeperClientError.httpError(let status, _) where status == 401 || status == 403:
-      return "Beeper rejected the token. Create a new access token in Beeper Desktop → Settings → Developer."
+      return "Beeper rejected the token. In Beeper Desktop open Settings, then Developer, and create a new access token."
     case let urlError as URLError where urlError.code == .cannotConnectToHost || urlError.code == .timedOut:
       return "Beeper Desktop isn't reachable. Open Beeper Desktop and enable the Desktop API, then retry."
     default:

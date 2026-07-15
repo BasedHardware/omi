@@ -33,6 +33,12 @@ struct AICloneBackendCompletionTransport: AICloneCompletionTransport {
   }
 }
 
+/// Test/dev transport returning a fixed completion (see defaultTransport()).
+struct AICloneStubCompletionTransport: AICloneCompletionTransport {
+  var response: String
+  func complete(system: String, user: String) async throws -> String { response }
+}
+
 /// Snapshot of the grounding material a reply is built from. Kept as a value
 /// so tests can drive the engine without network.
 struct AICloneReplyContext: Equatable {
@@ -51,8 +57,22 @@ struct AICloneReplyContext: Equatable {
 struct AICloneReplyEngine {
   var transport: AICloneCompletionTransport
 
-  init(transport: AICloneCompletionTransport = AICloneBackendCompletionTransport()) {
+  init(transport: AICloneCompletionTransport = AICloneReplyEngine.defaultTransport()) {
     self.transport = transport
+  }
+
+  /// Non-production builds may inject a canned completion via
+  /// `OMI_AICLONE_FAKE_COMPLETION` so the full WS→reply→draft loop can be
+  /// exercised end-to-end against a fake Beeper without a live LLM. Production
+  /// always uses the owner-bound backend lane.
+  static func defaultTransport() -> AICloneCompletionTransport {
+    if AppBuild.isNonProduction,
+      let canned = ProcessInfo.processInfo.environment["OMI_AICLONE_FAKE_COMPLETION"],
+      !canned.isEmpty
+    {
+      return AICloneStubCompletionTransport(response: canned)
+    }
+    return AICloneBackendCompletionTransport()
   }
 
   func decide(context: AICloneReplyContext) async throws -> AICloneReplyDecision {

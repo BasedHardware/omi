@@ -15,12 +15,13 @@ preconditions:
 
 steps:
   - id: S1
-    name: Navigate to AI Clone page
+    name: Navigate to AI Clone settings section
     bridge.navigate:
-      target: ai_clone
+      target: settings
+      settingsSection: ai_clone
       activateApp: false
-    expect:
-      ok: true
+    wait:
+      state.selectedSettingsSection: AI Clone
 
   - id: S2
     name: AI Clone snapshot reports disconnected fail-closed defaults

@@ -1,35 +1,46 @@
 import OmiTheme
 import SwiftUI
 
-// MARK: - AI Clone page
+// MARK: - AI Clone settings UI
 //
-// One screen for the whole feature: connect Beeper, pick per-chat trust
-// modes, review approval requests, run the self-benchmark, and read the
-// activity log of everything the clone did on the user's behalf.
+// Rendered as the "AI Clone" section inside Settings (AICloneContent), and
+// also wrapped as a standalone page (AIClonePage) for automation reachability.
+// Styling mirrors the other settings sections: settings-style cards
+// (backgroundTertiary card + hairline stroke), OmiType scale, OmiSpacing, and
+// OmiToggleStyle.
 
+/// Standalone wrapper kept for automation/e2e reachability. The feature's
+/// primary home is the AI Clone section in Settings.
 struct AIClonePage: View {
+  var body: some View {
+    ScrollView {
+      AICloneContent()
+        .padding(OmiSpacing.xl)
+        .frame(maxWidth: 760, alignment: .leading)
+    }
+    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+    .background(OmiColors.backgroundPrimary)
+  }
+}
+
+struct AICloneContent: View {
   @ObservedObject private var service = AICloneService.shared
   @State private var tokenInput: String = ""
   @State private var editedApprovalText: [UUID: String] = [:]
 
   var body: some View {
-    ScrollView {
-      VStack(alignment: .leading, spacing: 20) {
-        header
-        connectionCard
-        if service.connectionState.isConnected {
-          if !service.pendingApprovals.isEmpty {
-            approvalsCard
-          }
-          chatsCard
-          activityCard
+    VStack(spacing: OmiSpacing.xl) {
+      masterCard
+      connectionCard
+      if service.connectionState.isConnected {
+        if !service.pendingApprovals.isEmpty {
+          approvalsCard
         }
+        chatsCard
+        activityCard
       }
-      .padding(24)
-      .frame(maxWidth: 760, alignment: .leading)
     }
-    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
-    .background(OmiColors.backgroundPrimary)
+    .frame(maxWidth: .infinity, alignment: .leading)
     .task {
       if service.hasAccessToken, !service.connectionState.isConnected {
         await service.connect()
@@ -37,107 +48,126 @@ struct AIClonePage: View {
     }
   }
 
-  // MARK: Header
+  // MARK: Card chrome (mirrors SettingsContentView.settingsCard)
 
-  private var header: some View {
-    VStack(alignment: .leading, spacing: 6) {
-      HStack(spacing: 10) {
-        Image(systemName: "person.2.wave.2.fill")
-          .font(.system(size: 22, weight: .semibold))
-          .foregroundColor(OmiColors.accent)
-        Text("AI Clone")
-          .font(.system(size: 24, weight: .bold))
-          .foregroundColor(OmiColors.textPrimary)
+  private func card<Content: View>(@ViewBuilder content: () -> Content) -> some View {
+    content()
+      .frame(maxWidth: .infinity, alignment: .leading)
+      .padding(OmiSpacing.xl)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(OmiColors.backgroundTertiary.opacity(0.5))
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+              .stroke(OmiColors.backgroundQuaternary.opacity(0.3), lineWidth: 1)
+          )
+      )
+  }
+
+  private func cardTitle(_ text: String) -> some View {
+    Text(text)
+      .scaledFont(size: OmiType.subheading, weight: .semibold)
+      .foregroundColor(OmiColors.textPrimary)
+  }
+
+  private func cardSubtitle(_ text: String) -> some View {
+    Text(text)
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(OmiColors.textSecondary)
+      .fixedSize(horizontal: false, vertical: true)
+  }
+
+  // MARK: Master switch
+
+  private var masterCard: some View {
+    card {
+      HStack(spacing: OmiSpacing.lg) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+          cardTitle("Reply on my behalf")
+          cardSubtitle(
+            "Let Omi reply to people in WhatsApp, Telegram, iMessage and more, using your memories. Connect Beeper Desktop below, then choose how each chat is handled.")
+        }
         Spacer()
-        Toggle("", isOn: Binding(
-          get: { service.configuration.enabled },
-          set: { service.setEnabled($0) }
-        ))
-        .toggleStyle(.switch)
-        .accessibilityLabel("Enable AI Clone")
+        Toggle("", isOn: Binding(get: { service.configuration.enabled }, set: { service.setEnabled($0) }))
+          .toggleStyle(OmiToggleStyle())
+          .labelsHidden()
       }
-      Text("Replies to people on your behalf in WhatsApp, Telegram, iMessage and more — grounded in your Omi memories, through Beeper Desktop.")
-        .font(.system(size: 13))
-        .foregroundColor(OmiColors.textSecondary)
     }
   }
 
   // MARK: Connection
 
   private var connectionCard: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      HStack {
-        Text("Beeper Desktop")
-          .font(.system(size: 15, weight: .semibold))
-          .foregroundColor(OmiColors.textPrimary)
-        Spacer()
-        connectionBadge
-      }
-      switch service.connectionState {
-      case .connected(let accounts):
-        connectedNetworks(accounts)
-        HStack {
-          Button("Refresh") { Task { await service.connect() } }
-          Button("Disconnect") { service.disconnectAndForgetToken() }
-            .foregroundColor(OmiColors.error)
+    card {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        HStack(spacing: OmiSpacing.lg) {
+          cardTitle("Beeper Desktop")
+          Spacer()
+          connectionBadge
         }
-      case .connecting:
-        ProgressView().controlSize(.small)
-      case .disconnected, .failed:
-        tokenEntry
-      }
-      if case .failed(let message) = service.connectionState {
-        Text(message)
-          .font(.system(size: 12))
-          .foregroundColor(OmiColors.warning)
+        switch service.connectionState {
+        case .connected(let accounts):
+          connectedNetworks(accounts)
+          HStack(spacing: OmiSpacing.md) {
+            Button("Refresh") { Task { await service.connect() } }
+              .buttonStyle(OmiButtonStyle(.secondary))
+            Button("Disconnect") { service.disconnectAndForgetToken() }
+              .buttonStyle(OmiButtonStyle(.secondary))
+          }
+        case .connecting:
+          ProgressView().controlSize(.small)
+        case .disconnected, .failed:
+          tokenEntry
+        }
+        if case .failed(let message) = service.connectionState {
+          Text(message)
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.warning)
+            .fixedSize(horizontal: false, vertical: true)
+        }
       }
     }
-    .padding(16)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(12)
   }
 
   private var connectionBadge: some View {
     Group {
       switch service.connectionState {
       case .connected:
-        Label("Connected", systemImage: "checkmark.circle.fill")
-          .foregroundColor(.green)
+        Label("Connected", systemImage: "checkmark.circle.fill").foregroundColor(.green)
       case .connecting:
-        Label("Connecting…", systemImage: "arrow.triangle.2.circlepath")
-          .foregroundColor(OmiColors.textSecondary)
+        Label("Connecting", systemImage: "arrow.triangle.2.circlepath").foregroundColor(OmiColors.textSecondary)
       case .failed:
-        Label("Not connected", systemImage: "exclamationmark.triangle.fill")
-          .foregroundColor(OmiColors.warning)
+        Label("Not connected", systemImage: "exclamationmark.triangle.fill").foregroundColor(OmiColors.warning)
       case .disconnected:
-        Label("Not connected", systemImage: "circle")
-          .foregroundColor(OmiColors.textTertiary)
+        Label("Not connected", systemImage: "circle").foregroundColor(OmiColors.textTertiary)
       }
     }
-    .font(.system(size: 12, weight: .medium))
+    .scaledFont(size: OmiType.caption, weight: .medium)
   }
 
   private func connectedNetworks(_ accounts: [BeeperAccount]) -> some View {
-    HStack(spacing: 8) {
+    HStack(spacing: OmiSpacing.sm) {
       ForEach(accounts) { account in
         Text(account.displayNetwork)
-          .font(.system(size: 11, weight: .medium))
-          .padding(.horizontal, 8)
-          .padding(.vertical, 4)
-          .background(OmiColors.backgroundTertiary)
-          .cornerRadius(6)
+          .scaledFont(size: OmiType.caption, weight: .medium)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.chipRadius)
+              .fill(OmiColors.backgroundQuaternary.opacity(0.4)))
           .foregroundColor(OmiColors.textSecondary)
       }
     }
   }
 
   private var tokenEntry: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      Text("1. Install and open Beeper Desktop (beeper.com) and sign in to your chat networks.\n2. In Beeper: Settings → Developer → enable the Desktop API and create an access token.\n3. Paste the token here.")
-        .font(.system(size: 12))
-        .foregroundColor(OmiColors.textSecondary)
-        .fixedSize(horizontal: false, vertical: true)
-      HStack(spacing: 8) {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      VStack(alignment: .leading, spacing: OmiSpacing.xs) {
+        setupStep("1.", "Install and open Beeper Desktop from beeper.com and sign in to your chat networks.")
+        setupStep("2.", "In Beeper, open Settings, then Developer, enable the Desktop API and create an access token.")
+        setupStep("3.", "Paste the token below.")
+      }
+      HStack(spacing: OmiSpacing.sm) {
         SecureField("Beeper access token", text: $tokenInput)
           .textFieldStyle(.roundedBorder)
           .frame(maxWidth: 340)
@@ -146,94 +176,107 @@ struct AIClonePage: View {
           tokenInput = ""
           Task { await service.connect() }
         }
+        .buttonStyle(OmiButtonStyle(.primary))
         .disabled(tokenInput.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
+    }
+  }
+
+  private func setupStep(_ number: String, _ text: String) -> some View {
+    HStack(alignment: .top, spacing: OmiSpacing.sm) {
+      Text(number)
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(OmiColors.textTertiary)
+      Text(text)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textSecondary)
+        .fixedSize(horizontal: false, vertical: true)
     }
   }
 
   // MARK: Approvals
 
   private var approvalsCard: some View {
-    VStack(alignment: .leading, spacing: 12) {
-      Text("Waiting for your approval")
-        .font(.system(size: 15, weight: .semibold))
-        .foregroundColor(OmiColors.textPrimary)
-      ForEach(service.pendingApprovals) { approval in
-        VStack(alignment: .leading, spacing: 8) {
-          Text("\(approval.chatTitle) · \(approval.network)")
-            .font(.system(size: 12, weight: .semibold))
-            .foregroundColor(OmiColors.textSecondary)
-          Text("They said: \(approval.inboundPreview)")
-            .font(.system(size: 12))
-            .foregroundColor(OmiColors.textTertiary)
-          TextEditor(text: Binding(
-            get: { editedApprovalText[approval.id] ?? approval.replyText },
-            set: { editedApprovalText[approval.id] = $0 }
-          ))
-          .font(.system(size: 13))
-          .frame(minHeight: 48, maxHeight: 96)
-          .scrollContentBackground(.hidden)
-          .padding(6)
-          .background(OmiColors.backgroundTertiary)
-          .cornerRadius(8)
-          HStack {
-            Button("Send") {
-              let text = editedApprovalText[approval.id]
-              editedApprovalText.removeValue(forKey: approval.id)
-              Task { await service.approve(approval, editedText: text) }
-            }
-            .keyboardShortcut(.defaultAction)
-            Button("Skip") {
-              editedApprovalText.removeValue(forKey: approval.id)
-              service.skip(approval)
+    card {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        cardTitle("Waiting for your approval")
+        ForEach(service.pendingApprovals) { approval in
+          VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+            Text("\(approval.chatTitle) · \(approval.network)")
+              .scaledFont(size: OmiType.caption, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+            Text("They said: \(approval.inboundPreview)")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+            TextEditor(text: Binding(
+              get: { editedApprovalText[approval.id] ?? approval.replyText },
+              set: { editedApprovalText[approval.id] = $0 }))
+              .scaledFont(size: OmiType.body)
+              .frame(minHeight: 48, maxHeight: 96)
+              .scrollContentBackground(.hidden)
+              .padding(OmiSpacing.sm)
+              .background(
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                  .fill(OmiColors.backgroundQuaternary.opacity(0.35)))
+            HStack(spacing: OmiSpacing.sm) {
+              Button("Send") {
+                let text = editedApprovalText[approval.id]
+                editedApprovalText.removeValue(forKey: approval.id)
+                Task { await service.approve(approval, editedText: text) }
+              }
+              .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
+              Button("Skip") {
+                editedApprovalText.removeValue(forKey: approval.id)
+                service.skip(approval)
+              }
+              .buttonStyle(OmiButtonStyle(.secondary))
             }
           }
+          .padding(OmiSpacing.md)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+              .fill(OmiColors.backgroundQuaternary.opacity(0.25)))
         }
-        .padding(12)
-        .background(OmiColors.backgroundSecondary)
-        .cornerRadius(10)
       }
     }
-    .padding(16)
-    .background(OmiColors.backgroundSecondary.opacity(0.5))
-    .cornerRadius(12)
   }
 
   // MARK: Chats
 
   private var chatsCard: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text("Chats")
-        .font(.system(size: 15, weight: .semibold))
-        .foregroundColor(OmiColors.textPrimary)
-      Text("Draft puts the reply in Beeper's compose box. Ask me sends only after you approve. Auto sends by itself when confident — unlocked by a benchmark score of \(service.configuration.autoModeMinimumBenchmarkScore)+.")
-        .font(.system(size: 12))
-        .foregroundColor(OmiColors.textTertiary)
-        .fixedSize(horizontal: false, vertical: true)
-      ForEach(service.chats) { chat in
-        chatRow(chat)
+    card {
+      VStack(alignment: .leading, spacing: OmiSpacing.lg) {
+        cardTitle("Chats")
+        cardSubtitle(
+          "Draft puts the reply in Beeper's compose box. Ask me sends only after you approve. Auto sends by itself when confident, and unlocks once a chat's benchmark score reaches \(service.configuration.autoModeMinimumBenchmarkScore).")
+        ForEach(service.chats) { chat in
+          chatRow(chat)
+          if chat.id != service.chats.last?.id {
+            Divider().overlay(OmiColors.backgroundQuaternary.opacity(0.3))
+          }
+        }
       }
     }
-    .padding(16)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(12)
   }
 
   private func chatRow(_ chat: BeeperChat) -> some View {
-    HStack(spacing: 12) {
-      VStack(alignment: .leading, spacing: 2) {
+    HStack(spacing: OmiSpacing.md) {
+      VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
         Text(chat.title ?? "Untitled chat")
-          .font(.system(size: 13, weight: .medium))
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textPrimary)
           .lineLimit(1)
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.sm) {
           Text(chat.network ?? "Beeper")
-            .font(.system(size: 11))
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
           if let result = service.configuration.benchmarkResults[chat.id] {
             Text("matches you \(result.matchScore)%")
-              .font(.system(size: 11, weight: .medium))
-              .foregroundColor(result.matchScore >= service.configuration.autoModeMinimumBenchmarkScore ? .green : OmiColors.warning)
+              .scaledFont(size: OmiType.caption, weight: .medium)
+              .foregroundColor(
+                result.matchScore >= service.configuration.autoModeMinimumBenchmarkScore
+                  ? .green : OmiColors.warning)
           }
         }
       }
@@ -241,15 +284,12 @@ struct AIClonePage: View {
       if service.benchmarkRunningChatIDs.contains(chat.id) {
         ProgressView().controlSize(.small)
       } else {
-        Button("Benchmark") {
-          Task { await service.runBenchmark(for: chat) }
-        }
-        .font(.system(size: 11))
+        Button("Benchmark") { Task { await service.runBenchmark(for: chat) } }
+          .buttonStyle(OmiButtonStyle(.secondary, size: .compact))
       }
       Picker("", selection: Binding(
         get: { service.configuration.mode(for: chat.id) },
-        set: { service.setMode($0, for: chat) }
-      )) {
+        set: { service.setMode($0, for: chat) })) {
         ForEach(AICloneChatMode.allCases, id: \.self) { mode in
           if mode != .auto || service.configuration.canEnableAuto(for: chat.id) {
             Text(mode.displayName).tag(mode)
@@ -257,56 +297,54 @@ struct AIClonePage: View {
         }
       }
       .pickerStyle(.segmented)
+      .labelsHidden()
       .frame(width: 260)
     }
-    .padding(.vertical, 4)
+    .padding(.vertical, OmiSpacing.xxs)
   }
 
   // MARK: Activity
 
   private var activityCard: some View {
-    VStack(alignment: .leading, spacing: 10) {
-      Text("Activity")
-        .font(.system(size: 15, weight: .semibold))
-        .foregroundColor(OmiColors.textPrimary)
-      if service.configuration.activityLog.isEmpty {
-        Text("Nothing yet. When the clone drafts, sends, or declines a reply, it shows up here.")
-          .font(.system(size: 12))
-          .foregroundColor(OmiColors.textTertiary)
-      }
-      ForEach(service.configuration.activityLog.prefix(30)) { entry in
-        VStack(alignment: .leading, spacing: 3) {
-          HStack(spacing: 6) {
-            Text(entry.chatTitle)
-              .font(.system(size: 12, weight: .semibold))
-              .foregroundColor(OmiColors.textPrimary)
-            Text(entry.network)
-              .font(.system(size: 11))
+    card {
+      VStack(alignment: .leading, spacing: OmiSpacing.md) {
+        cardTitle("Activity")
+        if service.configuration.activityLog.isEmpty {
+          cardSubtitle("Nothing yet. When the clone drafts, sends, or declines a reply, it shows up here.")
+        }
+        ForEach(service.configuration.activityLog.prefix(30)) { entry in
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+            HStack(spacing: OmiSpacing.sm) {
+              Text(entry.chatTitle)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
+                .foregroundColor(OmiColors.textPrimary)
+              Text(entry.network)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textTertiary)
+              Spacer()
+              outcomeBadge(entry.outcome)
+              Text(entry.date, style: .relative)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textQuaternary)
+            }
+            Text("They said: \(entry.inboundPreview)")
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
-            Spacer()
-            outcomeBadge(entry.outcome)
-            Text(entry.date, style: .relative)
-              .font(.system(size: 11))
-              .foregroundColor(OmiColors.textQuaternary)
+              .lineLimit(1)
+            if let reply = entry.replyText, !reply.isEmpty {
+              Text("Clone: \(reply)")
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.textSecondary)
+                .lineLimit(2)
+            }
           }
-          Text("They said: \(entry.inboundPreview)")
-            .font(.system(size: 11))
-            .foregroundColor(OmiColors.textTertiary)
-            .lineLimit(1)
-          if let reply = entry.replyText, !reply.isEmpty {
-            Text("Clone: \(reply)")
-              .font(.system(size: 11))
-              .foregroundColor(OmiColors.textSecondary)
-              .lineLimit(2)
+          .padding(.vertical, OmiSpacing.xxs)
+          if entry.id != service.configuration.activityLog.prefix(30).last?.id {
+            Divider().overlay(OmiColors.backgroundQuaternary.opacity(0.3))
           }
         }
-        .padding(.vertical, 4)
-        Divider()
       }
     }
-    .padding(16)
-    .background(OmiColors.backgroundSecondary)
-    .cornerRadius(12)
   }
 
   private func outcomeBadge(_ outcome: AICloneActionOutcome) -> some View {
@@ -321,11 +359,10 @@ struct AIClonePage: View {
     case .failed: (label, color) = ("Failed", OmiColors.error)
     }
     return Text(label)
-      .font(.system(size: 10, weight: .semibold))
-      .padding(.horizontal, 6)
-      .padding(.vertical, 2)
-      .background(color.opacity(0.15))
+      .scaledFont(size: OmiType.micro, weight: .semibold)
+      .padding(.horizontal, OmiSpacing.xs)
+      .padding(.vertical, OmiSpacing.hairline)
+      .background(RoundedRectangle(cornerRadius: OmiChrome.chipRadius).fill(color.opacity(0.15)))
       .foregroundColor(color)
-      .cornerRadius(4)
   }
 }
