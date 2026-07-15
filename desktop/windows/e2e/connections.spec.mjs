@@ -1,11 +1,11 @@
 /* eslint-disable @typescript-eslint/explicit-function-return-type -- plain-JS test harness */
 // Connections panel E2E: drives the REAL built app (out/main/index.js) via
 // Playwright's _electron. Opens the Hub's Connect stage (the ask-bar "Connect"
-// toggle) and asserts the registered ConnectionsPanel renders its real content —
-// the Imports/Exports sections and every connector card — then screenshots it at
-// 1280x720 for the skeptical reviewer. Hermetic: OMI_E2E_FAKE_AUTH boots an
-// offline authed shell; no backend is required (useMemories' fetch simply fails
-// closed to an empty list, which the panel renders fine).
+// toggle) and asserts the registered ConnectionsPanel renders its two-column TRAY
+// top level (Mac's homeConnectPanel: "Connect data" sources + "Use omi memory
+// anywhere" destinations), then exercises the drill-in navigation and screenshots
+// each state at 1280x720 for the skeptical reviewer. Hermetic: OMI_E2E_FAKE_AUTH
+// boots an offline authed shell; no backend is required (status probes fail closed).
 //
 // Run after a build: electron-vite build && node --test e2e/connections.spec.mjs
 import { describe, test } from 'node:test'
@@ -68,8 +68,17 @@ async function mainPage(app) {
   throw new Error('main window never became ready')
 }
 
+const clickTestId = (page, id) =>
+  page.evaluate((t) => document.querySelector(`[data-testid="${t}"]`)?.click(), id)
+
+const hasText = (page, t) =>
+  page.evaluate(
+    (text) => !![...document.querySelectorAll('*')].find((el) => el.textContent === text),
+    t
+  )
+
 describe('Connections panel', () => {
-  test('Connect stage renders the registered Imports/Exports connectors', async () => {
+  test('Connect stage renders the two-column tray and drills in', async () => {
     const { app, cleanup } = await launch()
     try {
       const page = await mainPage(app)
@@ -100,63 +109,77 @@ describe('Connections panel', () => {
         btn.click()
       })
 
-      const panel = await page.waitForSelector('[data-testid="connections-panel"]', {
-        timeout: 15000
-      })
-      assert.ok(panel, 'the ConnectionsPanel is registered and renders in the Connect stage')
+      const tray = await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 15000 })
+      assert.ok(tray, 'the ConnectionsPanel tray renders in the Connect stage')
 
-      // The real content: both section headers and every connector row (Mac order).
+      // The two-column top level: both serif headers and every tile.
+      for (const text of ['Connect data', 'Use omi memory anywhere']) {
+        assert.ok(await hasText(page, text), `tray shows the "${text}" column header`)
+      }
+      for (const id of [
+        'tray-tile-gmail',
+        'tray-tile-calendar',
+        'tray-tile-sticky-notes',
+        'tray-tile-omi-device',
+        'tray-tile-more-imports',
+        'tray-tile-ask-omi',
+        'tray-tile-claude-claude-code',
+        'tray-tile-chatgpt-codex',
+        'tray-tile-openclaw',
+        'tray-tile-hermes',
+        'tray-tile-more-exports'
+      ]) {
+        const present = await page.evaluate(
+          (t) => !!document.querySelector(`[data-testid="${t}"]`),
+          id
+        )
+        assert.ok(present, `tray shows tile ${id}`)
+      }
+
+      await new Promise((r) => setTimeout(r, 500)) // let the drop-in transition settle
+      await page.screenshot({ path: path.join(shotsDir, 'connections-01-tray.png') })
+
+      // Drill into the full Imports list from the left "+ More".
+      await clickTestId(page, 'tray-tile-more-imports')
+      await page.waitForFunction(
+        () => document.querySelector('[data-testid="connections-detail"]'),
+        {
+          timeout: 10000
+        }
+      )
       for (const text of [
         'Imports',
-        'Exports',
         'Calendar',
         'Email',
         'Sticky Notes',
-        'ChatGPT',
-        'Claude',
-        'Notion',
-        'Obsidian',
-        'Markdown file',
         'Browse the App Marketplace'
       ]) {
-        const found = await page.evaluate(
-          (t) => !![...document.querySelectorAll('*')].find((el) => el.textContent === t),
-          text
-        )
-        assert.ok(found, `panel shows "${text}"`)
+        assert.ok(await hasText(page, text), `Imports list shows "${text}"`)
       }
-
-      // A couple of the interactive affordances exist (not dead UI).
-      const stickyReadBtn = await page.evaluate(
-        () =>
-          !![...document.querySelectorAll('button')].find((b) =>
-            /Read notes/.test(b.textContent || '')
-          )
-      )
-      assert.ok(stickyReadBtn, 'Sticky Notes has a live "Read notes" action')
-
-      await new Promise((r) => setTimeout(r, 500)) // let the drop-in transition settle
-      await page.screenshot({ path: path.join(shotsDir, 'connections-01-panel.png') })
-
-      // Scroll the panel's own overflow region to the foot so the Exports section
-      // and the App Marketplace link card are in-frame for the reviewer.
-      await page.evaluate(() => {
-        const panel = document.querySelector('[data-testid="connections-panel"]')
-        const scroller = panel?.querySelector('.overflow-y-auto')
-        if (scroller) scroller.scrollTop = scroller.scrollHeight
-      })
       await new Promise((r) => setTimeout(r, 300))
-      await page.screenshot({ path: path.join(shotsDir, 'connections-01b-exports.png') })
+      await page.screenshot({ path: path.join(shotsDir, 'connections-02-imports.png') })
 
-      // The App Marketplace link navigates to /apps and closes the panel.
-      await page.evaluate(() =>
-        document.querySelector('[data-testid="connector-browse-the-app-marketplace"]').click()
+      // Back to the tray, then the OpenClaw "coming soon" detail.
+      await clickTestId(page, 'connections-back')
+      await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 10000 })
+      await clickTestId(page, 'tray-tile-openclaw')
+      await page.waitForFunction(
+        () =>
+          !![...document.querySelectorAll('*')].find(
+            (el) => el.textContent === 'Live connection setup is coming soon.'
+          ),
+        { timeout: 10000 }
       )
+      await new Promise((r) => setTimeout(r, 300))
+      await page.screenshot({ path: path.join(shotsDir, 'connections-03-comingsoon.png') })
+
+      // The App Marketplace link (in the coming-soon detail) navigates to /apps.
+      await clickTestId(page, 'connector-browse-the-app-marketplace')
       await page.waitForFunction(() => window.location.hash.includes('/apps'), undefined, {
         timeout: 10000
       })
       await new Promise((r) => setTimeout(r, 400))
-      await page.screenshot({ path: path.join(shotsDir, 'connections-02-apps-nav.png') })
+      await page.screenshot({ path: path.join(shotsDir, 'connections-04-apps-nav.png') })
     } finally {
       await cleanup()
     }

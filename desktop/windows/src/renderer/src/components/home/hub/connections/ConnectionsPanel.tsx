@@ -1,5 +1,6 @@
+import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { LayoutGrid, ArrowRight } from 'lucide-react'
+import { ChevronLeft, LayoutGrid, ArrowRight, X } from 'lucide-react'
 import type { HubConnectSlotProps } from '../hubConnectSlot'
 import { CalendarConnector } from './CalendarConnector'
 import { GmailConnector } from './GmailConnector'
@@ -7,84 +8,213 @@ import { StickyNotesConnector } from './StickyNotesConnector'
 import { PasteImportConnector } from './PasteImportConnector'
 import { ExportsConnector } from './ExportsConnector'
 import { ConnectorRow } from './ConnectorRow'
+import { ConnectorBrandMark, type ConnectorBrand } from './ConnectorBrandMark'
+import { ConnectTray } from './ConnectTray'
 
 // The Connections home — the content registered into the Hub's Connect stage (see
-// hubConnectSlot.ts). It is the Windows-native port of macOS's AppsPage Imports/
-// Exports hub: divider-separated connector rows under serif section headers, fitted
-// to the Hub tokens, plus a link out to the full App Marketplace.
+// hubConnectSlot.ts). The Windows-native port of macOS's DashboardPage connect tray.
 //
-// IMPORTS pull external data INTO Omi's memory; EXPORTS push Omi's memory OUT. All
-// connect/sync/import logic is shared with Settings via the lib/* services each row
-// imports — this panel adds no business logic, only Hub-native presentation.
+// TWO LEVELS, one shallow internal navigator (no router — this lives inside a Hub
+// stage, so it owns its own view state):
+//   • TRAY (top level) — Mac's homeConnectPanel: two columns, "Connect data" (import
+//     SOURCES) and "Use omi memory anywhere" (export DESTINATIONS). Each tile drills
+//     into that connector's detail; "+ More" opens the full list for that side.
+//   • DETAIL (level 2) — a single connector's flow, or the full Imports / Exports
+//     lists, each reached from the tray and returning to it via Back.
 //
-// ORDER — Mac's connector order is a STATIC curated array (ImportConnector.all:
-// calendar, email, local-files, apple-notes, x, chatgpt, claude), rendered in
-// declaration order (connection state affects only labels, never position). Windows
-// drops Local Files (it lives in Settings → Advanced / file indexing) and maps Apple
-// Notes → Sticky Notes.
+// All connect/sync/import/export logic is shared with Settings via the lib/* services
+// each connector imports — this panel adds only Hub-native presentation + navigation.
 //
 // SLOT CONTRACT: mount at 100%/100%, own the internal scroll (the Hub panel is
-// overflow-hidden), never set an outer fixed size. Registered lazily from
-// register.ts (a dynamic import) so this module graph loads only when the main
-// window first opens Connect — see hubConnectSlot.ts.
+// overflow-hidden), never set an outer fixed size. Registered lazily from register.ts.
+
+const OMI_DEVICE_URL = 'https://www.omi.me'
+
+type View =
+  | { kind: 'tray' }
+  | { kind: 'source'; id: 'gmail' | 'calendar' | 'sticky' }
+  | { kind: 'imports' }
+  | { kind: 'exports' }
+  | { kind: 'comingSoon'; id: 'openclaw' | 'hermes' }
+
+const COMING_SOON: Record<'openclaw' | 'hermes', { title: string; brand: ConnectorBrand }> = {
+  openclaw: { title: 'OpenClaw', brand: 'openclaw' },
+  hermes: { title: 'Hermes', brand: 'hermes' }
+}
 
 function SectionHeader({ children }: { children: React.ReactNode }): React.JSX.Element {
   return <h2 className="mb-1 font-serif text-[17px] font-medium text-home-secondary">{children}</h2>
 }
 
+// Level-2 chrome: a Back affordance (returns to the tray) and a close X, wrapping the
+// detail content in the panel's own scroll region.
+function DetailShell({
+  title,
+  onBack,
+  onDismiss,
+  children
+}: {
+  title: string
+  onBack: () => void
+  onDismiss: () => void
+  children: React.ReactNode
+}): React.JSX.Element {
+  return (
+    <div className="relative flex h-full w-full flex-col" data-testid="connections-detail">
+      <div className="flex shrink-0 items-center gap-2.5 px-5 pt-5">
+        <button
+          type="button"
+          onClick={onBack}
+          data-testid="connections-back"
+          className="focus-ring -ml-1.5 flex items-center gap-1 rounded-lg py-1 pl-1 pr-2 text-[13px] font-medium text-home-muted transition-colors hover:text-home-ink"
+        >
+          <ChevronLeft className="h-4 w-4" strokeWidth={2.25} />
+          Back
+        </button>
+        <h1 className="min-w-0 truncate font-serif text-[18px] font-medium text-home-ink">
+          {title}
+        </h1>
+        <button
+          type="button"
+          onClick={onDismiss}
+          aria-label="Close connect"
+          className="focus-ring ml-auto flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-home-muted transition-colors hover:bg-white/10 hover:text-home-ink"
+        >
+          <X className="h-4 w-4" strokeWidth={2} />
+        </button>
+      </div>
+      <div className="mt-3 min-h-0 flex-1 overflow-y-auto px-5 pb-6">
+        <div className="mx-auto w-full max-w-[720px]">{children}</div>
+      </div>
+    </div>
+  )
+}
+
+// The App Marketplace link — rendered through ConnectorRow so it shares the exact row
+// layout; kept reachable from the list views (Mac's "More" opens the apps popup).
+function MarketplaceLink({ onOpen }: { onOpen: () => void }): React.JSX.Element {
+  return (
+    <ConnectorRow
+      icon={LayoutGrid}
+      title="Browse the App Marketplace"
+      description="Discover chat personas, notification plugins, and more."
+      onClick={onOpen}
+      action={<ArrowRight className="h-4 w-4 text-home-faint" strokeWidth={2} />}
+    />
+  )
+}
+
 export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.Element {
   const navigate = useNavigate()
+  const [view, setView] = useState<View>({ kind: 'tray' })
 
   const openApps = (): void => {
     onDismiss()
     navigate('/apps')
   }
 
+  // "Ask Omi": leave the Connect stage and hand focus to the hub's ask bar. The slot
+  // gives us only onDismiss, so we reach the bar the way HomeHub identifies it (a
+  // stable testid) once React has re-mounted the resting hub — two frames is enough
+  // for the panel→hub transition to commit.
+  const askOmi = (): void => {
+    onDismiss()
+    requestAnimationFrame(() =>
+      requestAnimationFrame(() => {
+        document.querySelector<HTMLInputElement>('[data-testid="hub-ask-bar"] input')?.focus()
+      })
+    )
+  }
+
+  const openDevice = (): void => {
+    void window.omi.openExternalUrl(OMI_DEVICE_URL)
+  }
+
+  if (view.kind === 'tray') {
+    return (
+      <ConnectTray
+        onOpenSource={(id) => setView({ kind: 'source', id })}
+        onOpenImports={() => setView({ kind: 'imports' })}
+        onOpenExports={() => setView({ kind: 'exports' })}
+        onOpenComingSoon={(id) => setView({ kind: 'comingSoon', id })}
+        onAskOmi={askOmi}
+        onOpenDevice={openDevice}
+        onDismiss={onDismiss}
+      />
+    )
+  }
+
+  const back = (): void => setView({ kind: 'tray' })
+
+  if (view.kind === 'source') {
+    const detail =
+      view.id === 'gmail' ? (
+        <GmailConnector />
+      ) : view.id === 'calendar' ? (
+        <CalendarConnector />
+      ) : (
+        <StickyNotesConnector />
+      )
+    return (
+      <DetailShell title="Connect data" onBack={back} onDismiss={onDismiss}>
+        <div className="flex flex-col">{detail}</div>
+      </DetailShell>
+    )
+  }
+
+  if (view.kind === 'imports') {
+    return (
+      <DetailShell title="Import sources" onBack={back} onDismiss={onDismiss}>
+        <SectionHeader>Imports</SectionHeader>
+        <div className="flex flex-col">
+          <CalendarConnector />
+          <GmailConnector />
+          <StickyNotesConnector />
+          {/* X/Twitter row lands here in the stacked follow-up connector PR. */}
+          <PasteImportConnector source="chatgpt" />
+          <PasteImportConnector source="claude" />
+        </div>
+        <div className="mt-6">
+          <MarketplaceLink onOpen={openApps} />
+        </div>
+      </DetailShell>
+    )
+  }
+
+  if (view.kind === 'exports') {
+    return (
+      <DetailShell title="Use omi memory anywhere" onBack={back} onDismiss={onDismiss}>
+        <SectionHeader>Exports</SectionHeader>
+        <div className="flex flex-col">
+          <ExportsConnector />
+        </div>
+        <div className="mt-6">
+          <MarketplaceLink onOpen={openApps} />
+        </div>
+      </DetailShell>
+    )
+  }
+
+  // comingSoon — OpenClaw / Hermes: a clean resting detail (brand mark + copy + the
+  // marketplace link) until live MCP-destination setup ships (phase 2).
+  const { title, brand } = COMING_SOON[view.id]
   return (
-    <div className="flex h-full w-full flex-col" data-testid="connections-panel">
-      <div className="shrink-0 px-6 pt-6">
-        {/* Flat pure-white title — no gradient, no glow, no stage-glow var. The only
-            sanctioned violet is the panel's background chrome (owned by Track 5). */}
-        <h1 className="font-display text-[22px] font-bold lowercase leading-none text-white">
-          connections
-        </h1>
-        <p className="mt-1.5 text-[13px] text-home-muted">
-          Bring your data into Omi, and send your memories where you work.
-        </p>
-      </div>
-
-      <div className="mt-4 min-h-0 flex-1 overflow-y-auto px-6 pb-6">
-        <div className="mx-auto flex w-full max-w-[760px] flex-col gap-7">
-          <section>
-            <SectionHeader>Imports</SectionHeader>
-            <div className="flex flex-col">
-              <CalendarConnector />
-              <GmailConnector />
-              <StickyNotesConnector />
-              {/* X/Twitter row lands here in the follow-up connector PR. */}
-              <PasteImportConnector source="chatgpt" />
-              <PasteImportConnector source="claude" />
-            </div>
-          </section>
-
-          <section>
-            <SectionHeader>Exports</SectionHeader>
-            <div className="flex flex-col">
-              <ExportsConnector />
-            </div>
-          </section>
-
-          {/* Rendered through ConnectorRow (as a button) so it shares the row's exact
-              layout/styling instead of re-declaring it. */}
-          <ConnectorRow
-            icon={LayoutGrid}
-            title="Browse the App Marketplace"
-            description="Discover chat personas, notification plugins, and more."
-            onClick={openApps}
-            action={<ArrowRight className="h-4 w-4 text-home-faint" strokeWidth={2} />}
-          />
+    <DetailShell title={title} onBack={back} onDismiss={onDismiss}>
+      <div className="flex flex-col items-center gap-4 py-10 text-center">
+        <span
+          className="flex h-14 w-14 items-center justify-center rounded-[16px]"
+          style={{ backgroundColor: 'rgb(255 255 255 / 0.05)' }}
+        >
+          <span className="scale-[1.6]">
+            <ConnectorBrandMark brand={brand} />
+          </span>
+        </span>
+        <div className="max-w-[360px]">
+          <p className="text-[15px] font-semibold text-home-ink">{title}</p>
+          <p className="mt-1 text-[13px] text-home-muted">Live connection setup is coming soon.</p>
         </div>
       </div>
-    </div>
+      <MarketplaceLink onOpen={openApps} />
+    </DetailShell>
   )
 }
