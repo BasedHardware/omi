@@ -246,7 +246,7 @@ class ChatToolExecutor {
         expectedOwnerID: expectedOwnerID)
 
     case .renderChatBlocks:
-      return await executeRenderChatBlocks(
+      return await ChatFirstBlockToolExecutor.execute(
         toolCall.arguments,
         surface: originatingSurfaceRef,
         sessionID: originatingSessionID,
@@ -1635,81 +1635,6 @@ class ChatToolExecutor {
     } catch {
       logError("Tool delete_task failed", error: error)
       return "Error: \(error.localizedDescription)"
-    }
-  }
-
-  /// The server admits the canonical references as one all-or-nothing receipt;
-  /// only then does the kernel append the receipt to the producing assistant
-  /// turn. This path deliberately never calls the legacy Python chat writer.
-  private static func executeRenderChatBlocks(
-    _ args: [String: Any],
-    surface: AgentSurfaceReference?,
-    sessionID: String?,
-    runID: String?,
-    attemptID: String?,
-    capabilityRef: String?,
-    controlGeneration: Int?,
-    expectedOwnerID: String?,
-    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?,
-    api: APIClient
-  ) async -> String {
-    guard let expectedOwnerID,
-      let authorizationSnapshot,
-      let surface,
-      surface.surfaceKind == "main_chat",
-      let sessionID,
-      let runID,
-      let attemptID,
-      let capabilityRef,
-      let controlGeneration,
-      controlGeneration >= 0,
-      let backendBlocks = ChatFirstBlockWire.backendBlocks(from: args)
-    else {
-      return #"{"ok":false,"error":{"code":"chat_first_invalid_authority"}}"#
-    }
-    guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
-      return authorizedOwnerChangedResult()
-    }
-
-    do {
-      let request = ChatFirstBlockValidationRequest(
-        controlGeneration: controlGeneration,
-        ownerFence: expectedOwnerID,
-        runID: runID,
-        attemptID: attemptID,
-        blocks: backendBlocks.map(OmiAnyCodable.init)
-      )
-      let receipt: ChatFirstBlockValidationReceipt = try await api.post(
-        "v1/chat-first/blocks/validate",
-        body: request,
-        expectedOwnerId: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot
-      )
-      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
-        return authorizedOwnerChangedResult()
-      }
-      guard let journalBlocks = ChatFirstBlockWire.journalBlocks(from: receipt) else {
-        return #"{"ok":false,"error":{"code":"chat_first_blocks_rejected"}}"#
-      }
-      _ = try await AgentRuntimeProcess.shared.appendChatFirstBlocks(
-        clientId: "chat-first-render",
-        surface: surface,
-        ownerID: expectedOwnerID,
-        sessionID: sessionID,
-        runID: runID,
-        attemptID: attemptID,
-        capabilityRef: capabilityRef,
-        controlGeneration: controlGeneration,
-        blocks: journalBlocks,
-        authorizationSnapshot: authorizationSnapshot
-      )
-      return #"{"ok":true,"rendered":#(journalBlocks.count)}"#
-    } catch {
-      guard isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
-        return authorizedOwnerChangedResult()
-      }
-      logError("Chat-first block rendering failed", error: error)
-      return #"{"ok":false,"error":{"code":"chat_first_blocks_unavailable"}}"#
     }
   }
 

@@ -46,14 +46,9 @@ def ensure_development_smoke_fixture(uid: str, *, stage: str | None = None) -> b
     except (AlreadyExists, Conflict):
         snapshot = ref.get()
         if snapshot.exists:
-            payload = snapshot.to_dict()
-            if isinstance(payload, dict):
-                try:
-                    existing = TaskWorkflowControl.model_validate(cast(dict[str, Any], payload))
-                except ValueError:
-                    existing = None
-                if existing is not None and existing.persisted_payload() == expected_payload:
-                    return False
+            existing = parse_snapshot_or_none(TaskWorkflowControl, snapshot)
+            if existing is not None and existing.persisted_payload() == expected_payload:
+                return False
         raise DevelopmentSmokeFixtureConflictError(
             'development smoke fixture control already exists with differing state'
         ) from None

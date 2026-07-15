@@ -59,6 +59,27 @@ enum ChatFirstRoute: Hashable, Codable, Sendable {
     default: return nil
     }
   }
+
+  /// Maps every legacy-compatible automation name to its mounted cohort route.
+  /// This is visibility-only: dispatch remains owned by `DesktopHomeView` so
+  /// callers retain the legacy adapter while the old shell is active.
+  static func automationVisibilityDestination(named target: String) -> ChatFirstRoute? {
+    if let primary = primaryAutomationDestination(named: target) {
+      return primary
+    }
+    let normalized = target.lowercased().replacingOccurrences(of: "-", with: "_")
+    switch normalized {
+    case "dashboard", "home": return .more(.dashboard)
+    case "focus": return .more(.focus)
+    case "insight": return .more(.insight)
+    case "rewind": return .more(.rewind)
+    case "apps", "integrations": return .more(.apps)
+    case "permissions": return .more(.permissions)
+    case "help": return .more(.help)
+    case "settings": return .more(.settings)
+    default: return nil
+    }
+  }
 }
 
 enum ChatFirstMorePage: String, CaseIterable, Codable, Hashable, Sendable {
@@ -175,6 +196,10 @@ final class ChatFirstShellNavigation: ObservableObject {
   static let storageKey = "chatFirstShell.windowNavigation.v1"
 
   @Published private(set) var route: ChatFirstRoute
+  /// The destination currently mounted by SwiftUI. This is deliberately
+  /// separate from `route`: navigation commands are not complete until the
+  /// requested target has actually appeared.
+  @Published private(set) var visibleRoute: ChatFirstRoute?
   @Published private(set) var pendingFocus: ChatFirstPendingFocus?
   /// A related-entity link can intentionally land in a different primary
   /// destination (for example, a Goal's task list). This is transient like the
@@ -209,6 +234,7 @@ final class ChatFirstShellNavigation: ObservableObject {
     }
     pendingFocus = nil
     pendingFocusDestination = nil
+    visibleRoute = nil
     lastAcknowledgedFocusKind = nil
     focusedEntityID = nil
     isFocusedEntityAcknowledged = false
@@ -220,6 +246,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   ) {
     guard destination.isPrimaryDestination else { return }
     route = destination
+    visibleRoute = nil
     clearFocus()
     persistNavigation()
     analytics(.routeEntered(route: analyticsRoute(destination), origin: origin))
@@ -227,6 +254,7 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   func selectMore(_ page: ChatFirstMorePage) {
     route = .more(page)
+    visibleRoute = nil
     clearFocus()
     persistNavigation()
     analytics(.routeEntered(route: .more, origin: .more))
@@ -244,6 +272,7 @@ final class ChatFirstShellNavigation: ObservableObject {
   func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
     guard destination.isPrimaryDestination else { return }
     route = destination
+    visibleRoute = nil
     pendingFocus = focus
     pendingFocusDestination = destination
     focusedEntityID = focus.entityID
@@ -271,6 +300,14 @@ final class ChatFirstShellNavigation: ObservableObject {
     focusedEntityID = focus.entityID
     isFocusedEntityAcknowledged = true
     return true
+  }
+
+  /// Called by the mounted destination, never by the navigation command. This
+  /// gives the non-production bridge an exact-target-visible acknowledgement
+  /// without persisting a second navigation state or emitting entity data.
+  func markRouteVisible(_ destination: ChatFirstRoute) {
+    guard route == destination else { return }
+    visibleRoute = destination
   }
 
   func toggleSidebar() {

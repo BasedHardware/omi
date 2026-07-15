@@ -639,6 +639,7 @@ struct DesktopHomeView: View {
       homeMode: !usesChatFirstShell && onDashboard && !useLegacyHomeDesign ? (priorHomeMode ?? "hub") : nil,
       shellVariant: chatFirstCapabilitySample.variant.stableName,
       chatFirstRoute: chatFirstRoute?.stableName,
+      visibleChatFirstRoute: usesChatFirstShell ? chatFirstNavigation.visibleRoute?.stableName : nil,
       pendingFocusKind: chatFirstNavigation.pendingFocus?.stableName,
       acknowledgedFocusKind: chatFirstNavigation.lastAcknowledgedFocusKind,
       focusedEntityID: chatFirstNavigation.focusedEntityID,
@@ -1130,6 +1131,7 @@ struct DesktopHomeView: View {
       updateStoreActivityForCurrentShell()
       reportAutomationState()
     }
+    .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
     .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
     .onChange(of: useLegacyHomeDesign) { _, newValue in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {

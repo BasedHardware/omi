@@ -50,7 +50,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   /// available. A shell with another route never creates a proactive turn.
   func chatTranscriptFirstPageDidLoad() {
     didLoadTranscriptFirstPage = true
-    requestMaterialization(windowForeground: true)
+    _ = requestMaterialization(windowForeground: true)
   }
 
   /// Leaving the rich Chat route must immediately make this coordinator inert.
@@ -65,11 +65,13 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
 
   /// `ChatFirstShell` alone forwards app foreground events. This is never
   /// registered by the legacy shell, floating/notch UI, or a background task.
-  func mainWindowDidBecomeForeground() {
+  @discardableResult
+  func mainWindowDidBecomeForeground() -> Bool {
     requestMaterialization(windowForeground: true)
   }
 
-  private func requestMaterialization(windowForeground: Bool) {
+  @discardableResult
+  private func requestMaterialization(windowForeground: Bool) -> Bool {
     guard ChatFirstPromptMaterializationPolicy.shouldStart(
       hasChatFirstMainChatContext: driver?.materializationContext() != nil,
       transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
@@ -77,7 +79,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
       lastAttemptAt: lastAttemptAt,
       now: now()
     ), let driver
-    else { return }
+    else { return false }
 
     lastAttemptAt = now()
     requestGeneration &+= 1
@@ -89,6 +91,7 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
         self.requestTask = nil
       }
     }
+    return true
   }
 
   private func materialize(

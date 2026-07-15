@@ -4,6 +4,7 @@ import logging
 import os
 
 from utils.env_loader import load_backend_env
+from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
 
 load_backend_env()  # No-op if no env files exist (production); stage + local overrides otherwise
 
@@ -42,6 +43,7 @@ from routers import (
     action_items,
     candidates,
     chat_first,
+    chat_first_e2e,
     task_integrations,
     integrations,
     x_connector,
@@ -120,6 +122,10 @@ app.include_router(conversations.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
 app.include_router(chat_first.router)
+if is_chat_first_e2e_harness_runtime():
+    # The fixture router has its own runtime check as defense in depth.  It is
+    # intentionally absent from dev/prod route tables, not merely disabled.
+    app.include_router(chat_first_e2e.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)

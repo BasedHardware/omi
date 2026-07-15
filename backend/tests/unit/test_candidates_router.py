@@ -164,6 +164,20 @@ def test_candidate_workflow_control_defaults_chat_first_ui_off_when_the_flag_is_
     assert 'chat_first_ui_enabled' not in response.json()
 
 
+def test_candidate_workflow_control_e2e_fixture_uses_real_transport_failure(monkeypatch):
+    monkeypatch.setattr(candidates_router.chat_first_e2e_fixture, 'is_control_unreachable', lambda uid: True)
+    monkeypatch.setattr(
+        candidates_router.task_control_db,
+        'get_task_workflow_control',
+        lambda uid: pytest.fail('fixture transport failure must precede control resolution'),
+    )
+
+    response = _workflow_control_client().get('/v1/candidates/control')
+
+    assert response.status_code == 503
+    assert response.json() == {'detail': 'Control temporarily unavailable'}
+
+
 def test_candidate_record_serialization_satisfies_its_response_schema():
     validate(_record().model_dump(mode='json'), CandidateRecord.model_json_schema())
 

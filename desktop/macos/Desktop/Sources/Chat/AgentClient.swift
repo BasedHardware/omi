@@ -306,6 +306,20 @@ enum AgentClient {
       )
     }
 
+    func invokeChatFirstFixtureTaskCard(
+      ownerID: String,
+      sessionID: String,
+      producingTurnID: String,
+      controlGeneration: Int
+    ) async throws -> AgentRuntimeProcess.ChatFirstHarnessExecutorReceipt {
+      try await bridge.invokeChatFirstFixtureTaskCard(
+        ownerID: ownerID,
+        sessionID: sessionID,
+        producingTurnID: producingTurnID,
+        controlGeneration: controlGeneration
+      )
+    }
+
     func updateJournalTurn(
       surface: AgentSurfaceReference,
       ownerID: String? = nil,

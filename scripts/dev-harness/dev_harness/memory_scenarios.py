@@ -32,6 +32,8 @@ WATERMARK = "NOT_ACTIVATION_EVIDENCE"
 DEFAULT_LOCAL_USER_ID = "local_default_user"
 ALICE_USER_ID = "alice"
 BOB_USER_ID = "bob"
+CHAT_FIRST_E2E_ENABLED_USER_ID = "omi-chat-first-e2e-enabled"
+CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID = "omi-chat-first-e2e-out-of-cohort"
 # Short-term seeds must stay visible across long local-dev sessions.
 SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
 SYNTHETIC_SOURCE_VERSION = "memory-local-synthetic-source-1"
@@ -177,7 +179,13 @@ def _user(uid: str, name: str) -> ScenarioUser:
     )
 
 
-USERS = (_user(DEFAULT_LOCAL_USER_ID, "Default"), _user(ALICE_USER_ID, "Alice"), _user(BOB_USER_ID, "Bob"))
+USERS = (
+    _user(DEFAULT_LOCAL_USER_ID, "Default"),
+    _user(ALICE_USER_ID, "Alice"),
+    _user(BOB_USER_ID, "Bob"),
+    _user(CHAT_FIRST_E2E_ENABLED_USER_ID, "Chat-first E2E Enabled"),
+    _user(CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID, "Chat-first E2E Out Of Cohort"),
+)
 
 
 def _auth_seed(users: Sequence[ScenarioUser]) -> tuple[Mapping[str, object], ...]:
@@ -1024,7 +1032,13 @@ def validate_scenario(scenario: MemoryScenario) -> None:
     if scenario.scenario_id not in SCENARIOS:
         raise ValueError("Scenario ID must be registered")
     user_ids = {user.uid for user in scenario.users}
-    required = {DEFAULT_LOCAL_USER_ID, ALICE_USER_ID, BOB_USER_ID}
+    required = {
+        DEFAULT_LOCAL_USER_ID,
+        ALICE_USER_ID,
+        BOB_USER_ID,
+        CHAT_FIRST_E2E_ENABLED_USER_ID,
+        CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID,
+    }
     if not required.issubset(user_ids):
         raise ValueError(f"Scenario users must include {sorted(required)}")
     if scenario.selected_user not in user_ids:

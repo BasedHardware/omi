@@ -26,6 +26,7 @@ HUB_SOURCE = DESKTOP_DIR / "Desktop/Sources/FloatingControlBar/RealtimeHubContro
 VIEW_MODEL_ACTION_SOURCES = (
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/TasksPage.swift",
     DESKTOP_DIR / "Desktop/Sources/MainWindow/Pages/MemoriesPage.swift",
+    DESKTOP_DIR / "Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift",
 )
 
 TYPED_STEP_KEYS = {
@@ -36,6 +37,7 @@ TYPED_STEP_KEYS = {
     "state.expect",
     "log.expect",
     "trace.expect",
+    "ax.activate",
     "ax.expect",
     "power.sample",
 }
@@ -67,6 +69,50 @@ def collect_bridge_action_names(step: dict) -> list[str]:
         if isinstance(payload, dict) and payload.get("name"):
             names.append(str(payload["name"]))
     return names
+
+
+def stable_identifier(value: object) -> bool:
+    return isinstance(value, str) and bool(re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9_.-]*", value))
+
+
+def lint_ax_step(path: Path, step: dict) -> list[str]:
+    errors: list[str] = []
+    if "ax.activate" in step:
+        payload = step.get("ax.activate") or {}
+        if not isinstance(payload, dict) or not stable_identifier(payload.get("identifier")):
+            errors.append(f"{path.name}: ax.activate requires a stable identifier")
+        elif payload.get("action", "click") not in {"click", "press"}:
+            errors.append(f"{path.name}: ax.activate action must be click or press")
+
+    if "ax.expect" in step:
+        payload = step.get("ax.expect") or {}
+        if not isinstance(payload, dict):
+            errors.append(f"{path.name}: ax.expect must be a mapping")
+            return errors
+        for key in ("identifiers_visible", "focus_order"):
+            value = payload.get(key)
+            if value is None:
+                continue
+            values = [value] if isinstance(value, str) else value
+            if not isinstance(values, list) or not all(stable_identifier(item) for item in values):
+                errors.append(f"{path.name}: ax.expect {key} must contain stable identifiers")
+        focus_order = payload.get("focus_order")
+        if (
+            isinstance(focus_order, list)
+            and all(stable_identifier(item) for item in focus_order)
+            and len(set(focus_order)) != len(focus_order)
+        ):
+            errors.append(f"{path.name}: ax.expect focus_order must not repeat an identifier")
+        labels = payload.get("voiceover_labels")
+        if labels is not None and (
+            not isinstance(labels, dict)
+            or not all(
+                stable_identifier(identifier) and isinstance(label, str) and label
+                for identifier, label in labels.items()
+            )
+        ):
+            errors.append(f"{path.name}: ax.expect voiceover_labels must map stable identifiers to non-empty labels")
+    return errors
 
 
 def is_typed_flow(flow: dict, steps: list) -> bool:
@@ -115,6 +161,7 @@ def lint_flow(path: Path, actions: set[str]) -> list[str]:
         if "do" in step:
             errors.append(f"{path.name}: typed flow must not contain do steps")
             continue
+        errors.extend(lint_ax_step(path, step))
         for name in collect_bridge_action_names(step):
             if name not in actions:
                 errors.append(f"{path.name}: unknown bridge action {name!r}")

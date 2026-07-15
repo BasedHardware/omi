@@ -3,6 +3,36 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstRichBlockTests: XCTestCase {
+  func testBlockWireRejectsTheEntireToolPayloadWhenAnyBlockIsMalformed() {
+    let converted = ChatFirstBlockWire.backendBlocks(
+      from: [
+        "blocks": [
+          ["type": "taskCard", "taskId": "task-1"],
+          ["type": "taskCard"],
+        ]
+      ]
+    )
+
+    XCTAssertNil(converted, "render_chat_blocks must fail closed instead of rendering a valid subset")
+  }
+
+  func testBlockWirePreservesEveryValidatedToolBlock() throws {
+    let converted = try XCTUnwrap(
+      ChatFirstBlockWire.backendBlocks(
+        from: [
+          "blocks": [
+            ["type": "taskCard", "taskId": "task-1"],
+            ["type": "goalLink", "goalId": "goal-1", "summary": "Ship the plan"],
+          ]
+        ]
+      )
+    )
+
+    XCTAssertEqual(converted.count, 2)
+    XCTAssertEqual(converted[0]["task_id"] as? String, "task-1")
+    XCTAssertEqual(converted[1]["goal_id"] as? String, "goal-1")
+  }
+
   func testCodecRoundTripsEveryChatFirstBlock() throws {
     let blocks: [ChatContentBlock] = [
       .questionCard(

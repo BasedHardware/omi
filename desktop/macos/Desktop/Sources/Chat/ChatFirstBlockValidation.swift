@@ -32,7 +32,8 @@ enum ChatFirstBlockWire {
     guard let blocks = input["blocks"] as? [[String: Any]], (1...8).contains(blocks.count) else {
       return nil
     }
-    return blocks.compactMap(backendBlock)
+    let convertedBlocks = blocks.compactMap(backendBlock)
+    return convertedBlocks.count == blocks.count ? convertedBlocks : nil
   }
 
   static func journalBlocks(from receipt: ChatFirstBlockValidationReceipt) -> [[String: Any]]? {

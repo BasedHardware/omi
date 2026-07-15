@@ -38,7 +38,13 @@ def test_all_memory_scenarios_import_and_validate() -> None:
     }.issubset(names)
 
     happy = memory_scenarios.get_scenario("happy_path")
-    assert {user.uid for user in happy.users} >= {"local_default_user", "alice", "bob"}
+    assert {user.uid for user in happy.users} >= {
+        "local_default_user",
+        "alice",
+        "bob",
+        "omi-chat-first-e2e-enabled",
+        "omi-chat-first-e2e-out-of-cohort",
+    }
     assert happy.selected_user == "alice"
     assert happy.report_metadata.evidence_class == "LOCAL_EMULATOR_DEV"
     assert happy.report_metadata.activation_eligible is False

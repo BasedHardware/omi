@@ -27,6 +27,7 @@ from utils.task_intelligence import candidate_service
 from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
 from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
+from utils.task_intelligence import chat_first_e2e_fixture
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
 
@@ -232,6 +233,11 @@ def migrate_staged_candidates(
 
 @router.get('/v1/candidates/control', response_model=TaskWorkflowControl, tags=['candidates'])
 def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)) -> TaskWorkflowControl:
+    # The named E2E bundle exercises the real desktop transport failure path,
+    # rather than accepting a client-supplied capability override.  This is
+    # false for every non-local/offline account and unavailable in production.
+    if chat_first_e2e_fixture.is_control_unreachable(uid):
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail='Control temporarily unavailable')
     try:
         control = task_control_db.get_task_workflow_control(uid)
     except Exception:

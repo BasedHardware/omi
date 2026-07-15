@@ -9,15 +9,18 @@ import OmiTheme
 struct CaptureArchivePage: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
   let chatProvider: ChatProvider
+  let automationRuntime: ChatFirstAutomationRuntime?
   @StateObject private var repository: CaptureArchiveRepository
   @StateObject private var playback: CapturePlaybackController
 
   init(
     navigation: ChatFirstShellNavigation,
-    chatProvider: ChatProvider
+    chatProvider: ChatProvider,
+    automationRuntime: ChatFirstAutomationRuntime? = nil
   ) {
     self.navigation = navigation
     self.chatProvider = chatProvider
+    self.automationRuntime = automationRuntime
     _repository = StateObject(wrappedValue: CaptureArchiveRepository())
     _playback = StateObject(wrappedValue: CapturePlaybackController())
   }
@@ -35,6 +38,8 @@ struct CaptureArchivePage: View {
     .background(OmiColors.backgroundPrimary)
     .task { await repository.loadInitial() }
     .task(id: pendingFocusToken) { await resolvePendingFocusIfNeeded() }
+    .onAppear { registerAutomationActions() }
+    .onDisappear { automationRuntime?.unregisterCapturePage() }
     .accessibilityIdentifier("chat-first-capture-archive")
   }
 
@@ -357,6 +362,24 @@ struct CaptureArchivePage: View {
       ) else { return }
     }
     _ = navigation.acknowledgeFocus(.capture(id: id, momentTs: momentTimestamp))
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerCapturePage(
+      openCapture: { [repository, playback] in
+        guard let capture = repository.captures.first else { return false }
+        repository.select(capture)
+        guard let detail = await repository.loadDetail(id: capture.id) else { return false }
+        _ = await playback.prepare(for: detail)
+        return true
+      },
+      discussCapture: { [navigation, chatProvider, repository] in
+        guard let capture = repository.selectedCapture else { return false }
+        navigation.discuss(.capture(id: capture.id, momentTimestamp: nil), using: chatProvider)
+        return true
+      },
+      detailIsVisible: { [repository] in repository.selectedCapture != nil }
+    )
   }
 
   private func canSeekMoment(_ segment: TranscriptSegment) -> Bool {
