@@ -57,9 +57,16 @@ else
   nok "missing subcommand should fail"
 fi
 
-# --- lint subcommand includes --strict ---
-# --- lint passes config file ---
+# --- lint subcommand includes --strict and config, but NOT --in-place ---
 assert_contains "$WRAPPER_TEXT" '--configuration "$CONFIG_FILE"' "lint uses pinned config file"
+
+# --- no-write in lint mode: extract the lint case body and verify no --in-place/-i ---
+LINT_BODY="$(sed -n '/^  lint)/,/^    ;;/p' "$WRAPPER")"
+if echo "$LINT_BODY" | grep -qE '\-\-in-place| -i '; then
+  nok "lint case contains --in-place/-i (must be read-only)"
+else
+  ok "lint mode does not write files (no --in-place/-i in lint case)"
+fi
 
 # --- config-path subcommand ---
 CONFIG_PATH="$("$WRAPPER" config-path)"
