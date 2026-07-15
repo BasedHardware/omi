@@ -92,10 +92,11 @@ void main() {
 
     expect(syncs.syncWalCalls, 1);
     expect(
-      wakes,
-      [WakeTrigger.cooldownElapsed],
-      reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile',
-    );
+        wakes,
+        [
+          WakeTrigger.cooldownElapsed,
+        ],
+        reason: 'successful syncWal must wake coordinator so uploaded WALs reconcile');
     provider.dispose();
   });
 

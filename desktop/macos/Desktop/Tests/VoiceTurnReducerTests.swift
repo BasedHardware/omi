@@ -413,6 +413,23 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(result.model.lastTerminal?.reason, .bargeInReplacementTimeout)
   }
 
+  func testStaleBargeInReplacementDeadlineCannotTerminalizeAdvancedTurn() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: nil))).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubCommitDeferredForReplacement(turnID: turnID)).model
+    model.turn?.phase = .finalizing
+
+    let stale = reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .bargeInReplacement))
+
+    XCTAssertEqual(stale.model.turn?.phase, .finalizing)
+    XCTAssertEqual(stale.model.staleEventCount, model.staleEventCount + 1)
+    XCTAssertFalse(stale.effects.contains(where: \.isTerminal))
+  }
+
   func testProviderNoResponseDeadlineTerminatesAndShowsActionableHint() {
     let (model, turnID, _, _) = awaitingHubResponse()
 
@@ -628,6 +645,214 @@ final class VoiceTurnReducerTests: XCTestCase {
         sessionID: sessionID,
         responseID: responseID)).model
     XCTAssertEqual(acceptJournal(continuation).model.turn?.phase, .terminal(.success))
+  }
+
+  func testCanonicalSpawnReceiptCompletesWithoutProviderContinuation() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let toolIdentity = reservation.identity
+    let callID = VoiceToolCallID("spawn-agent")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
+    XCTAssertTrue(model.turn?.deadlines.contains(.pendingTools) == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: toolIdentity,
+        callID: callID,
+        kind: .spawnReceipt)
+    ).model
+
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    guard case .writing = model.turn?.journalFinalization else {
+      return XCTFail("the canonical receipt must open the journal fence")
+    }
+
+    let finished = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+    let accepted = acceptJournal(finished)
+    XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(accepted.model.lastTerminal?.reason, .success)
+    XCTAssertEqual(accepted.model.lastTerminal?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(accepted.model.turn?.responseID, responseID)
+  }
+
+  func testVerifiedScreenEvidenceCompletesWithoutProviderContinuation() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = screenshotReservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      screenshotReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+
+    let reportReservation = reserveIdentity(model, turnID: turnID)
+    let reportIdentity = reportReservation.identity
+    let reportCallID = VoiceToolCallID("report")
+    model = reduce(
+      reportReservation.model,
+      .toolStartedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)).model
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidence(.verified(reportCallID: reportCallID, reportIdentity: reportIdentity)))
+    ).model
+
+    XCTAssertNil(model.turn?.screenEvidenceProtocol)
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+    guard case .writing = model.turn?.journalFinalization else {
+      return XCTFail("the verified screen answer must open the journal fence")
+    }
+
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
+    ).model
+    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+  }
+
+  func testFailedScreenEvidenceCompletesWithoutProviderContinuation() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidence(.failed))
+    ).model
+
+    XCTAssertNil(model.turn?.screenEvidenceProtocol)
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+  }
+
+  func testScreenEvidenceProtocolDeadlineEmitsExactFailureEffect() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+
+    let expiration = reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .screenEvidenceProtocol))
+
+    XCTAssertEqual(expiration.model.turn?.screenEvidenceProtocol, token)
+    XCTAssertTrue(
+      expiration.effects.contains(
+        .screenEvidenceProtocolExpired(turnID: turnID, token: token)))
+    XCTAssertFalse(expiration.effects.contains(where: \.isTerminal))
+  }
+
+  func testScreenEvidenceResolutionFromBargedTurnIsDropped() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+    let replacementID = VoiceTurnID()
+    model = reduce(model, .start(turnID: replacementID, ownerID: nil, intent: .hold)).model
+
+    let stale = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidence(.failed)))
+
+    XCTAssertEqual(stale.model.turn?.id, replacementID)
+    XCTAssertEqual(stale.model.turn?.phase, .recording)
+    XCTAssertEqual(stale.model.staleEventCount, model.staleEventCount + 1)
   }
 
   func testProviderOutputCannotMutateRecordingTurnBeforeCommit() {

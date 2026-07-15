@@ -69,6 +69,34 @@ final class LoggerPermissionsTests: XCTestCase {
     XCTAssertEqual(try String(contentsOfFile: victim, encoding: .utf8), "victim content\n")
   }
 
+  func testNamedNonProductionLaunchesResolveToSeparateOwnerOnlyLogPaths() {
+    let first = OmiLogPathResolver.logPath(
+      isNonProduction: true,
+      bundleIdentifier: "com.omi.qa-one",
+      processID: 101)
+    let second = OmiLogPathResolver.logPath(
+      isNonProduction: true,
+      bundleIdentifier: "com.omi.qa-two",
+      processID: 202)
+
+    XCTAssertNotEqual(first, second)
+    XCTAssertEqual(first, "/private/tmp/omi/com.omi.qa-one/pid-101.log")
+    XCTAssertEqual(second, "/private/tmp/omi/com.omi.qa-two/pid-202.log")
+    XCTAssertEqual(
+      OmiLogPathResolver.logPath(
+        isNonProduction: false,
+        bundleIdentifier: "com.omi.computer-macos",
+        processID: 303),
+      "/tmp/omi.log")
+  }
+
+  func testEnsureLogDirectoryOwnerOnlyCreatesDirectoryWith0700() throws {
+    let path = tempDir.appendingPathComponent("owner-only-logs").path
+
+    XCTAssertTrue(ensureLogDirectoryOwnerOnly(atPath: path))
+    XCTAssertEqual(try posixPermissions(of: path), 0o700)
+  }
+
   private func posixPermissions(of path: String) throws -> Int {
     let attributes = try FileManager.default.attributesOfItem(atPath: path)
     let number = try XCTUnwrap(attributes[.posixPermissions] as? NSNumber)

@@ -1057,7 +1057,7 @@ describe("external realtime surface authority", () => {
       continuityKey: "voice:voice-turn-1",
       userTurnId: stableAgentSpawnTurnId("voice:voice-turn-1", "user"),
       assistantTurnId: stableAgentSpawnTurnId("voice:voice-turn-1", "assistant"),
-      assistantText: "I started a background agent for that.",
+      assistantText: "Delegated: Research the launch plan started and is working in the background.",
     });
     expect(JSON.parse(compactRealtimeSpawnToolResult('{"ok":true}', descriptor))).toMatchObject({
       ok: false,

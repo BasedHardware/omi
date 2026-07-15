@@ -607,6 +607,18 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
       realtimeDescription: "Capture the user's current screen so you can see what they're looking at.",
     },
   },
+  report_screen_observation: {
+    surfaces: ["realtime_voice"],
+    capabilityDoc: doc("Report Screen Observation", "Report a grounded current-screen answer.", [
+      "Only call after screenshot returns the current image.",
+      "Put only visual detail in the answer; native evidence supplies application identity.",
+    ]),
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    voice: {
+      realtimeDescription:
+        "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+    },
+  },
   point_click: {
     surfaces: ["realtime_voice"],
     capabilityDoc: doc("Point Click", "Click at on-screen pixel coordinates.", [
@@ -1249,6 +1261,29 @@ const swiftToolManifestDrafts: OmiToolManifestEntryDraft[] = [
     adapters: {
       "pi-mono": { advertised: true },
     },
+  },
+  {
+    name: "report_screen_observation",
+    label: "Report Screen Observation",
+    description:
+      "Submit one current-screen observation after screenshot succeeds.",
+    promptSnippet: "report_screen_observation - Submit a grounded current-screen answer",
+    latency: "fast local",
+    inputSchema: schema(
+      {
+        answer: {
+          type: "string",
+          description: "Concise visual detail only; do not name or identify an app.",
+        },
+      },
+      ["answer"],
+    ),
+    annotations: readOnlyLocal,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool", executorName: "realtimeHub" },
+    intendedForAgents: true,
+    runtimePreconditions: ["Realtime voice only; screenshot evidence must belong to the active PTT turn."],
+    adapters: {},
   },
   {
     name: "point_click",

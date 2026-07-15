@@ -1,14 +1,34 @@
 import Foundation
 import Sentry
 
-private let logFile: String = {
-  let isDev = AppBuild.isNonProduction
-  return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
-}()
+enum OmiLogPathResolver {
+  static func launchID(processID: Int32) -> String { "pid-\(processID)" }
+
+  static func logPath(
+    isNonProduction: Bool,
+    bundleIdentifier: String?,
+    processID: Int32
+  ) -> String {
+    guard isNonProduction else { return "/tmp/omi.log" }
+    let rawBundleID = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+    let safeBundleID = rawBundleID.replacingOccurrences(
+      of: #"[^A-Za-z0-9._-]+"#,
+      with: "-",
+      options: .regularExpression)
+    return "/private/tmp/omi/\(safeBundleID)/\(launchID(processID: processID)).log"
+  }
+}
+
+private let logFile: String = OmiLogPathResolver.logPath(
+  isNonProduction: AppBuild.isNonProduction,
+  bundleIdentifier: Bundle.main.bundleIdentifier,
+  processID: getpid())
+private let logLaunchID = OmiLogPathResolver.launchID(processID: getpid())
 /// The on-disk app-log path for the current build. Single source of truth for
 /// the log location so callers (feedback export, diagnostics bundle) don't
 /// re-derive it. Owner-only permissions are enforced by `ensureLogFileOwnerOnly`.
 func omiLogFilePath() -> String { logFile }
+func omiLogLaunchID() -> String { logLaunchID }
 
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
@@ -65,9 +85,41 @@ func ensureLogFileOwnerOnly(atPath path: String) -> Bool {
   return fileManager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
 }
 
+/// Non-production bundles can run side by side during QA. Keep a private directory per bundle
+/// and launch so one app cannot truncate or contaminate another app's diagnostic evidence.
+@discardableResult
+func ensureLogDirectoryOwnerOnly(atPath path: String) -> Bool {
+  let fileManager = FileManager.default
+  var info = stat()
+  if lstat(path, &info) == 0 {
+    let isDirectory = (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR)
+    let isOwnedByUs = info.st_uid == getuid()
+    guard isDirectory, isOwnedByUs else {
+      guard (try? fileManager.removeItem(atPath: path)) != nil else { return false }
+      return (try? fileManager.createDirectory(
+        atPath: path,
+        withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700])) != nil
+    }
+    return (try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)) != nil
+  }
+  return (try? fileManager.createDirectory(
+    atPath: path,
+    withIntermediateDirectories: false,
+    attributes: [.posixPermissions: 0o700])) != nil
+}
+
 /// Guards the one-time permission normalization. Mutated only on the serial
 /// `logQueue` (every writer hops through it), so it needs no extra locking.
 private var didEnsureLogFilePermissions = false
+
+private func ensureLogParentDirectories() -> Bool {
+  guard AppBuild.isNonProduction else { return true }
+  let bundleDirectory = (logFile as NSString).deletingLastPathComponent
+  let rootDirectory = (bundleDirectory as NSString).deletingLastPathComponent
+  return ensureLogDirectoryOwnerOnly(atPath: rootDirectory)
+    && ensureLogDirectoryOwnerOnly(atPath: bundleDirectory)
+}
 
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
@@ -75,7 +127,8 @@ private func writeToLogFile(_ data: Data) {
     // Latch only when normalization actually succeeds, so a transient failure
     // (e.g. a racing create) is retried on the next write instead of leaving
     // the log permanently world-readable.
-    didEnsureLogFilePermissions = ensureLogFileOwnerOnly(atPath: logFile)
+    didEnsureLogFilePermissions = ensureLogParentDirectories()
+      && ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
     if let handle = FileHandle(forWritingAtPath: logFile) {

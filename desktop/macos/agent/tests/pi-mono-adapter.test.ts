@@ -523,6 +523,26 @@ describe("PiMonoAdapter prompt correlation", () => {
     expect(events.some((event) => event.type === "result")).toBe(false);
   });
 
+  it("treats agent_settled as advisory and waits for the authoritative turn_end", async () => {
+    const { adapter } = createAdapter();
+    seedSessions(adapter, "session-1");
+    const prompt = adapter.sendPrompt(
+      "session-1",
+      [{ type: "text", text: "wait for the child" }],
+      [],
+      "act",
+      () => {},
+      async () => "",
+    );
+
+    (adapter as any).handleEvent(JSON.stringify({ type: "agent_settled" }));
+
+    expect((adapter as any).activePromptGeneration).toBe(1);
+    expect((adapter as any).pendingRequests.size).toBe(1);
+    (adapter as any).handleTurnEnd(makeTurnEndEvent("authoritative terminal result"));
+    await expect(prompt).resolves.toMatchObject({ text: "authoritative terminal result" });
+  });
+
   it("rejects turn_end errors instead of resolving success", async () => {
     const { adapter, events } = createAdapter();
     seedSessions(adapter, "session-1");
