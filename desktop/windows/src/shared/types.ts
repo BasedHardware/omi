@@ -737,6 +737,22 @@ export type OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
+  // --- Track 3 (task sync engine) ---
+  // Local-first tasks: every read/write goes through main (which owns local SQLite
+  // + backend REST). Reads return the LOCAL rows instantly and kick a background
+  // sync; subscribe to `onTasksChanged` to re-fetch when the store updates.
+  tasksListIncomplete: (opts?: { limit?: number; offset?: number }) => Promise<ActionItemRecord[]>
+  tasksListCompleted: (opts?: { limit?: number; offset?: number }) => Promise<ActionItemRecord[]>
+  tasksListDeleted: (opts?: { limit?: number; offset?: number }) => Promise<ActionItemRecord[]>
+  tasksDashboardSlices: () => Promise<TaskDashboardSlices>
+  tasksCreate: (fields: TaskCreateFields) => Promise<ActionItemRecord>
+  tasksToggle: (args: { backendId: string; completed: boolean }) => Promise<void>
+  tasksUpdate: (args: { backendId: string; fields: TaskUpdateFields }) => Promise<void>
+  tasksDelete: (args: { backendId: string }) => Promise<void>
+  tasksReconcile: () => Promise<void>
+  /** main → renderer: the local task store changed (optimistic write or a
+   *  background sync landed). Returns an unsubscribe fn. */
+  onTasksChanged: (cb: () => void) => () => void
   /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
@@ -1845,6 +1861,46 @@ export type TaskEmbeddingRow = { id: number; embedding: Float32Array }
 
 /** One (backendId, newPosition) re-rank instruction from the scoring service. */
 export type TaskRerank = { backendId: string; newPosition: number }
+
+// --- Task SYNC ENGINE IPC contract (main ↔ renderer) ---
+// The main-process `taskSyncEngine` owns local SQLite + backend REST; the renderer
+// is thin (IPC only). These are the payload shapes for the `tasks:*` channels
+// (see src/main/ipc/tasks.ts for the channel list + semantics).
+
+/** Fields the renderer supplies to create a task (`tasks:create`). Only
+ *  description/completed/dueAt/conversationId reach the backend; priority/category/
+ *  tags/source are Windows-local-only (the backend action-item model has no such
+ *  fields). `dueAt` is epoch-ms. */
+export type TaskCreateFields = {
+  description: string
+  completed?: boolean
+  dueAt?: number | null
+  conversationId?: string | null
+  priority?: string | null
+  category?: string | null
+  tags?: string[]
+  source?: string | null
+}
+
+/** Fields the renderer supplies to edit a task (`tasks:update`). `clearDueAt` wins
+ *  over `dueAt`. Only description/completed/dueAt reach the backend. */
+export type TaskUpdateFields = {
+  description?: string
+  priority?: string
+  category?: string
+  tags?: string[]
+  dueAt?: number | null
+  clearDueAt?: boolean
+  completed?: boolean
+}
+
+/** Dashboard slices for the Tasks home (`tasks:dashboardSlices`). All are active
+ *  (incomplete, non-deleted) tasks partitioned by due window. */
+export type TaskDashboardSlices = {
+  overdue: ActionItemRecord[]
+  today: ActionItemRecord[]
+  noDue: ActionItemRecord[]
+}
 
 // --- Meeting detection (Phase 5) ---
 export type MeetingMode = 'off' | 'ask' | 'auto'

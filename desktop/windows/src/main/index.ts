@@ -93,6 +93,7 @@ import {
 } from './automation/foregroundTarget'
 import { registerScreenSynthHandlers } from './ipc/screenSynth'
 import { registerAiUserProfileHandlers } from './ipc/aiUserProfile'
+import { registerTaskHandlers } from './ipc/tasks'
 import { createGlowWindow, registerGlowIpc, destroyGlow } from './glow/glowWindow'
 import { maybeGenerateOnStartup as maybeGenerateAiProfileOnStartup } from './assistants/aiUserProfile/service'
 import { registerFocusAssistant } from './assistants/focus/register'
@@ -817,6 +818,11 @@ app.whenReady().then(async () => {
   // a session (Firebase token + base URLs) and drives generation. The background
   // startup check + daily timer are wired at ready-to-show below.
   registerAiUserProfileHandlers()
+  // Track 3 (task sync engine): local-first Tasks list. Cheap handler registration;
+  // the engine reads the shared backend session (relayed by the renderer) and syncs
+  // on demand when a list/reconcile channel is invoked. The embedding-index evictor
+  // is wired to the deletion listener at the embedding-service integration step.
+  registerTaskHandlers()
   // Track 3 (focus halo): the click-through ring the Focus assistant fires around
   // the active window (red = distracted, green = refocused). Handler registration
   // only; the window itself is created at ready-to-show below.
