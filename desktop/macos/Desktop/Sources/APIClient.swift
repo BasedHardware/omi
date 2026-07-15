@@ -3220,9 +3220,11 @@ extension APIClient {
     struct StatusResponse: Decodable {
       let status: String
     }
-    let request = BatchRequest(
-      scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-    let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    for scoreBatch in scores.chunked(maxSize: 500) {
+      let request = BatchRequest(
+        scores: scoreBatch.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
+      let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    }
   }
 
   /// Promotes the top-ranked staged task to action_items
