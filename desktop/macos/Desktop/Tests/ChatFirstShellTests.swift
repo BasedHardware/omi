@@ -49,7 +49,7 @@ final class ChatFirstShellTests: XCTestCase {
   func testNavigationPersistsOnlyRouteAndCollapseAndRetainsFocusUntilAcknowledged() {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
-    defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
     XCTAssertEqual(navigation.route, .chat)
@@ -75,7 +75,7 @@ final class ChatFirstShellTests: XCTestCase {
   func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
-    defer { UserDefaults.standard.removePersistentDomain(forName: suiteName) }
+    defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
     navigation.open(focus: .goal(id: "goal-1"))
@@ -90,6 +90,22 @@ final class ChatFirstShellTests: XCTestCase {
 
     navigation.selectLegacyDestination(.chat)
     XCTAssertEqual(navigation.route, .chat)
+  }
+
+  func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() {
+    let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    let focus = ChatFirstPendingFocus.goal(id: "goal-1")
+    navigation.open(focus: focus, destination: .tasks)
+
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertEqual(navigation.pendingFocus, focus)
+    XCTAssertEqual(navigation.pendingFocusDestination, .tasks)
+    XCTAssertTrue(navigation.acknowledgeFocus(focus))
+    XCTAssertNil(navigation.pendingFocus)
   }
 
   func testPrimaryAutomationRouteIncludesGoalsWithoutRepurposingLegacyPages() {

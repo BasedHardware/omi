@@ -1119,12 +1119,13 @@ struct DesktopHomeView: View {
   /// expression. The runtime choice is already immutable for this app session;
   /// this is only an erased rendering boundary, not a second state owner.
   private var shellContent: AnyView {
-    if case .chatFirst = chatFirstCapabilitySample.variant {
+    if case .chatFirst(let capability) = chatFirstCapabilitySample.variant {
       return AnyView(
         ChatFirstShell(
           navigation: chatFirstNavigation,
           appState: appState,
           viewModelContainer: viewModelContainer,
+          capability: capability,
           selectedSettingsSection: $selectedSettingsSection,
           highlightedSettingID: $highlightedSettingId
         )

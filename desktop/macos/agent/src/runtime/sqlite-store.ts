@@ -71,6 +71,7 @@ const BACKEND_RECONCILE_CURSOR_MIGRATION_VERSION = 26;
 const JOURNAL_PRODUCING_ATTEMPT_MIGRATION_VERSION = 27;
 const CHAT_FIRST_DEFERRAL_OUTBOX_MIGRATION_VERSION = 28;
 const CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION = 29;
+const CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION = 30;
 
 const ACTIVE_ATTEMPT_STATUSES = ["queued", "starting", "running", "waiting_input", "waiting_approval", "cancelling"] as const;
 const TERMINAL_ATTEMPT_STATUSES = ["succeeded", "failed", "cancelled", "timed_out", "orphaned"] as const;
@@ -377,6 +378,9 @@ export function probeNodeSqliteRuntime(options: NodeSqliteProbeOptions = {}): vo
     runJournalGenerationBaseMigration(db, Date.now());
     runContextSourceSurfaceScopeMigration(db, Date.now());
     runJournalProducingAttemptMigration(db, Date.now());
+    runChatFirstDeferralOutboxMigration(db, Date.now());
+    runChatFirstMaterializationReceiptsMigration(db, Date.now());
+    runChatFirstColdStartSequenceReceiptsMigration(db, Date.now());
     runTransaction(db, () => {
       db?.prepare("INSERT INTO sessions (session_id, owner_id, status, surface_kind, default_adapter_id, created_at_ms, updated_at_ms, last_activity_at_ms) VALUES (?, ?, ?, ?, ?, ?, ?, ?)").run(
         "ses_probe",
@@ -514,6 +518,9 @@ export class SqliteAgentStore implements AgentStore {
     }
     if (!this.hasMigration(CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION)) {
       runChatFirstMaterializationReceiptsMigration(this.db, this.nowMs());
+    }
+    if (!this.hasMigration(CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION)) {
+      runChatFirstColdStartSequenceReceiptsMigration(this.db, this.nowMs());
     }
   }
 
@@ -3225,6 +3232,39 @@ function runChatFirstMaterializationReceiptsMigration(
     `);
     db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
       CHAT_FIRST_MATERIALIZATION_RECEIPTS_MIGRATION_VERSION,
+      appliedAtMs,
+    );
+  });
+}
+
+/**
+ * Terminal sparse-sequence receipts are a local-journal outbox, not a second
+ * transcript state or client-side rollout flag. The server attaches the
+ * accepted receipt to the originating cold-start intent before it permits
+ * agent-tier judgment again.
+ */
+function runChatFirstColdStartSequenceReceiptsMigration(
+  db: Pick<DatabaseSync, "exec" | "prepare" | "isTransaction">,
+  appliedAtMs: number,
+): void {
+  runTransaction(db, () => {
+    db.exec(`
+      CREATE TABLE chat_first_cold_start_sequence_receipts(
+        sequence_id TEXT PRIMARY KEY,
+        owner_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        control_generation INTEGER NOT NULL CHECK (control_generation >= 0),
+        receipt_id TEXT NOT NULL,
+        terminal_state TEXT NOT NULL CHECK (terminal_state IN ('completed', 'abandoned')),
+        created_at_ms INTEGER NOT NULL
+      ) STRICT;
+      CREATE INDEX chat_first_cold_start_sequence_receipts_owner_idx
+        ON chat_first_cold_start_sequence_receipts(
+          owner_id, conversation_id, control_generation, created_at_ms ASC
+        );
+    `);
+    db.prepare("INSERT INTO schema_migrations (version, applied_at_ms) VALUES (?, ?)").run(
+      CHAT_FIRST_COLD_START_SEQUENCE_RECEIPTS_MIGRATION_VERSION,
       appliedAtMs,
     );
   });

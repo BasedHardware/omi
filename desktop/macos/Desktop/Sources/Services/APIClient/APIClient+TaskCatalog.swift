@@ -436,11 +436,43 @@ extension APIClient {
   }
 
   func getCanonicalGoals(includeEnded: Bool = true) async throws -> [OmiAPI.GoalResponse] {
-    try await get("v1/goals/all?include_ended=\(includeEnded ? "true" : "false")")
+    try await getCanonicalGoals(
+      includeEnded: includeEnded,
+      expectedOwnerId: nil,
+      authorizationSnapshot: nil
+    )
+  }
+
+  func getCanonicalGoals(
+    includeEnded: Bool,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> [OmiAPI.GoalResponse] {
+    try await get(
+      "v1/goals/all?include_ended=\(includeEnded ? "true" : "false")",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
   }
 
   func getCanonicalGoalDetail(goalID: String) async throws -> OmiAPI.GoalDetailProjection {
-    try await get("v1/goals/\(goalID)/detail")
+    try await getCanonicalGoalDetail(
+      goalID: goalID,
+      expectedOwnerId: nil,
+      authorizationSnapshot: nil
+    )
+  }
+
+  func getCanonicalGoalDetail(
+    goalID: String,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.GoalDetailProjection {
+    try await get(
+      "v1/goals/\(goalID)/detail",
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
+    )
   }
 
   func createCanonicalGoal(
@@ -482,6 +514,26 @@ extension APIClient {
     accountGeneration: Int,
     idempotencyKey: String
   ) async throws -> OmiAPI.GoalResponse {
+    try await focusCanonicalGoal(
+      goalID: goalID,
+      replacementGoalID: replacementGoalID,
+      focusRank: focusRank,
+      accountGeneration: accountGeneration,
+      idempotencyKey: idempotencyKey,
+      expectedOwnerId: nil,
+      authorizationSnapshot: nil
+    )
+  }
+
+  func focusCanonicalGoal(
+    goalID: String,
+    replacementGoalID: String?,
+    focusRank: Int?,
+    accountGeneration: Int,
+    idempotencyKey: String,
+    expectedOwnerId: String?,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> OmiAPI.GoalResponse {
     struct Request: Encodable {
       let replacement_goal_id: String?
       let focus_rank: Int?
@@ -491,7 +543,9 @@ extension APIClient {
       method: "POST",
       body: Request(replacement_goal_id: replacementGoalID, focus_rank: focusRank),
       idempotencyKey: idempotencyKey,
-      accountGeneration: accountGeneration
+      accountGeneration: accountGeneration,
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot
     )
   }
 

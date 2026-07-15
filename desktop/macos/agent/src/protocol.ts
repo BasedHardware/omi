@@ -416,7 +416,13 @@ export interface MaterializeChatFirstIntentsMessage extends ProtocolEnvelope {
   intents: Array<{
     intentId: string;
     continuityKey: string;
-    source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment";
+    source:
+      | "daily_opener"
+      | "capture_arrival"
+      | "deferral_reraise"
+      | "agent_judgment"
+      | "cold_start_rich"
+      | "cold_start_sparse";
     blocks: unknown[];
   }>;
 }
@@ -443,6 +449,11 @@ export interface AcknowledgeChatFirstMaterializationReceiptsMessage extends Prot
   sessionId: string;
   controlGeneration: number;
   receipts: Array<{ intentId: string; receiptId: string }>;
+  coldStartSequenceTerminalReceipts: Array<{
+    sequenceId: string;
+    receiptId: string;
+    terminalState: "completed" | "abandoned";
+  }>;
 }
 
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
@@ -996,6 +1007,11 @@ export interface JournalOperationResultMessage extends OutboundEnvelope {
   suppressedByStreamingTail?: boolean;
   materializationStoppedByTail?: boolean;
   materializationReceipts?: Array<{ intentId: string; receiptId: string }>;
+  coldStartSequenceTerminalReceipts?: Array<{
+    sequenceId: string;
+    receiptId: string;
+    terminalState: "completed" | "abandoned";
+  }>;
   acknowledgedReceiptCount?: number;
 }
 

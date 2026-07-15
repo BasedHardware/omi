@@ -82,7 +82,10 @@ describe("kernel conversation journal", () => {
     expect(replay).toMatchObject({ accepted: true, duplicate: true, turn: { turnId: first.turn?.turnId } });
     expect(listChatFirstMaterializationReceipts(fixture.store, {
       ownerId: fixture.ownerId, controlGeneration: 7,
-    })).toEqual([first.receipt]);
+    })).toEqual({
+      materializationReceipts: [first.receipt],
+      coldStartSequenceTerminalReceipts: [],
+    });
 
     recordTerminalQuestion(fixture, "tail-question", [
       { optionId: "later", label: "Later", preparedAnswer: "Ask me later.", defer: true },
@@ -103,10 +106,11 @@ describe("kernel conversation journal", () => {
       ownerId: fixture.ownerId,
       controlGeneration: 7,
       receipts: [first.receipt!],
+      coldStartSequenceTerminalReceipts: [],
     })).toBe(1);
     expect(listChatFirstMaterializationReceipts(fixture.store, {
       ownerId: fixture.ownerId, controlGeneration: 7,
-    })).toEqual([]);
+    })).toEqual({ materializationReceipts: [], coldStartSequenceTerminalReceipts: [] });
     fixture.store.close();
   });
 
@@ -265,6 +269,179 @@ describe("kernel conversation journal", () => {
       [fixture.conversationId],
     ).count).toBe(3);
     fixture.store.close();
+  });
+
+  it("advances sparse cold start only after the selected normal answer terminalizes and retires on unrelated input", () => {
+    const fixture = newSurface("main_chat", "chat", "cold-start-sequence");
+    const first = materializeChatFirstIntent(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      controlGeneration: 7,
+      intentId: "cold-start-intent",
+      continuityKey: "cold-start:7",
+      source: "cold_start_sparse",
+      blocks: [{
+        type: "questionCard",
+        question_id: "cold-start:7:step:1",
+        text: "What matters now?",
+        subject: { kind: "cold_start", id: "cold-start:7" },
+        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
+        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
+      }],
+      nowMs: 10,
+    });
+    const selected = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:1",
+      optionId: "progress",
+      controlGeneration: 7,
+      nowMs: 20,
+    });
+    const { run, attempt } = insertActiveRunAttempt(fixture, "cold-start-sequence");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: selected.assistantTurn!.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      nowMs: 21,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: selected.assistantTurn!.turnId,
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      disposition: "accept",
+      content: "Let us shape that together.",
+      nowMs: 22,
+    });
+    const turns = listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns;
+    expect(turns.at(-1)?.contentBlocks).toContainEqual(expect.objectContaining({
+      type: "questionCard",
+      questionId: "cold-start:7:step:2",
+      coldStartSequence: { sequenceId: "cold-start:7", step: 2 },
+    }));
+
+    const second = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:2",
+      optionId: "cold-start:7:goal:create",
+      controlGeneration: 7,
+      nowMs: 30,
+    });
+    const secondRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-2");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: second.assistantTurn!.turnId,
+      producingRunId: secondRunAttempt.run.runId,
+      producingAttemptId: secondRunAttempt.attempt.attemptId,
+      nowMs: 31,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [secondRunAttempt.run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [secondRunAttempt.attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: second.assistantTurn!.turnId,
+      producingRunId: secondRunAttempt.run.runId,
+      producingAttemptId: secondRunAttempt.attempt.attemptId,
+      disposition: "accept",
+      content: "I will turn that into a goal.",
+      nowMs: 32,
+    });
+
+    const third = recordQuestionInteractionReply(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      questionId: "cold-start:7:step:3",
+      optionId: "cold-start:7:tasks:draft",
+      controlGeneration: 7,
+      nowMs: 40,
+    });
+    const thirdRunAttempt = insertActiveRunAttempt(fixture, "cold-start-sequence-step-3");
+    updateJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: third.assistantTurn!.turnId,
+      producingRunId: thirdRunAttempt.run.runId,
+      producingAttemptId: thirdRunAttempt.attempt.attemptId,
+      nowMs: 41,
+    });
+    fixture.store.execute("UPDATE runs SET status = 'succeeded' WHERE run_id = ?", [thirdRunAttempt.run.runId]);
+    fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [thirdRunAttempt.attempt.attemptId]);
+    terminalizeJournalTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      turnId: third.assistantTurn!.turnId,
+      producingRunId: thirdRunAttempt.run.runId,
+      producingAttemptId: thirdRunAttempt.attempt.attemptId,
+      disposition: "accept",
+      content: "I will draft those first tasks.",
+      nowMs: 42,
+    });
+    expect(listChatFirstMaterializationReceipts(fixture.store, {
+      ownerId: fixture.ownerId, controlGeneration: 7,
+    }).coldStartSequenceTerminalReceipts).toEqual([
+      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "completed" }),
+    ]);
+
+    const unrelated = newSurface("main_chat", "chat", "cold-start-unrelated");
+    materializeChatFirstIntent(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      conversationId: unrelated.conversationId,
+      controlGeneration: 7,
+      intentId: "cold-start-unrelated-intent",
+      continuityKey: "cold-start:7",
+      source: "cold_start_sparse",
+      blocks: [{
+        type: "questionCard",
+        question_id: "cold-start:7:step:1",
+        text: "What matters now?",
+        subject: { kind: "cold_start", id: "cold-start:7" },
+        cold_start_sequence: { sequence_id: "cold-start:7", step: 1 },
+        options: [{ option_id: "progress", label: "Make progress", prepared_answer: "I want to make progress." }],
+      }],
+      nowMs: 10,
+    });
+    recordJournalTurn(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      conversationId: unrelated.conversationId,
+      role: "user",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "Actually, help me with something else.",
+      contentBlocks: [{ type: "text", id: "unrelated:text", text: "Actually, help me with something else." }],
+      createdAtMs: 20,
+    });
+    const retired = listJournalTurns(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      conversationId: unrelated.conversationId,
+    }).turns[0]!.contentBlocks[0] as Extract<ConversationContentBlock, { type: "questionCard" }>;
+    expect(retired.coldStartSequence?.retired).toBe(true);
+    expect(listChatFirstMaterializationReceipts(unrelated.store, {
+      ownerId: unrelated.ownerId, controlGeneration: 7,
+    }).coldStartSequenceTerminalReceipts).toEqual([
+      expect.objectContaining({ sequenceId: "cold-start:7", terminalState: "abandoned" }),
+    ]);
+    expect(recordQuestionInteractionReply(unrelated.store, {
+      ownerId: unrelated.ownerId,
+      sessionId: unrelated.sessionId,
+      questionId: "cold-start:7:step:1",
+      optionId: "progress",
+      controlGeneration: 7,
+    })).toMatchObject({ accepted: false });
+    fixture.store.close();
+    unrelated.store.close();
   });
 
   it("rejects stale or conflicting question selections without mutating the journal", () => {

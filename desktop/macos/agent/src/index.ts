@@ -1577,6 +1577,11 @@ async function main(): Promise<void> {
       // must leave chat-first background work entirely dormant.
       if (kernel.hasChatFirstMainCapability(activeOwnerId)) {
         for (const delivery of drainChatFirstDeferralOutbox(store, { ownerId: activeOwnerId, limit: 20 })) {
+          const deferredQuestionSubject = delivery.question.subject;
+          if (deferredQuestionSubject.kind === "cold_start") {
+            throw new Error("Cold-start sequence questions cannot enter the deferral outbox");
+          }
+          const deferralSubject = deferredQuestionSubject as { kind: "task" | "goal" | "capture"; id: string };
           send({
             type: "chat_first_deferral_delivery",
             requestId: `chat-first-deferral:${delivery.continuityKey}:${delivery.deliveryGeneration}`,
@@ -1588,7 +1593,7 @@ async function main(): Promise<void> {
             question: {
               questionId: delivery.question.questionId,
               text: delivery.question.text,
-              subject: delivery.question.subject,
+              subject: deferralSubject,
               options: delivery.question.options,
             },
             attemptCount: delivery.attemptCount,
@@ -2705,7 +2710,7 @@ async function main(): Promise<void> {
             externalRefId: request.externalRefId, turns: [], clearedCount: 0,
             highWaterTurnSeq: range.highWaterTurnSeq, generationBaseTurnSeq: range.generationBaseTurnSeq,
             conversationGeneration: range.generation,
-            materializationReceipts: listChatFirstMaterializationReceipts(store, {
+            ...listChatFirstMaterializationReceipts(store, {
               ownerId, controlGeneration: request.controlGeneration, limit: request.limit,
             }),
           });
@@ -2728,6 +2733,8 @@ async function main(): Promise<void> {
             || typeof request.sessionId !== "string" || !request.sessionId.trim()
             || !Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0
             || !Array.isArray(request.receipts) || request.receipts.length > 16
+            || !Array.isArray(request.coldStartSequenceTerminalReceipts)
+            || request.coldStartSequenceTerminalReceipts.length > 16
           ) throw new Error("Chat-first receipt acknowledgement request is invalid");
           kernel.assertChatFirstMainCapability(request.sessionId, ownerId, request.controlGeneration);
           const resolved = resolveJournalSurface({
@@ -2739,8 +2746,21 @@ async function main(): Promise<void> {
             intentId: typeof receipt?.intentId === "string" ? receipt.intentId : "",
             receiptId: typeof receipt?.receiptId === "string" ? receipt.receiptId : "",
           }));
+          const coldStartSequenceTerminalReceipts = request.coldStartSequenceTerminalReceipts.map((receipt) => {
+            if (receipt?.terminalState !== "completed" && receipt?.terminalState !== "abandoned") {
+              throw new Error("Cold-start terminal receipt is invalid");
+            }
+            return {
+              sequenceId: typeof receipt.sequenceId === "string" ? receipt.sequenceId : "",
+              receiptId: typeof receipt.receiptId === "string" ? receipt.receiptId : "",
+              terminalState: receipt.terminalState,
+            };
+          });
           const acknowledgedReceiptCount = acknowledgeChatFirstMaterializationReceipts(store, {
-            ownerId, controlGeneration: request.controlGeneration, receipts,
+            ownerId,
+            controlGeneration: request.controlGeneration,
+            receipts,
+            coldStartSequenceTerminalReceipts,
           });
           const range = listJournalTurns(store, {
             ownerId, conversationId: resolved.conversationId, afterTurnSeq: 0, limit: 1,

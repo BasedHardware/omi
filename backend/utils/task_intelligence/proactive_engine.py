@@ -6,13 +6,61 @@ from datetime import datetime, timezone
 from typing import Callable, Literal, Protocol
 
 import database.chat_first_intents as intent_db
-from models.chat_first import CaptureLinkSpec, ChatFirstBlockSpec, ChatFirstSubject, ProactiveIntent
+from models.chat_first import (
+    CaptureLinkSpec,
+    ChatFirstBlockSpec,
+    ChatFirstSubject,
+    ColdStartSequence,
+    ProactiveIntent,
+    QuestionCardSpec,
+    QuestionOption,
+)
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
 from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility, resolve_chat_first_eligibility
 
 logger = logging.getLogger(__name__)
 
 WakeTriggerKind = Literal['task_changed', 'goal_changed', 'capture_finalized', 'deferral_due']
+ColdStartProfile = Literal['rich', 'sparse']
+
+
+def classify_cold_start_profile(*, canonical_goal_count: int, open_task_count: int) -> ColdStartProfile:
+    """Return ``rich`` only when canonical goals and open tasks both exist.
+
+    This intentionally is the entire first-run decision table: it has no
+    model call, ranking heuristic, or dependency on legacy onboarding state.
+    """
+
+    return 'rich' if canonical_goal_count >= 1 and open_task_count >= 1 else 'sparse'
+
+
+def cold_start_sparse_question(*, sequence_id: str) -> QuestionCardSpec:
+    """Return sparse cold-start script step one as a typed server intent."""
+
+    return QuestionCardSpec(
+        type='questionCard',
+        question_id=f'{sequence_id}:step:1',
+        text="What's the main outcome you're working toward right now? You can choose one or tell me in your own words.",
+        subject=ChatFirstSubject(kind='cold_start', id=sequence_id),
+        cold_start_sequence=ColdStartSequence(sequence_id=sequence_id, step=1),
+        options=[
+            QuestionOption(
+                option_id=f'{sequence_id}:outcome:progress',
+                label='Make progress',
+                prepared_answer='I want to make progress on something important.',
+            ),
+            QuestionOption(
+                option_id=f'{sequence_id}:outcome:organize',
+                label='Get organized',
+                prepared_answer='I want to get organized and make a clear plan.',
+            ),
+            QuestionOption(
+                option_id=f'{sequence_id}:outcome:decide',
+                label='Decide what matters',
+                prepared_answer='I want help deciding what to focus on next.',
+            ),
+        ],
+    )
 
 
 @dataclass(frozen=True)
@@ -57,7 +105,16 @@ class EmptyProactiveJudge:
 
 @dataclass(frozen=True)
 class ProactiveWakeResult:
-    outcome: Literal['disabled', 'stale', 'budget_exhausted', 'already_pending', 'declined', 'created', 'no_candidate']
+    outcome: Literal[
+        'disabled',
+        'stale',
+        'budget_exhausted',
+        'already_pending',
+        'declined',
+        'created',
+        'no_candidate',
+        'suppressed_by_cold_start',
+    ]
     intent: ProactiveIntent | None = None
 
 
@@ -100,6 +157,12 @@ def wake_after_commit(
 
     if trigger.kind not in {'task_changed', 'goal_changed'}:
         return ProactiveWakeResult(outcome='no_candidate')
+
+    # Sparse cold start is an ordered local-journal interaction. Its terminal
+    # receipt lives on the original intent, so agent judgment is quiet only
+    # while that sequence is active—not for the entire account generation.
+    if intent_db.has_active_sparse_cold_start_sequence(uid, account_generation=generation):
+        return ProactiveWakeResult(outcome='suppressed_by_cold_start')
 
     try:
         admission = intent_db.admit_agent_judgment(
@@ -254,6 +317,56 @@ def persist_daily_opener_intent(
     return intent
 
 
+def persist_cold_start_intent(
+    uid: str,
+    *,
+    profile: ColdStartProfile,
+    rich_blocks: list[ChatFirstBlockSpec],
+    rich_subject: ChatFirstSubject | None,
+    expected_generation: int | None = None,
+    now: datetime | None = None,
+    eligibility_resolver: Callable[[str], ChatFirstEligibility] = resolve_chat_first_eligibility,
+) -> ProactiveIntent | None:
+    """Create the one deterministic, generation-bound first-run intent.
+
+    The intent store picks the first winning rich/sparse payload under its
+    transaction and returns it verbatim thereafter. This function never
+    writes a visible Chat row; only the desktop kernel can do that.
+    """
+
+    resolved_now = now or datetime.now(timezone.utc)
+    eligibility = eligibility_resolver(uid)
+    if not eligibility.enabled or (
+        expected_generation is not None and eligibility.account_generation != expected_generation
+    ):
+        return None
+    assert eligibility.account_generation is not None
+    generation = eligibility.account_generation
+    sequence_id = f'cold-start:{generation}'
+    if profile == 'rich':
+        if not rich_blocks or rich_subject is None:
+            return None
+        source: Literal['cold_start_rich', 'cold_start_sparse'] = 'cold_start_rich'
+        blocks = rich_blocks
+        subject = rich_subject
+    else:
+        source = 'cold_start_sparse'
+        blocks = [cold_start_sparse_question(sequence_id=sequence_id)]
+        subject = ChatFirstSubject(kind='cold_start', id=sequence_id)
+    intent, created = intent_db.get_or_create_cold_start_intent(
+        uid,
+        source=source,
+        continuity_key=sequence_id,
+        subject=subject,
+        blocks=blocks,
+        account_generation=generation,
+        now=resolved_now,
+    )
+    if created:
+        _meter('intent_created', source)
+    return intent
+
+
 def _deterministic_shortlist(trigger: ProactiveWakeTrigger) -> list[ProactiveCandidate]:
     return [
         ProactiveCandidate(
@@ -272,12 +385,16 @@ def _meter(event: str, source: str) -> None:
 
 __all__ = [
     'EmptyProactiveJudge',
+    'ColdStartProfile',
     'ProactiveCandidate',
     'ProactiveJudge',
     'ProactiveSelection',
     'ProactiveWakeResult',
     'ProactiveWakeTrigger',
     'persist_capture_arrival_intent',
+    'classify_cold_start_profile',
+    'cold_start_sparse_question',
+    'persist_cold_start_intent',
     'persist_daily_opener_intent',
     'run_post_commit_wake',
     'wake_after_commit',

@@ -6,7 +6,13 @@ from datetime import datetime, timedelta, timezone
 import pytest
 
 import database.chat_first_intents as intents_db
-from models.chat_first import CaptureLinkSpec, ChatFirstSubject, QuestionCardSpec, QuestionOption
+from models.chat_first import (
+    CaptureLinkSpec,
+    ChatFirstSubject,
+    ColdStartSequence,
+    QuestionCardSpec,
+    QuestionOption,
+)
 from models.chat_first import ProactiveBudgetState
 from models.proactive_budget import budget_allows
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
@@ -321,6 +327,109 @@ def test_capture_arrival_retry_creates_one_deterministic_receipt_intent(firestor
     assert created_on_retry is False
     assert retry.intent_id == first.intent_id
     assert retry.source == 'capture_arrival'
+
+
+def test_cold_start_generation_retries_one_pending_intent_until_its_kernel_receipt(firestore):
+    sequence_id = f'cold-start:{GENERATION}'
+    question = QuestionCardSpec(
+        type='questionCard',
+        question_id=f'{sequence_id}:step:1',
+        text='What matters now?',
+        subject=ChatFirstSubject(kind='cold_start', id=sequence_id),
+        cold_start_sequence=ColdStartSequence(sequence_id=sequence_id, step=1),
+        options=[QuestionOption(option_id='progress', label='Make progress', prepared_answer='Make progress.')],
+    )
+    first, created = intents_db.get_or_create_cold_start_intent(
+        UID,
+        source='cold_start_sparse',
+        continuity_key=sequence_id,
+        subject=question.subject,
+        blocks=[question],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+    retried, retry_created = intents_db.get_or_create_cold_start_intent(
+        UID,
+        source='cold_start_rich',
+        continuity_key=sequence_id,
+        subject=ChatFirstSubject(kind='goal', id='goal-1'),
+        blocks=[CaptureLinkSpec(type='captureLink', conversation_id='capture-1', summary='Ignored retry shape')],
+        account_generation=GENERATION,
+        now=NOW + timedelta(minutes=1),
+        firestore_client=firestore,
+    )
+
+    assert created is True
+    assert retry_created is False
+    assert retried == first
+    assert first.delivery_state == 'pending_kernel_receipt'
+    assert (
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
+        is True
+    )
+    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == [first]
+    delivered = intents_db.acknowledge_materialization(
+        UID,
+        intent_id=first.intent_id,
+        receipt_id='kernel-receipt-1',
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    assert delivered.delivery_state == 'delivered'
+    assert (
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
+        is True
+    )
+    terminalized = intents_db.acknowledge_sparse_cold_start_sequence_terminal(
+        UID,
+        sequence_id=sequence_id,
+        receipt_id='sequence-terminal-receipt-1',
+        terminal_state='abandoned',
+        account_generation=GENERATION,
+        now=NOW + timedelta(seconds=1),
+        firestore_client=firestore,
+    )
+    assert terminalized.cold_start_sequence_terminal_state == 'abandoned'
+    assert terminalized.cold_start_sequence_terminal_receipt_id == 'sequence-terminal-receipt-1'
+    assert (
+        intents_db.has_active_sparse_cold_start_sequence(UID, account_generation=GENERATION, firestore_client=firestore)
+        is False
+    )
+    assert (
+        intents_db.acknowledge_sparse_cold_start_sequence_terminal(
+            UID,
+            sequence_id=sequence_id,
+            receipt_id='sequence-terminal-receipt-1',
+            terminal_state='abandoned',
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=2),
+            firestore_client=firestore,
+        )
+        == terminalized
+    )
+    with pytest.raises(intents_db.ChatFirstIntentConflictError):
+        intents_db.acknowledge_sparse_cold_start_sequence_terminal(
+            UID,
+            sequence_id=sequence_id,
+            receipt_id='another-terminal-receipt',
+            terminal_state='completed',
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=3),
+            firestore_client=firestore,
+        )
+    with pytest.raises(intents_db.ChatFirstIntentConflictError):
+        intents_db.acknowledge_materialization(
+            UID,
+            intent_id=first.intent_id,
+            receipt_id='different-kernel-receipt',
+            account_generation=GENERATION,
+            now=NOW + timedelta(seconds=1),
+            firestore_client=firestore,
+        )
+    assert intents_db.fetch_ready_intents(UID, account_generation=GENERATION, firestore_client=firestore) == []
 
 
 def test_deferral_releases_once_verbatim_when_due_or_subject_changes(firestore):

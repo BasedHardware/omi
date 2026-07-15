@@ -8,6 +8,7 @@ struct ChatFirstShell: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
   @ObservedObject var appState: AppState
   let viewModelContainer: ViewModelContainer
+  let capability: ChatFirstCapabilityProjection
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingID: String?
   @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
@@ -33,6 +34,7 @@ struct ChatFirstShell: View {
     .environmentObject(navigation)
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
+      viewModelContainer.canonicalGoalsStore.activate(capability: capability)
     }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }
@@ -64,6 +66,7 @@ struct ChatFirstShell: View {
           navigation: navigation,
           tasksStore: viewModelContainer.tasksStore,
           chatProvider: viewModelContainer.chatProvider,
+          canonicalGoalsStore: viewModelContainer.canonicalGoalsStore,
           promptMaterializationCoordinator: promptMaterializationCoordinator
         )
       )
@@ -82,9 +85,11 @@ struct ChatFirstShell: View {
       )
       .accessibilityIdentifier("chat-first-route-tasks")
     case .goals:
-      ChatFirstDeferredDestination(
-        title: "Goals",
-        message: "Your canonical goals will appear here."
+      ChatFirstGoalsPage(
+        navigation: navigation,
+        goalsStore: viewModelContainer.canonicalGoalsStore,
+        tasksStore: viewModelContainer.tasksStore,
+        chatProvider: viewModelContainer.chatProvider
       )
       .accessibilityIdentifier("chat-first-route-goals")
     case .memories:

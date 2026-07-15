@@ -59,6 +59,28 @@ final class ChatFirstTasksPageTests: XCTestCase {
         visibleTaskID: "task-a"))
   }
 
+  func testGoalFocusAcknowledgesOnlyTheVisibleRelatedGoalGroup() {
+    let requested = ChatFirstPendingFocus.goal(id: "goal-a")
+
+    XCTAssertEqual(
+      ChatFirstTaskPagePolicy.goalFocusToAcknowledge(
+        pendingFocus: requested,
+        visibleGoalID: "goal-a"
+      ),
+      requested
+    )
+    XCTAssertNil(
+      ChatFirstTaskPagePolicy.goalFocusToAcknowledge(
+        pendingFocus: requested,
+        visibleGoalID: "goal-b"
+      )
+    )
+    XCTAssertEqual(
+      ChatFirstTaskPagePolicy.goalFocusAnchor("goal-a"),
+      "chat-first-tasks-goal-focus:goal-a"
+    )
+  }
+
   private func task(
     id: String,
     dueAt: Date? = nil,

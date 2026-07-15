@@ -130,6 +130,7 @@ enum ChatFirstPendingFocus: Equatable, Sendable {
 /// prompts from display strings or pass raw URLs into Chat.
 enum ChatFirstDiscussionContext: Equatable, Sendable {
   case tasks
+  case goals
   case goal(id: String)
   case capture(id: String, momentTimestamp: TimeInterval?)
 
@@ -137,6 +138,8 @@ enum ChatFirstDiscussionContext: Equatable, Sendable {
     switch self {
     case .tasks:
       return "Help me review my current tasks."
+    case .goals:
+      return "Help me create a goal."
     case .goal(let id):
       return "Help me continue working on goal \(id)."
     case .capture(let id, let momentTimestamp):
@@ -163,6 +166,10 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   @Published private(set) var route: ChatFirstRoute
   @Published private(set) var pendingFocus: ChatFirstPendingFocus?
+  /// A related-entity link can intentionally land in a different primary
+  /// destination (for example, a Goal's task list). This is transient like the
+  /// focus itself and is never restored across launches.
+  @Published private(set) var pendingFocusDestination: ChatFirstRoute?
   @Published private(set) var lastAcknowledgedFocusKind: String?
   @Published private(set) var isSidebarCollapsed: Bool
 
@@ -180,6 +187,7 @@ final class ChatFirstShellNavigation: ObservableObject {
       isSidebarCollapsed = false
     }
     pendingFocus = nil
+    pendingFocusDestination = nil
     lastAcknowledgedFocusKind = nil
   }
 
@@ -187,20 +195,31 @@ final class ChatFirstShellNavigation: ObservableObject {
     guard destination.isPrimaryDestination else { return }
     route = destination
     pendingFocus = nil
+    pendingFocusDestination = nil
     persistNavigation()
   }
 
   func selectMore(_ page: ChatFirstMorePage) {
     route = .more(page)
     pendingFocus = nil
+    pendingFocusDestination = nil
     persistNavigation()
   }
 
   /// Used by a typed rich-Chat link. Unlike direct navigation it carries the
   /// focus until the destination calls `acknowledgeFocus` after visible load.
   func open(focus: ChatFirstPendingFocus) {
-    route = focus.route
+    open(focus: focus, destination: focus.route)
+  }
+
+  /// Preserves the typed focus contract while allowing a relationship link to
+  /// choose its destination. Destinations must remain in the cohort primary
+  /// navigation; no legacy page can receive a pending focus.
+  func open(focus: ChatFirstPendingFocus, destination: ChatFirstRoute) {
+    guard destination.isPrimaryDestination else { return }
+    route = destination
     pendingFocus = focus
+    pendingFocusDestination = destination
     persistNavigation()
   }
 
@@ -216,8 +235,9 @@ final class ChatFirstShellNavigation: ObservableObject {
 
   @discardableResult
   func acknowledgeFocus(_ focus: ChatFirstPendingFocus) -> Bool {
-    guard route == focus.route, pendingFocus == focus else { return false }
+    guard route == pendingFocusDestination, pendingFocus == focus else { return false }
     pendingFocus = nil
+    pendingFocusDestination = nil
     lastAcknowledgedFocusKind = focus.stableName
     return true
   }

@@ -1416,7 +1416,7 @@ actor AgentBridge {
     sessionID: String,
     controlGeneration: Int,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
-  ) async throws -> [ChatFirstMaterializationReceipt] {
+  ) async throws -> ChatFirstPromptReceiptBatch {
     let authorization = try resolveAuthorization(
       authorizationSnapshot,
       expectedOwnerID: ownerID)
@@ -1437,7 +1437,7 @@ actor AgentBridge {
     ownerID: String,
     sessionID: String,
     controlGeneration: Int,
-    receipts: [ChatFirstMaterializationReceipt],
+    receipts: ChatFirstPromptReceiptBatch,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> Int {
     let authorization = try resolveAuthorization(

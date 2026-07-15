@@ -97,6 +97,18 @@ enum ChatFirstTaskPagePolicy {
     return pendingFocus
   }
 
+  static func goalFocusToAcknowledge(
+    pendingFocus: ChatFirstPendingFocus?,
+    visibleGoalID: String
+  ) -> ChatFirstPendingFocus? {
+    guard case .goal(let pendingID) = pendingFocus, pendingID == visibleGoalID else { return nil }
+    return pendingFocus
+  }
+
+  static func goalFocusAnchor(_ goalID: String) -> String {
+    "chat-first-tasks-goal-focus:\(goalID)"
+  }
+
   private static func normalizedID(_ id: String?) -> String? {
     guard let id else { return nil }
     let normalized = id.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -148,6 +160,11 @@ struct ChatFirstTasksPage: View {
 
   private var pendingTaskID: String? {
     guard case .task(let id) = navigation.pendingFocus else { return nil }
+    return id
+  }
+
+  private var pendingGoalID: String? {
+    guard case .goal(let id) = navigation.pendingFocus else { return nil }
     return id
   }
 
@@ -233,9 +250,9 @@ struct ChatFirstTasksPage: View {
         .padding(.horizontal, OmiSpacing.xxl)
         .padding(.bottom, OmiSpacing.xxl)
       }
-      .onAppear { scrollPendingTaskIntoView(proxy) }
-      .onChange(of: pendingTaskID) { _ in scrollPendingTaskIntoView(proxy) }
-      .onChange(of: visibleTasks.map(\.id)) { _ in scrollPendingTaskIntoView(proxy) }
+      .onAppear { scrollPendingFocusIntoView(proxy) }
+      .onChange(of: navigation.pendingFocus) { _, _ in scrollPendingFocusIntoView(proxy) }
+      .onChange(of: visibleTasks.map(\.id)) { _ in scrollPendingFocusIntoView(proxy) }
     }
   }
 
@@ -270,6 +287,11 @@ struct ChatFirstTasksPage: View {
             )
             .id(task.id)
           }
+        }
+        .id(goalGroup.goalID.map(ChatFirstTaskPagePolicy.goalFocusAnchor) ?? goalGroup.id)
+        .onAppear {
+          guard let goalID = goalGroup.goalID else { return }
+          acknowledgeVisibleGoalIfNeeded(goalID)
         }
       }
 
@@ -331,12 +353,21 @@ struct ChatFirstTasksPage: View {
     }
   }
 
-  private func scrollPendingTaskIntoView(_ proxy: ScrollViewProxy) {
-    guard let taskID = pendingTaskID,
+  private func scrollPendingFocusIntoView(_ proxy: ScrollViewProxy) {
+    if let taskID = pendingTaskID,
       visibleTasks.contains(where: { $0.id == taskID })
+    {
+      withAnimation(OmiMotion.gated(.easeOut(duration: 0.18))) {
+        proxy.scrollTo(taskID, anchor: .center)
+      }
+      return
+    }
+
+    guard let goalID = pendingGoalID,
+      visibleTasks.contains(where: { $0.goalId == goalID })
     else { return }
     withAnimation(OmiMotion.gated(.easeOut(duration: 0.18))) {
-      proxy.scrollTo(taskID, anchor: .center)
+      proxy.scrollTo(ChatFirstTaskPagePolicy.goalFocusAnchor(goalID), anchor: .center)
     }
   }
 
@@ -353,6 +384,14 @@ struct ChatFirstTasksPage: View {
       guard !Task.isCancelled, highlightedTaskID == taskID else { return }
       highlightedTaskID = nil
     }
+  }
+
+  private func acknowledgeVisibleGoalIfNeeded(_ goalID: String) {
+    guard let focus = ChatFirstTaskPagePolicy.goalFocusToAcknowledge(
+      pendingFocus: navigation.pendingFocus,
+      visibleGoalID: goalID
+    ) else { return }
+    _ = navigation.acknowledgeFocus(focus)
   }
 }
 

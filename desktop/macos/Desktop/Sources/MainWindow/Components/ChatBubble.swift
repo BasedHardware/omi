@@ -329,7 +329,8 @@ struct ChatBubble: View {
         GoalLinkView(
           goalID: goalID,
           summary: summary,
-          navigation: chatFirstRichBlockContext.navigation
+          navigation: chatFirstRichBlockContext.navigation,
+          goalsStore: chatFirstRichBlockContext.canonicalGoalsStore
         )
       )
     case .captureLink(_, let conversationID, let momentTimestampMs, let summary):
