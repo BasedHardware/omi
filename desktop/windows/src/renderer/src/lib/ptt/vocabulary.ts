@@ -9,11 +9,11 @@
 //
 // Three sources, all optional and non-throwing (a dead source contributes
 // nothing; it never breaks a turn):
-//   1. user-configured vocabulary — no Windows machinery yet (the custom-
-//      vocabulary control in TranscriptionTab is deliberately unbuilt; vocabulary
-//      lives only in the backend transcription-preferences PATCH), so this is
-//      currently empty. Kept as an explicit slot so it lights up for free when a
-//      local pref lands.
+//   1. the user's account-level custom vocabulary, synced to the backend from
+//      Mac/mobile and cached by userVocabulary.ts. Added FIRST so custom terms
+//      take priority in the collector (macOS: AssistantSettings.effectiveVocabulary).
+//      Read synchronously off the cache — a cold/never-synced cache just
+//      contributes nothing, degrading to sources 2+3.
 //   2. the active screen's OCR text (window.omi.screenReadText).
 //   3. recent-activity OCR from the last 120s of rewind frames.
 //
@@ -21,6 +21,7 @@
 // (pttKeywordsParam) prepends the brand terms, hard-caps at PTT_VOCAB_MAX_WIRE
 // (40), and comma-joins for the query param.
 import type { RewindFrame } from '../../../../shared/types'
+import { getUserVocabulary } from './userVocabulary'
 import {
   PTT_VOCAB_CONSUME_TIMEOUT_MS,
   PTT_VOCAB_FRAME_OCR_CHARS,
@@ -85,8 +86,12 @@ export async function collectPttKeywords(now: number = Date.now()): Promise<stri
   try {
     const collector = new KeywordCollector(PTT_VOCAB_MAX_COLLECTED)
 
-    // Source 1: user-configured vocabulary — no Windows preference exists yet
-    // (see TranscriptionTab), so nothing to add today.
+    // Source 1: the user's account-level custom vocabulary (highest priority, so
+    // it fills the collector first — same order as macOS). Read synchronously off
+    // the cache so the PTT hot path never awaits the network; a cold cache is [].
+    for (const term of getUserVocabulary()) {
+      collector.add(term)
+    }
 
     // Sources 2 + 3 run in parallel (macOS `async let` shape).
     const [immediate, frames] = await Promise.all([
