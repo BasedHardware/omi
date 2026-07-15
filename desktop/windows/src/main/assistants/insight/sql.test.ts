@@ -31,6 +31,25 @@ describe('isReadOnlySql', () => {
     expect(isReadOnlySql('SELECT 1 -- delete everything')).toBe(true)
     expect(isReadOnlySql('SELECT 1 /* drop */ FROM rewind_frames')).toBe(true)
   })
+  it('ignores keywords that only appear inside a string literal', () => {
+    // OCR text / window titles routinely contain these words — they must not trip
+    // the blocklist when they live in a literal rather than as SQL structure.
+    expect(isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%delete%'")).toBe(true)
+    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE window_title LIKE '%Create%'")).toBe(true)
+    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE ocr_text LIKE '%update%'")).toBe(true)
+    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE ocr_text LIKE '%insert file%'")).toBe(true)
+  })
+  it('handles an escaped quote inside a literal and still allows it', () => {
+    expect(isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%it''s delete%'")).toBe(true)
+  })
+  it('ignores a keyword used as a double-quoted identifier', () => {
+    expect(isReadOnlySql('SELECT "create" FROM rewind_frames')).toBe(true)
+  })
+  it('still rejects a real write even when a literal is also present', () => {
+    // The write is SQL structure, not a literal — must remain rejected.
+    expect(isReadOnlySql("DELETE FROM rewind_frames WHERE app LIKE '%safe%'")).toBe(false)
+    expect(isReadOnlySql("SELECT 1; DELETE FROM rewind_frames WHERE app = 'x'")).toBe(false)
+  })
 })
 
 describe('appendLimit', () => {
@@ -96,6 +115,60 @@ describe('executeSql', () => {
       throw new Error('no such column: bogus')
     })
     expect(executeSql('SELECT bogus FROM rewind_frames', runQuery)).toMatch(/^Error:/)
+  })
+})
+
+describe('executeSql table allowlist', () => {
+  it('allows a plain read of rewind_frames', () => {
+    const runQuery = vi.fn(() => ({ columns: ['app'], rows: [['Terminal']] }))
+    executeSql('SELECT app FROM rewind_frames', runQuery)
+    expect(runQuery).toHaveBeenCalledWith('SELECT app FROM rewind_frames LIMIT 200')
+  })
+  it('allows the FTS mirror table and a rewind_frames↔fts join', () => {
+    const runQuery = vi.fn(() => ({ columns: ['id'], rows: [[1]] }))
+    executeSql("SELECT rowid FROM rewind_frames_fts WHERE rewind_frames_fts MATCH 'foo'", runQuery)
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    executeSql('SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id', runQuery)
+    expect(runQuery).toHaveBeenCalledTimes(2)
+  })
+  it('allows a CTE / derived table that only reads rewind_frames', () => {
+    const runQuery = vi.fn(() => ({ columns: ['app'], rows: [] }))
+    executeSql('WITH recent AS (SELECT app FROM rewind_frames) SELECT app FROM recent', runQuery)
+    expect(runQuery).toHaveBeenCalledTimes(1)
+    executeSql('SELECT app FROM (SELECT app FROM rewind_frames) t', runQuery)
+    expect(runQuery).toHaveBeenCalledTimes(2)
+  })
+  it('rejects a read of a non-allowlisted table before running it', () => {
+    const runQuery = vi.fn()
+    for (const q of [
+      'SELECT * FROM local_conversation',
+      'SELECT display_name FROM ai_user_profiles',
+      'SELECT * FROM local_kg_nodes'
+    ]) {
+      expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)
+    }
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('rejects a JOIN onto a non-allowlisted table', () => {
+    const runQuery = vi.fn()
+    const out = executeSql(
+      'SELECT f.app FROM rewind_frames f JOIN local_conversation c ON c.id = f.id',
+      runQuery
+    )
+    expect(out).toMatch(/only the rewind_frames table is queryable/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('cannot be bypassed by comma-joins, quoting, or a subquery', () => {
+    const runQuery = vi.fn()
+    for (const q of [
+      'SELECT * FROM rewind_frames, local_conversation', // implicit comma-join
+      'SELECT * FROM "local_conversation"', // double-quoted identifier
+      'SELECT * FROM [local_conversation]', // bracket-quoted identifier
+      'SELECT * FROM (SELECT * FROM ai_user_profiles)' // hidden inside a subquery
+    ]) {
+      expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)
+    }
+    expect(runQuery).not.toHaveBeenCalled()
   })
 })
 
