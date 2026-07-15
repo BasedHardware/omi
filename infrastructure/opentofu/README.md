@@ -34,7 +34,8 @@ The `.backend.hcl.example` files are placeholders, not executable configuration.
 module. It defines one development-only bootstrap: a dedicated GitHub WIF pool,
 one plan service account, its WIF impersonation binding, and project-level
 `roles/browser`. Its immutable variables reject any project other than
-`based-hardware-dev`; its provider accepts only `BasedHardware/omi` `main`.
+`based-hardware-dev`; its provider accepts only Omi's immutable GitHub
+repository/owner IDs, dedicated workflow, `development` environment, and `main`.
 
 An approved development operator applies that bootstrap only after creating a
 separate versioned state bucket. Then `OpenTofu Development WIF Pilot` can
@@ -48,4 +49,5 @@ The credentials-free validation workflow supplies exactly one checked-in,
 invalid `offline-validation-only` token literal to satisfy Google-provider
 initialization for the bootstrap's backend-free, no-refresh plan. It cannot
 authenticate to GCP, and the guard rejects any real credential source or a
-different token value.
+different token value. CI saves the plan and accepts exactly the five approved
+create actions, not merely any successful non-empty plan.

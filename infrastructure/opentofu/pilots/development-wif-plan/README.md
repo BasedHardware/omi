@@ -3,11 +3,13 @@
 This module creates exactly one development-only GitHub Workload Identity Federation path for issue #9842:
 
 - pool: `omi-opentofu-9842-dev`;
-- provider: GitHub OIDC, restricted to `BasedHardware/omi` on `main`;
+- provider: GitHub OIDC, restricted to immutable repository ID `776121034`,
+  owner ID `162546372`, the dedicated workflow, `development` environment, and
+  `main`;
 - service account: `omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com`; and
-- grant: project-level `roles/browser` only, which is sufficient for the
-  probe's `resourcemanager.projects.get` call and does not grant access to
-  resources in the project.
+- grant: project-level `roles/browser` only. It does not grant access to
+  project resources, but it does allow the probe's `resourcemanager.projects.get`
+  call and project IAM-policy metadata reads.
 
 It deliberately grants no Secret Manager role, no Storage write role, no Service
 Account Token Creator role, and no ability to deploy Cloud Run/GKE resources.
@@ -17,7 +19,8 @@ no remote backend, refresh, lock, or apply path.
 The separate validation workflow uses a single checked-in,
 `offline-validation-only` token literal solely to initialize the Google provider
 for the bootstrap's backend-free, no-refresh plan. It is invalid for GCP and
-the guard rejects any different token or credential source.
+the guard rejects any different token or credential source. It saves the plan
+and asserts that it has exactly the five approved creates before CI passes.
 
 ## Operator bootstrap
 

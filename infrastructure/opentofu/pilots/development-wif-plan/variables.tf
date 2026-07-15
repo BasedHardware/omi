@@ -20,14 +20,36 @@ variable "project_number" {
   }
 }
 
-variable "github_repository" {
+variable "github_repository_id" {
   type        = string
-  description = "The only GitHub repository allowed to exchange this identity."
-  default     = "BasedHardware/omi"
+  description = "The immutable GitHub repository ID allowed to exchange this identity."
+  default     = "776121034"
 
   validation {
-    condition     = var.github_repository == "BasedHardware/omi"
-    error_message = "The WIF pilot must remain restricted to BasedHardware/omi."
+    condition     = var.github_repository_id == "776121034"
+    error_message = "The WIF pilot must remain restricted to Omi's immutable GitHub repository ID."
+  }
+}
+
+variable "github_repository_owner_id" {
+  type        = string
+  description = "The immutable GitHub organization ID that owns the allowed repository."
+  default     = "162546372"
+
+  validation {
+    condition     = var.github_repository_owner_id == "162546372"
+    error_message = "The WIF pilot must remain restricted to BasedHardware's immutable GitHub organization ID."
+  }
+}
+
+variable "github_workflow_ref" {
+  type        = string
+  description = "The only GitHub Actions workflow that may exchange the pilot identity."
+  default     = "BasedHardware/omi/.github/workflows/opentofu-development-wif-pilot.yml@refs/heads/main"
+
+  validation {
+    condition     = var.github_workflow_ref == "BasedHardware/omi/.github/workflows/opentofu-development-wif-pilot.yml@refs/heads/main"
+    error_message = "The WIF pilot must remain restricted to its dedicated main-branch workflow."
   }
 }
 

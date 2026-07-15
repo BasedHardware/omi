@@ -34,14 +34,17 @@ resource "google_iam_workload_identity_pool_provider" "github" {
   workload_identity_pool_id          = google_iam_workload_identity_pool.github.workload_identity_pool_id
   workload_identity_pool_provider_id = "github"
   display_name                       = "Omi GitHub Actions development plan provider"
-  description                        = "Restricts the development plan identity to BasedHardware/omi main."
+  description                        = "Restricts the development plan identity to Omi's immutable GitHub identity, workflow, environment, and main."
 
   attribute_mapping = {
-    "google.subject"       = "assertion.sub"
-    "attribute.repository" = "assertion.repository"
+    "google.subject"                = "assertion.sub"
+    "attribute.repository_id"       = "assertion.repository_id"
+    "attribute.repository_owner_id" = "assertion.repository_owner_id"
+    "attribute.workflow_ref"        = "assertion.workflow_ref"
+    "attribute.environment"         = "assertion.environment"
   }
 
-  attribute_condition = "assertion.repository == '${var.github_repository}' && assertion.ref == 'refs/heads/main'"
+  attribute_condition = "assertion.repository_id == '${var.github_repository_id}' && assertion.repository_owner_id == '${var.github_repository_owner_id}' && assertion.ref == 'refs/heads/main' && assertion.workflow_ref == '${var.github_workflow_ref}' && assertion.environment == 'development'"
 
   oidc {
     issuer_uri = "https://token.actions.githubusercontent.com"
@@ -51,7 +54,7 @@ resource "google_iam_workload_identity_pool_provider" "github" {
 resource "google_service_account_iam_member" "github_plan_impersonation" {
   service_account_id = google_service_account.plan.name
   role               = "roles/iam.workloadIdentityUser"
-  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository/${var.github_repository}"
+  member             = "principalSet://iam.googleapis.com/${google_iam_workload_identity_pool.github.name}/attribute.repository_id/${var.github_repository_id}"
 }
 
 resource "google_project_iam_member" "plan_project_browser" {
