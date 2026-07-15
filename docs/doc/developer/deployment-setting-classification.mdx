@@ -31,6 +31,31 @@ An exception is intentionally unusual. Add it only in the policy and include
 the specific allowed source plus an accountable owner, reason, and ISO expiry
 date. Expired or incomplete exceptions fail CI.
 
+## Public build contract
+
+[`config/public-build-contract.json`](https://github.com/BasedHardware/omi/blob/main/config/public-build-contract.json)
+is the canonical wiring inventory for browser-delivered build inputs. It names
+each deployment target, its Dockerfile, workflow, and the required effective
+GitHub variable scope. It must not contain values.
+
+`python3 .github/scripts/check_public_build_contract.py` is a deterministic
+static check, registered in the manifest. It rejects drift between that
+contract, the `public_build` classification, Docker `ARG`s, deploy workflow
+build arguments, and each Dockerfile's empty-value guard.
+
+`python3 .github/scripts/preflight_public_build_config.py --all --environment prod`
+is the complementary live configuration check. It needs a token with
+`actions: read` and reads only GitHub variable metadata; it never prints values.
+It fails a deploy when a required input is missing, empty, or resolves from a
+higher-precedence scope than the contract allows. Every affected deploy runs it
+before cloud authentication, and a scheduled workflow checks production daily.
+
+When adding a public input, update the contract, classification, Dockerfile,
+workflow, and focused checker fixture together. Do not add a target-specific
+source scan or a one-off fallback. This is the short-term guard while
+[#9824](https://github.com/BasedHardware/omi/issues/9824) tracks the canonical
+build interface and candidate-artifact verification.
+
 ## Backend runtime ConfigMap rollout
 
 `backend/scripts/deploy-backend-config.sh` writes only classified `config`

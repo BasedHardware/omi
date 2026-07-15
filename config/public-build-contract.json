@@ -1,0 +1,63 @@
+{
+  "targets": {
+    "admin": {
+      "dockerfile": "web/admin/Dockerfile",
+      "workflow": ".github/workflows/gcp_admin.yml",
+      "inputs": [
+        {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_PROJECT_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_APP_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_VAPID_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_PLUGINS_APP_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_OMI_API_URL", "scope": "repository"}
+      ]
+    },
+    "app": {
+      "dockerfile": "web/app/Dockerfile",
+      "workflow": ".github/workflows/gcp_app.yml",
+      "inputs": [
+        {"name": "NEXT_PUBLIC_API_BASE_URL", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_PROJECT_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_APP_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_VAPID_KEY", "scope": "repository"}
+      ]
+    },
+    "frontend": {
+      "dockerfile": "web/frontend/Dockerfile",
+      "workflow": ".github/workflows/gcp_frontend.yml",
+      "inputs": [
+        {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_PROJECT_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_APP_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID", "scope": "repository"},
+        {"name": "API_URL", "scope": "environment"}
+      ]
+    },
+    "personas": {
+      "dockerfile": "web/personas-open-source/Dockerfile",
+      "workflow": ".github/workflows/gcp_personas.yml",
+      "inputs": [
+        {"name": "NEXT_PUBLIC_FIREBASE_API_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_PROJECT_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_APP_ID", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_FIREBASE_VAPID_KEY", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_MIXPANEL_TOKEN", "scope": "repository"},
+        {"name": "NEXT_PUBLIC_EXTRA_PROMPT_RULES", "scope": "repository"}
+      ]
+    }
+  }
+}

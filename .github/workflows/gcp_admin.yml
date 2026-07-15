@@ -22,6 +22,7 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
     permissions:
+      actions: 'read'
       contents: 'read'
       id-token: 'write'
 
@@ -29,6 +30,14 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+
+      - name: Preflight public build configuration
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          python3 .github/scripts/preflight_public_build_config.py \
+            --target admin \
+            --environment "${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}"
 
       - name: Google Auth
         id: auth
