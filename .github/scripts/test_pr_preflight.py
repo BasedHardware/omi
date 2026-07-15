@@ -14,7 +14,7 @@ import unittest
 from pathlib import Path
 
 from pr_metadata import load_from_api
-from pr_preflight import select_checks
+from pr_preflight import format_failure_class_suggest, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -95,6 +95,7 @@ class SelectionTests(unittest.TestCase):
                 "diff-hygiene",
                 "architecture-guardrails",
                 "product-invariants",
+                "failure-class-protocol",
                 "desktop-changelog-data",
                 "deferred-work-markers",
                 "lifecycle-headers",
@@ -149,7 +150,7 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(coverage.returncode, 1, coverage.stdout)
             self.assertIn("UNCOVERED", coverage.stdout)
 
-    def test_suggest_flag_prints_paste_ready_invariants(self) -> None:
+    def test_suggest_flag_prints_paste_ready_pr_metadata(self) -> None:
         result = subprocess.run(
             [
                 sys.executable,
@@ -168,6 +169,26 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn("## Product invariants affected", result.stdout)
+        self.assertIn("## Failure class (fixes)", result.stdout)
+        self.assertIn("No `fix:` commits were detected", result.stdout)
+
+    def test_failure_class_suggestion_keeps_classification_manual(self) -> None:
+        output = format_failure_class_suggest(
+            {
+                "requires_declaration": True,
+                "pr_body_patch": {"text": "Failure-Class: none\n"},
+                "advisory_candidates": [
+                    {
+                        "id": "FC-malformed-doc-read",
+                        "violated_contract": "Stored documents must be validated at the read boundary.",
+                    }
+                ],
+            }
+        )
+        self.assertIn("Failure-Class: none", output)
+        self.assertIn("does not infer a class from paths or diffs", output)
+        self.assertIn("scripts/failure-class explain FC-<slug> --format json", output)
+        self.assertIn("FC-malformed-doc-read", output)
 
     def test_pr_body_file_env_is_honored(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
