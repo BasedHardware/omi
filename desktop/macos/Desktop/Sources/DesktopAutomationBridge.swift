@@ -124,6 +124,13 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var usesLegacyHomeDesign: Bool
   /// Redesigned Home stage mode: `hub`, `chat`, or `connect`. Nil when legacy home or not on Dashboard.
   var homeMode: String?
+  /// `loading`, `legacy`, or `chat_first`; never a local rollout preference.
+  var shellVariant: String?
+  /// Stable typed route for the cohort shell. Nil for the legacy shell.
+  var chatFirstRoute: String?
+  /// Shape-only focus telemetry for route acknowledgement; entity IDs stay local.
+  var pendingFocusKind: String?
+  var acknowledgedFocusKind: String?
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -431,6 +438,10 @@ final class DesktopAutomationStateStore {
     highlightedSettingId: nil,
     usesLegacyHomeDesign: false,
     homeMode: nil,
+    shellVariant: nil,
+    chatFirstRoute: nil,
+    pendingFocusKind: nil,
+    acknowledgedFocusKind: nil,
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,

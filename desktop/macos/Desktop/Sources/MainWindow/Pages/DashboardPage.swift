@@ -220,6 +220,10 @@ struct DashboardPage: View {
   @ObservedObject var chatProvider: ChatProvider
   @ObservedObject var memoriesViewModel: MemoriesViewModel
   var taskChatCoordinator: TaskChatCoordinator? = nil
+  /// The cohort shell reuses dashboard content under More, but Chat itself
+  /// has one primary home. Legacy callers leave this nil and retain their
+  /// inline Home chat exactly as before.
+  var onOpenPrimaryChat: (() -> Void)? = nil
   @ObservedObject private var deviceProvider = DeviceProvider.shared
   @ObservedObject private var homeSuggestionsStore = HomeSuggestionsStore.shared
   @StateObject private var intelligenceStore = DashboardIntelligenceStore()
@@ -249,6 +253,10 @@ struct DashboardPage: View {
   @AppStorage("useLegacyHomeDesign") private var useLegacyHomeDesign = false
   @State private var homeMode: HomeStageMode = .hub
   @FocusState private var homeAskFieldFocused: Bool
+
+  private var routesChatToPrimaryShell: Bool {
+    onOpenPrimaryChat != nil
+  }
 
   private var selectedApp: OmiApp? {
     guard let appId = chatProvider.selectedAppId else { return nil }
@@ -369,7 +377,7 @@ struct DashboardPage: View {
 
   private var homeSurface: some View {
     Group {
-      if useLegacyHomeDesign {
+      if useLegacyHomeDesign && !routesChatToPrimaryShell {
         legacyHome
       } else {
         redesignedHome
@@ -1161,6 +1169,10 @@ struct DashboardPage: View {
   }
 
   private func openHomeChat(focusInput: Bool = true) {
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      return
+    }
     guard homeMode != .chat else { return }
     OmiMotion.withGated(Self.homeStageAnimation) {
       homeMode = .chat
@@ -1220,6 +1232,17 @@ struct DashboardPage: View {
     // Text is required — ChatProvider.sendMessage no-ops on empty text, so
     // an attachment-only "send" would silently drop the turn.
     guard !text.isEmpty else { return }
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      guard !chatProvider.isSending else { return }
+      AnalyticsManager.shared.chatMessageSent(
+        messageLength: text.count,
+        hasSelectedAppContext: selectedApp != nil,
+        source: "home_ask_bar"
+      )
+      Task { await chatProvider.sendMainDraft(draft) }
+      return
+    }
     openHomeChat(focusInput: false)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: text.count,
@@ -1234,6 +1257,17 @@ struct DashboardPage: View {
   }
 
   private func askHomeSuggestion(_ suggestion: String) {
+    if let onOpenPrimaryChat {
+      onOpenPrimaryChat()
+      guard !chatProvider.isSending else { return }
+      AnalyticsManager.shared.chatMessageSent(
+        messageLength: suggestion.count,
+        hasSelectedAppContext: selectedApp != nil,
+        source: "home_suggested_question"
+      )
+      Task { await chatProvider.sendMessage(suggestion) }
+      return
+    }
     openHomeChat(focusInput: false)
     AnalyticsManager.shared.chatMessageSent(
       messageLength: suggestion.count,

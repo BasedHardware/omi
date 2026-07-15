@@ -1232,6 +1232,10 @@ class ChatProvider: ObservableObject {
   private var journalOwnerByMessageID: [String: String] = [:]
   private var journalTerminalTargets = ChatTerminalTargetRegistry<ChatJournalTerminalTarget>()
   private var agentBridgeStarted = false
+  /// The root shell supplies one server-authoritative sample before this
+  /// provider resolves Main Chat. This is process-local only: a different
+  /// owner, a failed sample, and every non-main surface receive no extension.
+  private var chatFirstMainChatProjectionGate = ChatFirstMainChatProjectionGate()
   private let bridgeReadinessSingleFlight =
     AgentRuntimeStartupSingleFlight<RuntimeOwnerAuthorizationSnapshot, Bool>()
   /// Tracks the harness mode the bridge is actually running (NOT the @AppStorage preference).
@@ -1586,6 +1590,16 @@ class ChatProvider: ObservableObject {
     _ = await ensureBridgeStarted()
   }
 
+  /// Configures the immutable main-Chat capability handoff at root-shell
+  /// construction. A nil sample is explicit capability-off and is never
+  /// persisted or inferred from local state.
+  @discardableResult
+  func configureChatFirstMainChatCapability(
+    _ sample: ChatFirstCapabilityProjection?
+  ) -> Bool {
+    chatFirstMainChatProjectionGate.configure(sample: sample, ownerID: runtimeOwnerId)
+  }
+
   /// Drop a cached agent surface so the next query recreates it with fresh prompt context.
   func invalidateAgentSurface(surface: AgentSurfaceReference) async {
     guard agentBridgeStarted else { return }
@@ -1677,9 +1691,16 @@ class ChatProvider: ObservableObject {
       modelProfile: usesNativeModelChoice ? nil : ModelQoS.Claude.chat,
       workingDirectory: effectiveAgentWorkingDirectory()
     )
-    let warmSurfaces: [AgentSurfaceReference] = [.mainChat(chatId: nil), .floatingChat()]
+    // Onboarding can start the shared runtime before the root shell has
+    // sampled workflow control. Do not resolve Main Chat in that interval:
+    // its first kernel resolution must carry the root's true or explicit
+    // capability-off sample. Floating remains capability-off.
+    var warmSurfaces: [AgentSurfaceReference] = [.floatingChat()]
+    if chatFirstMainChatProjectionGate.isConfigured(for: runtimeOwnerId) {
+      warmSurfaces.insert(.mainChat(chatId: nil), at: 0)
+    }
     for surface in warmSurfaces {
-      let session = try await resolvedAgentClient().resolveSurfaceSession(surface)
+      let session = try await resolveAgentSurfaceSession(surface)
       await resolvedAgentClient().warmupSession(session)
     }
     agentBridgeStarted = true
@@ -1784,7 +1805,7 @@ class ChatProvider: ObservableObject {
       throw BridgeError.agentError("Unknown AI runtime mode: \(requestedHarness)")
     }
     let usesNativeModelChoice = requestedHarness == "hermes" || requestedHarness == "openclaw"
-    return try await resolvedAgentClient().resolveSurfaceSession(
+    return try await resolveAgentSurfaceSession(
       surface,
       creationProfile: AgentSessionCreationProfile(
         adapterId: requestedAdapter,
@@ -1793,6 +1814,28 @@ class ChatProvider: ObservableObject {
         workingDirectory: effectiveAgentWorkingDirectory()
       )
     )
+  }
+
+  /// The only ChatProvider path that resolves a runtime surface. It carries
+  /// the root's immutable projection to the local kernel for Main Chat and
+  /// deliberately omits it for floating, onboarding, task, and all other
+  /// surfaces. A failed/off/owner-mismatched sample maps to the base tools.
+  private func resolveAgentSurfaceSession(
+    _ surface: AgentSurfaceReference,
+    creationProfile: AgentSessionCreationProfile? = nil
+  ) async throws -> AgentSurfaceSession {
+    let ownerID = runtimeOwnerId
+    let projection = chatFirstMainChatProjectionGate.capability(
+      for: surface,
+      ownerID: ownerID
+    )
+    let session = try await resolvedAgentClient().resolveSurfaceSession(
+      surface,
+      creationProfile: creationProfile,
+      chatFirstCapability: projection
+    )
+    chatFirstMainChatProjectionGate.markResolved(surface: surface, ownerID: ownerID)
+    return session
   }
 
   private func prepareKernelQueryContext(
