@@ -3478,9 +3478,11 @@ final class DesktopAutomationActionRegistry {
       params: ["chat_id"]
     ) { params in
       guard let chatID = params["chat_id"] else { return ["error": "missing chat_id"] }
-      guard let chat = await MainActor.run(body: {
-        AICloneService.shared.chats.first(where: { $0.id == chatID })
-      }) else { return ["error": "unknown chat_id"] }
+      guard
+        let chat = await MainActor.run(body: {
+          AICloneService.shared.chats.first(where: { $0.id == chatID })
+        })
+      else { return ["error": "unknown chat_id"] }
       await AICloneService.shared.runBenchmark(for: chat)
       return await MainActor.run {
         guard let result = AICloneService.shared.configuration.benchmarkResults[chatID] else {
