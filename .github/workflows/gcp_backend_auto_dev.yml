@@ -51,7 +51,8 @@ jobs:
           python3 backend/scripts/verify_sync_ledger_fence_transition.py \
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
-            --desired-mode="$SYNC_LEDGER_FENCE_MODE"
+            --desired-mode="$SYNC_LEDGER_FENCE_MODE" \
+            --allow-tagged-no-percent-targets
 
       - name: Reconcile generated Firestore indexes before backend deploy
         run: |
