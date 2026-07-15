@@ -1,13 +1,37 @@
 import type { RewindFrame, RewindSearchGroup } from '../../shared/types'
+import { rewindMatchTerms } from './rewindSearchQuery'
 
 /** Temporal window for clustering consecutive frames (matches macOS 30s). */
 export const GROUP_WINDOW_MS = 30_000
 
-function snippet(text: string, query: string): string {
-  const idx = text.toLowerCase().indexOf(query.toLowerCase())
+/** The earliest position at which any of `terms` occurs in `text` (lowercased),
+ *  and the matched term's length — or -1 when none match. */
+function firstMatch(lowerText: string, terms: string[]): { idx: number; len: number } {
+  let best = -1
+  let len = 0
+  for (const t of terms) {
+    const i = lowerText.indexOf(t)
+    if (i >= 0 && (best < 0 || i < best)) {
+      best = i
+      len = t.length
+    }
+  }
+  return { idx: best, len }
+}
+
+/**
+ * A context snippet around the first matched term. Uses the FTS-EXPANDED terms
+ * (camelCase/digit/prefix parts), not the raw query: a frame surfaced only because
+ * "ActivityPerformance" prefix-matched an OCR line reading "…Performance review…"
+ * still gets a snippet centered on the match, where testing the raw literal
+ * "activityperformance" would have found nothing and fallen back to an arbitrary
+ * text head. Falls back to the head only when no expanded term is literally present.
+ */
+function snippet(text: string, terms: string[]): string {
+  const { idx, len } = firstMatch(text.toLowerCase(), terms)
   if (idx < 0) return text.slice(0, 80)
   const start = Math.max(0, idx - 30)
-  return (start > 0 ? '…' : '') + text.slice(start, idx + query.length + 30).trim() + '…'
+  return (start > 0 ? '…' : '') + text.slice(start, idx + len + 30).trim() + '…'
 }
 
 /**
@@ -28,6 +52,9 @@ function snippet(text: string, query: string): string {
  * discarded ordering into a correctness bug.)
  */
 export function groupFrames(frames: RewindFrame[], query: string): RewindSearchGroup[] {
+  // Expanded literal terms, computed once — used for both representative
+  // selection and the snippet so a sub-part-only match still highlights (M-2).
+  const terms = rewindMatchTerms(query)
   // Relevance rank = position in the input. Captured BEFORE the chronological
   // sort below, which exists only to make time-contiguous clustering possible.
   const rankOf = new Map<number, number>()
@@ -45,7 +72,11 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
     if (current.length === 0) return
     const first = current[0]
     const last = current[current.length - 1]
-    const rep = current.find((f) => f.ocrText.toLowerCase().includes(query.toLowerCase())) ?? last
+    const rep =
+      current.find((f) => {
+        const lower = f.ocrText.toLowerCase()
+        return terms.some((t) => lower.includes(t))
+      }) ?? last
     groups.push({
       id: `${first.app}-${first.ts}`,
       app: first.app,
@@ -54,7 +85,7 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
       endTs: last.ts,
       frames: [...current],
       representative: rep,
-      matchSnippet: snippet(rep.ocrText, query)
+      matchSnippet: snippet(rep.ocrText, terms)
     })
     current = []
   }
