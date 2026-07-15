@@ -14,7 +14,7 @@ struct ChatFirstRichBlockContext {
 
   init(
     navigation: ChatFirstShellNavigation,
-    tasksStore: TasksStore = .shared,
+    tasksStore: TasksStore,
     chatProvider: ChatProvider,
     canonicalGoalsStore: CanonicalGoalsStore,
     promptMaterializationCoordinator: ChatFirstPromptMaterializationCoordinator
