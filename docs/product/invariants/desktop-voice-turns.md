@@ -43,6 +43,15 @@ SwiftUI and floating-bar state are projections.
   realtime provider only after the exact current kernel context identity is
   installed on that physical session; a missing, stale, or superseded identity
   fails closed into the existing fallback route.
+- A PTT press starts capture independently of session maintenance. It either
+  uses an exactly admitted binding immediately, retains its one logical turn
+  through one controller-owned rebind, or takes one typed transcription
+  fallback; a generic warm timeout, cancelled-turn fence, or background schema
+  refresh must never require the user to repeat the press.
+- `RealtimeHubController` is the sole owner of ordinary physical-session
+  handoffs. Context, schema, settings, and post-turn maintenance request its
+  typed handoff boundary; no asynchronous prefetch may tear down a session
+  directly.
 - A physical release is idempotent once the reducer has a pending hub commit.
   `PushToTalkManager` must not start batch transcription for that same audio; only
   a still-finalizing turn with no accepted/deferred hub commit may take the batch

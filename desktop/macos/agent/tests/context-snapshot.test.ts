@@ -328,6 +328,35 @@ describe("kernel ContextSnapshot", () => {
     store.close();
   });
 
+  it("accepts a newer observation for identical revision material", () => {
+    const { store, session } = fixture("realtime_voice");
+    const first = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 100,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 100);
+    const concurrentObservation = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 101,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 101);
+
+    expect(concurrentObservation.changed).toBe(true);
+    expect(concurrentObservation.snapshot.version).toBe(first.snapshot.version);
+    expect(
+      concurrentObservation.snapshot.sourceOutcomes.find((source) => source.source === "workspace")?.capturedAtMs,
+    ).toBe(101);
+    store.close();
+  });
+
   it("keeps realtime renderer fingerprint stable for irrelevant workspace churn", () => {
     const { store, session } = fixture("realtime_voice");
     const before = buildContextSnapshot(store, session.sessionId, session.ownerId, 1);

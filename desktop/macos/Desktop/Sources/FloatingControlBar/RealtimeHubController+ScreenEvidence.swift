@@ -334,6 +334,9 @@ extension RealtimeHubController {
     for (key, value) in automationScreenEvidenceDiagnostics() {
       snapshot[key] = value
     }
+    for (key, value) in automationPTTInputDiagnostics() {
+      snapshot[key] = value
+    }
     return snapshot
   }
 

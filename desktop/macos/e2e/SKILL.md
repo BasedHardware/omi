@@ -75,11 +75,10 @@ journal receipt, so new PTT work should extend that contract rather than add UI 
 
 ### 2b.1 Probe a current-screen PTT turn
 
-`ptt_test_turn` is the first-class, non-production PTT controller probe. It captures the
-same one pre-overlay screen image used by a physical PTT press and drives the real hub turn.
-Its added screen-protocol diagnostics expose only safe lifecycle state—never pixels, app names,
-or evidence IDs. Use it to reproduce and diagnose a screen-answer stall without coordinate
-clicking:
+`ptt_test_turn` is the non-production controller probe. It captures the same one pre-overlay
+screen image used by a physical PTT press and drives the real hub turn. Its added screen-protocol
+diagnostics expose only safe lifecycle state—never pixels, app names, or evidence IDs. Use it to
+reproduce and diagnose a screen-answer stall without coordinate clicking:
 
 ```bash
 cd desktop/macos
@@ -90,8 +89,22 @@ The probe emits only the safe state needed to diagnose its result. For a success
 expect `screen_evidence_last_completion=completed`, `screen_evidence_protocol_active=false`,
 and `pending_tool_count=0`. A non-`completed` completion class identifies the local fail-closed
 boundary; `terminal_reason=tool_timeout` is always a regression. This validates the controller
-and capture/transport lifecycle; use a natural authenticated physical PTT press as the final UX
-validation.
+and capture/transport lifecycle.
+
+For a regression in first-press admission, reconnect, or warm buffering, use the separate
+manager-level probe. It drives `PushToTalkManager`'s actual route selection and injects a raw
+PCM file through its capture callback equivalent; it intentionally does not perform the
+controller-only auto-redrive or forced-text behavior:
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action ptt_manager_turn pcm=/absolute/path/to/clip.pcm
+./scripts/omi-ctl action ptt_turn_snapshot
+```
+
+Assert `injected_bytes` equals the clip length, then inspect only the typed diagnostics (admission,
+route, pending deadlines, terminal reason). This is the first automated surface for the actual PTT
+manager; use a natural authenticated physical PTT press as the final UX validation.
 
 ### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
 After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just

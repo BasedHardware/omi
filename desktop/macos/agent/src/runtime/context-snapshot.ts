@@ -110,15 +110,35 @@ export function updateContextSource(
       throw new Error("Context source update is older than the persisted revision");
     }
     if (previous && String(previous.source_revision) === sourceRevision) {
-      const exactDuplicate = String(previous.outcome) === input.outcome
-        && Number(previous.captured_at_ms) === input.capturedAtMs
-        && nullableNumber(previous.expires_at_ms) === expiresAtMs
+      const sameSemanticMaterial = String(previous.outcome) === input.outcome
         && String(previous.payload_hash) === payloadHash;
-      if (!exactDuplicate) {
+      if (!sameSemanticMaterial) {
         throw new Error("A context source revision cannot be reused with different content");
       }
+      // Capture/expiry are observation metadata, not revision material. Two
+      // concurrent callers can correctly prepare the same source payload a few
+      // milliseconds apart; rejecting the later timestamp turned a harmless
+      // read/update race into an empty realtime voice context. Keep the newer
+      // observation atomically and render one valid snapshot.
+      const metadataChanged = Number(previous.captured_at_ms) !== input.capturedAtMs
+        || nullableNumber(previous.expires_at_ms) !== expiresAtMs;
+      if (metadataChanged) {
+        store.execute(
+          `UPDATE context_source_state
+           SET captured_at_ms = ?, expires_at_ms = ?, updated_at_ms = ?
+           WHERE session_id = ? AND source = ? AND surface_kind = ?`,
+          [
+            input.capturedAtMs,
+            expiresAtMs,
+            nowMs,
+            input.sessionId,
+            input.source,
+            sourceSurfaceKind,
+          ],
+        );
+      }
       return {
-        changed: false,
+        changed: metadataChanged,
         snapshot: buildContextSnapshot(store, input.sessionId, input.ownerId, nowMs, projectionSurface),
       };
     }

@@ -1278,6 +1278,41 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    // Manager-level PTT harness: this crosses the real shortcut lifecycle,
+    // routing decision, realtime admission, warm buffering, and replay seam.
+    // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
+    // physical test, it needs neither microphone permission nor a device.
+    register(
+      name: "ptt_manager_turn",
+      summary: "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
+      params: ["pcm"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+
+      var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
+      guard result["listening"] == "true" else { return result }
+      let chunkSize = 3_200
+      var offset = 0
+      var injected = 0
+      while offset < pcm16k.count {
+        let end = min(offset + chunkSize, pcm16k.count)
+        if PushToTalkManager.shared.injectRealtimePTTAutomationAudio(pcm16k.subdata(in: offset..<end)) {
+          injected += end - offset
+        }
+        offset = end
+      }
+      let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      result["injected_bytes"] = "\(injected)"
+      result["finalized"] = stopped["finalized"] ?? "false"
+      for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
+    }
+
     register(
       name: "ptt_turn_snapshot",
       summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"

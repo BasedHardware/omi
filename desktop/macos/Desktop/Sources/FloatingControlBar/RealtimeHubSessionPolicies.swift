@@ -382,12 +382,6 @@ enum RealtimeHubLifecyclePolicy {
     !replacementPending
   }
 
-  static func shouldResumeCanceledTurnRefresh(
-    fenceTurnID: VoiceTurnID?,
-    terminalTurnID: VoiceTurnID
-  ) -> Bool {
-    fenceTurnID != terminalTurnID
-  }
 }
 
 /// Immutable account identity attached to a realtime socket, its context, and

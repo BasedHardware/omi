@@ -850,13 +850,14 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("let interruptedContinuityTask = bargeInContinuityTask"))
     XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
-    XCTAssertTrue(source.contains("cancelContinuityFenceActive = true"))
-    XCTAssertTrue(source.contains("self.cancelContinuityFenceActive = false"))
-    XCTAssertTrue(source.contains("general warm deferred behind canceled-turn continuity fence"))
-    XCTAssertTrue(source.contains("session start rejected behind canceled-turn continuity fence"))
+    XCTAssertTrue(source.contains("reason: .cancelledTurnContinuity"))
+    XCTAssertTrue(source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
+    XCTAssertTrue(source.contains("ensureWarm()"))
+    XCTAssertFalse(source.contains("general warm deferred behind canceled-turn continuity fence"))
+    XCTAssertFalse(source.contains("session start rejected behind canceled-turn continuity fence"))
   }
 
-  func testCancelKeepsReconnectFenceThroughEveryPersistencePathAndContextRefresh() throws {
+  func testCancelRefreshesPersistenceContextWithoutBlockingTheNextWarmSession() throws {
     let source = try realtimeHubControllerSource()
     let cancel = try XCTUnwrap(
       source.range(of: "func cancelTurn(turnID requestedTurnID: VoiceTurnID) -> Bool"))
@@ -867,12 +868,11 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       cancelTail.range(of: "await interruptedContinuityTask.value"))
     let persistenceFence = try XCTUnwrap(
       cancelTail.range(of: "await self.refreshVoiceContextAfterPersistenceFence("))
-    let fenceRelease = try XCTUnwrap(
-      cancelTail.range(of: "self.cancelContinuityFenceActive = false"))
-
     XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
     XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
-    XCTAssertLessThan(persistenceFence.lowerBound, fenceRelease.lowerBound)
+    XCTAssertLessThan(
+      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound)).lowerBound,
+      persistenceFence.lowerBound)
 
     let helper = try XCTUnwrap(
       source.range(
@@ -1306,16 +1306,11 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(resolution.usedLocalTranscript)
   }
 
-  func testCanceledTurnFenceResumesOnlyAfterAnotherTurnTerminates() {
-    let canceled = VoiceTurnID()
-    let next = VoiceTurnID()
-
-    XCTAssertFalse(
-      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
-        fenceTurnID: canceled, terminalTurnID: canceled))
+  func testGeneralWarmSessionIsNotBlockedByACompletedCanceledTurn() {
     XCTAssertTrue(
-      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
-        fenceTurnID: canceled, terminalTurnID: next))
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: false))
+    XCTAssertFalse(
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: true))
   }
 
   func testNativeAudioFailureKeepsTextFallbackOnlyBeforePlaybackStarts() {
@@ -1389,12 +1384,18 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     ))
   }
 
-  func testBeginTurnWaitsForActiveSessionBeforeActivityStart() throws {
+  func testBeginTurnBuffersThroughTypedHandoffInsteadOfWaitingOnThePressPath() throws {
     let source = try realtimeHubControllerSource()
+    let begin = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
+    let nextMethod = try XCTUnwrap(
+      source.range(of: "private func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
+    let beginBody = String(source[begin.lowerBound..<nextMethod.lowerBound])
 
-    XCTAssertTrue(source.contains("self.contextFreshInputPreparationIsCurrent("))
-    XCTAssertTrue(source.contains("await self.waitUntilActive(timeout: 15)"))
-    XCTAssertTrue(source.contains("inputTurnActivityStartPending = true"))
+    XCTAssertTrue(beginBody.contains("self.contextFreshInputPreparationIsCurrent("))
+    XCTAssertTrue(beginBody.contains("requestSessionHandoff("))
+    XCTAssertTrue(beginBody.contains("reason: .voiceContextFreshness"))
+    XCTAssertFalse(beginBody.contains("await self.waitUntilActive(timeout: 15)"))
+    XCTAssertFalse(beginBody.contains("inputTurnActivityStartPending"))
   }
 
   func testHubDidConnectCannotOpenInputFromTransportReadiness() throws {

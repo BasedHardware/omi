@@ -31,6 +31,11 @@ from pathlib import Path
 # Relative to the repository root.
 HUB_RELATIVE = "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"
 
+# Post-Phase-2 hub line count (4532) + 10% headroom, then the explicitly
+# justified PTT handoff/replay boundary from PR #9825. MAY ONLY INCREASE with
+# an explicit PR justification; prefer extracting new logic into a policy file.
+LINE_COUNT_BASELINE = 5166
+
 # Top-level types extracted in Phase 2. Keep in sync with the policy files.
 EXTRACTED_TYPE_NAMES: frozenset[str] = frozenset(
     {
@@ -61,6 +66,11 @@ EXTRACTED_TYPE_NAMES: frozenset[str] = frozenset(
         # RealtimeHubInputAdmission.swift
         "RealtimeReconnectAudioBuffer",
         "RealtimeReplacementAudioBuffer",
+        "RealtimePTTAdmission",
+        "RealtimePTTAdmissionPolicy",
+        "RealtimeHubSessionHandoffReason",
+        "RealtimeHubSessionHandoffDecision",
+        "RealtimeHubSessionHandoffPolicy",
         "RealtimeInputAdmissionDecision",
         "RealtimeInputAdmissionPolicy",
         "RealtimeVoiceContextRefreshPolicy",

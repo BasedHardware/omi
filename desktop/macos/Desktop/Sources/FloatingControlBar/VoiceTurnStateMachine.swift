@@ -688,7 +688,10 @@ struct VoiceTurnReducer {
     var deferredCommit: TimeInterval = 8
     var bargeInReplacement: TimeInterval = 8
     var playbackDrain: TimeInterval = 30
-    var providerReconnect: TimeInterval = 15
+    /// One controller-owned physical rebind is permitted for captured input.
+    /// If it cannot reconnect promptly, the same turn moves to the existing
+    /// transcript fallback rather than leaving PTT in an ambiguous spinner.
+    var providerReconnect: TimeInterval = 3
     var journalFinalization: TimeInterval = 15
     var transcriptionFinalization: TimeInterval = 8
     var hintVisibility: TimeInterval = 2
@@ -962,6 +965,11 @@ struct VoiceTurnReducer {
         identity: identity, previousSessionID: previousSessionID)
       model.turn?.sessionID = nil
       model.turn?.providerFinished = false
+      // Once the controller owns a captured input boundary, its typed rebind
+      // deadline—not the generic one-second warm hint—governs this turn.
+      // Otherwise a healthy reconnect can race into batch STT before it has a
+      // chance to replay the user's already-captured audio.
+      cancel(.hubWarm, in: &model, effects: &effects)
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
         model.turn?.projection.isThinking = true
@@ -977,10 +985,25 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
+      // A response already accepted by the provider has no local PCM left to
+      // recover. Transcript fallback is only valid while this logical input is
+      // still captured or its hub commit is deferred.
+      guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
+        terminate(&model, reason: .providerFailed, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
       cancel(.providerReconnect, in: &model, effects: &effects)
       model.turn?.providerConnection = .ready
       model.turn?.sessionID = sessionID
-      model.turn?.route = .hub(sessionID: sessionID)
+      // A manager-owned warm capture still has PCM in PushToTalkManager's
+      // bounded buffer. Keep its route at `.hubWarmWait` until `hubReady`
+      // emits `prepareHubInput`; that effect is the one place which flushes
+      // that PCM into the now-admitted provider input window. Rewriting the
+      // route here would make the controller replay its own buffer while
+      // silently orphaning the manager buffer.
+      if turn.route != .hubWarmWait {
+        model.turn?.route = .hub(sessionID: sessionID)
+      }
       if shouldProjectProviderConnectionAsAwaitingResponse(turn) {
         model.turn?.phase = .awaitingResponse
       }
@@ -992,7 +1015,22 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
-      terminate(&model, reason: .providerFailed, effects: &effects)
+      cancel(.providerReconnect, in: &model, effects: &effects)
+      model.turn?.providerConnection = .ready
+      if turn.phase == .awaitingResponse, turn.hubCommitPending {
+        // The physical release already happened, but its buffered input never
+        // reached a provider. Return it to the finalizing boundary so the
+        // existing transcription fallback can own the same turn exactly once.
+        model.turn?.phase = .finalizing
+        model.turn?.hubCommitPending = false
+        model.turn?.projection.isResponseWaiting = false
+        model.turn?.projection.isThinking = true
+      }
+      model.turn?.route = .deepgramBatch
+      effects.append(.fallbackToTranscription(turnID: turn.id, reason: .providerFailed))
+      if model.turn?.phase == .finalizing {
+        schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+      }
 
     case .providerReplacementStarted(
       _, let identity, let previousResponseID, let nextResponseID):
@@ -1473,7 +1511,22 @@ struct VoiceTurnReducer {
       case .playbackDrain:
         terminate(&model, reason: .playbackFailed, effects: &effects)
       case .providerReconnect:
-        terminate(&model, reason: .providerFailed, effects: &effects)
+        guard turn.phase.isRecording || turn.phase == .finalizing || turn.hubCommitPending else {
+          terminate(&model, reason: .providerFailed, effects: &effects)
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
+        model.turn?.providerConnection = .ready
+        if turn.phase == .awaitingResponse, turn.hubCommitPending {
+          model.turn?.phase = .finalizing
+          model.turn?.hubCommitPending = false
+          model.turn?.projection.isResponseWaiting = false
+          model.turn?.projection.isThinking = true
+        }
+        model.turn?.route = .deepgramBatch
+        effects.append(.fallbackToTranscription(turnID: turn.id, reason: .providerFailed))
+        if model.turn?.phase == .finalizing {
+          schedule(.transcription, after: deadlines.transcription, in: &model, effects: &effects)
+        }
       case .journalFinalization:
         terminate(&model, reason: .journalFailed, effects: &effects)
       case .transcriptionFinalization:

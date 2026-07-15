@@ -109,7 +109,8 @@ describe("omi tool manifest", () => {
     const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
 
     expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
-    expect(list?.voice?.realtimeDescription).toContain("restrict discovery to status='open'");
+    expect(list?.voice?.realtimeDescription).toContain("omit status filters");
+    expect(list?.voice?.realtimeDescription).toContain("latestRun.finalText");
     expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
     expect(run?.voice?.realtimeDescription).toContain("run.finalText");
     expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");

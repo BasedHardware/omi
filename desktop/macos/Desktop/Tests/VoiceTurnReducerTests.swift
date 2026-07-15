@@ -238,6 +238,52 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
+  func testBufferedReconnectSupersedesGenericHubWarmDeadline() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+
+    let reconnecting = reduce(
+      reservation.model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil))
+
+    XCTAssertFalse(reconnecting.model.turn?.deadlines.contains(.hubWarm) == true)
+    XCTAssertTrue(reconnecting.model.turn?.deadlines.contains(.providerReconnect) == true)
+  }
+
+  func testWarmManagerBufferRemainsRoutableUntilItsPrepareEffectFlushesIt() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model = reduce(
+      reservation.model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil)).model
+
+    let reconnected = reduce(
+      model,
+      .providerReconnected(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID))
+
+    XCTAssertEqual(reconnected.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(reconnected.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(reconnected.model.turn?.route, .hubWarmWait)
+
+    let ready = reduce(reconnected.model, .hubReady(turnID: turnID, sessionID: sessionID))
+    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+  }
+
   func testTransportReadyBindsHubRouteAndPreparesContext() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()
@@ -1548,7 +1594,7 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(reconnected.model.turn?.hubCommitPending == true)
   }
 
-  func testContextRefreshFailureReleasesDeferredShortPressInsteadOfWedgingNextTurn() {
+  func testContextRefreshFailureFallsBackWithTheDeferredShortPressInsteadOfDroppingIt() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
@@ -1569,7 +1615,12 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: reservation.identity,
         message: "Voice context is temporarily unavailable"))
-    XCTAssertEqual(failed.model.turn?.phase, .terminal(.providerFailed))
+    XCTAssertEqual(failed.model.turn?.phase, .finalizing)
+    XCTAssertEqual(failed.model.turn?.route, .deepgramBatch)
+    XCTAssertFalse(failed.model.turn?.hubCommitPending == true)
+    XCTAssertTrue(
+      failed.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .providerFailed)))
   }
 
   func testExplicitInterruptRevokesToolAndRejectsItsLateCallback() throws {
