@@ -353,6 +353,14 @@ export interface AgentRuntimeKernelOptions {
   runtimeNodeId?: string
   artifactStorage?: OmiArtifactStorage
   recoverRunInput?: KernelRunRecoveryPolicy
+  /**
+   * The MCP server config that lets this binding's model call the agent-control
+   * tools, appended to the caller's own `mcpServers` when a binding is opened or
+   * resumed. Injected rather than imported so the kernel stays free of the
+   * socket transport (and so unit tests need no pipe). Wired in controlPlane.ts;
+   * when absent, models simply get no control tools.
+   */
+  controlMcpServers?: (sessionId: string, adapterId: string) => Record<string, unknown>[]
 }
 
 /** Attention-override upsert input (kernel-owned; the store persists the row). */
