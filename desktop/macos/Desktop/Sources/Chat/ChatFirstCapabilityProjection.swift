@@ -9,6 +9,7 @@ struct ChatFirstCapabilityProjection: Equatable, Sendable {
 
   init?(control: OmiAPI.TaskWorkflowControl) {
     guard control.chatFirstUi == true,
+      control.workflowMode == .read,
       let generation = control.accountGeneration,
       generation >= 0
     else { return nil }
