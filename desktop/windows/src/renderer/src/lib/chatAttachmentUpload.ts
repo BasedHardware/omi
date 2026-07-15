@@ -29,7 +29,10 @@ export type UploadDeps = {
  * `X-App-Platform: windows`). Content-Type is intentionally NOT set — the
  * browser fills in the multipart boundary.
  */
-export async function uploadChatFile(file: UploadableFile, deps: UploadDeps = {}): Promise<FileChat> {
+export async function uploadChatFile(
+  file: UploadableFile,
+  deps: UploadDeps = {}
+): Promise<FileChat> {
   const doFetch = deps.fetchImpl ?? fetch
   const token = deps.getToken ? await deps.getToken() : await auth.currentUser?.getIdToken()
 

@@ -61,7 +61,11 @@ function patch(id: string, next: Partial<PendingAttachment>): void {
   signal.set(signal.get().map((a) => (a.id === id ? { ...a, ...next } : a)))
 }
 
-function startUpload(att: PendingAttachment, bytes: Uint8Array, upload: typeof uploadChatFile): void {
+function startUpload(
+  att: PendingAttachment,
+  bytes: Uint8Array,
+  upload: typeof uploadChatFile
+): void {
   const p = upload({ name: att.name, mimeType: att.mimeType, bytes })
     .then((fc) => {
       patch(att.id, { status: 'uploaded', serverId: fc.id })

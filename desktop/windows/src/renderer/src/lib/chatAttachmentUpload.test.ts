@@ -45,12 +45,18 @@ describe('uploadChatFile', () => {
   })
 
   it('throws on a non-OK response so the caller can mark that attachment failed', async () => {
-    const fetchImpl = vi.fn(async () => ({ ok: false, status: 500 }) as unknown as Response) as unknown as typeof fetch
-    await expect(uploadChatFile(file, { fetchImpl, getToken: async () => 't' })).rejects.toThrow('HTTP 500')
+    const fetchImpl = vi.fn(
+      async () => ({ ok: false, status: 500 }) as unknown as Response
+    ) as unknown as typeof fetch
+    await expect(uploadChatFile(file, { fetchImpl, getToken: async () => 't' })).rejects.toThrow(
+      'HTTP 500'
+    )
   })
 
   it('throws when the response carries no file id', async () => {
     const fetchImpl = vi.fn(async () => okResponse([])) as unknown as typeof fetch
-    await expect(uploadChatFile(file, { fetchImpl, getToken: async () => 't' })).rejects.toThrow(/no file id/)
+    await expect(uploadChatFile(file, { fetchImpl, getToken: async () => 't' })).rejects.toThrow(
+      /no file id/
+    )
   })
 })

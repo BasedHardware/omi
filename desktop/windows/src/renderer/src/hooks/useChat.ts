@@ -458,7 +458,11 @@ export function useChat(): UseChat {
       await awaitUploadsSettled()
       const uploaded = getPendingAttachments().filter((a) => a.status === 'uploaded' && a.serverId)
       sendFileIds = uploaded.map((a) => a.serverId as string)
-      sentAttachments = uploaded.map((a) => ({ id: a.serverId as string, name: a.name, mimeType: a.mimeType }))
+      sentAttachments = uploaded.map((a) => ({
+        id: a.serverId as string,
+        name: a.name,
+        mimeType: a.mimeType
+      }))
       // The message now owns these files; clear the composer's pending list.
       clearAttachments()
     }

@@ -39,7 +39,10 @@ function deferredUpload(): {
   resolve: (name: string) => void
   reject: (name: string) => void
 } {
-  const resolvers = new Map<string, { resolve: (fc: FileChat) => void; reject: (e: unknown) => void }>()
+  const resolvers = new Map<
+    string,
+    { resolve: (fc: FileChat) => void; reject: (e: unknown) => void }
+  >()
   const upload = vi.fn(
     (f: { name: string }) =>
       new Promise<FileChat>((resolve, reject) => resolvers.set(f.name, { resolve, reject }))

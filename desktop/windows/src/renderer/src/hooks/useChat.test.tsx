@@ -46,11 +46,7 @@ const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
 
 import { useChat, CHAT_STREAM_TIMEOUT_MS } from './useChat'
-import {
-  addAttachments,
-  awaitUploadsSettled,
-  clearAttachments
-} from '../lib/chatAttachments'
+import { addAttachments, awaitUploadsSettled, clearAttachments } from '../lib/chatAttachments'
 import type { FileChat } from '../lib/omiApi.generated'
 import type { PickedChatFile } from '../../../shared/types'
 
@@ -260,7 +256,9 @@ describe('useChat — blank-reply guard', () => {
       await p
     })
     // The empty pending bubble is replaced with the error copy, not left blank.
-    expect(lastAssistant(result.current.history)?.content).toBe("Omi didn't send a reply. Try again.")
+    expect(lastAssistant(result.current.history)?.content).toBe(
+      "Omi didn't send a reply. Try again."
+    )
     // The FINAL persisted assistant message carries the error, never blank text.
     const finalThread = persisted.at(-1) as { role: string; content: string }[]
     const persistedAssistant = [...finalThread].reverse().find((m) => m.role === 'assistant')
@@ -278,7 +276,9 @@ describe('useChat — blank-reply guard', () => {
       streams[0].close()
       await p
     })
-    expect(lastAssistant(result.current.history)?.content).toBe("Omi didn't send a reply. Try again.")
+    expect(lastAssistant(result.current.history)?.content).toBe(
+      "Omi didn't send a reply. Try again."
+    )
     expect(speakSpy).not.toHaveBeenCalled()
   })
 
@@ -579,7 +579,9 @@ describe('useChat — chat attachments (file_ids)', () => {
     const userMsg = result.current.history.find((m) => m.role === 'user') as {
       attachments?: { id: string; name: string; mimeType: string }[]
     }
-    expect(userMsg.attachments).toEqual([{ id: 'srv-a.txt', name: 'a.txt', mimeType: 'text/plain' }])
+    expect(userMsg.attachments).toEqual([
+      { id: 'srv-a.txt', name: 'a.txt', mimeType: 'text/plain' }
+    ])
   })
 
   it('blocks the send until an in-flight upload settles (no half-uploaded send)', async () => {
