@@ -121,39 +121,39 @@ extension SettingsContentView {
               .scaledFont(size: OmiType.subheading)
               .foregroundColor(OmiColors.textTertiary)
 
-            Text("AI Provider")
-              .scaledFont(size: OmiType.subheading, weight: .semibold)
-              .foregroundColor(OmiColors.textPrimary)
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
+              Text("AI Provider")
+                .scaledFont(size: OmiType.body)
+                .foregroundColor(OmiColors.textSecondary)
+
+              if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
+                if let url = provider.attributionURL {
+                  Link(destination: url) {
+                    Text("\(provider.tagline) · \(url.host ?? "")")
+                      .scaledFont(size: OmiType.caption)
+                      .foregroundColor(OmiColors.textTertiary)
+                  }
+                } else {
+                  Text(provider.tagline)
+                    .scaledFont(size: OmiType.caption)
+                    .foregroundColor(OmiColors.textTertiary)
+                }
+              }
+            }
 
             Spacer()
 
-            Picker("", selection: $chatBridgeMode) {
+            SettingsMenuPicker(selection: $chatBridgeMode) {
               ForEach(AIProvider.all) { provider in
                 Text(provider.displayName).tag(provider.bridgeModeRawValue)
               }
             }
-            .pickerStyle(.menu)
-            .frame(width: 200)
             .onChange(of: chatBridgeMode) { _, newMode in
               if let mode = ChatProvider.BridgeMode(rawValue: newMode) {
                 Task {
                   await chatProvider?.switchBridgeMode(to: mode)
                 }
               }
-            }
-          }
-
-          if let provider = AIProvider.from(bridgeMode: chatBridgeMode) {
-            if let url = provider.attributionURL {
-              Link(destination: url) {
-                Text("\(provider.tagline) · \(url.host ?? "")")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(OmiColors.textTertiary)
-              }
-            } else {
-              Text(provider.tagline)
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
             }
           }
 
@@ -433,7 +433,7 @@ extension SettingsContentView {
                 .scaledFont(size: OmiType.body, design: .monospaced)
                 .foregroundColor(OmiColors.textSecondary)
                 .scrollContentBackground(.hidden)
-                .frame(maxHeight: 200)
+                .frame(minHeight: 120, maxHeight: 300)
 
               HStack {
                 Button("Cancel") {
