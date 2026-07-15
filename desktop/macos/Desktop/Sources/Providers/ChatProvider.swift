@@ -4043,6 +4043,7 @@ class ChatProvider: ObservableObject {
         clearChatTelemetryState(for: sendGen)
         releaseSendLock(sendGeneration: sendGen)
 
+
         return nil
       }
       guard let sid = currentSessionId else {

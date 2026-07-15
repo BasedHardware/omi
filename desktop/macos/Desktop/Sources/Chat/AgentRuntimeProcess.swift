@@ -2078,7 +2078,7 @@ actor AgentRuntimeProcess {
       payload: [
         "sessionId": sessionID,
         "controlGeneration": controlGeneration,
-        "intents": intents.compactMap { intent in
+        "intents": intents.compactMap { intent -> [String: Any]? in
           guard let blocks = intent.kernelBlocks else { return nil }
           return [
             "intentId": intent.intentID,

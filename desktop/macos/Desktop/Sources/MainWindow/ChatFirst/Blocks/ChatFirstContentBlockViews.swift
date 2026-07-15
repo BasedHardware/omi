@@ -272,18 +272,20 @@ struct GoalLinkView: View {
   @State private var isUnavailable = false
 
   var body: some View {
-    if isUnavailable {
-      ChatFirstUnavailableBlockView(entityName: "Goal")
-    } else {
-      ChatFirstLinkBlockView(
-        eyebrow: "Goal",
-        systemImage: "target",
-        summary: summary,
-        actionTitle: "Open in Goals",
-        isOpening: isOpening,
-        accessibilityID: "chat-first-goal-\(goalID)-open"
-      ) {
-        openGoal()
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Goal")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Goal",
+          systemImage: "target",
+          summary: summary,
+          actionTitle: "Open in Goals",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-goal-\(goalID)-open"
+        ) {
+          openGoal()
+        }
       }
     }
     .onAppear {
@@ -325,18 +327,20 @@ struct CaptureLinkView: View {
   @State private var isUnavailable = false
 
   var body: some View {
-    if isUnavailable {
-      ChatFirstUnavailableBlockView(entityName: "Conversation")
-    } else {
-      ChatFirstLinkBlockView(
-        eyebrow: "Conversation",
-        systemImage: "waveform",
-        summary: summary,
-        actionTitle: "Open conversation",
-        isOpening: isOpening,
-        accessibilityID: "chat-first-capture-\(conversationID)-open"
-      ) {
-        openCapture()
+    Group {
+      if isUnavailable {
+        ChatFirstUnavailableBlockView(entityName: "Conversation")
+      } else {
+        ChatFirstLinkBlockView(
+          eyebrow: "Conversation",
+          systemImage: "waveform",
+          summary: summary,
+          actionTitle: "Open conversation",
+          isOpening: isOpening,
+          accessibilityID: "chat-first-capture-\(conversationID)-open"
+        ) {
+          openCapture()
+        }
       }
     }
     .onAppear {

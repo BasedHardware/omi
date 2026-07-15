@@ -3,6 +3,36 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstDeferralOutboxDriverTests: XCTestCase {
+  func testDeferredOptionRetainsItsWireKey() throws {
+    let request = try XCTUnwrap(ChatFirstDeferralDeliveryRequest(payload: [
+      "ownerId": "owner-1",
+      "continuityKey": "continuity-1",
+      "controlGeneration": 1,
+      "subject": ["kind": "goal", "id": "goal-1"],
+      "question": [
+        "questionId": "question-1",
+        "text": "What should happen next?",
+        "subject": ["kind": "goal", "id": "goal-1"],
+        "options": [[
+          "optionId": "later",
+          "label": "Ask tomorrow",
+          "preparedAnswer": "Ask me again tomorrow.",
+          "defer": true,
+        ]],
+      ],
+      "attemptCount": 1,
+      "deliveryGeneration": 1,
+      "payloadHash": "hash-1",
+    ]))
+
+    XCTAssertTrue(request.question.options[0].isDeferred)
+    let data = try JSONEncoder().encode(request.question)
+    let wire = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
+    let option = try XCTUnwrap((wire["options"] as? [[String: Any]])?.first)
+    XCTAssertEqual(option["defer"] as? Bool, true)
+    XCTAssertNil(option["isDeferred"])
+  }
+
   func testDeferralDeliveryRetriesTransientAndServerFailuresOnly() {
     for status in [408, 425, 429, 500, 503] {
       XCTAssertEqual(

@@ -167,7 +167,7 @@ final class CanonicalGoalsStore: ObservableObject {
       goals = []
       selectedGoalDetail = nil
       let message = "Goals are unavailable right now. Try again."
-      error = message
+      self.error = message
       availability = .unavailable(message)
     }
   }
@@ -198,7 +198,7 @@ final class CanonicalGoalsStore: ObservableObject {
       // A missing/revoked target must remain an inert link or an honest page
       // state; do not substitute a legacy-goal record.
       selectedGoalDetail = nil
-      error = "This goal is no longer available."
+      self.error = "This goal is no longer available."
       return nil
     }
   }
@@ -235,7 +235,7 @@ final class CanonicalGoalsStore: ObservableObject {
       return true
     } catch {
       guard scopeIsCurrent(scope) else { return false }
-      error = "Goal focus could not be updated."
+      self.error = "Goal focus could not be updated."
       return false
     }
   }

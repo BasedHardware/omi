@@ -463,7 +463,7 @@ private struct ChatFirstTaskRow: View {
           }
           .buttonStyle(.plain)
           .disabled(isSaving)
-          .onKeyPress(.return) { _ in
+          .onKeyPress(.return) {
             titleDraft = task.description
             isEditing = true
             return .handled
