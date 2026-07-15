@@ -1,11 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import {
   reduce,
+  reduceLock,
   initialState,
+  initialLockState,
   assembleTranscript,
   type PttEvent,
   type PttState,
-  type PttEffect
+  type PttEffect,
+  type LockState,
+  type LockEffect
 } from './machine'
 
 // Gate-passing stats (total ≥ 0.35s, voiced ≥ 0.2s) and the failing shapes.
@@ -325,5 +329,63 @@ describe('assembleTranscript', () => {
   it('is empty for an empty capture', () => {
     expect(assembleTranscript([])).toBe('')
     expect(assembleTranscript(['  '])).toBe('')
+  })
+})
+
+describe('reduceLock (tap-to-lock latch)', () => {
+  const kinds = (effects: LockEffect[]): string[] => effects.map((e) => e.kind)
+  const tap = (holdMs: number, doubleTapForLock = true) =>
+    reduceLock(initialLockState, { type: 'TAP_RELEASED', holdMs, doubleTapForLock })
+  const pending: LockState = { phase: 'pendingLock' }
+  const locked: LockState = { phase: 'locked' }
+
+  it('a fast tap (0.21s) opens the pending-lock window', () => {
+    const step = tap(210)
+    expect(step.state.phase).toBe('pendingLock')
+    expect(kinds(step.effects)).toEqual(['armWindow'])
+  })
+
+  it('a tap at/over the tap-to-lock ceiling (0.25s) does NOT open the window', () => {
+    const step = tap(250)
+    expect(step.state.phase).toBe('idle')
+    expect(step.effects).toEqual([])
+  })
+
+  it('never latches when doubleTapForLock is off', () => {
+    const step = tap(100, /* doubleTapForLock */ false)
+    expect(step.state.phase).toBe('idle')
+    expect(step.effects).toEqual([])
+  })
+
+  it('a second tap 0.39s later latches locked listening', () => {
+    const step = reduceLock(pending, { type: 'PRESS_DOWN', gapMs: 390 })
+    expect(step.state.phase).toBe('locked')
+    expect(kinds(step.effects)).toEqual(['cancelWindow', 'enterLocked'])
+  })
+
+  it('a late second tap 0.41s later does NOT latch — drops back to idle', () => {
+    const step = reduceLock(pending, { type: 'PRESS_DOWN', gapMs: 410 })
+    expect(step.state.phase).toBe('idle')
+    expect(kinds(step.effects)).toEqual(['cancelWindow'])
+  })
+
+  it('the decision window elapsing returns to idle', () => {
+    const step = reduceLock(pending, { type: 'WINDOW_EXPIRED' })
+    expect(step.state.phase).toBe('idle')
+    expect(step.effects).toEqual([])
+  })
+
+  it('a tap while locked finalizes the hands-free turn', () => {
+    const step = reduceLock(locked, { type: 'PRESS_DOWN', gapMs: 5000 })
+    expect(step.state.phase).toBe('idle')
+    expect(kinds(step.effects)).toEqual(['finalizeLocked'])
+  })
+
+  it('CANCEL drops the pending window without finalizing', () => {
+    expect(kinds(reduceLock(pending, { type: 'CANCEL' }).effects)).toEqual(['cancelWindow'])
+    // Cancelling a locked turn only clears the latch (the hook discards the capture).
+    const fromLocked = reduceLock(locked, { type: 'CANCEL' })
+    expect(fromLocked.state.phase).toBe('idle')
+    expect(fromLocked.effects).toEqual([])
   })
 })

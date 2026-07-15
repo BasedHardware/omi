@@ -52,6 +52,26 @@ describe('appSettings', () => {
     expect(s.recordHotkey).toBe('Ctrl+Space')
   })
 
+  it('chatEngine defaults to legacy_sse and round-trips the pi_mono opt-in', () => {
+    expect(getAppSettings().chatEngine).toBe('legacy_sse')
+    setAppSettings({ chatEngine: 'pi_mono' })
+    _resetForTests()
+    expect(getAppSettings().chatEngine).toBe('pi_mono')
+    // Junk / unknown values fall back to the safe legacy path, never to pi_mono.
+    expect(sanitizeAppSettings({ chatEngine: 'nope' } as never).chatEngine).toBe('legacy_sse')
+    expect(sanitizeAppSettings(null).chatEngine).toBe('legacy_sse')
+  })
+
+  it('chatScreenshotSharingEnabled defaults ON and round-trips an explicit off', () => {
+    expect(getAppSettings().chatScreenshotSharingEnabled).toBe(true)
+    setAppSettings({ chatScreenshotSharingEnabled: false })
+    _resetForTests()
+    expect(getAppSettings().chatScreenshotSharingEnabled).toBe(false)
+    // Absent / junk stays ON (opt-out) — only an explicit false disables it.
+    expect(sanitizeAppSettings(null).chatScreenshotSharingEnabled).toBe(true)
+    expect(sanitizeAppSettings({} as never).chatScreenshotSharingEnabled).toBe(true)
+  })
+
   it('round-trips a rebound record hotkey', () => {
     setAppSettings({ recordHotkey: 'Ctrl+Shift+O' })
     _resetForTests()
@@ -109,7 +129,9 @@ describe('appSettings', () => {
       taskEnabled: true,
       taskFallbackIntervalMin: 10,
       taskMinConfidence: 0.75,
-      taskExcludedApps: []
+      taskExcludedApps: [],
+      chatEngine: 'legacy_sse',
+      chatScreenshotSharingEnabled: true
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
     // interrupt once the user has chosen a frequency. Anything that is not a

@@ -31,3 +31,22 @@ describe('floatingBarTypedVoiceEnabled — speak typed bar replies toggle', () =
     expect(getPreferences().floatingBarTypedVoiceEnabled).toBe(true)
   })
 })
+
+// The warm realtime hub was flipped ON by default after the driver was made
+// functional and live-verified end-to-end (eager warm + hub route + chat recording).
+// selectPttRoute + the eager-warm gate read getPreferences().pttHubEnabled.
+describe('pttHubEnabled — warm-hub PTT default', () => {
+  beforeEach(() => {
+    localStorage.clear()
+    setPreferences({}) // reload the module cache from the cleared store → defaults
+  })
+
+  it('defaults ON — a fresh install routes PTT to the warm hub', () => {
+    expect(getPreferences().pttHubEnabled).toBe(true)
+  })
+
+  it('an explicit opt-out (false) overrides the ON default', () => {
+    setPreferences({ pttHubEnabled: false })
+    expect(getPreferences().pttHubEnabled).toBe(false)
+  })
+})

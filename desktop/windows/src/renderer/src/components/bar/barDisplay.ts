@@ -13,6 +13,10 @@ import type {
 export type BarActivity = {
   /** PTT is capturing the user's voice right now (local to the bar). */
   recording: boolean
+  /** The capture is a tap-to-lock hands-free turn (mic open, no key held) — shown
+   *  in the distinct 'listening' pose (still reacting to the user's amplitude),
+   *  not the held-press 'speaking' pose. Absent ⇒ a normal held press. */
+  locked?: boolean
   /** PTT is finalizing a captured transcript (local to the bar). */
   transcribing: boolean
   /** Projected chat status from the main window's engine. */
@@ -34,7 +38,7 @@ export type BarActivity = {
  * Recording wins over a still-playing TTS so the user's own turn is reactive.
  */
 export function deriveOrbState(a: BarActivity): { state: OrbState; withAmplitude: boolean } {
-  if (a.recording) return { state: 'speaking', withAmplitude: true }
+  if (a.recording) return { state: a.locked ? 'listening' : 'speaking', withAmplitude: true }
   if (a.status === 'speaking') return { state: 'speaking', withAmplitude: false }
   // A running coding-agent shows the distinctive 'agents' pose over generic
   // 'thinking' (both carry status==='sending'), but live voice above still wins.

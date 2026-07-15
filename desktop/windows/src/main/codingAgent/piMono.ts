@@ -7,10 +7,11 @@
 // RPC event loop, generation/pending-request correlation, required-control-tool
 // tracking, model mapping, and deferred-restart lifecycle are unchanged.
 //
-// This PR lands the adapter DARK: it is NOT registered in the adapter registry,
-// NOT in ADAPTER_CAPABILITY_MATRIX, and nothing routes to it yet. Only tests
-// consume it. Registration, the auth relay, the tool-manifest/OMI_BRIDGE_PIPE
-// relay, and default-chat routing arrive in later PRs.
+// As of PR-D the adapter IS in ADAPTER_CAPABILITY_MATRIX and IS registered into
+// the kernel registry on session relay (agentKernel/controlPlane.ts), but it
+// stays DARK: nothing ever invokes it (openBinding/executeAttempt) — default chat
+// still routes through /v2/messages, and control-tool spawns explicitly refuse
+// managed-cloud adapters. Deliberate main_chat routing arrives in PR-E.
 //
 // Windows deviations from the macOS source, each load-bearing:
 //   - Subprocess spawn: macOS spawns pi's `dist/cli.js` directly; Windows spawns
@@ -26,9 +27,9 @@
 //     forwards only canonical stream events to the sink; harness `error` still
 //     propagates via the rejected sendPrompt promise (matching the ACP adapter),
 //     and `tool_use` is display-redundant with `tool_activity`.
-//   - Capabilities: pi-mono is not yet in ADAPTER_CAPABILITY_MATRIX (DARK), so
-//     the wrapper uses a local static capability set equal to what the macOS
-//     matrix entry produces. PR-D moves this into the shared matrix.
+//   - Capabilities: the wrapper reads `adapterCapabilitiesFor('pi-mono')` from
+//     the shared ADAPTER_CAPABILITY_MATRIX (PR-D added the entry; it previously
+//     held a local static set equal to what the macOS matrix entry produces).
 //   - The small HarnessConfig / HarnessFeature / HarnessAdapter / SessionOpts /
 //     PromptResult / ToolExecutor / EventCallback / WarmupSessionConfig types
 //     were trimmed from Windows' interface.ts; they are re-declared locally so
@@ -40,6 +41,7 @@ import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { createInterface, Interface as ReadlineInterface } from 'readline'
 import { fileURLToPath } from 'url'
+import { adapterCapabilitiesFor } from './interface'
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -295,17 +297,19 @@ function resolveBundledPi(): string {
 
 /** Resolve the omi-provider extension file bundled alongside the app.
  *
- *  The pi-mono-extension (tool relay + omi provider registration) is NOT ported
- *  in this PR — it arrives in PR-C together with the omi-tool-manifest and the
- *  OMI_BRIDGE_PIPE relay server. Until then, callers must inject an explicit
- *  extension path (tests do); starting the real subprocess without one fails
- *  loud rather than passing pi a bogus `-e` argument.
+ *  The pi-mono-extension (omi provider registration + Windows denylist + the
+ *  OMI_BRIDGE_PIPE relay client) lives at ./pi-mono-extension/index.ts, a raw
+ *  `.ts` file pi loads on the fly via jiti (no precompile). This resolver
+ *  returns its on-disk path relative to this module's source.
+ *
+ *  DARK: the adapter is still unregistered, so this resolver is never called in
+ *  production yet — every production path either injects an explicit
+ *  extensionPath or does not spawn pi at all. Final packaging (asar-unpack of
+ *  the extension source + its .ts dep tree so the plain-Node child can read it)
+ *  is finished when the adapter is activated in PR-D/E.
  */
 function resolveBundledExtension(): string {
-  throw new Error(
-    'pi-mono extension is not bundled yet (wired in PR-C). ' +
-      'Pass an explicit extensionPath or set PI_EXTENSION_PATH.'
-  )
+  return join(dirname(fileURLToPath(import.meta.url)), 'pi-mono-extension', 'index.ts')
 }
 
 /**
@@ -1130,28 +1134,12 @@ export class PiMonoAdapter {
   }
 }
 
-/**
- * Capabilities for pi-mono. Equal to what `adapterCapabilitiesFor('pi-mono')`
- * would produce from the macOS ADAPTER_CAPABILITY_MATRIX entry. Held locally
- * because pi-mono is intentionally NOT in Windows' ADAPTER_CAPABILITY_MATRIX in
- * this DARK PR; PR-D adds the matrix entry and this constant is replaced by
- * `adapterCapabilitiesFor('pi-mono')`.
- */
-const PI_MONO_CAPABILITIES: AdapterCapabilities = {
-  resumeFidelity: 'none',
-  supportsNativeResume: false,
-  supportsCancellation: true,
-  acknowledgesCancellation: false,
-  requiresPinnedWorker: true,
-  supportsModelSwitching: true,
-  supportsArtifactEmission: false,
-  supportsTools: true,
-  restartBehavior: 'process_local_bindings_stale'
-}
-
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = 'pi-mono'
-  readonly capabilities: AdapterCapabilities = PI_MONO_CAPABILITIES
+  // Derived from the ADAPTER_CAPABILITY_MATRIX 'pi-mono' entry (PR-D). Was a
+  // local PI_MONO_CAPABILITIES const while pi-mono was intentionally absent from
+  // the matrix; that constant is now the matrix entry.
+  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor('pi-mono')
 
   private readonly harness: PiMonoAdapter
   private readonly cancelledAttempts = new Set<string>()

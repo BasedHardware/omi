@@ -11,6 +11,7 @@ import type {
   BarShowPayload,
   BarChatState,
   BarUsageLimitPayload,
+  VoiceHubBarState,
   LocalConversation,
   ConversationFolder,
   ConversationSyncPatch,
@@ -37,6 +38,8 @@ import type {
   CodingAgentEvent,
   CodingAgentId,
   CodingAgentRunArgs,
+  MainChatEvent,
+  MainChatSendArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
   ActionItemRecord,
@@ -141,6 +144,9 @@ const omi: OmiBridgeApi = {
   usageFlush: () => ipcRenderer.invoke('usage:flush'),
   usageGetSettings: () => ipcRenderer.invoke('usage:getSettings'),
   usageSetSettings: (next: UsageSettings) => ipcRenderer.invoke('usage:setSettings', next),
+  getChatScreenshotSharing: () => ipcRenderer.invoke('chat:getScreenshotSharing'),
+  setChatScreenshotSharing: (enabled: boolean) =>
+    ipcRenderer.invoke('chat:setScreenshotSharing', enabled),
   openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
   openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
@@ -275,10 +281,21 @@ const omi: OmiBridgeApi = {
   codingAgentCancel: (taskId: string) => ipcRenderer.invoke('codingAgent:cancel', taskId),
   codingAgentTest: (agentId: CodingAgentId, commandOverrides?: CodingAgentCommandOverrides) =>
     ipcRenderer.invoke('codingAgent:test', agentId, commandOverrides),
+  codingAgentAuthStatus: () => ipcRenderer.invoke('codingAgent:authStatus'),
+  codingAgentStartAuth: () => ipcRenderer.invoke('codingAgent:startAuth'),
+  codingAgentSignOut: () => ipcRenderer.invoke('codingAgent:signOut'),
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, event: CodingAgentEvent): void => cb(event)
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
+  },
+  chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
+  mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
+  mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
+  onMainChatEvent: (cb: (event: MainChatEvent) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, event: MainChatEvent): void => cb(event)
+    ipcRenderer.on('mainChat:event', listener)
+    return () => ipcRenderer.removeListener('mainChat:event', listener)
   },
   // pi-mono managed-cloud chat session relay: the Firebase token lives only in
   // the renderer, so push it (and re-push on ~hourly refresh) to the main-side
@@ -411,6 +428,25 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('chat:barRequestState', listener)
   },
   publishChatState: (state: BarChatState) => ipcRenderer.send('chat:publishState', state),
+  // --- Warm-hub PTT driver (main-window side; A5 PR-6b) ---
+  onVoiceHubBegin: (cb: (payload: { backfillMs: number }) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: { backfillMs: number }): void =>
+      cb(payload)
+    ipcRenderer.on('voiceHub:begin', listener)
+    return () => ipcRenderer.removeListener('voiceHub:begin', listener)
+  },
+  onVoiceHubEnd: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:end', listener)
+    return () => ipcRenderer.removeListener('voiceHub:end', listener)
+  },
+  onVoiceHubCancel: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:cancel', listener)
+    return () => ipcRenderer.removeListener('voiceHub:cancel', listener)
+  },
+  publishVoiceHubState: (state: VoiceHubBarState) =>
+    ipcRenderer.send('voiceHub:publishState', state),
   // --- Tray + lifecycle (Phase 1) ---
   trayReportState: (state) => ipcRenderer.send('tray:state', state),
   onTrayToggleListening: (cb: () => void) => {
@@ -545,6 +581,15 @@ const omiBar: OmiBarApi = {
     const listener = (_e: Electron.IpcRendererEvent, phase: 'down' | 'up'): void => cb(phase)
     ipcRenderer.on('bar:ptt', listener)
     return () => ipcRenderer.removeListener('bar:ptt', listener)
+  },
+  voiceHubBegin: (payload: { backfillMs: number }) =>
+    ipcRenderer.send('bar:voiceHubBegin', payload),
+  voiceHubEnd: () => ipcRenderer.send('bar:voiceHubEnd'),
+  voiceHubCancel: () => ipcRenderer.send('bar:voiceHubCancel'),
+  onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: VoiceHubBarState): void => cb(state)
+    ipcRenderer.on('voiceHub:state', listener)
+    return () => ipcRenderer.removeListener('voiceHub:state', listener)
   },
   getContentProtection: () => ipcRenderer.invoke('bar:getContentProtection'),
   setContentProtection: (enabled: boolean) =>

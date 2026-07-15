@@ -29,6 +29,10 @@ import {
   type ToolRelayBridgeOptions
 } from './toolRelayBridge'
 import { LEAF_AGENT_CONTROL_TOOLS } from './executionPolicy'
+import {
+  createCaptureScreenExecutor,
+  screenshotSharingDeniedMessage
+} from './captureScreenExecutor'
 import type { AgentExecutionRole } from './types'
 
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
@@ -405,6 +409,53 @@ describe('product-tool dispatch', () => {
         tool: 'execute_sql'
       })
     )
+  })
+})
+
+// === capture_screen: the Screen-Sharing-in-Chat gate at the relay layer =======
+
+describe('capture_screen dispatches through its consent gate', () => {
+  it('gate ON → the executor captures and the file path round-trips', async () => {
+    const { kernel, store } = newKernel()
+    const capture = vi.fn(
+      async () => 'C:\\Users\\me\\AppData\\Roaming\\omi\\chat-screenshots\\shot.jpg'
+    )
+    const bridge = await startBridge(kernel, {
+      productExecutors: new Map([
+        ['capture_screen', createCaptureScreenExecutor({ isSharingEnabled: () => true, capture })]
+      ])
+    })
+    const { token, pipePath } = bindSession(bridge, store, 'coordinator')
+    const client = await connect(pipePath, token)
+
+    expect(await client.call('capture_screen', {})).toBe(
+      'C:\\Users\\me\\AppData\\Roaming\\omi\\chat-screenshots\\shot.jpg'
+    )
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
+
+  it('gate OFF → dispatch is refused with POLICY_DENIED and NO capture happens', async () => {
+    const { kernel, store } = newKernel()
+    const capture = vi.fn(async () => 'should-not-run.jpg')
+    const bridge = await startBridge(kernel, {
+      productExecutors: new Map([
+        ['capture_screen', createCaptureScreenExecutor({ isSharingEnabled: () => false, capture })]
+      ])
+    })
+    const { token, pipePath } = bindSession(bridge, store, 'coordinator')
+    const client = await connect(pipePath, token)
+
+    const result = await client.call('capture_screen', {})
+    expect(result).toBe(screenshotSharingDeniedMessage())
+    expect(result).toContain('POLICY_DENIED:')
+    expect(JSON.parse(result.slice('POLICY_DENIED: '.length))).toMatchObject({
+      ok: false,
+      code: 'disabled_by_user_setting',
+      capability: 'desktop.context.screenshot_image',
+      tool: 'capture_screen'
+    })
+    // The gate is enforced at dispatch: the executor never ran the capture.
+    expect(capture).not.toHaveBeenCalled()
   })
 })
 

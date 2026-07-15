@@ -9,6 +9,8 @@ import { ClaudeCodeRuntimeAdapter } from './claudeCode'
 import { OpenClawRuntimeAdapter } from './openclaw'
 import { HermesRuntimeAdapter } from './hermes'
 import { CodexRuntimeAdapter } from './codex'
+import { PiMonoAdapter, PiMonoRuntimeAdapter } from './piMono'
+import { getPiMonoByokEnv, getPiMonoSession, piMonoManagedApiBaseUrl } from './piMonoSession'
 import {
   adapterCapabilitiesFor,
   type AdapterCapabilities,
@@ -20,7 +22,8 @@ export const ADAPTER_ACTIVATION_ENV = {
   acp: undefined, // Claude Code — bundled bridge, no install or env var needed
   openclaw: 'OMI_OPENCLAW_ADAPTER_COMMAND',
   hermes: 'OMI_HERMES_ADAPTER_COMMAND',
-  codex: 'OMI_CODEX_ADAPTER_COMMAND'
+  codex: 'OMI_CODEX_ADAPTER_COMMAND',
+  'pi-mono': undefined // managed-cloud default-chat engine — no install/env, token-gated
 } as const satisfies Record<ProductionAdapterId, string | undefined>
 
 export type ExternalAdapterId = Exclude<ProductionAdapterId, 'acp'>
@@ -64,6 +67,33 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     activationEnv: ADAPTER_ACTIVATION_ENV.codex,
     capabilities: adapterCapabilitiesFor('codex'),
     createAdapter: ({ log, command }) => new CodexRuntimeAdapter({ log, command })
+  },
+  // pi-mono is the managed-cloud default-chat engine, present only to satisfy the
+  // `Record<ProductionAdapterId, …>` totality (matrix membership forces it). It is
+  // NOT a coding-agent pill/fallback — PRODUCTION_ADAPTER_IDS excludes it, so this
+  // profile is never selected via the coding-agent task path. `createAdapter`
+  // ignores `command` (pi-mono is bundled, not a user command) and builds from the
+  // relayed Firebase session; it throws when signed out. The live kernel factory
+  // that actually spawns pi-mono lives in agentKernel/controlPlane.ts.
+  'pi-mono': {
+    adapterId: 'pi-mono',
+    displayName: 'Omi',
+    activationEnv: ADAPTER_ACTIVATION_ENV['pi-mono'],
+    capabilities: adapterCapabilitiesFor('pi-mono'),
+    createAdapter: ({ log }) => {
+      const session = getPiMonoSession()
+      if (!session) {
+        throw new Error('pi-mono requires a signed-in session (no Firebase token relayed yet).')
+      }
+      return new PiMonoRuntimeAdapter(
+        new PiMonoAdapter({
+          omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
+          authToken: session.token,
+          byokEnv: getPiMonoByokEnv(),
+          onRestart: (reason) => log(`[pi-mono] restart: ${reason}`)
+        })
+      )
+    }
   }
 }
 
@@ -85,6 +115,13 @@ export function adapterConfiguredCommand(
   return fromEnv || undefined
 }
 
+// Whether a coding agent is usable. `pi-mono` returns `true` unconditionally via
+// the `activationEnv === undefined` branch (like acp), but that value is never
+// consumed on a coding-agent path: pi-mono is excluded from PRODUCTION_ADAPTER_IDS,
+// so neither the pill list nor the delegated-task fallback (candidateAgents) ever
+// calls this for it. pi-mono's real gate is the relayed Firebase session, enforced
+// in the kernel registration factory (agentKernel/controlPlane.ts) and in this
+// module's pi-mono `createAdapter`. No special-case needed here.
 export function adapterIsActivated(
   adapterId: ProductionAdapterId,
   overrides: AdapterCommandOverrides = {},

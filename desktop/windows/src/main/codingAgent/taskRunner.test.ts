@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { candidateAgents, cancelTask, runCodingAgentTask } from './taskRunner'
+import { AcpError } from './acp'
 import { ADAPTER_PROFILES, adapterConfiguredCommand, adapterIsActivated } from './adapterRegistry'
 import type {
   AdapterAttemptContext,
@@ -33,6 +34,8 @@ type FakeScript = {
   stream?: string[]
   /** Throw from executeAttempt after streaming (post-output failure). */
   failAfterStream?: boolean
+  /** Throw this exact error from executeAttempt before any output. */
+  failWithError?: Error
   /** Resolve the attempt only when the signal aborts (for cancel tests). */
   hangUntilAborted?: boolean
 }
@@ -61,6 +64,7 @@ function fakeAdapter(adapterId: ProductionAdapterId, script: FakeScript): Runtim
       sink: AdapterEventSink,
       signal: AbortSignal
     ): Promise<AdapterAttemptResult> => {
+      if (script.failWithError) throw script.failWithError
       for (const text of script.stream ?? []) {
         sink({ type: 'text_delta', text })
       }
@@ -190,6 +194,26 @@ describe('runCodingAgentTask', () => {
 
     expect(result.ok).toBe(false)
     expect(result.error).toBeTruthy()
+  })
+
+  it('emits auth_required and stops (no fallback) when Claude Code hits an auth error', async () => {
+    activate('acp', 'openclaw')
+    script({
+      acp: { failWithError: new AcpError('Authentication required', -32000) },
+      openclaw: { stream: ['should never run'] }
+    })
+    const events: CodingAgentEvent[] = []
+
+    const result = await runCodingAgentTask(
+      { taskId: 't-auth', prompt: 'fix it', agentId: 'acp' },
+      (e) => events.push(e)
+    )
+
+    expect(result).toMatchObject({ ok: false, adapterId: 'acp' })
+    expect(result.error).toMatch(/Sign in to Claude/)
+    expect(events).toContainEqual({ type: 'auth_required', taskId: 't-auth', adapterId: 'acp' })
+    // A login fixes it — don't silently retry another agent for the same task.
+    expect(events.filter((e) => e.type === 'agent_selected')).toHaveLength(1)
   })
 
   it('reports no-agents-connected when nothing is activated', async () => {

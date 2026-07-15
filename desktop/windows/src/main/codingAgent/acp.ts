@@ -29,9 +29,9 @@ import type {
   AdapterEventSink,
   CancelAttemptContext,
   CancelDispatchResult,
+  CodingAgentAdapterId,
   OpenBindingInput,
   OpenedBinding,
-  ProductionAdapterId,
   ResumeBindingInput,
   RuntimeAdapter
 } from './interface'
@@ -131,6 +131,42 @@ export class AcpError extends Error {
   }
 }
 
+const RECOVERABLE_AUTH_ERROR_MARKERS = [
+  'authentication_error',
+  'authentication_failed',
+  'failed to authenticate',
+  'invalid authentication credentials',
+  'oauth token has been revoked',
+  'not logged in',
+  'please run /login'
+] as const
+
+/**
+ * Detect ACP authentication failures that should re-enter the Claude sign-in
+ * flow — port of macOS agent/src/adapters/acp.ts.
+ *
+ * The Claude bridge reports missing credentials with the canonical -32000 code,
+ * but a provider 401 during session/prompt is wrapped as a -32603 internal
+ * error. Restrict wrapped-error matching to known auth markers so unrelated
+ * internal errors stay terminal instead of opening a surprise login flow.
+ */
+export function isRecoverableAcpAuthError(error: unknown): boolean {
+  if (!(error instanceof AcpError)) return false
+  if (error.code === -32000) return true
+  if (error.code !== -32603) return false
+
+  let data = ''
+  if (error.data !== undefined) {
+    try {
+      data = typeof error.data === 'string' ? error.data : JSON.stringify(error.data)
+    } catch {
+      // The message stays authoritative when error data is not serializable.
+    }
+  }
+  const searchable = `${error.message}\n${data}`.toLowerCase()
+  return RECOVERABLE_AUTH_ERROR_MARKERS.some((marker) => searchable.includes(marker))
+}
+
 const MAX_RECENT_STDERR_CHARS = 2_000
 
 function appendRecentStderr(current: string, next: string): string {
@@ -144,7 +180,7 @@ function appendRecentStderr(current: string, next: string): string {
 export type AcpNotificationHandler = (method: string, params: unknown) => void
 
 export interface AcpRuntimeAdapterOptions {
-  adapterId?: ProductionAdapterId
+  adapterId?: CodingAgentAdapterId
   log?: (message: string) => void
   /** Binary used to run the bundled entry; defaults to Electron/Node's own executable. */
   nodeBin?: string
@@ -183,7 +219,7 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 }
 
 export class AcpRuntimeAdapter implements RuntimeAdapter {
-  readonly adapterId: ProductionAdapterId
+  readonly adapterId: CodingAgentAdapterId
   readonly capabilities: AdapterCapabilities
 
   private process: ChildProcess | null = null

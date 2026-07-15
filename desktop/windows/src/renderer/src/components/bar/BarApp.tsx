@@ -36,7 +36,8 @@ import type {
   BarShowPayload,
   BarChatState,
   CodingAgentId,
-  WaveformSource
+  WaveformSource,
+  VoiceHubBarState
 } from '../../../../shared/types'
 import './bar.css'
 
@@ -51,6 +52,16 @@ const PANEL_ZOOM = 0.7
 const RETRACT_GRACE_MS = 1800
 
 const EMPTY_CHAT: BarChatState = { messages: [], sending: false, status: 'idle' }
+
+// Idle warm-hub projection: `active:false` ⇒ the bar reads its LOCAL orb state
+// (today's behavior). Only a main-owned turn (flag on) flips `active` true.
+const HUB_ORB_IDLE: VoiceHubBarState = {
+  active: false,
+  isListening: false,
+  isThinking: false,
+  isResponseActive: false,
+  orbLevel: 0
+}
 
 function SignedOutContent(): React.JSX.Element {
   return (
@@ -179,7 +190,17 @@ export function BarApp(): React.JSX.Element {
     // Fires on every completed hold capture (drives the onboarding voice step).
     onCaptureEnd: () => window.omiOverlay.notifyVoiceCaptured(),
     restoreDraft: (snapshot) => setDraft(snapshot),
-    getDraft: () => draftRef.current
+    getDraft: () => draftRef.current,
+    // Warm-hub delegation (A5 PR-6b): flag on, the hold is driven by the MAIN
+    // window's hub driver over the bar→main control channels — the hook creates no
+    // local capture. `enabled` reads the live kill-switch pref (default OFF), so
+    // flag off this is inert and the local cascade path runs exactly as today.
+    hubDelegate: {
+      enabled: () => getPreferences().pttHubEnabled === true,
+      begin: (backfillMs) => window.omiBar.voiceHubBegin({ backfillMs }),
+      end: () => window.omiBar.voiceHubEnd(),
+      cancel: () => window.omiBar.voiceHubCancel()
+    }
   })
   // A capture that FAILS (mic unavailable → the machine cancels, so no
   // captureEnded ever fires; or a batch/pipeline error) leaves the bar silent —
@@ -189,6 +210,34 @@ export function BarApp(): React.JSX.Element {
   useEffect(() => {
     if (ptt.error) window.omiOverlay.notifyVoiceFailed(ptt.error)
   }, [ptt.error])
+
+  // Warm-hub projection (A5 PR-6b): while a MAIN-owned hub turn is active the bar
+  // has no local capture, so the orb phase + loudness arrive over IPC. `active` is
+  // only ever true when the flag is on and a turn is running — flag off this stays
+  // idle and the orb/pill read exactly the local `ptt.*` state as today.
+  const hubOrbRef = useRef<VoiceHubBarState>(HUB_ORB_IDLE)
+  const [hubOrb, setHubOrb] = useState<VoiceHubBarState>(HUB_ORB_IDLE)
+  useEffect(
+    () =>
+      window.omiBar.onVoiceHubState((s) => {
+        hubOrbRef.current = s
+        setHubOrb(s)
+      }),
+    []
+  )
+  // A WaveformSource fed by the projected orb level (no per-frame audio crosses
+  // windows — just the coarse loudness). Stable ref so the Orb reads the latest.
+  const hubWaveRef = useRef<WaveformSource>({
+    getByteFrequencyData: (dest) => {
+      const v = Math.round(Math.min(1, Math.max(0, hubOrbRef.current.orbLevel)) * 255)
+      for (let i = 0; i < dest.length; i++) dest[i] = v
+    },
+    getOrbLevel: () => hubOrbRef.current.orbLevel
+  })
+  const hubActive = hubOrb.active
+  // The user's voice is being captured — local hold OR a main-owned hub hold.
+  const recordingNow = hubActive ? hubOrb.isListening : ptt.recording
+  const thinkingNow = hubActive ? hubOrb.isThinking || hubOrb.isResponseActive : ptt.transcribing
 
   // Main drives PTT for the summon-hotkey hold; read the latest handlers.
   const beginHoldRef = useRef(ptt.beginHold)
@@ -270,9 +319,11 @@ export function BarApp(): React.JSX.Element {
   // Recording/finalizing → abort the capture; in the conversation → back to the
   // list; on the list → close the bar. Window-level so it fires regardless of
   // which control has focus. Refs keep the once-registered listener current.
-  const escStateRef = useRef({ view, recording: ptt.recording, transcribing: ptt.transcribing })
+  // recordingNow/thinkingNow fold in a main-owned hub turn (flag on) so Esc aborts
+  // it too — flag off they equal the local ptt.* state, so this is unchanged.
+  const escStateRef = useRef({ view, recording: recordingNow, transcribing: thinkingNow })
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered listener
-  escStateRef.current = { view, recording: ptt.recording, transcribing: ptt.transcribing }
+  escStateRef.current = { view, recording: recordingNow, transcribing: thinkingNow }
   const cancelPttRef = useRef(ptt.cancel)
   // eslint-disable-next-line react-hooks/refs -- latest-ref
   cancelPttRef.current = ptt.cancel
@@ -295,8 +346,8 @@ export function BarApp(): React.JSX.Element {
   // open via main's watchdog suppression, then release after a short grace once
   // everything settles so the normal cursor retract can reclaim it.
   const busy = isBarBusy({
-    recording: ptt.recording,
-    transcribing: ptt.transcribing,
+    recording: recordingNow,
+    transcribing: thinkingNow,
     status: chat.status
   })
   const retractTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -343,8 +394,12 @@ export function BarApp(): React.JSX.Element {
   const continuousListening = continuous && !!user
   const agentsActive = chat.agentsActive ?? false
   const orb = deriveOrbState({
-    recording: ptt.recording,
-    transcribing: ptt.transcribing,
+    recording: recordingNow,
+    // Distinct locked-listening pose for a tap-to-lock hands-free capture. The
+    // recording/thinking signals already fold in a main-owned hub turn via
+    // recordingNow/thinkingNow (onVoiceHubState).
+    locked: ptt.locked,
+    transcribing: thinkingNow,
     status: chat.status,
     continuousListening,
     agentsActive
@@ -353,9 +408,11 @@ export function BarApp(): React.JSX.Element {
   // Pill wordmark → "Listening" whenever the user's voice is being captured
   // (PTT hold or always-on), else "Omi". Activity-keyed, not orb-pose-keyed: a
   // PTT hold derives as the 'speaking' pose but is still Omi listening to you.
-  const pillText = pillLabel({ recording: ptt.recording, continuousListening })
+  const pillText = pillLabel({ recording: recordingNow, continuousListening })
   const amplitudeSource: (() => WaveformSource | null) | null = orb.withAmplitude
-    ? () => ptt.analyserRef.current
+    ? hubActive
+      ? () => hubWaveRef.current
+      : () => ptt.analyserRef.current
     : null
 
   // Connected coding agents to list under "Omi Chat" (at most one "Working…").

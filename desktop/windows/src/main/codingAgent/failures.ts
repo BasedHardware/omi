@@ -3,7 +3,7 @@
 // before a diagnostic is ever logged or shown, and classifyAdapterProcessFailure
 // is the one sanctioned stderr-sniffing site (known OpenClaw config errors).
 
-import type { ProductionAdapterId } from './interface'
+import type { CodingAgentAdapterId } from './interface'
 
 export type RuntimeFailureSource = 'adapter_process' | 'adapter_execution' | 'runtime'
 
@@ -81,7 +81,7 @@ export function sanitizeProcessDiagnostic(text: string): string {
 }
 
 export function failureFromProcessExit(input: {
-  adapterId: ProductionAdapterId
+  adapterId: CodingAgentAdapterId
   exitCode: number | null
   recentStderr: string
 }): RuntimeFailure {
@@ -111,7 +111,7 @@ export function failureFromProcessExit(input: {
 }
 
 function classifyAdapterProcessFailure(
-  adapterId: ProductionAdapterId,
+  adapterId: CodingAgentAdapterId,
   diagnostic: string
 ): (Pick<RuntimeFailure, 'code' | 'userMessage'> & Partial<RuntimeFailure>) | undefined {
   if (adapterId === 'openclaw' && isOpenClawInvalidConfig(diagnostic)) {
@@ -138,7 +138,7 @@ function isOpenClawInvalidConfig(diagnostic: string): boolean {
 }
 
 export function failureFromProcessError(input: {
-  adapterId: ProductionAdapterId
+  adapterId: CodingAgentAdapterId
   message: string
 }): RuntimeFailure {
   const diagnostic = sanitizeProcessDiagnostic(input.message)
@@ -163,7 +163,7 @@ function providerFromDiagnostic(diagnostic: string): string | undefined {
   return undefined
 }
 
-function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string): string {
+function adapterFailureLabel(adapterId: CodingAgentAdapterId, provider?: string): string {
   switch (adapterId) {
     case 'openclaw':
       return 'OpenClaw'

@@ -1,8 +1,18 @@
-import type { App as AppEntry } from './omiApi.generated'
+// Minimal structural shape the ranking helpers read. Both the full `App` (v1)
+// and `AppCatalogItem` (v2 catalog) satisfy it, so ranking works across the
+// v1→v2 migration without coupling to either concrete type.
+export interface RankableApp {
+  name?: string
+  description?: string
+  category?: string
+  author?: string
+  rating_avg?: number | null
+  installs?: number
+}
 
 // Ranks an app by rating weighted by install count (log-damped). Used to order
 // both category rows and search results so the most relevant apps surface first.
-export function popularityScore(a: AppEntry): number {
+export function popularityScore(a: RankableApp): number {
   return (a.rating_avg ?? 0) * Math.log((a.installs ?? 1) + 1)
 }
 
@@ -12,14 +22,14 @@ export function popularityScore(a: AppEntry): number {
 // past the cap and make it unreachable — e.g. they can't find it to toggle it off.
 // Ranking exact/prefix name matches first guarantees that typing an app's name
 // always surfaces it.
-function nameMatchTier(a: AppEntry, q: string): number {
+function nameMatchTier(a: RankableApp, q: string): number {
   const name = a.name?.toLowerCase() ?? ''
   if (name === q) return 0 // exact name match
   if (name.startsWith(q)) return 1 // name prefix match
   return 2 // matched elsewhere (name substring, description, category, author)
 }
 
-function matchesQuery(a: AppEntry, q: string): boolean {
+function matchesQuery(a: RankableApp, q: string): boolean {
   return Boolean(
     a.name?.toLowerCase().includes(q) ||
     a.description?.toLowerCase().includes(q) ||
@@ -32,7 +42,7 @@ function matchesQuery(a: AppEntry, q: string): boolean {
 // relevant surface first (and stay within the render cap): exact name match, then
 // name-prefix match, then by popularity. Pure and deterministic. Returns [] for an
 // empty/whitespace query.
-export function rankSearchResults(apps: AppEntry[], rawQuery: string): AppEntry[] {
+export function rankSearchResults<T extends RankableApp>(apps: T[], rawQuery: string): T[] {
   const q = rawQuery.trim().toLowerCase()
   if (!q) return []
   return apps

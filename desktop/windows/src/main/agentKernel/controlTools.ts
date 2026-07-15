@@ -21,7 +21,7 @@
 
 import { randomUUID } from 'node:crypto'
 import { z } from 'zod'
-import { isProductionAdapterId } from '../codingAgent/interface'
+import { adapterCredentialScopeFor, isProductionAdapterId } from '../codingAgent/interface'
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -450,10 +450,35 @@ function defaultControlAdapterId(context: AgentControlToolContext): string {
   return context.defaultAdapterId ?? 'acp'
 }
 
+/**
+ * The agent-control spawn/run tools start LOCAL-provider sub-agents. A
+ * managed-cloud adapter (pi-mono) must never be spawned or run through them: it
+ * is the default-chat engine reached via main_chat (PR-E), not a spawnable
+ * coding agent. Registering pi-mono (PR-D) flipped `isProductionAdapterId` true,
+ * so without this guard `resolveAdapterWithinBoundary` would accept it — and the
+ * trusted-direct-control context has no owning session boundary, so
+ * `assertAdapterAllowedForControlRun` early-returns and would NOT catch it. Reject
+ * by credential SCOPE (matrix-derived, not an id list) so it stays correct when a
+ * second managed adapter appears. Keeps pi-mono un-invocable via control tools in
+ * DARK. Called at the entry of both admission guards so every spawn variant
+ * (spawn_agent, spawn_background_agent, run_agent_and_wait) is covered.
+ */
+function assertControlSpawnAdapterNotManagedCloud(adapterId: string): void {
+  if (
+    isProductionAdapterId(adapterId) &&
+    adapterCredentialScopeFor(adapterId) === 'managed_cloud'
+  ) {
+    throw new Error(
+      `${adapterId} is a managed-cloud adapter and cannot be spawned or run through the agent-control tools.`
+    )
+  }
+}
+
 function assertAdapterAllowedForControlRun(
   context: AgentControlToolContext,
   adapterId: string
 ): void {
+  assertControlSpawnAdapterNotManagedCloud(adapterId)
   if (!context.defaultAdapterId && !context.providerBoundary) {
     return
   }
@@ -480,6 +505,7 @@ function assertAdapterAllowedForTopLevelLocalProviderSpawn(
   adapterId: string,
   directedProvider?: 'hermes' | 'openclaw'
 ): void {
+  assertControlSpawnAdapterNotManagedCloud(adapterId)
   const hasDirectedLocalProvider = directedProvider === adapterId
   if (!context.trustedUserControl && !hasDirectedLocalProvider) {
     assertAdapterAllowedForControlRun(context, adapterId)

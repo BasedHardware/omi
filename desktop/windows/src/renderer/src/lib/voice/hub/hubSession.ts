@@ -102,8 +102,11 @@ export type HubSession = {
 // MARK: - Injectable seams (socket / player / clock)
 
 /** Minimal socket surface the sessions use — real `WebSocket` in production, a
- *  frame-recording fake in tests. Providers exchange JSON TEXT frames (spoken
- *  audio rides as base64 inside JSON), so `send`/`onMessage` are string-typed. */
+ *  frame-recording fake in tests. Client→server frames are always JSON TEXT
+ *  (spoken audio rides as base64 inside JSON), so `send` is string-typed. But
+ *  server→client frames are NOT all text: Gemini Live delivers its JSON control
+ *  frames (incl. the `{"setupComplete":{}}` readiness signal) as BINARY, so the
+ *  real factory decodes binary→text before `onMessage` (which stays string). */
 export type HubSocket = {
   send(data: string): void
   close(): void
@@ -138,10 +141,23 @@ const defaultClock: HubClock = {
   clearTimer: (h) => clearTimeout(h as ReturnType<typeof setTimeout>)
 }
 
-const defaultSocketFactory: HubSocketFactory = (spec) => {
+const wsTextDecoder = new TextDecoder()
+
+// Exported for the binary-frame regression test (hubSession.test.ts). The
+// injected-fake socket tests pass strings and never exercise this real factory,
+// which is how the dropped-binary-frame bug reached the default-ON flip.
+export const defaultSocketFactory: HubSocketFactory = (spec) => {
   const ws = new WebSocket(spec.url, spec.protocols)
+  // Gemini Live delivers control frames (incl. the `{"setupComplete":{}}`
+  // readiness signal) as BINARY. Force ArrayBuffer delivery (browser default is
+  // Blob) and decode to text; without this the readiness frame is dropped, the
+  // Gemini session never warms, and every hub turn silently cascades.
+  ws.binaryType = 'arraybuffer'
   ws.onopen = () => spec.onOpen()
-  ws.onmessage = (e: MessageEvent) => spec.onMessage(typeof e.data === 'string' ? e.data : '')
+  ws.onmessage = (e: MessageEvent) =>
+    spec.onMessage(
+      typeof e.data === 'string' ? e.data : e.data instanceof ArrayBuffer ? wsTextDecoder.decode(e.data) : ''
+    )
   ws.onclose = (e: CloseEvent) => spec.onClose(e.code, e.reason)
   ws.onerror = () => spec.onError('websocket error')
   return {

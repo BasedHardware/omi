@@ -113,14 +113,21 @@ export type Preferences = {
   // 'openai'/'gemini' pins a concrete lane. Resolved to a concrete VoiceProvider
   // at session start via resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
   voiceProvider?: VoiceProviderSetting
-  // Warm-hub system-wide PTT kill-switch (Track 2 / A5 PR-6). Default OFF: the
-  // shipped `omniSTT` cascade is the ONLY path a PTT turn takes, byte-for-byte as
-  // it does today. When true, a PTT press whose hub is available routes to the
-  // warm realtime hub (with graceful cascade fallback). Flipping it off at runtime
-  // restores the merged behavior with no restart — the next route selection picks
-  // `omniSTT`. Undefined ⇒ OFF; never defaulted true here (flipping the default is
-  // a separate post-soak PR).
+  // Warm-hub system-wide PTT kill-switch (Track 2 / A5 PR-6). Default ON (flipped
+  // after the driver was made functional + live-verified end-to-end): a PTT press
+  // whose hub is available routes to the warm realtime hub (native audio in + reply,
+  // recorded into the one chat timeline), with graceful byte-for-byte cascade
+  // fallback when the hub is cold/unavailable. Setting it explicitly false restores
+  // the shipped `omniSTT`-only cascade with no restart — the next route selection
+  // picks `omniSTT` and the eager warm tears down. (`selectPttRoute` still treats
+  // undefined as off at the structural layer; the ON default is applied here so
+  // every user gets the hub unless they opt out.)
   pttHubEnabled?: boolean
+  // Tap-to-lock (macOS PushToTalkManager.doubleTapForLock): a quick double-tap of
+  // the summon hotkey latches hands-free listening (mic stays open, no key held)
+  // until the next tap. DEFAULT ON — read as `!== false` so an unset pref latches.
+  // Hold-to-talk is unchanged either way.
+  doubleTapForLock?: boolean
 }
 
 const defaults: Preferences = {
@@ -134,7 +141,11 @@ const defaults: Preferences = {
   chatHistoryMode: 'infinite',
   // Auto is the out-of-the-box default (macOS RealtimeOmniProvider.auto): the
   // daily benchmark pick decides the lane until the user pins one in Settings.
-  voiceProvider: 'auto'
+  voiceProvider: 'auto',
+  // Warm realtime hub is ON by default (flipped after live end-to-end verification):
+  // a PTT press routes to the hub when available, with cascade fallback and its text
+  // recorded to the one chat timeline. Users can opt out in Settings (sets false).
+  pttHubEnabled: true
 }
 
 function load(): Preferences {

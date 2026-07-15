@@ -435,6 +435,25 @@ export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
  *  re-showing the popup. */
 export type BarUsageLimitPayload = { message: string; spoken: boolean; popup?: boolean }
 
+/** Low-rate orb-driving projection pushed MAIN → bar during a warm-hub PTT turn
+ *  (A5 PR-6b). The main window owns the turn (capture, hub, playback); the bar is
+ *  a pure viewport whose orb needs the phase + loudness to animate. NO per-frame
+ *  audio is carried — only this coarse state on each reducer transition + a
+ *  throttled `orbLevel`. `active:false` tells the bar to fall back to its own local
+ *  orb state (today's behavior), so the flag-off path never sees this at all. */
+export type VoiceHubBarState = {
+  /** A main-owned warm-hub turn currently owns the bar orb. */
+  active: boolean
+  /** The mic is capturing (the orb's listening/speaking pose). */
+  isListening: boolean
+  /** Awaiting the hub's response (the orb's thinking pose). */
+  isThinking: boolean
+  /** The hub is speaking its reply (the orb's response-active pose). */
+  isResponseActive: boolean
+  /** Latest orb loudness in [0,1] sampled from the main-owned capture. */
+  orbLevel: number
+}
+
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
@@ -479,6 +498,20 @@ export type OmiBarApi = {
   /** Summon-hotkey physical hold state, driven by main's gesture machine.
    *  'down' arms the existing PTT machine; 'up' releases it. */
   onPtt: (cb: (phase: 'down' | 'up') => void) => () => void
+  /** Warm-hub PTT (A5 PR-6b, gated on `pttHubEnabled`): a bar hold delegates the
+   *  turn to the MAIN window's warm-hub driver instead of running the local
+   *  cascade. `backfillMs` is the pre-roll the main-owned capture should include
+   *  (time since the physical key-down). Sent ONLY when the flag is on — flag off,
+   *  the bar never calls these and its local cascade path is byte-for-byte today's. */
+  voiceHubBegin: (payload: { backfillMs: number }) => void
+  /** Hub hold released — the main driver finalizes + commits the turn. */
+  voiceHubEnd: () => void
+  /** Hub hold aborted (Esc / focus loss) — the main driver cancels the turn. */
+  voiceHubCancel: () => void
+  /** Projected warm-hub turn state pushed from the MAIN window, so the bar orb
+   *  animates during a main-owned turn (no per-frame audio crosses — just the low-
+   *  rate orb level + phase). `active:false` ⇒ the bar uses its local orb state. */
+  onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => () => void
   /** Screen-share privacy toggle (persisted in main's app settings). */
   getContentProtection: () => Promise<boolean>
   setContentProtection: (enabled: boolean) => Promise<boolean>
@@ -704,6 +737,10 @@ export type OmiBridgeApi = {
   /** Read/write the foreground-monitor opt-out flag. */
   usageGetSettings: () => Promise<UsageSettings>
   usageSetSettings: (next: UsageSettings) => Promise<UsageSettings>
+  /** Read/write "Screen Sharing in Chat" (default ON) — the consent gate for the
+   *  model-invoked capture_screen tool. Returns the stored value. */
+  getChatScreenshotSharing: () => Promise<boolean>
+  setChatScreenshotSharing: (enabled: boolean) => Promise<boolean>
   /** Open a Stripe Checkout URL in a modal in-app window; resolves when the flow
    *  completes ('success'/'cancel' at the backend redirect) or the user closes it
    *  ('closed'). Only displays Stripe's hosted page — completes no payment. */
@@ -979,6 +1016,16 @@ export type OmiBridgeApi = {
   onBarRequestChatState: (cb: () => void) => () => void
   /** Broadcast the projected chat state to the bar (history + streaming + status). */
   publishChatState: (state: BarChatState) => void
+  // --- Warm-hub PTT driver (main-window side; A5 PR-6b, gated on pttHubEnabled) ---
+  /** A bar hold delegated its turn to the main-window warm-hub driver. Payload is
+   *  the pre-roll backfill ms. Main-window renderer only. */
+  onVoiceHubBegin: (cb: (payload: { backfillMs: number }) => void) => () => void
+  /** The delegated hold was released — finalize + commit the main-owned turn. */
+  onVoiceHubEnd: (cb: () => void) => () => void
+  /** The delegated hold was aborted — cancel the main-owned turn. */
+  onVoiceHubCancel: (cb: () => void) => () => void
+  /** Push the projected warm-hub turn state to the bar orb (main → bar). */
+  publishVoiceHubState: (state: VoiceHubBarState) => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void
@@ -1042,12 +1089,35 @@ export type OmiBridgeApi = {
   codingAgentRun: (args: CodingAgentRunArgs) => Promise<CodingAgentResult>
   codingAgentCancel: (taskId: string) => Promise<boolean>
   /** Spawn the agent and complete the ACP handshake, then tear it down —
-   *  proves the configured command works (Settings → Agents "Test"). */
+   *  proves the configured command works (Settings → Agents "Test"). For Claude
+   *  Code, a missing/expired sign-in is reported as `needsAuth` (not a generic
+   *  failure) so the UI can offer "Sign in" instead of a confusing error. */
   codingAgentTest: (
     agentId: CodingAgentId,
     commandOverrides?: CodingAgentCommandOverrides
-  ) => Promise<{ ok: boolean; error?: string }>
+  ) => Promise<CodingAgentTestResult>
+  /** Whether the built-in Claude Code agent has usable credentials. */
+  codingAgentAuthStatus: () => Promise<CodingAgentAuthStatus>
+  /** Run the Claude Code sign-in: loopback PKCE flow + open the browser, then
+   *  write credentials. Resolves with the post-sign-in status. */
+  codingAgentStartAuth: () => Promise<CodingAgentStartAuthResult>
+  /** Sign out of Claude Code (drop only its stored credentials). */
+  codingAgentSignOut: () => Promise<CodingAgentAuthStatus>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  // --- Main chat (kernel-routed pi-mono) ---
+  /** Which engine the main typed-chat should use: 'legacy_sse' (the existing
+   *  /v2/messages path) or 'pi_mono' (the kernel-routed managed-cloud door).
+   *  PR-E2 reads this to branch; DARK until then. */
+  chatGetEngine: () => Promise<'legacy_sse' | 'pi_mono'>
+  /** Run one main-chat turn through the kernel + pi-mono adapter; resolves with the
+   *  final outcome. Streaming progress arrives via onMainChatEvent, keyed by runId
+   *  (and tagged with the caller's requestId). DARK: no renderer consumer yet. */
+  mainChatSend: (args: MainChatSendArgs) => Promise<MainChatResult>
+  /** Request cancellation of an in-flight main-chat run. Resolves true when the
+   *  kernel accepted the cancellation. */
+  mainChatCancel: (runId: string) => Promise<boolean>
+  /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
+  onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
    *  main-side pi-mono session store on sign-in and on every id-token refresh;
@@ -1133,6 +1203,32 @@ export type CodingAgentEvent =
       input?: Record<string, unknown>
     }
   | { type: 'tool_result_display'; taskId: string; toolUseId: string; name: string; output: string }
+  // Claude Code hit an authentication failure mid-task — the UI surfaces a
+  // "Sign in to Claude" prompt (the flow itself is triggered from the UI, never
+  // auto-opened from inside the adapter).
+  | { type: 'auth_required'; taskId: string; adapterId: CodingAgentId }
+
+/** Result of Settings → Agents "Test". `needsAuth` marks the built-in Claude
+ *  Code agent as not-signed-in (vs. a generic connection failure). */
+export type CodingAgentTestResult = {
+  ok: boolean
+  error?: string
+  needsAuth?: boolean
+}
+
+/** Whether the built-in Claude Code agent has usable credentials. */
+export type CodingAgentAuthStatus = {
+  connected: boolean
+  /** Epoch ms of access-token expiry, when known. */
+  expiresAt: number | null
+}
+
+/** Outcome of the Claude Code sign-in flow. */
+export type CodingAgentStartAuthResult = {
+  ok: boolean
+  error?: string
+  status: CodingAgentAuthStatus
+}
 
 export type CodingAgentResult = {
   taskId: string
@@ -1140,6 +1236,83 @@ export type CodingAgentResult = {
   /** Agent that produced the outcome; null when none could run. */
   adapterId: CodingAgentId | null
   text: string
+  costUsd?: number
+  error?: string
+}
+
+// --- Main chat (kernel-routed, pi-mono managed-cloud) ---
+// The DARK door PR-E2 will call to run a default-chat turn through the agent
+// kernel and the managed-cloud pi-mono adapter, instead of the legacy /v2/messages
+// SSE path. Wire shapes parallel CodingAgent* but key events by `runId` (the
+// kernel's run identity) rather than `taskId`, because a chat turn IS a kernel run
+// and cancellation targets the runId. Every event also carries the caller's
+// `requestId` so the renderer can correlate a streaming turn to its send before
+// the server-assigned `runId` is known (the `accepted` event delivers that runId).
+
+export type MainChatSendArgs = {
+  /** Caller-generated correlation id, echoed on every MainChatEvent and used as
+   *  the kernel run's requestId. Lets the renderer match a streaming turn to its
+   *  send before the run's server-assigned runId arrives. */
+  requestId: string
+  /** The already-context-prepended user prompt. PR-E2 assembles OCR/history
+   *  context; the main-chat door forwards this string to the adapter verbatim. */
+  prompt: string
+  /** The raw user message, BEFORE any OCR/context prepend. The main-chat door
+   *  records THIS (not `prompt`) as the user turn on the kernel transcript, so the
+   *  stored transcript stays clean of the contexted prompt while the adapter still
+   *  receives `prompt` verbatim. */
+  cleanUserText: string
+  /** Main-chat conversation id; maps to the main_chat/chat/<chatId> surface.
+   *  Defaults to 'default' when omitted. */
+  chatId?: string
+}
+
+export type MainChatEvent =
+  /** The run has been accepted and assigned a runId — the first event of a turn.
+   *  Carries the runId so the caller can later cancel it via mainChatCancel. */
+  | { type: 'accepted'; requestId: string; runId: string }
+  /** A run-lifecycle marker (queued/starting/running) for a spinner. */
+  | { type: 'status'; requestId: string; runId: string; message: string }
+  /** An assistant text chunk; accumulate in order to render the streaming reply. */
+  | { type: 'text_delta'; requestId: string; runId: string; text: string }
+  /** A reasoning/thinking chunk (shown separately from the reply). */
+  | { type: 'thinking_delta'; requestId: string; runId: string; text: string }
+  /** A tool invocation's lifecycle transition. */
+  | {
+      type: 'tool_activity'
+      requestId: string
+      runId: string
+      name: string
+      status: 'started' | 'completed' | 'failed'
+      toolUseId?: string
+      input?: Record<string, unknown>
+    }
+  /** A tool's rendered output. */
+  | {
+      type: 'tool_result_display'
+      requestId: string
+      runId: string
+      toolUseId: string
+      name: string
+      output: string
+    }
+  /** The final assistant text (emitted on a successful turn before run_finished). */
+  | { type: 'completed'; requestId: string; runId: string; text: string }
+  /** Terminal event — the turn is done. The renderer stops the spinner here. */
+  | {
+      type: 'run_finished'
+      requestId: string
+      runId: string
+      status: 'succeeded' | 'failed' | 'cancelled'
+      error?: string
+    }
+
+export type MainChatResult = {
+  runId: string
+  requestId: string
+  ok: boolean
+  text: string
+  terminalStatus: 'succeeded' | 'failed' | 'cancelled'
   costUsd?: number
   error?: string
 }

@@ -8,6 +8,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   BaseHubSession,
+  defaultSocketFactory,
   type HubBargeInStrategy,
   type HubProvider,
   type HubSocketFactory
@@ -21,6 +22,61 @@ const noopPlayer: VoicePlayer = {
   flush: () => {},
   close: () => {}
 } as unknown as VoicePlayer
+
+// Regression for the Gemini binary-frame drop that the default-ON hub flip would
+// otherwise ship. Gemini Live delivers control frames (incl. the
+// `{"setupComplete":{}}` readiness signal) as BINARY. The real defaultSocketFactory
+// must set binaryType='arraybuffer' and decode binary→text; otherwise the readiness
+// frame is dropped, the Gemini session never warms, and every hub turn silently
+// cascades. The injected-fake socket tests below never exercise this real factory
+// (they pass strings), which is exactly why this shipped uncaught for Gemini.
+describe('defaultSocketFactory — binary frame decoding', () => {
+  it('sets binaryType=arraybuffer and decodes a BINARY readiness frame to text', () => {
+    let created: FakeWS | null = null
+    class FakeWS {
+      binaryType = 'blob'
+      onopen: (() => void) | null = null
+      onmessage: ((e: { data: unknown }) => void) | null = null
+      onclose: ((e: { code: number; reason: string }) => void) | null = null
+      onerror: (() => void) | null = null
+      readyState = 0
+      constructor(
+        public url: string,
+        public protocols?: string | string[]
+      ) {
+        created = this
+      }
+      send(): void {}
+      close(): void {}
+    }
+    const orig = globalThis.WebSocket
+    globalThis.WebSocket = FakeWS as unknown as typeof WebSocket
+    try {
+      const received: string[] = []
+      defaultSocketFactory({
+        url: 'wss://generativelanguage.googleapis.com/ws',
+        onOpen: () => {},
+        onMessage: (m) => received.push(m),
+        onClose: () => {},
+        onError: () => {}
+      })
+      expect(created).not.toBeNull()
+      // Without this the browser delivers binary frames as Blob and they are dropped.
+      expect(created!.binaryType).toBe('arraybuffer')
+
+      // Gemini's readiness frame — arrives BINARY, not string.
+      const binary = new TextEncoder().encode('{"setupComplete":{}}').buffer
+      created!.onmessage!({ data: binary })
+      expect(received).toEqual(['{"setupComplete":{}}'])
+
+      // A normal string frame (OpenAI, or Gemini text) still passes through unchanged.
+      created!.onmessage!({ data: '{"serverContent":{}}' })
+      expect(received).toEqual(['{"setupComplete":{}}', '{"serverContent":{}}'])
+    } finally {
+      globalThis.WebSocket = orig
+    }
+  })
+})
 
 /** A controllable socket whose `send` throws when not OPEN, exactly like a real
  *  `WebSocket` — so a missing guard in `BaseHubSession.send` would surface as a

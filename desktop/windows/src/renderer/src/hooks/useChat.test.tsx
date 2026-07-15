@@ -527,6 +527,34 @@ describe('useChat — C5 abort on reset (agent-task path)', () => {
   })
 })
 
+describe('useChat — recordVoiceTurn (native hub turn → one timeline, no LLM/TTS)', () => {
+  it('appends the user + assistant messages and persists them, with NO fetch', async () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('what time is it', "it's noon"))
+    await act(async () => {
+      await flush()
+    })
+    expect(result.current.history.map((m) => [m.role, m.content])).toEqual([
+      ['user', 'what time is it'],
+      ['assistant', "it's noon"]
+    ])
+    const thread = persisted.at(-1) as ChatMessage[]
+    expect(thread.map((m) => [m.role, m.content])).toEqual([
+      ['user', 'what time is it'],
+      ['assistant', "it's noon"]
+    ])
+    // Append-only: it must NOT re-answer via the LLM stream.
+    expect(global.fetch).not.toHaveBeenCalled()
+  })
+
+  it('ignores an empty turn (missing user or assistant text)', () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('', 'orphan'))
+    act(() => result.current.recordVoiceTurn('orphan', '   '))
+    expect(result.current.history).toHaveLength(0)
+  })
+})
+
 describe('useChat — chat attachments (file_ids)', () => {
   const pick = (name: string): PickedChatFile => ({
     name,

@@ -26,6 +26,7 @@ import {
   configurePiMonoSession,
   getPiMonoSession,
   getPiMonoByokEnv,
+  piMonoManagedApiBaseUrl,
   registerPiMonoAdapter,
   unregisterPiMonoAdapter,
   __resetPiMonoSessionForTests,
@@ -145,6 +146,29 @@ describe('token refresh → adapter restart', () => {
     ).not.toThrow()
     await flush()
     expect(console.warn).toHaveBeenCalled()
+  })
+})
+
+describe('piMonoManagedApiBaseUrl (adds the /v2 segment the OpenAI SDK needs)', () => {
+  // Regression: VITE_OMI_DESKTOP_API_BASE is a BARE host (no /v2), unlike the
+  // already-/v2 base macOS passes. Without this the pi extension's
+  // openai-completions provider requests `<host>/chat/completions` (404) instead
+  // of `<host>/v2/chat/completions`. Sibling consumers (aiUserProfile, rewind)
+  // append their own version to the same bare base, so this must stay version-less
+  // at the source and only pi-mono's managed base gets /v2.
+  it('appends /v2 to a bare host', () => {
+    expect(
+      piMonoManagedApiBaseUrl({
+        token: 't',
+        desktopApiBase: 'https://desktop-backend-hhibjajaja-uc.a.run.app'
+      })
+    ).toBe('https://desktop-backend-hhibjajaja-uc.a.run.app/v2')
+  })
+
+  it('collapses a trailing slash rather than producing //v2', () => {
+    expect(piMonoManagedApiBaseUrl({ token: 't', desktopApiBase: 'https://api.omi.me/' })).toBe(
+      'https://api.omi.me/v2'
+    )
   })
 })
 

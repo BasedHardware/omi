@@ -34,6 +34,14 @@ import { AgentRuntimeKernel } from './kernel'
 import { SqliteAgentStore } from './store'
 import { AgentControlMcpBridge } from './controlMcpBridge'
 import { AgentToolRelayBridge } from './toolRelayBridge'
+import { PiMonoAdapter, PiMonoRuntimeAdapter } from '../codingAgent/piMono'
+import {
+  getPiMonoByokEnv,
+  getPiMonoSession,
+  piMonoManagedApiBaseUrl,
+  registerPiMonoAdapter
+} from '../codingAgent/piMonoSession'
+import type { RuntimeAdapter } from '../codingAgent/interface'
 import {
   DEFAULT_LOCAL_OWNER_ID,
   handleAgentControlToolCall,
@@ -129,6 +137,53 @@ export function getAgentToolRelayBridge(): AgentToolRelayBridge | null {
 export function getAgentAdapterRegistry(): AdapterRegistry {
   getAgentRuntimeKernel()
   return registry as AdapterRegistry
+}
+
+/**
+ * Build a fresh pi-mono RuntimeAdapter from the CURRENT relayed Firebase session.
+ *
+ * Re-reads `getPiMonoSession()` on every call — the worker pool invokes the
+ * registered factory LAZILY on first use, by which point a token refresh
+ * (`configurePiMonoSession`) may have replaced the token that was present when
+ * `ensurePiMonoAdapterRegistered()` ran. Reading here, not closing over an outer
+ * `session`, guarantees the freshest token is used at actual spawn time.
+ *
+ * Registers the harness with the session store so a later token refresh restarts
+ * THIS instance. Exported as a test seam for the re-read nuance.
+ */
+export function buildPiMonoRuntimeAdapter(): RuntimeAdapter {
+  const session = getPiMonoSession()
+  if (!session) {
+    throw new Error('pi-mono session was cleared before the adapter started.')
+  }
+  const harness = new PiMonoAdapter({
+    omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
+    authToken: session.token,
+    byokEnv: getPiMonoByokEnv(),
+    onRestart: (reason) => console.log(`[pi-mono] restart: ${reason}`)
+  })
+  registerPiMonoAdapter(harness)
+  return new PiMonoRuntimeAdapter(harness)
+}
+
+/**
+ * Register the managed-cloud pi-mono adapter into the live kernel registry, once,
+ * when a Firebase session has been relayed. Called from the `pimono:setSession`
+ * IPC handler after `configurePiMonoSession` succeeds. Returns false (a no-op)
+ * when signed out, so the registry stays empty until a real session exists.
+ *
+ * DARK after PR-D1: this only makes `registry.has('pi-mono')` true — nothing calls
+ * openBinding/executeAttempt on it yet (default chat still routes through
+ * /v2/messages; main_chat routing arrives in PR-E). Idempotent: guarded by
+ * `registry.has` so a token refresh re-invoking it never double-registers.
+ */
+export function ensurePiMonoAdapterRegistered(): boolean {
+  if (!getPiMonoSession()) return false
+  const registry = getAgentAdapterRegistry()
+  if (!registry.has('pi-mono')) {
+    registry.register('pi-mono', buildPiMonoRuntimeAdapter)
+  }
+  return true
 }
 
 /**

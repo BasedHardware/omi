@@ -1,5 +1,15 @@
 import { useEffect, useRef, useState } from 'react'
-import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
+import {
+  reduce,
+  reduceLock,
+  initialState,
+  initialLockState,
+  type PttEvent,
+  type PttState,
+  type LockState,
+  type LockEvent
+} from '../lib/ptt/machine'
+import { getPreferences } from '../lib/preferences'
 import { voicedStats } from '../lib/ptt/gate'
 import {
   startPttCapture,
@@ -27,6 +37,7 @@ import {
   WATCHDOG_MS,
   MIC_IDLE_RELEASE_MS,
   MIC_TAP_RELEASE_MS,
+  DOUBLE_TAP_WINDOW_MS,
   RECORDING_TOO_LONG_MESSAGE
 } from '../lib/ptt/constants'
 import { PCM_PENDING_MAX_BYTES, type WaveformSource } from '../../../shared/types'
@@ -68,11 +79,27 @@ type Options = {
   checkUsageLimit?: () => { blocked: boolean; message?: string }
   /** Raise the shared usage-limit popup for a hold that checkUsageLimit vetoed. */
   onUsageLimitBlocked?: (message: string) => void
+  /** Warm-hub delegation (A5 PR-6b, gated on `pttHubEnabled`). When present AND
+   *  `enabled()` returns true at hold-start, the hold is driven by the MAIN
+   *  window's warm-hub turn driver instead of this hook's local cascade: the hook
+   *  still owns gesture detection (tap-vs-hold threshold, mic warm, barge-in) but
+   *  creates NO local capture job and issues NO local `ptt-start`. Absent or
+   *  disabled ⇒ the local cascade path runs byte-for-byte as today (the flag-off
+   *  invariant). `begin` carries the pre-roll backfill (ms since key-down). */
+  hubDelegate?: {
+    enabled: () => boolean
+    begin: (backfillMs: number) => void
+    end: () => void
+    cancel: () => void
+  }
 }
 
 export type PushToTalk = {
   /** True while Space is held and the mic is capturing. */
   recording: boolean
+  /** True while a tap-to-lock hands-free capture runs (mic open, no key held) —
+   *  the orb shows this distinctly from a held press. */
+  locked: boolean
   /** True after release while the transcript is being finalized (stream or batch). */
   transcribing: boolean
   /** Friendly guidance ("Hold longer to record") — auto-clears. */
@@ -143,7 +170,15 @@ export function usePushToTalk(opts: Options): PushToTalk {
   const [transcribing, setTranscribing] = useState(false)
   const [hint, setHint] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [locked, setLocked] = useState(false)
   const analyserRef = useRef<WaveformSource | null>(null)
+
+  // Tap-to-lock latch (macOS PushToTalkManager). Its own pure reducer + timer,
+  // driven only by the hotkey path (beginHold/endHold) — the textarea Space keeps
+  // typing. `lastTapUpRef` is the double-tap anchor.
+  const lockStateRef = useRef<LockState>(initialLockState)
+  const lockWindowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const lastTapUpRef = useRef(0)
 
   // The ACTIVE (foreground) job — the one bound to UI state. Superseded jobs run
   // headless until they finish.
@@ -166,6 +201,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // Consecutive dead-mic turns across holds (macOS PTTSilentMicRecoveryPolicy):
   // drives the capture-rebuild-then-escalate ladder. Persists across holds.
   const deadMicPolicyRef = useRef(new DeadMicPolicy())
+  // A hold is being driven by the MAIN window's warm-hub driver (A5 PR-6b) instead
+  // of a local Job. Always false unless a hold-start actually delegated (flag on).
+  const hubActiveRef = useRef(false)
 
   const optsRef = useRef(opts)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
@@ -173,8 +211,11 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   const isForeground = (job: Job): boolean => jobRef.current === job
   /** Synchronous "is a hold capturing right now" for the key handlers — derived
-   *  from the machine state, never a second source of truth. */
-  const isHolding = (): boolean => jobRef.current?.state.phase === 'holding'
+   *  from the machine state (or a delegated hub hold), never a second source of
+   *  truth. `hubActiveRef` is always false unless a hold delegated (flag on), so
+   *  flag-off this reads exactly as before. */
+  const isHolding = (): boolean =>
+    jobRef.current?.state.phase === 'holding' || hubActiveRef.current
 
   // Acquire the mic NOW (macOS parity: capture starts at key-down, not at the
   // hold threshold), prefetch the auth token alongside the mic spin-up, and
@@ -434,6 +475,23 @@ export function usePushToTalk(opts: Options): PushToTalk {
     // hold-start (macOS PushToTalkManager.startListening → interruptCurrentResponse),
     // before mic capture begins. Safe no-op when nothing is playing.
     optsRef.current.onHoldStart?.()
+    // Warm-hub delegation (A5 PR-6b): flag on, the MAIN window's hub driver owns
+    // the turn — this hook detected the gesture (threshold, warm mic, barge-in
+    // above) but creates NO local capture job and issues NO local ptt-start.
+    // hubDelegate absent or disabled ⇒ fall straight through to the local cascade
+    // below, byte-for-byte as today (the flag-off invariant).
+    const hub = optsRef.current.hubDelegate
+    if (hub?.enabled()) {
+      const prevJob = jobRef.current
+      if (prevJob && (prevJob.state.phase === 'holding' || prevJob.state.phase === 'draining')) {
+        dispatch(prevJob, { type: 'CANCEL' })
+      }
+      hubActiveRef.current = true
+      // Take back the auto-repeat spaces typed while holding, like the local path.
+      optsRef.current.restoreDraft(snapshotRef.current)
+      hub.begin(keyDownAtRef.current > 0 ? Date.now() - keyDownAtRef.current : 0)
+      return
+    }
     // A prior job still pre-release can't coexist with a new hold (only possible
     // via focus glitches); one already transcribing keeps running in the
     // background and commits on its own — the new hold never kills it.
@@ -465,11 +523,69 @@ export function usePushToTalk(opts: Options): PushToTalk {
     dispatch(job, { type: 'HOLD_START' })
   }
 
+  // Interpret the tap-to-lock latch's effects. `enterLocked` starts a hands-free
+  // capture (a hold not tied to a key-up); `finalizeLocked` releases it into the
+  // transcribe pipeline exactly like a physical key-up.
+  const dispatchLock = (event: LockEvent): void => {
+    const { state, effects } = reduceLock(lockStateRef.current, event)
+    lockStateRef.current = state
+    for (const eff of effects) {
+      switch (eff.kind) {
+        case 'armWindow': {
+          if (lockWindowTimerRef.current) clearTimeout(lockWindowTimerRef.current)
+          lockWindowTimerRef.current = setTimeout(
+            () => dispatchLock({ type: 'WINDOW_EXPIRED' }),
+            DOUBLE_TAP_WINDOW_MS
+          )
+          break
+        }
+        case 'cancelWindow': {
+          if (lockWindowTimerRef.current) clearTimeout(lockWindowTimerRef.current)
+          lockWindowTimerRef.current = null
+          break
+        }
+        case 'enterLocked': {
+          setLocked(true)
+          startHold()
+          break
+        }
+        case 'finalizeLocked': {
+          setLocked(false)
+          // A locked capture delegates to the hub just like any hold (enterLocked →
+          // startHold → hubDelegate.begin), so finalize it on the MAIN driver when
+          // the hub owns it — there is no local job in that case. Mirrors gestureUp.
+          if (hubActiveRef.current) {
+            hubActiveRef.current = false
+            optsRef.current.hubDelegate?.end()
+            break
+          }
+          const job = jobRef.current
+          if (job && job.state.phase === 'holding') dispatch(job, { type: 'RELEASE' })
+          break
+        }
+      }
+    }
+  }
+
   const cancel = (): void => {
     if (holdTimerRef.current !== null) {
       clearTimeout(holdTimerRef.current)
       holdTimerRef.current = null
     }
+    // A delegated hub hold must not outlive the cancel — tell the main driver to
+    // drop its turn (no-op when nothing was delegated, i.e. flag off).
+    if (hubActiveRef.current) {
+      hubActiveRef.current = false
+      optsRef.current.hubDelegate?.cancel()
+    }
+    // Drop any tap-to-lock latch + pending window; the capture CANCEL below
+    // discards a locked capture in flight.
+    if (lockWindowTimerRef.current) {
+      clearTimeout(lockWindowTimerRef.current)
+      lockWindowTimerRef.current = null
+    }
+    dispatchLock({ type: 'CANCEL' })
+    setLocked(false)
     const job = jobRef.current
     if (job && job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
     setHint(null)
@@ -501,6 +617,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
       armMicIdleRelease(MIC_TAP_RELEASE_MS)
       return 'tap'
     }
+    if (hubActiveRef.current) {
+      // A delegated hub hold released — the MAIN driver finalizes + commits. No
+      // local job exists. (Only reachable when a hold delegated, i.e. flag on.)
+      hubActiveRef.current = false
+      optsRef.current.hubDelegate?.end()
+      return 'released'
+    }
     const job = jobRef.current
     if (job && job.state.phase === 'holding') {
       dispatch(job, { type: 'RELEASE' })
@@ -509,14 +632,38 @@ export function usePushToTalk(opts: Options): PushToTalk {
     return 'none'
   }
 
-  /** Main-process-driven hold (bar hotkey): same path as a physical Space
-   *  key-down/key-up on the window. */
+  /** Main-process-driven hold (bar summon hotkey). A normal hold behaves exactly
+   *  like a physical Space hold; a quick double-tap latches hands-free listening,
+   *  and a tap while locked finalizes it (macOS PushToTalkManager tap-to-lock).
+   *  Tap-to-lock lives on THIS path only — the textarea Space keeps typing. */
   const beginHold = (): void => {
+    const prevLock = lockStateRef.current.phase
+    if (prevLock === 'pendingLock' || prevLock === 'locked') {
+      // Anchor a possible locked capture's backfill + warm the mic, then let the
+      // latch decide: enter locked, finalize, or (window elapsed) fall through to
+      // a fresh normal press.
+      keyDownAtRef.current = Date.now()
+      touchMic()
+      const gapMs =
+        lastTapUpRef.current > 0 ? Date.now() - lastTapUpRef.current : Number.POSITIVE_INFINITY
+      dispatchLock({ type: 'PRESS_DOWN', gapMs })
+      if (prevLock === 'locked' || lockStateRef.current.phase === 'locked') return
+    }
     if (isHolding() || holdTimerRef.current !== null) return
     gestureDown(optsRef.current.getDraft())
   }
   const endHold = (): void => {
-    gestureUp()
+    // A locked capture never ends on key-up — the next tap finalizes it.
+    if (lockStateRef.current.phase === 'locked') return
+    const holdMs = keyDownAtRef.current > 0 ? Date.now() - keyDownAtRef.current : 0
+    if (gestureUp() === 'tap') {
+      lastTapUpRef.current = Date.now()
+      dispatchLock({
+        type: 'TAP_RELEASED',
+        holdMs,
+        doubleTapForLock: getPreferences().doubleTapForLock !== false
+      })
+    }
   }
 
   const onKeyDown = (e: React.KeyboardEvent): boolean => {
@@ -575,14 +722,22 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   // Privacy backstop: the moment the overlay hides or loses focus, any lingering
   // warm mic is released (the hook is the single owner of mic lifecycle policy).
-  // Guarded — the bridge doesn't exist under jsdom tests.
+  // A tap-to-lock hands-free capture must additionally be CANCELLED — releasing
+  // only the warm mic would strand the latch 'locked' over a dead mic (stuck
+  // locked-UI) or, worse, leave the locked capture running while the bar is
+  // hidden. cancel() drops the latch AND CANCELs the capture job (its stopCapture
+  // teardown restores system audio too). Guarded — no bridge under jsdom tests.
   useEffect(() => {
     const bridge = (window as { omiOverlay?: typeof window.omiOverlay }).omiOverlay
     if (!bridge) return
+    const onHiddenOrBlurred = (): void => {
+      if (lockStateRef.current.phase !== 'idle') cancel()
+      releasePttMic()
+    }
     const unActive = bridge.onActiveChange((active) => {
-      if (!active) releasePttMic()
+      if (!active) onHiddenOrBlurred()
     })
-    const unHide = bridge.onWillHide(() => releasePttMic())
+    const unHide = bridge.onWillHide(() => onHiddenOrBlurred())
     return () => {
       unActive()
       unHide()
@@ -598,6 +753,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
       if (hintTimerRef.current) clearTimeout(hintTimerRef.current)
       if (errorTimerRef.current) clearTimeout(errorTimerRef.current)
       if (micIdleTimerRef.current) clearTimeout(micIdleTimerRef.current)
+      if (lockWindowTimerRef.current) clearTimeout(lockWindowTimerRef.current)
+      // A delegated hub hold must not outlive the hook — tell the main driver to
+      // cancel its turn (no-op when nothing delegated, i.e. flag off).
+      if (hubActiveRef.current) {
+        hubActiveRef.current = false
+        optsRef.current.hubDelegate?.cancel()
+      }
       for (const job of [...liveJobsRef.current]) {
         if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
       }
@@ -612,6 +774,7 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   return {
     recording,
+    locked,
     transcribing,
     hint,
     error,

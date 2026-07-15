@@ -33,7 +33,9 @@ import { runAnimBench } from './lib/dev/animBench'
 import { InsightToast } from './components/insight/InsightToast'
 import { TrayStateHost } from './components/tray/TrayStateHost'
 import { ChatBridgeHost } from './components/chat/ChatBridgeHost'
+import { VoiceHubDriverHost } from './components/chat/VoiceHubDriverHost'
 import { UsageLimitPopup } from './components/settings/billing/UsageLimitPopup'
+import { ClaudeAuthSheet } from './components/settings/billing/ClaudeAuthSheet'
 import { UsageLimitTriggerHost } from './components/settings/billing/UsageLimitTriggerHost'
 import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
@@ -127,11 +129,20 @@ function AppShellInner(): React.JSX.Element {
           state back to the bar. Main window only (this shell never mounts in the
           bar/capture windows). */}
       <ChatBridgeHost />
+      {/* Warm-hub PTT driver (A5 PR-6b, gated on pttHubEnabled). Main window only:
+          the coordinator + hub + pcmPlayer live here (D1). Inert until the bar
+          delegates a hold (flag on) — flag off it never receives a begin. */}
+      <VoiceHubDriverHost />
       {/* Usage-limit popup + its chat-quota trigger. The popup deep-links into
           the Plan & Usage settings tab; the trigger watches the shared chat
           engine and raises it once when a send lands on an exhausted quota. */}
       <UsageLimitTriggerHost />
       <UsageLimitPopup />
+      {/* "Upgrade to Omi Pro" upsell shown alongside the parallel Claude Code
+          OAuth launch (Settings → Agents sign-in, or an in-chat auth_required).
+          Unconditional upsell, matching macOS; completing sign-in auto-closes
+          it and grants Claude with no purchase. */}
+      <ClaudeAuthSheet />
     </div>
   )
 }
