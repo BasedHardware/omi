@@ -79,14 +79,17 @@ describe('capability matrix', () => {
     expect(adapterCapabilitiesFor('openclaw').restartBehavior).toBe('native_bindings_survive')
     expect(adapterCapabilitiesFor('hermes').restartBehavior).toBe('process_local_bindings_stale')
     expect(adapterCapabilitiesFor('codex').restartBehavior).toBe('process_local_bindings_stale')
+    // pi-mono has no native resume but pins its worker → process_local_bindings_stale.
+    expect(adapterCapabilitiesFor('pi-mono').restartBehavior).toBe('process_local_bindings_stale')
   })
 
-  it('knows exactly the four production adapters', () => {
+  it('knows the production adapters, including the managed-cloud pi-mono (PR-D)', () => {
     expect(isProductionAdapterId('acp')).toBe(true)
     expect(isProductionAdapterId('openclaw')).toBe(true)
     expect(isProductionAdapterId('hermes')).toBe(true)
     expect(isProductionAdapterId('codex')).toBe(true)
-    expect(isProductionAdapterId('pi-mono')).toBe(false)
+    // pi-mono is now a registered managed-cloud production adapter (matrix member).
+    expect(isProductionAdapterId('pi-mono')).toBe(true)
     expect(isProductionAdapterId('a2a')).toBe(false)
   })
 })

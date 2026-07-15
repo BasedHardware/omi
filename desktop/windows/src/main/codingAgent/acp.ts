@@ -29,9 +29,9 @@ import type {
   AdapterEventSink,
   CancelAttemptContext,
   CancelDispatchResult,
+  CodingAgentAdapterId,
   OpenBindingInput,
   OpenedBinding,
-  ProductionAdapterId,
   ResumeBindingInput,
   RuntimeAdapter
 } from './interface'
@@ -144,7 +144,7 @@ function appendRecentStderr(current: string, next: string): string {
 export type AcpNotificationHandler = (method: string, params: unknown) => void
 
 export interface AcpRuntimeAdapterOptions {
-  adapterId?: ProductionAdapterId
+  adapterId?: CodingAgentAdapterId
   log?: (message: string) => void
   /** Binary used to run the bundled entry; defaults to Electron/Node's own executable. */
   nodeBin?: string
@@ -183,7 +183,7 @@ function parsePositiveInt(value: string | undefined): number | undefined {
 }
 
 export class AcpRuntimeAdapter implements RuntimeAdapter {
-  readonly adapterId: ProductionAdapterId
+  readonly adapterId: CodingAgentAdapterId
   readonly capabilities: AdapterCapabilities
 
   private process: ChildProcess | null = null

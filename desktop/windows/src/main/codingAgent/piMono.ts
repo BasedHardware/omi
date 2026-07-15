@@ -40,6 +40,7 @@ import { tmpdir } from 'os'
 import { dirname, join } from 'path'
 import { createInterface, Interface as ReadlineInterface } from 'readline'
 import { fileURLToPath } from 'url'
+import { adapterCapabilitiesFor } from './interface'
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -1132,28 +1133,12 @@ export class PiMonoAdapter {
   }
 }
 
-/**
- * Capabilities for pi-mono. Equal to what `adapterCapabilitiesFor('pi-mono')`
- * would produce from the macOS ADAPTER_CAPABILITY_MATRIX entry. Held locally
- * because pi-mono is intentionally NOT in Windows' ADAPTER_CAPABILITY_MATRIX in
- * this DARK PR; PR-D adds the matrix entry and this constant is replaced by
- * `adapterCapabilitiesFor('pi-mono')`.
- */
-const PI_MONO_CAPABILITIES: AdapterCapabilities = {
-  resumeFidelity: 'none',
-  supportsNativeResume: false,
-  supportsCancellation: true,
-  acknowledgesCancellation: false,
-  requiresPinnedWorker: true,
-  supportsModelSwitching: true,
-  supportsArtifactEmission: false,
-  supportsTools: true,
-  restartBehavior: 'process_local_bindings_stale'
-}
-
 export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   readonly adapterId = 'pi-mono'
-  readonly capabilities: AdapterCapabilities = PI_MONO_CAPABILITIES
+  // Derived from the ADAPTER_CAPABILITY_MATRIX 'pi-mono' entry (PR-D). Was a
+  // local PI_MONO_CAPABILITIES const while pi-mono was intentionally absent from
+  // the matrix; that constant is now the matrix entry.
+  readonly capabilities: AdapterCapabilities = adapterCapabilitiesFor('pi-mono')
 
   private readonly harness: PiMonoAdapter
   private readonly cancelledAttempts = new Set<string>()
