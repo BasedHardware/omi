@@ -756,6 +756,8 @@ extension SettingsContentView {
         await MainActor.run {
           dailySummaryEnabled = dailySummary.enabled
           dailySummaryHour = dailySummary.hour
+          dailySummaryTime = SettingsControlMetrics.dailySummaryDate(
+            forHour: dailySummary.hour, referenceDate: Date())
           notificationsEnabled = notifications.enabled
           notificationFrequency = notifications.frequency
           // Mirror to UserDefaults so NotificationService can gate/throttle without a backend roundtrip.

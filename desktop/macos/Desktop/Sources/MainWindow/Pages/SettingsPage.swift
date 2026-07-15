@@ -213,6 +213,10 @@ struct SettingsContentView: View {
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
   @State var dailySummaryHour: Int = 22
+  // UI-only date for the Summary Time stepper field; the backend stores whole hours,
+  // so this glides freely while only the hour component is persisted.
+  @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
+    forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = true
   @State var notificationFrequency: Int = 3
 
