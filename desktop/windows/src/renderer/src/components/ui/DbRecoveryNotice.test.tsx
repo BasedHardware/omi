@@ -22,6 +22,9 @@ const HEALTHY: DbRecoveryStatus = {
 // Captures the main→renderer corruption event so a test can fire it.
 let fireCorruption: (() => void) | null = null
 const relaunchSpy = vi.fn()
+// Rebuild affordance (this PR): the main-side rebuild is insert-only + idempotent;
+// here we just assert the button is wired to it and reflects the returned count.
+const rebuildSpy = vi.fn<() => Promise<number>>().mockResolvedValue(0)
 
 function mockStatus(status: DbRecoveryStatus | Promise<never>): void {
   fireCorruption = null
@@ -31,6 +34,7 @@ function mockStatus(status: DbRecoveryStatus | Promise<never>): void {
         dbRecoveryStatus: () => Promise<DbRecoveryStatus>
         onDbCorruptionDetected: (cb: () => void) => () => void
         relaunchApp: () => void
+        rewindRebuildIndex: () => Promise<number>
       }
     }
   ).omi = {
@@ -42,7 +46,8 @@ function mockStatus(status: DbRecoveryStatus | Promise<never>): void {
         fireCorruption = null
       }
     },
-    relaunchApp: relaunchSpy
+    relaunchApp: relaunchSpy,
+    rewindRebuildIndex: rebuildSpy
   }
 }
 
@@ -168,6 +173,72 @@ describe('DbRecoveryNotice', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Restart Omi' }))
       expect(relaunchSpy).toHaveBeenCalledOnce()
+    })
+  })
+
+  // The Rewind index rebuild (this PR). It appears in exactly this banner — the one
+  // place a whole-DB reset/recovery is surfaced — because that's when rewind_frames
+  // can be wiped while the JPEGs survive on disk. macOS has the analogous button
+  // here; Windows had no equivalent (the orphan sweep only ever deletes).
+  describe('Rewind index rebuild affordance', () => {
+    const RESET: DbRecoveryStatus = {
+      recovered: true,
+      reset: true,
+      rowsRecovered: 0,
+      tablesRecovered: {},
+      backupPath: 'C:/x/backups/omi_corrupted.db'
+    }
+
+    it('offers the rebuild after a reset and runs it, reflecting the recovered count', async () => {
+      rebuildSpy.mockResolvedValue(12)
+      mockStatus(RESET)
+      await renderNotice()
+
+      const btn = screen.getByRole('button', { name: 'Rebuild Rewind Index' })
+      await act(async () => {
+        fireEvent.click(btn)
+      })
+      expect(rebuildSpy).toHaveBeenCalledOnce()
+      expect(screen.getByRole('status').textContent).toContain('Rebuilt Rewind index (12 recovered)')
+    })
+
+    it('says "up to date" when the rebuild finds nothing to recover', async () => {
+      rebuildSpy.mockResolvedValue(0)
+      mockStatus(RESET)
+      await renderNotice()
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: 'Rebuild Rewind Index' }))
+      })
+      expect(screen.getByRole('status').textContent).toContain('Rewind index up to date')
+    })
+
+    it('offers the rebuild after a corruption recovery too', async () => {
+      rebuildSpy.mockResolvedValue(0)
+      mockStatus({
+        recovered: true,
+        reset: false,
+        rowsRecovered: 3,
+        tablesRecovered: { rewind_frames: 3 },
+        backupPath: null
+      })
+      await renderNotice()
+      expect(screen.queryByRole('button', { name: 'Rebuild Rewind Index' })).not.toBeNull()
+    })
+
+    it('does NOT offer the rebuild on the unrepairable path — nothing was wiped', async () => {
+      rebuildSpy.mockResolvedValue(0)
+      mockStatus({
+        recovered: false,
+        reset: false,
+        rowsRecovered: 0,
+        tablesRecovered: {},
+        backupPath: null,
+        unrepairable: true,
+        damagedTables: ['rewind_frames']
+      })
+      await renderNotice()
+      expect(screen.getByRole('status')).not.toBeNull() // the notice still shows
+      expect(screen.queryByRole('button', { name: 'Rebuild Rewind Index' })).toBeNull()
     })
   })
 })

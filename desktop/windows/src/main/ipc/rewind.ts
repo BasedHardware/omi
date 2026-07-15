@@ -22,6 +22,7 @@ import {
 } from '../rewind/captureService'
 import { getCaptureDirective } from '../rewind/captureDirective'
 import { pruneRewindOnce } from '../rewind/retentionRunner'
+import { rebuildRewindIndexFromDisk } from '../rewind/rebuildIndex'
 import { rewindRoot } from '../rewind/paths'
 import type { RewindSettings } from '../../shared/types'
 
@@ -142,6 +143,10 @@ export function registerRewindHandlers(): void {
   // host fetches this on mount, then reacts to pushes on 'rewind:capture-directive'.
   ipcMain.handle('rewind:getCaptureDirective', async () => getCaptureDirective())
   ipcMain.handle('rewind:pruneNow', async () => pruneRewindOnce())
+  // Recovery affordance: re-create rewind_frames rows for the JPEGs still on disk
+  // after a whole-DB reset/recovery wiped them (surfaced from DbRecoveryNotice).
+  // Only ever INSERTs missing rows — never deletes, idempotent. Returns the count.
+  ipcMain.handle('rewind:rebuildIndex', async () => rebuildRewindIndexFromDisk())
   // Cached primary-screen id. The underlying desktopCapturer.getSources() can
   // take several seconds on some machines, so it's prewarmed at startup; this
   // is an instant cache hit in the normal case.

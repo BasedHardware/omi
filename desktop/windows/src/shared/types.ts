@@ -820,6 +820,10 @@ export type OmiBridgeApi = {
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
   rewindPruneNow: () => Promise<number>
+  /** Recovery affordance: re-create rewind_frames rows for the JPEGs still on disk
+   *  after a whole-DB reset/recovery wiped them. Only INSERTs missing rows (never
+   *  deletes, idempotent). Resolves to the number of rows rebuilt. */
+  rewindRebuildIndex: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
