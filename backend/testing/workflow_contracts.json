@@ -422,6 +422,26 @@
       ]
     },
     {
+      "id": "desktop_backend_realtime_provider_proof",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_auto_dev.yml",
+        "backend/scripts/firebase_release_probe_token.py",
+        "scripts/voice-provider-probe.sh"
+      ],
+      "tests": [
+        "tests/unit/test_firebase_release_probe_token.py",
+        "tests/unit/test_voice_provider_probe.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every deployed development desktop backend proves the managed OpenAI and Gemini mint-to-response paths",
+        "the Firebase ID token audience and issuer match the deployed backend's explicit Firebase auth project",
+        "the bypass is explicit in the workflow log and is limited to an operator-declared upstream outage",
+        "probe credentials and provider responses never appear in workflow output"
+      ]
+    },
+    {
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [

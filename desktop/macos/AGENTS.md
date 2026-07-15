@@ -292,6 +292,7 @@ Fast path (skips web login and sidebar click-through):
 ### After Implementing Changes
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
 - To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
+- Voice-path verification means a natural authenticated PTT turn on a named bundle — signed-out, forced-transcript, or reducer-only runs do not count; provider mint or payload changes must also show the deploy-inline provider probe.
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 
 ### macOS Version Compatibility
