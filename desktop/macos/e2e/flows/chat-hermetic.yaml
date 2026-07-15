@@ -97,13 +97,13 @@ steps:
       result.detail.idle: "true"
 
   - id: S4
-    name: Assert stub marker echoed in assistant reply
+    name: Assert deterministic exact stub reply
     bridge.action:
       name: main_chat_snapshot
       params:
         limit: "12"
     expect:
-      result.detail.last_assistant_text: "Stub saw marker: chat-hermetic"
+      result.detail.last_assistant_text: "MARKER:chat-hermetic"
 
   - id: S5
     name: Logs clean
