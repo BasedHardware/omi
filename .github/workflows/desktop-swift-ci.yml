@@ -30,7 +30,7 @@ jobs:
           fi
           FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
           echo "$FILES"
-          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$'; then
+          if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
             echo "should_run=true" >> "$GITHUB_OUTPUT"
           else
             echo "should_run=false" >> "$GITHUB_OUTPUT"
@@ -88,6 +88,11 @@ jobs:
             echo "== $t"
             bash "$t"
           done
+
+      - name: Run macOS-scoped manifest checks
+        if: steps.changed.outputs.should_run == 'true'
+        run: |
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base origin/main
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not
