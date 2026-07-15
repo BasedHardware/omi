@@ -16,6 +16,7 @@ except ImportError:  # pragma: no cover - local unit tests mock Firestore.
 
 from database._client import db
 from database.memory_collections import MemoryCollections
+from database.read_boundary import parse_snapshot_strict
 from models.memory_evidence import MemoryEvidence
 from models.memory_contracts import DurablePatchDecision
 from models.memory_apply import (
@@ -227,8 +228,7 @@ def _atomic_bump_source_generation_transaction(
             updated_at=now,
         )
     else:
-        data: Dict[str, Any] = _typed_doc(snapshot)
-        control = MemoryControlState(**data)
+        control = parse_snapshot_strict(MemoryControlState, snapshot, payload_from_snapshot=_typed_doc)
     bumped = control.model_copy(
         update={
             "source_generation": control.source_generation + 1,
@@ -363,8 +363,7 @@ def _read_authoritative_target_item(
     snapshot = target_ref.get(transaction=transaction)
     if not snapshot.exists:
         return None
-    data: Dict[str, Any] = _typed_doc(snapshot)
-    return MemoryItem(**data)
+    return parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
 
 
 def _validate_authoritative_targets(
@@ -381,8 +380,7 @@ def _validate_authoritative_targets(
         snapshot = target_ref.get(transaction=transaction)
         if not snapshot.exists:
             return _target_not_active(control_state, operation, f"missing target memory item: {target_id}")
-        data: Dict[str, Any] = _typed_doc(snapshot)
-        target = MemoryItem(**data)
+        target = parse_snapshot_strict(MemoryItem, snapshot, payload_from_snapshot=_typed_doc)
         if target.uid != operation.uid:
             return _target_not_active(control_state, operation, "target memory uid mismatch")
         if target.account_generation != control_state.account_generation:
@@ -464,8 +462,7 @@ def _required_model(*, ref: Any, transaction: Any, model: type[M], label: str) -
     snapshot = ref.get(transaction=transaction)
     if not snapshot.exists:
         raise MissingMemoryDocument(f"missing {label}: {ref.path}")
-    data: Dict[str, Any] = _typed_doc(snapshot)
-    return model(**data)
+    return parse_snapshot_strict(model, snapshot, payload_from_snapshot=_typed_doc)
 
 
 def _firestore_data(value: object) -> Any:
