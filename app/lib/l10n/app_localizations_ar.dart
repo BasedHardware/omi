@@ -9,6 +9,9 @@ class AppLocalizationsAr extends AppLocalizations {
   AppLocalizationsAr([String locale = 'ar']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'انتهت صلاحية الجلسة — سجّل الدخول مرة أخرى.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9451,4 +9454,87 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'مساحة تخزين القلادة ممتلئة تقريبًا — أبقِ التطبيق مفتوحًا للمزامنة.';
+
+  @override
+  String get connectRayBanMeta => 'توصيل Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'استخدم نظارة Ray-Ban Meta كجهاز التقاط Omi للمحادثات والسياق المرئي. سيفتح Omi تطبيق Meta AI لربط نظارتك.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'الاتصال عبر Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'أكمل الاتصال في تطبيق Meta AI، ثم عد إلى هنا.';
+
+  @override
+  String get raybanMetaCheckAgain => 'التحقق مرة أخرى';
+
+  @override
+  String get raybanMetaAllowCamera => 'السماح للكاميرا في النظارة';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'يستخدم Omi كاميرا نظارتك لإضافة الصور إلى محادثاتك. يمكنك تخطي هذا واستخدام الصوت فقط.';
+
+  @override
+  String get raybanMetaSkipForNow => 'التخطي الآن';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'وضع الصوت فقط لـ Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'يمكن لهذا الإصدار من Omi استخدام ميكروفون نظارتك عبر Bluetooth. يتطلب التقاط الصور إصدار المطوّر من Omi الخاص بـ Meta.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'يتم إيقاف الموسيقى مؤقتًا على هاتفك أثناء استخدام ميكروفون النظارة.';
+
+  @override
+  String get raybanMetaContinue => 'متابعة';
+
+  @override
+  String get raybanMetaCapturePhoto => 'التقاط صورة';
+
+  @override
+  String get raybanMetaPhotoRequested => 'تم طلب الصورة — ستظهر في محادثتك.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'الميكروفون جاهز';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'التقاط الصورة جاهز';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'غير متاح في وضع الصوت فقط';
+
+  @override
+  String get raybanMetaCamera => 'الكاميرا';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'خطأ في الاتصال بـ Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'مساحة تخزين الجهاز';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'ممتلئ $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used من $total مستخدمة';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free متاحة';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.';
 }

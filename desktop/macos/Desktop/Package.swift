@@ -68,6 +68,7 @@ let package = Package(
         "Theme",
         "OmiSupport",
         "OmiWAL",
+        "Bluetooth/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),
@@ -86,7 +87,10 @@ let package = Package(
         "OmiTheme",
         "OmiWAL",
       ],
-      path: "Tests"
+      path: "Tests",
+      exclude: [
+        "fixtures"
+      ]
     ),
   ]
 )

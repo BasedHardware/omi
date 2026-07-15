@@ -1,6 +1,7 @@
 import AVFoundation
 import CryptoKit
 import Foundation
+import OmiSupport
 
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
@@ -62,8 +63,14 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   private var hasStartedRealPlayback = false
   private var hasEmittedFirstChunk = false
   private var audioPlayer: AVAudioPlayer?
+  private var activePlayerFallbackText = ""
   private var playbackGeneration: UInt64 = 0
-  private var localSpeechActive = false
+  // AVSpeechSynthesizer delegates arrive asynchronously, including after a
+  // stop. The current token is the sole owner of both the physical utterance
+  // and its PTT lease; a callback for an older utterance must not drain a
+  // replacement turn.
+  private var activeSystemSpeechToken: SystemSpeechToken?
+  private var activePTTLease: VoiceOutputLease?
 
   /// QueryTracer for the in-flight query, handed in by the floating-bar window.
   /// Used to bracket the `tts_start` span (first real chunk → first audio out).
@@ -77,8 +84,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   var isSpeaking: Bool {
     if audioPlayer?.isPlaying == true { return true }
-    if localSpeechActive { return true }
-    if speechSynthesizer.isSpeaking { return true }
+    if activeSystemSpeechToken != nil { return true }
     if isFillerSynthesizing { return true }
     if isOneShotSynthesizing { return true }
     if isSynthesizing { return true }
@@ -87,6 +93,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   func playFillerIfEnabled() {
     guard ShortcutSettings.shared.hasAnyFloatingBarVoiceAnswersEnabled else { return }
+    if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.filler) == nil
+    {
+      return
+    }
     setFloatingPillResponseGlow(true)
 
     if currentMode == nil {
@@ -116,7 +127,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
               self.clearFloatingPillResponseGlowIfIdle()
               return
             }
-            self.startPlayback(audioData)
+            self.startPlayback(audioData, fallbackText: phrase)
             self.clearFloatingPillResponseGlowIfIdle()
           }
         } catch {
@@ -142,7 +153,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     guard let message else { return }
 
     if currentResponseID != message.id {
-      resetPlaybackPipeline(clearMode: false)
+      resetPlaybackPipeline(clearMode: false, notifyPTTDrain: true)
       currentResponseID = message.id
       interruptedResponseID = shouldInterruptNextResponse ? message.id : nil
       shouldInterruptNextResponse = false
@@ -150,11 +161,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
     let text = Self.cleanedPlaybackText(from: message)
     guard !text.isEmpty, Self.shouldSpeak(text) else { return }
-
     if interruptedResponseID == message.id {
       streamedText = text
       bufferedText = ""
       clearFloatingPillResponseGlowIfIdle()
+      return
+    }
+    if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.selectedVoiceFallback) == nil
+    {
       return
     }
     setFloatingPillResponseGlow(true)
@@ -238,7 +253,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
     let text = synthesisQueue.removeFirst()
     isSynthesizing = true
-    let generation = playbackGeneration
+    let token = currentSynthesisToken()
     playbackTask?.cancel()
     playbackTask = Task { [weak self] in
       do {
@@ -253,7 +268,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         try Task.checkCancellation()
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
+          guard self.ownsCurrentSynthesisToken(token) else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
           self.audioQueue.append((audio: audioData, text: text))
@@ -264,7 +279,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       } catch is CancellationError {
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
+          guard self.ownsCurrentSynthesisToken(token) else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
           self.startSynthesisIfNeeded(mode: mode)
@@ -274,7 +289,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         if Self.isCancellation(error) {
           await MainActor.run {
             guard let self else { return }
-            guard self.playbackGeneration == generation else { return }
+            guard self.ownsCurrentSynthesisToken(token) else { return }
             self.isSynthesizing = false
             self.playbackTask = nil
             self.startSynthesisIfNeeded(mode: mode)
@@ -285,12 +300,19 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
         await MainActor.run {
           guard let self else { return }
-          guard self.playbackGeneration == generation else { return }
+          guard self.ownsCurrentSynthesisToken(token) else { return }
           self.isSynthesizing = false
           self.playbackTask = nil
+          guard self.canUseCloudTTSFallback(after: error, token: token, operation: "chunk") else {
+            self.startSynthesisIfNeeded(mode: mode)
+            self.clearFloatingPillResponseGlowIfIdle()
+            return
+          }
           log(
             "FloatingBarVoicePlaybackService: cloud TTS chunk synthesis failed, falling back to system voice: \(error.localizedDescription)"
           )
+          self.recordSelectedVoiceFallback(
+            to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
           self.enqueueSystemSpeech(text)
           self.startSynthesisIfNeeded(mode: mode)
           self.clearFloatingPillResponseGlowIfIdle()
@@ -309,6 +331,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// Play a short preview of the given voice so the user can hear it
   /// when switching voices in settings.
   func playVoiceSample(voiceID: String) {
+    guard VoiceTurnCoordinator.shared.activeTurnID == nil else {
+      log("FloatingBarVoicePlaybackService: voice sample denied while PTT owns audible output")
+      return
+    }
     resetPlaybackPipeline(clearMode: true)
     currentResponseID = nil
     interruptedResponseID = nil
@@ -351,29 +377,46 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   /// Synthesize and play a single short phrase via the selected voice. Used by
   /// agent pills to speak a short acknowledgement like "On it" before the agent kicks off.
-  func speakOneShot(_ text: String) {
+  func speakOneShot(_ text: String, lease: VoiceOutputLease? = nil) {
     let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !trimmed.isEmpty else { return }
+    if let lease {
+      guard VoiceTurnCoordinator.shared.outputSnapshot.activeLease == lease else {
+        log("FloatingBarVoicePlaybackService: dropping one-shot with stale PTT lease")
+        return
+      }
+      activePTTLease = lease
+    } else if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
+    {
+      return
+    }
     setFloatingPillResponseGlow(true)
     let mode = currentMode ?? resolvePlaybackMode()
     currentMode = mode
     switch mode {
     case .openAI(let voiceID, let instructions):
-      let generation = playbackGeneration
+      let token = currentSynthesisToken()
       isOneShotSynthesizing = true
       Task { [weak self] in
         do {
           let audio = try await Self.synthesizeOpenAISpeech(
             text: trimmed, voiceID: voiceID, instructions: instructions)
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
+            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
             self.startPlayback(audio, fallbackText: trimmed)
           }
         } catch {
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
+            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
+            guard self.canUseCloudTTSFallback(after: error, token: token, operation: "one_shot") else { return }
+            log(
+              "FloatingBarVoicePlaybackService: one-shot synthesis failed; rendering the same response with system voice "
+                + "reason=\(Self.ttsFallbackReason(for: error))")
+            self.recordSelectedVoiceFallback(
+              to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
           }
         }
@@ -384,6 +427,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   func speakBackgroundAgentKickoff() {
+    if VoiceTurnCoordinator.shared.activeTurnID != nil,
+      acquirePTTLeaseIfNeeded(.deterministicAgentAck) == nil
+    {
+      return
+    }
     let phrase = Self.randomBackgroundAgentKickoffPhrase()
     setFloatingPillResponseGlow(true)
     let mode = currentMode ?? resolvePlaybackMode()
@@ -391,26 +439,32 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
     switch mode {
     case .openAI(let voiceID, let instructions):
-      let generation = playbackGeneration
+      let token = currentSynthesisToken()
       isOneShotSynthesizing = true
       Task { [weak self] in
         do {
           let audio = try await Self.cachedOrSynthesizedBackgroundAgentKickoffAudio(
             text: phrase, voiceID: voiceID, instructions: instructions)
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
+            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
             self.startPlayback(audio, fallbackText: phrase)
           }
         } catch {
-          let cachedFallback = Self.cachedBackgroundAgentKickoffAudio(
-            voiceID: voiceID, instructions: instructions)
           await MainActor.run {
-            guard let self, self.playbackGeneration == generation else { return }
+            guard let self, self.ownsCurrentSynthesisToken(token) else { return }
             self.isOneShotSynthesizing = false
+            guard self.canUseCloudTTSFallback(after: error, token: token, operation: "background_kickoff")
+            else { return }
+            let cachedFallback = Self.cachedBackgroundAgentKickoffAudio(
+              voiceID: voiceID, instructions: instructions)
             if let cachedFallback {
+              self.recordSelectedVoiceFallback(
+                to: "cached_openai_tts", reason: Self.ttsFallbackReason(for: error), outcome: .recovered)
               self.startPlayback(cachedFallback, fallbackText: phrase)
             } else {
+              self.recordSelectedVoiceFallback(
+                to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
               self.enqueueSystemSpeech(phrase)
             }
           }
@@ -441,15 +495,24 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
   }
 
-  func interruptCurrentResponse() {
+  @discardableResult
+  func interruptCurrentResponse(
+    leaseID expectedLeaseID: VoiceLeaseID? = nil,
+    armNextResponse: Bool = false
+  ) -> Bool {
+    if let expectedLeaseID, activePTTLease?.id != expectedLeaseID {
+      log("FloatingBarVoicePlaybackService: ignored stale playback stop lease=\(expectedLeaseID)")
+      return false
+    }
     if let currentResponseID {
       interruptedResponseID = currentResponseID
       shouldInterruptNextResponse = false
     } else {
-      shouldInterruptNextResponse = true
+      shouldInterruptNextResponse = armNextResponse
     }
     resetPlaybackPipeline(clearMode: false)
     clearFloatingPillResponseGlowIfIdle()
+    return true
   }
 
   private func startPlaybackIfNeeded() {
@@ -469,25 +532,120 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       player.enableRate = true
       player.rate = playbackRate
       player.prepareToPlay()
-      player.play()
+      let started = !UserDefaults.standard.bool(forKey: .forceTTSPlaybackStartFalse)
+        && player.play()
+      guard VoicePlaybackStartPolicy.accepts(started: started) else {
+        throw NSError(
+          domain: "TTSPlayback",
+          code: -2,
+          userInfo: [NSLocalizedDescriptionKey: "audio player refused to start"])
+      }
       audioPlayer = player
+      activePlayerFallbackText = fallbackText
       tracer?.end("tts_start")
     } catch {
       // Don't drop the reply silently — speak this chunk with the system voice instead.
       log(
         "FloatingBarVoicePlaybackService: audio playback failed, falling back to system voice: \(error.localizedDescription)"
       )
+      recordSelectedVoiceFallback(
+        to: fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? "none" : "system_voice_fallback",
+        reason: "enqueue_failed",
+        outcome: fallbackText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+          ? .exhausted : .degraded)
       enqueueSystemSpeech(fallbackText)
     }
   }
 
+  private func recordSelectedVoiceFallback(
+    to: String,
+    reason: String,
+    outcome: DesktopFallbackOutcome
+  ) {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: activePTTLease == nil ? "other" : "ptt_cascade",
+      from: "openai_tts",
+      to: to,
+      reason: reason,
+      outcome: outcome,
+      extra: ["user_visible": outcome != .recovered])
+  }
+
+  private func currentSynthesisToken() -> VoiceSynthesisToken {
+    VoiceSynthesisToken(generation: playbackGeneration, leaseID: activePTTLease?.id)
+  }
+
+  private func ownsCurrentSynthesisToken(_ token: VoiceSynthesisToken) -> Bool {
+    VoiceSynthesisFallbackPolicy.ownsCurrentOutput(
+      token: token,
+      playbackGeneration: playbackGeneration,
+      activeLeaseID: activePTTLease?.id)
+  }
+
+  /// A cancelled or superseded cloud request belongs to an old output owner.
+  /// Never turn it into cached or system speech after that owner has gone away.
+  private func canUseCloudTTSFallback(
+    after error: Error,
+    token: VoiceSynthesisToken,
+    operation: String
+  ) -> Bool {
+    let allowed = VoiceSynthesisFallbackPolicy.shouldUseFallback(
+      afterCancellation: Self.isCancellation(error),
+      token: token,
+      playbackGeneration: playbackGeneration,
+      activeLeaseID: activePTTLease?.id)
+    guard !allowed else { return true }
+    log("FloatingBarVoicePlaybackService: dropping \(operation) fallback for cancelled or stale output")
+    return false
+  }
+
+  /// The delegate callback is not a global "speech stopped" signal: AVFoundation
+  /// may deliver it after `stopSpeaking` or after another utterance began.
+  private func completeSystemSpeechIfCurrent(_ utterance: AVSpeechUtterance) -> Bool {
+    guard SystemSpeechCallbackPolicy.matchesCurrentUtterance(
+      callbackUtterance: utterance,
+      currentToken: activeSystemSpeechToken,
+      playbackGeneration: playbackGeneration)
+    else { return false }
+    guard SystemSpeechCallbackPolicy.accepts(
+      callbackUtterance: utterance,
+      currentToken: activeSystemSpeechToken,
+      playbackGeneration: playbackGeneration,
+      activeLeaseID: activePTTLease?.id)
+    else {
+      // This exact utterance finished after its lease was superseded. Clear
+      // only its physical marker; never let it drain the replacement lease.
+      activeSystemSpeechToken = nil
+      return false
+    }
+    activeSystemSpeechToken = nil
+    return true
+  }
+
   private func enqueueSystemSpeech(_ text: String) {
-    localSpeechActive = true
+    guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+      if let lease = activePTTLease {
+        activePTTLease = nil
+        VoiceTurnCoordinator.shared.send(
+          .playbackFailedScoped(
+            turnID: lease.turnID,
+            identity: lease.identity,
+            leaseID: lease.id,
+            message: "no fallback speech available"))
+      }
+      clearFloatingPillResponseGlowIfIdle()
+      return
+    }
     let utterance = AVSpeechUtterance(string: text)
     utterance.rate = 0.47
     utterance.pitchMultiplier = 1.02
     utterance.volume = 1.0
     utterance.voice = preferredSystemVoice()
+    activeSystemSpeechToken = SystemSpeechToken(
+      generation: playbackGeneration,
+      leaseID: activePTTLease?.id,
+      utterance: utterance)
     speechSynthesizer.speak(utterance)
     tracer?.end("tts_start")
   }
@@ -496,7 +654,16 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     Task { @MainActor [weak self] in
       guard let self else { return }
       guard self.audioPlayer === player else { return }
+      let fallbackText = self.activePlayerFallbackText
       self.audioPlayer = nil
+      self.activePlayerFallbackText = ""
+      if !flag, !fallbackText.isEmpty {
+        log("FloatingBarVoicePlaybackService: player ended unsuccessfully; using system voice")
+        self.recordSelectedVoiceFallback(
+          to: "system_voice_fallback", reason: "enqueue_failed", outcome: .degraded)
+        self.enqueueSystemSpeech(fallbackText)
+        return
+      }
       self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
@@ -505,7 +672,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
     Task { @MainActor [weak self] in
       guard let self else { return }
-      self.localSpeechActive = false
+      guard self.completeSystemSpeechIfCurrent(utterance) else { return }
+      self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
@@ -513,12 +681,13 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
     Task { @MainActor [weak self] in
       guard let self else { return }
-      self.localSpeechActive = false
+      guard self.completeSystemSpeechIfCurrent(utterance) else { return }
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
 
-  private func resetPlaybackPipeline(clearMode: Bool) {
+  private func resetPlaybackPipeline(clearMode: Bool, notifyPTTDrain: Bool = false) {
+    let leaseToRelease = activePTTLease
     playbackGeneration &+= 1
     playbackTask?.cancel()
     playbackTask = nil
@@ -542,23 +711,93 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     hasEmittedFirstChunk = false
     audioPlayer?.stop()
     audioPlayer = nil
+    activePlayerFallbackText = ""
     speechSynthesizer.stopSpeaking(at: .immediate)
-    localSpeechActive = false
+    activeSystemSpeechToken = nil
+    activePTTLease = nil
+    if let lease = leaseToRelease, notifyPTTDrain {
+      _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
+    }
     setFloatingPillResponseGlow(false)
   }
 
   private func setFloatingPillResponseGlow(_ active: Bool) {
-    if active {
-      FloatingControlBarManager.shared.barState?.isVoiceResponseActive = true
-    } else {
-      FloatingControlBarManager.shared.barState?.clearVoiceResponseState()
+    if let lease = activePTTLease {
+      VoiceTurnCoordinator.shared.send(
+        .responseActiveChanged(turnID: lease.turnID, active: active))
+      return
     }
+    VoiceTurnCoordinator.shared.setUnscopedResponseActive(active)
   }
 
   private func clearFloatingPillResponseGlowIfIdle() {
     if !isSpeaking {
+      finishActivePTTLeaseIfIdle()
       setFloatingPillResponseGlow(false)
     }
+  }
+
+  private func acquirePTTLeaseIfNeeded(_ lane: VoiceOutputLane) -> VoiceOutputLease? {
+    if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
+      _ = preemptFillerIfNeeded(for: lane, turnID: turnID)
+    }
+    if let activePTTLease {
+      return activePTTLease.lane == lane ? activePTTLease : nil
+    }
+    guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else { return nil }
+    switch VoiceTurnCoordinator.shared.acquireOutput(lane, turnID: turnID) {
+    case .acquired(let lease):
+      activePTTLease = lease
+      guard let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity else {
+        log("FloatingBarVoicePlaybackService: dropping PTT output without provider effect identity")
+        activePTTLease = nil
+        return nil
+      }
+      VoiceTurnCoordinator.shared.send(
+        .providerResponseStartedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: nil,
+          responseID: nil))
+      return lease
+    case .denied(let active):
+      log(
+        "FloatingBarVoicePlaybackService: dropping \(lane.rawValue) PTT output; "
+          + "active_lane=\(active.lane.rawValue)")
+      return nil
+    case .staleTurn:
+      log("FloatingBarVoicePlaybackService: dropping stale \(lane.rawValue) PTT output")
+      return nil
+    }
+  }
+
+  /// Real output always wins over a provisional filler phrase. Stop the audio
+  /// engine before releasing its lease so the incoming lane cannot overlap it.
+  @discardableResult
+  func preemptFillerIfNeeded(for incomingLane: VoiceOutputLane, turnID: VoiceTurnID) -> Bool {
+    guard let lease = activePTTLease,
+      VoiceOutputHandoffPolicy.fillerCanYield(
+        active: lease,
+        to: incomingLane,
+        turnID: turnID)
+    else { return false }
+
+    playbackGeneration &+= 1
+    fillerTask?.cancel()
+    fillerTask = nil
+    isFillerSynthesizing = false
+    audioPlayer?.stop()
+    audioPlayer = nil
+    speechSynthesizer.stopSpeaking(at: .immediate)
+    activeSystemSpeechToken = nil
+    activePTTLease = nil
+    return VoiceTurnCoordinator.shared.releaseOutput(lease)
+  }
+
+  private func finishActivePTTLeaseIfIdle() {
+    guard !isSpeaking, let lease = activePTTLease else { return }
+    activePTTLease = nil
+    _ = VoiceTurnCoordinator.shared.releaseOutput(lease)
   }
 
   private func preferredSystemVoice() -> AVSpeechSynthesisVoice? {
@@ -582,13 +821,63 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     voiceID: String,
     instructions: String
   ) async throws -> Data {
-    try await APIClient.shared.synthesizeSpeech(
-      request: APIClient.TtsSynthesizeRequest(
-        text: text,
-        voiceId: voiceID,
-        instructions: instructions.isEmpty ? nil : instructions
+    let byokKey = APIKeyService.isByokActive ? APIKeyService.byokKey(.openai) : nil
+    let fingerprint = byokKey.map(APIKeyService.byokFingerprint)
+    if let fingerprint {
+      let canUseKey = await MainActor.run {
+        CredentialHealthManager.shared.canUseBYOK(provider: .openai, fingerprint: fingerprint)
+      }
+      guard canUseKey else {
+        throw CredentialHealthError.providerAuth(
+          provider: .openai,
+          mode: .byok,
+          message: "Your OpenAI key was rejected. Update it in Settings."
+        )
+      }
+    }
+
+    do {
+      return try await APIClient.shared.synthesizeSpeech(
+        request: APIClient.TtsSynthesizeRequest(
+          text: text,
+          voiceId: voiceID,
+          instructions: instructions.isEmpty ? nil : instructions
+        )
       )
-    )
+    } catch let error as CredentialHealthError {
+      await MainActor.run {
+        if case .providerAuth(let provider, let mode, _) = error {
+          CredentialHealthManager.shared.recordProviderFailure(
+            error.failureClass,
+            provider: provider,
+            authMode: mode,
+            fingerprint: fingerprint,
+            context: "openai_tts"
+          )
+        } else {
+          CredentialHealthManager.shared.record(error, context: "openai_tts")
+        }
+      }
+      throw error
+    }
+  }
+
+  private nonisolated static func ttsFallbackReason(for error: Error) -> String {
+    if let apiError = error as? APIError,
+      case .httpError(let statusCode, _) = apiError,
+      statusCode == 429
+    {
+      return "quota"
+    }
+    guard let credentialError = error as? CredentialHealthError else { return "provider_5xx" }
+    switch credentialError.failureClass {
+    case .providerAuthFailed:
+      return "auth"
+    case .providerQuotaExceeded:
+      return "provider_429"
+    default:
+      return "provider_5xx"
+    }
   }
 
   private nonisolated static func cleanedPlaybackText(from message: ChatMessage?) -> String {
@@ -604,6 +893,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           return text
         case .discoveryCard(_, let title, let summary, _):
           return "\(title). \(summary)"
+        case .agentSpawn(_, _, _, _, let title, let objective, _):
+          return "\(title). \(objective)"
+        case .agentCompletion(_, _, _, _, let title, _, let output, _):
+          return "\(title). \(output)"
         case .toolCall, .thinking:
           return nil
         }
@@ -666,13 +959,10 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     voiceID: String,
     instructions: String
   ) -> URL {
-    let baseURL = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)
-      .first ?? FileManager.default.temporaryDirectory
     let fingerprint = SHA256.hash(data: Data("\(voiceID)\n\(instructions)\n\(text)".utf8))
       .map { String(format: "%02x", $0) }
       .joined()
-    return baseURL
-      .appendingPathComponent("Omi", isDirectory: true)
+    return DesktopLocalProfile.applicationSupportURL()
       .appendingPathComponent("VoicePhraseCache", isDirectory: true)
       .appendingPathComponent("background-agent-kickoff-v1", isDirectory: true)
       .appendingPathComponent("\(fingerprint).mp3")
@@ -742,6 +1032,82 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     }
 
     return false
+  }
+}
+
+enum VoicePlaybackStartPolicy {
+  static func accepts(started: Bool) -> Bool { started }
+}
+
+/// Identity of one AVSpeech utterance. Generation invalidates all callbacks from
+/// an interrupted playback pipeline; lease identity prevents an old utterance
+/// from changing the response state for a newer PTT turn.
+struct SystemSpeechToken: Equatable {
+  let generation: UInt64
+  let leaseID: VoiceLeaseID?
+  let utteranceIdentity: ObjectIdentifier
+
+  init(generation: UInt64, leaseID: VoiceLeaseID?, utterance: AnyObject) {
+    self.generation = generation
+    self.leaseID = leaseID
+    utteranceIdentity = ObjectIdentifier(utterance)
+  }
+}
+
+enum SystemSpeechCallbackPolicy {
+  static func matchesCurrentUtterance(
+    callbackUtterance: AnyObject,
+    currentToken: SystemSpeechToken?,
+    playbackGeneration: UInt64
+  ) -> Bool {
+    guard let currentToken else { return false }
+    return currentToken.generation == playbackGeneration
+      && currentToken.utteranceIdentity == ObjectIdentifier(callbackUtterance)
+  }
+
+  static func accepts(
+    callbackUtterance: AnyObject,
+    currentToken: SystemSpeechToken?,
+    playbackGeneration: UInt64,
+    activeLeaseID: VoiceLeaseID?
+  ) -> Bool {
+    guard matchesCurrentUtterance(
+      callbackUtterance: callbackUtterance,
+      currentToken: currentToken,
+      playbackGeneration: playbackGeneration)
+    else { return false }
+    return currentToken?.leaseID == activeLeaseID
+  }
+}
+
+/// A cloud synthesis must still own the same generation and PTT lease at its
+/// completion boundary. This keeps every cloud-TTS fallback on one auditable
+/// policy instead of letting individual completion handlers revive old speech.
+struct VoiceSynthesisToken: Equatable {
+  let generation: UInt64
+  let leaseID: VoiceLeaseID?
+}
+
+enum VoiceSynthesisFallbackPolicy {
+  static func ownsCurrentOutput(
+    token: VoiceSynthesisToken,
+    playbackGeneration: UInt64,
+    activeLeaseID: VoiceLeaseID?
+  ) -> Bool {
+    token.generation == playbackGeneration && token.leaseID == activeLeaseID
+  }
+
+  static func shouldUseFallback(
+    afterCancellation: Bool,
+    token: VoiceSynthesisToken,
+    playbackGeneration: UInt64,
+    activeLeaseID: VoiceLeaseID?
+  ) -> Bool {
+    !afterCancellation
+      && ownsCurrentOutput(
+        token: token,
+        playbackGeneration: playbackGeneration,
+        activeLeaseID: activeLeaseID)
   }
 }
 

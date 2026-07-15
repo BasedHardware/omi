@@ -12,6 +12,7 @@ import 'package:omi/gen/pigeon_communicator.g.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/sync_provider.dart';
+import 'package:omi/services/devices/connectors/rayban_meta_connection.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/utils/analytics/intercom.dart';
 import 'package:omi/utils/device.dart';
@@ -35,15 +36,6 @@ class ConnectedDevice extends StatefulWidget {
 
 class _ConnectedDeviceState extends State<ConnectedDevice> {
   CaptureProvider? _captureProvider;
-
-  // TODO: thinh, use connection directly
-  Future _bleDisconnectDevice(BtDevice btDevice) async {
-    var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
-    if (connection == null) {
-      return Future.value(null);
-    }
-    return await connection.disconnect();
-  }
 
   Future _bleUnpairDevice(BtDevice btDevice) async {
     var connection = await ServiceManager.instance().device.ensureConnection(btDevice.id);
@@ -205,6 +197,56 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
     );
   }
 
+  Future<String>? _rayBanMetaCameraStatusFuture;
+  String? _rayBanMetaCameraStatusDeviceId;
+
+  Future<String> _rayBanMetaCameraStatusMemoized(DeviceProvider provider) {
+    final deviceId = provider.connectedDevice?.id;
+    if (_rayBanMetaCameraStatusFuture == null || _rayBanMetaCameraStatusDeviceId != deviceId) {
+      _rayBanMetaCameraStatusDeviceId = deviceId;
+      _rayBanMetaCameraStatusFuture = _rayBanMetaCameraStatus(provider);
+    }
+    return _rayBanMetaCameraStatusFuture!;
+  }
+
+  Future<String> _rayBanMetaCameraStatus(DeviceProvider provider) async {
+    try {
+      final deviceId = provider.connectedDevice?.id;
+      if (deviceId == null) return 'unavailable';
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection is! RayBanMetaDeviceConnection) return 'unavailable';
+      return await connection.getCameraPermissionStatus();
+    } catch (_) {
+      return 'unavailable';
+    }
+  }
+
+  Future<void> _captureRayBanMetaPhoto() async {
+    try {
+      final provider = context.read<DeviceProvider>();
+      final deviceId = provider.connectedDevice?.id;
+      if (deviceId == null) return;
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection is! RayBanMetaDeviceConnection) return;
+      final cameraStatus = await connection.getCameraPermissionStatus();
+      if (cameraStatus != 'granted') {
+        if (!mounted) return;
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaImageCaptureUnavailable)));
+        return;
+      }
+      await connection.capturePhoto();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.raybanMetaPhotoRequested)));
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(context.l10n.errorConnectingRayBanMeta(e.toString())), backgroundColor: Colors.red),
+      );
+    }
+  }
+
   Widget _buildActionsSection(DeviceProvider provider) {
     final syncProvider = context.watch<SyncProvider>();
     final pendingSeconds = syncProvider.missingWalsInSeconds;
@@ -232,49 +274,62 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             ),
             const Divider(height: 1, color: Color(0xFF3C3C43)),
           ],
+          // Ray-Ban Meta: on-demand photo capture. Its firmware is managed by
+          // the Meta AI app, so the update rows below are hidden for it.
+          if (provider.pairedDevice?.type == DeviceType.raybanMeta) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.camera,
+              title: context.l10n.raybanMetaCapturePhoto,
+              onTap: provider.connectedDevice != null ? _captureRayBanMetaPhoto : null,
+              showChevron: provider.connectedDevice != null,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+          ],
           // Firmware Update
-          _buildProfileStyleItem(
-            icon: FontAwesomeIcons.download,
-            title: context.l10n.productUpdate,
-            chipValue: provider.connectedDevice == null
-                ? context.l10n.offline
-                : provider.havingNewFirmware
-                    ? context.l10n.available
-                    : null,
-            onTap: provider.connectedDevice != null
-                ? () {
-                    // Route to OmiGlass OTA page for openglass devices
-                    final deviceName = provider.connectedDevice!.name.toLowerCase();
-                    final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
-                        deviceName.contains('openglass') ||
-                        deviceName.contains('omiglass') ||
-                        deviceName.contains('glass');
-                    debugPrint('ProductUpdate: connectedDevice type: ${provider.connectedDevice?.type}');
-                    debugPrint('ProductUpdate: connectedDevice name: "${provider.connectedDevice?.name}"');
-                    debugPrint('ProductUpdate: deviceName lowercase: "$deviceName"');
-                    debugPrint('ProductUpdate: isOpenGlass: $isOpenGlass');
-                    if (isOpenGlass) {
-                      debugPrint('ProductUpdate: Routing to OmiGlassOtaUpdate');
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => OmiGlassOtaUpdate(
-                            device: provider.pairedDevice,
-                            latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+          if (provider.pairedDevice?.type != DeviceType.raybanMeta)
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.download,
+              title: context.l10n.productUpdate,
+              chipValue: provider.connectedDevice == null
+                  ? context.l10n.offline
+                  : provider.havingNewFirmware
+                      ? context.l10n.available
+                      : null,
+              onTap: provider.connectedDevice != null
+                  ? () {
+                      // Route to OmiGlass OTA page for openglass devices
+                      final deviceName = provider.connectedDevice!.name.toLowerCase();
+                      final isOpenGlass = provider.connectedDevice!.type == DeviceType.openglass ||
+                          deviceName.contains('openglass') ||
+                          deviceName.contains('omiglass') ||
+                          deviceName.contains('glass');
+                      debugPrint('ProductUpdate: connectedDevice type: ${provider.connectedDevice?.type}');
+                      debugPrint('ProductUpdate: connectedDevice name: "${provider.connectedDevice?.name}"');
+                      debugPrint('ProductUpdate: deviceName lowercase: "$deviceName"');
+                      debugPrint('ProductUpdate: isOpenGlass: $isOpenGlass');
+                      if (isOpenGlass) {
+                        debugPrint('ProductUpdate: Routing to OmiGlassOtaUpdate');
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (context) => OmiGlassOtaUpdate(
+                              device: provider.pairedDevice,
+                              latestFirmwareDetails: provider.latestOmiGlassFirmwareDetails,
+                            ),
                           ),
-                        ),
-                      );
-                    } else {
-                      debugPrint('ProductUpdate: Routing to FirmwareUpdate');
-                      Navigator.of(
-                        context,
-                      ).push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: provider.pairedDevice)));
+                        );
+                      } else {
+                        debugPrint('ProductUpdate: Routing to FirmwareUpdate');
+                        Navigator.of(
+                          context,
+                        ).push(MaterialPageRoute(builder: (context) => FirmwareUpdate(device: provider.pairedDevice)));
+                      }
                     }
-                  }
-                : null,
-            showChevron: provider.connectedDevice != null,
-          ),
+                  : null,
+              showChevron: provider.connectedDevice != null,
+            ),
           // Roll back to stable firmware (only when current firmware differs from latest stable)
-          if (provider.connectedDevice != null &&
+          if (provider.pairedDevice?.type != DeviceType.raybanMeta &&
+              provider.connectedDevice != null &&
               provider.latestStableFirmwareVersion.isNotEmpty &&
               provider.pairedDevice?.firmwareRevision != provider.latestStableFirmwareVersion) ...[
             const Divider(height: 1, color: Color(0xFF3C3C43)),
@@ -387,6 +442,8 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
               if (mounted) {
                 context.read<DeviceProvider>().setIsConnected(false);
                 await context.read<DeviceProvider>().setConnectedDevice(null);
+              }
+              if (mounted) {
                 context.read<DeviceProvider>().updateConnectingStatus(false);
               }
 
@@ -435,7 +492,7 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
                       if (provider.connectedDevice != null) {
                         await _bleUnpairDevice(provider.connectedDevice!);
                       }
-                      if (context.mounted) {
+                      if (mounted) {
                         context.read<DeviceProvider>().setIsConnected(false);
                         context.read<DeviceProvider>().setConnectedDevice(null);
                         context.read<DeviceProvider>().updateConnectingStatus(false);
@@ -529,13 +586,43 @@ class _ConnectedDeviceState extends State<ConnectedDevice> {
             showChevron: false,
           ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
-          _buildProfileStyleItem(
-            icon: FontAwesomeIcons.code,
-            title: context.l10n.firmware,
-            chipValue: firmware,
-            copyValue: firmware,
-            showChevron: false,
-          ),
+          if (provider.pairedDevice?.type == DeviceType.raybanMeta) ...[
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.microphone,
+              title: context.l10n.microphone,
+              chipValue:
+                  provider.connectedDevice != null ? context.l10n.raybanMetaMicrophoneReady : context.l10n.offline,
+              showChevron: false,
+            ),
+            const Divider(height: 1, color: Color(0xFF3C3C43)),
+            FutureBuilder<String>(
+              future: _rayBanMetaCameraStatusMemoized(provider),
+              builder: (context, snapshot) {
+                final status = snapshot.data;
+                final String label;
+                if (status == 'granted') {
+                  label = context.l10n.raybanMetaImageCaptureReady;
+                } else if (status == 'unavailable') {
+                  label = context.l10n.raybanMetaImageCaptureUnavailable;
+                } else {
+                  label = context.l10n.raybanMetaAllowCamera;
+                }
+                return _buildProfileStyleItem(
+                  icon: FontAwesomeIcons.camera,
+                  title: context.l10n.raybanMetaCamera,
+                  chipValue: snapshot.hasData ? label : null,
+                  showChevron: false,
+                );
+              },
+            ),
+          ] else
+            _buildProfileStyleItem(
+              icon: FontAwesomeIcons.code,
+              title: context.l10n.firmware,
+              chipValue: firmware,
+              copyValue: firmware,
+              showChevron: false,
+            ),
           const Divider(height: 1, color: Color(0xFF3C3C43)),
           _buildProfileStyleItem(
             icon: FontAwesomeIcons.fingerprint,

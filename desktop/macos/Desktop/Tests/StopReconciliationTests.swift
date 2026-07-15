@@ -342,6 +342,107 @@ final class StopReconciliationTests: XCTestCase {
         ))
     }
 
+    func testClientIdentifiedSessionRejectsStaleConversationBinding() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "stale-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testClientIdentifiedSessionAcceptsExactConversationBinding() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.shouldBindConversationSession(
+            incomingBackendId: "recording-conversation",
+            expectedBackendId: "recording-conversation",
+            activeBackendId: nil,
+            ignoredRotatedBackendIds: []
+        ))
+    }
+
+    func testLifecycleEventRejectsStaleRecordingIdentity() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "stale-conversation",
+            recordingSessionId: "stale-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsExactRecordingIdentity() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: "recording-conversation",
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testLifecycleEventAcceptsLegacyEventWhenConversationIdStillMatches() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+            memoryId: "recording-conversation",
+            recordingSessionId: nil,
+            expectedBackendId: "recording-conversation"
+        ))
+    }
+
+    func testVersionedLifecycleEnvelopeAcceptsOnlyTheNextSequence() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+            recordingSessionId: "recording-conversation",
+            conversationId: "recording-conversation",
+            lifecycleVersion: 1,
+            lifecyclePhase: "processing",
+            lifecycleSequence: 2,
+            expectedLifecyclePhase: "processing",
+            expectedBackendId: "recording-conversation",
+            lastAcceptedSequence: 1
+        ))
+        XCTAssertFalse(DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+            recordingSessionId: "recording-conversation",
+            conversationId: "recording-conversation",
+            lifecycleVersion: 1,
+            lifecyclePhase: "processing",
+            lifecycleSequence: 1,
+            expectedLifecyclePhase: "processing",
+            expectedBackendId: "recording-conversation",
+            lastAcceptedSequence: 1
+        ))
+    }
+
+    func testVersionedLifecycleEnvelopeRejectsDifferentSessionOrConversation() {
+        XCTAssertFalse(DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+            recordingSessionId: "other-session",
+            conversationId: "recording-conversation",
+            lifecycleVersion: 1,
+            lifecyclePhase: "processing",
+            lifecycleSequence: 1,
+            expectedLifecyclePhase: "processing",
+            expectedBackendId: "recording-conversation",
+            lastAcceptedSequence: nil
+        ))
+        XCTAssertFalse(DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+            recordingSessionId: "recording-conversation",
+            conversationId: "other-conversation",
+            lifecycleVersion: 1,
+            lifecyclePhase: "processing",
+            lifecycleSequence: 1,
+            expectedLifecyclePhase: "processing",
+            expectedBackendId: "recording-conversation",
+            lastAcceptedSequence: nil
+        ))
+    }
+
+    func testLegacyLifecycleEnvelopeRemainsCompatible() {
+        XCTAssertTrue(DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+            recordingSessionId: nil,
+            conversationId: "recording-conversation",
+            lifecycleVersion: nil,
+            lifecyclePhase: nil,
+            lifecycleSequence: nil,
+            expectedLifecyclePhase: "completed",
+            expectedBackendId: "recording-conversation",
+            lastAcceptedSequence: 10
+        ))
+    }
+
     func testActiveBackendConversationIdRejectsDifferentRollover() {
         XCTAssertFalse(DesktopConversationMatchPolicy.shouldBindConversationSession(
             incomingBackendId: "rolled-over-conversation",

@@ -5,7 +5,7 @@ import uuid
 import logging
 import asyncio
 from datetime import timezone, timedelta, datetime
-from typing import Any, Dict, List, Optional, Set, Tuple, Union, cast
+from typing import Any, Callable, Dict, List, Optional, Set, Tuple, Union, cast
 
 from fastapi import HTTPException
 
@@ -34,6 +34,8 @@ from database.vector_db import upsert_vector2, update_vector_metadata, upsert_tr
 from utils.conversations.transcript_chunks import build_transcript_chunks
 from models.app import App, UsageHistoryType
 from models.memories import MemoryDB, Memory, render_memory
+from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
+from models.workstream_association import AssociationEvidence
 from models.product_memory import MemoryTier
 from models.calendar_context import CalendarMeetingContext
 from models.conversation import (
@@ -44,13 +46,15 @@ from models.conversation import (
 )
 from models.conversation_enums import ConversationSource, ConversationStatus, ExternalIntegrationConversationSource
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
 from utils.memory.memory_system_pin import memory_system_request_scope
 from utils.memory.canonical_memory_adapter import extraction_memory_id
+from utils.observability.fallback import record_fallback
+from utils.task_intelligence.workstream_association import associate_canonical_evidence
 from utils.subscription import is_trial_paywalled, should_defer_desktop_processing
 from models.other import Person
 from models.structured import Structured
@@ -93,11 +97,17 @@ from utils.retrieval.rag import retrieve_rag_conversation_context
 from utils.webhooks import conversation_created_webhook
 from utils.notifications import send_action_item_data_message
 from utils.task_sync import auto_sync_action_items_batch
+from utils.task_intelligence import conversation_capture
 from utils.conversations.calendar_linking import (
     get_overlapping_calendar_event,
     write_conversation_link_to_calendar_event,
 )
-from utils.other.storage import precache_conversation_audio
+from utils.cloud_tasks import is_audio_merge_dispatch_enabled
+from utils.other.storage import (
+    compute_audio_files_fingerprint,
+    enqueue_conversation_artifact_build,
+    precache_conversation_audio,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -152,6 +162,7 @@ def _get_structured(
     people: Optional[List[Person]] = None,
 ) -> Tuple[Structured, bool]:
     try:
+        task_intelligence_capture = conversation_capture.capture_enabled(uid)
         tz: Optional[str] = notification_db.get_user_time_zone(uid)
         tz_str: str = tz or ''
         user_language = users_db.get_user_language_preference(uid) or language_code
@@ -191,6 +202,7 @@ def _get_structured(
                         existing_action_items=_fetch_dedup_candidates(uid, structured),
                         calendar_meeting_context=calendar_context,
                         output_language_code=user_language,
+                        task_intelligence_capture=task_intelligence_capture,
                     )
                 return structured, False
 
@@ -242,6 +254,7 @@ def _get_structured(
                     photos=main_conv.photos,
                     existing_action_items=_fetch_dedup_candidates(uid, structured),
                     output_language_code=user_language,
+                    task_intelligence_capture=task_intelligence_capture,
                 )
             return structured, False
 
@@ -279,6 +292,7 @@ def _get_structured(
                 existing_action_items=_fetch_dedup_candidates(uid, structured),
                 calendar_meeting_context=calendar_context,
                 output_language_code=user_language,
+                task_intelligence_capture=task_intelligence_capture,
             )
         return structured, False
     except Exception as e:
@@ -469,15 +483,23 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
         logger.error(f"[GOAL] Error updating progress: {e}")
 
 
-def _extract_memories(uid: str, conversation: Conversation) -> None:
+def extract_memories(uid: str, conversation: Conversation) -> None:
+    """Extract one conversation's memories through the selected memory system.
+
+    Finalization workers use this public boundary while holding their durable
+    lease. Keep the private helper below for existing in-module async callers.
+    """
     with track_usage(uid, Features.MEMORIES):
         _extract_memories_inner(uid, conversation)
 
 
+def _extract_memories(uid: str, conversation: Conversation) -> None:
+    extract_memories(uid, conversation)
+
+
 def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
-    """Canonical-cohort extraction: retract-then-write to memory_items only (Q1/Q7)."""
+    """Canonical-cohort extraction: extract first, then retract-and-write (Q1/Q7)."""
     memory_service = MemoryService(db_client=db_client)
-    memory_service.retract_conversation_memories(uid, conversation.id)
 
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
@@ -525,9 +547,49 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
         logger.info(f"No canonical memories extracted for conversation {conversation.id}")
         return
 
+    memory_service.retract_conversation_memories(uid, conversation.id)
+
     logger.info(f"Saving {len(parsed_memories)} canonical memories for conversation {conversation.id}")
     for memory_db_obj in parsed_memories:
         memory_service.write(uid, memory_db_obj.model_dump(mode="json"))
+
+    if not is_locked:
+        memory_refs = [
+            EvidenceRef(
+                kind=EvidenceKind.memory_item,
+                id=cast(str, memory_db_obj.id),
+                scope=EvidenceScope.canonical,
+            )
+            for memory_db_obj in parsed_memories[:49]
+        ]
+        evidence_summary = '\n'.join(memory.content.strip() for memory in parsed_memories if memory.content.strip())[
+            :2000
+        ]
+        try:
+            associate_canonical_evidence(
+                uid,
+                AssociationEvidence(
+                    evidence_id=conversation.id,
+                    summary=evidence_summary,
+                    evidence_refs=[
+                        EvidenceRef(
+                            kind=EvidenceKind.conversation,
+                            id=conversation.id,
+                            scope=EvidenceScope.canonical,
+                        ),
+                        *memory_refs,
+                    ],
+                ),
+                firestore_client=db_client,
+            )
+        except Exception:
+            record_fallback(
+                component='other',
+                from_mode='canonical_memory_workflow_association',
+                to_mode='memory_write_only',
+                reason='other',
+                outcome='degraded',
+            )
 
     record_usage(uid, memories_created=len(parsed_memories))
 
@@ -535,7 +597,8 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
 def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
             _extract_memories_canonical(uid, conversation, db_client=db_client)
             return
 
@@ -543,11 +606,6 @@ def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
 
 
 def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
-    # Also get the IDs to delete from Pinecone
-    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
-    for memory_id in deletion_result.get('vector_delete_ids', []):
-        delete_memory_vector(uid, memory_id)
-
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
@@ -656,6 +714,11 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
         logger.info(f"No memories extracted for conversation {conversation.id}")
         return
 
+    # Replace conversation-scoped memories only after extraction succeeds.
+    deletion_result = memories_db.delete_memories_for_conversation(uid, conversation.id)
+    for memory_id in deletion_result.get('vector_delete_ids', []):
+        delete_memory_vector(uid, memory_id)
+
     logger.info(f"Saving {len(parsed_memories)} memories for conversation {conversation.id}")
     memories_db.save_memories(uid, [memory_write_payload(fact, MemoryApiExposure.LEGACY) for fact in parsed_memories])
 
@@ -731,6 +794,9 @@ def _save_action_items(uid: str, conversation: Conversation):
         return
 
     is_locked = conversation.is_locked
+    if conversation_capture.process_before_legacy(uid, conversation.id, conversation.structured.action_items):
+        return
+
     action_items_data: List[Dict[str, Any]] = []
     now = datetime.now(timezone.utc)
 
@@ -744,6 +810,7 @@ def _save_action_items(uid: str, conversation: Conversation):
             'completed_at': action_item.completed_at,
             'conversation_id': conversation.id,
             'is_locked': is_locked,
+            **conversation_capture.canonical_fields(action_item, conversation.id),
         }
         action_items_data.append(action_item_data)
 
@@ -753,10 +820,38 @@ def _save_action_items(uid: str, conversation: Conversation):
         old_ids = [item['id'] for item in old_items]
         if old_ids:
             delete_action_item_vectors_batch(uid, old_ids)
-        action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        document_ids = conversation_capture.legacy_document_ids(
+            uid,
+            conversation.id,
+            conversation.structured.action_items,
+        )
+        if document_ids is None:
+            action_items_db.delete_action_items_for_conversation(uid, conversation.id)
+        else:
+            action_items_db.retire_action_items_for_conversation(
+                uid,
+                conversation.id,
+                active_ids=document_ids,
+                replacements=conversation_capture.legacy_replacement_map(
+                    old_items,
+                    conversation.structured.action_items,
+                    document_ids,
+                ),
+            )
         # Save new action items
-        action_item_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+        action_item_ids = action_items_db.create_action_items_batch(
+            uid,
+            action_items_data,
+            document_ids=document_ids,
+        )
         logger.info(f"Saved {len(action_item_ids)} action items for conversation {conversation.id}")
+
+        conversation_capture.reconcile_after_legacy(
+            uid,
+            conversation.id,
+            conversation.structured.action_items,
+            action_item_ids,
+        )
 
         # Send FCM data messages for action items with due dates
         for idx, action_item in enumerate(conversation.structured.action_items):
@@ -878,6 +973,7 @@ def _store_deferred_conversation(
     all enrichment. Mirrors the tail of process_conversation's persistence (cheap structured →
     `_get_conversation_obj` → upsert) without any LLM / Pinecone / app work. The enrichment runs
     later via the lazy trigger in `get_conversation_by_id`."""
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     structured = _build_deferred_structured(conversation)
     conversation = _get_conversation_obj(uid, structured, conversation)
     conversation.deferred = True
@@ -886,7 +982,13 @@ def _store_deferred_conversation(
     # processing indicator and re-fetches on open to trigger enrichment. The lazy enrich sets it
     # back to `completed`.
     conversation.status = ConversationStatus.processing
-    conversations_db.upsert_conversation(uid, conversation.dict())
+    if is_initial_creation:
+        persisted = lifecycle_service.create_processing_conversation(uid, conversation.dict(), idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    if not persisted:
+        logger.info('lazy: deferred conversation creation fenced uid=%s conv=%s', uid, conversation.id)
+        return conversation
     logger.info("lazy: stored deferred desktop conversation uid=%s conv=%s", uid, conversation.id)
     return conversation
 
@@ -898,7 +1000,14 @@ def process_conversation(
     force_process: bool = False,
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
+    persistence_observer: Callable[[bool], None] | None = None,
+    defer_memory_extraction: bool = False,
 ) -> Conversation:
+    def report_persistence(current: bool) -> None:
+        if persistence_observer is not None:
+            persistence_observer(current)
+
+    is_initial_creation = isinstance(conversation, (CreateConversation, ExternalIntegrationCreateConversation))
     # Trial paywall: skip ALL post-processing (summaries, memories, action
     # items, embeddings, app integrations) for paywalled desktop users.
     # Without this, any segments that did get through before the trial gate
@@ -925,6 +1034,7 @@ def process_conversation(
                 conversation.status = ConversationStatus.completed
             except Exception:
                 pass
+        report_persistence(False)
         return cast(Conversation, conversation)
 
     # Lazy desktop processing (freemium cost cut): desktop users without a desktop-entitled
@@ -941,7 +1051,9 @@ def process_conversation(
         and conversation.source == ConversationSource.desktop
         and should_defer_desktop_processing(uid)
     ):
-        return _store_deferred_conversation(uid, conversation)
+        deferred = _store_deferred_conversation(uid, conversation)
+        report_persistence(False)
+        return deferred
 
     # Fetch meeting context from Firestore if meeting_id is associated with this conversation
     if isinstance(conversation, Conversation) and conversation.id:
@@ -969,6 +1081,22 @@ def process_conversation(
     structured, discarded = _get_structured(uid, language_code, conversation, force_process, people=people)
     conversation = _get_conversation_obj(uid, structured, conversation)
 
+    # Persist the completed generation before it can trigger any derived work.
+    # A discard or replacement that wins this transaction must not create
+    # integrations, vectors, memories, action items, audio artifacts, folders,
+    # calendar links, usage, or webhooks from a stale in-memory snapshot.
+    conversation.status = ConversationStatus.completed
+    if is_initial_creation:
+        persisted = lifecycle_service.create_completed_conversation(uid, conversation.dict(), idempotent=True)
+    else:
+        persisted = lifecycle_service.persist_processed_conversation(uid, conversation.dict())
+    report_persistence(persisted)
+    if not persisted:
+        logger.info(
+            'processing result fenced before completion side effects uid=%s conversation=%s', uid, conversation.id
+        )
+        return conversation
+
     # Calendar auto-linking calls and mutates a user's Google Calendar during generic
     # conversation processing. Keep it opt-in so normal sync/reprocess jobs do not
     # fan out provider traffic for every connected user.
@@ -990,6 +1118,11 @@ def process_conversation(
             if calendar_event:
                 conversation.calendar_event = calendar_event
                 asyncio.run(write_conversation_link_to_calendar_event(uid, calendar_event.event_id, conversation.id))
+                conversations_db.update_conversation(
+                    uid,
+                    conversation.id,
+                    {'calendar_event': calendar_event.model_dump(mode='json')},
+                )
         except Exception as e:
             logger.error(f"Error during calendar event linking: {e}")
             pass
@@ -1016,6 +1149,7 @@ def process_conversation(
                 if folder_id:
                     conversation.folder_id = folder_id
                     assigned_folder_id = folder_id
+                    conversations_db.update_conversation(uid, conversation.id, {'folder_id': folder_id})
                     logger.info(
                         f"AI assigned conversation {conversation.id} to folder {folder_id} (confidence: {confidence:.2f}): {reasoning}"
                     )
@@ -1056,7 +1190,15 @@ def process_conversation(
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                 submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
-        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+        if not defer_memory_extraction:
+            with memory_system_request_scope(uid) as memory_system:
+                if memory_system == MemorySystem.CANONICAL:
+                    # Canonical writes intentionally fail closed. Do not hide a
+                    # retryable gate/store failure in an unobserved future and
+                    # report this conversation as successfully processed.
+                    _extract_memories(uid, conversation)
+                else:
+                    submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
         submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 
@@ -1066,16 +1208,20 @@ def process_conversation(
             audio_files = conversations_db.create_audio_files_from_chunks(uid, conversation.id)
             if audio_files:
                 conversation.audio_files = audio_files
-                conversations_db.update_conversation(
-                    uid, conversation.id, {'audio_files': [af.dict() for af in audio_files]}
-                )
+                files_payload = [af.dict() for af in audio_files]
+                conversations_db.update_conversation(uid, conversation.id, {'audio_files': files_payload})
                 # Pre-cache audio files in background
-                precache_conversation_audio(uid, conversation.id, [af.dict() for af in audio_files])
+                precache_conversation_audio(uid, conversation.id, files_payload)
+                # Build the conversation-level playback artifact (dense MP3 + spans)
+                if is_audio_merge_dispatch_enabled():
+                    enqueue_conversation_artifact_build(
+                        uid,
+                        conversation.id,
+                        compute_audio_files_fingerprint(files_payload),
+                        caller='process_conversation',
+                    )
         except Exception as e:
             logger.error(f"Error creating audio files: {e}")
-
-    conversation.status = ConversationStatus.completed
-    conversations_db.upsert_conversation(uid, conversation.dict())
 
     # Update folder conversation count after conversation is saved
     if assigned_folder_id:

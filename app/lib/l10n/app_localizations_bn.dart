@@ -9,6 +9,9 @@ class AppLocalizationsBn extends AppLocalizations {
   AppLocalizationsBn([String locale = 'bn']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'সেশনের মেয়াদ শেষ হয়েছে — আবার সাইন ইন করুন।';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9514,4 +9517,87 @@ class AppLocalizationsBn extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'পেনড্যান্টের স্টোরেজ প্রায় পূর্ণ — সিঙ্ক করতে অ্যাপটি খোলা রাখুন।';
+
+  @override
+  String get connectRayBanMeta => 'Ray-Ban Meta সংযুক্ত করুন';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'কথোপকথন এবং ভিজ্যুয়াল প্রসঙ্গের জন্য আপনার Ray-Ban Meta চশমা Omi ক্যাপচার ডিভাইস হিসেবে ব্যবহার করুন। Omi আপনার চশমা লিঙ্ক করতে Meta AI অ্যাপ খুলবে।';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Meta AI-এর মাধ্যমে সংযুক্ত করুন';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Meta AI অ্যাপে সংযোগ সম্পূর্ণ করুন, তারপর এখানে ফিরে আসুন।';
+
+  @override
+  String get raybanMetaCheckAgain => 'আবার পরীক্ষা করুন';
+
+  @override
+  String get raybanMetaAllowCamera => 'চশমায় ক্যামেরা অনুমতি দিন';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi আপনার কথোপকথনে ছবি যোগ করতে আপনার চশমার ক্যামেরা ব্যবহার করে। আপনি এটি এড়িয়ে গিয়ে শুধুমাত্র অডিও ব্যবহার করতে পারেন।';
+
+  @override
+  String get raybanMetaSkipForNow => 'আপাতত এড়িয়ে যান';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta শুধুমাত্র অডিও মোড';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Omi-এর এই সংস্করণটি Bluetooth-এর মাধ্যমে আপনার চশমার মাইক্রোফোন ব্যবহার করতে পারে। ছবি ক্যাপচারের জন্য Omi-এর Meta ডেভেলপার বিল্ড প্রয়োজন।';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'চশমার মাইক্রোফোন ব্যবহারের সময় আপনার ফোনের সঙ্গীত থেমে যায়।';
+
+  @override
+  String get raybanMetaContinue => 'চালিয়ে যান';
+
+  @override
+  String get raybanMetaCapturePhoto => 'ছবি তুলুন';
+
+  @override
+  String get raybanMetaPhotoRequested => 'ছবির অনুরোধ করা হয়েছে — এটি আপনার কথোপকথনে প্রদর্শিত হবে।';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'মাইক্রোফোন প্রস্তুত';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'ছবি ক্যাপচার প্রস্তুত';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'শুধুমাত্র অডিও মোডে অনুপলব্ধ';
+
+  @override
+  String get raybanMetaCamera => 'ক্যামেরা';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Ray-Ban Meta-তে সংযোগ করতে ত্রুটি: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'ডিভাইস স্টোরেজ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% পূর্ণ';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total-এর মধ্যে $used ব্যবহৃত';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free খালি';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।';
 }

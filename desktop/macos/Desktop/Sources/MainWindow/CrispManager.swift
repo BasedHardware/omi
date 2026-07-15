@@ -7,6 +7,15 @@ import Foundation
 class CrispManager: ObservableObject {
     static let shared = CrispManager()
 
+    /// First-launch polling watermark, in epoch MILLISECONDS to match Crisp
+    /// message timestamps (`CrispOperatorMessage.timestamp` and the `?since=`
+    /// filter in the Rust route). Seeding this in seconds (~1e9) left it ~1000x
+    /// below every real message timestamp (~1e12), so the first poll treated all
+    /// historical operator messages as new and fired a notification for each.
+    nonisolated static func initialWatermark(now: Date = Date()) -> UInt64 {
+        UInt64(now.timeIntervalSince1970 * 1000)
+    }
+
     /// Number of unread operator messages (shown as badge in sidebar)
     @Published private(set) var unreadCount = 0
 
@@ -80,7 +89,7 @@ class CrispManager: ObservableObject {
         // On subsequent launches, keep the persisted value so the first
         // poll picks up messages that arrived while the app was closed.
         if lastSeenTimestamp == 0 {
-            lastSeenTimestamp = UInt64(Date().timeIntervalSince1970)
+            lastSeenTimestamp = Self.initialWatermark()
         }
 
         if performInitialPoll {
@@ -142,15 +151,16 @@ class CrispManager: ObservableObject {
     private func pollForMessages() {
         pollInvocations += 1
         guard !isRunningUnderXCTest else { return }
-        Task {
-            // Skip if in auth backoff period (recent 401 errors)
-            guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
+        guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
+        Task { [ownerID] in
             do {
-                let messages = try await fetchUnreadMessages()
+                let messages = try await fetchUnreadMessages(ownerID: ownerID)
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 log("CrispManager: poll returned \(messages.count) messages (since=\(self.lastSeenTimestamp))")
 
                 var newMessageCount = 0
                 for msg in messages {
+                    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                     let key = String(msg.text.prefix(80)) + "_\(msg.timestamp)"
 
                     // Track the latest operator timestamp
@@ -169,6 +179,7 @@ class CrispManager: ObservableObject {
                     log("CrispManager: new operator message: \(preview)")
 
                     NotificationService.shared.sendNotification(
+                        ownerID: ownerID,
                         title: "Help from Founder",
                         message: preview,
                         assistantId: "crisp",
@@ -177,14 +188,11 @@ class CrispManager: ObservableObject {
                 }
 
                 // Batch update: single @Published write instead of per-message increments
+                guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 if newMessageCount > 0 && !isViewingHelp {
                     unreadCount += newMessageCount
                 }
-                AuthBackoffTracker.shared.reportSuccess()
             } catch {
-                if case APIError.unauthorized = error {
-                    AuthBackoffTracker.shared.reportAuthFailure()
-                }
                 log("CrispManager: poll failed: \(error)")
             }
         }
@@ -206,10 +214,22 @@ class CrispManager: ObservableObject {
         let from: String
     }
 
-    private func fetchUnreadMessages() async throws -> [CrispOperatorMessage] {
+    private func fetchUnreadMessages(ownerID: String) async throws -> [CrispOperatorMessage] {
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+            throw AuthError.userChangedDuringRequest
+        }
         let api = APIClient.shared
         let baseURL = await api.rustBackendURL
-        let headers = try await api.buildHeaders(requireAuth: true)
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+            throw AuthError.userChangedDuringRequest
+        }
+        let headers = try await api.buildHeaders(
+            requireAuth: true,
+            expectedAuthOwnerId: ownerID
+        )
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+            throw AuthError.userChangedDuringRequest
+        }
 
         var urlString = "\(baseURL)v1/crisp/unread"
         if lastSeenTimestamp > 0 {
@@ -229,6 +249,9 @@ class CrispManager: ObservableObject {
 
         let session = api.session
         let (data, response) = try await session.data(for: request)
+        guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else {
+            throw AuthError.userChangedDuringRequest
+        }
 
         guard let httpResponse = response as? HTTPURLResponse else {
             throw URLError(.badServerResponse)

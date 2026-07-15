@@ -16,9 +16,9 @@ venv/
 .memory_pipeline_runs/
 .local/
 dump/
-/scripts/
 *.zip
 *.wav
+!backend/testing/release_fixtures/transcription-release-probe.wav
 node_modules
 yarn.lock
 
@@ -63,6 +63,7 @@ dist/
 **/ios/**/Flutter/Flutter.podspec
 **/ios/Flutter/Generated.xcconfig
 **/ios/Flutter/flutter_export_environment.sh
+**/ios/Flutter/RayBanMetaCredentials.xcconfig
 **/ios/.generated/
 **/ios/Runner.xcworkspace
 **/ios/**/GeneratedPluginRegistrant.*
@@ -239,6 +240,9 @@ builds-snapshot.md
 .dev/
 
 # Agent planning artifacts (ephemeral; do not commit)
-.cursor/plans/
+.cursor/plans/*
+!.cursor/plans/.gitkeep
+
 .hermes/
 backend/.venv
+backend/.harness/

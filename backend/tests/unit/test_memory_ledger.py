@@ -8,14 +8,20 @@ This is the sanctioned Tier-2 "fake must precede import" case (see
 """
 
 import os
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 from pathlib import Path
+from threading import Barrier, Lock
 from types import ModuleType
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import Aborted
 import pytest
 
+from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
+from tests.unit.fake_firestore import FakeFirestore
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -52,6 +58,11 @@ def _load_modules():
         yield
 
 
+@pytest.fixture(autouse=True)
+def _isolate_retry_logging_cost(monkeypatch):
+    monkeypatch.setattr(firestore_transaction_retry, "logger", MagicMock())
+
+
 def _fact(fact_id, content, *, valid_from=None, valid_to=None):
     qualifiers = {}
     if valid_from:
@@ -66,6 +77,103 @@ def _fact(fact_id, content, *, valid_from=None, valid_to=None):
         "subject_entity_id": "user",
         "qualifiers": qualifiers,
     }
+
+
+class _LedgerSnapshot:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return self._data
+
+
+class _LedgerDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def collection(self, name):
+        return _LedgerCollection(self._db, f"{self.path}/{name}")
+
+    def get(self, transaction=None):
+        return _LedgerSnapshot(self._db.docs.get(self.path))
+
+
+class _LedgerCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def document(self, document_id):
+        return _LedgerDocument(self._db, f"{self.path}/{document_id}")
+
+
+class _LedgerDb:
+    def __init__(self, docs):
+        self.docs = dict(docs)
+
+    def collection(self, name):
+        return _LedgerCollection(self, name)
+
+
+class _LedgerTransaction:
+    def __init__(self):
+        self.sets = []
+
+    def set(self, ref, payload):
+        self.sets.append((ref.path, payload))
+
+
+def _ledger_state_write(transaction):
+    return next(payload for path, payload in transaction.sets if path.endswith("/memory_state/head"))
+
+
+class ReadAfterWriteError(Exception):
+    """Mirror of Firestore's read-after-write guard for strict ordering tests."""
+
+
+class _StrictLedgerTransaction:
+    """Transaction fake that enforces Firestore's read-before-write ordering."""
+
+    def __init__(self):
+        self.sets = []
+        self.has_written = False
+
+    def set(self, ref, payload):
+        self.has_written = True
+        self.sets.append((ref.path, payload))
+
+
+class _StrictLedgerDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def collection(self, name):
+        return _StrictLedgerCollection(self._db, f"{self.path}/{name}")
+
+    def get(self, transaction=None):
+        if transaction is not None and transaction.has_written:
+            raise ReadAfterWriteError("Attempted read after write in a transaction.")
+        return _LedgerSnapshot(self._db.docs.get(self.path))
+
+
+class _StrictLedgerCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def document(self, document_id):
+        return _StrictLedgerDocument(self._db, f"{self.path}/{document_id}")
+
+
+class _StrictLedgerDb:
+    def __init__(self, docs):
+        self.docs = dict(docs)
+
+    def collection(self, name):
+        return _StrictLedgerCollection(self, name)
 
 
 def test_fold_commits_replays_head_and_valid_time():
@@ -253,6 +361,319 @@ def test_append_commit_to_history_rejects_sibling_heads():
         raise AssertionError("Expected same-parent sibling append to fail")
 
 
+def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply_control():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+            },
+            f"users/{uid}/memory_state/apply_control": {
+                "uid": uid,
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+    trusted = read_memory_v3_trusted_account_generation(
+        uid=uid,
+        db_client=FakeFirestore({f"users/{uid}/memory_state/head": state_head}),
+    )
+    assert trusted.read_error_reason is None
+    assert trusted.account_generation == 7
+
+
+def _clobbered_state_docs(uid):
+    """State head lacks trusted canonical fields, so the write must fall back to
+    reading memory_state/apply_control — the read that regressed to happen after
+    the commit/projection writes (issue #9780)."""
+    return {
+        f"users/{uid}/memory_state/head": {
+            "current_head_commit_id": "legacy-head",
+            "projection_version": 1,
+        },
+        f"users/{uid}/memory_state/apply_control": {
+            "uid": uid,
+            "account_generation": 7,
+            "head_commit_id": "canonical-head",
+            "commit_sequence": 11,
+        },
+    }
+
+
+def test_ledger_append_reads_apply_control_before_any_write():
+    """Regression for #9780: the apply_control fallback read must precede writes.
+
+    The strict transaction fake raises ReadAfterWriteError if a get() lands after
+    a set(), reproducing Firestore's ordering contract that the pre-fix code and
+    the lenient fake did not enforce.
+    """
+    uid = "u1"
+    database = _StrictLedgerDb(_clobbered_state_docs(uid))
+    transaction = _StrictLedgerTransaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        lambda _transaction: None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_reads_apply_control_before_any_write():
+    """Regression for #9780 on the builder append path."""
+    uid = "u1"
+    database = _StrictLedgerDb(_clobbered_state_docs(uid))
+    transaction = _StrictLedgerTransaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+                "schema_version": 1,
+                "uid": uid,
+                "source": "memory_state_head",
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_typed_transactional_isolates_sdk_wrapper_state_per_concurrent_call(monkeypatch):
+    barrier = Barrier(2)
+    created_wrappers = []
+    created_lock = Lock()
+
+    class StatefulTransactional:
+        def __init__(self, function):
+            self.function = function
+            self.current_id = None
+            with created_lock:
+                created_wrappers.append(self)
+
+        def __call__(self, transaction, value):
+            self.current_id = value
+            barrier.wait(timeout=2)
+            assert self.current_id == value
+            return self.function(transaction, value)
+
+    monkeypatch.setattr(memory_ledger, "transactional", StatefulTransactional)
+
+    @memory_ledger._typed_transactional
+    def operation(_transaction, value):
+        return value
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        results = list(executor.map(lambda value: operation(object(), value), ["first", "second"]))
+
+    assert results == ["first", "second"]
+    assert len(created_wrappers) == 2
+
+
+def test_contention_retry_uses_fresh_transactions_and_equal_jitter():
+    transactions = []
+    sleeps = []
+    calls = []
+
+    def transaction_factory():
+        transaction = object()
+        transactions.append(transaction)
+        return transaction
+
+    def operation(transaction):
+        calls.append(transaction)
+        if len(calls) < 3:
+            raise Aborted("read contention")
+        return "committed"
+
+    result = firestore_transaction_retry.run_with_transaction_contention_retry(
+        transaction_factory,
+        operation,
+        operation_name="test_operation",
+        sleep=sleeps.append,
+        random_value=lambda: 0.0,
+    )
+
+    assert result == "committed"
+    assert calls == transactions
+    assert len({id(transaction) for transaction in transactions}) == 3
+    assert sleeps == [0.1, 0.2]
+
+
+def test_contention_retry_accepts_sdk_exhaustion_wrapper_with_explicit_aborted_cause():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            try:
+                raise Aborted("commit contention")
+            except Aborted as error:
+                raise ValueError("transaction failed after SDK attempts") from error
+        return "committed"
+
+    result = firestore_transaction_retry.run_with_transaction_contention_retry(
+        object,
+        operation,
+        operation_name="test_operation",
+        sleep=lambda _delay: None,
+    )
+
+    assert result == "committed"
+    assert calls == 2
+
+
+def test_contention_retry_does_not_replay_non_contention_error():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        raise RuntimeError("not retryable")
+
+    with pytest.raises(RuntimeError, match="not retryable"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            sleep=lambda _delay: None,
+        )
+
+    assert calls == 1
+
+
+def test_aborted_implicit_context_does_not_make_replacement_error_retryable():
+    calls = 0
+
+    def operation(_transaction):
+        nonlocal calls
+        calls += 1
+        try:
+            raise Aborted("handled contention")
+        except Aborted:
+            raise RuntimeError("replacement failure")
+
+    with pytest.raises(RuntimeError, match="replacement failure"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            sleep=lambda _delay: None,
+        )
+
+    assert calls == 1
+
+
+def test_contention_retry_exhaustion_is_bounded_and_preserves_cause():
+    sleeps = []
+
+    def operation(_transaction):
+        raise Aborted("persistent contention")
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted) as raised:
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            object,
+            operation,
+            operation_name="test_operation",
+            max_attempts=3,
+            sleep=sleeps.append,
+            random_value=lambda: 1.0,
+        )
+
+    assert isinstance(raised.value.__cause__, Aborted)
+    assert sleeps == [0.2, 0.4]
+
+
+def test_contention_retry_rejects_invalid_attempt_count_before_transaction():
+    opened = False
+
+    def transaction_factory():
+        nonlocal opened
+        opened = True
+        return object()
+
+    with pytest.raises(ValueError, match="max_attempts must be positive"):
+        firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            lambda _transaction: None,
+            operation_name="test_operation",
+            max_attempts=0,
+        )
+
+    assert opened is False
+
+
 def test_projection_repair_extracts_affected_fact_ids_and_metadata():
     mutations = [
         memory_ledger.add_fact({"id": "m1", "subject_entity_id": "user", "object_entity_ids": ["project"]}),
@@ -320,6 +741,121 @@ def test_append_commit_enqueues_projection_repairs(monkeypatch):
     assert queued == [("uid-1", commit)]
 
 
+def test_append_commit_retries_precommit_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    calls = 0
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
+
+    def append_transaction(*args, **kwargs):
+        nonlocal calls
+        calls += 1
+        if calls == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
+    )
+
+    result = memory_ledger.append_commit("uid-1", None, commit["mutations"])
+
+    assert result["applied"] is True
+    assert calls == 2
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_retries_contention_and_enqueues_projection_once(monkeypatch):
+    queued = []
+    seen_transactions = []
+    commit = memory_ledger.build_commit(None, [memory_ledger.add_fact({"id": "m1"})])
+    database = MagicMock()
+    database.transaction.side_effect = [object(), object()]
+
+    def append_transaction(transaction, *args, **kwargs):
+        seen_transactions.append(transaction)
+        if len(seen_transactions) == 1:
+            raise Aborted("read contention")
+        return {"commit": commit, "applied": True}
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda uid, item, **_kwargs: queued.append((uid, item)) or ["repair"],
+    )
+
+    result = memory_ledger.append_commit_with_builder(
+        "uid-1",
+        None,
+        lambda _transaction: {"mutations": commit["mutations"]},
+        firestore_client=database,
+    )
+
+    assert result["applied"] is True
+    assert len(seen_transactions) == 2
+    assert seen_transactions[0] is not seen_transactions[1]
+    assert queued == [("uid-1", commit)]
+
+
+def test_append_commit_with_builder_exhaustion_never_enqueues_projection(monkeypatch):
+    queued = []
+    database = MagicMock()
+
+    def append_transaction(*args, **kwargs):
+        raise Aborted("persistent contention")
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(memory_ledger, "_append_commit_with_builder_transaction", append_transaction)
+    monkeypatch.setattr(memory_ledger, "run_with_transaction_contention_retry", fast_retry)
+    monkeypatch.setattr(
+        memory_ledger.projection_repair,
+        "enqueue_projection_repairs",
+        lambda *args, **kwargs: queued.append(args),
+    )
+
+    with pytest.raises(firestore_transaction_retry.FirestoreContentionExhausted):
+        memory_ledger.append_commit_with_builder(
+            "uid-1",
+            None,
+            lambda _transaction: {"mutations": []},
+            firestore_client=database,
+        )
+
+    assert database.transaction.call_count == firestore_transaction_retry.DEFAULT_MAX_ATTEMPTS
+    assert queued == []
+
+
 def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
     updates = []
 
@@ -368,3 +904,57 @@ def test_process_projection_repairs_applies_queued_vector_repairs(monkeypatch):
     assert result == {"repaired": ["repair1"], "failed": [], "processed": 1}
     assert updates[0]["status"] == "repaired"
     assert updates[0]["repair_action"] == "delete"
+
+
+def test_process_projection_repairs_dead_letters_after_max_attempts(monkeypatch):
+    updates = []
+
+    class FakeDoc:
+        id = "repair1"
+
+        @property
+        def reference(self):
+            return self
+
+        def to_dict(self):
+            return {"repair_id": "repair1", "fact_id": "m1", "status": "failed", "attempt_count": 1}
+
+        def update(self, payload):
+            updates.append(payload)
+
+    class FakeQuery:
+        def limit(self, value):
+            return self
+
+        def stream(self):
+            return [FakeDoc()]
+
+    class FakeCollection:
+        def document(self, value):
+            return self
+
+        def collection(self, value):
+            return self
+
+        def where(self, *args):
+            return FakeQuery()
+
+    class FakeDB:
+        def collection(self, value):
+            return FakeCollection()
+
+    monkeypatch.setattr(projection_repair, "db", FakeDB())
+
+    def _failing_repair(uid, fact):
+        raise RuntimeError("repair failed")
+
+    result = projection_repair.process_projection_repairs(
+        "uid-1",
+        fact_loader=lambda fact_id: {"id": fact_id},
+        repair_func=_failing_repair,
+        max_attempts=2,
+    )
+
+    assert result == {"repaired": [], "failed": ["repair1"], "processed": 1}
+    assert updates[0]["status"] == "dead_letter"
+    assert updates[0]["attempt_count"] == 2

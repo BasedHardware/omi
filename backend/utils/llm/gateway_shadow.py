@@ -193,16 +193,16 @@ def _submit_sync_shadow(fn, *args, feature: str, legacy_result: Any = None, **kw
     try:
         submit_with_context(llm_executor, _run_sync_shadow, fn, args, kwargs, feature, legacy_result)
     except Exception:
-        record_gateway_request_result(feature=feature, outcome='fallback', reason='submit_failed')
+        record_gateway_request_result(feature=feature, outcome='fallback', reason='submit_failed', mode='shadow')
 
 
 def _run_sync_shadow(fn, args: tuple[Any, ...], kwargs: dict[str, Any], feature: str, legacy_result: Any) -> None:
     try:
         gateway_result = fn(*args, **kwargs)
     except Exception:
-        record_gateway_request_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        record_gateway_request_result(feature=feature, outcome='fallback', reason='unexpected_error', mode='shadow')
         return
-    record_gateway_request_result(feature=feature, outcome='success', reason='ok')
+    record_gateway_request_result(feature=feature, outcome='success', reason='ok', mode='shadow')
     _record_shadow_result_comparison(feature=feature, legacy_result=legacy_result, gateway_result=gateway_result)
 
 
@@ -210,9 +210,9 @@ async def _run_async_shadow(fn, *args, feature: str, legacy_result: Any = None, 
     try:
         gateway_result = await fn(*args, **kwargs)
     except Exception:
-        record_gateway_request_result(feature=feature, outcome='fallback', reason='unexpected_error')
+        record_gateway_request_result(feature=feature, outcome='fallback', reason='unexpected_error', mode='shadow')
         return
-    record_gateway_request_result(feature=feature, outcome='success', reason='ok')
+    record_gateway_request_result(feature=feature, outcome='success', reason='ok', mode='shadow')
     _record_shadow_result_comparison(feature=feature, legacy_result=legacy_result, gateway_result=gateway_result)
 
 

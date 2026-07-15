@@ -1828,6 +1828,7 @@ class TestPerEndpointHealthIsolation:
             assert _disabled_cache.get("app-mcp-1", (None,))[0] is True
 
 
+@pytest.mark.integration
 class TestFakeRedisFailureLua:
     """Execute the real failure Lua script against fakeredis to verify atomic behavior."""
 
@@ -1896,6 +1897,7 @@ class TestFakeRedisFailureLua:
         assert len(state['last_error']) <= 200
 
 
+@pytest.mark.integration
 class TestFakeRedisSuccessLua:
     """Execute the real success Lua script against fakeredis."""
 
@@ -1940,6 +1942,7 @@ class TestFakeRedisSuccessLua:
         assert ttl > 0
 
 
+@pytest.mark.integration
 class TestFakeRedisDevFailureLua:
     """Execute the real dev failure Lua script against fakeredis."""
 

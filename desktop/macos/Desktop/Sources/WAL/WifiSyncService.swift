@@ -50,8 +50,14 @@ final class WifiSyncService: ObservableObject {
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "WifiSyncService")
-    private let walService = WALService.shared
     private let deviceProvider = DeviceProvider.shared
+    private let walServiceOverride: WALService?
+
+    private var activeWalService: WALService {
+        // Keep the production singleton lazy: constructing an injected test
+        // service must never recover the real user's WAL directory.
+        walServiceOverride ?? WALService.shared
+    }
 
     private var tcpConnection: NWConnection?
     private var syncTask: Task<Void, Never>?
@@ -67,7 +73,9 @@ final class WifiSyncService: ObservableObject {
 
     // MARK: - Initialization
 
-    private init() {}
+    init(walServiceForTesting: WALService? = nil) {
+        walServiceOverride = walServiceForTesting
+    }
 
     // MARK: - Public Methods
 
@@ -151,7 +159,7 @@ final class WifiSyncService: ObservableObject {
             }
 
             // Create WAL
-            currentWal = walService.createSdCardWal(
+            currentWal = activeWalService.createSdCardWal(
                 device: device.id,
                 deviceModel: device.type.displayName,
                 codec: codec,
@@ -429,16 +437,29 @@ final class WifiSyncService: ObservableObject {
         guard let wal = currentWal else { return }
 
         // Save downloaded data
-        walService.updateWalWithDownloadedData(
+        activeWalService.updateWalWithDownloadedData(
             walId: wal.id,
             downloadedBytes: totalBytesDownloaded,
             frames: downloadedFrames
         )
 
-        // Cleanup
+        let frameCount = downloadedFrames.count
+
+        // Tear down the device SoftAP first so the Mac can regain its normal
+        // internet route before uploading downloaded WALs to cloud.
         await cleanup()
 
-        logger.info("WiFi sync completed: \(self.downloadedFrames.count) frames")
+        await activeWalService.syncToCloud()
+
+        logger.info("WiFi sync completed: \(frameCount) frames")
+    }
+
+    /// Test seam: exercise finishSync without a live device/TCP session.
+    func finishSyncForTesting(wal: WALEntry, frames: [Data], downloadedBytes: Int) async {
+        currentWal = wal
+        downloadedFrames = frames
+        totalBytesDownloaded = downloadedBytes
+        await finishSync()
     }
 
     private func cleanup() async {

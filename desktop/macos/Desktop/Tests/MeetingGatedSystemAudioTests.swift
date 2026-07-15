@@ -74,10 +74,32 @@ final class MeetingDetectorTests: XCTestCase {
         var changes = [Bool]()
         let detector = makeDetector(onChange: { changes.append($0) })
 
+        XCTAssertFalse(detector.hasObservedState)
         detector.applyDetected(true)
 
+        XCTAssertTrue(detector.hasObservedState)
         XCTAssertTrue(detector.isMeetingActive)
         XCTAssertEqual(changes, [true])
+    }
+
+    func testInitialInactiveProbeMarksStateObservedWithoutMeetingChange() {
+        var initialObservedCount = 0
+        var changes = [Bool]()
+        let detector = MeetingDetector(
+            pollInterval: 4.0,
+            offGracePeriod: 8.0,
+            now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
+            onInitialStateObserved: { initialObservedCount += 1 },
+            onChange: { changes.append($0) }
+        )
+
+        detector.applyDetected(false)
+        detector.applyDetected(false)
+
+        XCTAssertTrue(detector.hasObservedState)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(initialObservedCount, 1)
+        XCTAssertEqual(changes, [], "initial inactive readiness is not a meeting state change")
     }
 
     func testTurningOffRequiresSustainedGracePeriod() {
@@ -129,6 +151,108 @@ final class MeetingDetectorTests: XCTestCase {
         XCTAssertFalse(detector.isMeetingActive)
         XCTAssertEqual(changes, [], "no edges while never in a meeting")
     }
+
+    func testStopDiscardsInFlightProbeResult() async {
+        let probeStarted = DispatchSemaphore(value: 0)
+        let releaseProbe = DispatchSemaphore(value: 0)
+        let unexpectedInitialObservation = DispatchSemaphore(value: 0)
+        let unexpectedChange = DispatchSemaphore(value: 0)
+        var changes = [Bool]()
+        var initialObservedCount = 0
+        let detector = MeetingDetector(
+            pollInterval: 60.0,
+            offGracePeriod: 8.0,
+            isMeetingNow: {
+                probeStarted.signal()
+                _ = releaseProbe.wait(timeout: .now() + 2)
+                return true
+            },
+            now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
+            onInitialStateObserved: {
+                initialObservedCount += 1
+                unexpectedInitialObservation.signal()
+            },
+            onChange: {
+                changes.append($0)
+                unexpectedChange.signal()
+            }
+        )
+
+        detector.start()
+        XCTAssertEqual(probeStarted.wait(timeout: .now() + 2), .success)
+        detector.stop()
+        releaseProbe.signal()
+        await Task.yield()
+
+        XCTAssertFalse(detector.hasObservedState)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(initialObservedCount, 0)
+        XCTAssertEqual(changes, [])
+        XCTAssertEqual(unexpectedInitialObservation.wait(timeout: .now()), .timedOut)
+        XCTAssertEqual(unexpectedChange.wait(timeout: .now()), .timedOut)
+    }
+
+    func testNewerProbeWinsWhenCanceledProbeFinishesLater() async {
+        let firstProbeStarted = DispatchSemaphore(value: 0)
+        let secondProbeStarted = DispatchSemaphore(value: 0)
+        let releaseFirstProbe = DispatchSemaphore(value: 0)
+        let releaseSecondProbe = DispatchSemaphore(value: 0)
+        let unexpectedChange = DispatchSemaphore(value: 0)
+        let probeLock = NSLock()
+        var probeCount = 0
+        var changes = [Bool]()
+        var initialObservedCount = 0
+        let detector = MeetingDetector(
+            pollInterval: 60.0,
+            offGracePeriod: 8.0,
+            isMeetingNow: {
+                probeLock.lock()
+                probeCount += 1
+                let probeIndex = probeCount
+                probeLock.unlock()
+
+                if probeIndex == 1 {
+                    firstProbeStarted.signal()
+                    _ = releaseFirstProbe.wait(timeout: .now() + 2)
+                    return true
+                }
+
+                secondProbeStarted.signal()
+                _ = releaseSecondProbe.wait(timeout: .now() + 2)
+                return false
+            },
+            now: { [weak self] in self?.now ?? Date(timeIntervalSince1970: 0) },
+            onInitialStateObserved: { initialObservedCount += 1 },
+            onChange: {
+                changes.append($0)
+                unexpectedChange.signal()
+            }
+        )
+
+        detector.start()
+        defer { detector.stop() }
+        XCTAssertEqual(firstProbeStarted.wait(timeout: .now() + 2), .success)
+        guard let firstProbeTask = detector.currentProbeTaskForTesting else {
+            return XCTFail("initial probe task was not installed")
+        }
+
+        guard let secondProbeTask = detector.triggerProbeForTesting() else {
+            return XCTFail("replacement probe task was not installed")
+        }
+        XCTAssertEqual(secondProbeStarted.wait(timeout: .now() + 2), .success)
+
+        releaseSecondProbe.signal()
+        await secondProbeTask.value
+        XCTAssertTrue(detector.hasObservedState)
+        XCTAssertFalse(detector.isMeetingActive)
+        XCTAssertEqual(initialObservedCount, 1)
+
+        releaseFirstProbe.signal()
+        await firstProbeTask.value
+        XCTAssertFalse(detector.isMeetingActive, "the canceled older probe must not overwrite the newer result")
+        XCTAssertEqual(changes, [])
+        XCTAssertEqual(unexpectedChange.wait(timeout: .now()), .timedOut)
+    }
 }
 
 // MARK: - AssistantSettings.systemAudioCaptureMode
@@ -163,5 +287,91 @@ final class SystemAudioCaptureModeSettingsTests: XCTestCase {
     func testUnknownRawValueFallsBackToDefault() {
         UserDefaults.standard.set("garbage", forKey: key)
         XCTAssertEqual(AssistantSettings.shared.systemAudioCaptureMode, .onlyDuringMeetings)
+    }
+}
+
+// MARK: - Meeting conversation boundary
+
+final class MeetingConversationBoundaryPolicyTests: XCTestCase {
+
+    func testMeetingGateClosingWithSegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testMeetingGateClosingWithOnlyInMemorySegmentsFinishesConversation() {
+        XCTAssertTrue(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testWaitingForFirstMeetingDoesNotFinishEmptySession() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 0,
+                hasSpeakerSegments: false
+            )
+        )
+    }
+
+    func testNonMeetingModesDoNotUseMeetingEndBoundary() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .always,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .never,
+                meetingStateReady: true,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testActiveMeetingDoesNotFinishConversation() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: true,
+                shouldCapture: true,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
+    }
+
+    func testUnreadyMeetingStateDoesNotFinishExistingConversation() {
+        XCTAssertFalse(
+            MeetingConversationBoundaryPolicy.shouldFinishConversation(
+                mode: .onlyDuringMeetings,
+                meetingStateReady: false,
+                shouldCapture: false,
+                segmentCount: 12,
+                hasSpeakerSegments: true
+            )
+        )
     }
 }

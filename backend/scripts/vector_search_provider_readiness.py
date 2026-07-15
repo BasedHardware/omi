@@ -6,7 +6,19 @@ import json
 import os
 import sys
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any, Dict, List, Sequence
+
+SCRIPTS_DIR = Path(__file__).resolve().parent
+if str(SCRIPTS_DIR) not in sys.path:
+    sys.path.insert(0, str(SCRIPTS_DIR))
+
+from readiness_gate_common import (
+    add_require_go_arg,
+    collect_gates_from_artifact,
+    evaluate_gates,
+    exit_code_for_status,
+)
 
 SHARED_NAMESPACE = "ns2"
 
@@ -153,6 +165,7 @@ class VectorSearchProviderReadinessConfig:
     firestore_project: str
     proof_uid: str
     proof_namespace: str
+    require_go: bool = False
 
 
 def parse_args(argv: Sequence[str]) -> argparse.Namespace:
@@ -166,12 +179,14 @@ def parse_args(argv: Sequence[str]) -> argparse.Namespace:
     parser.add_argument("--firestore-project", default=os.getenv("MEMORY_PROVIDER_PROOF_FIRESTORE_PROJECT", ""))
     parser.add_argument("--proof-uid", default=os.getenv("MEMORY_PROVIDER_PROOF_UID", ""))
     parser.add_argument("--proof-namespace", default=os.getenv("MEMORY_PROVIDER_PROOF_NAMESPACE", SHARED_NAMESPACE))
+    add_require_go_arg(parser)
     return parser.parse_args(argv)
 
 
 def config_from_args(args: argparse.Namespace) -> VectorSearchProviderReadinessConfig:
     return VectorSearchProviderReadinessConfig(
         execute=bool(args.execute),
+        require_go=bool(args.require_go),
         pinecone_api_key=str(args.pinecone_api_key or ""),
         pinecone_index_name=str(args.pinecone_index_name or ""),
         pinecone_index_host=str(args.pinecone_index_host or ""),
@@ -235,6 +250,9 @@ def main(argv: Sequence[str] | None = None) -> int:
     print(json.dumps(artifact, indent=2, sort_keys=True))
     if config.execute and artifact["prerequisites"]:
         return 2
+    if config.require_go:
+        overall_status, _ = evaluate_gates(collect_gates_from_artifact(artifact))
+        return exit_code_for_status(overall_status, require_go=True)
     return 0
 
 

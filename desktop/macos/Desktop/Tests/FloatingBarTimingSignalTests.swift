@@ -9,7 +9,7 @@ import XCTest
 /// that `test.sh` runs).
 final class FloatingBarTimingSignalTests: XCTestCase {
   /// Keep in sync with `BASELINE` in `scripts/check-async-after-ratchet.py`.
-  private static let asyncAfterBaseline = 27
+  private static let asyncAfterBaseline = 23
 
   private func floatingControlBarDir() -> URL {
     URL(fileURLWithPath: #filePath)

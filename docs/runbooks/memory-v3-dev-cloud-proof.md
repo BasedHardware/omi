@@ -28,17 +28,57 @@ Expected status without a fully specified dev target is `BLOCKED` with missing-e
 
 The first-user dev/beta read proof uses deploy plane `based-hardware-dev` and runtime data/auth Firestore project `based-hardware`.
 
-Checked-in dev runtime config intentionally preserves the first-user read baseline across future dev deploys:
+Checked-in dev runtime config intentionally preserves the first-user full canonical baseline across future dev deploys:
 
 ```text
 MEMORY_MODE=read
 MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23
+# Next dogfood (re-enable soon): ,viUv7GtdoHXbK1UBCDlPuTDuPgJ2
 MEMORY_V3_GET_ENABLED=true
-MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false
-MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false
+# Request-path CRON stays false; only memory-maintenance-job sets CRON=true.
+MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false   # request-path / GKE
+MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=true
+# memory-maintenance-job: MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=true
 ```
 
-This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled.
+Dev dogfood cohort (code `CANONICAL_MEMORY_USERS` + env allowlist):
+
+- `vi7SA9ckQCe4ccobWNxlbdcNdC23` — david.d.zhang@gmail.com (active)
+- `viUv7GtdoHXbK1UBCDlPuTDuPgJ2` — kodjima33@gmail.com (commented out for this PR; re-enable soon)
+
+Promotion/consolidation maintenance runs from the dedicated hourly `memory-maintenance-job` Cloud Run Job (not request-path backend, not `notifications-job`). That job is part of `backend/deploy/runtime_env.yaml` and is deployed via `.github/workflows/gcp_memory_maintenance_job.yml` (manual) and `.github/workflows/gcp_memory_maintenance_job_auto_dev.yml` (auto on push to `main` for `backend/**`) with the same whitelist-scoped `MEMORY_*` flags plus consolidation secrets (`OPENAI_API_KEY`, Pinecone, Typesense, `SERVICE_ACCOUNT_JSON`).
+
+### Post-merge dogfood checklist (dev only)
+
+1. Confirm auto-dev ran after merge (or dispatch: `gh workflow run "Deploy Memory Maintenance Job to Cloud RUN" -f environment=development -f branch=main`).
+2. Confirm live job env has `MEMORY_MODE=read`, cron/fast-track `true`, and secrets present.
+3. Capture a pre-execution baseline for the active dogfood UID (pending ST count / last watermark fields only — no raw memory content).
+4. Execute once and wait: `gcloud run jobs execute memory-maintenance-job --region=us-central1 --project=based-hardware-dev --wait`
+5. Assert watermark / ST→LT movement vs the baseline for UID `vi7SA9ckQCe4ccobWNxlbdcNdC23` (do not print raw memory content).
+6. Create or update Cloud Scheduler to run the job hourly (manual GCP; not IaC in-repo):
+
+```bash
+# Create (first time) — adjust SA email to the Cloud Run Job runtime identity used in based-hardware-dev
+gcloud scheduler jobs create http memory-maintenance-hourly \
+  --location=us-central1 \
+  --project=based-hardware-dev \
+  --schedule="0 * * * *" \
+  --time-zone=UTC \
+  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware-dev/jobs/memory-maintenance-job:run" \
+  --http-method=POST \
+  --oauth-service-account-email="<JOB_RUNTIME_SA>@based-hardware-dev.iam.gserviceaccount.com"
+
+# Or update an existing scheduler target to the same URI
+gcloud scheduler jobs update http memory-maintenance-hourly \
+  --location=us-central1 \
+  --project=based-hardware-dev \
+  --uri="https://us-central1-run.googleapis.com/apis/run.googleapis.com/v1/namespaces/based-hardware-dev/jobs/memory-maintenance-job:run"
+```
+
+Do **not** dispatch `notifications-job` for memory maintenance.
+Its independent deploy workflow explicitly removes only stale canonical-maintenance and Typesense bindings left by historical revisions. It merges the declared notification/X-sync config so unrelated live dependencies are not globally overwritten.
+
+This is dev-only. Production remains `MEMORY_MODE=off`, `MEMORY_ENABLED_USERS=""`, `MEMORY_V3_GET_ENABLED=false`, and promotion cron/fast-track disabled on `memory-maintenance-job`. Non-whitelisted users stay on legacy memory with Desktop lifecycle UI fail-closed.
 
 ## First-user projection operator
 

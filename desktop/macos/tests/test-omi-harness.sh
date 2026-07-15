@@ -37,6 +37,49 @@ def safe_load(handle):
 PY
 export PYTHONPATH="$TMPDIR${PYTHONPATH:+:$PYTHONPATH}"
 
+python3 - "$HARNESS" <<'PY'
+import importlib.machinery
+import importlib.util
+import sys
+
+path = sys.argv[1]
+loader = importlib.machinery.SourceFileLoader("omi_harness", path)
+spec = importlib.util.spec_from_loader(loader.name, loader)
+module = importlib.util.module_from_spec(spec)
+sys.modules[loader.name] = module
+loader.exec_module(module)
+
+assert module.expectation_matches({"result": {"count": "1"}}, {"result.count": {"min": 1}})
+assert module.expectation_matches({"result": {"count": 2}}, {"result.count": {"min": "1", "max": "2"}})
+assert not module.expectation_matches({"result": {"count": "0"}}, {"result.count": {"min": 1}})
+assert not module.expectation_matches({"result": {"count": "one"}}, {"result.count": {"min": 1}})
+assert not module.expectation_matches({"result": {"count": "1"}}, {"result.count": {"minimum": 1}})
+assert module.expectation_matches({"result": {"value": "1"}}, {"result.value": "1"})
+assert not module.expectation_matches({"result": {"value": "1"}}, {"result.value": 1})
+assert module.expectation_matches({"result": {"value": {"min": 1}}}, {"result.value": {"min": 1}})
+assert module.expectation_matches({"result": {"id": "memory-1"}}, {"result.id": {"exists": True}})
+assert not module.expectation_matches({"result": {}}, {"result.id": {"exists": True}})
+assert module.expectation_matches({"result": {}}, {"result.id": {"exists": False}})
+assert not module.expectation_matches({"result": {"id": "memory-1"}}, {"result.id": {"exists": "yes"}})
+assert not module.expectation_matches({"result": {"id": 1}}, {"result.id": {"exists": True, "min": 1}})
+
+mismatch = module.expectation_mismatches(
+    {"result": {"count": "1"}}, {"result.count": {"minimum": 1}}
+)["result.count"]
+assert "unsupported expectation operator" in mismatch["reason"]
+
+assert module.log_path_from_health(
+    {"ok": True, "logFilePath": "/private/tmp/omi/com.omi.qa/pid-1.log"}
+).as_posix().endswith("pid-1.log")
+assert module.log_path_from_health({"ok": True}, "/tmp/explicit.log").as_posix() == "/tmp/explicit.log"
+try:
+    module.log_path_from_health({"ok": True, "logFilePath": "relative.log"})
+except RuntimeError:
+    pass
+else:
+    raise AssertionError("relative health log path must fail loudly")
+PY
+
 write_flow() {
   local path="$1" version="$2"
   cat >"$path" <<YAML

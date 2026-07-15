@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Dict, List, Optional
@@ -7,6 +8,7 @@ from typing import Any, Dict, List, Optional
 from pydantic import BaseModel, Field, field_validator
 
 from models.memory_evidence import ArtifactPreservationState, MemoryEvidence, SourceState
+from models.memory_admission import valid_required_processing_receipt
 from models.memory_contracts import (
     DurableMemoryPatch,
     DurablePatchDecision,
@@ -27,6 +29,8 @@ from models.product_memory import (
     MemoryItem,
 )
 from utils.memory.short_term_lifecycle import default_short_term_expiry
+
+logger = logging.getLogger(__name__)
 
 
 class ApplyStatus(str, Enum):
@@ -210,6 +214,19 @@ def _deterministic_materialized_memory_id(*, uid: str, patch: DurableMemoryPatch
     )
 
 
+def _processing_state_for_promotion(
+    promotion: Optional[Dict[str, Any]],
+    *,
+    fallback: ProcessingState,
+) -> ProcessingState:
+    processing_status = str((promotion or {}).get("processing_status") or "")
+    if processing_status in {"pending_processing", "processing_failed_retryable", "pending_admission"}:
+        return ProcessingState.pending
+    if processing_status == "processed":
+        return ProcessingState.processed
+    return fallback
+
+
 def _materialize_memory_item(
     *,
     uid: str,
@@ -224,7 +241,7 @@ def _materialize_memory_item(
     tier = patch.initial_tier
     expires_at = default_short_term_expiry(now) if tier == MemoryTier.short_term else None
     status = MemoryItemStatus.active
-    processing_state = ProcessingState.processed
+    processing_state = _processing_state_for_promotion(promotion, fallback=ProcessingState.processed)
     assert_legal_state(
         MemoryLayer(tier.value),
         physical_status_to_record_status(status.value),
@@ -299,7 +316,12 @@ def _apply_update_memory_item(
         )
     else:
         expires_at = None
-    processing_state = ProcessingState.processed
+    processing_state = _processing_state_for_promotion(
+        promotion_audit,
+        fallback=existing.processing_state,
+    )
+    if tier == MemoryTier.long_term:
+        processing_state = ProcessingState.processed
     assert_legal_state(
         MemoryLayer(tier.value),
         physical_status_to_record_status(status.value),
@@ -318,6 +340,14 @@ def _apply_update_memory_item(
         "version": existing.version + 1,
         "item_revision": existing.item_revision + 1,
     }
+    if patch.memory_text is not None and patch.memory_text.strip():
+        updates["content_hash"] = deterministic_contract_id(
+            "memory-content",
+            {
+                "content": patch.memory_text,
+                "evidence_ids": [item.evidence_id for item in (evidence or existing.evidence)],
+            },
+        )
     if promotion_audit is not None:
         updates["promotion"] = promotion_audit
     if patch.subject_entity_id is not None:
@@ -370,6 +400,20 @@ def _barrier_outbox_events(
     ]
 
 
+def _coerce_iso_timestamp(value: str, *, field: str) -> Optional[datetime]:
+    """Parse a stored ISO timestamp string, tolerating a trailing 'Z'.
+
+    Returns None on a malformed value so the caller can drop just that one field instead of
+    letting a single drifted string abort the whole patch. Logs the field name only, never the
+    raw value, which can carry memory text.
+    """
+    try:
+        return datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        logger.warning("Dropping malformed timestamp field %s in long-term memory patch", field)
+        return None
+
+
 def apply_long_term_patch_transaction(
     *, control_state: MemoryControlState, operation: MemoryOperation, patch_payload: Dict[str, Any]
 ) -> ApplyResult:
@@ -382,6 +426,8 @@ def apply_long_term_patch_transaction(
     existing_item_raw = raw.pop("existing_item", None)
     promotion_audit = raw.pop("promotion_audit", None)
     promotion_metadata = raw.pop("promotion", None)
+    expected_item_revision = raw.pop("expected_item_revision", None)
+    expected_content_hash = raw.pop("expected_content_hash", None)
     extra_item_updates: Dict[str, Any] = {}
     for optional_key in (
         "corroboration_count",
@@ -392,14 +438,19 @@ def apply_long_term_patch_transaction(
         "superseded_by",
         "kg_extracted",
         "confidence",
+        "sensitivity_labels",
     ):
         if optional_key in raw:
             extra_item_updates[optional_key] = raw.pop(optional_key)
     for timestamp_key in ("last_corroborated_at", "captured_at", "updated_at", "expires_at"):
         if timestamp_key in extra_item_updates and isinstance(extra_item_updates[timestamp_key], str):
-            extra_item_updates[timestamp_key] = datetime.fromisoformat(
-                extra_item_updates[timestamp_key].replace("Z", "+00:00")
-            )
+            coerced = _coerce_iso_timestamp(extra_item_updates[timestamp_key], field=timestamp_key)
+            if coerced is None:
+                # Drop just the malformed field; the item keeps its existing (update path) or
+                # materialized (create path) value instead of the whole patch raising ValueError.
+                extra_item_updates.pop(timestamp_key)
+            else:
+                extra_item_updates[timestamp_key] = coerced
     if (
         "confidence" in extra_item_updates
         and extra_item_updates["confidence"] is not None
@@ -496,6 +547,34 @@ def apply_long_term_patch_transaction(
                 operation=operation,
                 reason="update patch target_memory_id mismatch",
             )
+        if expected_item_revision is not None and existing_item.item_revision != expected_item_revision:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="update patch expected_item_revision mismatch",
+            )
+        if expected_content_hash is not None and existing_item.content_hash != expected_content_hash:
+            return ApplyResult(
+                status=ApplyStatus.invalid_patch,
+                control_state=control_state,
+                operation=operation,
+                reason="update patch expected_content_hash mismatch",
+            )
+        if patch.target_tier == MemoryTier.long_term:
+            admission_metadata = promotion_audit if isinstance(promotion_audit, dict) else existing_item.promotion or {}
+            proposed_content = _resolved_update_content(existing_item, patch) or ""
+            if admission_metadata.get("required") and not valid_required_processing_receipt(
+                content=proposed_content,
+                item_revision=existing_item.item_revision,
+                promotion=admission_metadata,
+            ):
+                return ApplyResult(
+                    status=ApplyStatus.invalid_patch,
+                    control_state=control_state,
+                    operation=operation,
+                    reason="required durable memory is missing processing receipt",
+                )
         memory_item = _apply_update_memory_item(
             existing=existing_item,
             patch=patch,
@@ -517,22 +596,27 @@ def apply_long_term_patch_transaction(
         )
         if extra_item_updates:
             memory_item = MemoryItem(**{**memory_item.dict(), **extra_item_updates})
-    outbox_events = [
-        MemoryOutboxEvent(
-            event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),
-            uid=operation.uid,
-            event_type=event_type,
-            commit_id=commit_id,
-            parent_commit_id=control_state.head_commit_id,
-            commit_sequence=next_control.commit_sequence,
-            memory_id=memory_item.memory_id,
-            operation_id=operation.operation_id,
-            account_generation=control_state.account_generation,
-            source_generation=control_state.source_generation,
-            payload={"memory_id": memory_item.memory_id, "tier": memory_item.tier.value, "action": "upsert"},
-        )
-        for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
-    ]
+    outbox_events = []
+    if (
+        memory_item.processing_state == ProcessingState.processed
+        and (memory_item.promotion or {}).get("user_review") is not False
+    ):
+        outbox_events = [
+            MemoryOutboxEvent(
+                event_id=_event_id(event_type, commit_id, memory_item.memory_id, operation.operation_id),
+                uid=operation.uid,
+                event_type=event_type,
+                commit_id=commit_id,
+                parent_commit_id=control_state.head_commit_id,
+                commit_sequence=next_control.commit_sequence,
+                memory_id=memory_item.memory_id,
+                operation_id=operation.operation_id,
+                account_generation=control_state.account_generation,
+                source_generation=control_state.source_generation,
+                payload={"memory_id": memory_item.memory_id, "tier": memory_item.tier.value, "action": "upsert"},
+            )
+            for event_type in [MemoryOutboxEventType.projection_sync, MemoryOutboxEventType.vector_sync]
+        ]
     committed_operation = operation.mark_committed(
         commit_id,
         committed_sequence=next_control.commit_sequence,

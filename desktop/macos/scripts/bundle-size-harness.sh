@@ -76,20 +76,43 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cleanup_stale_run_lock_if_safe() {
-  local lock_dir="${TMPDIR:-/tmp}/omi-run-sh-${USER}.lock.d"
-  [[ -d "$lock_dir" ]] || return 0
+  # Match run.sh: after sourcing scripts/dev-instance.sh, OMI_DEV_DIR is the
+  # repo-root .dev/. Don't re-source dev-instance here — it would mutate ports.
+  # shellcheck source=/dev/null
+  source "$MACOS_DIR/scripts/run-sh-build-lock.sh"
 
-  local other_run_sh=0
-  while read -r pid command; do
-    if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"./run.sh"* ]]; then
-      other_run_sh=1
-      break
-    fi
-  done < <(ps -axo pid=,command=)
+  local -a lock_dirs=()
+  local lock_dir other_run_sh pid command
+  local current_user="${USER:-$(id -un 2>/dev/null || echo unknown)}"
+  local saved_omi_dev_dir="${OMI_DEV_DIR:-}"
 
-  if [[ "$other_run_sh" == "0" ]]; then
-    rmdir "$lock_dir" 2>/dev/null || true
+  OMI_DEV_DIR="${saved_omi_dev_dir:-$REPO_ROOT/.dev}"
+  if lock_dir="$(omi_run_sh_build_lock_dir)"; then
+    lock_dirs+=("$lock_dir")
   fi
+  if [ -n "$saved_omi_dev_dir" ]; then
+    OMI_DEV_DIR="$saved_omi_dev_dir"
+  else
+    unset OMI_DEV_DIR
+  fi
+  # Legacy per-user global path from older run.sh — clear if abandoned.
+  lock_dirs+=("${TMPDIR:-/tmp}/omi-run-sh-${current_user}.lock.d")
+
+  for lock_dir in "${lock_dirs[@]}"; do
+    [[ -d "$lock_dir" ]] || continue
+
+    other_run_sh=0
+    while read -r pid command; do
+      if [[ "$pid" =~ ^[0-9]+$ && "$command" == *"./run.sh"* ]]; then
+        other_run_sh=1
+        break
+      fi
+    done < <(ps -axo pid=,command=)
+
+    if [[ "$other_run_sh" == "0" ]]; then
+      rmdir "$lock_dir" 2>/dev/null || true
+    fi
+  done
 }
 
 run_bundle_build() {

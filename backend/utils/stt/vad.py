@@ -3,6 +3,7 @@ import os
 import threading
 from typing import Any, Dict, List, Literal, Optional, Tuple, Union, overload
 
+import httpx
 import numpy as np
 import onnxruntime as ort  # onnxruntime is untyped
 import requests
@@ -12,8 +13,42 @@ from pydub import AudioSegment  # pydub is untyped
 from database import redis_db
 from utils.executors import db_executor, storage_executor, sync_executor, run_blocking
 from utils.http_client import get_stt_client
+from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
+
+
+class VADAudioDecodeError(RuntimeError):
+    """Audio could not be decoded for a strict speech-eligibility decision."""
+
+
+class VADProcessingError(RuntimeError):
+    """The local VAD could not make a trustworthy speech decision."""
+
+
+def _hosted_vad_fallback_reason(exc: BaseException) -> str:
+    if isinstance(exc, (requests.Timeout, httpx.TimeoutException)):
+        return 'timeout'
+    response = getattr(exc, 'response', None)
+    if response is not None:
+        status_code = getattr(response, 'status_code', None)
+        if isinstance(status_code, int):
+            if status_code == 429:
+                return 'provider_429'
+            if status_code >= 500:
+                return 'provider_5xx'
+    return 'other'
+
+
+def _record_hosted_vad_fallback(exc: BaseException) -> None:
+    record_fallback(
+        component='vad',
+        from_mode='hosted',
+        to_mode='local_onnx',
+        reason=_hosted_vad_fallback_reason(exc),
+        outcome='degraded',
+    )
+
 
 # ---------------------------------------------------------------------------
 # Singleton ONNX Silero-VAD session (process-wide, thread-safe)
@@ -129,6 +164,7 @@ def vad_is_empty(
                 response.raise_for_status()
                 segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local ONNX VAD for {file_path}: {e}')
 
     if segments is None:
@@ -142,7 +178,12 @@ def vad_is_empty(
     return len(segments) == 0
 
 
-def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]]:
+def _run_file_vad(
+    file_path: str,
+    threshold: float = 0.5,
+    *,
+    raise_on_decode_error: bool = False,
+) -> List[Dict[str, Any]]:
     """Process an entire audio file through Silero-VAD ONNX.
 
     Reads the file, resamples to 16 kHz mono, and iterates 512-sample windows
@@ -151,6 +192,8 @@ def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]
     try:
         audio: Any = AudioSegment.from_file(file_path)  # type: ignore[reportUnknownMemberType]  # pydub untyped
     except Exception as e:
+        if raise_on_decode_error:
+            raise VADAudioDecodeError('audio could not be decoded for VAD') from e
         logger.error(f'Failed to read audio file {file_path}: {e}')
         return []
 
@@ -159,6 +202,18 @@ def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]
     samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0  # type: ignore[reportUnknownMemberType]  # pydub untyped
     del audio
 
+    try:
+        return _segments_from_16khz_samples(samples, threshold=threshold)
+    except Exception as e:
+        if raise_on_decode_error:
+            raise VADProcessingError('local VAD could not evaluate audio') from e
+        raise
+    finally:
+        del samples
+
+
+def _segments_from_16khz_samples(samples: np.ndarray[Any, Any], *, threshold: float = 0.5) -> List[Dict[str, Any]]:
+    """Run Silero over 16 kHz mono samples and return speech segments."""
     state, context = make_fresh_state()
     is_speech_flags: List[bool] = []
 
@@ -169,8 +224,6 @@ def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]
         prob, state, context = run_vad_window(window, state, context)
         is_speech_flags.append(prob > threshold)
         offset += VAD_WINDOW_SAMPLES
-    del samples
-
     # Convert per-window flags to time segments
     window_sec = VAD_WINDOW_SAMPLES / VAD_SAMPLE_RATE
     segments: List[Dict[str, Any]] = []
@@ -191,6 +244,46 @@ def _run_file_vad(file_path: str, threshold: float = 0.5) -> List[Dict[str, Any]
         segments.append({'start': start, 'end': end, 'duration': end - start})
 
     return segments
+
+
+def vad_is_empty_strict(file_path: str) -> bool:
+    """Classify local audio silence while preserving decode/VAD failures.
+
+    This eligibility seam is for boundaries where an empty result is a terminal
+    semantic decision. Legacy ``vad_is_empty`` retains its fail-soft behavior.
+    """
+
+    return len(_run_file_vad(file_path, raise_on_decode_error=True)) == 0
+
+
+def linear16_pcm_is_silent(audio_bytes: bytes, *, sample_rate: int, channels: int) -> bool:
+    """Make a strict local speech decision for raw signed 16-bit PCM.
+
+    This intentionally bypasses the hosted VAD: raw PCM is a request-boundary
+    eligibility decision and must never turn an unavailable external service
+    into a false "silence" result. Decode and inference failures remain typed
+    so callers can return a retryable/invalid failure instead.
+    """
+    if sample_rate <= 0 or channels < 1 or len(audio_bytes) % (2 * channels) != 0:
+        raise VADAudioDecodeError('invalid linear16 PCM shape')
+    try:
+        audio: Any = AudioSegment(
+            data=audio_bytes,
+            sample_width=2,
+            frame_rate=sample_rate,
+            channels=channels,
+        )
+        audio = audio.set_frame_rate(VAD_SAMPLE_RATE).set_channels(1).set_sample_width(2)  # type: ignore[reportUnknownMemberType]  # pydub untyped
+        samples = np.array(audio.get_array_of_samples(), dtype=np.float32) / 32768.0  # type: ignore[reportUnknownMemberType]  # pydub untyped
+    except Exception as e:
+        raise VADAudioDecodeError('linear16 PCM could not be decoded for VAD') from e
+
+    try:
+        return len(_segments_from_16khz_samples(samples)) == 0
+    except Exception as e:
+        raise VADProcessingError('local VAD could not evaluate linear16 PCM') from e
+    finally:
+        del samples
 
 
 def _read_file(path: str) -> bytes:
@@ -230,6 +323,7 @@ async def async_vad_is_empty(
             response.raise_for_status()
             segments = response.json()  # untyped external JSON response
         except Exception as e:
+            _record_hosted_vad_fallback(e)
             logger.warning(f'Hosted VAD unavailable, falling back to local VAD for {file_path}: {e}')
 
     if segments is None:

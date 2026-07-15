@@ -770,6 +770,90 @@ class GeneratedAppBaseModel {
   }
 }
 
+class GeneratedAppCatalogItem {
+  final bool approved;
+  final String author;
+  final List<String>? capabilities;
+  final String category;
+  final String description;
+  final bool enabled;
+  final GeneratedExternalIntegration? externalIntegration;
+  final String id;
+  final String image;
+  final int installs;
+  final bool? isPaid;
+  final String name;
+  final double? price;
+  final bool private;
+  final double? ratingAvg;
+  final int ratingCount;
+  final String status;
+
+  const GeneratedAppCatalogItem({
+    this.approved = false,
+    this.author = "",
+    this.capabilities,
+    this.category = "other",
+    this.description = "",
+    this.enabled = false,
+    this.externalIntegration,
+    required this.id,
+    this.image = "",
+    this.installs = 0,
+    this.isPaid = false,
+    this.name = "",
+    this.price,
+    this.private = false,
+    this.ratingAvg,
+    this.ratingCount = 0,
+    this.status = "approved",
+  });
+
+  factory GeneratedAppCatalogItem.fromJson(Map<String, dynamic> json) {
+    return GeneratedAppCatalogItem(
+      approved: _required(_readFieldValue<bool>(_readField(json, const ["approved"]), "approved", _readBool, requiredField: false, nullable: false, defaultValue: false), "approved"),
+      author: _required(_readFieldValue<String>(_readField(json, const ["author"]), "author", _readString, requiredField: false, nullable: false, defaultValue: ""), "author"),
+      capabilities: _readFieldValue<List<String>>(_readField(json, const ["capabilities"]), "capabilities", _readStringList, requiredField: false, nullable: true),
+      category: _required(_readFieldValue<String>(_readField(json, const ["category"]), "category", _readString, requiredField: false, nullable: false, defaultValue: "other"), "category"),
+      description: _required(_readFieldValue<String>(_readField(json, const ["description"]), "description", _readString, requiredField: false, nullable: false, defaultValue: ""), "description"),
+      enabled: _required(_readFieldValue<bool>(_readField(json, const ["enabled"]), "enabled", _readBool, requiredField: false, nullable: false, defaultValue: false), "enabled"),
+      externalIntegration: _readFieldValue<GeneratedExternalIntegration>(_readField(json, const ["external_integration"]), "external_integration", (value) => _readObject(value, GeneratedExternalIntegration.fromJson), requiredField: false, nullable: true),
+      id: _required(_readFieldValue<String>(_readField(json, const ["id"]), "id", _readString, requiredField: true, nullable: false), "id"),
+      image: _required(_readFieldValue<String>(_readField(json, const ["image"]), "image", _readString, requiredField: false, nullable: false, defaultValue: ""), "image"),
+      installs: _required(_readFieldValue<int>(_readField(json, const ["installs"]), "installs", _readInt, requiredField: false, nullable: false, defaultValue: 0), "installs"),
+      isPaid: _readFieldValue<bool>(_readField(json, const ["is_paid"]), "is_paid", _readBool, requiredField: false, nullable: true, defaultValue: false),
+      name: _required(_readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: false, defaultValue: ""), "name"),
+      price: _readFieldValue<double>(_readField(json, const ["price"]), "price", _readDouble, requiredField: false, nullable: true),
+      private: _required(_readFieldValue<bool>(_readField(json, const ["private"]), "private", _readBool, requiredField: false, nullable: false, defaultValue: false), "private"),
+      ratingAvg: _readFieldValue<double>(_readField(json, const ["rating_avg"]), "rating_avg", _readDouble, requiredField: false, nullable: true),
+      ratingCount: _required(_readFieldValue<int>(_readField(json, const ["rating_count"]), "rating_count", _readInt, requiredField: false, nullable: false, defaultValue: 0), "rating_count"),
+      status: _required(_readFieldValue<String>(_readField(json, const ["status"]), "status", _readString, requiredField: false, nullable: false, defaultValue: "approved"), "status"),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'approved': approved,
+      'author': author,
+      'capabilities': capabilities,
+      'category': category,
+      'description': description,
+      'enabled': enabled,
+      'external_integration': externalIntegration?.toJson(),
+      'id': id,
+      'image': image,
+      'installs': installs,
+      'is_paid': isPaid,
+      'name': name,
+      'price': price,
+      'private': private,
+      'rating_avg': ratingAvg,
+      'rating_count': ratingCount,
+      'status': status,
+    };
+  }
+}
+
 class GeneratedApp {
   final bool approved;
   final String author;
@@ -1050,7 +1134,7 @@ class GeneratedAppCatalogGroup {
   final GeneratedAppSelectOption? capability;
   final GeneratedAppSelectOption? category;
   final int? count;
-  final List<GeneratedAppBaseModel>? data;
+  final List<GeneratedAppCatalogItem>? data;
   final GeneratedAppPagination? pagination;
 
   const GeneratedAppCatalogGroup({
@@ -1066,7 +1150,7 @@ class GeneratedAppCatalogGroup {
       capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
       category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
       count: _readFieldValue<int>(_readField(json, const ["count"]), "count", _readInt, requiredField: false, nullable: true),
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppCatalogItem>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppCatalogItem.fromJson), requiredField: false, nullable: true),
       pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
     );
   }
@@ -1121,7 +1205,7 @@ class GeneratedAppCatalogMeta {
 class GeneratedAppCatalogResponse {
   final GeneratedAppSelectOption? capability;
   final GeneratedAppSelectOption? category;
-  final List<GeneratedAppBaseModel>? data;
+  final List<GeneratedAppCatalogItem>? data;
   final List<GeneratedAppCatalogGroup>? groups;
   final GeneratedAppCatalogMeta? meta;
   final GeneratedAppPagination? pagination;
@@ -1139,7 +1223,7 @@ class GeneratedAppCatalogResponse {
     return GeneratedAppCatalogResponse(
       capability: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["capability"]), "capability", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
       category: _readFieldValue<GeneratedAppSelectOption>(_readField(json, const ["category"]), "category", (value) => _readObject(value, GeneratedAppSelectOption.fromJson), requiredField: false, nullable: true),
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppCatalogItem>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppCatalogItem.fromJson), requiredField: false, nullable: true),
       groups: _readFieldValue<List<GeneratedAppCatalogGroup>>(_readField(json, const ["groups"]), "groups", (value) => _readObjectList(value, GeneratedAppCatalogGroup.fromJson), requiredField: false, nullable: true),
       meta: _readFieldValue<GeneratedAppCatalogMeta>(_readField(json, const ["meta"]), "meta", (value) => _readObject(value, GeneratedAppCatalogMeta.fromJson), requiredField: false, nullable: true),
       pagination: _readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: false, nullable: true),
@@ -1203,7 +1287,7 @@ class GeneratedAppSearchFilters {
 }
 
 class GeneratedAppSearchResponse {
-  final List<GeneratedAppBaseModel>? data;
+  final List<GeneratedAppCatalogItem>? data;
   final GeneratedAppSearchFilters filters;
   final GeneratedAppPagination pagination;
 
@@ -1215,7 +1299,7 @@ class GeneratedAppSearchResponse {
 
   factory GeneratedAppSearchResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedAppSearchResponse(
-      data: _readFieldValue<List<GeneratedAppBaseModel>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppBaseModel.fromJson), requiredField: false, nullable: true),
+      data: _readFieldValue<List<GeneratedAppCatalogItem>>(_readField(json, const ["data"]), "data", (value) => _readObjectList(value, GeneratedAppCatalogItem.fromJson), requiredField: false, nullable: true),
       filters: _required(_readFieldValue<GeneratedAppSearchFilters>(_readField(json, const ["filters"]), "filters", (value) => _readObject(value, GeneratedAppSearchFilters.fromJson), requiredField: true, nullable: false), "filters"),
       pagination: _required(_readFieldValue<GeneratedAppPagination>(_readField(json, const ["pagination"]), "pagination", (value) => _readObject(value, GeneratedAppPagination.fromJson), requiredField: true, nullable: false), "pagination"),
     );

@@ -15,11 +15,13 @@ import 'package:omi/pages/home/omiglass_ota_update.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/local_recordings_provider.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/connectors/omi_connection.dart';
 import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -34,6 +36,13 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool isConnected = false;
   bool isDeviceStorageSupport = false;
   bool supportsMultiFileSync = SharedPreferencesUtil().deviceSupportsMultiFileSync;
+
+  // Latest on-device ring-buffer storage snapshot (firmware 3.0.20+ only).
+  // Surfaced on the Auto Sync page as a storage-usage indicator. Null when the
+  // device predates the ring protocol or hasn't been read yet.
+  RingStatus? _ringStatus;
+  RingStatus? get ringStatus => _ringStatus;
+
   BtDevice? connectedDevice;
   BtDevice? pairedDevice;
   StreamSubscription<List<int>>? _bleBatteryLevelListener;
@@ -141,15 +150,6 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return [];
     }
     return connection.getStorageList();
-  }
-
-  Future<BtDevice?> _getConnectedDevice() async {
-    var deviceId = SharedPreferencesUtil().btDevice.id;
-    if (deviceId.isEmpty) {
-      return null;
-    }
-    var connection = await ServiceManager.instance().device.ensureConnection(deviceId);
-    return connection?.device;
   }
 
   initiateBleBatteryListener() async {
@@ -312,7 +312,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       return;
     }
     final deviceService = ServiceManager.instance().device;
-    if (deviceService is DeviceService && deviceService.status == DeviceServiceStatus.ready) {
+    if (deviceService.status == DeviceServiceStatus.ready) {
       try {
         await deviceService.discover();
       } catch (e) {
@@ -482,6 +482,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     syncs.storage.setDevice(device);
     syncs.ring.setDevice(device);
 
+    // Device connection and inventory are a recovery wake, even when the
+    // home page is not mounted. The coordinator serializes it with every
+    // other foreground trigger and applies the auto-sync preference itself.
+    unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.deviceConnected));
+
     // Auto-sync: check if device has offline files
     _checkAndStartAutoSync(device);
 
@@ -533,6 +538,10 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       // ring firmware no longer serves).
       if (WalSyncs.isRingBufferFirmware(fwVersion)) {
         final ringStatus = await connection.getRingStatus();
+        if (ringStatus != null) {
+          _ringStatus = ringStatus;
+          notifyListeners();
+        }
         if (ringStatus == null || ringStatus.unreadPackets <= 0) return;
         Logger.debug(
           'DeviceProvider: Ring auto-sync detected ${ringStatus.unreadPackets} unread packets (${ringStatus.usedBytes} bytes)',
@@ -548,6 +557,27 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
       onOfflineDataDetected?.call(device, status.fileCount, status.totalUsedBytes);
     } catch (e) {
       Logger.debug('DeviceProvider: Auto-sync check failed: $e');
+    }
+  }
+
+  /// Refresh the on-device ring-buffer storage snapshot for the storage-usage
+  /// indicator. No-op on firmware < 3.0.20 (the ring protocol isn't served) or
+  /// when there's no active connection. Safe to call from UI (e.g. on page open).
+  Future<void> refreshRingStorageStatus() async {
+    try {
+      final fwVersion = pairedDevice?.firmwareRevision ?? connectedDevice?.firmwareRevision;
+      if (!WalSyncs.isRingBufferFirmware(fwVersion)) return;
+      final deviceId = pairedDevice?.id ?? connectedDevice?.id;
+      if (deviceId == null) return;
+      final connection = await ServiceManager.instance().device.ensureConnection(deviceId);
+      if (connection == null) return;
+      final status = await connection.getRingStatus();
+      if (status != null) {
+        _ringStatus = status;
+        notifyListeners();
+      }
+    } catch (e) {
+      Logger.debug('DeviceProvider: refreshRingStorageStatus failed: $e');
     }
   }
 
@@ -598,7 +628,7 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
         // Use a small delay to ensure the UI is ready
         Future.delayed(const Duration(milliseconds: 500), () {
           final context = globalNavigatorKey.currentContext;
-          if (context != null) {
+          if (context != null && context.mounted) {
             showFirmwareUpdateDialog(context);
           }
         });
@@ -611,6 +641,9 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
   bool get _isOmiGlassDevice {
     if (pairedDevice == null) return false;
     if (pairedDevice!.type == DeviceType.openglass) return true;
+    // Name matching only applies to Omi-family devices: Ray-Ban Meta names can
+    // contain 'glasses' but its firmware is managed by the Meta AI app.
+    if (pairedDevice!.type != DeviceType.omi) return false;
     final name = pairedDevice!.name.toLowerCase();
     return name.contains('openglass') || name.contains('omiglass') || name.contains('glass');
   }

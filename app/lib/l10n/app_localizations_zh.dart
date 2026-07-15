@@ -9,6 +9,9 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => '会话已过期，请重新登录。';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9336,4 +9339,84 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => '吊坠存储空间即将用尽——请保持应用打开以同步。';
+
+  @override
+  String get connectRayBanMeta => '连接 Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription => '将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。';
+
+  @override
+  String get raybanMetaOpenMetaAI => '通过 Meta AI 连接';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => '在 Meta AI 应用中完成连接，然后返回此处。';
+
+  @override
+  String get raybanMetaCheckAgain => '再次检查';
+
+  @override
+  String get raybanMetaAllowCamera => '允许在眼镜上使用摄像头';
+
+  @override
+  String get raybanMetaCameraExplanation => 'Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。';
+
+  @override
+  String get raybanMetaSkipForNow => '暂时跳过';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta 纯音频模式';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation => '此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。';
+
+  @override
+  String get raybanMetaMusicPauseNote => '使用眼镜麦克风时，您手机上的音乐将暂停。';
+
+  @override
+  String get raybanMetaContinue => '继续';
+
+  @override
+  String get raybanMetaCapturePhoto => '拍摄照片';
+
+  @override
+  String get raybanMetaPhotoRequested => '已请求拍照 — 照片将显示在您的对话中。';
+
+  @override
+  String get raybanMetaMicrophoneReady => '麦克风已就绪';
+
+  @override
+  String get raybanMetaImageCaptureReady => '图像采集已就绪';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => '在纯音频模式下不可用';
+
+  @override
+  String get raybanMetaCamera => '摄像头';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return '连接 Ray-Ban Meta 时出错：$error';
+  }
+
+  @override
+  String get deviceStorageTitle => '设备存储';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '已用 $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 中已使用 $used';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '剩余 $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '设备快满了 — 请同步以释放空间。';
 }

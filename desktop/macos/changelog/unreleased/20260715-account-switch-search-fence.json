@@ -1,0 +1,3 @@
+{
+  "change": "Fixed an active conversations search still showing the previous account's results after switching accounts"
+}

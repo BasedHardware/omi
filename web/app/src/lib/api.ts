@@ -1,4 +1,5 @@
 import { getIdToken } from './firebase';
+import { getWebDeviceIdHash } from './clientDevice';
 import {
   invalidateCache,
   invalidationPatterns,
@@ -69,16 +70,21 @@ async function fetchWithAuth<T>(endpoint: string, options: RequestInit = {}): Pr
   }
 
   const url = `${API_BASE_URL}${endpoint}`;
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers = new Headers({
+    Authorization: `Bearer ${token}`,
+    'Content-Type': 'application/json',
+  });
+  new Headers(options.headers).forEach((value, name) => headers.set(name, value));
+  headers.set('X-App-Platform', 'web');
+  if (deviceIdHash) {
+    headers.set('X-Device-Id-Hash', deviceIdHash);
+  }
 
   try {
     const response = await fetch(url, {
       ...options,
-      headers: {
-        Authorization: `Bearer ${token}`,
-        'Content-Type': 'application/json',
-        'X-App-Platform': 'web',
-        ...options.headers,
-      },
+      headers,
     });
 
     if (!response.ok) {
@@ -1557,6 +1563,49 @@ export async function assignBulkTranscriptSegments(
 }
 
 /**
+ * Error thrown when editing a transcript segment requires a paid plan
+ * (backend returns HTTP 402 for `/segments/text` on gated accounts).
+ */
+export class SegmentEditPlanRequiredError extends Error {
+  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+    super(message);
+    this.name = 'SegmentEditPlanRequiredError';
+  }
+}
+
+/**
+ * Update the text of a single transcript segment.
+ *
+ * Mirrors the backend `PATCH /v1/conversations/{id}/segments/text`
+ * (`UpdateSegmentTextRequest`), which identifies the segment by its `id` and
+ * rewrites just that segment's text. The response is a bare `{status}`, so
+ * callers must optimistically patch their local `transcript_segments`.
+ *
+ * @param conversationId - The conversation ID
+ * @param segmentId - The `id` of the segment to edit (non-empty)
+ * @param text - New segment text (1–10000 chars, enforced by the backend)
+ * @throws SegmentEditPlanRequiredError when the account is plan-gated (402)
+ */
+export async function updateSegmentText(
+  conversationId: string,
+  segmentId: string,
+  text: string,
+): Promise<void> {
+  try {
+    await fetchWithAuth(`/v1/conversations/${conversationId}/segments/text`, {
+      method: 'PATCH',
+      body: JSON.stringify({ segment_id: segmentId, text }),
+    });
+  } catch (error) {
+    // fetchWithAuth surfaces the status in the thrown message (`API error: 402 ...`).
+    if (error instanceof Error && error.message.includes('402')) {
+      throw new SegmentEditPlanRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
  * Delete account permanently
  */
 export async function deleteAccount(): Promise<void> {
@@ -2128,32 +2177,6 @@ export async function bulkMoveConversationsToFolder(
 // FCM Token Registration API
 // ============================================================================
 
-const WEB_DEVICE_ID_KEY = 'omi-web-device-id';
-
-/**
- * Get or generate a unique device ID for this browser
- * This is used to identify the device when registering FCM tokens
- */
-function getWebDeviceIdHash(): string {
-  if (typeof window === 'undefined') return 'server';
-
-  let deviceId = localStorage.getItem(WEB_DEVICE_ID_KEY);
-  if (!deviceId) {
-    // Generate a unique ID for this browser
-    deviceId = `web_${Date.now()}_${Math.random().toString(36).substring(2, 15)}`;
-    localStorage.setItem(WEB_DEVICE_ID_KEY, deviceId);
-  }
-
-  // Create a simple hash of the device ID
-  let hash = 0;
-  for (let i = 0; i < deviceId.length; i++) {
-    const char = deviceId.charCodeAt(i);
-    hash = (hash << 5) - hash + char;
-    hash = hash & hash; // Convert to 32-bit integer
-  }
-  return Math.abs(hash).toString(16);
-}
-
 /**
  * Register FCM token for push notifications
  * This is the same endpoint used by the mobile app
@@ -2161,7 +2184,8 @@ function getWebDeviceIdHash(): string {
  */
 export async function registerFCMToken(fcmToken: string): Promise<void> {
   const timeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
-  const deviceIdHash = getWebDeviceIdHash();
+  const deviceIdHash = await getWebDeviceIdHash();
+  if (!deviceIdHash) return;
 
   await fetchWithAuth('/v1/users/fcm-token', {
     method: 'POST',
@@ -2182,7 +2206,8 @@ export async function registerFCMToken(fcmToken: string): Promise<void> {
  */
 export async function unregisterFCMToken(fcmToken: string): Promise<void> {
   try {
-    const deviceIdHash = getWebDeviceIdHash();
+    const deviceIdHash = await getWebDeviceIdHash();
+    if (!deviceIdHash) return;
 
     await fetchWithAuth('/v1/users/fcm-token', {
       method: 'DELETE',

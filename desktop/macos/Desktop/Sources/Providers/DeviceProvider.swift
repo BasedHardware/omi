@@ -19,24 +19,29 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Singleton
 
-    static let shared = DeviceProvider()
+    static let shared = DeviceProvider(bluetoothManager: BluetoothManager.shared)
+    typealias ConnectionFactory = @MainActor (BtDevice, UInt64) -> DeviceConnection?
+    typealias StorageDataChecker = @MainActor () async -> (totalBytes: Int, currentOffset: Int)?
 
     // MARK: - Published State
 
     /// Whether currently scanning for devices
     @Published private(set) var isScanning = false
 
-    /// Whether currently connecting to a device
-    @Published private(set) var isConnecting = false
+    /// The canonical Bluetooth lifecycle state. UI-facing convenience
+    /// properties below are read-only projections of this snapshot.
+    @Published private(set) var sessionSnapshot: DeviceSessionSnapshot
 
-    /// Whether a device is connected
-    @Published private(set) var isConnected = false
-
-    /// Currently connected device
-    @Published private(set) var connectedDevice: BtDevice?
-
-    /// Paired device (persisted across sessions)
-    @Published private(set) var pairedDevice: BtDevice?
+    var isConnecting: Bool { sessionSnapshot.phase.isConnecting }
+    var isConnected: Bool { sessionSnapshot.phase.isReady }
+    var connectedDevice: BtDevice? { sessionSnapshot.connectedDevice }
+    var pairedDevice: BtDevice? { sessionSnapshot.pairedDevice }
+    var isConnectedPublisher: AnyPublisher<Bool, Never> {
+        $sessionSnapshot
+            .map { $0.phase.isReady }
+            .removeDuplicates()
+            .eraseToAnyPublisher()
+    }
 
     /// Current battery level (0-100, or -1 if unavailable)
     @Published private(set) var batteryLevel: Int = -1
@@ -64,18 +69,22 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Private Properties
 
-    private var bluetoothManager: BluetoothManager { BluetoothManager.shared }
-    /// The active device connection (internal for AudioSourceManager access)
-    private(set) var activeConnection: DeviceConnection?
+    private let bluetoothManager: DeviceBluetoothManaging
+    private let userDefaults: UserDefaults
+    private let notificationCenter: NotificationCenter
+    private let storageDataChecker: StorageDataChecker
+    private let sessionCoordinator: DeviceSessionCoordinator
+
+    /// The active connection is owned by the session coordinator. This
+    /// projection remains internal for AudioSourceManager access.
+    var activeConnection: DeviceConnection? { sessionCoordinator.activeConnection }
+
     private var batterySubscription: Task<Void, Never>?
     private var cancellables = Set<AnyCancellable>()
-    private var reconnectionTimer: Timer?
-    private var reconnectAt: Date?
     private var disconnectNotificationTimer: Timer?
     private var hasLowBatteryAlerted = false
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "DeviceProvider")
-    private let connectionCheckInterval: TimeInterval = 15.0
 
     // MARK: - UserDefaults Keys
 
@@ -89,9 +98,58 @@ final class DeviceProvider: ObservableObject {
 
     private var hasSetupBluetoothBindings = false
 
-    private init() {
-        setupNotificationBindings()
-        loadPairedDevice()
+    init(
+        bluetoothManager: DeviceBluetoothManaging,
+        userDefaults: UserDefaults = .standard,
+        notificationCenter: NotificationCenter = .default,
+        connectionFactory: @escaping ConnectionFactory = {
+            DeviceConnectionFactory.create(device: $0, sessionGeneration: $1)
+        },
+        storageDataChecker: @escaping StorageDataChecker = { await StorageSyncService.shared.checkForStorageData() },
+        sessionScheduler: (any DeviceSessionScheduling)? = nil,
+        reconnectDelay: Duration = .seconds(15),
+        autoReconnectEnabled: Bool = true
+    ) {
+        let persistedDevice = Self.loadPairedDevice(from: userDefaults)
+        let coordinator = DeviceSessionCoordinator(
+            pairedDevice: persistedDevice,
+            connectionFactory: connectionFactory,
+            scheduler: sessionScheduler ?? DeviceSessionTaskScheduler(),
+            reconnectDelay: reconnectDelay,
+            autoReconnectEnabled: autoReconnectEnabled
+        )
+
+        self.bluetoothManager = bluetoothManager
+        self.userDefaults = userDefaults
+        self.notificationCenter = notificationCenter
+        self.storageDataChecker = storageDataChecker
+        self.sessionCoordinator = coordinator
+        self.sessionSnapshot = coordinator.snapshot
+
+        coordinator.onSnapshotChanged = { [weak self] snapshot in
+            self?.sessionSnapshot = snapshot
+        }
+        coordinator.onReconnectRequested = { [weak self] request in
+            Task { @MainActor in
+                await self?.connect(
+                    to: request.device,
+                    reconnectRequest: request
+                )
+            }
+        }
+        coordinator.onDiscoveryRequested = { [weak self] in
+            self?.startDiscovery(timeout: 5)
+        }
+        coordinator.onSessionEnded = { [weak self] in
+            self?.resetSessionPresentation()
+        }
+        coordinator.onFallDetected = { [weak self] data in
+            self?.sendFallDetectionNotification(data: data)
+        }
+
+        if let persistedDevice {
+            logger.info("Loaded paired device: \(persistedDevice.displayName)")
+        }
     }
 
     /// Initialize Bluetooth bindings - call this when Bluetooth features are needed
@@ -100,12 +158,14 @@ final class DeviceProvider: ObservableObject {
         guard !hasSetupBluetoothBindings else { return }
         hasSetupBluetoothBindings = true
 
-        // Force CBCentralManager creation to start receiving state updates
-        // This triggers the Bluetooth permission dialog on first use
-        _ = bluetoothManager.centralManager
+        bluetoothManager.prepareForStateUpdates()
+
+        bluetoothState = bluetoothManager.currentBluetoothState
+        isScanning = bluetoothManager.currentIsScanning
+        discoveredDevices = bluetoothManager.currentDiscoveredDevices
 
         // Observe Bluetooth state changes
-        bluetoothManager.$bluetoothState
+        bluetoothManager.bluetoothStatePublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in
                 self?.bluetoothState = state
@@ -113,7 +173,7 @@ final class DeviceProvider: ObservableObject {
             .store(in: &cancellables)
 
         // Observe scanning state
-        bluetoothManager.$isScanning
+        bluetoothManager.isScanningPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] scanning in
                 self?.isScanning = scanning
@@ -121,7 +181,7 @@ final class DeviceProvider: ObservableObject {
             .store(in: &cancellables)
 
         // Observe discovered devices
-        bluetoothManager.$discoveredDevices
+        bluetoothManager.discoveredDevicesPublisher
             .receive(on: DispatchQueue.main)
             .sink { [weak self] devices in
                 self?.discoveredDevices = devices
@@ -129,58 +189,36 @@ final class DeviceProvider: ObservableObject {
             .store(in: &cancellables)
     }
 
-    private func setupNotificationBindings() {
-
-        // Observe BLE connection events
-        NotificationCenter.default.publisher(for: .bleDeviceConnected)
-            .receive(on: DispatchQueue.main)
-            .compactMap { $0.userInfo?["peripheralId"] as? UUID }
-            .sink { [weak self] peripheralId in
-                self?.handleDeviceConnected(peripheralId: peripheralId)
-            }
-            .store(in: &cancellables)
-
-        NotificationCenter.default.publisher(for: .bleDeviceDisconnected)
-            .receive(on: DispatchQueue.main)
-            .compactMap { $0.userInfo?["peripheralId"] as? UUID }
-            .sink { [weak self] peripheralId in
-                self?.handleDeviceDisconnected(peripheralId: peripheralId)
-            }
-            .store(in: &cancellables)
-    }
-
     // MARK: - Persistence
 
-    private func loadPairedDevice() {
-        guard let deviceId = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceId),
+    private static func loadPairedDevice(from userDefaults: UserDefaults) -> BtDevice? {
+        guard let deviceId = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceId),
               !deviceId.isEmpty else {
-            return
+            return nil
         }
 
-        let deviceName = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceName) ?? "Unknown Device"
-        let deviceTypeRaw = UserDefaults.standard.string(forKey: UserDefaultsKeys.pairedDeviceType) ?? "omi"
+        let deviceName = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceName) ?? "Unknown Device"
+        let deviceTypeRaw = userDefaults.string(forKey: UserDefaultsKeys.pairedDeviceType) ?? "omi"
         let deviceType = DeviceType(rawValue: deviceTypeRaw) ?? .omi
 
-        pairedDevice = BtDevice(
+        return BtDevice(
             id: deviceId,
             name: deviceName,
             type: deviceType,
             rssi: 0
         )
-
-        logger.info("Loaded paired device: \(deviceName) (\(deviceId))")
     }
 
     private func savePairedDevice(_ device: BtDevice?) {
         if let device = device {
-            UserDefaults.standard.set(device.id, forKey: UserDefaultsKeys.pairedDeviceId)
-            UserDefaults.standard.set(device.name, forKey: UserDefaultsKeys.pairedDeviceName)
-            UserDefaults.standard.set(device.type.rawValue, forKey: UserDefaultsKeys.pairedDeviceType)
+            userDefaults.set(device.id, forKey: UserDefaultsKeys.pairedDeviceId)
+            userDefaults.set(device.name, forKey: UserDefaultsKeys.pairedDeviceName)
+            userDefaults.set(device.type.rawValue, forKey: UserDefaultsKeys.pairedDeviceType)
             logger.info("Saved paired device: \(device.displayName)")
         } else {
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceId)
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceName)
-            UserDefaults.standard.removeObject(forKey: UserDefaultsKeys.pairedDeviceType)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceId)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceName)
+            userDefaults.removeObject(forKey: UserDefaultsKeys.pairedDeviceType)
             logger.info("Cleared paired device")
         }
     }
@@ -212,51 +250,38 @@ final class DeviceProvider: ObservableObject {
     /// Connect to a device
     /// - Parameter device: The device to connect to
     func connect(to device: BtDevice) async {
-        guard !isConnecting else {
-            logger.warning("Already connecting to a device")
-            return
-        }
+        await connect(to: device, reconnectRequest: nil)
+    }
 
-        guard !isConnected else {
-            logger.warning("Already connected to a device")
-            return
-        }
-
-        isConnecting = true
+    private func connect(
+        to device: BtDevice,
+        reconnectRequest: DeviceReconnectRequest?
+    ) async {
         errorMessage = nil
 
         do {
-            // Create connection using factory
-            guard let connection = DeviceConnectionFactory.create(device: device) else {
-                throw DeviceConnectionError.connectionFailed("Failed to create connection")
+            let connection: DeviceConnection
+            if let reconnectRequest {
+                connection = try await sessionCoordinator.reconnect(reconnectRequest)
+            } else {
+                connection = try await sessionCoordinator.connect(to: device)
             }
-
-            // Connect
-            try await connection.connect()
-
-            // Store the connection
-            activeConnection = connection
-
-            // Update state
-            connectedDevice = connection.device
-            pairedDevice = connection.device
-            isConnected = true
+            let generation = connection.sessionGeneration
 
             // Save as paired device
             savePairedDevice(connection.device)
 
             // Start battery monitoring
-            await startBatteryMonitoring()
+            await startBatteryMonitoring(connection: connection, generation: generation)
+            guard sessionCoordinator.isReady(generation: generation) else { return }
 
             // Check storage support
-            await checkStorageSupport()
+            await checkStorageSupport(connection: connection, generation: generation)
+            guard sessionCoordinator.isReady(generation: generation) else { return }
 
             // Check for firmware updates
-            await checkFirmwareUpdates()
-
-            // Cancel reconnection timer
-            reconnectionTimer?.invalidate()
-            reconnectionTimer = nil
+            await checkFirmwareUpdates(generation: generation)
+            guard sessionCoordinator.isReady(generation: generation) else { return }
 
             // Clear any pending disconnect notification
             disconnectNotificationTimer?.invalidate()
@@ -267,50 +292,42 @@ final class DeviceProvider: ObservableObject {
             // TODO: Track analytics when AnalyticsManager supports device events
             // AnalyticsManager.shared.deviceConnected(deviceType: device.type.rawValue, deviceName: device.name)
 
+        } catch DeviceSessionCoordinatorError.connectionAlreadyActive {
+            logger.debug("Ignored duplicate connection request for \(device.displayName)")
+        } catch DeviceSessionCoordinatorError.superseded {
+            logger.debug("Connection attempt for \(device.displayName) was superseded")
         } catch {
             logger.error("Failed to connect to \(device.displayName): \(error.localizedDescription)")
             errorMessage = "Failed to connect: \(error.localizedDescription)"
-            activeConnection = nil
         }
-
-        isConnecting = false
     }
 
     /// Disconnect from the current device
     func disconnect() async {
-        guard let connection = activeConnection else {
+        guard activeConnection != nil else {
             logger.warning("No active connection to disconnect")
             return
         }
 
-        await connection.disconnect()
-        handleDisconnection()
+        await sessionCoordinator.disconnect(reconnectAfter: .zero)
 
         logger.info("Disconnected from device")
     }
 
     /// Unpair the current device (disconnect and clear pairing)
     func unpair() async {
-        if let connection = activeConnection {
-            await connection.unpair()
-        }
-
-        handleDisconnection()
+        await sessionCoordinator.unpair()
+        resetSessionPresentation()
         savePairedDevice(nil)
-        pairedDevice = nil
 
         logger.info("Unpaired device")
     }
 
-    private func handleDisconnection() {
+    private func resetSessionPresentation() {
         // Cancel battery monitoring
         batterySubscription?.cancel()
         batterySubscription = nil
 
-        // Clear state
-        activeConnection = nil
-        connectedDevice = nil
-        isConnected = false
         batteryLevel = -1
         isDeviceStorageSupported = false
         hasFirmwareUpdate = false
@@ -321,100 +338,47 @@ final class DeviceProvider: ObservableObject {
 
         // Schedule disconnect notification
         scheduleDisconnectNotification()
-
-        // Start reconnection attempts
-        startReconnectionTimer()
     }
 
     // MARK: - Auto-Reconnection
 
-    /// Start periodic reconnection attempts
-    func startReconnectionTimer() {
-        guard pairedDevice != nil else { return }
-        guard reconnectionTimer == nil else { return }
-
-        reconnectionTimer = Timer.scheduledTimer(
-            withTimeInterval: connectionCheckInterval,
-            repeats: true
-        ) { [weak self] _ in
-            Task { @MainActor in
-                await self?.attemptReconnection()
-            }
-        }
-
-        // Attempt immediately
-        Task {
-            await attemptReconnection()
-        }
+    /// Begin the coordinator-owned reconnection policy.
+    func startReconnecting() {
+        sessionCoordinator.startReconnecting()
     }
 
-    /// Stop reconnection attempts
-    func stopReconnectionTimer() {
-        reconnectionTimer?.invalidate()
-        reconnectionTimer = nil
-    }
-
-    private func attemptReconnection() async {
-        // Skip if already connected or connecting
-        guard !isConnected && !isConnecting else { return }
-
-        // Skip if reconnection is delayed
-        if let reconnectAt = reconnectAt, reconnectAt > Date() {
-            return
-        }
-
-        // Skip if no paired device
-        guard let pairedDevice = pairedDevice else {
-            stopReconnectionTimer()
-            return
-        }
-
-        logger.debug("Attempting reconnection to \(pairedDevice.displayName)")
-
-        // Try direct connection first
-        await connect(to: pairedDevice)
-
-        if isConnected {
-            stopReconnectionTimer()
-            return
-        }
-
-        // If direct connection failed, scan for the device
-        startDiscovery(timeout: 5.0)
-
-        // Wait for scan to complete
-        try? await Task.sleep(nanoseconds: 5_500_000_000)
-
-        // Check if device was found during scan
-        if let foundDevice = discoveredDevices.first(where: { $0.id == pairedDevice.id }) {
-            await connect(to: foundDevice)
-        }
+    /// Stop pending coordinator-owned reconnection work.
+    func stopReconnecting() {
+        sessionCoordinator.stopReconnecting()
     }
 
     // MARK: - Battery Monitoring
 
-    private func startBatteryMonitoring() async {
-        guard let connection = activeConnection else { return }
-
+    private func startBatteryMonitoring(
+        connection: DeviceConnection,
+        generation: UInt64
+    ) async {
         // Get initial battery level
         let level = await connection.getBatteryLevel()
-        if level >= 0 {
+        if sessionCoordinator.isReady(generation: generation), level >= 0 {
             batteryLevel = level
             checkLowBattery()
         }
+        guard sessionCoordinator.isReady(generation: generation) else { return }
 
         // Start listening for battery updates
         batterySubscription?.cancel()
-        batterySubscription = Task {
+        batterySubscription = Task { [weak self, weak connection] in
+            guard let connection else { return }
             do {
                 for try await level in connection.getBatteryLevelStream() {
-                    await MainActor.run {
-                        self.batteryLevel = level
-                        self.checkLowBattery()
-                    }
+                    guard !Task.isCancelled, let self else { return }
+                    guard self.sessionCoordinator.isReady(generation: generation) else { return }
+                    self.batteryLevel = level
+                    self.checkLowBattery()
                 }
             } catch {
-                logger.debug("Battery stream ended: \(error.localizedDescription)")
+                self?.logger.debug("Battery stream ended: \(error.localizedDescription)")
             }
         }
     }
@@ -446,26 +410,26 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Storage Support
 
-    private func checkStorageSupport() async {
-        guard let connection = activeConnection else {
-            isDeviceStorageSupported = false
-            return
-        }
-
+    private func checkStorageSupport(
+        connection: DeviceConnection,
+        generation: UInt64
+    ) async {
         let storageList = await connection.getStorageList()
+        guard sessionCoordinator.isReady(generation: generation) else { return }
         isDeviceStorageSupported = !storageList.isEmpty
 
         // Check for pending storage data to sync
         if isDeviceStorageSupported {
-            await checkPendingStorageSync()
+            await checkPendingStorageSync(generation: generation)
         }
     }
 
     /// Check if device has pending storage data to sync
-    private func checkPendingStorageSync() async {
-        guard let (totalBytes, currentOffset) = await StorageSyncService.shared.checkForStorageData() else {
+    private func checkPendingStorageSync(generation: UInt64) async {
+        guard let (totalBytes, currentOffset) = await storageDataChecker() else {
             return
         }
+        guard sessionCoordinator.isReady(generation: generation) else { return }
 
         let bytesToSync = totalBytes - currentOffset
 
@@ -476,7 +440,7 @@ final class DeviceProvider: ObservableObject {
             logger.info("Device has \(String(format: "%.1f", mbToSync)) MB of audio data pending sync")
 
             // Post notification that storage sync is available
-            NotificationCenter.default.post(
+            notificationCenter.post(
                 name: .storageSyncAvailable,
                 object: nil,
                 userInfo: ["bytesToSync": bytesToSync]
@@ -486,8 +450,9 @@ final class DeviceProvider: ObservableObject {
 
     // MARK: - Firmware Updates
 
-    private func checkFirmwareUpdates() async {
+    private func checkFirmwareUpdates(generation: UInt64) async {
         guard !isFirmwareUpdateInProgress else { return }
+        guard sessionCoordinator.isReady(generation: generation) else { return }
         guard let device = connectedDevice else { return }
 
         // TODO: Implement firmware update check via API
@@ -512,10 +477,7 @@ final class DeviceProvider: ObservableObject {
     func prepareDFU() async {
         guard connectedDevice != nil else { return }
 
-        await disconnect()
-
-        // Delay reconnection to allow DFU
-        reconnectAt = Date().addingTimeInterval(30)
+        await sessionCoordinator.disconnect(reconnectAfter: .seconds(30))
     }
 
     // MARK: - Notifications
@@ -547,32 +509,21 @@ final class DeviceProvider: ObservableObject {
         UNUserNotificationCenter.current().add(request)
     }
 
-    // MARK: - Event Handlers
+    private func sendFallDetectionNotification(data: AccelerometerData) {
+        logger.warning("Fall detected! Magnitude: \(data.magnitude)")
 
-    private func handleDeviceConnected(peripheralId: UUID) {
-        // Check if this is our paired device
-        guard let pairedDevice = pairedDevice,
-              pairedDevice.id == peripheralId.uuidString else {
-            return
-        }
+        let content = UNMutableNotificationContent()
+        content.title = "Fall Detected"
+        content.body = "A potential fall was detected by your omi device."
+        content.sound = .default
 
-        // If we're not already handling the connection, connect now
-        if !isConnecting && !isConnected {
-            Task {
-                await connect(to: pairedDevice)
-            }
-        }
-    }
+        let request = UNNotificationRequest(
+            identifier: "fallDetected-\(Date().timeIntervalSince1970)",
+            content: content,
+            trigger: nil
+        )
 
-    private func handleDeviceDisconnected(peripheralId: UUID) {
-        // Check if this is our connected device
-        guard let connectedDevice = connectedDevice,
-              connectedDevice.id == peripheralId.uuidString else {
-            return
-        }
-
-        // Handle the disconnection
-        handleDisconnection()
+        UNUserNotificationCenter.current().add(request)
     }
 
     // MARK: - Audio Stream
@@ -670,39 +621,7 @@ final class DeviceProvider: ObservableObject {
     // MARK: - Cleanup
 
     deinit {
-        reconnectionTimer?.invalidate()
         disconnectNotificationTimer?.invalidate()
         batterySubscription?.cancel()
-    }
-}
-
-// MARK: - DeviceConnectionDelegate
-
-extension DeviceProvider: DeviceConnectionDelegate {
-    nonisolated func deviceConnection(_ connection: DeviceConnection, didDisconnectUnexpectedly device: BtDevice) {
-        Task { @MainActor in
-            logger.warning("Device disconnected unexpectedly: \(device.displayName)")
-            handleDisconnection()
-        }
-    }
-
-    nonisolated func deviceConnection(_ connection: DeviceConnection, didDetectFall data: AccelerometerData) {
-        Task { @MainActor in
-            logger.warning("Fall detected! Magnitude: \(data.magnitude)")
-
-            // Send fall detection notification
-            let content = UNMutableNotificationContent()
-            content.title = "Fall Detected"
-            content.body = "A potential fall was detected by your omi device."
-            content.sound = .default
-
-            let request = UNNotificationRequest(
-                identifier: "fallDetected-\(Date().timeIntervalSince1970)",
-                content: content,
-                trigger: nil
-            )
-
-            try? await UNUserNotificationCenter.current().add(request)
-        }
     }
 }

@@ -1,5 +1,6 @@
 {
     "@@locale": "lt",
+    "sessionExpiredSignInAgain": "Seanso laikas baigėsi — prisijunkite dar kartą.",
     "@captureRecordingError": {
         "placeholders": {
             "error": {
@@ -3116,5 +3117,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas."
+    "pendantStorageAlmostFull": "Pakabuko atmintis beveik pilna — laikykite programą atidarytą, kad vyktų sinchronizavimas.",
+    "connectRayBanMeta": "Prijungti Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Naudokite savo Ray-Ban Meta akinius kaip Omi įrašymo įrenginį pokalbiams ir vaizdiniam kontekstui. Omi atidarys Meta AI programėlę, kad susietų jūsų akinius.",
+    "raybanMetaOpenMetaAI": "Prisijungti per Meta AI",
+    "raybanMetaWaitingForMetaAI": "Užbaikite prisijungimą Meta AI programėlėje ir grįžkite čia.",
+    "raybanMetaCheckAgain": "Tikrinti dar kartą",
+    "raybanMetaAllowCamera": "Leisti naudoti akinių kamerą",
+    "raybanMetaCameraExplanation": "Omi naudoja jūsų akinių kamerą, kad pridėtų nuotraukas prie jūsų pokalbių. Galite tai praleisti ir naudoti tik garsą.",
+    "raybanMetaSkipForNow": "Praleisti kol kas",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta tik garso režimas",
+    "raybanMetaAudioOnlyExplanation": "Ši Omi versija gali naudoti jūsų akinių mikrofoną per Bluetooth. Nuotraukoms fiksuoti reikia Meta kūrėjų Omi versijos.",
+    "raybanMetaMusicPauseNote": "Muzika jūsų telefone pristabdoma, kol naudojamas akinių mikrofonas.",
+    "raybanMetaContinue": "Tęsti",
+    "raybanMetaCapturePhoto": "Fotografuoti",
+    "raybanMetaPhotoRequested": "Nuotrauka užsakyta — ji pasirodys jūsų pokalbyje.",
+    "raybanMetaMicrophoneReady": "Mikrofonas paruoštas",
+    "raybanMetaImageCaptureReady": "Vaizdų fiksavimas paruoštas",
+    "raybanMetaImageCaptureUnavailable": "Negalima tik garso režimu",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Klaida jungiantis prie Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Įrenginio saugykla",
+    "deviceStoragePercentFull": "užpildyta {percent}%",
+    "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
+    "deviceStorageFree": "{free} laisva",
+    "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos."
 }

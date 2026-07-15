@@ -1,5 +1,6 @@
 {
     "@@locale": "te",
+    "sessionExpiredSignInAgain": "సెషన్ గడువు ముగిసింది — మళ్లీ సైన్ ఇన్ చేయండి.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "పెండెంట్ నిల్వ దాదాపు నిండిపోయింది — సింక్ చేయడానికి యాప్‌ను తెరిచి ఉంచండి."
+    "pendantStorageAlmostFull": "పెండెంట్ నిల్వ దాదాపు నిండిపోయింది — సింక్ చేయడానికి యాప్‌ను తెరిచి ఉంచండి.",
+    "connectRayBanMeta": "Ray-Ban Meta ను కనెక్ట్ చేయండి",
+    "raybanMetaSetupDescription": "సంభాషణలు మరియు దృశ్య సందర్భం కోసం మీ Ray-Ban Meta అద్దాలను మీ Omi క్యాప్చర్ పరికరంగా ఉపయోగించండి. మీ అద్దాలను లింక్ చేయడానికి Omi, Meta AI యాప్‌ను తెరుస్తుంది.",
+    "raybanMetaOpenMetaAI": "Meta AI ద్వారా కనెక్ట్ చేయండి",
+    "raybanMetaWaitingForMetaAI": "Meta AI యాప్‌లో కనెక్ట్ చేయడం పూర్తి చేసి, ఆపై ఇక్కడికి తిరిగి రండి.",
+    "raybanMetaCheckAgain": "మళ్లీ తనిఖీ చేయండి",
+    "raybanMetaAllowCamera": "అద్దాలపై కెమెరాను అనుమతించండి",
+    "raybanMetaCameraExplanation": "మీ సంభాషణలకు ఫోటోలను జోడించడానికి Omi మీ అద్దాల కెమెరాను ఉపయోగిస్తుంది. మీరు దీన్ని దాటవేసి ఆడియో మాత్రమే ఉపయోగించవచ్చు.",
+    "raybanMetaSkipForNow": "ప్రస్తుతానికి దాటవేయండి",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ఆడియో-మాత్రమే మోడ్",
+    "raybanMetaAudioOnlyExplanation": "Omi యొక్క ఈ వెర్షన్ బ్లూటూత్ ద్వారా మీ అద్దాల మైక్రోఫోన్‌ను ఉపయోగించగలదు. ఫోటో క్యాప్చర్ కోసం Omi యొక్క Meta డెవలపర్ బిల్డ్ అవసరం.",
+    "raybanMetaMusicPauseNote": "అద్దాల మైక్రోఫోన్ ఉపయోగంలో ఉన్నప్పుడు మీ ఫోన్‌లోని సంగీతం పాజ్ అవుతుంది.",
+    "raybanMetaContinue": "కొనసాగించండి",
+    "raybanMetaCapturePhoto": "ఫోటో తీయండి",
+    "raybanMetaPhotoRequested": "ఫోటో అభ్యర్థించబడింది — ఇది మీ సంభాషణలో కనిపిస్తుంది.",
+    "raybanMetaMicrophoneReady": "మైక్రోఫోన్ సిద్ధంగా ఉంది",
+    "raybanMetaImageCaptureReady": "చిత్ర క్యాప్చర్ సిద్ధంగా ఉంది",
+    "raybanMetaImageCaptureUnavailable": "ఆడియో-మాత్రమే మోడ్‌లో అందుబాటులో లేదు",
+    "raybanMetaCamera": "కెమెరా",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta కు కనెక్ట్ చేయడంలో లోపం: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "పరికర నిల్వ",
+    "deviceStoragePercentFull": "{percent}% నిండింది",
+    "deviceStorageUsedOfTotal": "{total} లో {used} ఉపయోగించబడింది",
+    "deviceStorageFree": "{free} ఖాళీ",
+    "deviceStorageNearlyFull": "పరికరం దాదాపు నిండిపోయింది — స్థలాన్ని ఖాళీ చేయడానికి సింక్ చేయండి."
 }

@@ -114,6 +114,8 @@ typedef enum {
     REQ_CLEAR_RING,
     REQ_FLUSH,
     REQ_UNMOUNT,
+    REQ_POWER_OFF, /* flush + unmount + cut SD power (idle) */
+    REQ_POWER_ON,  /* power on + remount (mic wake) */
 } sd_req_type_t;
 
 typedef struct {
@@ -475,6 +477,12 @@ static int restore_tail_batch(void)
 
 static int flush_current_batch(bool sync_requested)
 {
+    /* SD is powered off (idle): keep the batch buffered in RAM, do not touch the
+     * disk. It will be flushed after the next remount. */
+    if (!is_mounted) {
+        return 0;
+    }
+
     if (!current_batch_loaded || !current_batch_dirty || current_batch_packets == 0U) {
         if (sync_requested) {
             (void) sync_media();
@@ -784,7 +792,10 @@ static int sd_enable_power(bool enable)
                 LOG_WRN("SD power-off suspend failed (sd=%d)", ret_sd);
             }
         }
-        gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
+        /* NOTE: the SD SPI chip-select (P1.11) is intentionally left managed by
+         * the SPI driver here so the card can be re-initialised after a power
+         * cycle. Full shutdown (app_sd_off) disconnects it separately to kill the
+         * last bit of leakage since no remount follows. */
         ret = gpio_pin_set_dt(&sd_en, 0);
         atomic_set(&sd_io_low_power, 0);
         sd_enabled = false;
@@ -940,6 +951,17 @@ void sd_worker_thread(void)
 
         switch (req.type) {
         case REQ_WRITE_DATA:
+            /* If the SD was powered off (mic just woke), a write can be dequeued
+             * before the POWER_ON prio request is seen. Mount first so buffered
+             * audio lands on a valid ring, then process the write in order. */
+            if (!is_mounted) {
+                /* CS was parked low on power-off; restore physical high before mount.
+                 * Mount directly rather than draining the prio queue looking for the
+                 * POWER_ON (that would discard unrelated sync/read prio requests).
+                 * The pending POWER_ON stays queued and is a no-op once mounted. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
+                (void) sd_mount();
+            }
             process_write_data_req(&req);
             for (int i = 0; i < WRITE_DRAIN_BURST; i++) {
                 if (k_msgq_num_used_get(&sd_prio_msgq) > 0) {
@@ -1016,6 +1038,40 @@ void sd_worker_thread(void)
                 release_resp_busy(req.u.status.resp->busy_flag);
             }
             break;
+
+        case REQ_POWER_OFF:
+            /* Idle (mic asleep): flush, unmount and cut SD power to save current.
+             * Drain buffered writes first (like the shutdown path) so audio queued
+             * just before idle is not lost when we unmount. */
+            if (is_mounted) {
+                drain_pending_write_queue_for_shutdown();
+                (void) sd_unmount();
+                /* Park the SD chip-select at physical 0 V. The SPI driver otherwise
+                 * idles it HIGH, which forward-biases the unpowered card's input
+                 * clamp and leaks current. Use *_raw so the driver's active-low
+                 * inversion does not flip the level. Keep it an output owned by the
+                 * driver (do NOT disconnect) so the card still re-inits on wake.
+                 * SCK/MOSI/MISO are shared with the OTA flash on spi3, not parked. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 0);
+                LOG_INF("SD powered off (idle, CS parked low)");
+            }
+            break;
+
+        case REQ_POWER_ON:
+            /* Mic woke: power on + remount. Handled via the prio queue so it runs
+             * before any buffered write is dequeued from sd_msgq. */
+            if (!is_mounted) {
+                /* CS back to inactive (physical high) before powering the card, per
+                 * SD SPI power-up sequencing. */
+                gpio_pin_set_raw(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, 1);
+                int mret = sd_mount();
+                if (mret == 0) {
+                    LOG_INF("SD powered on + remounted");
+                } else {
+                    LOG_ERR("SD remount failed: %d", mret);
+                }
+            }
+            break;
         }
 
         if (req.type != REQ_WRITE_DATA) {
@@ -1078,6 +1134,10 @@ int app_sd_off(void)
         }
         sd_enabled = false;
 
+        /* Full shutdown: no remount follows, so disconnect the SD chip-select
+         * (P1.11) to remove the last leakage path into the unpowered card. */
+        gpio_pin_configure(DEVICE_DT_GET(DT_NODELABEL(gpio1)), 11, GPIO_DISCONNECTED);
+
         const struct device *spi_dev = DEVICE_DT_GET(DT_NODELABEL(spi3));
         if (device_is_ready(spi_dev)) {
             int ret = pm_device_action_run(spi_dev, PM_DEVICE_ACTION_SUSPEND);
@@ -1095,9 +1155,38 @@ bool is_sd_on(void)
     return sd_enabled;
 }
 
+bool sd_is_ready(void)
+{
+    /* Powered AND actually mounted -> ring reads will succeed. During a
+     * power-on the card is enabled but not yet mounted (~remount latency). */
+    return sd_enabled && is_mounted;
+}
+
 void sd_write_pause(bool pause)
 {
     sd_write_paused = pause;
+}
+
+void sd_request_power(bool on)
+{
+    sd_req_t req = {0};
+    req.type = on ? REQ_POWER_ON : REQ_POWER_OFF;
+
+    /* Queue with a timeout and check the result (like the other prio-queue
+     * callers). A silently dropped REQ_POWER_ON would leave sd_enabled=true with
+     * no remount -> subsequent writes lost. */
+    int ret = k_msgq_put(&sd_prio_msgq, &req, K_MSEC(500));
+    if (ret != 0) {
+        LOG_ERR("sd_request_power(%s) failed to queue: %d", on ? "on" : "off", ret);
+        return;
+    }
+
+    if (on) {
+        /* Only after the POWER_ON is queued: mark SD available so the audio
+         * pusher keeps writing; the writes buffer in sd_msgq until the remount
+         * (prio request) completes. */
+        sd_enabled = true;
+    }
 }
 
 #ifdef CONFIG_OMI_ENABLE_OFFLINE_STORAGE

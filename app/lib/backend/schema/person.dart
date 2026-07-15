@@ -73,7 +73,7 @@ class Person {
       updatedAt: updatedAt,
       speechSamples: generated.speechSamples,
       speechSampleTranscripts: generated.speechSampleTranscripts,
-      speechSamplesVersion: generated.speechSamplesVersion ?? 3,
+      speechSamplesVersion: generated.speechSamplesVersion,
       colorIdx: colorIdx ?? generated.id.hashCode % speakerColors.length,
     );
   }

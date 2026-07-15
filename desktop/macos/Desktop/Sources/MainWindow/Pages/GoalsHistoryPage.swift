@@ -13,11 +13,11 @@ struct GoalsHistoryPage: View {
             // Header
             HStack {
                 Button(action: onDismiss) {
-                    HStack(spacing: 6) {
+                    HStack(spacing: OmiSpacing.xs) {
                         Image(systemName: "chevron.left")
-                            .scaledFont(size: 12, weight: .semibold)
+                            .scaledFont(size: OmiType.caption, weight: .semibold)
                         Text("Back")
-                            .scaledFont(size: 14, weight: .medium)
+                            .scaledFont(size: OmiType.body, weight: .medium)
                     }
                     .foregroundColor(OmiColors.textTertiary)
                 }
@@ -26,7 +26,7 @@ struct GoalsHistoryPage: View {
                 Spacer()
 
                 Text("Goals History")
-                    .scaledFont(size: 18, weight: .semibold)
+                    .scaledFont(size: OmiType.heading, weight: .semibold)
                     .foregroundColor(OmiColors.textPrimary)
 
                 Spacer()
@@ -34,53 +34,53 @@ struct GoalsHistoryPage: View {
                 // Spacer to balance the back button
                 Color.clear.frame(width: 60)
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 20)
-            .padding(.bottom, 16)
+            .padding(.horizontal, OmiSpacing.xl)
+            .padding(.top, OmiSpacing.xl)
+            .padding(.bottom, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
 
             if isLoading {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     ProgressView()
                         .scaleEffect(1.0)
                     Text("Loading history...")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if let error = error {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "exclamationmark.triangle")
                         .scaledFont(size: 32)
                         .foregroundColor(.orange)
                     Text(error)
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else if completedGoals.isEmpty {
-                VStack(spacing: 12) {
+                VStack(spacing: OmiSpacing.md) {
                     Image(systemName: "trophy")
-                        .scaledFont(size: 40)
+                        .scaledFont(size: OmiType.hero)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
                     Text("No goals history yet")
-                        .scaledFont(size: 15, weight: .medium)
+                        .scaledFont(size: OmiType.subheading, weight: .medium)
                         .foregroundColor(OmiColors.textTertiary)
                     Text("Completed and removed goals will appear here")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.7))
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 8) {
+                    LazyVStack(spacing: OmiSpacing.sm) {
                         ForEach(completedGoals) { goal in
                             CompletedGoalRow(goal: goal)
                         }
                     }
-                    .padding(20)
+                    .padding(OmiSpacing.xl)
                 }
             }
         }
@@ -96,7 +96,7 @@ struct GoalsHistoryPage: View {
             completedGoals = try await APIClient.shared.getCompletedGoals()
             isLoading = false
         } catch {
-            self.error = error.localizedDescription
+            self.error = UserFacingErrorPresentation.message(for: error, while: .goals)
             isLoading = false
         }
     }
@@ -144,10 +144,10 @@ struct CompletedGoalRow: View {
     }
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             // Emoji
             ZStack {
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(OmiColors.backgroundTertiary.opacity(0.6))
                     .frame(width: 36, height: 36)
                 Text(goalEmoji)
@@ -155,27 +155,27 @@ struct CompletedGoalRow: View {
             }
 
             // Content
-            VStack(alignment: .leading, spacing: 4) {
+            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                 Text(goal.title)
-                    .scaledFont(size: 14, weight: .medium)
+                    .scaledFont(size: OmiType.body, weight: .medium)
                     .foregroundColor(OmiColors.textPrimary)
                     .lineLimit(1)
 
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     // Type badge
                     Text(typeBadgeText)
-                        .scaledFont(size: 10, weight: .medium)
-                        .foregroundColor(OmiColors.purplePrimary)
-                        .padding(.horizontal, 6)
-                        .padding(.vertical, 2)
+                        .scaledFont(size: OmiType.micro, weight: .medium)
+                        .foregroundColor(OmiColors.accent)
+                        .padding(.horizontal, OmiSpacing.xs)
+                        .padding(.vertical, OmiSpacing.hairline)
                         .background(
                             Capsule()
-                                .fill(OmiColors.purplePrimary.opacity(0.15))
+                                .fill(OmiColors.accent.opacity(0.15))
                         )
 
                     // Final value
                     Text("\(Int(goal.currentValue))/\(Int(goal.targetValue))\(goal.unit.map { " \($0)" } ?? "")")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                 }
             }
@@ -183,32 +183,32 @@ struct CompletedGoalRow: View {
             Spacer()
 
             // Status indicator
-            VStack(alignment: .trailing, spacing: 4) {
+            VStack(alignment: .trailing, spacing: OmiSpacing.xxs) {
                 if isCompleted {
                     Image(systemName: "checkmark.circle.fill")
-                        .scaledFont(size: 16)
+                        .scaledFont(size: OmiType.subheading)
                         .foregroundColor(Color(red: 0.133, green: 0.773, blue: 0.369))
 
                     if !completionDateText.isEmpty {
                         Text(completionDateText)
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(OmiColors.textTertiary)
                     }
                 } else {
                     Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 16)
+                        .scaledFont(size: OmiType.subheading)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.5))
 
                     Text("Removed")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary.opacity(0.7))
                 }
             }
         }
-        .padding(.vertical, 10)
-        .padding(.horizontal, 14)
+        .padding(.vertical, OmiSpacing.sm)
+        .padding(.horizontal, OmiSpacing.md)
         .background(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundTertiary.opacity(0.3))
         )
     }

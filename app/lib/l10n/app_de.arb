@@ -1,5 +1,6 @@
 {
     "@@locale": "de",
+    "sessionExpiredSignInAgain": "Deine Sitzung ist abgelaufen — melde dich erneut an.",
     "appTitle": "Omi",
     "conversationTab": "Unterhaltung",
     "transcriptTab": "Transkript",
@@ -3084,5 +3085,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Der Speicher des Pendants ist fast voll — lass die App geöffnet, um zu synchronisieren."
+    "pendantStorageAlmostFull": "Der Speicher des Pendants ist fast voll — lass die App geöffnet, um zu synchronisieren.",
+    "connectRayBanMeta": "Ray-Ban Meta verbinden",
+    "raybanMetaSetupDescription": "Verwenden Sie Ihre Ray-Ban Meta Brille als Omi-Aufnahmegerät für Gespräche und visuellen Kontext. Omi öffnet die Meta AI App, um Ihre Brille zu verknüpfen.",
+    "raybanMetaOpenMetaAI": "Über Meta AI verbinden",
+    "raybanMetaWaitingForMetaAI": "Schließen Sie die Verbindung in der Meta AI App ab und kehren Sie dann hierher zurück.",
+    "raybanMetaCheckAgain": "Erneut prüfen",
+    "raybanMetaAllowCamera": "Kamera der Brille erlauben",
+    "raybanMetaCameraExplanation": "Omi verwendet die Kamera Ihrer Brille, um Fotos zu Ihren Gesprächen hinzuzufügen. Sie können dies überspringen und nur Audio verwenden.",
+    "raybanMetaSkipForNow": "Vorerst überspringen",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta Nur-Audio-Modus",
+    "raybanMetaAudioOnlyExplanation": "Diese Version von Omi kann das Mikrofon Ihrer Brille über Bluetooth verwenden. Die Fotoaufnahme erfordert den Meta-Entwickler-Build von Omi.",
+    "raybanMetaMusicPauseNote": "Die Musik auf Ihrem Telefon pausiert, während das Mikrofon der Brille verwendet wird.",
+    "raybanMetaContinue": "Fortfahren",
+    "raybanMetaCapturePhoto": "Foto aufnehmen",
+    "raybanMetaPhotoRequested": "Foto angefordert – es wird in Ihrem Gespräch erscheinen.",
+    "raybanMetaMicrophoneReady": "Mikrofon bereit",
+    "raybanMetaImageCaptureReady": "Bildaufnahme bereit",
+    "raybanMetaImageCaptureUnavailable": "Im Nur-Audio-Modus nicht verfügbar",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Fehler beim Verbinden mit Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Gerätespeicher",
+    "deviceStoragePercentFull": "{percent}% belegt",
+    "deviceStorageUsedOfTotal": "{used} von {total} belegt",
+    "deviceStorageFree": "{free} frei",
+    "deviceStorageNearlyFull": "Gerät fast voll — synchronisieren, um Speicher freizugeben."
 }

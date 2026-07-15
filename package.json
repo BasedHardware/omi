@@ -3,6 +3,7 @@
     "test:memory-firestore-rules:emulator": "firebase emulators:exec --only firestore --project demo-memory \"node backend/scripts/firestore_rules_emulator_test.mjs\"",
     "test:memory-firestore-transactions:emulator": "firebase emulators:exec --only firestore --project demo-memory \"node backend/scripts/firestore_transaction_emulator_test.mjs\"",
     "test:memory-firestore-python-apply:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/firestore_python_apply_emulator_test.py\"",
+    "test:listen-lifecycle:emulator": "firebase emulators:exec --only firestore --project demo-listen \"backend/.venv/bin/python backend/scripts/listen_lifecycle_emulator_test.py\"",
     "test:memory-vector-repair-outbox:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_emulator_test.py\"",
     "test:memory-vector-repair-outbox-rules:emulator": "firebase emulators:exec --only firestore --project demo-memory \"node backend/scripts/firestore_rules_emulator_test.mjs\"",
     "test:memory-vector-repair-outbox-lease:emulator": "firebase emulators:exec --only firestore --project demo-memory \"python3 backend/scripts/vector_repair_outbox_lease_emulator_test.py\"",

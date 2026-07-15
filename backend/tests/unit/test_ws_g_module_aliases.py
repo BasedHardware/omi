@@ -19,6 +19,8 @@ from tests.unit.memory_import_isolation import (
     snapshot_sys_modules,
 )
 
+pytestmark = pytest.mark.slow
+
 
 @pytest.fixture(scope="module", autouse=True)
 def _ws_g_import_isolation():
@@ -37,6 +39,7 @@ def test_memory_contracts_l1_l2_symbol_aliases_are_identity():
     assert memory_contracts.PromotionRoute is memory_contracts.L2MemoryRoute
 
 
+@pytest.mark.slow
 def test_working_memory_batch_alias_is_identity():
     from utils.llm.working_observations import L1MemoryArchiveItems, WorkingObservationBatch
 

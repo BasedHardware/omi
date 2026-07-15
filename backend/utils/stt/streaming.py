@@ -2,7 +2,6 @@ import asyncio
 import io
 import json
 import os
-import random
 import threading
 import urllib.parse
 import wave as _wave
@@ -25,6 +24,8 @@ from utils.stt.speaker_embedding import (
     async_extract_embedding_from_bytes,
     compare_embeddings,
 )
+from utils.observability.fallback import record_fallback
+from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
 logger = logging.getLogger(__name__)
@@ -261,6 +262,14 @@ def _normalize_language(language: str) -> str:
     return language.split('-')[0].split('_')[0].lower()
 
 
+def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
+    if base_lang and base_lang != 'en':
+        return 'requested_non_en'
+    if any(m.strip() for m in stt_service_models):
+        return 'configured'
+    return 'none'
+
+
 def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True) -> Tuple[STTService, str, str]:
     base_lang = _normalize_language(language)
     for m in stt_service_models:
@@ -281,6 +290,13 @@ def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True)
             continue
 
     # Fallback to deepgram nova-3 with English
+    record_fallback(
+        component='stt_selection',
+        from_mode=_stt_selection_from_mode(language, base_lang),
+        to_mode='deepgram_en',
+        reason='capability_mismatch',
+        outcome='degraded',
+    )
     return STTService.deepgram, 'en', 'nova-3'
 
 
@@ -391,13 +407,6 @@ async def process_audio_dg(
     dg_connection.on(LiveTranscriptionEvents.Error, on_dg_error)
 
     return safe_conn
-
-
-# Calculate backoff with jitter
-def calculate_backoff_with_jitter(attempt: int, base_delay: int = 1000, max_delay: int = 32000) -> float:
-    jitter = random.random() * base_delay
-    backoff = min(((2**attempt) * base_delay) + jitter, max_delay)
-    return backoff
 
 
 async def connect_to_deepgram_with_backoff(
@@ -559,7 +568,6 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
 
 
 class SafeModulateSocket(STTSocket):
-
     def __init__(
         self,
         ws: Any,
@@ -602,24 +610,44 @@ class SafeModulateSocket(STTSocket):
                 self._dead = True
                 self._death_reason = reason
 
-    def send(self, data: bytes) -> None:
+    def send(self, data: bytes) -> bool:
+        """Synchronously accept audio only when it reaches the provider queue.
+
+        The listen handler runs on ``self._loop``.  A producer on a different
+        event loop cannot safely wait for a queue callback without blocking that
+        loop, so it is treated as a terminal ownership error rather than
+        optimistically dropping audio.
+        """
         with self._lock:
             if self._dead or self._closed:
-                return
-            if not self._header_sent and self._wav_header:
-                data = self._wav_header + data
-                self._header_sent = True
-
-        def _enqueue() -> None:
-            try:
-                self._send_queue.put_nowait(data)
-            except asyncio.QueueFull:
-                self._mark_dead('send queue full')
+                return False
+            prepend_header = not self._header_sent and self._wav_header is not None
+            queued_data = (self._wav_header or b'') + data if prepend_header else data
 
         try:
-            self._loop.call_soon_threadsafe(_enqueue)
+            current_loop = asyncio.get_running_loop()
         except RuntimeError:
-            self._mark_dead('event loop closed')
+            current_loop = None
+
+        if current_loop is not self._loop:
+            # This only occurs in synchronous tests / shutdown code where the
+            # provider loop is stopped, so no concurrent queue consumer exists.
+            # It remains a truthful immediate enqueue rather than a deferred
+            # cross-loop callback. A live foreign loop is a terminal misuse.
+            if current_loop is not None or self._loop.is_running():
+                self._mark_dead('send called outside provider event loop')
+                return False
+
+        try:
+            self._send_queue.put_nowait(queued_data)
+        except asyncio.QueueFull:
+            self._mark_dead('send queue full')
+            return False
+
+        if prepend_header:
+            with self._lock:
+                self._header_sent = True
+        return True
 
     def finalize(self) -> None:
         pass
@@ -887,11 +915,14 @@ class ParakeetStreamingSocket(STTSocket):
         self._pump_task = create_named_task(self._pump(), name="parakeet_stt_pump")
 
     # --- STTSocket interface the listen pipeline / VAD gate call (all sync) ---
-    def send(self, data: bytes) -> None:
-        if self._closed or getattr(self, '_finalized', False) or not data:
-            return
+    def send(self, data: bytes) -> bool:
+        if self._closed or self._dead or getattr(self, '_finalized', False):
+            return False
+        if not data:
+            return True
         with self._lock:
             self._buf.extend(data)
+        return True
 
     def finish(self) -> None:
         # Sync close signal (ABC requirement; the VAD gate calls this). The pump observes
@@ -1103,13 +1134,17 @@ class ParakeetWebSocketSocket(STTSocket):
             raise RuntimeError(self._dead_reason or 'parakeet ws failed before connection')
         logger.info('Parakeet WS connected successfully')
 
-    def send(self, data: bytes) -> None:
-        if self._closed or not data:
-            return
+    def send(self, data: bytes) -> bool:
+        if self._closed or self._dead:
+            return False
+        if not data:
+            return True
         try:
             self._send_queue.put_nowait(data)
         except asyncio.QueueFull:
-            pass
+            self._mark_dead('parakeet ws send queue full')
+            return False
+        return True
 
     def finish(self) -> None:
         self._finalized = True

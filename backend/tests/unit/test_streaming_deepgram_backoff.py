@@ -372,6 +372,7 @@ async def test_process_audio_dg_returns_safe_socket_always():
     result.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_sends_during_idle():
     """SafeDeepgramSocket auto-keepalive thread sends keepalive when idle > interval (#5870).
 
@@ -415,6 +416,7 @@ def test_auto_keepalive_sends_during_idle():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_stops_on_dead():
     """Auto-keepalive thread stops when connection dies (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -451,6 +453,7 @@ def test_auto_keepalive_stops_on_dead():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_auto_keepalive_resets_on_send():
     """send() resets idle timer, preventing unnecessary keepalives (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -498,6 +501,7 @@ def test_keepalive_config_validation():
         KeepaliveConfig(check_period_sec=-1)
 
 
+@pytest.mark.slow
 def test_concurrent_send_and_keepalive():
     """Thread safety: concurrent send() calls while keepalive thread fires (#5870).
 
@@ -560,6 +564,7 @@ def test_concurrent_send_and_keepalive():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_keepalive_fires_at_exact_threshold():
     """Keepalive fires when elapsed == interval (boundary) (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -588,6 +593,7 @@ def test_keepalive_fires_at_exact_threshold():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_repeated_idle_sends_multiple_keepalives():
     """Repeated idle periods send multiple keepalives (#5870)."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
@@ -697,6 +703,7 @@ def test_death_reason_on_send_exception():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_death_reason_on_keepalive_false():
     """death_reason records keepalive failure when keep_alive returns False."""
     import time as _time
@@ -719,6 +726,7 @@ def test_death_reason_on_keepalive_false():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_death_reason_on_keepalive_exception():
     """death_reason captures exception on keepalive failure."""
     import time as _time
@@ -743,7 +751,7 @@ def test_death_reason_on_keepalive_exception():
 
 
 def test_set_close_reason_stores_first_reason():
-    """set_close_reason stores only the first reason (root cause)."""
+    """A provider callback latches terminal death and preserves its root cause."""
     from utils.stt.safe_socket import KeepaliveConfig, SafeDeepgramSocket
 
     mock_conn = MagicMock()
@@ -753,6 +761,9 @@ def test_set_close_reason_stores_first_reason():
         assert safe.death_reason is None
         safe.set_close_reason('DG close event: code=1006')
         assert safe.death_reason == 'DG close event: code=1006'
+        assert safe.is_connection_dead is True
+        assert safe.send(b'late-audio') is False
+        mock_conn.send.assert_not_called()
         # Second call is a no-op
         safe.set_close_reason('DG error event: something else')
         assert safe.death_reason == 'DG close event: code=1006'
@@ -778,6 +789,7 @@ def test_set_close_reason_does_not_override_send_death():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_set_close_reason_does_not_override_keepalive_death():
     """If keepalive fails first, set_close_reason doesn't override the death reason."""
     import time as _time
@@ -823,6 +835,7 @@ def test_close_reason_preserved_when_send_fails_after():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_close_reason_preserved_when_keepalive_fails_after():
     """If close reason is set first, subsequent keepalive failure does not override it (#6036)."""
     import time as _time
@@ -866,6 +879,7 @@ def test_close_reason_preserved_when_send_raises_after():
         safe.finish()
 
 
+@pytest.mark.slow
 def test_close_reason_preserved_when_keepalive_raises_after():
     """If close reason is set first, subsequent keepalive exception does not override it (#6036)."""
     import time as _time
@@ -917,13 +931,16 @@ async def test_process_audio_dg_registers_close_error_handlers():
     assert LiveTranscriptionEvents.Close in registered_events
     assert LiveTranscriptionEvents.Error in registered_events
 
-    # Invoke the close handler and verify it sets death_reason
+    # Invoke the close handler and verify it terminally latches the wrapper.
     for call in on_calls:
         event, handler = call[0][0], call[0][1]
         if event == LiveTranscriptionEvents.Close:
             handler(None, 'CloseResponse(type=Close)')
             break
     assert result.death_reason == 'DG close event: CloseResponse(type=Close)'
+    assert result.is_connection_dead is True
+    assert result.send(b'late-audio') is False
+    mock_dg_conn.send.assert_not_called()
     result.finish()
 
 
@@ -951,6 +968,7 @@ async def test_process_audio_dg_error_handler_sets_death_reason():
             handler(None, 'ErrorResponse(message=server_error)')
             break
     assert result.death_reason == 'DG error event: ErrorResponse(message=server_error)'
+    assert result.is_connection_dead is True
     result.finish()
 
 

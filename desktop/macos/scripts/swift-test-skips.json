@@ -1,0 +1,25 @@
+{
+  "max_skip_count": 4,
+  "allowed_tests": [
+    "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
+    "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
+    "APIClientRoutingTests/testDeleteConversationRoutesToPython"
+  ],
+  "skips": [
+    {
+      "test": "ChatDiscoverabilityTests/testAgentControlCapabilitiesMatchCanonicalManifest",
+      "issue": "https://github.com/BasedHardware/omi/issues/9030",
+      "reason": "Swift DesktopCapabilityRegistry, agent control-tool-manifest.ts, and the desktop chat prompt have drifted; reconciling the canonical tool set is a product decision."
+    },
+    {
+      "test": "ChatDiscoverabilityTests/testDesktopCapabilitiesExistInAgentToolDeclarations",
+      "issue": "https://github.com/BasedHardware/omi/issues/9030",
+      "reason": "Swift DesktopCapabilityRegistry, agent control-tool-manifest.ts, and the desktop chat prompt have drifted; reconciling the canonical tool set is a product decision."
+    },
+    {
+      "test": "APIClientRoutingTests/testDeleteConversationRoutesToPython",
+      "issue": "https://github.com/BasedHardware/omi/issues/9031",
+      "reason": "The client omits ?cascade=true; cascade is backend-gated behind owner sign-off, so flipping it is a data-deletion behavior change."
+    }
+  ]
+}

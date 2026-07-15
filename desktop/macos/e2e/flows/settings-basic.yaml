@@ -1,0 +1,110 @@
+version: 2
+name: settings-basic
+tier: 2
+description: Settings navigation smoke for General, Transcription, Privacy, Rewind, Notifications, About, Shortcuts, and Advanced sections
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DefaultsKey.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/SettingsPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/SettingsSidebar.swift
+  - desktop/macos/Desktop/Sources/MemoryExportService.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Integrations.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+General.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/AppRuleEditorView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SearchableDropdown.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings
+    bridge.navigate:
+      target: settings
+      activateApp: false
+    wait:
+      state.selectedTabIndex: 9
+
+  - id: S2
+    name: Open General section
+    bridge.navigate:
+      target: settings
+      settingsSection: General
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: General
+
+  - id: S3
+    name: Open Transcription section
+    bridge.navigate:
+      target: settings
+      settingsSection: Transcription
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Transcription
+
+  - id: S4
+    name: Open Privacy section
+    bridge.navigate:
+      target: settings
+      settingsSection: Privacy
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Privacy
+
+  - id: S5
+    name: Open Rewind section
+    bridge.navigate:
+      target: settings
+      settingsSection: Rewind
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Rewind
+
+  - id: S6
+    name: Open Notifications section
+    bridge.navigate:
+      target: settings
+      settingsSection: Notifications
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Notifications
+
+  - id: S7
+    name: Open About section
+    bridge.navigate:
+      target: settings
+      settingsSection: About
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: About
+
+  - id: S8
+    name: Open Shortcuts section
+    bridge.navigate:
+      target: settings
+      settingsSection: Shortcuts
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Shortcuts
+
+  - id: S9
+    name: Open Advanced section
+    bridge.navigate:
+      target: settings
+      settingsSection: Advanced
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Advanced
+
+  - id: S10
+    name: Advanced settings snapshot
+    bridge.action:
+      name: advanced_settings_snapshot
+    expect:
+      ok: true
+
+  - id: S11
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

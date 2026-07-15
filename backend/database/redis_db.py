@@ -1,11 +1,19 @@
+import ast
 import base64
 import json
 import os
-from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
+from typing import Any, Callable, Dict, List, Optional, TypeVar, Union, cast
 from datetime import datetime, timedelta, timezone
 
 import redis
 import logging
+
+from database.api_key_metadata import (
+    DEV_API_KEY_AUTH_CONTEXT_VERSION,
+    MCP_API_KEY_AUTH_CONTEXT_VERSION,
+    ApiKeyCacheReadMode,
+    ApiKeyCacheReadResult,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +31,28 @@ r: Any = redis.Redis(
 
 
 T = TypeVar("T")
+
+
+def _decode_redis_value(raw: Union[bytes, str]) -> str:
+    return raw.decode('utf-8') if isinstance(raw, bytes) else raw
+
+
+def _deserialize_cache_value(raw: Union[bytes, str, None]) -> Any:
+    """Deserialize a Redis cache value using JSON, with legacy literal_eval fallback."""
+    if raw is None:
+        return None
+    text = _decode_redis_value(raw)
+    try:
+        return json.loads(text)
+    except (TypeError, ValueError, json.JSONDecodeError):
+        try:
+            return ast.literal_eval(text)
+        except (ValueError, SyntaxError):
+            return text
+
+
+def _serialize_cache_value(value: Any) -> str:
+    return json.dumps(value, default=str)
 
 
 def try_catch_decorator(func: Callable[..., T]) -> Callable[..., Optional[T]]:
@@ -123,25 +153,37 @@ def save_username(username: str, uid: str) -> None:
 
 
 def set_app_usage_count_cache(app_id: str, count: int) -> None:
-    r.set(f'apps:{app_id}:usage_count', count, ex=60 * 15)  # 15 minutes
+    r.set(f'apps:{app_id}:usage_count', _serialize_cache_value(count), ex=60 * 15)  # 15 minutes
 
 
 def get_app_usage_count_cache(app_id: str) -> Optional[int]:
     count = r.get(f'apps:{app_id}:usage_count')
     if not count:
         return None
-    return eval(count)
+    loaded = _deserialize_cache_value(count)
+    if isinstance(loaded, bool):
+        return None
+    if isinstance(loaded, int):
+        return loaded
+    if isinstance(loaded, float):
+        return int(loaded)
+    return None
 
 
 def set_app_money_made_amount_cache(app_id: str, amount: float) -> None:
-    r.set(f'apps:{app_id}:money_made', amount, ex=60 * 15)  # 15 minutes
+    r.set(f'apps:{app_id}:money_made', _serialize_cache_value(amount), ex=60 * 15)  # 15 minutes
 
 
 def get_app_money_made_amount_cache(app_id: str) -> Optional[float]:
     amount = r.get(f'apps:{app_id}:money_made')
     if not amount:
         return None
-    return eval(amount)
+    loaded = _deserialize_cache_value(amount)
+    if isinstance(loaded, bool):
+        return None
+    if isinstance(loaded, (int, float)):
+        return float(loaded)
+    return None
 
 
 def set_app_usage_history_cache(app_id: str, usage: List[Dict[str, Any]]) -> None:
@@ -174,17 +216,20 @@ def set_app_money_made_cache(app_id: str, money: Dict[str, Any]) -> None:
 
 def set_app_review_cache(app_id: str, uid: str, data: Dict[str, Any]) -> None:
     raw = r.get(f'plugins:{app_id}:reviews')
-    reviews: Dict[str, Any] = {} if not raw else cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    reviews: Dict[str, Any] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
     reviews[uid] = data
-    r.set(f'plugins:{app_id}:reviews', str(reviews))
+    r.set(f'plugins:{app_id}:reviews', _serialize_cache_value(reviews))
 
 
 def get_specific_user_review(app_id: str, uid: str) -> Dict[str, Any]:
     raw = r.get(f'plugins:{app_id}:reviews')
     if not raw:
         return {}
-    reviews = cast(Dict[str, Any], eval(raw))
-    return cast(Dict[str, Any], reviews.get(uid, {}))
+    loaded = _deserialize_cache_value(raw)
+    if not isinstance(loaded, dict):
+        return {}
+    return cast(Dict[str, Any], loaded.get(uid, {}))
 
 
 def set_user_paid_app(app_id: str, uid: str, ttl: int) -> None:
@@ -234,7 +279,8 @@ def get_app_reviews(app_id: str) -> Dict[str, Any]:
     raw = r.get(f'plugins:{app_id}:reviews')
     if not raw:
         return {}
-    return cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
 
 
 def get_apps_reviews(app_ids: List[str]) -> Dict[str, Any]:
@@ -245,7 +291,14 @@ def get_apps_reviews(app_ids: List[str]) -> Dict[str, Any]:
     reviews = r.mget(keys)
     if reviews is None:
         return {}
-    return {app_id: cast(Dict[str, Any], eval(review)) if review else {} for app_id, review in zip(app_ids, reviews)}
+    result: Dict[str, Any] = {}
+    for app_id, review in zip(app_ids, reviews):
+        if not review:
+            result[app_id] = {}
+            continue
+        loaded = _deserialize_cache_value(review)
+        result[app_id] = cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else {}
+    return result
 
 
 def set_app_installs_count(app_id: str, count: int) -> None:
@@ -268,7 +321,10 @@ def get_apps_installs_count(app_ids: List[str]) -> Dict[str, int]:
     counts = r.mget(keys)
     if counts is None:
         return {}
-    return {app_id: int(count) if count else 0 for app_id, count in zip(app_ids, counts)}
+    # Clamp to >= 0: the install counter is a plain INCR/DECR with no floor, so drift (a disable with no
+    # matching enable, or a DECR on an evicted key) can leave a negative value. A negative install count
+    # would later hit math.log(1 + installs) in compute_app_score and 500 the whole marketplace sort.
+    return {app_id: max(0, int(count)) if count else 0 for app_id, count in zip(app_ids, counts)}
 
 
 def cache_user_name(uid: str, name: str, ttl: int = 60 * 60 * 24 * 7) -> None:
@@ -289,7 +345,7 @@ def get_cached_signed_url(blob_path: str) -> str:
 
 
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
-    r.set(f'users:{uid}:geolocation', str(geolocation))
+    r.set(f'users:{uid}:geolocation', _serialize_cache_value(geolocation))
     r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
 
 
@@ -297,7 +353,8 @@ def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
     raw = r.get(f'users:{uid}:geolocation')
     if not raw:
         return None
-    return cast(Dict[str, Any], eval(raw))
+    loaded = _deserialize_cache_value(raw)
+    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
 
 
 # DAILY SUMMARY UID LOOKUP
@@ -504,9 +561,9 @@ def cache_mcp_api_key_auth_context(
     key_id: Optional[str] = None,
     app_id: Optional[str] = None,
     memory_grant_seeded: bool = True,
-    auth_context_version: int = 2,
+    auth_context_version: int = MCP_API_KEY_AUTH_CONTEXT_VERSION,
     ttl: int = 3600,
-) -> None:
+) -> bool:
     """Caches the user_id, key identity, and scopes for a given MCP API key."""
     cache_data = {
         "user_id": user_id,
@@ -518,6 +575,7 @@ def cache_mcp_api_key_auth_context(
     }
     r.set(f'mcp_api_key_auth:{hashed_key}', json.dumps(cache_data), ex=ttl)
     r.set(f'mcp_api_key:{hashed_key}', user_id, ex=ttl)
+    return True
 
 
 @try_catch_decorator
@@ -527,27 +585,45 @@ def get_cached_mcp_api_key_user_id(hashed_key: str) -> Optional[str]:
     return auth_context.get("user_id") if auth_context else None
 
 
-@try_catch_decorator
-def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
-    """Retrieves MCP API key auth context, accepting older uid-only cache values."""
-    cached = r.get(f'mcp_api_key_auth:{hashed_key}')
-    if not cached:
-        cached = r.get(f'mcp_api_key:{hashed_key}')
-    if not cached:
-        return None
-    decoded = cached.decode() if isinstance(cached, bytes) else cached
+def read_cached_mcp_api_key_auth_context(hashed_key: str) -> ApiKeyCacheReadResult:
+    """Read MCP auth context while distinguishing cache absence from failure."""
     try:
-        cache_data: object = json.loads(decoded)
-    except (TypeError, ValueError):
-        return {"user_id": decoded, "scopes": None, "key_id": None, "app_id": None}
-    return cast(Dict[str, Any], cache_data) if isinstance(cache_data, dict) else None
+        cached = r.get(f'mcp_api_key_auth:{hashed_key}')
+        if cached:
+            decoded = cached.decode() if isinstance(cached, bytes) else cached
+            cache_data: object = json.loads(decoded)
+            if not isinstance(cache_data, dict):
+                return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+            return ApiKeyCacheReadResult(
+                mode=ApiKeyCacheReadMode.HIT,
+                data=cast(Dict[str, Any], cache_data),
+            )
+
+        legacy_cached = r.get(f'mcp_api_key:{hashed_key}')
+        if not legacy_cached:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        legacy_user_id = legacy_cached.decode() if isinstance(legacy_cached, bytes) else legacy_cached
+        if not isinstance(legacy_user_id, str):
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+        return ApiKeyCacheReadResult(
+            mode=ApiKeyCacheReadMode.HIT,
+            data={"user_id": legacy_user_id, "scopes": None, "key_id": None, "app_id": None},
+        )
+    except Exception as exc:
+        logger.error("Error reading MCP API key auth cache: %s", exc)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
 
 
-@try_catch_decorator
-def delete_cached_mcp_api_key(hashed_key: str) -> None:
-    """Deletes a cached MCP API key."""
-    r.delete(f'mcp_api_key:{hashed_key}')
-    r.delete(f'mcp_api_key_auth:{hashed_key}')
+def get_cached_mcp_api_key_auth_context(hashed_key: str) -> Optional[Dict[str, Any]]:
+    """Compatibility adapter returning data only for a successful cache hit."""
+    result = read_cached_mcp_api_key_auth_context(hashed_key)
+    return result.data if result.mode == ApiKeyCacheReadMode.HIT else None
+
+
+def delete_cached_mcp_api_key_strict(hashed_key: str) -> bool:
+    """Atomically delete both MCP auth cache keys, raising on Redis failure."""
+    r.delete(f'mcp_api_key:{hashed_key}', f'mcp_api_key_auth:{hashed_key}')
+    return True
 
 
 # ******************************************************
@@ -555,6 +631,7 @@ def delete_cached_mcp_api_key(hashed_key: str) -> None:
 # ******************************************************
 
 
+@try_catch_decorator
 def cache_dev_api_key(
     hashed_key: str,
     user_id: str,
@@ -562,26 +639,46 @@ def cache_dev_api_key(
     ttl: int = 3600,
     key_id: Optional[str] = None,
     app_id: Optional[str] = None,
-) -> None:
+    auth_context_version: int = DEV_API_KEY_AUTH_CONTEXT_VERSION,
+) -> bool:
     """Caches Developer API key auth context for uid-only and memory app/key authorization."""
-    cache_data = {"user_id": user_id, "scopes": scopes, "key_id": key_id, "app_id": app_id}
+    cache_data = {
+        "user_id": user_id,
+        "scopes": scopes,
+        "key_id": key_id,
+        "app_id": app_id,
+        "auth_context_version": auth_context_version,
+    }
     r.set(f'dev_api_key:{hashed_key}', json.dumps(cache_data), ex=ttl)
+    return True
 
 
-@try_catch_decorator
+def read_cached_dev_api_key_data(hashed_key: str) -> ApiKeyCacheReadResult:
+    """Read Developer auth context while distinguishing absence from failure."""
+    try:
+        cached = r.get(f'dev_api_key:{hashed_key}')
+        if not cached:
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.MISS)
+        decoded = cached.decode() if isinstance(cached, bytes) else cached
+        loaded: object = json.loads(decoded)
+        if not isinstance(loaded, dict):
+            return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.HIT, data=cast(Dict[str, Any], loaded))
+    except Exception as exc:
+        logger.error("Error reading Developer API key auth cache: %s", exc)
+        return ApiKeyCacheReadResult(mode=ApiKeyCacheReadMode.ERROR)
+
+
 def get_cached_dev_api_key_data(hashed_key: str) -> Optional[Dict[str, Any]]:
-    """Retrieves the user_id and scopes for a given hashed Developer API key from cache."""
-    cached = r.get(f'dev_api_key:{hashed_key}')
-    if not cached:
-        return None
-    loaded: object = json.loads(cached.decode())
-    return cast(Dict[str, Any], loaded) if isinstance(loaded, dict) else None
+    """Compatibility adapter returning data only for a successful cache hit."""
+    result = read_cached_dev_api_key_data(hashed_key)
+    return result.data if result.mode == ApiKeyCacheReadMode.HIT else None
 
 
-@try_catch_decorator
-def delete_cached_dev_api_key(hashed_key: str) -> None:
-    """Deletes a cached Developer API key."""
+def delete_cached_dev_api_key_strict(hashed_key: str) -> bool:
+    """Delete a Developer auth cache key, raising on Redis failure."""
     r.delete(f'dev_api_key:{hashed_key}')
+    return True
 
 
 # ******************************************************
@@ -671,6 +768,16 @@ def set_silent_user_notification_sent(uid: str, ttl: int = 60 * 60 * 24) -> None
 def has_silent_user_notification_been_sent(uid: str) -> bool:
     """Check if silent user notification was already sent to user recently"""
     return r.exists(f'users:{uid}:silent_notification_sent')
+
+
+def try_acquire_byok_llm_error_notification_lock(uid: str, provider: str, reason: str, ttl: int = 60 * 60 * 24) -> bool:
+    """Return True once per BYOK provider/error reason per TTL window."""
+    return bool(r.set(f'users:{uid}:byok_llm_error:{provider}:{reason}', '1', ex=ttl, nx=True))
+
+
+def release_byok_llm_error_notification_lock(uid: str, provider: str, reason: str) -> None:
+    """Release the dedupe lock so a failed notification can be retried."""
+    r.delete(f'users:{uid}:byok_llm_error:{provider}:{reason}')
 
 
 # ******************************************************

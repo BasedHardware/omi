@@ -62,10 +62,28 @@ extension AppState {
       return
     }
 
+    // Never relaunch a DMG/translocated path — `open` on the mounted-DMG bundle
+    // re-reveals the installer's "Drag to Applications" Finder window. Prefer an
+    // installed copy when one exists (AppInstaller normally guarantees this).
+    var relaunchURL = bundleURL
+    if AppInstaller.isInstallerLocation(bundleURL.path) {
+      let installed = AppInstaller.installedURL(forBundleURL: bundleURL)
+      if FileManager.default.fileExists(atPath: installed.path) {
+        log("Restart: bundle is on an installer mount, relaunching installed copy instead")
+        relaunchURL = installed
+      }
+    }
+
     // Use a shell script to wait briefly, then relaunch the app
     let task = Process()
     task.executableURL = URL(fileURLWithPath: "/bin/sh")
-    task.arguments = ["-c", "sleep 0.5 && open \"\(bundleURL.path)\""]
+    task.arguments = [
+      "-c",
+      Self.relaunchCommand(
+        appPath: relaunchURL.path,
+        isNonProduction: AppBuild.isNonProduction,
+        automationPort: DesktopAutomationLaunchOptions.port),
+    ]
 
     do {
       try task.run()
@@ -80,18 +98,47 @@ extension AppState {
     }
   }
 
+  /// Builds the `/bin/sh -c` payload that relaunches the app after a short delay.
+  ///
+  /// On **non-production** builds the automation port is re-passed as an argv
+  /// (`--automation-port=`) so the reopened bundle rebinds the SAME port the harness
+  /// launched with. A plain `open <bundle>` carries no argv and no env, so on its own
+  /// the reopened app would fall back to a launchd-session-inherited
+  /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
+  /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
+  /// is the highest-precedence port source, so it wins over any inherited env. The
+  /// production relaunch stays a plain `open` and is unchanged.
+  nonisolated static func relaunchCommand(
+    appPath: String,
+    isNonProduction: Bool,
+    automationPort: UInt16
+  ) -> String {
+    var openCommand = "open \"\(appPath)\""
+    if isNonProduction {
+      openCommand += " --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+    }
+    return "sleep 0.5 && \(openCommand)"
+  }
+
   /// Reset onboarding state for the current app only, then restart.
   /// This clears onboarding state without touching production data or system permissions.
   nonisolated func resetOnboardingAndRestart() {
     log("Resetting onboarding state for current app...")
+    let graphAuthorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot()
 
-    // Update live @AppStorage state in the current app instance before touching
-    // raw UserDefaults so SwiftUI doesn't write stale onboarding values back.
-    DispatchQueue.main.async {
+    // Update live @AppStorage-backed state on the main thread *before* clearing
+    // UserDefaults. DesktopHomeView handles .resetOnboardingRequested by setting
+    // hasCompletedOnboarding = false; dispatch synchronously so that runs first.
+    let postResetNotification = {
       NotificationCenter.default.post(name: .resetOnboardingRequested, object: nil)
     }
+    if Thread.isMainThread {
+      postResetNotification()
+    } else {
+      DispatchQueue.main.sync(execute: postResetNotification)
+    }
 
-    // Clear onboarding-related UserDefaults keys (thread-safe, do first)
+    // Clear onboarding-related UserDefaults keys (thread-safe, after live state)
     let onboardingKeys = [
       "hasCompletedOnboarding",
       "onboardingStep",
@@ -115,10 +162,23 @@ extension AppState {
     OnboardingChatPersistence.clear()
     log("Cleared onboarding chat persistence")
 
-    Task { [self] in
+    Task { @MainActor [self] in
       // Clear knowledge graph (local + server) so the onboarding chart starts fresh
-      await KnowledgeGraphStorage.shared.clearAll()
-      log("Cleared local knowledge graph storage")
+      if let graphAuthorizationSnapshot {
+        let authorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(graphAuthorizationSnapshot)
+        }
+        do {
+          try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
+          log("Cleared local knowledge graph storage")
+        } catch LocalMutationAuthorizationError.revoked {
+          log("Skipped stale-owner local knowledge graph reset")
+        } catch {
+          logError("Failed to clear local knowledge graph during onboarding reset", error: error)
+        }
+      } else {
+        log("Skipped local knowledge graph reset without an authenticated owner")
+      }
       do {
         try await APIClient.shared.deleteKnowledgeGraph()
         log("Cleared server knowledge graph")
@@ -126,13 +186,17 @@ extension AppState {
         logError("Failed to clear server knowledge graph during onboarding reset", error: error)
       }
 
-      // Clear persisted backend chat messages so onboarding does not resume old history.
-      // Onboarding currently uses the default chat message stream.
-      do {
-        _ = try await APIClient.shared.deleteMessages()
-        log("Cleared backend chat messages")
-      } catch {
-        logError("Failed to clear backend chat messages during onboarding reset", error: error)
+      // Clear the default stream through the kernel journal's durable,
+      // generation-fenced delete outbox. No UI surface may write or delete
+      // backend chat state directly.
+      if let chatProvider = ChatProvider.mainInstance {
+        if await chatProvider.clearDefaultJournalForOnboardingReset() {
+          log("Queued default chat reset through kernel journal")
+        } else {
+          log("Failed to queue default chat reset through kernel journal")
+        }
+      } else {
+        log("Default chat reset deferred: main chat provider unavailable")
       }
 
       try? await Task.sleep(nanoseconds: 150_000_000)
@@ -320,23 +384,28 @@ extension AppState {
     }
   }
 
-  /// Check system audio permission status and update `hasSystemAudioPermission`.
+  func recordSystemAudioCaptureOutcome(_ status: SystemAudioPermissionStatus) {
+    systemAudioPermissionStatus = status
+    hasSystemAudioPermission = status == .granted
+  }
+
+  /// Check system audio permission support and keep the last observed tap result fresh.
   ///
-  /// Core Audio process taps (macOS 14.4+) have no dedicated preflight API, but a
-  /// *global* tap that captures other apps' output is gated behind the same Screen
-  /// Recording TCC grant the rest of the app already checks — which is why a failed
-  /// test capture in `triggerSystemAudioPermission()` deep-links the user to
-  /// Privacy → Screen Recording. Previously this was a no-op (BL-020) that left the
-  /// flag reflecting only a prior successful test capture, so a revoked grant (or a
-  /// user who never ran onboarding's test) was never reflected. Mirror
-  /// `checkScreenRecordingPermission()` so the reported state tracks real TCC state.
+  /// Core Audio process taps (macOS 14.4+) do not provide a preflight API. Unlike
+  /// Screen Recording, the truthful product state comes from a real tap outcome.
+  /// If no tap is currently running, a previously granted outcome is no longer a
+  /// fresh assertion, so refreshes return to unknown until the next tap succeeds.
   func checkSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
-      hasSystemAudioPermission = false
+      recordSystemAudioCaptureOutcome(.unsupported)
       return
     }
-    hasSystemAudioPermission = ScreenRecordingPermissionPolicy.uiPermissionGranted(
-      tccGranted: ScreenCaptureService.checkPermission())
+
+    if let service = systemAudioCaptureService as? SystemAudioCaptureService, service.capturing {
+      recordSystemAudioCaptureOutcome(.granted)
+    } else if systemAudioPermissionStatus == .granted {
+      recordSystemAudioCaptureOutcome(.unknown)
+    }
   }
 
   /// Trigger system audio permission by actually testing capture
@@ -344,7 +413,7 @@ extension AppState {
   func triggerSystemAudioPermission() {
     guard #available(macOS 14.4, *) else {
       log("System audio not supported on this macOS version")
-      hasSystemAudioPermission = false
+      recordSystemAudioCaptureOutcome(.unsupported)
       return
     }
 
@@ -368,12 +437,12 @@ extension AppState {
         log("System audio: Test capture stopped")
 
         // Mark permission as granted
-        hasSystemAudioPermission = true
+        recordSystemAudioCaptureOutcome(.granted)
         log("System audio: Permission verified")
 
       } catch {
         logError("System audio: Test capture failed", error: error)
-        hasSystemAudioPermission = false
+        recordSystemAudioCaptureOutcome(SystemAudioPermissionStatus.classify(captureError: error))
 
         // Open System Settings to Screen Recording section
         if let url = URL(

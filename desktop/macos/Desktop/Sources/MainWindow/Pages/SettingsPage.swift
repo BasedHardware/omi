@@ -17,18 +17,18 @@ struct SettingsPage: View {
         VStack(spacing: 0) {
           // Section header
           HStack {
-            Text(selectedSection.rawValue)
-              .scaledFont(size: 28, weight: .bold)
+            Text(selectedSection.displayTitle)
+              .scaledFont(size: OmiType.title, weight: .bold)
               .foregroundColor(OmiColors.textPrimary)
               .id(selectedSection)
               .transition(.opacity)
-              .animation(.easeInOut(duration: 0.15), value: selectedSection)
+              .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
 
             Spacer()
           }
-          .padding(.horizontal, 32)
-          .padding(.top, 32)
-          .padding(.bottom, 24)
+          .padding(.horizontal, OmiSpacing.section)
+          .padding(.top, OmiSpacing.section)
+          .padding(.bottom, OmiSpacing.xxl)
 
           // Settings content - embedded SettingsView with dark theme override
           SettingsContentView(
@@ -37,7 +37,7 @@ struct SettingsPage: View {
             highlightedSettingId: $highlightedSettingId,
             chatProvider: chatProvider
           )
-          .padding(.horizontal, 32)
+          .padding(.horizontal, OmiSpacing.section)
 
           Spacer()
         }
@@ -45,7 +45,7 @@ struct SettingsPage: View {
       .onChange(of: highlightedSettingId) { _, newId in
         guard let newId = newId else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-          withAnimation(.easeInOut(duration: 0.3)) {
+          OmiMotion.withGated(.easeInOut(duration: 0.3)) {
             proxy.scrollTo(newId, anchor: .center)
           }
         }
@@ -131,6 +131,11 @@ struct SettingsContentView: View {
 
   // Ask Omi floating bar state
   @State var showAskOmiBar: Bool = false
+
+  // Grant for chat screenshot tools (capture_screen / get_screenshot);
+  // read by ChatToolExecutor.physicalExecutionPrecondition. Default on.
+  @AppStorage(DefaultsKey.chatScreenshotSharingEnabled.rawValue)
+  var chatScreenshotSharingEnabled: Bool = true
 
   // Transcription state
   @State var isTranscribing: Bool
@@ -331,6 +336,54 @@ struct SettingsContentView: View {
     case shortcuts = "Shortcuts"
     case advanced = "Advanced"
     case about = "About"
+
+    /// Label shown in the settings sidebar and page header. Merged sections
+    /// (Account + Plan and Usage, Notifications + Privacy) share one nav item,
+    /// so both cases surface the combined title. Raw values stay untouched —
+    /// they are the automation contract (`selectedSettingsSection` snapshots,
+    /// `omi-ctl navigate settings <section>`, e2e flow waits).
+    var displayTitle: String {
+      switch self {
+      case .account, .planUsage: return "Account & Plan"
+      case .notifications, .privacy: return "Notifications & Privacy"
+      default: return rawValue
+      }
+    }
+
+    /// The sidebar nav entry that represents this section. Legacy deep-link
+    /// targets (`privacy`, `planUsage`) remain routable but highlight their
+    /// merged sidebar item.
+    var sidebarItem: SettingsSection {
+      switch self {
+      case .planUsage: return .account
+      case .privacy: return .notifications
+      default: return self
+      }
+    }
+
+    /// Resolve an automation-supplied section name tolerantly (SET-01). The raw values
+    /// are Title Case with spaces ("Plan and Usage"), but `omi-ctl navigate settings
+    /// <section>` sends whatever the caller typed — the documented examples are
+    /// lowercase (`settings rewind`), so a strict `init(rawValue:)` never matched and
+    /// navigation silently stayed on General. Accepts the exact raw value, any
+    /// case/spacing/hyphen/underscore variant of it, or the Swift case name
+    /// (`planUsage`, `floating_bar`, "plan-and-usage", …).
+    nonisolated static func automationMatch(_ raw: String) -> SettingsSection? {
+      if let exact = SettingsSection(rawValue: raw) { return exact }
+      let key = normalizedAutomationKey(raw)
+      guard !key.isEmpty else { return nil }
+      return allCases.first { section in
+        normalizedAutomationKey(section.rawValue) == key
+          || normalizedAutomationKey(String(describing: section)) == key
+      }
+    }
+
+    /// Lowercase and strip everything but letters/digits, so "Plan and Usage",
+    /// "plan_usage", "plan-and-usage", and "planUsage" can meet in one keyspace.
+    private nonisolated static func normalizedAutomationKey(_ value: String) -> String {
+      String(value.unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) })
+        .lowercased()
+    }
   }
 
   enum AdvancedSubsection: String, CaseIterable {
@@ -461,8 +514,24 @@ struct SettingsContentView: View {
     }
   }
 
+  /// Divider header used when two legacy sections are stacked on one merged
+  /// settings page (visually mirrors `advancedCategoryHeader` but lives here so
+  /// routing does not depend on the Sections content files).
+  func mergedSectionHeader(title: String, icon: String) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(OmiColors.accent)
+      Text(title)
+        .scaledFont(size: OmiType.heading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+      Spacer()
+    }
+    .padding(.top, OmiSpacing.lg)
+  }
+
   var body: some View {
-    VStack(spacing: 24) {
+    VStack(spacing: OmiSpacing.xxl) {
       // Section content
       Group {
         switch selectedSection {
@@ -472,13 +541,13 @@ struct SettingsContentView: View {
           rewindSection
         case .transcription:
           transcriptionSection
-        case .notifications:
+        case .notifications, .privacy:
           notificationsSection
-        case .privacy:
+          mergedSectionHeader(title: "Privacy", icon: "lock.shield")
           privacySection
-        case .account:
+        case .account, .planUsage:
           accountSection
-        case .planUsage:
+          mergedSectionHeader(title: "Plan and Usage", icon: "creditcard")
           planUsageSection
         case .aiChat:
           aiChatSection
@@ -496,10 +565,10 @@ struct SettingsContentView: View {
       }
       .id(selectedSection)
       .transition(.opacity)
-      .animation(.easeInOut(duration: 0.15), value: selectedSection)
+      .omiAnimation(.easeInOut(duration: 0.15), value: selectedSection)
     }
     .onAppear {
-      if selectedSection == .aiChat {
+      if AppBuild.isProductionBundle && selectedSection == .aiChat {
         selectedSection = .advanced
       }
       loadBackendSettings()
@@ -524,11 +593,13 @@ struct SettingsContentView: View {
       isTranscribing = newValue
     }
     .onChange(of: selectedSection) { _, newValue in
-      if newValue == .aiChat {
+      if AppBuild.isProductionBundle && newValue == .aiChat {
         selectedSection = .advanced
         return
       }
-      if newValue == .planUsage {
+      if newValue == .planUsage || newValue == .account {
+        // Plan and Usage now renders on the merged "Account & Plan" page, so
+        // entering via either section id must refresh billing state.
         // Refetch everything for the CURRENT account. Without the trial + limiter
         // refresh, switching accounts leaves the previous user's "Trial Ended" /
         // over-limit state painted here (trialMetadata + serverQuota aren't reset

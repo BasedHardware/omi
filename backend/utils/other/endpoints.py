@@ -13,6 +13,7 @@ import redis as redis_pkg
 
 from database.redis_db import check_rate_limit, try_acquire_listen_lock
 from database.users import record_client_device, record_user_platform
+from utils.api_key_families import FIREBASE_FAMILY, wrong_key_family_detail
 from utils.client_device import resolve_client_device
 from utils.byok import extract_byok_from_websocket, set_byok_keys, validate_byok_request, validate_byok_websocket
 from utils.executors import critical_executor, run_blocking
@@ -76,8 +77,12 @@ def get_current_user_uid(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
@@ -129,8 +134,12 @@ def get_current_user_uid_no_byok_validation(
     elif len(str(authorization).split(' ')) != 2:
         raise HTTPException(status_code=401, detail="Invalid authorization token")
 
+    token = authorization.split(' ')[1]
+    key_family_mismatch = wrong_key_family_detail(token, FIREBASE_FAMILY)
+    if key_family_mismatch:
+        raise HTTPException(status_code=401, detail=key_family_mismatch)
+
     try:
-        token = authorization.split(' ')[1]
         uid = verify_token(token)
     except InvalidIdTokenError as e:
         logger.error(e)
@@ -294,6 +303,17 @@ def get_current_user_uid_from_ws_message(message: Dict[str, Any]) -> str:
 
 cached: Dict[str, Any] = {}
 
+# This in-process rate-limit cache is keyed by "{endpoint}:{ip}", so a stream of distinct client IPs
+# would otherwise grow it without bound. Bound the map.
+_MAX_RATE_LIMIT_ENTRIES = 100000
+
+
+def _store_rate_limit(key: str, value: str) -> None:
+    cached[key] = value
+    if len(cached) > _MAX_RATE_LIMIT_ENTRIES:
+        for stale in list(cached)[: len(cached) - _MAX_RATE_LIMIT_ENTRIES]:
+            del cached[stale]
+
 
 def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int, window_seconds: int) -> bool:
     ip = request.client.host if request.client else None
@@ -330,8 +350,8 @@ def rate_limit_custom(endpoint: str, request: Request, requests_per_window: int,
         remaining = requests_per_window - 1
         timestamp = int(time.time())
 
-    # Update the rate limit info in Redis
-    cached[key] = json.dumps({"timestamp": timestamp, "remaining": remaining})
+    # Update the rate limit info in the in-process cache
+    _store_rate_limit(key, json.dumps({"timestamp": timestamp, "remaining": remaining}))
 
     return True
 
@@ -417,7 +437,7 @@ def with_rate_limit(auth_dependency: Callable[..., Any], policy_name: str) -> Ca
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(uid: str = Depends(auth_dependency)) -> str:
-        _enforce_rate_limit(uid, policy_name)
+        await run_blocking(critical_executor, _enforce_rate_limit, uid, policy_name)
         return uid
 
     return dependency
@@ -439,7 +459,8 @@ def with_rate_limit_context(auth_context_dependency: Callable[..., Any], policy_
         raise ValueError(f"Unknown rate limit policy: {policy_name}")
 
     async def dependency(auth_context: Any = Depends(auth_context_dependency)) -> Any:
-        _enforce_rate_limit(rate_limit_key_for_context(auth_context), policy_name, fail_closed=True)
+        key = rate_limit_key_for_context(auth_context)
+        await run_blocking(critical_executor, _enforce_rate_limit, key, policy_name, fail_closed=True)
         return auth_context
 
     return dependency

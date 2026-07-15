@@ -18,6 +18,7 @@ final class BleAudioService: ObservableObject {
     @Published private(set) var isProcessing = false
     @Published private(set) var currentCodec: BleAudioCodec?
     @Published private(set) var audioLevel: Float = 0.0
+    @Published private(set) var isDecodeDegraded = false
 
     // MARK: - Properties
 
@@ -79,6 +80,8 @@ final class BleAudioService: ObservableObject {
 
         // Create processor
         processor = BleAudioProcessor(codec: codec)
+        processor?.delegate = self
+        isDecodeDegraded = false
 
         // Subscribe to decoded PCM data
         processor?.pcmDataPublisher
@@ -259,5 +262,27 @@ extension BleAudioService {
     }
 }
 
-// MARK: - Integration with DeviceProvider
+// MARK: - BleAudioProcessorDelegate
 
+extension BleAudioService: BleAudioProcessor.Delegate {
+    nonisolated func bleAudioProcessor(_ processor: BleAudioProcessor, didDecodeSamples samples: [Int16]) {
+        // PCM delivery uses pcmDataPublisher; delegate path is unused.
+        // Reset the degraded flag on successful decode so it reflects the
+        // current processor state rather than staying sticky.
+        Task { @MainActor [weak self] in
+            guard let self, self.isDecodeDegraded else { return }
+            self.isDecodeDegraded = false
+            self.logger.info("BLE decode recovered — clearing degraded flag")
+        }
+    }
+
+    nonisolated func bleAudioProcessor(_ processor: BleAudioProcessor, didFailWithError error: Error) {
+        Task { @MainActor [weak self] in
+            guard let self else { return }
+            self.isDecodeDegraded = true
+            self.logger.error("BLE decode degraded: \(error.localizedDescription)")
+        }
+    }
+}
+
+// MARK: - Integration with DeviceProvider

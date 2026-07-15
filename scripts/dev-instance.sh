@@ -6,6 +6,8 @@
 # ("Omi Dev"), and run.sh killed *every* backend by process name. This derives a
 # stable, unique "instance" from the current git worktree so each one gets its own
 # ports, its own bundle, and its own pidfile — zero cross-talk, automatically.
+# Pair with desktop/macos/scripts/run-sh-build-lock.sh: build serialization is also
+# per-worktree (never a machine-wide ./run.sh mutex).
 #
 # Exports (an explicit override always wins — set any of these to opt out):
 #   OMI_INSTANCE      stable id (git worktree basename)

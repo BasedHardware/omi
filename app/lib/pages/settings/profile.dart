@@ -361,7 +361,7 @@ class _ProfilePageState extends State<ProfilePage> {
             final enabled = SharedPreferencesUtil().batchModeEnabled;
             Future<void> setEnabled(bool value) async {
               final accepted = await captureProvider.setBatchMode(value);
-              if (!accepted) {
+              if (!accepted && context.mounted) {
                 AppSnackbar.showSnackbarError(context.l10n.transcribeLaterNote);
               }
               if (sheetContext.mounted) {

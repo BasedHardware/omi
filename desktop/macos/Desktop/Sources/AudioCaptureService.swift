@@ -241,20 +241,23 @@ class AudioCaptureService: @unchecked Sendable {
             return
         }
 
-        self.onAudioChunk = onAudioChunk
-        self.onAudioLevel = onAudioLevel
         resetSilentMicWatchdog()
 
         // All CoreAudio HAL calls (AudioObjectGetPropertyData, AudioDeviceStart, etc.) are
         // synchronous IPC to coreaudiod via mach_msg. After wake from sleep the daemon can
         // take seconds to respond, blocking the caller. Dispatch the entire setup to audioQueue,
         // mirroring the pattern already used in stopCapture() and handleConfigurationChange().
+        // The callback assignments live on audioQueue too: the serial queue is the single
+        // owner of all state the HAL IO thread reads (callbacks, converter, formats), so a
+        // stop's deferred clear and a restart's fresh assignment can never interleave.
         try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, Error>) in
             audioQueue.async { [weak self] in
                 guard let self else {
                     continuation.resume()
                     return
                 }
+                self.onAudioChunk = onAudioChunk
+                self.onAudioLevel = onAudioLevel
                 do {
                     try self.startCaptureOnQueue()
                     continuation.resume()
@@ -356,26 +359,44 @@ class AudioCaptureService: @unchecked Sendable {
         deviceID = kAudioObjectUnknown
         isCapturing = false
         isReconfiguring = false
-        onAudioChunk = nil
-        onAudioLevel = nil
-
-        // Clean up converter
-        audioConverter = nil
-        inputFormat = nil
-        targetFormat = nil
-        detectedSampleRate = 0.0
-        smoothedLevel = 0.0
         isTrackingOverrideDevice = false
 
-        // AudioDeviceStop can block waiting for the IO thread — run off main thread
-        if let procID = procID, devID != kAudioObjectUnknown {
-            audioQueue.async {
+        // Do NOT release the state handleAudioInput reads (callbacks, converter,
+        // formats, detectedSampleRate) here: the CoreAudio HAL IO thread can still be
+        // inside handleAudioInput until AudioDeviceStop below returns, and nil-ing
+        // ARC references from the main thread races its reads (torn retain/release →
+        // intermittent crash on stop; detectedSampleRate=0 would divide-by-zero the
+        // resample math). The serial audioQueue quiesces the IOProc first and then
+        // clears; startCapture assigns this state on the same queue, so a stop's
+        // clear and a restart's fresh assignment can never interleave.
+        // AudioDeviceStop can block waiting for the IO thread — run off main thread.
+        audioQueue.async { [weak self] in
+            if let procID = procID, devID != kAudioObjectUnknown {
                 AudioDeviceStop(devID, procID)
                 AudioDeviceDestroyIOProcID(devID, procID)
             }
+            guard let self else { return }
+            self.onAudioChunk = nil
+            self.onAudioLevel = nil
+            self.audioConverter = nil
+            self.inputFormat = nil
+            self.targetFormat = nil
+            self.detectedSampleRate = 0.0
+            self.smoothedLevel = 0.0
         }
 
         log("AudioCapture: Stopped capturing")
+    }
+
+    /// Wait until every CoreAudio stop/destroy operation already enqueued by
+    /// `stopCapture()` has completed. Effective-owner replacement uses this as
+    /// a hard physical boundary before the new owner becomes visible.
+    func waitForPhysicalStop() async {
+        await withCheckedContinuation { continuation in
+            audioQueue.async {
+                continuation.resume()
+            }
+        }
     }
 
     /// Check if currently capturing
@@ -495,6 +516,18 @@ class AudioCaptureService: @unchecked Sendable {
         return status == noErr ? format : nil
     }
 
+    /// Frames a `sourceSampleRate`→`targetSampleRate` conversion of `frameCount` input
+    /// frames produces. Returns 0 when the source rate is unknown (0): dividing by a
+    /// zero rate yields `.infinity`, and `AVAudioFrameCount(.infinity)` traps the
+    /// real-time IOProc thread — reachable when a device reports no rate at start or
+    /// `stopCapture` zeroes `detectedSampleRate` mid-callback. Pure math, unit-testable.
+    static func resampledFrameCapacity(
+        frameCount: AVAudioFrameCount, sourceSampleRate: Double, targetSampleRate: Double
+    ) -> AVAudioFrameCount {
+        guard frameCount > 0, sourceSampleRate > 0, targetSampleRate > 0 else { return 0 }
+        return AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / sourceSampleRate))
+    }
+
     /// Handle incoming audio data from the IOProc callback
     private func handleAudioInput(_ inputData: UnsafePointer<AudioBufferList>?, timestamp: UnsafePointer<AudioTimeStamp>?) {
         guard isCapturing,
@@ -507,6 +540,7 @@ class AudioCaptureService: @unchecked Sendable {
         guard let data = buffer.mData, buffer.mDataByteSize > 0 else { return }
 
         let bytesPerFrame = UInt32(MemoryLayout<Float32>.size) * buffer.mNumberChannels
+        guard bytesPerFrame > 0 else { return }
         let frameCount = buffer.mDataByteSize / bytesPerFrame
         guard frameCount > 0 else { return }
 
@@ -532,8 +566,10 @@ class AudioCaptureService: @unchecked Sendable {
         }
 
         // Convert to target format (16kHz mono)
-        let outputFrameCapacity = AVAudioFrameCount(ceil(Double(frameCount) * targetSampleRate / detectedSampleRate))
-        guard let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else { return }
+        let outputFrameCapacity = Self.resampledFrameCapacity(
+            frameCount: frameCount, sourceSampleRate: detectedSampleRate, targetSampleRate: targetSampleRate)
+        guard outputFrameCapacity > 0,
+              let outputBuffer = AVAudioPCMBuffer(pcmFormat: targetFmt, frameCapacity: outputFrameCapacity) else { return }
 
         var error: NSError?
         var hasConsumedInput = false
@@ -771,6 +807,10 @@ class AudioCaptureService: @unchecked Sendable {
     private static let maxRetries = 3
 
     private func reconfigureAfterChange(retryCount: Int) {
+        guard Self.shouldRunDeferredReconfiguration(
+            isCapturing: isCapturing,
+            isReconfiguring: isReconfiguring
+        ) else { return }
         let newDeviceID: AudioDeviceID
         do {
             newDeviceID = try resolveInputDeviceID()
@@ -848,6 +888,13 @@ class AudioCaptureService: @unchecked Sendable {
 
         log("AudioCapture: Restarted with new configuration")
         isReconfiguring = false
+    }
+
+    nonisolated static func shouldRunDeferredReconfiguration(
+        isCapturing: Bool,
+        isReconfiguring: Bool
+    ) -> Bool {
+        isCapturing && isReconfiguring
     }
 
     private func retryOrGiveUp(retryCount: Int) {

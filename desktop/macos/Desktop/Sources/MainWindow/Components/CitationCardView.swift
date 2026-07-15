@@ -10,22 +10,22 @@ struct CitationCardView: View {
 
     var body: some View {
         Button(action: onTap) {
-            HStack(spacing: 10) {
+            HStack(spacing: OmiSpacing.sm) {
                 // Emoji or icon
                 Text(citation.emoji ?? "📝")
-                    .scaledFont(size: 16)
+                    .scaledFont(size: OmiType.subheading)
                     .frame(width: 24, height: 24)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     // Title
                     Text(citation.title)
-                        .scaledFont(size: 12, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
                         .lineLimit(1)
 
                     // Preview
                     Text(citation.preview)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textSecondary)
                         .lineLimit(1)
                 }
@@ -34,17 +34,17 @@ struct CitationCardView: View {
 
                 // Chevron
                 Image(systemName: "chevron.right")
-                    .scaledFont(size: 10, weight: .medium)
+                    .scaledFont(size: OmiType.micro, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 8)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundSecondary)
             )
             .overlay(
-                RoundedRectangle(cornerRadius: 8)
+                RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
                     .stroke(OmiColors.backgroundTertiary, lineWidth: 1)
             )
         }
@@ -59,17 +59,17 @@ struct CitationCardsView: View {
     let onCitationTap: (Citation) -> Void
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
+        VStack(alignment: .leading, spacing: OmiSpacing.xs) {
             // Section header
-            HStack(spacing: 4) {
+            HStack(spacing: OmiSpacing.xxs) {
                 Image(systemName: "quote.opening")
-                    .scaledFont(size: 10)
+                    .scaledFont(size: OmiType.micro)
                     .foregroundColor(OmiColors.textTertiary)
                 Text("Sources")
-                    .scaledFont(size: 11, weight: .medium)
+                    .scaledFont(size: OmiType.caption, weight: .medium)
                     .foregroundColor(OmiColors.textTertiary)
             }
-            .padding(.top, 4)
+            .padding(.top, OmiSpacing.xxs)
 
             // Citation cards
             ForEach(citations) { citation in

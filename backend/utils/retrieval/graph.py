@@ -21,6 +21,7 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
+from utils.executors import run_blocking, llm_executor
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
 import logging
@@ -33,14 +34,17 @@ logger = logging.getLogger(__name__)
 # ---------------------------------------------------------------------------
 
 
-def _has_file_context(last_message: Optional[Message], chat_session: Optional[ChatSession]) -> bool:
+async def _has_file_context(last_message: Optional[Message], chat_session: Optional[ChatSession]) -> bool:
     """Check if the request involves file attachments."""
     if last_message and last_message.files_id and len(last_message.files_id) > 0:
         return chat_session is not None
 
     if chat_session and chat_session.file_ids and len(chat_session.file_ids) > 0:
         question = last_message.text if last_message else ""
-        if question and retrieve_is_file_question(question):
+        # retrieve_is_file_question runs a synchronous ~1-2s LLM inference; offload it so it
+        # doesn't block the event loop while execute_chat_stream's async generator is driven
+        # on the loop by StreamingResponse.
+        if question and await run_blocking(llm_executor, retrieve_is_file_question, question):
             return True
 
     return False
@@ -247,7 +251,7 @@ async def execute_chat_stream(
 
     # 2. File attachments
     last_msg = messages[-1] if messages else None
-    if chat_session is not None and _has_file_context(last_msg, chat_session):
+    if chat_session is not None and await _has_file_context(last_msg, chat_session):
         async for chunk in _execute_file_chat_stream(uid, messages, chat_session, callback_data):
             yield chunk
         return

@@ -43,6 +43,12 @@ Never run `flutterfire configure` — it overwrites prod credentials. Config fil
 - iOS: `ios/Runner/PhoneCallsPlugin.swift`
 - Methods: initialize, makeCall, endCall, toggleMute, toggleSpeaker
 
+### Pigeon (Phone Mic — iOS conversation capture)
+- Contract: `lib/phone_mic_interface.dart` → `lib/gen/phone_mic_pigeon.g.dart` + `ios/Runner/PhoneMic/PhoneMicPigeon.g.swift`
+- Regenerate: `dart run pigeon --input lib/phone_mic_interface.dart`
+- iOS module: `ios/Runner/PhoneMic/` — self-healing AVAudioEngine capture (interruptions/route changes recover natively; Dart only mirrors state)
+- Dart service: `lib/services/mic/native_mic_recorder_service.dart` behind `ServiceManager.phoneMic`; chat memos/speech profile/Android stay on flutter_sound via `ServiceManager.mic`; `MicArbiter` prevents the two stacks contending
+
 ## Permission Matrix
 
 | Permission | Android | iOS | Feature |
@@ -74,6 +80,8 @@ flutter test test/unit/  # specific directory
 ```
 
 `bash test.sh` bootstraps missing local generated files with an empty `API_BASE_URL` so `test/` stays hermetic.
+
+PR CI runs `flutter test` and an analyzer ratchet (`app/scripts/analyze_ratchet.sh`) — analyzer errors always fail; new info/warning lint occurrences above `app/analysis_baseline.json` fail. Run the script locally before committing app Dart changes. Deliberate lint acceptances/improvements update the baseline via `--update-baseline` in the same PR.
 
 ### Test Patterns
 - Mock singletons (SharedPreferencesUtil, AuthService, FirebaseAuth) since they aren't injectable
@@ -123,4 +131,21 @@ All API requests include: X-Request-Start-Time, X-App-Platform, X-Device-Id-Hash
 
 - See `e2e/SKILL.md` for navigation architecture, screen map, widget patterns, and 34 reference flows
 - See `e2e/flows/*.yaml` for individual flow definitions
-- agent-flutter (Marionette) for programmatic UI interaction — see root AGENTS.md for setup
+
+## Verifying UI Changes (agent-flutter)
+
+After any Flutter UI edit, verify programmatically with [agent-flutter](https://github.com/beastoin/agent-flutter) (Marionette is integrated in debug builds). Install once: `npm install -g agent-flutter-cli`.
+
+Edit → Verify → Evidence loop:
+1. Edit code, hot restart: `kill -SIGUSR2 $(pgrep -f "flutter run" | head -1)`
+2. Connect: `AGENT_FLUTTER_LOG=/tmp/flutter-run.log agent-flutter connect`
+3. Verify: `agent-flutter snapshot -i`
+4. Interact: `agent-flutter press @e3` / `press 540 1200` / `find type button press` / `fill @e5 "text"` / `dismiss`
+5. Evidence: `agent-flutter screenshot /tmp/evidence.png`
+
+Key rules:
+- Must reconnect after every hot restart (kills VM Service session).
+- Refs go stale frequently — always re-snapshot before every interaction. Use `press x y` as fallback.
+- `AGENT_FLUTTER_LOG` must point to flutter run stdout (not logcat).
+- Prefer `find type X` / `find key "name"` over hardcoded `@ref`. Add `Key('descriptive_name')` to new interactive widgets.
+- Full command reference: `agent-flutter schema`.

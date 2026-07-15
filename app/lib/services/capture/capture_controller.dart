@@ -28,7 +28,6 @@ import 'package:omi/backend/schema/structured.dart';
 import 'package:omi/backend/schema/transcript_segment.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/custom_stt_config.dart';
-import 'package:omi/models/stt_provider.dart';
 import 'package:omi/providers/device_onboarding_provider.dart';
 import 'package:omi/services/capture/capture_external_actions.dart';
 import 'package:omi/services/capture/capture_metrics_tracker.dart';
@@ -115,6 +114,8 @@ class CaptureController extends ChangeNotifier
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+  MessageServiceStatusEvent? _terminalTranscriptionFailure;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
@@ -153,48 +154,24 @@ class CaptureController extends ChangeNotifier
     _connectionStateListener = ConnectivityService().onConnectionChange.listen((bool isConnected) {
       onConnectionStateChanged(isConnected);
     });
-    _startAudioInterruptionListener();
     BleBridge.instance.addBatchRecordingFinalizedListener(_onOfflineRecordingFinalized);
   }
 
-  // iOS phone-call interruption events from AudioInterruptionManager.swift.
-  StreamSubscription? _audioInterruptionSubscription;
-  static const EventChannel _audioInterruptionChannel = EventChannel('com.omi.ios/audioInterruption');
-  static const MethodChannel _audioSessionChannel = MethodChannel('com.omi.ios/audioSession');
+  // True while the audio session is interrupted (phone call, Siri, alarm).
+  // On iOS the native recorder detects and recovers interruptions itself and
+  // reports them via onInterruption; Dart only mirrors the state so the UI and
+  // the socket keepalive stay in sync — it never restarts capture for them.
+  bool _micInterrupted = false;
 
-  void _startAudioInterruptionListener() {
-    if (!Platform.isIOS) return;
-    _audioInterruptionSubscription?.cancel();
-    _audioInterruptionSubscription = _audioInterruptionChannel.receiveBroadcastStream().listen(
-      (dynamic event) {
-        if (event is! Map) return;
-        final type = event['type'];
-        if (type == 'began') {
-          _onAudioInterruptionBegan();
-        } else if (type == 'ended') {
-          _onAudioInterruptionEnded();
-        }
-      },
-      onError: (Object err) {
-        Logger.error('[CaptureProvider] audioInterruption channel error: $err');
-      },
-    );
-  }
-
-  // True while a phone call is active; suppresses mic restarts until .ended fires.
-  bool _callActive = false;
-
-  void _onAudioInterruptionBegan() {
+  void _onMicInterruption(bool began) {
     if (_activeSource is! PhoneMicSource) return;
-    _callActive = true;
-    ServiceManager.instance().mic.stop();
-    updateRecordingState(RecordingState.interrupted);
-  }
-
-  void _onAudioInterruptionEnded() {
-    if (_activeSource is! PhoneMicSource) return;
-    _callActive = false;
-    _restartPhoneMicRecording();
+    _micInterrupted = began;
+    if (began) {
+      updateRecordingState(RecordingState.interrupted);
+    }
+    // On end, native capture has already resumed; onRecording restores
+    // RecordingState.record once frames flow again.
+    notifyListeners();
   }
 
   bool _phoneMicRestartInFlight = false;
@@ -203,19 +180,15 @@ class CaptureController extends ChangeNotifier
     if (_phoneMicRestartInFlight) return;
     _phoneMicRestartInFlight = true;
     try {
-      ServiceManager.instance().mic.stop();
-      // Re-assert interrupted so the IPC 'stopped' response doesn't overwrite it.
+      ServiceManager.instance().phoneMic.stop();
+      // Re-assert interrupted so the recorder's stop callback doesn't overwrite it.
       updateRecordingState(RecordingState.interrupted);
-      await Future.delayed(const Duration(milliseconds: 250));
+      if (!Platform.isIOS) {
+        // flutter_sound needs a beat to finish native teardown before restart.
+        await Future.delayed(const Duration(milliseconds: 250));
+      }
       // _activeSource is cleared if the user manually stopped — bail in that case.
       if (_activeSource is! PhoneMicSource) return;
-      if (Platform.isIOS) {
-        try {
-          await _audioSessionChannel.invokeMethod<bool>('reactivate');
-        } catch (e) {
-          Logger.error('[CaptureProvider] reactivate audio session failed: $e');
-        }
-      }
       // Use _resumeMicRecording (not streamRecording) to preserve existing socket/segments.
       await _resumeMicRecording();
     } catch (e, st) {
@@ -230,7 +203,7 @@ class CaptureController extends ChangeNotifier
     updateRecordingState(RecordingState.initialising);
     _activeSource = PhoneMicSource();
     _phoneMicWalActive = true;
-    await ServiceManager.instance().mic.start(
+    await ServiceManager.instance().phoneMic.start(
           onByteReceived: (bytes) {
             final frames = _activeSource?.processBytes(bytes) ?? [];
             for (final frame in frames) {
@@ -245,7 +218,7 @@ class CaptureController extends ChangeNotifier
             updateRecordingState(RecordingState.record);
           },
           onStop: () {
-            if (!_callActive) {
+            if (!_micInterrupted) {
               updateRecordingState(RecordingState.stop);
             }
           },
@@ -253,12 +226,13 @@ class CaptureController extends ChangeNotifier
             updateRecordingState(RecordingState.initialising);
           },
           onStalled: _onMicStalled,
+          onInterruption: _onMicInterruption,
         );
   }
 
   void _onMicStalled() {
     if (_activeSource is! PhoneMicSource) return;
-    if (_callActive) return; // silence during a call is expected
+    if (_micInterrupted) return; // silence during an interruption is expected
     if (recordingState == RecordingState.record ||
         recordingState == RecordingState.initialising ||
         recordingState == RecordingState.stop) {
@@ -271,14 +245,6 @@ class CaptureController extends ChangeNotifier
 
   void updateExternalActions(CaptureExternalActions? actions) {
     externalActions = actions ?? const NoopCaptureExternalActions();
-
-    // Run orphan recovery once after providers are wired up and WAL service is initialized.
-    // Uses Future.delayed to let the WAL service finish loading wals.json from disk.
-    if (!_orphanRecoveryDone) {
-      _orphanRecoveryDone = true;
-      Future.delayed(const Duration(seconds: 5), () => recoverOrphanedWals());
-    }
-
     notifyListeners();
   }
 
@@ -305,6 +271,8 @@ class CaptureController extends ChangeNotifier
         return 'apple_watch';
       case DeviceType.limitless:
         return 'limitless';
+      case DeviceType.raybanMeta:
+        return 'rayban_meta';
     }
   }
 
@@ -376,8 +344,6 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  bool _orphanRecoveryDone = false;
-
   /// Preserved session start for auto-sync after socket-driven conversation completion.
   /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
   int _pendingAutoSyncSessionStart = 0;
@@ -388,8 +354,8 @@ class CaptureController extends ChangeNotifier
   /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
   String? _pendingAutoSyncConversationId;
 
-  /// Future tracking the in-progress _finalizeAndStampSession(), so _autoSyncSessionWals()
-  /// can await it before querying disk WALs. Prevents race when backend responds fast.
+  /// Future tracking the in-progress _finalizeAndStampSession(), so the next
+  /// coordinated transfer wake cannot run before the durable stamp is ready.
   Future<void>? _pendingFinalizeAndStamp;
 
   /// Set in onClosed() when the socket drops during active device recording.
@@ -438,7 +404,7 @@ class CaptureController extends ChangeNotifier
 
   bool _isPaused = false;
   bool get isPaused => _isPaused;
-  bool get isCallActive => _callActive;
+  bool get isCallActive => _micInterrupted;
 
   // Flag to star the conversation when it ends
   bool _starOngoingConversation = false;
@@ -1127,6 +1093,9 @@ class CaptureController extends ChangeNotifier
       case DeviceType.bee:
       case DeviceType.fieldy:
       case DeviceType.plaud:
+      // Ray-Ban Meta audio is bridged from the platform HFP route, so there is
+      // no native BLE GATT target; capture runs on the foreground Dart path.
+      case DeviceType.raybanMeta:
         return null;
     }
   }
@@ -1275,6 +1244,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     _transcriptionServiceStatuses = [];
+    _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     taggingSegmentIds = [];
     notifyListeners();
@@ -1324,7 +1294,6 @@ class CaptureController extends ChangeNotifier
     _keepAliveTimer?.cancel();
     _inProgressConversationRefreshTimer?.cancel();
     _connectionStateListener?.cancel();
-    _audioInterruptionSubscription?.cancel();
     _metrics.dispose();
     _autoSyncFallbackTimer?.cancel();
     _peopleRefreshFuture = null; // Clear in-flight tracker
@@ -1369,7 +1338,12 @@ class CaptureController extends ChangeNotifier
 
   streamRecording() async {
     updateRecordingState(RecordingState.initialising);
-    await Permission.microphone.request();
+    final micPermission = await Permission.microphone.request();
+    if (!micPermission.isGranted) {
+      Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic');
+      updateRecordingState(RecordingState.stop);
+      return;
+    }
 
     // Send current location when conversation starts
     _sendCurrentGeolocation();
@@ -1385,33 +1359,44 @@ class CaptureController extends ChangeNotifier
     setIsWalSupported(true);
 
     // record
-    await ServiceManager.instance().mic.start(
-          onByteReceived: (bytes) {
-            // Process through AudioSource for frame splitting and sync key generation
-            final frames = _activeSource?.processBytes(bytes) ?? [];
+    try {
+      await ServiceManager.instance().phoneMic.start(
+            onByteReceived: (bytes) {
+              // Process through AudioSource for frame splitting and sync key generation
+              final frames = _activeSource?.processBytes(bytes) ?? [];
 
-            for (final frame in frames) {
-              _wal.getSyncs().phone.onFrameCaptured(frame);
+              for (final frame in frames) {
+                _wal.getSyncs().phone.onFrameCaptured(frame);
 
-              if (_socket?.state == SocketServiceState.connected) {
-                _socket?.send(frame.payload);
-                _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+                if (_socket?.state == SocketServiceState.connected) {
+                  _socket?.send(frame.payload);
+                  _wal.getSyncs().phone.markFrameSynced(frame.syncKey);
+                }
               }
-            }
-          },
-          onRecording: () {
-            updateRecordingState(RecordingState.record);
-          },
-          onStop: () {
-            if (!_callActive) {
-              updateRecordingState(RecordingState.stop);
-            }
-          },
-          onInitializing: () {
-            updateRecordingState(RecordingState.initialising);
-          },
-          onStalled: _onMicStalled,
-        );
+            },
+            onRecording: () {
+              updateRecordingState(RecordingState.record);
+            },
+            onStop: () {
+              if (!_micInterrupted) {
+                updateRecordingState(RecordingState.stop);
+              }
+            },
+            onInitializing: () {
+              updateRecordingState(RecordingState.initialising);
+            },
+            onStalled: _onMicStalled,
+            onInterruption: _onMicInterruption,
+          );
+    } catch (e, st) {
+      // Typed native failures (permission_denied, engine_start_failed, ...) or
+      // mic contention — fail visibly instead of recording silence.
+      Logger.error('[CaptureProvider] phone mic start failed: $e\n$st');
+      _activeSource = null;
+      _phoneMicWalActive = false;
+      updateRecordingState(RecordingState.stop);
+      await _socket?.stop(reason: 'phone mic start failed');
+    }
   }
 
   stopStreamRecording() async {
@@ -1428,7 +1413,8 @@ class CaptureController extends ChangeNotifier
       _phoneMicWalActive = false;
     }
     await _cleanupCurrentState(disableNativeBackground: true);
-    ServiceManager.instance().mic.stop();
+    _micInterrupted = false;
+    ServiceManager.instance().phoneMic.stop();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
   }
@@ -1548,7 +1534,7 @@ class CaptureController extends ChangeNotifier
   void onConnected() {
     _transcriptServiceReady = true;
     // Restart mic on reconnect if interrupted (skip during active call).
-    if (recordingState == RecordingState.interrupted && !_callActive) {
+    if (recordingState == RecordingState.interrupted && !_micInterrupted) {
       if (_activeSource is PhoneMicSource) {
         _restartPhoneMicRecording();
       } else {
@@ -1690,7 +1676,7 @@ class CaptureController extends ChangeNotifier
       _pendingAutoSyncConversationId = event.memory.id;
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so _autoSyncSessionWals() can await it before querying disk WALs.
+      // Store the future so the coordinated transfer wake waits for the stamp.
       _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
 
       _resetStateVariables();
@@ -1699,12 +1685,11 @@ class CaptureController extends ChangeNotifier
       _autoSyncFallbackTimer?.cancel();
       _autoSyncFallbackTimer = Timer(const Duration(seconds: 30), () {
         if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
-          final sessionStart = _pendingAutoSyncSessionStart;
           final convId = _pendingAutoSyncConversationId!;
           _pendingAutoSyncSessionStart = 0;
           _pendingAutoSyncConversationId = null;
           Logger.debug('Auto-sync fallback timer fired — syncing WALs to conversation $convId');
-          _autoSyncSessionWals(sessionStart, convId);
+          _autoSyncSessionWals();
         }
       });
       return;
@@ -1716,10 +1701,9 @@ class CaptureController extends ChangeNotifier
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
       if (_pendingAutoSyncSessionStart > 0) {
-        final sessionStart = _pendingAutoSyncSessionStart;
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
-        _autoSyncSessionWals(sessionStart, event.memory.id);
+        _autoSyncSessionWals();
       }
       return;
     }
@@ -1751,6 +1735,15 @@ class CaptureController extends ChangeNotifier
         final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({'status_text': event.statusText});
         _handleFreemiumThresholdReached(thresholdEvent);
         return;
+      }
+
+      // The backend sends stt_failed immediately before it closes the socket.
+      // Keep this terminal state separate from the connection-scoped status
+      // list so the user can see the outage while the reconnect loop runs.
+      if (event.status == 'stt_failed') {
+        _terminalTranscriptionFailure = event;
+      } else if (event.status == 'ready') {
+        _terminalTranscriptionFailure = null;
       }
 
       _transcriptionServiceStatuses.add(event);
@@ -1819,7 +1812,7 @@ class CaptureController extends ChangeNotifier
       // Stamp WALs with conversation ID and auto-sync
       if (sessionStart > 0 && result.conversation != null) {
         await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
-        _autoSyncSessionWals(sessionStart, result.conversation!.id);
+        _autoSyncSessionWals();
       }
     });
 
@@ -1840,140 +1833,15 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
-    // Third-party STT users opt out of auto-sync: offline files can only be
-    // transcribed on Omi's servers (counting toward their limit), not on their
-    // own provider. They sync manually with an explicit confirmation instead.
-    if (SharedPreferencesUtil().useCustomStt) {
-      Logger.debug('Auto-sync skipped: custom STT provider enabled');
-      return;
-    }
-    // Omi users can opt out of auto-sync from device settings; they back up
-    // manually instead. Defaults to on.
-    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
-      Logger.debug('Auto-sync skipped: disabled by user');
-      return;
-    }
+  Future<void> _autoSyncSessionWals() async {
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
     }
-    final phoneSync = _wal.getSyncs().phone;
-    final unsyncedWals = phoneSync.getSessionUnsyncedWals(sessionStartSeconds);
-    if (unsyncedWals.isEmpty) return;
-
-    Logger.debug('Auto-syncing ${unsyncedWals.length} session WALs to conversation $conversationId');
-    for (final wal in unsyncedWals) {
-      await _syncSingleWal(wal, conversationId, phoneSync);
-    }
-  }
-
-  /// Sync a single WAL to a conversation with retry and backoff.
-  /// Retries up to 3 times with exponential delays (5s, 10s, 20s).
-  /// Network/transient errors (SocketException, no connectivity) do NOT increment retryCount.
-  Future<void> _syncSingleWal(Wal wal, String conversationId, LocalWalSyncImpl phoneSync) async {
-    if (wal.filePath == null) {
-      Logger.debug('Auto-sync WAL ${wal.id}: no filePath, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-    final fullPath = await Wal.getFilePath(wal.filePath);
-    if (fullPath == null) {
-      Logger.debug('Auto-sync WAL ${wal.id}: path resolution failed, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-    final file = File(fullPath);
-    if (!file.existsSync()) {
-      Logger.debug('Auto-sync WAL ${wal.id}: file missing, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-
-    if (!_isConnected) {
-      Logger.debug('Auto-sync WAL ${wal.id}: offline, will retry later');
-      return;
-    }
-
-    // Honor an active fair-use cooldown: don't fire uploads that will just be
-    // 429'd, which amplifies the throttle and mislabels recordings as failed.
-    if (SyncRateLimiter.instance.isLimited) {
-      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
-      return;
-    }
-
-    // Upload only — no poll-to-terminal, no in-method retry loop. On 202 the
-    // WAL becomes `uploaded` and the SyncReconciler resolves the job out of
-    // band; on real failure we bump retryCount so orphan recovery / the next
-    // sync retries (the local file is retained until confirmed synced).
-    try {
-      final result = await uploadLocalFilesV2([file], conversationId: conversationId);
-      SyncRateLimiter.instance.clear();
-      if (result.completed != null) {
-        // 200 fast-path: server already produced the result.
-        await phoneSync.markWalSyncedAndPersist(wal);
-      } else {
-        wal.status = WalStatus.uploaded;
-        wal.jobId = result.jobId;
-        wal.uploadedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        await phoneSync.persistRetryMetadata(wal); // persists the WAL list
-        SyncReconciler.instance.poke();
-      }
-    } on SyncRateLimitedException catch (e) {
-      // Fair-use throttle — pause uploads, do NOT bump retryCount (it's not a
-      // content failure). The WAL stays `miss`/'waiting' and syncs once the
-      // cooldown clears.
-      SyncRateLimiter.instance.markLimited(retryAfterSeconds: e.retryAfterSeconds);
-      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
-    } on SocketException {
-      Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
-    } catch (e) {
-      wal.retryCount = wal.retryCount + 1;
-      wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await phoneSync.persistRetryMetadata(wal);
-      Logger.debug('Auto-sync WAL ${wal.id} upload failed (retryCount=${wal.retryCount}): $e');
-    }
-  }
-
-  /// Recover orphaned WALs on startup. Called once after providers are initialized.
-  /// Finds WALs with conversationId set but status still miss, and syncs them.
-  /// Skips recovery if offline — retryCount is not incremented for transient failures.
-  Future<void> recoverOrphanedWals() async {
-    // Custom STT users never auto-sync (offline files would use Omi STT + count
-    // toward their limit). They back up manually with explicit confirmation.
-    if (SharedPreferencesUtil().useCustomStt) {
-      Logger.debug('Orphan WAL recovery skipped: custom STT provider enabled');
-      return;
-    }
-    // Honor the user's auto-sync opt-out (device settings). Defaults to on.
-    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
-      Logger.debug('Orphan WAL recovery skipped: auto-sync disabled by user');
-      return;
-    }
-    if (!_isConnected) {
-      Logger.debug('Startup recovery: offline, skipping orphan WAL sync');
-      _orphanRecoveryDone = false; // Allow retry on next external action update.
-      return;
-    }
-    final phoneSync = _wal.getSyncs().phone;
-    await phoneSync.walReady; // Wait for WALs to be loaded from disk
-    final orphaned = phoneSync.getOrphanedWals();
-    if (orphaned.isEmpty) return;
-
-    Logger.debug('Startup recovery: found ${orphaned.length} orphaned WALs to sync');
-    for (final wal in orphaned) {
-      await _syncSingleWal(wal, wal.conversationId!, phoneSync);
-    }
-    // Check if any orphaned WALs remain (e.g., transient SocketException while "online").
-    // If so, allow onConnectionStateChanged to re-trigger recovery on next transition.
-    final remaining = phoneSync.getOrphanedWals();
-    if (remaining.isNotEmpty) {
-      _orphanRecoveryDone = false;
-    }
+    // The stamped conversation id stays on the WAL; the single transfer owner
+    // will reconcile first and then offer retryable bytes through `syncAll`.
+    await RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed);
   }
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
@@ -2181,11 +2049,6 @@ class CaptureController extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
-    // When coming back online, retry orphan recovery if it was skipped due to being offline
-    if (isConnected && !_orphanRecoveryDone) {
-      _orphanRecoveryDone = true;
-      recoverOrphanedWals();
-    }
     notifyListeners();
   }
 

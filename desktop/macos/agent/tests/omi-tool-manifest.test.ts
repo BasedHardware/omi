@@ -9,6 +9,16 @@ import {
 } from "../src/runtime/omi-tool-manifest.js";
 
 describe("omi tool manifest", () => {
+  it("projects agent-management tools out of leaf worker contexts", () => {
+    for (const adapterId of ["pi-mono", "omi-tools-stdio"] as const) {
+      const names = toolNamesForAdapter(adapterId, { executionRole: "leaf", screenContext: true });
+      expect(names).not.toContain("spawn_agent");
+      expect(names).not.toContain("spawn_background_agent");
+      expect(names).not.toContain("run_agent_and_wait");
+      expect(names).not.toContain("send_agent_message");
+    }
+  });
+
   it("has unique canonical names", () => {
     const names = omiToolManifest.map((tool) => tool.name);
     expect(new Set(names).size).toBe(names.length);
@@ -31,6 +41,8 @@ describe("omi tool manifest", () => {
       "create_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_agent",
@@ -49,8 +61,30 @@ describe("omi tool manifest", () => {
       "create_action_item",
       "update_action_item",
       "capture_screen",
+      "check_permission_status",
+      "request_permission",
+      "screenshot",
+      "get_work_context",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("keeps the realtime screenshot executor capability-registered", () => {
+    const screenshot = toolsForAdapter("pi-mono").find((tool) => tool.name === "screenshot");
+
+    expect(screenshot?.surfaces).toEqual(["realtime_voice"]);
+    expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
+  });
+
+  it("routes current-screen questions to work context before raw screenshots", () => {
+    const workContext = toolsForAdapter("pi-mono").find((tool) => tool.name === "get_work_context");
+    const captureScreen = toolsForAdapter("pi-mono").find((tool) => tool.name === "capture_screen");
+    const requestPermission = toolsForAdapter("pi-mono").find((tool) => tool.name === "request_permission");
+
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
+    expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
   });
 
   it("keeps spawn_background_agent internal to coordinator RPC only", () => {
@@ -61,6 +95,8 @@ describe("omi tool manifest", () => {
   it("keeps directed provider routing on the canonical spawn_agent schema", () => {
     const spawnAgent = toolsForAdapter("pi-mono").find((tool) => tool.name === "spawn_agent");
 
+    expect(spawnAgent?.inputSchema.required).toEqual(["objective"]);
+    expect(spawnAgent?.inputSchema.properties).not.toHaveProperty("originSurfaceKind");
     expect(spawnAgent?.inputSchema.properties.provider).toMatchObject({
       enum: ["openclaw", "hermes"],
     });
@@ -68,17 +104,35 @@ describe("omi tool manifest", () => {
     expect(spawnAgent?.promptGuidelines?.join("\n")).toContain("provider='hermes'");
   });
 
-  it("projects stdio onboarding-only tools only in onboarding context", () => {
+  it("guides realtime child-result retrieval without exposing internal ids", () => {
+    const list = omiToolManifest.find((tool) => tool.name === "list_agent_sessions");
+    const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
+
+    expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
+    expect(list?.voice?.realtimeDescription).toContain("restrict discovery to status='open'");
+    expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("run.finalText");
+    expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");
+  });
+
+  it("keeps permission tools available to main stdio while onboarding-only tools remain scoped", () => {
     const regular = new Set(toolNamesForAdapter("omi-tools-stdio"));
     const onboarding = new Set(toolNamesForAdapter("omi-tools-stdio", { onboarding: true }));
+    const screenContext = new Set(toolNamesForAdapter("omi-tools-stdio", { screenContext: true }));
 
-    expect(regular.has("request_permission")).toBe(false);
+    expect(regular.has("request_permission")).toBe(true);
+    expect(regular.has("check_permission_status")).toBe(true);
     expect(regular.has("get_email_insights")).toBe(false);
     expect(regular.has("capture_screen")).toBe(false);
     expect(regular.has("get_work_context")).toBe(false);
     expect(onboarding.has("request_permission")).toBe(true);
+    expect(onboarding.has("check_permission_status")).toBe(true);
     expect(onboarding.has("get_email_insights")).toBe(true);
     expect(onboarding.has("capture_screen")).toBe(false);
+    expect(screenContext.has("request_permission")).toBe(true);
+    expect(screenContext.has("check_permission_status")).toBe(true);
+    expect(screenContext.has("get_work_context")).toBe(true);
+    expect(screenContext.has("capture_screen")).toBe(true);
   });
 
   it("emits MCP tool definitions from the same projection", () => {
@@ -103,20 +157,21 @@ describe("omi tool manifest", () => {
     expect(askFollowup?.inputSchema.properties.options).toMatchObject({ type: "array" });
     expect(askFollowup?.inputSchema.required).toEqual(["question", "options"]);
     expect(requestPermission?.inputSchema.properties.type).toMatchObject({
-      enum: ["screen_recording", "microphone", "accessibility", "automation", "full_disk_access"],
+      enum: ["screen_recording", "microphone", "notifications", "accessibility", "automation", "full_disk_access"],
     });
   });
 
-  it("preserves control-tool schema preconditions in MCP projections", () => {
+  it("keeps control-tool cross-field preconditions in runtime validation instead of MCP schemas", () => {
     const tools = mcpToolDefinitionsForAdapter("omi-tools-stdio");
     const inspectArtifacts = tools.find((tool) => tool.name === "inspect_agent_artifacts");
 
-    expect(inspectArtifacts?.inputSchema.anyOf).toEqual([
-      { required: ["artifactId"] },
-      { required: ["sessionId"] },
-      { required: ["runId"] },
-      { required: ["attemptId"] },
-    ]);
+    expect(inspectArtifacts?.inputSchema).toMatchObject({
+      type: "object",
+      required: [],
+    });
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("anyOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("oneOf");
+    expect(inspectArtifacts?.inputSchema).not.toHaveProperty("allOf");
   });
 
   it("keeps MCP-only schema options from overriding base tool schema fields", () => {
@@ -151,7 +206,7 @@ describe("omi tool manifest", () => {
     expect(snapshot.advertisedToolCount).toBe(toolNamesForAdapter("pi-mono").length);
     expect(snapshot.advertisedToolNames).toEqual(toolNamesForAdapter("pi-mono"));
     expect(snapshot.aliases["mcp__omi-tools__execute_sql"]).toBe("execute_sql");
-    expect(snapshot.disabled.some((tool) => tool.name === "request_permission")).toBe(true);
+    expect(snapshot.disabled.some((tool) => tool.name === "get_email_insights")).toBe(true);
   });
 
   it("requires surfaces and capabilityDoc on every manifest entry", () => {

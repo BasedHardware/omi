@@ -68,35 +68,43 @@ extension AppState {
 
     // Persist segments to DB for crash safety (upsert by backend segment ID)
     if let sessionId = currentSessionId {
+      let segmentsToPersist = segments
       Task {
-        for segment in segments {
-          guard !segment.text.isEmpty else { continue }
-          let speakerId = segment.speaker_id ?? 0
-          var translationsJson: String?
-          if let translations = segment.translations, !translations.isEmpty {
-            let mapped = translations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
-            if let data = try? JSONEncoder().encode(mapped) {
-              translationsJson = String(data: data, encoding: .utf8)
-            }
-          }
-          do {
-            try await TranscriptionStorage.shared.upsertSegment(
-              sessionId: sessionId,
-              backendSegmentId: segment.id,
-              speaker: speakerId,
-              text: segment.text,
-              startTime: segment.start,
-              endTime: segment.end,
-              isUser: segment.is_user,
-              personId: segment.person_id,
-              speakerLabel: segment.speaker,
-              translationsJson: translationsJson
-            )
-          } catch {
-            logError("Transcription: Failed to persist segment to DB", error: error)
-            await RewindDatabase.shared.reportQueryError(error)
-          }
+        await persistBackendSegmentsToStorage(segmentsToPersist, sessionId: sessionId)
+      }
+    }
+  }
+
+  func persistBackendSegmentsToStorage(
+    _ segments: [TranscriptionService.BackendSegment],
+    sessionId: Int64
+  ) async {
+    for segment in segments {
+      guard !segment.text.isEmpty else { continue }
+      let speakerId = segment.speaker_id ?? 0
+      var translationsJson: String?
+      if let translations = segment.translations, !translations.isEmpty {
+        let mapped = translations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
+        if let data = try? JSONEncoder().encode(mapped) {
+          translationsJson = String(data: data, encoding: .utf8)
         }
+      }
+      do {
+        try await TranscriptionStorage.shared.upsertSegment(
+          sessionId: sessionId,
+          backendSegmentId: segment.id,
+          speaker: speakerId,
+          text: segment.text,
+          startTime: segment.start,
+          endTime: segment.end,
+          isUser: segment.is_user,
+          personId: segment.person_id,
+          speakerLabel: segment.speaker,
+          translationsJson: translationsJson
+        )
+      } catch {
+        logError("Transcription: Failed to persist segment to DB", error: error)
+        await RewindDatabase.shared.reportQueryError(error)
       }
     }
   }
@@ -104,6 +112,7 @@ extension AppState {
   func bindActiveSessionToBackendConversation(_ backendId: String) {
     guard DesktopConversationMatchPolicy.shouldBindConversationSession(
       incomingBackendId: backendId,
+      expectedBackendId: currentClientConversationId,
       activeBackendId: currentBackendConversationId,
       ignoredRotatedBackendIds: ignoredRotatedBackendConversationIds
     ) else {
@@ -111,7 +120,7 @@ extension AppState {
       if let currentBackendConversationId, currentBackendConversationId != backendId {
         ignoredRotatedBackendConversationIds.insert(backendId)
       }
-      log("Transcription: Ignoring rotated backend conversation id \(backendId) for fresh local session")
+      log("Transcription: Ignoring non-matching backend conversation id \(backendId) for current local session")
       return
     }
 
@@ -134,16 +143,65 @@ extension AppState {
     }
   }
 
+  /// Reject out-of-order versioned lifecycle events before they can mutate UI
+  /// or local-session display state. Events without the additive envelope keep
+  /// the established legacy identity/timestamp compatibility behavior.
+  func acceptsLifecycleEnvelope(
+    _ event: TranscriptionService.ListenEvent,
+    conversationId: String,
+    expectedLifecyclePhase: String,
+    expectedBackendId: String?
+  ) -> Bool {
+    let recordingSessionId = event.raw["recording_session_id"] as? String
+    let lifecycleVersion = event.raw["lifecycle_version"] as? Int
+    let lifecyclePhase = event.raw["lifecycle_phase"] as? String
+    let lifecycleSequence = event.raw["lifecycle_sequence"] as? Int
+    let lastAcceptedSequence = recordingSessionId.flatMap { lifecycleSequenceByRecordingSession[$0] }
+    guard DesktopConversationMatchPolicy.acceptsLifecycleEnvelope(
+      recordingSessionId: recordingSessionId,
+      conversationId: conversationId,
+      lifecycleVersion: lifecycleVersion,
+      lifecyclePhase: lifecyclePhase,
+      lifecycleSequence: lifecycleSequence,
+      expectedLifecyclePhase: expectedLifecyclePhase,
+      expectedBackendId: expectedBackendId,
+      lastAcceptedSequence: lastAcceptedSequence
+    ) else {
+      log("Transcription: Ignoring stale or misbound versioned lifecycle event for \(conversationId)")
+      return false
+    }
+    if let recordingSessionId, let lifecycleSequence {
+      lifecycleSequenceByRecordingSession[recordingSessionId] = lifecycleSequence
+    }
+    return true
+  }
+
   /// Handle message events from Python backend `/v4/listen`
   func handleListenEvent(_ event: TranscriptionService.ListenEvent) {
     switch event.type {
     case "service_status":
       let status = event.raw["status"] as? String ?? "unknown"
+      if status == "stt_failed" {
+        // The socket is closed immediately after this status. Keep a
+        // user-visible truth state through reconnects; only a subsequent
+        // ready status proves that live transcription recovered.
+        transcriptionServiceError = "Transcription unavailable"
+      } else if status == "ready" {
+        transcriptionServiceError = nil
+      }
       log("Transcription: Backend service status: \(status)")
 
     case "conversation_session":
       guard let backendId = event.raw["conversation_id"] as? String, !backendId.isEmpty else {
         log("Transcription: Ignoring conversation_session event without conversation_id")
+        break
+      }
+      guard acceptsLifecycleEnvelope(
+        event,
+        conversationId: backendId,
+        expectedLifecyclePhase: "in_progress",
+        expectedBackendId: currentClientConversationId
+      ) else {
         break
       }
       bindActiveSessionToBackendConversation(backendId)
@@ -152,6 +210,26 @@ extension AppState {
       // ConversationEvent: conversation is nested under "memory"
       let memory = event.raw["memory"] as? [String: Any]
       let processingId = memory?["id"] as? String ?? "?"
+      let recordingSessionId = event.raw["recording_session_id"] as? String
+      let conversationId = event.raw["conversation_id"] as? String ?? processingId
+      guard conversationId == processingId,
+            acceptsLifecycleEnvelope(
+              event,
+              conversationId: conversationId,
+              expectedLifecyclePhase: "processing",
+              expectedBackendId: currentClientConversationId
+            )
+      else {
+        break
+      }
+      guard DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+        memoryId: processingId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: currentClientConversationId
+      ) else {
+        log("Transcription: Ignoring stale memory_processing_started \(processingId) for current recording")
+        break
+      }
       log("Transcription: Backend started processing conversation: \(processingId)")
       isSavingConversation = true
 
@@ -159,21 +237,47 @@ extension AppState {
       // ConversationEvent: conversation is nested under "memory"
       let memory = event.raw["memory"] as? [String: Any]
       let memoryId = memory?["id"] as? String ?? "?"
+      let recordingSessionId = event.raw["recording_session_id"] as? String
       log("Transcription: Backend created conversation: \(memoryId)")
-      isSavingConversation = false
 
       // Mark DB session as completed so TranscriptionRetryService won't re-upload.
       // Only bind the session captured before rotation; live events may arrive while
       // the next recording is already active.
       let targetSessionId = finishedSessionId
+      let targetClientConversationId = finishedClientConversationId
       let targetStartTime = finishedRecordingStartTime
       let didBindLocalSession: Bool
+      let conversationId = event.raw["conversation_id"] as? String ?? memoryId
+      guard conversationId == memoryId,
+            acceptsLifecycleEnvelope(
+              event,
+              conversationId: conversationId,
+              expectedLifecyclePhase: "completed",
+              expectedBackendId: targetClientConversationId
+            )
+      else {
+        break
+      }
+      if !DesktopConversationMatchPolicy.lifecycleEventBelongsToRecording(
+        memoryId: memoryId,
+        recordingSessionId: recordingSessionId,
+        expectedBackendId: targetClientConversationId
+      ) {
+        log("Transcription: Ignoring stale memory_created \(memoryId) for finished recording")
+        break
+      }
+      isSavingConversation = false
+      // New desktop sessions carry an exact client-generated recording id, so
+      // they must never fall back to a timestamp guess. Timestamp matching is
+      // retained only for legacy sessions without that identity.
+      let matchesFinishedRecording = targetClientConversationId != nil
+        || DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
+          memory, sessionStartedAt: targetStartTime ?? .distantPast)
       if let sessionId = targetSessionId,
-         let startTime = targetStartTime,
          memoryId != "?",
-         DesktopConversationMatchPolicy.memoryEventMatchesFinishedSession(
-          memory, sessionStartedAt: startTime) {
+         matchesFinishedRecording {
         finishedSessionId = nil  // Consume once
+        finishedClientConversationId = nil
         finishedRecordingStartTime = nil
         didBindLocalSession = true
         Task {
@@ -314,10 +418,8 @@ extension AppState {
             // the in-memory window, the event payload has all fields needed
             if let sessionId = currentSessionId {
               let mapped = newTranslations.map { TranscriptTranslation(lang: $0.lang, text: $0.text) }
-              var translationsJson: String?
-              if let jsonData = try? JSONEncoder().encode(mapped) {
-                translationsJson = String(data: jsonData, encoding: .utf8)
-              }
+              let translationsJson = (try? JSONEncoder().encode(mapped))
+                .flatMap { String(data: $0, encoding: .utf8) }
               Task {
                 try? await TranscriptionStorage.shared.upsertSegment(
                   sessionId: sessionId,

@@ -35,6 +35,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         let createdAt = Date(timeIntervalSince1970: 1_749_900_000)
         let staleServerUpdatedAt = Date(timeIntervalSince1970: 1_749_950_000)
 
+        // This storage fixture has no runtime session; owner revocation is tested separately.
         try await ActionItemStorage.shared.syncTaskActionItems([
             task(
                 id: "backend-task-1",
@@ -45,7 +46,7 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
                 updatedAt: staleServerUpdatedAt,
                 dueAt: originalDueAt
             )
-        ])
+        ], authorization: .unrestricted)
 
         // Local optimistic field updates mutate updatedAt to now, putting the row
         // inside the existing 60s optimistic-update protection window. A normal
@@ -53,7 +54,8 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         try await ActionItemStorage.shared.updateActionItemFields(
             backendId: "backend-task-1",
             description: "local description must survive",
-            dueAt: originalDueAt
+            dueAt: originalDueAt,
+            authorization: .unrestricted
         )
 
         let authoritativeServerItem = task(
@@ -65,7 +67,10 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
             updatedAt: staleServerUpdatedAt,
             dueAt: serverDueAt
         )
-        try await ActionItemStorage.shared.syncTaskActionItems([authoritativeServerItem])
+        try await ActionItemStorage.shared.syncTaskActionItems(
+            [authoritativeServerItem],
+            authorization: .unrestricted
+        )
         let afterNormalSyncItem = try await ActionItemStorage.shared.getLocalActionItem(
             byBackendId: "backend-task-1"
         )
@@ -73,9 +78,10 @@ final class ActionItemStorageVisibilityReconciliationTests: XCTestCase {
         XCTAssertFalse(afterNormalSync.completed, "precondition: normal sync is still guarded")
         XCTAssertEqual(afterNormalSync.dueAt, originalDueAt, "precondition: due date is still guarded")
 
-        let reconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields([
-            authoritativeServerItem
-        ])
+        let reconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
+            [authoritativeServerItem],
+            authorization: .unrestricted
+        )
 
         XCTAssertEqual(reconciled, 1)
         let refreshedItem = try await ActionItemStorage.shared.getLocalActionItem(

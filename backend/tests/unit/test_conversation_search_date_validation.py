@@ -236,6 +236,18 @@ def test_valid_date_is_accepted_and_calls_search():
         assert mock_search.called
 
 
+def test_null_per_page_does_not_500():
+    # per_page is Optional and unbounded on SearchRequest. Before the fix the total_pages recompute did
+    # `len(conversations) >= search_request.per_page`, so a client sending per_page: null raised TypeError
+    # -> HTTP 500. The handler now derives pagination from search_conversations' clamped return.
+    with patch.object(
+        conv, 'search_conversations', return_value={'items': [], 'total_pages': 1, 'current_page': 1, 'per_page': 10}
+    ):
+        client = _client()
+        resp = client.post('/v1/conversations/search', json={'query': 'hi', 'per_page': None})
+    assert resp.status_code == 200
+
+
 def test_named_speaker_is_validated_and_forwarded():
     with (
         patch.object(conv.users_db, 'get_person', return_value={'id': 'person-1'}) as mock_get_person,
@@ -292,6 +304,15 @@ def _conversation(conversation_id='conv-1', status=ConversationStatus.in_progres
     )
 
 
+def _process_result(result, *, persisted: bool):
+    def process(*_args, persistence_observer=None, **_kwargs):
+        assert persistence_observer is not None
+        persistence_observer(persisted)
+        return result
+
+    return process
+
+
 def test_finalize_conversation_processes_target_id_and_clears_matching_redis_pointer():
     target = _conversation()
     processed = _conversation(status=ConversationStatus.completed)
@@ -299,26 +320,20 @@ def test_finalize_conversation_processes_target_id_and_clears_matching_redis_poi
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
-        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True) as claim_status,
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True) as claim_status,
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
         patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
-        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
-        patch.object(conv, 'process_conversation', return_value=processed) as process,
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)) as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
-    claim_status.assert_called_once_with(
-        'test-uid',
-        'conv-1',
-        ConversationStatus.in_progress,
-        ConversationStatus.processing,
-        extra_updates=None,
-    )
+    claim_status.assert_called_once_with('test-uid', 'conv-1', extra_updates=None)
     remove_pointer.assert_called_once_with('test-uid')
-    update_status.assert_called_once_with('test-uid', 'conv-1', ConversationStatus.completed)
-    process.assert_called_once_with('test-uid', 'en', target, force_process=True)
+    assert process.call_args.args == ('test-uid', 'en', target)
+    assert process.call_args.kwargs['force_process'] is True
+    assert callable(process.call_args.kwargs['persistence_observer'])
     assert response.conversation.id == 'conv-1'
     assert response.conversation.status == ConversationStatus.completed
 
@@ -330,12 +345,11 @@ def test_finalize_conversation_does_not_clear_different_redis_pointer():
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
-        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=True),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='newer-conv'),
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
         patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
-        patch.object(conv.conversations_db, 'update_conversation_status'),
-        patch.object(conv, 'process_conversation', return_value=processed),
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=True)),
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])),
     ):
         conv.finalize_conversation('conv-1', uid='test-uid')
@@ -350,10 +364,9 @@ def test_finalize_conversation_claim_loser_returns_latest_without_side_effects()
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
-        patch.object(conv.conversations_db, 'claim_conversation_status', return_value=False) as claim_status,
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=False) as claim_status,
         patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
-        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
         patch.object(conv, 'process_conversation') as process,
         patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
     ):
@@ -362,10 +375,77 @@ def test_finalize_conversation_claim_loser_returns_latest_without_side_effects()
     claim_status.assert_called_once()
     get_pointer.assert_not_called()
     remove_pointer.assert_not_called()
-    update_status.assert_not_called()
     process.assert_not_called()
     integrations.assert_not_called()
     assert response.conversation.status == ConversationStatus.processing
+
+
+def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integrations():
+    target = _conversation(status=ConversationStatus.in_progress)
+    latest = _conversation(status=ConversationStatus.failed)
+
+    with (
+        patch.object(conv, 'retrieve_in_progress_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=False) as claim_status,
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv, 'process_conversation') as process,
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+        patch.object(conv, '_get_valid_conversation_by_id', return_value={'id': 'conv-1'}),
+    ):
+        response = conv.process_in_progress_conversation(uid='test-uid')
+
+    claim_status.assert_called_once_with('test-uid', 'conv-1')
+    get_pointer.assert_not_called()
+    remove_pointer.assert_not_called()
+    process.assert_not_called()
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.failed
+
+
+def test_finalize_persistence_loser_returns_latest_without_integrations():
+    target = _conversation(status=ConversationStatus.in_progress)
+    processed = _conversation(status=ConversationStatus.completed)
+    latest = _conversation(status=ConversationStatus.failed)
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id'),
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=False)),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+    ):
+        response = conv.finalize_conversation('conv-1', uid='test-uid')
+
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.failed
+
+
+def test_legacy_finalize_persistence_loser_returns_latest_without_integrations():
+    target = _conversation(status=ConversationStatus.in_progress)
+    processed = _conversation(status=ConversationStatus.completed)
+    latest = _conversation(status=ConversationStatus.failed)
+
+    with (
+        patch.object(conv, 'retrieve_in_progress_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.lifecycle_service, 'admit_processing', return_value=True),
+        patch.object(conv.redis_db, 'get_cached_user_geolocation', return_value=None),
+        patch.object(conv.redis_db, 'get_in_progress_conversation_id', return_value='conv-1'),
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id'),
+        patch.object(conv, 'process_conversation', side_effect=_process_result(processed, persisted=False)),
+        patch.object(conv, 'trigger_external_integrations', AsyncMock(return_value=[])) as integrations,
+        patch.object(conv, '_get_valid_conversation_by_id', return_value={'id': 'conv-1'}),
+    ):
+        response = conv.process_in_progress_conversation(uid='test-uid')
+
+    integrations.assert_not_called()
+    assert response.conversation.status == ConversationStatus.failed
 
 
 def test_finalize_conversation_is_noop_for_completed_conversation():
@@ -376,13 +456,11 @@ def test_finalize_conversation_is_noop_for_completed_conversation():
         patch.object(conv, 'deserialize_conversation', return_value=completed),
         patch.object(conv.redis_db, 'get_in_progress_conversation_id') as get_pointer,
         patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
-        patch.object(conv.conversations_db, 'update_conversation_status') as update_status,
         patch.object(conv, 'process_conversation') as process,
     ):
         response = conv.finalize_conversation('conv-1', uid='test-uid')
 
     get_pointer.assert_not_called()
     remove_pointer.assert_not_called()
-    update_status.assert_not_called()
     process.assert_not_called()
     assert response.conversation.status == ConversationStatus.completed

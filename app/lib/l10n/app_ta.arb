@@ -1,5 +1,6 @@
 {
     "@@locale": "ta",
+    "sessionExpiredSignInAgain": "அமர்வு காலாவதியானது — மீண்டும் உள்நுழையவும்.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்."
+    "pendantStorageAlmostFull": "பெண்டன்ட்டின் சேமிப்பகம் கிட்டத்தட்ட நிரம்பிவிட்டது — ஒத்திசைக்க ஆப்ஸைத் திறந்து வைத்திருங்கள்.",
+    "connectRayBanMeta": "Ray-Ban Meta ஐ இணைக்கவும்",
+    "raybanMetaSetupDescription": "உரையாடல்கள் மற்றும் காட்சி சூழலுக்கான உங்கள் Omi பதிவு சாதனமாக உங்கள் Ray-Ban Meta கண்ணாடியைப் பயன்படுத்தவும். உங்கள் கண்ணாடியை இணைக்க Omi, Meta AI செயலியைத் திறக்கும்.",
+    "raybanMetaOpenMetaAI": "Meta AI மூலம் இணைக்கவும்",
+    "raybanMetaWaitingForMetaAI": "Meta AI செயலியில் இணைப்பை முடித்து, பிறகு இங்கே திரும்பி வாருங்கள்.",
+    "raybanMetaCheckAgain": "மீண்டும் சரிபார்க்கவும்",
+    "raybanMetaAllowCamera": "கண்ணாடியில் கேமராவை அனுமதிக்கவும்",
+    "raybanMetaCameraExplanation": "உங்கள் உரையாடல்களில் புகைப்படங்களைச் சேர்க்க Omi உங்கள் கண்ணாடியின் கேமராவைப் பயன்படுத்துகிறது. இதைத் தவிர்த்து, ஆடியோவை மட்டும் பயன்படுத்தலாம்.",
+    "raybanMetaSkipForNow": "இப்போதைக்கு தவிர்க்கவும்",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ஆடியோ-மட்டும் பயன்முறை",
+    "raybanMetaAudioOnlyExplanation": "Omi இன் இந்தப் பதிப்பு Bluetooth வழியாக உங்கள் கண்ணாடியின் மைக்ரோபோனைப் பயன்படுத்த முடியும். புகைப்படம் எடுக்க Omi இன் Meta டெவலப்பர் பதிப்பு தேவை.",
+    "raybanMetaMusicPauseNote": "கண்ணாடியின் மைக்ரோபோன் பயன்பாட்டில் இருக்கும்போது உங்கள் தொலைபேசியில் இசை இடைநிறுத்தப்படும்.",
+    "raybanMetaContinue": "தொடரவும்",
+    "raybanMetaCapturePhoto": "புகைப்படம் எடுக்கவும்",
+    "raybanMetaPhotoRequested": "புகைப்படம் கோரப்பட்டது — அது உங்கள் உரையாடலில் தோன்றும்.",
+    "raybanMetaMicrophoneReady": "மைக்ரோபோன் தயார்",
+    "raybanMetaImageCaptureReady": "படம் எடுத்தல் தயார்",
+    "raybanMetaImageCaptureUnavailable": "ஆடியோ-மட்டும் பயன்முறையில் கிடைக்காது",
+    "raybanMetaCamera": "கேமரா",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta உடன் இணைப்பதில் பிழை: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "சாதன சேமிப்பு",
+    "deviceStoragePercentFull": "{percent}% நிரம்பியது",
+    "deviceStorageUsedOfTotal": "{total} இல் {used} பயன்படுத்தப்பட்டது",
+    "deviceStorageFree": "{free} காலி",
+    "deviceStorageNearlyFull": "சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்."
 }

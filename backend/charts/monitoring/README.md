@@ -77,11 +77,11 @@ The service chart includes a `ServiceMonitor` CRD that Prometheus auto-discovers
 
 **2. Pod annotations + additionalScrapeConfigs**
 
-Used by: backend-listen, pusher, deepgram engine, GPU metrics, Stackdriver.
+Used by: backend-listen, pusher, llm-gateway, deepgram engine, GPU metrics, Stackdriver.
 
 Pods set annotations (`prometheus.io/scrape: "true"`, `prometheus.io/port`, `prometheus.io/path`) and a matching `additionalScrapeConfigs` entry in `kube-prometheus-stack` values defines the scrape job.
 
-Backend-listen and pusher require bearer token auth via the `metrics-scrape-token` secret.
+Backend-listen, pusher, and llm-gateway require bearer token auth via the `metrics-scrape-token` secret.
 
 ### Custom Scrape Jobs (prod)
 
@@ -91,10 +91,18 @@ These are the `additionalScrapeConfigs` and ServiceMonitor targets. Built-in kub
 |-----|--------|----------|------|
 | `backend-listen-metrics` | backend-listen pods `/metrics:8080` | 15s | Bearer token |
 | `pusher-metrics` | pusher pods `/metrics:8080` | 15s | Bearer token |
+| `llm-gateway-metrics` | llm-gateway pods `/metrics:8080` | 15s | Bearer token |
 | `dg_engine_metrics` | DG engine pods in `prod-omi-dg-self-hosted` | 2s | None |
 | `gpu-metrics` | all pods in `gke-managed-system` (includes DCGM exporter) | 1s | None |
 | `prometheus-stackdriver-metrics` | Stackdriver exporter in `prod-omi-monitoring` | 1s | None |
 | ServiceMonitor: `parakeet` | parakeet pods `/metrics:9091` | 15s | None |
+
+For llm-gateway streams, `llm_gateway_requests_total{outcome="success"}` is emitted only after the provider's
+terminal SSE marker (`data: [DONE]` or Anthropic `event: message_stop`) is observed. EOF without that marker,
+transport failure after first output, and client cancellation have separate bounded `outcome`, `phase`, and
+`error_class` values. This proves provider completion, not guaranteed delivery of the terminal chunk to the client.
+`credential_source` separates Omi-managed traffic from service-forwarded BYOK without putting key material or user
+identity in labels. `llm_gateway_stream_ttfb_seconds` records time to the first non-empty provider chunk.
 
 ### Log Pipeline
 
@@ -236,7 +244,7 @@ Folder: `GKE` (folder UID: `aev9igt5fwgsgc`)
 | Pusher | `c758b698-01a0-4b5c-b58c-e81e4ff33ccd` | Audio pusher service |
 | VAD | `72cfe240-ae8c-4076-845e-c58e28f12d87` | Voice activity detection GPU service |
 
-### Omi Services (4) — cross-cutting dashboards
+### Omi Services (5) — cross-cutting dashboards
 
 Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 
@@ -246,15 +254,16 @@ Folder: `Omi Services` (folder UID: `betdycdziadc0e`)
 | Cloud Run Services - Logs | `d2d782ef-f537-46b8-969d-f73561ec7d07` | Aggregated Cloud Run logs view |
 | Global External ALB | `59aa0de7-15c6-413f-acba-b7e99296ad75` | External load balancer metrics |
 | Omi Kubernetes Events | `3714dbfa-114b-47a0-99ca-1a26354e792a` | K8s event stream (OOM kills, pod evictions) |
+| Resilience / Fallbacks | `omi-resilience-fallbacks` | Fallback rates, sync/pusher SLOs, gateway ticket tier — see `backend/docs/runbooks/resilience-dashboards.md` |
 
 ### Dashboard Summary
 
 | Category | Count | Source | Version-controlled |
 |----------|------:|--------|--------------------|
 | Bundled (kube-prometheus-stack) | 28 | Helm chart sidecar | Yes (via chart defaults) |
-| Custom (Omi-specific) | 16 | Exported from Grafana UI | Yes — `dashboards/` directory |
+| Custom (Omi-specific) | 17 | Exported from Grafana UI | Yes — `dashboards/` directory |
 
-All 16 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
+All 17 custom dashboards are exported to `dashboards/` as provisioning-ready JSON (`.id` and `.version` stripped). The K8s Node Metrics dashboard (`your_custom_uid_X0dfg`) is a community import bundled with the chart and not separately exported.
 
 ## Developer Guide
 
@@ -468,7 +477,7 @@ git add dashboards/parakeet-asr-monitoring.json
 git commit -m "sync(monitoring): export parakeet dashboard from Grafana UI"
 ```
 
-**Bulk sync (all 16 custom dashboards):**
+**Bulk sync (all 17 custom dashboards):**
 ```bash
 export GRAFANA_TOKEN="your-token"
 export GRAFANA_HOST="https://monitor.omi.me"
@@ -495,6 +504,7 @@ declare -A DASHBOARDS=(
   ["d2d782ef-f537-46b8-969d-f73561ec7d07"]="omi-services"
   ["59aa0de7-15c6-413f-acba-b7e99296ad75"]="omi-services"
   ["3714dbfa-114b-47a0-99ca-1a26354e792a"]="omi-services"
+  ["omi-resilience-fallbacks"]="omi-services"
 )
 
 for uid in "${!DASHBOARDS[@]}"; do
@@ -584,7 +594,8 @@ backend/charts/monitoring/
 │       ├── cloud-armor-denied-requests.json
 │       ├── cloud-run-services-logs.json
 │       ├── global-external-alb.json
-│       └── omi-kubernetes-events.json
+│       ├── omi-kubernetes-events.json
+│       └── resilience-fallbacks.json
 ├── alerts/                              # (proposed) PrometheusRule or Grafana alert YAML
 │   └── ...
 ├── kube-prometheus-stack/               # existing

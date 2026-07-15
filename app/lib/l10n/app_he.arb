@@ -1,5 +1,6 @@
 {
     "@@locale": "he",
+    "sessionExpiredSignInAgain": "ההפעלה פגה — יש להתחבר שוב.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן."
+    "pendantStorageAlmostFull": "אחסון התליון כמעט מלא — השאר את האפליקציה פתוחה כדי לסנכרן.",
+    "connectRayBanMeta": "חבר את Ray-Ban Meta",
+    "raybanMetaSetupDescription": "השתמש במשקפי Ray-Ban Meta שלך כמכשיר הלכידה של Omi עבור שיחות והקשר חזותי. Omi יפתח את אפליקציית Meta AI כדי לקשר את המשקפיים שלך.",
+    "raybanMetaOpenMetaAI": "התחבר דרך Meta AI",
+    "raybanMetaWaitingForMetaAI": "סיים את ההתחברות באפליקציית Meta AI, ואז חזור לכאן.",
+    "raybanMetaCheckAgain": "בדוק שוב",
+    "raybanMetaAllowCamera": "אפשר מצלמה במשקפיים",
+    "raybanMetaCameraExplanation": "Omi משתמש במצלמת המשקפיים שלך כדי להוסיף תמונות לשיחות שלך. אפשר לדלג על כך ולהשתמש בשמע בלבד.",
+    "raybanMetaSkipForNow": "דלג לעת עתה",
+    "raybanMetaAudioOnlyTitle": "מצב שמע בלבד של Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "גרסה זו של Omi יכולה להשתמש במיקרופון המשקפיים שלך באמצעות Bluetooth. לכידת תמונות דורשת את גרסת המפתחים של Meta עבור Omi.",
+    "raybanMetaMusicPauseNote": "המוזיקה בטלפון שלך מושהית בזמן השימוש במיקרופון המשקפיים.",
+    "raybanMetaContinue": "המשך",
+    "raybanMetaCapturePhoto": "צלם תמונה",
+    "raybanMetaPhotoRequested": "התמונה התבקשה — היא תופיע בשיחה שלך.",
+    "raybanMetaMicrophoneReady": "המיקרופון מוכן",
+    "raybanMetaImageCaptureReady": "לכידת תמונה מוכנה",
+    "raybanMetaImageCaptureUnavailable": "לא זמין במצב שמע בלבד",
+    "raybanMetaCamera": "מצלמה",
+    "errorConnectingRayBanMeta": "שגיאה בהתחברות ל-Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "אחסון המכשיר",
+    "deviceStoragePercentFull": "{percent}% מלא",
+    "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
+    "deviceStorageFree": "{free} פנוי",
+    "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום."
 }

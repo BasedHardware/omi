@@ -7,6 +7,11 @@ assignees: ''
 
 ---
 
+**Product impact** (see [PRODUCT.md](https://github.com/BasedHardware/Omi/blob/main/PRODUCT.md) and [ISSUE_TRIAGE_GUIDE.MD](https://github.com/BasedHardware/Omi/blob/main/ISSUE_TRIAGE_GUIDE.MD))
+
+- Primary loop layer (pick one): Capture / Understand / Memory / Intelligence / Retrieval-Action / UX-Polish / Docs-Tooling
+- [ ] Involves data loss, failed capture, or broken sync/trust (call this out clearly below)
+
 **Describe the bug**
 A clear and concise description of what the bug is.
 

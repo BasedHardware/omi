@@ -139,6 +139,24 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["active_turn"] as? Bool, false)
   }
 
+  func testExpectedSessionRotationUsesNonErrorHealthEvent() throws {
+    DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
+      provider: "openai",
+      category: RealtimeHubCloseCategory.expectedSessionRotation.rawValue,
+      aliveFor: 3_600,
+      activeTurn: true,
+      authMode: .managed,
+      failureClass: nil)
+
+    let snapshot = try latestSnapshot()
+
+    XCTAssertEqual(snapshot["event"] as? String, "realtime_provider_expected_session_rotation")
+    XCTAssertEqual(snapshot["provider"] as? String, "openai")
+    XCTAssertEqual(snapshot["category"] as? String, "expected_session_rotation")
+    XCTAssertEqual(snapshot["recovery_action"] as? String, "rotate_realtime_session")
+    XCTAssertEqual(snapshot["recovery_result"] as? String, "turn_terminated_and_rewarm_started")
+  }
+
   func testProviderCloseFallsBackToFailureClassInsteadOfUnclassified() throws {
     DesktopDiagnosticsManager.shared.recordRealtimeProviderClose(
       provider: "openai",
@@ -180,13 +198,88 @@ final class DesktopDiagnosticsManagerTests: XCTestCase {
     XCTAssertEqual(snapshot["retryable"] as? Bool, true)
   }
 
-  private func latestSnapshot() throws -> [String: Any] {
+  func testRecordFallbackUsesSharedContractFields() throws {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "realtime_hub",
+      from: "openai",
+      to: "gemini",
+      reason: "auth",
+      outcome: .recovered,
+      extra: ["user_visible": false])
+
+    let snapshot = try latestSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "realtime_hub")
+    XCTAssertEqual(snapshot["from"] as? String, "openai")
+    XCTAssertEqual(snapshot["to"] as? String, "gemini")
+    XCTAssertEqual(snapshot["reason"] as? String, "auth")
+    XCTAssertEqual(snapshot["outcome"] as? String, "recovered")
+    XCTAssertEqual(snapshot["user_visible"] as? Bool, false)
+  }
+
+  func testRecordFallbackBucketsUnknownAreaAndReason() throws {
+    DesktopDiagnosticsManager.shared.recordFallback(
+      area: "brand_new_area",
+      from: "Cloud Tasks!",
+      to: "",
+      reason: "totally_novel_failure",
+      outcome: .degraded)
+
+    let snapshot = try latestSnapshot()
+    XCTAssertEqual(snapshot["event"] as? String, "fallback_triggered")
+    XCTAssertEqual(snapshot["area"] as? String, "other")
+    XCTAssertEqual(snapshot["from"] as? String, "cloud_tasks_")
+    XCTAssertEqual(snapshot["to"] as? String, "none")
+    XCTAssertEqual(snapshot["reason"] as? String, "other")
+    XCTAssertEqual(snapshot["outcome"] as? String, "degraded")
+  }
+
+  func testAuthTokenStorageFallbackRecordsHealthSnapshot() throws {
+    DesktopDiagnosticsManager.shared.recordAuthTokenStorageFallback(
+      reason: "keychain_write_failed",
+      updateChannel: "beta")
+
+    try assertLatestHealthSnapshot(
+      event: .authTokenStorageFallback,
+      contains: [
+        "storage": "user_defaults",
+        "reason": "keychain_write_failed",
+        "update_channel": "beta",
+      ])
+  }
+
+  private func assertLatestHealthSnapshot(
+    event: DesktopHealthEventName,
+    contains expected: [String: Any] = [:],
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws {
+    let snapshot = try latestSnapshot(file: file, line: line)
+    XCTAssertEqual(snapshot["event"] as? String, event.rawValue, file: file, line: line)
+    for (key, value) in expected {
+      switch value {
+      case let string as String:
+        XCTAssertEqual(snapshot[key] as? String, string, "key: \(key)", file: file, line: line)
+      case let int as Int:
+        XCTAssertEqual(snapshot[key] as? Int, int, "key: \(key)", file: file, line: line)
+      case let bool as Bool:
+        XCTAssertEqual(snapshot[key] as? Bool, bool, "key: \(key)", file: file, line: line)
+      default:
+        XCTFail("Unsupported expected value type for key \(key)", file: file, line: line)
+      }
+    }
+  }
+
+  private func latestSnapshot(
+    file: StaticString = #filePath,
+    line: UInt = #line
+  ) throws -> [String: Any] {
     let url = try XCTUnwrap(DesktopDiagnosticsManager.shared.writeDiagnosticsAttachment())
     defer { try? FileManager.default.removeItem(at: url) }
 
     let data = try Data(contentsOf: url)
     let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
     let snapshots = try XCTUnwrap(root["snapshots"] as? [[String: Any]])
-    return try XCTUnwrap(snapshots.last)
+    return try XCTUnwrap(snapshots.last, file: file, line: line)
   }
 }

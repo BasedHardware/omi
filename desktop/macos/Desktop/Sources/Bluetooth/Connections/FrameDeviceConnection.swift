@@ -1,4 +1,3 @@
-import Combine
 import CoreBluetooth
 import Foundation
 import os.log
@@ -10,25 +9,6 @@ import os.log
 /// Ported from: omi/app/lib/services/devices/frame_connection.dart
 final class FrameDeviceConnection: BaseDeviceConnection {
 
-    // MARK: - Constants
-
-    /// JPEG header used to prepend to raw image data from Frame
-    /// Frame sends raw JPEG data without the standard header
-    private static let photoHeader = Data(base64Encoded:
-        "/9j/4AAQSkZJRgABAgAAZABkAAD/2wBDACAWGBwYFCAcGhwkIiAmMFA0MCwsMGJGSjpQdGZ6" +
-        "eHJmcG6AkLicgIiuim5woNqirr7EztDOfJri8uDI8LjKzsb/2wBDASIkJDAqMF40NF7GhHCE" +
-        "xsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsbGxsb/wAAR" +
-        "CAIAAgADASIAAhEBAxEB/8QAHwAAAQUBAQEBAQEAAAAAAAAAAAECAwQFBgcICQoL/8QAHwEA" +
-        "AwEBAQEBAQEBAQAAAAAAAAECAwQFBgcICQoL/8QAtRAAAgEDAwIEAwUFBAQAAAF9AQIDAAQR" +
-        "BRIhMUEGE1FhByJxFDKBkaEII0KxwRVS0fAkM2JyggkKFhcYGRolJicoKSo0NTY3ODk6Q0RF" +
-        "RkdISUpTVFVWV1hZWmNkZWZnaGlqc3R1dnd4eXqDhIWGh4iJipKTlJWWl5iZmqKjpKWmp6ip" +
-        "qrKztLW2t7i5usLDxMXGx8jJytLT1NXW19jZ2uHi4+Tl5ufo6erx8vP09fb3+Pn6/8QAtREA" +
-        "AgECBAQDBAcFBAQAAQJ3AAECAxEEBSExBhJBUQdhcRMiMoEIFEKRobHBCSMzUvAVYnLRChYk" +
-        "NOEl8RcYGRomJygpKjU2Nzg5OkNERUZHSElKU1RVVldYWVpjZGVmZ2hpanN0dXZ3eHl6goOE" +
-        "hYaHiImKkpOUlZaXmJmaoqOkpaanqKmqsrO0tba3uLm6wsPExcbHyMnK0tPU1dbX2Nna4uPk" +
-        "5ebn6Onq8vP09fb3+Pn6/9oADAMBAAIRAxEAPwA="
-    )!
-
     // MARK: - Properties
 
     private let logger = Logger(subsystem: "me.omi.desktop", category: "FrameDeviceConnection")
@@ -36,15 +16,21 @@ final class FrameDeviceConnection: BaseDeviceConnection {
 
     // MARK: - Initialization
 
-    override init(device: BtDevice, transport: DeviceTransport) {
-        super.init(device: device, transport: transport)
+    override init(
+        device: BtDevice,
+        transport: DeviceTransport,
+        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+    ) {
+        super.init(
+            device: device,
+            transport: transport,
+            operationClock: operationClock
+        )
     }
 
     // MARK: - Connection
 
-    override func connect() async throws {
-        try await super.connect()
-
+    override func prepareDeviceAfterConnect() async throws {
         // Update device info
         device.firmwareRevision = "Frame"
         device.hardwareRevision = "Brilliant Labs Frame"
@@ -88,7 +74,7 @@ final class FrameDeviceConnection: BaseDeviceConnection {
         )
 
         return AsyncThrowingStream { [weak self] continuation in
-            Task { [weak self] in
+            let forwardingTask = Task { [weak self] in
                 guard let self = self else {
                     continuation.finish()
                     return
@@ -108,6 +94,9 @@ final class FrameDeviceConnection: BaseDeviceConnection {
                 } catch {
                     continuation.finish(throwing: error)
                 }
+            }
+            continuation.onTermination = { @Sendable _ in
+                forwardingTask.cancel()
             }
         }
     }

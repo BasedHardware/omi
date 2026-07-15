@@ -1,5 +1,6 @@
 {
     "@@locale": "fa",
+    "sessionExpiredSignInAgain": "جلسه منقضی شد — دوباره وارد شوید.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید."
+    "pendantStorageAlmostFull": "حافظه آویز تقریباً پر است — برای همگام‌سازی، برنامه را باز نگه دارید.",
+    "connectRayBanMeta": "اتصال Ray-Ban Meta",
+    "raybanMetaSetupDescription": "از عینک Ray-Ban Meta خود به‌عنوان دستگاه ضبط Omi برای گفتگوها و زمینه‌ی بصری استفاده کنید. Omi برنامه‌ی Meta AI را باز می‌کند تا عینک شما را متصل کند.",
+    "raybanMetaOpenMetaAI": "اتصال از طریق Meta AI",
+    "raybanMetaWaitingForMetaAI": "اتصال را در برنامه‌ی Meta AI کامل کنید، سپس به اینجا بازگردید.",
+    "raybanMetaCheckAgain": "بررسی دوباره",
+    "raybanMetaAllowCamera": "اجازه‌ی دوربین روی عینک",
+    "raybanMetaCameraExplanation": "Omi از دوربین عینک شما برای افزودن عکس به گفتگوهای شما استفاده می‌کند. می‌توانید از این مرحله صرف‌نظر کنید و فقط از صدا استفاده کنید.",
+    "raybanMetaSkipForNow": "فعلاً رد شود",
+    "raybanMetaAudioOnlyTitle": "حالت فقط صوتی Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "این نسخه از Omi می‌تواند از میکروفون عینک شما از طریق Bluetooth استفاده کند. ضبط عکس به نسخه‌ی توسعه‌دهنده‌ی Meta از Omi نیاز دارد.",
+    "raybanMetaMusicPauseNote": "موسیقی روی تلفن شما هنگام استفاده از میکروفون عینک متوقف می‌شود.",
+    "raybanMetaContinue": "ادامه",
+    "raybanMetaCapturePhoto": "گرفتن عکس",
+    "raybanMetaPhotoRequested": "عکس درخواست شد — در گفتگوی شما نمایش داده خواهد شد.",
+    "raybanMetaMicrophoneReady": "میکروفون آماده است",
+    "raybanMetaImageCaptureReady": "ضبط تصویر آماده است",
+    "raybanMetaImageCaptureUnavailable": "در حالت فقط صوتی در دسترس نیست",
+    "raybanMetaCamera": "دوربین",
+    "errorConnectingRayBanMeta": "خطا در اتصال به Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "فضای ذخیره‌سازی دستگاه",
+    "deviceStoragePercentFull": "{percent}٪ پر",
+    "deviceStorageUsedOfTotal": "{used} از {total} استفاده‌شده",
+    "deviceStorageFree": "{free} آزاد",
+    "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید."
 }

@@ -9,6 +9,9 @@ class AppLocalizationsId extends AppLocalizations {
   AppLocalizationsId([String locale = 'id']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Sesi berakhir — masuk lagi.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9518,4 +9521,87 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Penyimpanan liontin hampir penuh — biarkan aplikasi tetap terbuka untuk menyinkronkan.';
+
+  @override
+  String get connectRayBanMeta => 'Hubungkan Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Gunakan kacamata Ray-Ban Meta Anda sebagai perangkat perekam Omi untuk percakapan dan konteks visual. Omi akan membuka aplikasi Meta AI untuk menautkan kacamata Anda.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Hubungkan melalui Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Selesaikan penyambungan di aplikasi Meta AI, lalu kembali ke sini.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Periksa Lagi';
+
+  @override
+  String get raybanMetaAllowCamera => 'Izinkan Kamera pada Kacamata';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi menggunakan kamera kacamata Anda untuk menambahkan foto ke percakapan Anda. Anda dapat melewati ini dan hanya menggunakan audio.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Lewati untuk Sekarang';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Mode audio saja Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Versi Omi ini dapat menggunakan mikrofon kacamata Anda melalui Bluetooth. Pengambilan foto memerlukan versi developer Meta dari Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Musik di ponsel Anda dijeda saat mikrofon kacamata sedang digunakan.';
+
+  @override
+  String get raybanMetaContinue => 'Lanjutkan';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Ambil Foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto diminta — akan muncul di percakapan Anda.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon siap';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Pengambilan gambar siap';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Tidak tersedia dalam mode audio saja';
+
+  @override
+  String get raybanMetaCamera => 'Kamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Kesalahan saat menghubungkan ke Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Penyimpanan perangkat';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% penuh';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used dari $total terpakai';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free tersisa';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang.';
 }

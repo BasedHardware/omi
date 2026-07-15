@@ -9,9 +9,13 @@ class ViewModelContainer: ObservableObject {
 
     // ViewModels for each page
     let dashboardViewModel = DashboardViewModel()
+    let homeStatusStore = HomeStatusStore()
     let tasksViewModel = TasksViewModel()
     let appProvider = AppProvider()
     let memoriesViewModel = MemoriesViewModel()
+    /// Brain-map graph — persistent so the SceneKit scene, force layout, and
+    /// camera survive page navigation instead of rebuilding every visit.
+    let memoryGraphViewModel = MemoryGraphViewModel()
     let chatProvider: ChatProvider
     let taskChatCoordinator: TaskChatCoordinator
     private lazy var warmupCoordinator = StartupWarmupCoordinator(
@@ -29,6 +33,7 @@ class ViewModelContainer: ObservableObject {
         chatProvider = provider
         taskChatCoordinator = TaskChatCoordinator(chatProvider: provider)
         ChatProvider.mainInstance = provider
+        RecurringTaskScheduler.shared.configure(taskChatCoordinator: taskChatCoordinator)
 
         // Bind the headless task automation actions (create/toggle/delete/reorder/dump)
         // to this canonical, long-lived TasksViewModel so omi-ctl can drive TASK-01/02/03
@@ -36,6 +41,10 @@ class ViewModelContainer: ObservableObject {
         // only runs on non-prod bundles.
         if DesktopAutomationLaunchOptions.isEnabled {
             tasksViewModel.registerAutomationActions()
+#if DEBUG
+            taskChatCoordinator.registerAutomationActions()
+#endif
+            memoriesViewModel.registerAutomationActions()
         }
     }
 
@@ -48,7 +57,7 @@ class ViewModelContainer: ObservableObject {
 
     /// Load critical startup data, then stage warmup work after the first usable window.
     func loadAllData() async {
-        let currentUserId = UserDefaults.standard.string(forKey: "auth_userId")
+        let currentUserId = RuntimeOwnerIdentity.currentOwnerId()
         if loadedUserId != nil, loadedUserId != currentUserId {
             resetStartupState()
         }
@@ -63,9 +72,6 @@ class ViewModelContainer: ObservableObject {
         let startupStart = CFAbsoluteTimeGetCurrent()
         let timer = PerfTimer("ViewModelContainer.loadAllData", logCPU: true)
         logPerf("DATA LOAD: Starting critical startup path", cpu: true)
-
-        // Configure database for the current user before initialization
-        await RewindDatabase.shared.configure(userId: currentUserId)
 
         // Pre-initialize database so local SQLite reads are instant
         let dbInitStart = CFAbsoluteTimeGetCurrent()
@@ -97,6 +103,9 @@ class ViewModelContainer: ObservableObject {
         // DB-dependent loads are guarded — skip them if database init failed
         // to prevent a stampede of retries from each storage actor
         let dbAvailable = !databaseInitFailed
+        if dbAvailable {
+            await homeStatusStore.databaseDidBecomeReady()
+        }
 
         schedulePostInteractiveWarmup(dbAvailable: dbAvailable)
         isLoading = false
@@ -129,8 +138,10 @@ class ViewModelContainer: ObservableObject {
         warmupCoordinator.reset()
         tasksStore.resetSessionState()
         dashboardViewModel.resetSessionState()
+        homeStatusStore.resetSessionState()
         memoriesViewModel.resetSessionState()
         appProvider.resetSessionState()
+        memoryGraphViewModel.resetSessionState()
         isInitialLoadComplete = false
         isLoading = false
         databaseInitFailed = false
@@ -143,14 +154,12 @@ class ViewModelContainer: ObservableObject {
         guard databaseInitFailed else { return true }
         log("ViewModelContainer: Retrying database initialization...")
 
-        // Re-configure userId in case it changed (e.g. sign-in completed since first attempt)
-        let userId = UserDefaults.standard.string(forKey: "auth_userId")
-        await RewindDatabase.shared.configure(userId: userId)
-
         do {
             try await RewindDatabase.shared.initialize()
             databaseInitFailed = false
+            await homeStatusStore.databaseDidBecomeReady()
             warmupCoordinator.markDatabaseRetryComplete()
+            TranscriptionRetryService.shared.resumeAfterDatabaseRecovery()
             log("ViewModelContainer: Database retry succeeded, scheduling staged startup warmup")
             schedulePostInteractiveWarmup(dbAvailable: true)
             return true

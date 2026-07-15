@@ -115,25 +115,61 @@ class GeneratedMigrationRequestsResponse {
 }
 
 class GeneratedUserProfileResponse {
+  final String? company;
+  final DateTime? createdAt;
   final String? dataProtectionLevel;
+  final String? email;
+  final String? job;
   final Map<String, dynamic>? migrationStatus;
+  final String? motivation;
+  final String? name;
+  final String? timeZone;
+  final String uid;
+  final String? useCase;
 
   const GeneratedUserProfileResponse({
+    this.company,
+    this.createdAt,
     this.dataProtectionLevel,
+    this.email,
+    this.job,
     this.migrationStatus,
+    this.motivation,
+    this.name,
+    this.timeZone,
+    required this.uid,
+    this.useCase,
   });
 
   factory GeneratedUserProfileResponse.fromJson(Map<String, dynamic> json) {
     return GeneratedUserProfileResponse(
+      company: _readFieldValue<String>(_readField(json, const ["company"]), "company", _readString, requiredField: false, nullable: true),
+      createdAt: _readFieldValue<DateTime>(_readField(json, const ["created_at"]), "created_at", _readDateTime, requiredField: false, nullable: true),
       dataProtectionLevel: _readFieldValue<String>(_readField(json, const ["data_protection_level"]), "data_protection_level", _readString, requiredField: false, nullable: true),
+      email: _readFieldValue<String>(_readField(json, const ["email"]), "email", _readString, requiredField: false, nullable: true),
+      job: _readFieldValue<String>(_readField(json, const ["job"]), "job", _readString, requiredField: false, nullable: true),
       migrationStatus: _readFieldValue<Map<String, dynamic>>(_readField(json, const ["migration_status"]), "migration_status", _readMap, requiredField: false, nullable: true),
+      motivation: _readFieldValue<String>(_readField(json, const ["motivation"]), "motivation", _readString, requiredField: false, nullable: true),
+      name: _readFieldValue<String>(_readField(json, const ["name"]), "name", _readString, requiredField: false, nullable: true),
+      timeZone: _readFieldValue<String>(_readField(json, const ["time_zone"]), "time_zone", _readString, requiredField: false, nullable: true),
+      uid: _required(_readFieldValue<String>(_readField(json, const ["uid"]), "uid", _readString, requiredField: true, nullable: false), "uid"),
+      useCase: _readFieldValue<String>(_readField(json, const ["use_case"]), "use_case", _readString, requiredField: false, nullable: true),
     );
   }
 
   Map<String, dynamic> toJson() {
     return {
+      'company': company,
+      'created_at': createdAt?.toUtc().toIso8601String(),
       'data_protection_level': dataProtectionLevel,
+      'email': email,
+      'job': job,
       'migration_status': migrationStatus,
+      'motivation': motivation,
+      'name': name,
+      'time_zone': timeZone,
+      'uid': uid,
+      'use_case': useCase,
     };
   }
 }

@@ -4,7 +4,11 @@ import os
 from contextlib import asynccontextmanager
 from typing import Any, AsyncIterator
 
-logging.basicConfig(level=logging.INFO)
+from utils.logging_config import configure_split_stream_logging
+
+# Route INFO/DEBUG to stdout and WARNING+ to stderr so GKE Cloud Logging does not
+# classify routine request logs as ERROR severity (issues #9136, #9138, #9135).
+configure_split_stream_logging(level=logging.INFO)
 
 import firebase_admin
 from fastapi import FastAPI

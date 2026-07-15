@@ -12,6 +12,12 @@ on:
         required: true
         default: 'main'
 
+# LLM Gateway deployment reapplies shared backend-secrets, so it joins the
+# full backend mutation domain for the selected environment.
+concurrency:
+  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
 env:
   SERVICE: llm-gateway
   REGION: us-central1
@@ -27,8 +33,8 @@ jobs:
     steps:
       - name: Validate Environment Input
         run: |
-          if [[ "${{ github.event.inputs.environment }}" != "development" ]]; then
-            echo "Invalid environment: ${{ github.event.inputs.environment }}. LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed."
+          if [[ "${{ github.event.inputs.environment }}" != "development" && "${{ github.event.inputs.environment }}" != "prod" ]]; then
+            echo "Invalid environment: ${{ github.event.inputs.environment }}. Must be 'development' or 'prod'."
             exit 1
           fi
 
@@ -55,11 +61,14 @@ jobs:
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Google Service Account
-        run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./backend/google-credentials.json
-
       - name: Install Helm
         uses: azure/setup-helm@v3
+
+      - name: Verify production gateway service token
+        if: github.event.inputs.environment == 'prod'
+        run: |
+          gcloud secrets describe OMI_LLM_GATEWAY_SERVICE_TOKEN \
+            --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null
 
       - name: Validate gateway env wiring
         run: |
@@ -91,13 +100,16 @@ jobs:
 
       - name: Smoke LLM Gateway
         run: |
-          TOKEN="$(kubectl -n ${{ vars.ENV }}-omi-backend get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
-          kubectl -n ${{ vars.ENV }}-omi-backend run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
+          NAMESPACE="${{ vars.ENV }}-omi-backend"
+          TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.OMI_LLM_GATEWAY_SERVICE_TOKEN}' | base64 -d)"
+          METRICS_TOKEN="$(kubectl -n "$NAMESPACE" get secret ${{ vars.ENV }}-omi-backend-secrets -o jsonpath='{.data.METRICS_SECRET}' | base64 -d)"
+          kubectl -n "$NAMESPACE" run "llm-gateway-smoke-${GITHUB_RUN_ID}" \
             --rm -i --restart=Never \
             --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
             --env "SMOKE_URL=http://${{ vars.ENV }}-omi-llm-gateway.${{ vars.ENV }}-omi-backend.svc.cluster.local:8080" \
             --env "SMOKE_TOKEN=$TOKEN" \
-            --command -- sh -c 'python scripts/smoke-llm-gateway.py --url "$SMOKE_URL" --token "$SMOKE_TOKEN"'
+            --env "METRICS_SECRET=$METRICS_TOKEN" \
+            --command -- sh -c 'python scripts/smoke-llm-gateway.py --url "$SMOKE_URL" --token "$SMOKE_TOKEN" --check-metrics'
 
       - name: Show Output
         run: echo "LLM Gateway deployed to ${{ github.event.inputs.environment }}"

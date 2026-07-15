@@ -2,7 +2,7 @@ import XCTest
 @testable import Omi_Computer
 
 /// Tests for `ReentrancyGate`, the single-entry gate that prevents overlapping
-/// `ChatProvider.pollForNewMessages()` fetches when `didBecomeActive` and
+/// `ChatProvider.refreshJournalProjection()` replays when `didBecomeActive` and
 /// `.refreshAllData` fire back-to-back.
 @MainActor
 final class ReentrancyGateTests: XCTestCase {
@@ -69,7 +69,7 @@ final class ReentrancyGateTests: XCTestCase {
     }
 
     func testGuardDeferPatternNonOwnerDoesNotCallExit() {
-        // Models the canonical ChatProvider.pollForNewMessages() usage:
+        // Models the canonical ChatProvider.refreshJournalProjection() usage:
         //   guard gate.tryEnter() else { return }
         //   defer { gate.exit() }
         //
@@ -88,6 +88,7 @@ final class ReentrancyGateTests: XCTestCase {
                 gate.exit()
                 exitCalls += 1
             }
+            XCTAssertFalse(gate.tryEnter(), "critical section should keep the gate closed")
         }
 
         // Caller A (the test itself) acquires the gate directly.

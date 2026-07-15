@@ -3,6 +3,7 @@ from __future__ import annotations
 import importlib.util
 from pathlib import Path
 from typing import Any
+import uuid
 
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
@@ -24,6 +25,7 @@ from utils.llm.gateway_client import (
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
+import httpx
 
 
 class FakeChatModel(BaseChatModel):
@@ -167,6 +169,7 @@ def test_get_llm_dev_shadow_is_disabled_for_prod_like_runtime(monkeypatch):
 def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     captured = {}
     gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
 
     def fake_gateway(lane_id, streaming=False, options=None):
         captured['lane_id'] = lane_id
@@ -174,26 +177,107 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
         return gateway
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
     monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm', fake_gateway)
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
 
     result = clients.get_llm('conv_discard', streaming=True).invoke('hello')
 
     assert result.content == 'gateway response'
     assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True}
+    assert len(gateway.calls) == 1
+    assert legacy.calls == []
 
 
-def test_get_llm_feature_gateway_mode_blocks_byok_direct_bypass(monkeypatch):
+def test_get_llm_feature_gateway_mode_falls_back_on_transport_failure(monkeypatch):
+    from utils.llm import gateway_serving
+
+    recorded = []
+    legacy = FakeChatModel(name='legacy', calls=[])
+
+    class FailingGateway(FakeChatModel):
+        def _generate(self, messages, stop=None, run_manager=None, **kwargs):
+            raise httpx.ConnectError('connection refused')
+
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
-    monkeypatch.delenv(LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR, raising=False)
-    monkeypatch.delenv('K_SERVICE', raising=False)
-    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(
+        clients, 'get_or_create_omi_gateway_llm', lambda *args, **kwargs: FailingGateway(name='gateway', calls=[])
+    )
+    monkeypatch.setattr(clients, 'get_default_client', lambda *args, **kwargs: legacy)
+    monkeypatch.setattr(
+        gateway_serving,
+        'record_gateway_request_result',
+        lambda **kwargs: recorded.append(kwargs),
+    )
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'legacy response'
+    assert len(legacy.calls) == 1
+    assert len(recorded) == 1
+    assert recorded[0]['feature'] == 'conv_discard'
+    assert recorded[0]['outcome'] == 'fallback'
+    assert recorded[0]['reason'] == 'request_error'
+    assert recorded[0]['route'] == feature_auto_lane_id('conv_discard')
+    assert recorded[0]['mode'] == 'fallback'
+    assert recorded[0]['credential_source'] == 'omi_managed'
+    assert str(uuid.UUID(recorded[0]['request_id'])) == recorded[0]['request_id']
+
+
+def test_gateway_serving_does_not_fallback_on_non_transport_errors():
+    from utils.llm import gateway_serving
+
+    gateway = FakeChatModel(name='gateway', calls=[])
+    legacy = FakeChatModel(name='legacy', calls=[])
+    wrapped = gateway_serving.wrap_gateway_with_legacy_fallback(
+        feature='conv_discard',
+        gateway_model=gateway,
+        legacy_model=legacy,
+    )
+
+    def boom(*_args, **_kwargs):
+        raise ValueError('schema validation failed')
+
+    gateway._generate = boom  # type: ignore[method-assign]
 
     try:
-        clients.get_llm('conv_discard')
-    except RuntimeError as exc:
-        assert 'get_llm.conv_discard.byok' in str(exc)
+        wrapped.invoke('hello')
+    except ValueError as exc:
+        assert 'schema validation failed' in str(exc)
     else:
-        raise AssertionError('expected gateway mode to block BYOK direct bypass')
+        raise AssertionError('expected non-transport errors to propagate')
+    assert legacy.calls == []
+
+
+def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_with_fallback(monkeypatch):
+    captured: dict[str, object] = {}
+    legacy = FakeChatModel(name='byok', calls=[])
+
+    def fake_gateway(lane_id, *, provider, api_key, **_kwargs):
+        captured['lane_id'] = lane_id
+        captured['provider'] = provider
+        captured['api_key'] = api_key
+        return FakeChatModel(name='gateway-byok', calls=[])
+
+    monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
+    monkeypatch.setenv('OMI_ENV_STAGE', 'dev')
+    monkeypatch.delenv(gateway_shadow.DEV_SHADOW_ALL_ENABLED_ENV, raising=False)
+    monkeypatch.setattr(clients, 'get_byok_key', lambda provider: 'sk-test-byok' if provider == 'openai' else None)
+    monkeypatch.setattr(clients, 'get_or_create_omi_gateway_llm_for_byok', fake_gateway)
+    monkeypatch.setattr(clients, '_create_byok_client', lambda *args, **kwargs: legacy)
+
+    result = clients.get_llm('conv_discard').invoke('hello')
+
+    assert result.content == 'gateway-byok response'
+    assert captured == {
+        'lane_id': feature_auto_lane_id('conv_discard'),
+        'provider': 'openai',
+        'api_key': 'sk-test-byok',
+    }
+    assert legacy.calls == []
 
 
 def test_gateway_feature_mode_is_blocked_in_prod_without_explicit_allow(monkeypatch):

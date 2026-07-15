@@ -1,5 +1,6 @@
 {
     "@@locale": "sl",
+    "sessionExpiredSignInAgain": "Seja je potekla — znova se prijavite.",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Pomnilnik obeska je skoraj poln — pustite aplikacijo odprto za sinhronizacijo."
+    "pendantStorageAlmostFull": "Pomnilnik obeska je skoraj poln — pustite aplikacijo odprto za sinhronizacijo.",
+    "connectRayBanMeta": "Povežite Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Uporabite očala Ray-Ban Meta kot napravo za zajem Omi za pogovore in vizualni kontekst. Omi bo odprl aplikacijo Meta AI za povezavo vaših očal.",
+    "raybanMetaOpenMetaAI": "Povežite prek Meta AI",
+    "raybanMetaWaitingForMetaAI": "Dokončajte povezovanje v aplikaciji Meta AI, nato se vrnite sem.",
+    "raybanMetaCheckAgain": "Preverite znova",
+    "raybanMetaAllowCamera": "Dovolite kamero na očalih",
+    "raybanMetaCameraExplanation": "Omi uporablja kamero vaših očal za dodajanje fotografij k vašim pogovorom. To lahko preskočite in uporabljate samo zvok.",
+    "raybanMetaSkipForNow": "Preskoči za zdaj",
+    "raybanMetaAudioOnlyTitle": "Način samo za zvok Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Ta različica Omi lahko uporablja mikrofon vaših očal prek Bluetooth. Zajem fotografij zahteva Meta razvijalsko različico Omi.",
+    "raybanMetaMusicPauseNote": "Glasba na vašem telefonu se ustavi, medtem ko je mikrofon očal v uporabi.",
+    "raybanMetaContinue": "Nadaljujte",
+    "raybanMetaCapturePhoto": "Zajemi fotografijo",
+    "raybanMetaPhotoRequested": "Fotografija zahtevana — pojavila se bo v vašem pogovoru.",
+    "raybanMetaMicrophoneReady": "Mikrofon pripravljen",
+    "raybanMetaImageCaptureReady": "Zajem slike pripravljen",
+    "raybanMetaImageCaptureUnavailable": "Ni na voljo v načinu samo za zvok",
+    "raybanMetaCamera": "Kamera",
+    "errorConnectingRayBanMeta": "Napaka pri povezovanju z Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Shramba naprave",
+    "deviceStoragePercentFull": "{percent}% zasedeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} porabljeno",
+    "deviceStorageFree": "{free} prosto",
+    "deviceStorageNearlyFull": "Naprava je skoraj polna — sinhronizirajte za sprostitev prostora."
 }

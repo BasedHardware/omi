@@ -11,7 +11,7 @@ import json
 from unittest.mock import patch, MagicMock
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -99,6 +99,10 @@ _stubs = [
     'google.cloud.firestore_v1.FieldFilter',
     'google',
     'google.cloud',
+    # mcp_sse imports FailedPrecondition from google.api_core.exceptions; the
+    # bare 'google' AutoMock is not a package unless __path__ is set below.
+    'google.api_core',
+    'google.api_core.exceptions',
     'pinecone',
     'typesense',
     'opuslib',
@@ -125,6 +129,12 @@ for mod_name in _stubs:
     if mod_name not in sys.modules:
         sys.modules[mod_name] = _AutoMockModule(mod_name)
 
+# Make stubbed google.* packages importable as packages (submodule imports).
+for _pkg_name in ('google', 'google.cloud', 'google.api_core'):
+    _pkg = sys.modules.get(_pkg_name)
+    if isinstance(_pkg, ModuleType) and not hasattr(_pkg, '__path__'):
+        _pkg.__path__ = []  # type: ignore[attr-defined]
+
 if not isinstance(getattr(sys.modules['database._client'], '__file__', None), str):
     sys.modules['database._client'].document_id_from_seed = lambda seed: 'id-' + str(abs(hash(seed)) % (10**12))
 sys.modules['dependencies'].get_uid_from_mcp_api_key = MagicMock(return_value='user-1')
@@ -144,12 +154,44 @@ sys.modules['firebase_admin.auth'].ExpiredIdTokenError = type('ExpiredIdTokenErr
 sys.modules['firebase_admin.auth'].RevokedIdTokenError = type('RevokedIdTokenError', (Exception,), {})
 sys.modules['firebase_admin.auth'].CertificateFetchError = type('CertificateFetchError', (Exception,), {})
 sys.modules['firebase_admin.auth'].UserNotFoundError = type('UserNotFoundError', (Exception,), {})
+# AutoMockModule invents MagicMocks for missing attrs; those cannot be caught.
+# Reuse an existing Exception subclass if another test already installed one.
+_api_core_exc = sys.modules['google.api_core.exceptions']
+_existing_fp = getattr(_api_core_exc, 'FailedPrecondition', None)
+if not (isinstance(_existing_fp, type) and issubclass(_existing_fp, BaseException)):
+    _api_core_exc.FailedPrecondition = type('FailedPrecondition', (Exception,), {})
 
 from routers import mcp as rest  # noqa: E402
 from routers import mcp_sse as sse  # noqa: E402
 
 NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
+
+
+def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
+    route = next(
+        route
+        for route in rest.router.routes
+        if getattr(route, "path", None) == "/v1/mcp/memories" and "GET" in getattr(route, "methods", set())
+    )
+    dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
+    assert dependency_calls == [rest.get_mcp_memory_default_memory_read_context]
+    assert rest.get_uid_from_mcp_api_key not in dependency_calls
+
+    auth_context = SimpleNamespace(uid="auth-user")
+    authorization = SimpleNamespace(allowed=True)
+    memory_service = MagicMock()
+    memory_service.read.return_value = []
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
+        patch.object(rest, "pin_memory_system", return_value=rest.MemorySystem.CANONICAL) as pin,
+        patch.object(rest, "MemoryService", return_value=memory_service),
+    ):
+        assert rest.get_memories(auth_context=auth_context) == []
+
+    pin.assert_called_once_with("auth-user", db_client=rest.db)
+    authorize.assert_called_once_with(auth_context, db_client=rest.db)
+    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
 
 
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
@@ -216,8 +258,9 @@ async def test_sse_post_tools_list_accepts_missing_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
 
@@ -232,8 +275,9 @@ async def test_sse_post_tools_list_ignores_stale_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
     ):
         response = await sse.mcp_streamable_http(
             request,
@@ -253,9 +297,11 @@ async def test_sse_get_keepalive_uses_transport_rate_limit():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
-    ), patch.object(sse, 'check_rate_limit_inline') as check_rate_limit:
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse, 'check_rate_limit_inline') as check_rate_limit,
+    ):
         response = await sse.mcp_sse_get(request, authorization='Bearer token')
 
     assert response.status_code == 200
@@ -493,6 +539,27 @@ class TestScreenActivity:
         result = sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
         assert result['total_screenshots'] == 0
 
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_rows_missing_index_returns_typed_error(self, mock_db):
+        # Regression for #9189: a missing Firestore index must surface as a typed,
+        # actionable ToolExecutionError, not an opaque 500.
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'app': 'Cursor'})
+        assert exc_info.value.code == -32009
+        assert 'index' in exc_info.value.message.lower()
+
+    @patch('routers.mcp_sse.screen_activity_db')
+    def test_tool_summary_missing_index_returns_typed_error(self, mock_db):
+        from google.api_core.exceptions import FailedPrecondition
+
+        mock_db.get_screen_activity_summary.side_effect = FailedPrecondition('query requires an index')
+        with pytest.raises(sse.ToolExecutionError) as exc_info:
+            sse.execute_tool(UID, 'get_screen_activity', {'summary': True})
+        assert exc_info.value.code == -32009
+
 
 class TestDailySummaries:
     @patch('routers.mcp.daily_summaries_db')
@@ -524,9 +591,13 @@ class TestToolRegistry:
     def test_every_tool_has_a_dispatch_branch(self):
         # Each declared read-only data tool must dispatch (not fall through to "Unknown tool").
         for name in ['get_action_items', 'get_goals', 'get_chat_messages', 'get_people', 'get_daily_summaries']:
-            with patch.object(sse, 'action_items_db'), patch.object(sse, 'goals_db'), patch.object(
-                sse, 'chat_db'
-            ), patch.object(sse, 'users_db'), patch.object(sse, 'daily_summaries_db'):
+            with (
+                patch.object(sse, 'action_items_db'),
+                patch.object(sse, 'goals_db'),
+                patch.object(sse, 'chat_db'),
+                patch.object(sse, 'users_db'),
+                patch.object(sse, 'daily_summaries_db'),
+            ):
                 try:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:

@@ -1,5 +1,6 @@
 {
     "@@locale": "uk",
+    "sessionExpiredSignInAgain": "Сеанс завершено — увійдіть знову.",
     "appTitle": "Omi",
     "conversationTab": "Розмова",
     "transcriptTab": "Транскрипція",
@@ -3116,5 +3117,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "Пам'ять кулона майже заповнена — тримайте застосунок відкритим для синхронізації."
+    "pendantStorageAlmostFull": "Пам'ять кулона майже заповнена — тримайте застосунок відкритим для синхронізації.",
+    "connectRayBanMeta": "Підключити Ray-Ban Meta",
+    "raybanMetaSetupDescription": "Використовуйте окуляри Ray-Ban Meta як пристрій запису Omi для бесід і візуального контексту. Omi відкриє додаток Meta AI, щоб підключити ваші окуляри.",
+    "raybanMetaOpenMetaAI": "Підключити через Meta AI",
+    "raybanMetaWaitingForMetaAI": "Завершіть підключення в додатку Meta AI, а потім поверніться сюди.",
+    "raybanMetaCheckAgain": "Перевірити знову",
+    "raybanMetaAllowCamera": "Дозволити камеру на окулярах",
+    "raybanMetaCameraExplanation": "Omi використовує камеру ваших окулярів, щоб додавати фотографії до ваших бесід. Ви можете пропустити це й використовувати лише звук.",
+    "raybanMetaSkipForNow": "Пропустити поки що",
+    "raybanMetaAudioOnlyTitle": "Режим лише звуку Ray-Ban Meta",
+    "raybanMetaAudioOnlyExplanation": "Ця версія Omi може використовувати мікрофон ваших окулярів через Bluetooth. Для зйомки фотографій потрібна версія Omi для розробників Meta.",
+    "raybanMetaMusicPauseNote": "Музика на вашому телефоні призупиняється, поки використовується мікрофон окулярів.",
+    "raybanMetaContinue": "Продовжити",
+    "raybanMetaCapturePhoto": "Зробити фото",
+    "raybanMetaPhotoRequested": "Фото запитано — воно з'явиться у вашій бесіді.",
+    "raybanMetaMicrophoneReady": "Мікрофон готовий",
+    "raybanMetaImageCaptureReady": "Зйомка зображення готова",
+    "raybanMetaImageCaptureUnavailable": "Недоступно в режимі лише звуку",
+    "raybanMetaCamera": "Камера",
+    "errorConnectingRayBanMeta": "Помилка підключення до Ray-Ban Meta: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "Сховище пристрою",
+    "deviceStoragePercentFull": "заповнено {percent}%",
+    "deviceStorageUsedOfTotal": "використано {used} з {total}",
+    "deviceStorageFree": "{free} вільно",
+    "deviceStorageNearlyFull": "Пристрій майже заповнений — синхронізуйте, щоб звільнити місце."
 }

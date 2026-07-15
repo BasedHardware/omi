@@ -64,6 +64,7 @@ _mod(
     SubscriptionStatus=MagicMock(),
 )
 _mod("utils.subscription", get_default_basic_subscription=MagicMock())
+_mod("models.other", Person=MagicMock())
 
 
 def _load():

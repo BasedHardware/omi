@@ -22,9 +22,9 @@ What counts: an occurrence of `.asyncAfter(` in a `.swift` file under the scanne
 root. The leading dot + open paren deliberately excludes prose mentions of the
 word `asyncAfter` (e.g. in doc comments).
 
-Wiring (see also `scripts/pre-push` and `.github/workflows/lint.yml`):
+Wiring (see also `scripts/pre-push` and `.github/workflows/repo-checks.yml`):
   - Pre-push: run automatically for pushes that touch the floating-bar sources.
-  - CI: a gated step in the Lint workflow.
+  - CI: a gated step in the Repo Checks workflow.
   - Manually:  python3 desktop/macos/scripts/check-async-after-ratchet.py
   - Show the count / offenders:  ... --print
 
@@ -43,7 +43,7 @@ from pathlib import Path
 # scanned sources. MAY ONLY DECREASE. Raising it is a regression and must not be
 # done to make the gate pass; key the new transition off a real signal (a window
 # becoming key, a view lifecycle event, a state change) instead.
-BASELINE = 27
+BASELINE = 23
 
 # Scanned root, relative to the repo root. Covers the floating control bar and the
 # push-to-talk manager (which lives under FloatingControlBar/).

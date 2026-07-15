@@ -5,6 +5,7 @@ import os
 import sys
 from pathlib import Path
 import time
+import pytest
 from types import ModuleType
 
 BACKEND_DIR = Path(__file__).resolve().parents[1]
@@ -35,6 +36,8 @@ from testing.hermetic_network import block_outbound_network
 
 _network_guard = None
 _test_file_durations = defaultdict(float)
+_test_item_durations = defaultdict(float)
+_test_item_cpu = defaultdict(float)
 _collected_unit_files = set()
 
 _UNIT_TEST_ROOTS = (
@@ -94,6 +97,25 @@ def pytest_runtest_logreport(report):
     test_file = _backend_relative(report.fspath)
     if test_file is not None and test_file in _collected_unit_files:
         _test_file_durations[test_file] += report.duration
+        _test_item_durations[report.nodeid] += report.duration
+
+
+@pytest.hookimpl(hookwrapper=True)
+def pytest_runtest_call(item):
+    """Measure per-test CPU time (call phase only) for the duration guard.
+
+    CPU time (``time.process_time``) is load-independent: a test that does X ms of work
+    reads ~X ms whether the machine is idle or running many sibling pytest processes, so a
+    hard limit is deterministic (unlike wall-clock ``report.duration``, which inflates under
+    parallel contention). Only the *call* phase is measured so that shared class/file setup
+    (FastAPI app / TestClient construction, per-process module import) — which file-isolated
+    runs charge once to the first test — is not misattributed as a per-test regression. The
+    advisory timing summary still reports wall-clock for visibility.
+    """
+    start = time.process_time()
+    yield
+    if _is_unit_test_path(item.path):
+        _test_item_cpu[item.nodeid] += time.process_time() - start
 
 
 def pytest_sessionfinish(session, exitstatus):
@@ -113,6 +135,13 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
         return
 
     limit = int(os.environ.get('BACKEND_PYTEST_SLOW_FILE_LIMIT', '10'))
+    item_limit = int(os.environ.get('BACKEND_PYTEST_SLOW_TEST_LIMIT', '10'))
+    if _test_item_durations:
+        terminalreporter.section('Backend unit test durations')
+        slow_items = sorted(_test_item_durations.items(), key=lambda item: item[1], reverse=True)[:item_limit]
+        for test_id, seconds in slow_items:
+            terminalreporter.line(f'{seconds:7.2f}s  {test_id}')
+
     terminalreporter.section('Backend unit test file durations')
     slow_files = sorted(_test_file_durations.items(), key=lambda item: item[1], reverse=True)[:limit]
     for test_file, seconds in slow_files:
@@ -124,32 +153,98 @@ def pytest_terminal_summary(terminalreporter, exitstatus, config):
 
 
 def _enforce_fast_unit_duration_guard(session):
-    raw_limit = os.environ.get('BACKEND_FAST_UNIT_MAX_SECONDS')
-    if not raw_limit or not _collected_unit_files:
-        return
-    try:
-        limit = float(raw_limit)
-    except ValueError:
-        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
-        if terminalreporter is not None:
-            terminalreporter.section('Backend fast unit duration guard failures')
-            terminalreporter.line(f'Invalid BACKEND_FAST_UNIT_MAX_SECONDS value: {raw_limit}')
-        session.exitstatus = 1
-        return
-
-    allowlist = _read_duration_allowlist()
-    offenders = [
-        (test_file, seconds)
-        for test_file, seconds in sorted(_test_file_durations.items(), key=lambda item: item[1], reverse=True)
-        if seconds > limit and test_file not in allowlist
-    ]
-    if not offenders:
+    raw_warn_limit = os.environ.get('BACKEND_FAST_UNIT_WARN_SECONDS')
+    raw_fail_limit = os.environ.get('BACKEND_FAST_UNIT_FAIL_SECONDS')
+    if (not raw_warn_limit and not raw_fail_limit) or not _collected_unit_files:
         return
 
     terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+    warn_limit = _parse_fast_unit_limit(raw_warn_limit, 'BACKEND_FAST_UNIT_WARN_SECONDS', terminalreporter)
+    fail_limit = _parse_fast_unit_limit(raw_fail_limit, 'BACKEND_FAST_UNIT_FAIL_SECONDS', terminalreporter)
+    if warn_limit is None and raw_warn_limit:
+        session.exitstatus = 1
+        return
+    if fail_limit is None and raw_fail_limit:
+        session.exitstatus = 1
+        return
+
+    if warn_limit is None:
+        warn_limit = fail_limit
+    if fail_limit is not None and warn_limit is not None and fail_limit < warn_limit:
+        terminalreporter = session.config.pluginmanager.get_plugin('terminalreporter')
+        if terminalreporter is not None:
+            terminalreporter.section('Backend fast unit duration guard configuration error')
+            terminalreporter.line(
+                'BACKEND_FAST_UNIT_FAIL_SECONDS must be greater than or equal to ' 'BACKEND_FAST_UNIT_WARN_SECONDS.'
+            )
+        session.exitstatus = 1
+        return
+
+    # The guard measures per-test CPU time (``_test_item_cpu``), not wall-clock. CPU time is
+    # load-independent: a test that does X ms of work reads ~X ms whether the machine is idle or
+    # running many sibling pytest processes, whereas wall-clock ``report.duration`` inflates
+    # unpredictably under parallel contention and makes a hard limit flake. Sleep/wait-based
+    # slowness (real asyncio sleeps, network, stress) is excluded from the PR unit lane via
+    # ``slow``/``integration`` markers, so CPU time is the right signal here. The advisory
+    # timing summary in pytest_terminal_summary still reports wall-clock for visibility.
+    # The warning threshold is the target for fast unit tests. The failure threshold is the
+    # blocking budget; local pre-push stays strict, while CI uses a broad sanity ceiling so
+    # cross-machine CPU differences do not make unrelated pull requests flaky.
+
+    allowlist = _read_duration_allowlist()
+    unit_test_items = {
+        nodeid: seconds
+        for nodeid, seconds in _test_item_cpu.items()
+        if nodeid.split('::', 1)[0] in _collected_unit_files
+    }
+    warning_offenders = [
+        (test_id, seconds)
+        for test_id, seconds in sorted(unit_test_items.items(), key=lambda item: item[1], reverse=True)
+        if (
+            warn_limit is not None
+            and seconds > warn_limit
+            and (fail_limit is None or seconds <= fail_limit)
+            and not _duration_allowlisted(test_id, allowlist)
+        )
+    ]
+    failure_offenders = [
+        (test_id, seconds)
+        for test_id, seconds in sorted(unit_test_items.items(), key=lambda item: item[1], reverse=True)
+        if fail_limit is not None and seconds > fail_limit and not _duration_allowlisted(test_id, allowlist)
+    ]
+    if not warning_offenders and not failure_offenders:
+        return
+
     if terminalreporter is not None:
-        terminalreporter.section('Backend fast unit duration guard failures')
-        for test_file, seconds in offenders:
-            terminalreporter.line(f'{seconds:7.2f}s > {limit:.2f}s  {test_file}')
+        if warning_offenders:
+            terminalreporter.section('Backend fast unit duration guard warnings (CPU time)')
+            for test_id, seconds in warning_offenders:
+                terminalreporter.line(f'{seconds:7.2f}s > {warn_limit:.2f}s  {test_id}')
+        if failure_offenders:
+            terminalreporter.section('Backend fast unit duration guard failures (CPU time)')
+            for test_id, seconds in failure_offenders:
+                terminalreporter.line(f'{seconds:7.2f}s > {fail_limit:.2f}s  {test_id}')
+        terminalreporter.line(
+            f'(CPU time, call phase only; warn limit = {warn_limit:.2f}s'
+            + (f', fail limit = {fail_limit:.2f}s.)' if fail_limit is not None else '.)')
+        )
         terminalreporter.line(f'Allow intentional exceptions in {_FAST_UNIT_ALLOWLIST.relative_to(BACKEND_DIR)}.')
-    session.exitstatus = 1
+    if failure_offenders:
+        session.exitstatus = 1
+
+
+def _parse_fast_unit_limit(raw_value, name, terminalreporter):
+    if raw_value is None or raw_value == '':
+        return None
+    try:
+        return float(raw_value)
+    except ValueError:
+        if terminalreporter is not None:
+            terminalreporter.section('Backend fast unit duration guard configuration error')
+            terminalreporter.line(f'Invalid {name} value: {raw_value}')
+        return None
+
+
+def _duration_allowlisted(test_id, allowlist):
+    test_file = test_id.split('::', 1)[0]
+    return test_id in allowlist or test_file in allowlist

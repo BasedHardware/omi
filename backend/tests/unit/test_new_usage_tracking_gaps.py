@@ -506,7 +506,9 @@ class TestSourceTrackUsageWrapping:
         """utils/llm/clients.py must attach _usage_callback to ChatOpenAI."""
         source = (BACKEND_ROOT / "utils" / "llm" / "clients.py").read_text(encoding="utf-8")
         assert "_usage_callback = get_usage_callback()" in source, "clients.py must initialize the usage callback"
-        assert "'callbacks': [_usage_callback]" in source, "clients.py must attach usage callback"
+        assert (
+            "'callbacks': [_usage_callback]" in source or "callbacks.append(_usage_callback)" in source
+        ), "clients.py must attach usage callback"
 
     def test_usage_tracker_imports_in_modified_files(self):
         """Each modified file must import track_usage and Features from usage_tracker."""

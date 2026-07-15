@@ -1,5 +1,6 @@
 {
     "@@locale": "zh",
+    "sessionExpiredSignInAgain": "会话已过期，请重新登录。",
     "appTitle": "Omi",
     "conversationTab": "对话",
     "transcriptTab": "转录",
@@ -3138,5 +3139,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "吊坠存储空间即将用尽——请保持应用打开以同步。"
+    "pendantStorageAlmostFull": "吊坠存储空间即将用尽——请保持应用打开以同步。",
+    "connectRayBanMeta": "连接 Ray-Ban Meta",
+    "raybanMetaSetupDescription": "将您的 Ray-Ban Meta 眼镜用作 Omi 采集设备，用于对话和视觉情境。Omi 将打开 Meta AI 应用以关联您的眼镜。",
+    "raybanMetaOpenMetaAI": "通过 Meta AI 连接",
+    "raybanMetaWaitingForMetaAI": "在 Meta AI 应用中完成连接，然后返回此处。",
+    "raybanMetaCheckAgain": "再次检查",
+    "raybanMetaAllowCamera": "允许在眼镜上使用摄像头",
+    "raybanMetaCameraExplanation": "Omi 使用您眼镜的摄像头将照片添加到您的对话中。您可以跳过此步骤，仅使用音频。",
+    "raybanMetaSkipForNow": "暂时跳过",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta 纯音频模式",
+    "raybanMetaAudioOnlyExplanation": "此版本的 Omi 可以通过蓝牙使用您眼镜的麦克风。拍摄照片需要 Omi 的 Meta 开发者版本。",
+    "raybanMetaMusicPauseNote": "使用眼镜麦克风时，您手机上的音乐将暂停。",
+    "raybanMetaContinue": "继续",
+    "raybanMetaCapturePhoto": "拍摄照片",
+    "raybanMetaPhotoRequested": "已请求拍照 — 照片将显示在您的对话中。",
+    "raybanMetaMicrophoneReady": "麦克风已就绪",
+    "raybanMetaImageCaptureReady": "图像采集已就绪",
+    "raybanMetaImageCaptureUnavailable": "在纯音频模式下不可用",
+    "raybanMetaCamera": "摄像头",
+    "errorConnectingRayBanMeta": "连接 Ray-Ban Meta 时出错：{error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "设备存储",
+    "deviceStoragePercentFull": "已用 {percent}%",
+    "deviceStorageUsedOfTotal": "{total} 中已使用 {used}",
+    "deviceStorageFree": "剩余 {free}",
+    "deviceStorageNearlyFull": "设备快满了 — 请同步以释放空间。"
 }

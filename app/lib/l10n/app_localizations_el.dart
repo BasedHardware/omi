@@ -9,6 +9,9 @@ class AppLocalizationsEl extends AppLocalizations {
   AppLocalizationsEl([String locale = 'el']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Η συνεδρία έληξε — συνδεθείτε ξανά.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9576,4 +9579,88 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get pendantStorageAlmostFull =>
       'Ο αποθηκευτικός χώρος του μενταγιόν είναι σχεδόν πλήρης — κρατήστε την εφαρμογή ανοιχτή για συγχρονισμό.';
+
+  @override
+  String get connectRayBanMeta => 'Σύνδεση Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Χρησιμοποιήστε τα γυαλιά σας Ray-Ban Meta ως συσκευή καταγραφής Omi για συνομιλίες και οπτικό πλαίσιο. Το Omi θα ανοίξει την εφαρμογή Meta AI για να συνδέσει τα γυαλιά σας.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Σύνδεση μέσω Meta AI';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Ολοκληρώστε τη σύνδεση στην εφαρμογή Meta AI και μετά επιστρέψτε εδώ.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Έλεγχος ξανά';
+
+  @override
+  String get raybanMetaAllowCamera => 'Να επιτρέπεται η κάμερα στα γυαλιά';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Το Omi χρησιμοποιεί την κάμερα των γυαλιών σας για να προσθέτει φωτογραφίες στις συνομιλίες σας. Μπορείτε να το παραλείψετε και να χρησιμοποιήσετε μόνο ήχο.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Παράλειψη προς το παρόν';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Λειτουργία μόνο ήχου Ray-Ban Meta';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'Αυτή η έκδοση του Omi μπορεί να χρησιμοποιεί το μικρόφωνο των γυαλιών σας μέσω Bluetooth. Η λήψη φωτογραφιών απαιτεί την έκδοση προγραμματιστή Meta του Omi.';
+
+  @override
+  String get raybanMetaMusicPauseNote =>
+      'Η μουσική στο τηλέφωνό σας σταματά προσωρινά όσο χρησιμοποιείται το μικρόφωνο των γυαλιών.';
+
+  @override
+  String get raybanMetaContinue => 'Συνέχεια';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Λήψη φωτογραφίας';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Ζητήθηκε φωτογραφία — θα εμφανιστεί στη συνομιλία σας.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Το μικρόφωνο είναι έτοιμο';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Η λήψη εικόνας είναι έτοιμη';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Μη διαθέσιμο σε λειτουργία μόνο ήχου';
+
+  @override
+  String get raybanMetaCamera => 'Κάμερα';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Σφάλμα σύνδεσης με Ray-Ban Meta: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Αποθηκευτικός χώρος συσκευής';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% γεμάτο';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used από $total σε χρήση';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ελεύθερα';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Η συσκευή είναι σχεδόν γεμάτη — συγχρονίστε για να ελευθερώσετε χώρο.';
 }

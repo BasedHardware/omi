@@ -47,7 +47,7 @@ def test_pins_legacy_runtime_calls_in_router_source():
         "memories_db.get_memories(uid, limit, offset)",
     ]
     assert routes["POST /v3/memories"]["legacy_runtime_calls"] == [
-        "MemoryDB.from_memory(memory, uid, None, manually_added)",
+        "MemoryDB.from_memory includes request device provenance",
         "memories_db.create_memory(uid, payload)",
         "upsert_memory_vector(uid, memory_db.id, memory_db.content, memory_db.category.value, memory_db.subject_entity_id)",
     ]

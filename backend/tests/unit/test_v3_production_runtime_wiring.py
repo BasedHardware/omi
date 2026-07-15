@@ -14,12 +14,12 @@ except Exception as exc:  # pragma: no cover - system pytest env without backend
 from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from utils.memory.default_read_rollout import DEFAULT_READ_ROLLOUT_SCHEMA_VERSION
-from utils.memory.v3_composed_get_service import (
+from utils.memory.v3.composed_get_service import (
     V3ComposedRequestParams,
     V3ComposedResponse,
     compose_v3_get,
 )
-from utils.memory.v3_production_runtime import build_v3_production_runtime
+from utils.memory.v3.production_runtime import build_v3_production_runtime
 
 
 @dataclass
@@ -239,6 +239,7 @@ def _route_client(monkeypatch, db, legacy_calls):
     return TestClient(app, raise_server_exceptions=False)
 
 
+@pytest.mark.slow
 def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_off(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -261,6 +262,7 @@ def test_real_router_uses_actual_builder_and_does_zero_db_reads_while_v3_gate_of
     assert db.streams == []
 
 
+@pytest.mark.slow
 def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_calls_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -282,6 +284,7 @@ def test_real_router_uses_actual_builder_for_enrolled_memory_read_and_never_call
     assert db.writes == []
 
 
+@pytest.mark.slow
 def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')
@@ -300,6 +303,7 @@ def test_real_router_actual_builder_fail_closed_does_not_call_legacy(monkeypatch
     assert db.writes == []
 
 
+@pytest.mark.slow
 def test_real_router_cursor_read_requires_cursor_secret_and_never_calls_legacy(monkeypatch):
     monkeypatch.setenv('MEMORY_MODE', 'read')
     monkeypatch.setenv('MEMORY_ENABLED_USERS', 'uid-a')

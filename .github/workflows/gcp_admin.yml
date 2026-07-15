@@ -2,84 +2,84 @@ name: Deploy Admin Dashboard to Cloud Run
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: ["main", "development"]
     paths:
       - 'web/admin/**'
+      - 'config/public-build-*.json'
+      - '.github/actions/prepare-public-build/**'
+      - '.github/actions/public-build-candidate-promotion/**'
+      - '.github/scripts/preflight_public_build_config.py'
+      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
 
 env:
   SERVICE: omi-admin-dashboard
   REGION: us-central1
-  GCP_PROJECT: based-hardware
+  TARGET: admin
+
+concurrency:
+  group: deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
+  cancel-in-progress: false
 
 jobs:
   deploy:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
     permissions:
-      contents: 'read'
-      id-token: 'write'
-
+      actions: read
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
 
-      - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
+      - name: Prepare reviewed public build inputs
+        id: public-build
+        uses: ./.github/actions/prepare-public-build
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - run: gcloud auth configure-docker
+          target: admin
+          environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
 
-      - name: Fetch build-time secrets from GCP Secret Manager
-        id: secrets
+      - name: Compute immutable candidate identity
+        id: candidate
         run: |
-          echo "Fetching NEXT_PUBLIC_ build-time secrets from GCP Secret Manager..."
+          short_sha="${GITHUB_SHA::7}"
+          revision_suffix="${short_sha}-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           {
-            echo "NEXT_PUBLIC_FIREBASE_API_KEY=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_API_KEY --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_PROJECT_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_PROJECT_ID --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_APP_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_APP_ID --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_FIREBASE_VAPID_KEY=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_FIREBASE_VAPID_KEY --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_PLUGINS_APP_ID=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_PLUGINS_APP_ID --project=${{ env.GCP_PROJECT }})"
-            echo "NEXT_PUBLIC_OMI_API_URL=$(gcloud secrets versions access latest --secret=WEB_ADMIN_NEXT_PUBLIC_OMI_API_URL --project=${{ env.GCP_PROJECT }})"
+            echo "short_sha=${short_sha}"
+            echo "revision_suffix=${revision_suffix}"
+            echo "revision=${{ env.SERVICE }}-${revision_suffix}"
+            echo "tag=public-admin-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           } >> "$GITHUB_OUTPUT"
 
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v2
+      - name: Google Auth
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - run: gcloud auth configure-docker
+
+      - name: Build and push immutable Docker image
+        uses: docker/build-push-action@v6
         with:
           context: web/admin
           push: true
           platforms: linux/amd64
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          build-args: |
-            NEXT_PUBLIC_FIREBASE_API_KEY=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_API_KEY }}
-            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-            NEXT_PUBLIC_FIREBASE_APP_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_APP_ID }}
-            NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ steps.secrets.outputs.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
-            NEXT_PUBLIC_PLUGINS_APP_ID=${{ steps.secrets.outputs.NEXT_PUBLIC_PLUGINS_APP_ID }}
-            NEXT_PUBLIC_OMI_API_URL=${{ steps.secrets.outputs.NEXT_PUBLIC_OMI_API_URL }}
+          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate.outputs.short_sha }}
+          build-args: ${{ steps.public-build.outputs.build_args }}
 
-      - name: Deploy to Cloud Run
-        id: deploy
+      - name: Deploy no-traffic candidate revision
         uses: google-github-actions/deploy-cloudrun@v2
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          revision_traffic: LATEST=100
-          # listUsers() scans ~112K Firebase Auth users for the Cumulative
-          # Users chart; 512Mi was OOMing (SIGABRT) during the scan. The
-          # /api/internal/precompute route runs the heaviest aggregations
-          # (profitability/infra-costs) off the request path, so the timeout is
-          # raised to 3600s and memory to 2Gi for that job.
-          flags: '--memory=2Gi --cpu=1 --timeout=3600'
+          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.candidate.outputs.short_sha }}
+          no_traffic: true
+          flags: >-
+            --revision-suffix=${{ steps.candidate.outputs.revision_suffix }}
+            --tag=${{ steps.candidate.outputs.tag }}
+            --memory=2Gi --cpu=1 --timeout=3600
           secrets: |
             FIREBASE_PROJECT_ID=WEB_ADMIN_FIREBASE_PROJECT_ID:latest
             FIREBASE_CLIENT_EMAIL=WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest
@@ -104,5 +104,12 @@ jobs:
             GOAFFPRO_ACCESS_TOKEN=GOAFFPRO_ACCESS_TOKEN:latest
             CRON_SECRET=WEB_ADMIN_CRON_SECRET:latest
 
-      - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+      - name: Promote browser-accepted candidate
+        uses: ./.github/actions/public-build-candidate-promotion
+        with:
+          target: admin
+          service: ${{ env.SERVICE }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          region: ${{ env.REGION }}
+          revision: ${{ steps.candidate.outputs.revision }}
+          tag: ${{ steps.candidate.outputs.tag }}

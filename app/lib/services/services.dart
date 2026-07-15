@@ -8,20 +8,39 @@ import 'package:flutter_sound/flutter_sound.dart';
 
 import 'package:omi/services/connectivity_service.dart';
 import 'package:omi/services/devices.dart';
+import 'package:omi/services/mic/mic_arbiter.dart';
+import 'package:omi/services/mic/native_mic_recorder_service.dart';
 import 'package:omi/services/sockets.dart';
 import 'package:omi/services/wals.dart';
 import 'package:omi/utils/logger.dart';
 
 class ServiceManager {
   late IMicRecorderService _mic;
-  late IDeviceService _device;
+  late IMicRecorderService _phoneMic;
+  late DeviceService _device;
   late ISocketService _socket;
   late IWalService _wal;
   static ServiceManager? _instance;
 
   static ServiceManager _create() {
     ServiceManager sm = ServiceManager();
-    sm._mic = MicRecorderBackgroundService(runner: BackgroundService());
+    final micArbiter = MicArbiter();
+    sm._mic = ArbitratedMic(
+      inner: MicRecorderBackgroundService(runner: BackgroundService()),
+      arbiter: micArbiter,
+      owner: 'mic',
+    );
+    // Conversation capture uses the native AVAudioEngine recorder on iOS;
+    // everything else (chat voice memos, speech profile, all of Android)
+    // stays on the flutter_sound path. The shared arbiter keeps the two
+    // stacks from contending for the microphone.
+    sm._phoneMic = Platform.isIOS
+        ? ArbitratedMic(
+            inner: NativeMicRecorderService(),
+            arbiter: micArbiter,
+            owner: 'conversation',
+          )
+        : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
     sm._wal = WalService();
@@ -39,7 +58,11 @@ class ServiceManager {
 
   IMicRecorderService get mic => _mic;
 
-  IDeviceService get device => _device;
+  /// The recorder for conversation capture: native on iOS, flutter_sound
+  /// elsewhere. Chat voice memos and speech profile keep using [mic].
+  IMicRecorderService get phoneMic => _phoneMic;
+
+  DeviceService get device => _device;
 
   ISocketService get socket => _socket;
 
@@ -62,6 +85,9 @@ class ServiceManager {
     ConnectivityService().dispose();
     await _wal.stop();
     _mic.stop();
+    if (!identical(_phoneMic, _mic)) {
+      _phoneMic.stop();
+    }
     _device.stop();
   }
 }
@@ -142,7 +168,11 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
+      iosConfiguration: IosConfiguration(
+        autoStart: false,
+        onForeground: onStart,
+        onBackground: onIosBackground,
+      ),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -244,6 +274,10 @@ abstract class IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    // Fired with began=true/false around an audio-session interruption. Only
+    // NativeMicRecorderService emits it — capture resumes natively; Dart just
+    // mirrors the state.
+    Function(bool began)? onInterruption,
   });
   void stop();
 }
@@ -262,6 +296,7 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     await _runner.ensureRunning();
 
@@ -320,9 +355,12 @@ class MicRecorderService implements IMicRecorderService {
     Function()? onStop,
     Function()? onInitializing,
     Function()? onStalled,
+    Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception("Recorder is recording, please stop it before start new recording.");
+      throw Exception(
+        "Recorder is recording, please stop it before start new recording.",
+      );
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");

@@ -43,42 +43,27 @@ function logErr(msg: string): void {
   process.stderr.write(`[omi-tools-stdio] ${msg}\n`);
 }
 
-function activeOmiContext(): Record<string, unknown> {
-  const envBase = {
-    protocolVersion: PROTOCOL_VERSION,
-    adapterId: process.env.OMI_ADAPTER_ID,
-  };
+function activeRunCapability(): { capabilityRef?: string; contextError?: string } {
   if (process.env.OMI_CONTEXT_FILE) {
     try {
       const parsed = JSON.parse(readFileSync(process.env.OMI_CONTEXT_FILE, "utf8"));
       if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-        return {
-          ...envBase,
-          ...parsed,
-        };
+        return typeof parsed.capabilityRef === "string" && parsed.capabilityRef.length > 0
+          ? { capabilityRef: parsed.capabilityRef }
+          : { contextError: "OMI context file did not contain a capabilityRef" };
       }
       return {
-        ...envBase,
         contextError: "OMI context file did not contain an object",
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       logErr(`Failed to read OMI context file: ${message}`);
       return {
-        ...envBase,
         contextError: message,
       };
     }
   }
-  return {
-    ...envBase,
-    requestId: process.env.OMI_REQUEST_ID,
-    clientId: process.env.OMI_CLIENT_ID,
-    sessionId: process.env.OMI_SESSION_ID,
-    runId: process.env.OMI_RUN_ID,
-    attemptId: process.env.OMI_ATTEMPT_ID,
-    adapterSessionId: process.env.OMI_ADAPTER_SESSION_ID,
-  };
+  return { contextError: "OMI_CONTEXT_FILE is not configured" };
 }
 
 // --- Communication with parent bridge ---
@@ -144,9 +129,9 @@ async function requestSwiftTool(
     return "Error: not connected to bridge";
   }
 
-  const context = activeOmiContext();
-  if (context.contextError || !context.requestId || !context.clientId) {
-    return `Error: missing active Omi request context for tool relay${context.contextError ? `: ${context.contextError}` : ""}`;
+  const capability = activeRunCapability();
+  if (capability.contextError || !capability.capabilityRef) {
+    return `Error: missing active Omi run capability for tool relay${capability.contextError ? `: ${capability.contextError}` : ""}`;
   }
 
   return new Promise<string>((resolve) => {
@@ -154,9 +139,11 @@ async function requestSwiftTool(
     const msg = JSON.stringify({
       type: "tool_use",
       callId,
+      invocationId: callId,
       name,
       input,
-      ...context,
+      protocolVersion: PROTOCOL_VERSION,
+      capabilityRef: capability.capabilityRef,
     });
     pipeConnection!.write(msg + "\n");
   });
@@ -165,13 +152,16 @@ async function requestSwiftTool(
 // --- MCP tool definitions ---
 
 const isOnboarding = process.env.OMI_ONBOARDING === "true";
+const hasScreenContext = process.env.OMI_SCREEN_CONTEXT === "true";
+const executionRole = process.env.OMI_EXECUTION_ROLE === "leaf" ? "leaf" : "coordinator";
+const projectionContext = { onboarding: isOnboarding, screenContext: hasScreenContext, executionRole } as const;
 
 // Tool order is owned by the canonical manifest projection.
-const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const ADVERTISED_TOOLS = toolsForAdapter("omi-tools-stdio", projectionContext);
 const ADVERTISED_CANONICAL_TOOL_NAMES = new Set(ADVERTISED_TOOLS.map((tool) => tool.name));
 // Filter tools based on session type: onboarding sessions get onboarding tools,
 // regular sessions exclude them
-const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", { onboarding: isOnboarding });
+const TOOLS = mcpToolDefinitionsForAdapter("omi-tools-stdio", projectionContext);
 
 // --- JSON-RPC handling ---
 

@@ -9,6 +9,9 @@ class AppLocalizationsEt extends AppLocalizations {
   AppLocalizationsEt([String locale = 'et']) : super(locale);
 
   @override
+  String get sessionExpiredSignInAgain => 'Seanss aegus — logige uuesti sisse.';
+
+  @override
   String get appTitle => 'Omi';
 
   @override
@@ -9505,4 +9508,87 @@ class AppLocalizationsEt extends AppLocalizations {
 
   @override
   String get pendantStorageAlmostFull => 'Ripatsi mälu on peaaegu täis — hoia rakendus avatud, et sünkroonida.';
+
+  @override
+  String get connectRayBanMeta => 'Ühenda Ray-Ban Meta';
+
+  @override
+  String get raybanMetaSetupDescription =>
+      'Kasuta oma Ray-Ban Meta prille Omi jäädvustusseadmena vestluste ja visuaalse konteksti jaoks. Omi avab Meta AI rakenduse, et sinu prillid siduda.';
+
+  @override
+  String get raybanMetaOpenMetaAI => 'Ühenda Meta AI kaudu';
+
+  @override
+  String get raybanMetaWaitingForMetaAI => 'Lõpeta ühendamine Meta AI rakenduses ja tule siis siia tagasi.';
+
+  @override
+  String get raybanMetaCheckAgain => 'Kontrolli uuesti';
+
+  @override
+  String get raybanMetaAllowCamera => 'Luba prillide kaamera';
+
+  @override
+  String get raybanMetaCameraExplanation =>
+      'Omi kasutab sinu prillide kaamerat, et lisada vestlustele fotosid. Võid selle vahele jätta ja kasutada ainult heli.';
+
+  @override
+  String get raybanMetaSkipForNow => 'Jäta praegu vahele';
+
+  @override
+  String get raybanMetaAudioOnlyTitle => 'Ray-Ban Meta ainult heli režiim';
+
+  @override
+  String get raybanMetaAudioOnlyExplanation =>
+      'See Omi versioon saab kasutada sinu prillide mikrofoni Bluetoothi kaudu. Fotode jäädvustamiseks on vaja Omi Meta arendajaversiooni.';
+
+  @override
+  String get raybanMetaMusicPauseNote => 'Sinu telefoni muusika peatub, kui prillide mikrofon on kasutusel.';
+
+  @override
+  String get raybanMetaContinue => 'Jätka';
+
+  @override
+  String get raybanMetaCapturePhoto => 'Jäädvusta foto';
+
+  @override
+  String get raybanMetaPhotoRequested => 'Foto taotletud — see ilmub sinu vestlusesse.';
+
+  @override
+  String get raybanMetaMicrophoneReady => 'Mikrofon on valmis';
+
+  @override
+  String get raybanMetaImageCaptureReady => 'Pildistamine on valmis';
+
+  @override
+  String get raybanMetaImageCaptureUnavailable => 'Pole saadaval ainult heli režiimis';
+
+  @override
+  String get raybanMetaCamera => 'Kaamera';
+
+  @override
+  String errorConnectingRayBanMeta(String error) {
+    return 'Viga Ray-Ban Metaga ühendamisel: $error';
+  }
+
+  @override
+  String get deviceStorageTitle => 'Seadme salvestusruum';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% täis';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total kasutatud';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vaba';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.';
 }

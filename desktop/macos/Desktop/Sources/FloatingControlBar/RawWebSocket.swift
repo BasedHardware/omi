@@ -71,8 +71,8 @@ final class RawWebSocket {
     c.start(queue: queue)
   }
 
-  func sendText(_ text: String) {
-    send(frame(opcode: 0x1, payload: Data(text.utf8)))
+  func sendText(_ text: String, completion: ((Error?) -> Void)? = nil) {
+    send(frame(opcode: 0x1, payload: Data(text.utf8)), completion: completion)
   }
 
   func close() {
@@ -236,6 +236,13 @@ final class RawWebSocket {
           reason = String(data: payload.subdata(in: (payload.startIndex + 2)..<payload.endIndex), encoding: .utf8) ?? ""
         }
         closed = true
+        // Cancel the keepalive timer on a server-initiated close, exactly like close()
+        // and fail() do. Without this, a resumed DispatchSourceTimer outlives the
+        // deallocated socket and keeps firing its wakeup forever. Gemini idle-closes
+        // the warm hub socket with a 1008 close frame (opcode 0x8) every ~2.5 min, so
+        // this path leaked one zombie 20s timer per re-warm across the app's lifetime.
+        pingTimer?.cancel()
+        pingTimer = nil
         onClose?(code, reason)
         conn?.cancel(); conn = nil
       case 0x9:  // ping → pong
@@ -248,9 +255,14 @@ final class RawWebSocket {
     }
   }
 
-  private func send(_ data: Data) {
-    conn?.send(content: data, completion: .contentProcessed { [weak self] e in
+  private func send(_ data: Data, completion: ((Error?) -> Void)? = nil) {
+    guard let conn else {
+      completion?(RawWebSocketSendError.notConnected)
+      return
+    }
+    conn.send(content: data, completion: .contentProcessed { [weak self] e in
       if let e { self?.fail("send: \(e)") }
+      completion?(e)
     })
   }
 
@@ -262,4 +274,17 @@ final class RawWebSocket {
     onError?(message)
     conn?.cancel(); conn = nil
   }
+
+  deinit {
+    // A resumed DispatchSourceTimer keeps firing (and is leaked) if it is released
+    // without being cancelled. Every teardown path cancels pingTimer, but guard the
+    // release regardless so no future path can reintroduce a zombie keepalive timer.
+    pingTimer?.cancel()
+  }
+}
+
+private enum RawWebSocketSendError: LocalizedError {
+  case notConnected
+
+  var errorDescription: String? { "WebSocket is not connected." }
 }

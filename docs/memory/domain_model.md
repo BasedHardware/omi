@@ -72,6 +72,10 @@ flowchart TD
 
 - **Memories** is one store; **layer** (`short_term` / `long_term` / `archive`) is a field on each
   record. Layer drives lifecycle, TTL, promotion, and UI badges — not which collection you query.
+- A client cache record without an authoritative canonical lifecycle is **not** an implicit
+  Long-term memory. Canonical product surfaces may read only explicitly layered records;
+  untiered legacy and local-pending records remain a compatibility/provenance concern until
+  an authoritative read or create receipt supplies their lifecycle.
 - **Conversations** are never Memories. No merge of Conversations tab into Memories.
 - **Promotion** is an explicit Short-term → Long-term transition (corroboration, consolidation,
   or user assertion) within Memories — audited, not a silent flag flip.
@@ -404,9 +408,9 @@ Devices are **capture surfaces only** — provenance metadata, not memory author
 | Field / header | Shape | Notes |
 |----------------|-------|-------|
 | `client_device_id` | `{platform}_{hash}` | Same shape as FCM `device_key` in `notifications.py` |
-| `hash` | sha256 → first 8 hex chars | From stable per-install id (Keychain UUID on desktop; IDFV/Android id on mobile) |
-| `X-Device-Id-Hash` | HTTP / WS upgrade header | Raw hash component only |
-| `X-App-Platform` | `macos` / `ios` / `android` | Platform component |
+| `hash` | sha256 → first 8 hex chars | From a stable per-install id (Keychain UUID on macOS; persisted local install id on Windows; IDFV/Android id on mobile) |
+| `X-Device-Id-Hash` | HTTP / WS upgrade header (first auth message for browser WS) | Raw hash component only |
+| `X-App-Platform` | `macos` / `windows` / `ios` / `android` / `web` | Platform component |
 | `X-App-Version` | optional | Stored on registry `client_devices` doc |
 
 **Nullability:** all device fields optional. Absent headers or legacy data ⇒ `client_device_id=null` ⇒ UI shows **unknown device**. Device id is **never** folded into `evidence_id` hash inputs (legacy dedup must stay byte-identical when device is absent).

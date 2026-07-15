@@ -192,6 +192,16 @@ extension AppState {
     if !hasScreenRecordingPermission || isScreenRecordingStale {
       missing.append("Screen Recording")
     }
+    // System audio is optional/best-effort and its status idles at .unknown
+    // (Core Audio taps have no preflight API — only a live capture proves the
+    // grant). Counting .unknown as missing would permanently suppress the
+    // "All permissions granted" banner for default users, so only a proven
+    // denial counts.
+    if isSystemAudioSupported, effectiveSystemAudioMode != .never,
+      systemAudioPermissionStatus == .denied
+    {
+      missing.append("System Audio")
+    }
     if !hasNotificationPermission {
       missing.append("Notifications")
     } else if isNotificationBannerDisabled {

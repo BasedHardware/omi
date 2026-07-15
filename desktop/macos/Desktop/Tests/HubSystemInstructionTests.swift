@@ -2,27 +2,82 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubSystemInstructionTests: XCTestCase {
-    func testInstructionInjectsCardAndUsesUserLanguage() {
-        let card = "<about_user>\nName: Sam\n</about_user>"
-        let instr = RealtimeHubTools.systemInstruction(aboutUser: card)
-        XCTAssertTrue(instr.contains(card))                                   // card injected
-        XCTAssertTrue(instr.lowercased().contains("language the user"))        // reply-in-user-language
-        XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
+    func testInstructionUsesExactKernelContextAndVoiceLanguagePresentation() {
+        let kernelContext = "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[{\"source\":\"identity\"}]}"
+        let instr = RealtimeHubTools.systemInstruction(
+            kernelContext: kernelContext,
+            userLanguages: ["en"]
+        )
+
+        XCTAssertTrue(instr.contains(kernelContext))
+        XCTAssertTrue(instr.lowercased().contains("language the user"))
+        XCTAssertFalse(instr.contains("Always reply in English"))
+        XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
+        XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
+        XCTAssertFalse(instr.contains("evidence_id"))
+        XCTAssertTrue(instr.contains("report_screen_observation"))
+    }
+
+    func testLiveScreenshotResultRequiresAValidatedObservationReport() {
+        let valid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let invalid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: nil)
+        let validPayload = try? JSONSerialization.jsonObject(with: Data(valid.utf8)) as? [String: Any]
+        let invalidPayload = try? JSONSerialization.jsonObject(with: Data(invalid.utf8)) as? [String: Any]
+
+        XCTAssertEqual(validPayload?["ok"] as? Bool, true)
+        XCTAssertNil(validPayload?["evidence_id"])
+        XCTAssertNil(validPayload?["frontmost_app"])
+        XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
+        XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
+    }
+
+    func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
+        let raw = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let prepared = RealtimeProviderToolResultPolicy.prepare(
+            provider: .gemini, name: HubTool.screenshot.rawValue, output: raw)
+        let payload = try? JSONSerialization.jsonObject(with: Data(prepared.output.utf8)) as? [String: Any]
+
+        XCTAssertEqual(payload?["ok"] as? Bool, true)
+        XCTAssertNil(payload?["evidence_id"])
+        XCTAssertEqual(
+            ((payload?["toolResultEnvelope"] as? [String: Any])?["status"] as? String),
+            "succeeded")
+    }
+
+    func testInstructionDoesNotOwnSemanticSelectionOrRoutingPolicy() {
+        let instr = RealtimeHubTools.systemInstruction()
+        for forbidden in [
+            "Try before asking",
+            "Only ask a clarifying question",
+            "Do not ask permission to delegate",
+            "WHO the user is",
+            "MOST RECENT exchange",
+            "MUST call get_daily_recap",
+            "rather than spawning an agent",
+            "If the user asks to use/ask OpenClaw",
+            "Resolve relative dates",
+            "list_agent_sessions first",
+            "Call ask_higher_model when",
+            "spawn_agent proposes background work",
+        ] {
+            XCTAssertFalse(instr.contains(forbidden), "surface prompt must not own rule: \(forbidden)")
+        }
+    }
+
+    func testInstructionKeepsOnlyGenericSpokenToolUseContractAroundGeneratedCapabilities() {
+        let instr = RealtimeHubTools.systemInstruction()
+        XCTAssertTrue(instr.contains("short spoken heads-up"))
+        XCTAssertTrue(instr.contains("call the tool in the same turn"))
+        XCTAssertTrue(instr.contains("status, not a question or confirmation"))
+        XCTAssertTrue(instr.contains("Never claim a physical action succeeded"))
+        XCTAssertTrue(instr.contains("never read tool JSON or ids aloud"))
         XCTAssertTrue(instr.contains("spawn_agent"))
-        XCTAssertTrue(instr.contains("list_agent_sessions"))
-        XCTAssertTrue(instr.contains("run_agent_and_wait"))
-        XCTAssertTrue(instr.contains("set_desktop_attention_override"))
-        XCTAssertTrue(instr.contains("get_agent_run"))
-        XCTAssertTrue(instr.contains("cancel_agent_run"))
-        XCTAssertTrue(instr.contains("floating-bar pill projections"))
-        XCTAssertTrue(instr.contains("subagent"))
-        XCTAssertTrue(instr.contains("get_daily_recap"))
-        XCTAssertTrue(instr.contains("ask_higher_model"))
-        XCTAssertTrue(instr.contains("create_calendar_event"))
-        XCTAssertTrue(instr.contains("Current local datetime:"))
-        XCTAssertTrue(instr.contains("Current timezone:"))
-        XCTAssertTrue(instr.contains("Resolve relative dates"))
-        XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
+        XCTAssertTrue(instr.contains("check_permission_status"))
+        XCTAssertTrue(instr.contains("request_permission"))
+        XCTAssertFalse(instr.contains("run_agent_and_wait"))
     }
 
     func testRealtimeToolSurfaceMatchesCapabilityRegistry() {
@@ -80,6 +135,22 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
     }
 
+    func testRealtimePermissionToolsAreExposedForDirectHandling() {
+        let tools = RealtimeHubTools.openAITools
+        let names = Set(tools.compactMap { $0["name"] as? String })
+        XCTAssertTrue(names.contains(HubTool.checkPermissionStatus.rawValue))
+        XCTAssertTrue(names.contains(HubTool.requestPermission.rawValue))
+
+        let request = tools.first { ($0["name"] as? String) == HubTool.requestPermission.rawValue }
+        let parameters = request?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+        XCTAssertNotNil(properties?["type"])
+        XCTAssertTrue(
+            (request?["description"] as? String ?? "").contains("kernel-authorized native executor")
+        )
+        XCTAssertFalse((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
+    }
+
     func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {
         let declarations = RealtimeHubTools.geminiFunctionDeclarations
         XCTAssertFalse(declarations.isEmpty)
@@ -123,6 +194,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(toolNames.contains(HubTool.cancelAgentRun.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.inspectAgentArtifacts.rawValue))
         XCTAssertTrue(toolNames.contains(HubTool.updateAgentArtifactLifecycle.rawValue))
+        XCTAssertFalse(toolNames.contains("run_agent_and_wait"))
 
         let cancelTool = tools.first { ($0["name"] as? String) == HubTool.cancelAgentRun.rawValue }
         XCTAssertTrue((cancelTool?["description"] as? String ?? "").contains("canonical"))

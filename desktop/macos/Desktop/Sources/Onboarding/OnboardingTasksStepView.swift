@@ -23,15 +23,15 @@ struct OnboardingTasksStepView: View {
                 OnboardingLogoMark(onForceComplete: onForceComplete)
                 Spacer()
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 16)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.lg)
 
             Divider()
                 .background(OmiColors.backgroundTertiary)
 
             Spacer()
 
-            VStack(spacing: 28) {
+            VStack(spacing: OmiSpacing.xxl) {
                 // Icon with glow
                 ZStack {
                     Circle()
@@ -39,7 +39,7 @@ struct OnboardingTasksStepView: View {
                         .frame(width: 100, height: 100)
                         .blur(radius: 20)
                         .scaleEffect(pulseAnimation ? 1.2 : 1.0)
-                        .animation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
+                        .omiAnimation(.easeInOut(duration: 2).repeatForever(autoreverses: true), value: pulseAnimation)
 
                     Image(systemName: "checklist")
                         .font(.system(size: 44))
@@ -53,7 +53,7 @@ struct OnboardingTasksStepView: View {
                 }
                 .onAppear { pulseAnimation = true }
 
-                VStack(spacing: 10) {
+                VStack(spacing: OmiSpacing.sm) {
                     Text("Auto-created Tasks")
                         .font(.system(size: 24, weight: .bold))
                         .foregroundColor(OmiColors.textPrimary)
@@ -67,7 +67,7 @@ struct OnboardingTasksStepView: View {
 
                 // Mock task cards
                 if showTasks {
-                    VStack(spacing: 8) {
+                    VStack(spacing: OmiSpacing.sm) {
                         ForEach(Array(mockTasks.enumerated()), id: \.offset) { index, task in
                             mockTaskRow(title: task.0, subtitle: task.1, checked: task.2)
                                 .transition(.asymmetric(
@@ -79,32 +79,32 @@ struct OnboardingTasksStepView: View {
                     .frame(maxWidth: 420)
                 }
             }
-            .padding(.horizontal, 40)
+            .padding(.horizontal, OmiSpacing.page)
 
             Spacer()
 
-            VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.md) {
                 Button(action: onComplete) {
                     Text("Take me to Omi")
                         .font(.system(size: 15, weight: .semibold))
                         .foregroundColor(.black)
                         .frame(maxWidth: 280)
-                        .padding(.vertical, 12)
+                        .padding(.vertical, OmiSpacing.md)
                         .background(Color.white)
-                        .cornerRadius(12)
+                        .cornerRadius(OmiChrome.smallControlRadius)
                 }
                 .buttonStyle(.plain)
                 .keyboardShortcut(.defaultAction)
 
             }
-            .padding(.bottom, 32)
+            .padding(.bottom, OmiSpacing.section)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(OmiColors.backgroundPrimary)
         .onAppear {
             // Stagger task card appearance
             DispatchQueue.main.asyncAfter(deadline: .now() + 0.4) {
-                withAnimation(.spring(response: 0.5, dampingFraction: 0.8)) {
+                OmiMotion.withGated(.spring(response: 0.5, dampingFraction: 0.8)) {
                     showTasks = true
                 }
             }
@@ -112,12 +112,12 @@ struct OnboardingTasksStepView: View {
     }
 
     private func mockTaskRow(title: String, subtitle: String, checked: Bool) -> some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             Image(systemName: checked ? "checkmark.circle.fill" : "circle")
                 .font(.system(size: 18))
                 .foregroundColor(checked ? .green : OmiColors.textTertiary)
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                 Text(title)
                     .font(.system(size: 13))
                     .foregroundColor(checked ? OmiColors.textTertiary : OmiColors.textPrimary)
@@ -131,13 +131,13 @@ struct OnboardingTasksStepView: View {
 
             Spacer()
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
         .background(
-            RoundedRectangle(cornerRadius: 10)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                 .fill(OmiColors.backgroundSecondary)
                 .overlay(
-                    RoundedRectangle(cornerRadius: 10)
+                    RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
                         .stroke(OmiColors.backgroundTertiary.opacity(0.5), lineWidth: 1)
                 )
         )

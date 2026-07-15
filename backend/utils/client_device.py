@@ -9,8 +9,10 @@ Contract (see docs/memory/domain_model.md):
 
 from __future__ import annotations
 
+import json
+import re
 from dataclasses import dataclass
-from typing import Mapping, Optional
+from typing import Any, Mapping, Optional
 
 from starlette.requests import Request
 
@@ -63,7 +65,9 @@ class ClientDeviceContext:
 def build_client_device_id(platform: Optional[str], device_hash: Optional[str]) -> Optional[str]:
     platform_norm = (platform or "").strip().lower()
     hash_norm = (device_hash or "").strip().lower()
-    if not platform_norm or not hash_norm or hash_norm == "default":
+    if platform_norm not in {'android', 'ios', 'linux', 'macos', 'web', 'windows'} or not re.fullmatch(
+        r'[0-9a-f]{8}', hash_norm
+    ):
         return None
     return f"{platform_norm}_{hash_norm}"
 
@@ -99,4 +103,28 @@ def resolve_client_device_from_headers(headers: Mapping[str, str]) -> ClientDevi
         x_app_platform=headers.get("x-app-platform") or headers.get("X-App-Platform"),
         x_device_id_hash=headers.get("x-device-id-hash") or headers.get("X-Device-Id-Hash"),
         x_app_version=headers.get("x-app-version") or headers.get("X-App-Version"),
+    )
+
+
+def resolve_client_device_from_websocket_auth_message(message: Mapping[str, Any]) -> ClientDeviceContext:
+    """Resolve web capture provenance sent in the first WebSocket auth message.
+
+    Browsers cannot attach arbitrary headers to a WebSocket upgrade. The web
+    listen client therefore sends its stable device hash beside the Firebase
+    token in the already-required first auth message. Platform is fixed to
+    ``web`` rather than trusting a browser-provided platform value.
+    """
+    text = message.get("text")
+    if not isinstance(text, str):
+        return ClientDeviceContext()
+    try:
+        auth_data = json.loads(text)
+    except (TypeError, json.JSONDecodeError):
+        return ClientDeviceContext()
+    if not isinstance(auth_data, dict):
+        return ClientDeviceContext()
+    device_hash = auth_data.get("device_id_hash")
+    return resolve_client_device(
+        x_app_platform="web",
+        x_device_id_hash=device_hash if isinstance(device_hash, str) else None,
     )

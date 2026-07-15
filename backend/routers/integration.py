@@ -26,6 +26,7 @@ from langchain_core.messages import HumanMessage
 from models.shared import EmptyResponse
 from models.conversation import SearchRequest
 from models.app import App
+from models.geolocation import Geolocation
 from utils.app_integrations import (
     send_app_notification,
     trigger_external_integrations,
@@ -60,8 +61,11 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     # Check hourly limit
     hour_count = redis_client.get(hour_key)
     if hour_count is None:
-        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 1)
-        hour_count = 1
+        # Seed to 0, not 1: the unconditional incr below is the single source of truth for the count.
+        # Seeding to 1 AND incrementing made the first request consume two tokens, so only 9 of
+        # MAX_NOTIFICATIONS_PER_HOUR were ever allowed and the remaining header was off by one.
+        redis_client.setex(hour_key, RATE_LIMIT_PERIOD, 0)
+        hour_count = 0
     else:
         hour_count = int(hour_count)
 
@@ -79,6 +83,19 @@ def check_rate_limit(app_id: str, user_id: str) -> Tuple[bool, int, int, int]:
     remaining = MAX_NOTIFICATIONS_PER_HOUR - hour_count - 1
 
     return True, remaining, reset_time, 0
+
+
+async def _resolve_geolocation(geolocation: Optional[Geolocation]) -> Optional[Geolocation]:
+    """Enrich a raw geolocation with Google Places, keeping the original coordinates when the lookup
+    misses (returns None) so a geocode miss does not drop the location. Only enriches a geolocation that
+    has coordinates but no google_place_id yet."""
+    if geolocation and not geolocation.google_place_id:
+        enriched = await run_blocking(
+            db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
+        )
+        if enriched:
+            return enriched
+    return geolocation
 
 
 @router.post(
@@ -130,13 +147,9 @@ async def create_conversation_via_integration(
     create_conversation.started_at = started_at
     create_conversation.finished_at = finished_at
 
-    # Geo
-    geolocation = create_conversation.geolocation
-    if geolocation and not geolocation.google_place_id:
-        create_conversation.geolocation = await run_blocking(
-            db_executor, get_google_maps_location, geolocation.latitude, geolocation.longitude
-        )
-    create_conversation.geolocation = geolocation
+    # Geo: enrich raw coordinates with a Google Places lookup. Previously the enriched result was
+    # computed and then unconditionally overwritten with the original value, discarding it on every call.
+    create_conversation.geolocation = await _resolve_geolocation(create_conversation.geolocation)
 
     # Language
     language_code = create_conversation.language

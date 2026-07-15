@@ -3,305 +3,36 @@ import Combine
 import SwiftUI
 import UserNotifications
 
-private struct LocalConversationCacheTimeout: Error {}
-
 @MainActor
 extension AppState {
-
-  func updateConversationCount(_ count: Int, filtered: Bool) {
-    if filtered {
-      if filteredConversationsCount != count {
-        filteredConversationsCount = count
-      }
-    } else {
-      if totalConversationsCount != count {
-        totalConversationsCount = count
-      }
-      if filteredConversationsCount != nil {
-        filteredConversationsCount = nil
-      }
-    }
+  private var currentConversationQuery: ConversationListQuery {
+    ConversationListQuery(
+      starredOnly: showStarredOnly,
+      date: selectedDateFilter,
+      folderId: selectedFolderId
+    )
   }
 
-  /// Load conversations - first from local cache (instant), then from API (background refresh)
+  /// Cache-first load owned by ConversationRepository. The repository emits
+  /// the cached projection immediately and quietly replaces it with server truth.
   func loadConversations() async {
-    guard !isLoadingConversations else { return }
-
-    isLoadingConversations = true
-    conversationsError = nil
-
-    let requestShowStarredOnly = showStarredOnly
-    let requestSelectedDateFilter = selectedDateFilter
-    let requestSelectedFolderId = selectedFolderId
-    let requestHasActiveFilters = hasActiveConversationFilters
-
-    func requestFiltersAreCurrent() -> Bool {
-      showStarredOnly == requestShowStarredOnly
-        && selectedDateFilter == requestSelectedDateFilter
-        && selectedFolderId == requestSelectedFolderId
-    }
-
-    // Step 1: Load from local cache first (instant display)
-    // Use timeout to avoid blocking UI if database is initializing (e.g. recovery).
-    // The local cache currently supports starred/folder filters but not server date ranges;
-    // skip it for date-filtered views so the visible list and total count share semantics.
-    if requestSelectedDateFilter == nil {
-      do {
-        let cachedConversations = try await withThrowingTaskGroup(of: [ServerConversation].self) { group in
-          group.addTask {
-            try await TranscriptionStorage.shared.getLocalConversations(
-              limit: 50,
-              starredOnly: requestShowStarredOnly,
-              folderId: requestSelectedFolderId
-            )
-          }
-          group.addTask {
-            try await Task.sleep(nanoseconds: 3_000_000_000)  // 3 second timeout
-            throw LocalConversationCacheTimeout()
-          }
-          let result = try await group.next()!
-          group.cancelAll()
-          return result
-        }
-
-        if !cachedConversations.isEmpty && requestFiltersAreCurrent() {
-          conversations = cachedConversations
-          log("Conversations: Loaded \(cachedConversations.count) from local cache (instant)")
-
-          // Get local count
-          let localCount = try await TranscriptionStorage.shared.getLocalConversationsCount(
-            starredOnly: requestShowStarredOnly,
-            folderId: requestSelectedFolderId)
-          updateConversationCount(localCount, filtered: requestHasActiveFilters)
-
-          // Stop loading state so UI shows cached data immediately
-          isLoadingConversations = false
-          // Notify sidebar immediately so loading indicator clears with cached data
-          NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-        }
-      } catch is LocalConversationCacheTimeout {
-        log("Conversations: Local cache load timed out, falling back to API")
-      } catch is CancellationError {
-        log("Conversations: Local cache load cancelled")
-        return
-      } catch {
-        log("Conversations: Local cache unavailable, falling back to API")
-        // Continue to API fetch even if local fails
-      }
-    } else {
-      conversations = []
-      filteredConversationsCount = 0
-    }
-
-    // Step 2: Fetch from API in background to get fresh data
-    // Calculate date range if date filter is set
-    let startDate: Date?
-    let endDate: Date?
-    if let filterDate = requestSelectedDateFilter {
-      let calendar = Calendar.current
-      startDate = calendar.startOfDay(for: filterDate)
-      endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
-    } else {
-      startDate = nil
-      endDate = nil
-    }
-
-    // Fetch conversations and count in parallel
-    async let conversationsTask = APIClient.shared.getConversations(
-      limit: 50,
-      offset: 0,
-      statuses: [.completed, .processing],
-      includeDiscarded: false,
-      startDate: startDate,
-      endDate: endDate,
-      folderId: requestSelectedFolderId,
-      starred: requestShowStarredOnly ? true : nil
-    )
-    async let countTask = APIClient.shared.getConversationsCount(
-      includeDiscarded: false,
-      statuses: [.completed, .processing],
-      startDate: startDate,
-      endDate: endDate,
-      folderId: requestSelectedFolderId,
-      starred: requestShowStarredOnly ? true : nil
-    )
-
-    do {
-      let fetchedConversations = try await conversationsTask
-      if requestFiltersAreCurrent() {
-        let reconciliation = ConversationReconciliationPolicy.mergeList(
-          server: fetchedConversations,
-          current: conversations,
-          pendingMutations: pendingConversationMutations
-        )
-        pendingConversationMutations = reconciliation.pendingMutations
-        conversations = reconciliation.conversations
-      } else {
-        log("Conversations: Ignoring stale response for superseded filters")
-      }
-      log(
-        "Conversations: Refreshed \(fetchedConversations.count) from API (starred=\(requestShowStarredOnly), date=\(requestSelectedDateFilter?.description ?? "nil"))"
-      )
-
-      // DEBUG: Log any conversations with empty titles
-      for conv in fetchedConversations where conv.structured.title.isEmpty {
-        log(
-          "DEBUG: Conversation \(conv.id) has EMPTY title"
-        )
-      }
-
-      // Sync conversations to local database in background
-      Task.detached(priority: .background) {
-        var syncedCount = 0
-        for conversation in fetchedConversations {
-          do {
-            try await TranscriptionStorage.shared.syncServerConversation(conversation)
-            syncedCount += 1
-          } catch {
-            log(
-              "Conversations: Failed to sync \(conversation.id) to local DB: \(error.localizedDescription)"
-            )
-          }
-        }
-        log("Conversations: Synced \(syncedCount)/\(fetchedConversations.count) to local database")
-      }
-    } catch {
-      logError("Conversations: API fetch failed", error: error)
-      // Only set error if we don't have cached data
-      if conversations.isEmpty {
-        conversationsError = error.localizedDescription
-      } else {
-        log("Conversations: Using cached data after API failure")
-      }
-    }
-
-    // Update total count from API (more accurate than local)
-    do {
-      let count = try await countTask
-      if requestFiltersAreCurrent() {
-        updateConversationCount(count, filtered: requestHasActiveFilters)
-        log("Conversations: Count from API = \(count) (filtered=\(requestHasActiveFilters))")
-      } else {
-        log("Conversations: Ignoring stale count for superseded filters")
-      }
-    } catch {
-      logError("Conversations: Failed to get count from API", error: error)
-      // Keep local count if API fails
-    }
-
-    isLoadingConversations = false
+    await conversationRepository.load(query: currentConversationQuery)
     NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
-    if !requestFiltersAreCurrent() {
-      await loadConversations()
-    }
   }
 
-  /// Refresh conversations silently (for app-activation and Cmd+R event-driven refreshes).
-  /// Fetches from API only, merges in-place, and only triggers @Published if data actually changed.
+  /// Server-only revalidation for activation and Cmd+R.
   func refreshConversations() async {
-    // Skip if user is signed out (tokens are cleared)
     guard AuthState.shared.isSignedIn else { return }
-    // Skip if in auth backoff period (recent 401 errors)
-    guard !AuthBackoffTracker.shared.shouldSkipRequest() else { return }
-    // Skip if currently doing a full load
-    guard !isLoadingConversations else { return }
-
-    let requestShowStarredOnly = showStarredOnly
-    let requestSelectedDateFilter = selectedDateFilter
-    let requestSelectedFolderId = selectedFolderId
-    let requestHasActiveFilters = hasActiveConversationFilters
-
-    func requestFiltersAreCurrent() -> Bool {
-      showStarredOnly == requestShowStarredOnly
-        && selectedDateFilter == requestSelectedDateFilter
-        && selectedFolderId == requestSelectedFolderId
-    }
-
-    // Calculate date range if date filter is set
-    let startDate: Date?
-    let endDate: Date?
-    if let filterDate = requestSelectedDateFilter {
-      let calendar = Calendar.current
-      startDate = calendar.startOfDay(for: filterDate)
-      endDate = calendar.date(byAdding: .day, value: 1, to: startDate!)
-    } else {
-      startDate = nil
-      endDate = nil
-    }
-
-    do {
-      let fetchedConversations = try await APIClient.shared.getConversations(
-        limit: 50,
-        offset: 0,
-        statuses: [.completed, .processing],
-        includeDiscarded: false,
-        startDate: startDate,
-        endDate: endDate,
-        folderId: requestSelectedFolderId,
-        starred: requestShowStarredOnly ? true : nil
-      )
-
-      if requestFiltersAreCurrent() {
-        let reconciliation = ConversationReconciliationPolicy.mergeList(
-          server: fetchedConversations,
-          current: conversations,
-          pendingMutations: pendingConversationMutations
-        )
-        pendingConversationMutations = reconciliation.pendingMutations
-        if reconciliation.conversations != conversations {
-          conversations = reconciliation.conversations
-          log("Conversations: Auto-refresh updated (\(reconciliation.conversations.count) items)")
-        }
-      } else {
-        log("Conversations: Ignoring stale auto-refresh response for superseded filters")
-      }
-
-      // Sync to local database in background
-      Task.detached(priority: .background) {
-        for conversation in fetchedConversations {
-          _ = try? await TranscriptionStorage.shared.syncServerConversation(conversation)
-        }
-      }
-      AuthBackoffTracker.shared.reportSuccess()
-    } catch {
-      if case APIError.unauthorized = error {
-        AuthBackoffTracker.shared.reportAuthFailure()
-      }
-      // Silently ignore errors during auto-refresh — cached data stays visible.
-      // Auth errors (notSignedIn) are transient: token refresh may fail momentarily
-      // while the user is still signed in. Don't send these to Sentry.
-      if case AuthError.notSignedIn = error {
-        log("Conversations: Auto-refresh skipped (auth token temporarily unavailable)")
-      } else {
-        logError("Conversations: Auto-refresh failed", error: error)
-      }
-    }
-
-    do {
-      let count = try await APIClient.shared.getConversationsCount(
-        includeDiscarded: false,
-        statuses: [.completed, .processing],
-        startDate: startDate,
-        endDate: endDate,
-        folderId: requestSelectedFolderId,
-        starred: requestShowStarredOnly ? true : nil
-      )
-      if requestFiltersAreCurrent() {
-        updateConversationCount(count, filtered: requestHasActiveFilters)
-      }
-    } catch {
-      // Keep existing count
-    }
+    await conversationRepository.refresh(query: currentConversationQuery)
+    NotificationCenter.default.post(name: .conversationsPageDidLoad, object: nil)
   }
 
-  /// Update the starred status of a conversation locally after a successful mutation.
-  func setConversationStarred(_ conversationId: String, starred: Bool) {
-    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
-    mutation.setStarred(starred)
-    pendingConversationMutations[conversationId] = mutation
-
-    if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
-      conversations[index].starred = starred
+  /// Optimistically update star state, then settle from the canonical mutation response.
+  func setConversationStarred(_ conversationId: String, starred: Bool) async {
+    do {
+      try await conversationRepository.setStarred(id: conversationId, starred: starred)
+    } catch {
+      logError("Conversations: Failed to update starred state", error: error)
     }
   }
 
@@ -333,17 +64,27 @@ extension AppState {
 
   // MARK: - Folder Management
 
-  /// Load folders from API
-  func loadFolders() async {
+  /// Load folders from API. `fetch` is a test seam (production uses APIClient).
+  func loadFolders(fetch: (() async throws -> [Folder])? = nil) async {
     guard !isLoadingFolders else { return }
 
     isLoadingFolders = true
+    let generation = ownerScopeGeneration
 
     do {
-      let fetchedFolders = try await APIClient.shared.getFolders()
+      let fetchedFolders: [Folder]
+      if let fetch {
+        fetchedFolders = try await fetch()
+      } else {
+        fetchedFolders = try await APIClient.shared.getFolders()
+      }
+      // Owner fence: a previous account's in-flight response must not
+      // repopulate folders after an account switch reset them.
+      guard generation == ownerScopeGeneration else { return }
       folders = fetchedFolders
       log("Folders: Loaded \(fetchedFolders.count) folders")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("Folders: Failed to load", error: error)
     }
 
@@ -393,63 +134,72 @@ extension AppState {
     }
   }
 
-  /// Move a conversation to a folder
+  /// Move a conversation through the single conversation repository.
   func moveConversationToFolder(_ conversationId: String, folderId: String?) async {
     do {
-      try await APIClient.shared.moveConversationToFolder(
-        conversationId: conversationId, folderId: folderId)
-
-      var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
-      mutation.setFolderId(folderId)
-      pendingConversationMutations[conversationId] = mutation
-
-      // Sync to local SQLite cache so reload doesn't revert the change. A cache write failure
-      // should not roll back the already-successful backend move or block UI reconciliation.
-      do {
-        try await TranscriptionStorage.shared.updateFolderByBackendId(
-          conversationId, folderId: folderId)
-      } catch {
-        logError("Folders: Failed to update local folder cache", error: error)
-      }
-
-      // Update local state
-      if conversations.contains(where: { $0.id == conversationId }) {
-        // Reload to get updated conversation
-        await loadConversations()
-      }
+      try await conversationRepository.moveToFolder(id: conversationId, folderId: folderId)
       log("Folders: Moved conversation \(conversationId) to folder \(folderId ?? "none")")
     } catch {
       logError("Folders: Failed to move conversation to folder", error: error)
     }
   }
 
-  /// Delete a conversation locally (after successful API call)
-  func deleteConversationLocally(_ conversationId: String) {
-    withAnimation {
-      conversations.removeAll { $0.id == conversationId }
+  /// Optimistically update title, then settle from the canonical mutation response.
+  func updateConversationTitle(_ conversationId: String, title: String) async {
+    do {
+      try await conversationRepository.updateTitle(id: conversationId, title: title)
+    } catch {
+      logError("Conversations: Failed to update title", error: error)
     }
   }
 
-  /// Update a conversation title locally after a successful mutation.
-  func updateConversationTitle(_ conversationId: String, title: String) {
-    var mutation = pendingConversationMutations[conversationId] ?? ConversationPendingMutation()
-    mutation.setTitle(title)
-    pendingConversationMutations[conversationId] = mutation
+  func loadConversationDetail(
+    _ conversation: ServerConversation,
+    onCached: ((ServerConversation) -> Void)? = nil
+  ) async -> ServerConversation {
+    (try? await conversationRepository.detail(
+      id: conversation.id,
+      seed: conversation,
+      onCached: onCached
+    )) ?? conversation
+  }
 
-    if let index = conversations.firstIndex(where: { $0.id == conversationId }) {
-      conversations[index].structured.title = title
+  func searchConversations(_ query: String) async throws -> [ServerConversation] {
+    try await conversationRepository.search(text: query)
+  }
+
+  func cancelConversationSearch() {
+    conversationRepository.cancelSearch()
+  }
+
+  func deleteConversation(_ conversationId: String) async -> Bool {
+    do {
+      try await conversationRepository.delete(id: conversationId)
+      return true
+    } catch {
+      logError("Conversations: Failed to delete conversation", error: error)
+      return false
     }
   }
 
   // MARK: - People (Speaker Profiles)
 
-  /// Fetches all people from the OMI API
-  func fetchPeople() async {
+  /// Fetches all people from the OMI API. `fetch` is a test seam.
+  func fetchPeople(fetch: (() async throws -> [Person])? = nil) async {
+    let generation = ownerScopeGeneration
     do {
-      let fetchedPeople = try await APIClient.shared.getPeople()
+      let fetchedPeople: [Person]
+      if let fetch {
+        fetchedPeople = try await fetch()
+      } else {
+        fetchedPeople = try await APIClient.shared.getPeople()
+      }
+      // Owner fence: see loadFolders.
+      guard generation == ownerScopeGeneration else { return }
       people = fetchedPeople
       log("People: Loaded \(fetchedPeople.count) people")
     } catch {
+      guard generation == ownerScopeGeneration else { return }
       logError("People: Failed to load", error: error)
     }
   }

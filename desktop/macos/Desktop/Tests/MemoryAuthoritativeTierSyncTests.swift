@@ -8,23 +8,13 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
 
     override func setUp() async throws {
         try await super.setUp()
-        testUserId = "memory-tier-sync-\(UUID().uuidString)"
-        RewindDatabase.currentUserId = testUserId
-        await MemoryStorage.shared.invalidateCache()
-        try await RewindDatabase.shared.initialize()
-
-        let appSupport = FileManager.default
-            .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-        userDir = appSupport
-            .appendingPathComponent("Omi", isDirectory: true)
-            .appendingPathComponent("users", isDirectory: true)
-            .appendingPathComponent(testUserId, isDirectory: true)
+        let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memory-tier-sync")
+        testUserId = fixture.testUserId
+        userDir = fixture.userDir
     }
 
     override func tearDown() async throws {
-        await MemoryStorage.shared.invalidateCache()
-        if let userDir { try? FileManager.default.removeItem(at: userDir) }
-        RewindDatabase.currentUserId = nil
+        await RewindStorageTestIsolation.tearDown(userDir: userDir)
         try await super.tearDown()
     }
 
@@ -109,7 +99,32 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
         XCTAssertEqual(record?.tierIsExplicit, false)
     }
 
-    func testLocalReadsCanExcludeCanonicalLifecycleRowsWhenServerDoesNotExposeLifecycle() async throws {
+    func testAuthoritativeCreateReceiptReplacesLocalUntieredDefault() async throws {
+        let local = MemoryRecord(
+            backendSynced: false,
+            content: "Local-first memory"
+        )
+        let inserted = try await MemoryStorage.shared.insertLocalMemory(local)
+        guard let recordId = inserted.id else {
+            XCTFail("Expected inserted local memory id")
+            return
+        }
+
+        let receipt = makeMemory(
+            id: "canonical-create-\(UUID().uuidString)",
+            tier: .shortTerm,
+            tierIsExplicit: true,
+            updatedAt: Date(timeIntervalSince1970: 2_000)
+        )
+        try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: receipt)
+
+        let record = try await MemoryStorage.shared.getMemoryByBackendId(receipt.id)
+        XCTAssertEqual(record?.tier, MemoryLayer.shortTerm.rawValue)
+        XCTAssertEqual(record?.tierIsExplicit, true)
+        XCTAssertEqual(record?.backendSynced, true)
+    }
+
+    func testLocalReadsKeepCanonicalAndLegacyScopesDisjoint() async throws {
         let legacy = makeMemory(
             id: "legacy-visible",
             tier: .longTerm,
@@ -130,34 +145,63 @@ final class MemoryAuthoritativeTierSyncTests: XCTestCase {
         )
         try await MemoryStorage.shared.syncServerMemories([legacy, shortTerm, longTerm])
 
-        let local = try await MemoryStorage.shared.getLocalMemories(
+        let legacyLocal = try await MemoryStorage.shared.getLocalMemories(
             limit: 10,
             tiers: nil,
-            includeExplicitLifecycleRows: false
+            scope: .legacyCompatibility
         )
-        XCTAssertEqual(local.map(\.id), ["legacy-visible"])
+        XCTAssertEqual(legacyLocal.map(\.id), ["legacy-visible"])
 
-        let count = try await MemoryStorage.shared.getLocalMemoriesCount(
+        let legacyCount = try await MemoryStorage.shared.getLocalMemoriesCount(
             tiers: nil,
-            includeExplicitLifecycleRows: false
+            scope: .legacyCompatibility
         )
-        XCTAssertEqual(count, 1)
+        XCTAssertEqual(legacyCount, 1)
 
-        let filtered = try await MemoryStorage.shared.getFilteredMemories(
+        let legacyFiltered = try await MemoryStorage.shared.getFilteredMemories(
             limit: 10,
             matchAnyCategory: ["system"],
             tiers: nil,
-            includeExplicitLifecycleRows: false
+            scope: .legacyCompatibility
         )
-        XCTAssertEqual(filtered.map(\.id), ["legacy-visible"])
+        XCTAssertEqual(legacyFiltered.map(\.id), ["legacy-visible"])
 
-        let search = try await MemoryStorage.shared.searchLocalMemories(
+        let legacySearch = try await MemoryStorage.shared.searchLocalMemories(
             query: "Memory",
             limit: 10,
             tiers: nil,
-            includeExplicitLifecycleRows: false
+            scope: .legacyCompatibility
         )
-        XCTAssertEqual(search.map(\.id), ["legacy-visible"])
+        XCTAssertEqual(legacySearch.map(\.id), ["legacy-visible"])
+
+        let canonical = try await MemoryStorage.shared.getLocalMemories(
+            limit: 10,
+            tiers: nil,
+            scope: .canonicalProduct
+        )
+        XCTAssertEqual(Set(canonical.map(\.id)), ["canonical-short-hidden", "canonical-long-hidden"])
+
+        let canonicalCount = try await MemoryStorage.shared.getLocalMemoriesCount(
+            tiers: nil,
+            scope: .canonicalProduct
+        )
+        XCTAssertEqual(canonicalCount, 2)
+
+        let canonicalFiltered = try await MemoryStorage.shared.getFilteredMemories(
+            limit: 10,
+            matchAnyCategory: ["system"],
+            tiers: nil,
+            scope: .canonicalProduct
+        )
+        XCTAssertEqual(Set(canonicalFiltered.map(\.id)), ["canonical-short-hidden", "canonical-long-hidden"])
+
+        let canonicalSearch = try await MemoryStorage.shared.searchLocalMemories(
+            query: "Memory",
+            limit: 10,
+            tiers: nil,
+            scope: .canonicalProduct
+        )
+        XCTAssertEqual(Set(canonicalSearch.map(\.id)), ["canonical-short-hidden", "canonical-long-hidden"])
     }
 
     private func corruptLocalTier(

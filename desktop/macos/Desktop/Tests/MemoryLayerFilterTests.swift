@@ -103,11 +103,11 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertFalse(hidden.tierIsExplicit)
     }
 
-    func testNonCanonicalDisplayExcludesLifecycleExplicitRows() throws {
+    func testLifecycleDisplayScopesAreMutuallyExclusive() throws {
         let source = try memoriesPageSource()
 
-        XCTAssertTrue(source.contains("includeExplicitLifecycleRows(for: token)"))
-        XCTAssertTrue(source.contains("lifecycleExposed ? values : values.filter { !$0.tierIsExplicit }"))
+        XCTAssertTrue(source.contains("recordReadScope(for: token)"))
+        XCTAssertTrue(source.contains("values.filter { $0.tierIsExplicit == lifecycleExposed }"))
         XCTAssertFalse(source.contains("lifecycleExposed ? values : values.map { $0.hidingLifecycleExposure() }"))
     }
 
@@ -130,6 +130,16 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertTrue(source.contains("let fetchResult = try await fetchMemoriesPageDeviceScopeAware("))
         XCTAssertTrue(source.contains("let page = fetchResult.page"))
         XCTAssertTrue(source.contains("deviceScopeSupportedOverride: fetchResult.deviceScopeSupportedOverride"))
+        XCTAssertTrue(source.contains("reason: \"capability_mismatch\""))
+    }
+
+    func testLegacyDeviceScopeFallbackDoesNotLocallyHideUnprovenancedMemories() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(
+            source.contains("if filterThisDeviceOnly && deviceScopeSupported {"),
+            "The local device matcher must run only when the backend can provide device provenance."
+        )
     }
 
     func testMemoriesPageProjectsCacheReadsBeforeDisplay() throws {
@@ -142,6 +152,15 @@ final class MemoryLayerFilterTests: XCTestCase {
         XCTAssertTrue(source.contains("memories.append(contentsOf: visibleMemories)"))
         XCTAssertTrue(source.contains("memories = displayCacheMemories(cachedMemories, for: token)"))
         XCTAssertTrue(source.contains("memories = displayCacheMemories(mergedMemories, for: token)"))
+    }
+
+    func testMemoriesPageDoesNotRenderUnclassifiedCacheBeforeLifecycleCapability() throws {
+        let source = try memoriesPageSource()
+
+        XCTAssertTrue(source.contains("memoriesCanonicalLifecycleExposure_v1_"))
+        XCTAssertTrue(source.contains("let hasRememberedLifecycleExposure = restoreCanonicalLifecycleExposure()"))
+        XCTAssertTrue(source.contains("if hasRememberedLifecycleExposure {"))
+        XCTAssertTrue(source.contains("Deferring unclassified cache until lifecycle capability is confirmed"))
     }
 
     func testLayerFilterControlsRenderOnlyAfterCanonicalLifecycleExposure() throws {

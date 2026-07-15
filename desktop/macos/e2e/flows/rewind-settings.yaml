@@ -1,0 +1,33 @@
+version: 2
+name: rewind-settings
+tier: 2
+description: Settings Rewind section navigation and retention snapshot
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindModels.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Open Settings Rewind section
+    bridge.navigate:
+      target: settings
+      settingsSection: Rewind
+      activateApp: false
+    wait:
+      state.selectedSettingsSection: Rewind
+
+  - id: S2
+    name: Rewind settings snapshot
+    bridge.action:
+      name: rewind_settings_snapshot
+    expect:
+      ok: true
+
+  - id: S3
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

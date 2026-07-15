@@ -7,19 +7,85 @@ import typesense
 
 logger = logging.getLogger(__name__)
 
-client = typesense.Client(
-    {
-        'nodes': [
-            {
-                'host': os.getenv('TYPESENSE_HOST'),
-                'port': os.getenv('TYPESENSE_HOST_PORT'),
-                'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
-            }
-        ],
-        'api_key': os.getenv('TYPESENSE_API_KEY'),
-        'connection_timeout_seconds': 2,
+
+class ConversationSearchUnavailableError(Exception):
+    """Raised when Typesense is unreachable or times out (transient upstream failure)."""
+
+
+def _is_typesense_transient_error(exc: BaseException) -> bool:
+    message = str(exc).lower()
+    transient_markers = (
+        'timed out',
+        'timeout',
+        'connection refused',
+        'connection reset',
+        'temporarily unavailable',
+        'service unavailable',
+    )
+    if any(marker in message for marker in transient_markers):
+        return True
+    module = type(exc).__module__
+    name = type(exc).__name__
+    return module.endswith('exceptions') and name in {
+        'Timeout',
+        'ConnectTimeout',
+        'ReadTimeout',
+        'ConnectionError',
+        'ServiceUnavailable',
     }
-)
+
+
+# Client creation must remain lazy: retrieval helpers import this module in
+# offline tests and unrelated request paths where Typesense is intentionally
+# unconfigured. Tests can still inject a fake through the legacy ``client``
+# seam without causing a real client to be constructed.
+_typesense_client: Any | None = None
+
+
+def _get_typesense_client() -> Any:
+    global _typesense_client
+    if _typesense_client is None:
+        _typesense_client = typesense.Client(
+            {
+                'nodes': [
+                    {
+                        'host': os.getenv('TYPESENSE_HOST'),
+                        'port': os.getenv('TYPESENSE_HOST_PORT'),
+                        'protocol': os.getenv('TYPESENSE_PROTOCOL', 'https'),
+                    }
+                ],
+                'api_key': os.getenv('TYPESENSE_API_KEY'),
+                'connection_timeout_seconds': 2,
+            }
+        )
+    return _typesense_client
+
+
+def _lazy_getattr(target: Any, name: str) -> Any:
+    # Dunders stay unresolved so introspection (copy, pickle, mock) cannot
+    # construct a real client and defeat the laziness this shim exists for.
+    if name.startswith('__') and name.endswith('__'):
+        raise AttributeError(name)
+    return getattr(target(), name)
+
+
+class _LazyCollections:
+    def __getitem__(self, name: str) -> Any:
+        return _get_typesense_client().collections[name]
+
+    def __getattr__(self, name: str) -> Any:
+        return _lazy_getattr(lambda: _get_typesense_client().collections, name)
+
+
+class _LazyTypesenseClient:
+    def __init__(self) -> None:
+        self.collections: Any = _LazyCollections()
+
+    def __getattr__(self, name: str) -> Any:
+        return _lazy_getattr(_get_typesense_client, name)
+
+
+client: Any = _LazyTypesenseClient()
 
 
 def _utc_iso(ts: int) -> str:
@@ -43,6 +109,12 @@ def search_conversations(
     end_date: Optional[int] = None,
     speaker_id: Optional[str] = None,
 ) -> Dict[str, Any]:
+    # page/per_page arrive from SearchRequest where both are Optional and unbounded, so None, 0,
+    # negative, or a huge value would otherwise TypeError here (len(...) >= per_page / page + 1) or trip
+    # Typesense RequestMalformed and 500 the request. Clamp at this shared boundary, mirroring the
+    # clamps in routers/memories.py and routers/mcp.py. Typesense caps a single page at 250 hits.
+    page = max(1, page or 1)
+    per_page = max(1, min(per_page or 10, 250))
     try:
         stripped_query = query.strip() if query else ''
         has_filter_only_browse = bool(speaker_id) or start_date is not None or end_date is not None
@@ -78,7 +150,10 @@ def search_conversations(
             'page': page,
         }
 
-        results: Dict[str, Any] = cast(Dict[str, Any], client.collections['conversations'].documents.search(search_parameters))  # type: ignore[reportUnknownMemberType]  # typesense client untyped
+        results: Dict[str, Any] = cast(
+            Dict[str, Any],
+            client.collections['conversations'].documents.search(search_parameters),
+        )  # type: ignore[reportUnknownMemberType]  # typesense client untyped
         memories: List[Dict[str, Any]] = []
         for item in results.get('hits', []):
             doc: Dict[str, Any] = item.get('document', {})
@@ -111,7 +186,15 @@ def search_conversations(
             'per_page': per_page,
         }
     except Exception as e:
-        raise Exception(f"Failed to search conversations: {str(e)}")
+        if _is_typesense_transient_error(e):
+            logger.warning(
+                "search_conversations upstream timeout/unavailable uid=%s query_len=%s: %s",
+                uid,
+                len(query or ''),
+                e,
+            )
+            raise ConversationSearchUnavailableError('Typesense search temporarily unavailable') from e
+        raise Exception(f"Failed to search conversations: {str(e)}") from e
 
 
 def keyword_search_conversation_ids(

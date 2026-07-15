@@ -7,48 +7,67 @@ actor FileIndexerService {
     static let shared = FileIndexerService()
 
     private var _dbQueue: DatabasePool?
+    /// Shared Rewind pool epoch. `nil` denotes an explicitly injected test pool.
+    private var _dbGeneration: Int?
     private var isScanning = false
-
-    /// Folders to skip during recursive scan
-    private let skipFolders: Set<String> = [
-        ".Trash", "node_modules", ".git", "__pycache__", ".venv", "venv",
-        ".cache", ".npm", ".yarn", "Pods", "DerivedData", ".build",
-        "build", "dist", ".next", ".nuxt", "target", "vendor",
-        "Library", ".local", ".cargo", ".rustup"
-    ]
-
-    /// Max recursion depth (0 = root of scanned folder)
-    private let maxDepth = 3
-
-    /// Skip files larger than 500 MB
-    private let maxFileSize: Int64 = 500 * 1024 * 1024
+    private var activeScanOperations = 0
+    private var scanCompletionWaiters: [CheckedContinuation<Void, Never>] = []
+    private let scanPolicy: FileIndexScanPolicy
 
     /// Batch insert size
-    private let batchSize = 500
+    private let batchSize: Int
 
-    /// Package extensions to treat as leaf entries (don't recurse into)
-    private let packageExtensions: Set<String> = [
-        "app", "framework", "bundle", "plugin", "kext",
-        "xcodeproj", "xcworkspace", "playground"
-    ]
+    private init() {
+        scanPolicy = .standard
+        batchSize = 500
+    }
 
-    private init() {}
+    init(databasePool: DatabasePool, scanPolicy: FileIndexScanPolicy = .standard, batchSize: Int = 500) {
+        _dbQueue = databasePool
+        self.scanPolicy = scanPolicy
+        self.batchSize = batchSize
+    }
 
     // MARK: - Database Access
 
     private func ensureDB() async throws -> DatabasePool {
-        if let db = _dbQueue { return db }
+        if let db = _dbQueue {
+            guard let generation = _dbGeneration else { return db }
+            if await RewindDatabase.shared.poolGeneration() == generation {
+                return db
+            }
+        }
 
         try await RewindDatabase.shared.initialize()
-        guard let db = await RewindDatabase.shared.getDatabaseQueue() else {
+        let (queue, generation) = await RewindDatabase.shared.getDatabaseQueueWithGeneration()
+        guard let db = queue else {
             throw FileIndexerError.databaseNotInitialized
         }
         _dbQueue = db
+        _dbGeneration = generation
         return db
     }
 
-    func invalidateCache() {
+    func invalidateCache() async {
+        if activeScanOperations > 0 {
+            await withCheckedContinuation { continuation in
+                scanCompletionWaiters.append(continuation)
+            }
+        }
         _dbQueue = nil
+        _dbGeneration = nil
+    }
+
+    private func finishScanning() {
+        isScanning = false
+    }
+
+    private func finishScanOperation() {
+        activeScanOperations = max(0, activeScanOperations - 1)
+        guard activeScanOperations == 0 else { return }
+        let waiters = scanCompletionWaiters
+        scanCompletionWaiters.removeAll()
+        waiters.forEach { $0.resume() }
     }
 
     /// Returns the total number of indexed files in the database
@@ -79,24 +98,12 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting onboarding pipeline")
 
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let foldersToScan = [
-            home.appendingPathComponent("Downloads"),
-            home.appendingPathComponent("Documents"),
-            home.appendingPathComponent("Desktop"),
-            home.appendingPathComponent("Developer"),
-            home.appendingPathComponent("Projects"),
-            home.appendingPathComponent("Code"),
-            home.appendingPathComponent("src"),
-            home.appendingPathComponent("repos"),
-            home.appendingPathComponent("Sites"),
-            URL(fileURLWithPath: "/Applications"),
-            home.appendingPathComponent("Applications"),
-        ]
+        let foldersToScan = scanPolicy.standardScanRoots(homeURL: home)
 
         // 1. Scan files
         let totalFiles = await scanFolders(foldersToScan)
@@ -140,24 +147,12 @@ actor FileIndexerService {
         }
 
         isScanning = true
-        defer { isScanning = false }
+        defer { finishScanning() }
 
         log("FileIndexer: Starting background rescan")
 
         let home = FileManager.default.homeDirectoryForCurrentUser
-        let folders = [
-            home.appendingPathComponent("Downloads"),
-            home.appendingPathComponent("Documents"),
-            home.appendingPathComponent("Desktop"),
-            home.appendingPathComponent("Developer"),
-            home.appendingPathComponent("Projects"),
-            home.appendingPathComponent("Code"),
-            home.appendingPathComponent("src"),
-            home.appendingPathComponent("repos"),
-            home.appendingPathComponent("Sites"),
-            URL(fileURLWithPath: "/Applications"),
-            home.appendingPathComponent("Applications"),
-        ]
+        let folders = scanPolicy.standardScanRoots(homeURL: home)
 
         let count = await scanFolders(folders, incremental: true)
         log("FileIndexer: Background rescan complete, \(count) files indexed")
@@ -169,6 +164,8 @@ actor FileIndexerService {
     /// Returns total number of files indexed
     @discardableResult
     func scanFolders(_ folders: [URL], incremental: Bool = false) async -> Int {
+        activeScanOperations += 1
+        defer { finishScanOperation() }
         let db: DatabasePool
         do {
             db = try await ensureDB()
@@ -180,6 +177,11 @@ actor FileIndexerService {
         // For incremental scans, load existing index for O(1) lookup
         let existingIndex: [String: Date?] = incremental ? loadExistingIndex(from: db) : [:]
         var scannedPaths = Set<String>()
+        // ~-relative prefixes of directories whose enumeration FAILED (permission
+        // revoked, transient I/O). Files under these were not scanned, but that is
+        // a read error — not deletion — so they must be excluded from the retention
+        // diff (otherwise a single unreadable folder purges its whole index subtree).
+        var failedDirectories = Set<String>()
 
         if incremental {
             log("FileIndexer: Loaded \(existingIndex.count) existing paths for incremental scan")
@@ -212,7 +214,8 @@ actor FileIndexerService {
                 totalFiles: &totalFiles,
                 db: db,
                 existingIndex: existingIndex,
-                scannedPaths: &scannedPaths
+                scannedPaths: &scannedPaths,
+                failedDirectories: &failedDirectories
             )
         }
 
@@ -223,7 +226,12 @@ actor FileIndexerService {
 
         // For incremental scans, remove files that no longer exist on disk
         if incremental && !existingIndex.isEmpty {
-            deleteRemovedFiles(scannedPaths: scannedPaths, existingPaths: Set(existingIndex.keys), db: db)
+            deleteRemovedFiles(
+                scannedPaths: scannedPaths,
+                existingPaths: Set(existingIndex.keys),
+                protectedPrefixes: failedDirectories,
+                db: db
+            )
         }
 
         return totalFiles
@@ -240,9 +248,10 @@ actor FileIndexerService {
         totalFiles: inout Int,
         db: DatabasePool,
         existingIndex: [String: Date?],
-        scannedPaths: inout Set<String>
+        scannedPaths: inout Set<String>,
+        failedDirectories: inout Set<String>
     ) {
-        guard depth <= maxDepth else { return }
+        guard scanPolicy.shouldScanDirectory(atDepth: depth) else { return }
 
         let contents: [URL]
         do {
@@ -252,46 +261,42 @@ actor FileIndexerService {
                 options: [.skipsHiddenFiles]
             )
         } catch {
+            // Enumeration failure is a read error, not deletion. Record this
+            // directory so its previously-indexed files are NOT purged by the
+            // retention diff (see deleteRemovedFiles / failedDirectories).
+            failedDirectories.insert(scanPolicy.relativePath(for: url, homePath: homePath))
             log("FileIndexer: Cannot read \(url.lastPathComponent): \(error.localizedDescription)")
             return
         }
 
         for item in contents {
-            let name = item.lastPathComponent
-
             // Check directory
             let resourceValues = try? item.resourceValues(forKeys: Set(resourceKeys))
             let isDirectory = resourceValues?.isDirectory ?? false
 
             if isDirectory {
-                if skipFolders.contains(name) { continue }
-
-                // Treat macOS packages (.app, .framework, etc.) as leaf entries
-                let ext = item.pathExtension.lowercased()
-                if packageExtensions.contains(ext) {
-                    var relativePath = item.path
-                    if relativePath.hasPrefix(homePath) {
-                        relativePath = "~" + relativePath.dropFirst(homePath.count)
+                switch scanPolicy.planDirectoryEntry(item) {
+                case .skipSubtree:
+                    continue
+                case .indexPackage:
+                    guard let record = scanPolicy.makePackageRecord(
+                        for: item,
+                        folderName: folderName,
+                        homePath: homePath,
+                        depth: depth,
+                        createdAt: resourceValues?.creationDate,
+                        modifiedAt: resourceValues?.contentModificationDate
+                    ) else {
+                        continue
                     }
-                    scannedPaths.insert(relativePath)
+                    scannedPaths.insert(record.path)
                     // Skip unchanged files (incremental scan)
-                    if let existingModified = existingIndex[relativePath],
+                    if let existingModified = existingIndex[record.path],
                        let newModified = resourceValues?.contentModificationDate,
                        let existing = existingModified,
                        abs(existing.timeIntervalSince(newModified)) < 1.0 {
                         continue
                     }
-                    let record = IndexedFileRecord(
-                        path: relativePath,
-                        filename: name,
-                        fileExtension: ext,
-                        fileType: ext == "app" ? "application" : "package",
-                        sizeBytes: 0,
-                        folder: folderName,
-                        depth: depth,
-                        createdAt: resourceValues?.creationDate,
-                        modifiedAt: resourceValues?.contentModificationDate
-                    )
                     batch.append(record)
                     totalFiles += 1
                     if batch.count >= batchSize {
@@ -299,59 +304,47 @@ actor FileIndexerService {
                         batch.removeAll(keepingCapacity: true)
                     }
                     continue
+                case .descend:
+                    scanDirectory(
+                        url: item,
+                        folderName: folderName,
+                        homePath: homePath,
+                        depth: depth + 1,
+                        resourceKeys: resourceKeys,
+                        fm: fm,
+                        batch: &batch,
+                        totalFiles: &totalFiles,
+                        db: db,
+                        existingIndex: existingIndex,
+                        scannedPaths: &scannedPaths,
+                        failedDirectories: &failedDirectories
+                    )
+                    continue
                 }
-
-                scanDirectory(
-                    url: item,
-                    folderName: folderName,
-                    homePath: homePath,
-                    depth: depth + 1,
-                    resourceKeys: resourceKeys,
-                    fm: fm,
-                    batch: &batch,
-                    totalFiles: &totalFiles,
-                    db: db,
-                    existingIndex: existingIndex,
-                    scannedPaths: &scannedPaths
-                )
-                continue
             }
 
             // Regular file
-            guard resourceValues?.isRegularFile == true else { continue }
-
-            let fileSize = Int64(resourceValues?.fileSize ?? 0)
-            guard fileSize > 0, fileSize <= maxFileSize else { continue }
-
-            let ext = item.pathExtension.isEmpty ? nil : item.pathExtension.lowercased()
-            let fileType = FileTypeCategory.from(extension: ext)
-
-            // Build relative path
-            var relativePath = item.path
-            if relativePath.hasPrefix(homePath) {
-                relativePath = "~" + relativePath.dropFirst(homePath.count)
+            guard let record = scanPolicy.makeFileRecord(
+                for: item,
+                folderName: folderName,
+                homePath: homePath,
+                depth: depth,
+                isRegularFile: resourceValues?.isRegularFile == true,
+                sizeBytes: Int64(resourceValues?.fileSize ?? 0),
+                createdAt: resourceValues?.creationDate,
+                modifiedAt: resourceValues?.contentModificationDate
+            ) else {
+                continue
             }
 
-            scannedPaths.insert(relativePath)
+            scannedPaths.insert(record.path)
             // Skip unchanged files (incremental scan)
-            if let existingModified = existingIndex[relativePath],
+            if let existingModified = existingIndex[record.path],
                let newModified = resourceValues?.contentModificationDate,
                let existing = existingModified,
                abs(existing.timeIntervalSince(newModified)) < 1.0 {
                 continue
             }
-
-            let record = IndexedFileRecord(
-                path: relativePath,
-                filename: name,
-                fileExtension: ext,
-                fileType: fileType.rawValue,
-                sizeBytes: fileSize,
-                folder: folderName,
-                depth: depth,
-                createdAt: resourceValues?.creationDate,
-                modifiedAt: resourceValues?.contentModificationDate
-            )
 
             batch.append(record)
             totalFiles += 1
@@ -412,8 +405,32 @@ actor FileIndexerService {
     }
 
     /// Delete files from the index that no longer exist on disk
-    private func deleteRemovedFiles(scannedPaths: Set<String>, existingPaths: Set<String>, db: DatabasePool) {
-        let removed = existingPaths.subtracting(scannedPaths)
+    /// Paths that are genuinely gone from disk (present in the index, not seen this
+    /// scan, and NOT under a directory whose enumeration failed). Pure + static so
+    /// the retention diff can be tested without a database or filesystem.
+    static func pathsToDelete(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>
+    ) -> Set<String> {
+        existingPaths.subtracting(scannedPaths).filter { path in
+            !protectedPrefixes.contains { prefix in
+                path == prefix || path.hasPrefix(prefix + "/")
+            }
+        }
+    }
+
+    private func deleteRemovedFiles(
+        scannedPaths: Set<String>,
+        existingPaths: Set<String>,
+        protectedPrefixes: Set<String>,
+        db: DatabasePool
+    ) {
+        let removed = Self.pathsToDelete(
+            scannedPaths: scannedPaths,
+            existingPaths: existingPaths,
+            protectedPrefixes: protectedPrefixes
+        )
         guard !removed.isEmpty else { return }
 
         log("FileIndexer: Removing \(removed.count) deleted files from index")

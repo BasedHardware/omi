@@ -8,7 +8,7 @@ import firebase_admin.auth
 import httpx
 
 from database.apps import get_app_by_id_db
-from utils.executors import db_executor, run_blocking
+from utils.executors import critical_executor, db_executor, run_blocking
 from utils.http_client import get_auth_client
 from database.redis_db import enable_app, increase_app_installs_count
 from utils.apps import is_user_app_enabled, get_is_user_paid_app, is_tester
@@ -133,7 +133,11 @@ def oauth_authorize(
 @router.post("/v1/oauth/token", response_model=OAuthTokenResponse)
 async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...), state: Optional[str] = Form(None)):
     try:
-        decoded_token = firebase_admin.auth.verify_id_token(firebase_id_token)
+        decoded_token = await run_blocking(
+            critical_executor,
+            firebase_admin.auth.verify_id_token,
+            firebase_id_token,
+        )
         uid = decoded_token['uid']
     except firebase_admin.auth.InvalidIdTokenError as e:
         raise HTTPException(status_code=401, detail=f"Invalid Firebase ID token: {e}")
@@ -150,9 +154,9 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
         raise HTTPException(status_code=400, detail="App not configured for OAuth or app home URL not set")
 
     # Validate if the user has enabled this app, if not, try to enable it automatically
-    if not is_user_app_enabled(uid, app_id):
+    if not await run_blocking(db_executor, is_user_app_enabled, uid, app_id):
         if app.private is not None:
-            if app.private and app.uid != uid and not is_tester(uid):
+            if app.private and app.uid != uid and not await run_blocking(db_executor, is_tester, uid):
                 raise HTTPException(
                     status_code=403, detail="This app is private and you are not authorized to enable it."
                 )
@@ -180,14 +184,18 @@ async def oauth_token(firebase_id_token: str = Form(...), app_id: str = Form(...
                 )
 
         # Check payment status
-        if app.is_paid and not get_is_user_paid_app(app.id, uid):
+        if app.is_paid and not await run_blocking(db_executor, get_is_user_paid_app, app.id, uid):
             raise HTTPException(
                 status_code=403, detail='This is a paid app. Please purchase the app before authorizing.'
             )
 
         try:
             await run_blocking(db_executor, enable_app, uid, app_id)
-            if (app.private is None or not app.private) and (app.uid is None or app.uid != uid) and not is_tester(uid):
+            if (
+                (app.private is None or not app.private)
+                and (app.uid is None or app.uid != uid)
+                and not await run_blocking(db_executor, is_tester, uid)
+            ):
                 await run_blocking(db_executor, increase_app_installs_count, app_id)
         except Exception as e:
             raise HTTPException(

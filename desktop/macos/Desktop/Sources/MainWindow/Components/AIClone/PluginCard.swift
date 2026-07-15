@@ -154,7 +154,7 @@ struct PluginCard: View {
         // the same endpoint and both show "Connected" even if only
         // one is actually connected.
         guard config.isPluginReady else { return }
-        
+
         // Check if the discovery file's plugin_type matches this card
         // If the plugin is Telegram, only the Telegram card checks status
         // If no discovery (manual config), only Telegram checks (the
@@ -174,7 +174,7 @@ struct PluginCard: View {
             // No discovery file — only Telegram checks status
             guard plugin == .telegram else { return }
         }
-        
+
         checkingStatus = true
         defer { checkingStatus = false }
         do {

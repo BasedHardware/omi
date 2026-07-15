@@ -1,6 +1,14 @@
 import AppKit
 import Foundation
 
+private final class WeakMeetingDetector: @unchecked Sendable {
+    weak var value: MeetingDetector?
+
+    init(_ value: MeetingDetector) {
+        self.value = value
+    }
+}
+
 /// Detects whether a conferencing call ("meeting") is currently active by scanning on-screen
 /// windows for known call apps (see `ConferencingApps`).
 ///
@@ -15,11 +23,15 @@ final class MeetingDetector {
 
     /// Current meeting state. Updated on the main actor by `applyDetected(_:)`.
     private(set) var isMeetingActive: Bool = false
+    /// True after at least one async probe has reported. Until then, `isMeetingActive == false`
+    /// means "unknown", not "no meeting".
+    private(set) var hasObservedState: Bool = false
 
     private let pollInterval: TimeInterval
     private let offGracePeriod: TimeInterval
     private let isMeetingNow: () -> Bool
     private let now: () -> Date
+    private let onInitialStateObserved: () -> Void
     private let onChange: (Bool) -> Void
 
     private var timer: Timer?
@@ -28,6 +40,8 @@ final class MeetingDetector {
     /// `nil` whenever a meeting is detected or no pending-off is in progress.
     private var pendingOffDeadline: Date?
     private var started = false
+    private var probeGeneration: UInt64 = 0
+    private var probeTask: Task<Void, Never>?
 
     /// - Parameters:
     ///   - pollInterval: how often to re-probe (browser tab-title changes only surface via the poll).
@@ -35,6 +49,7 @@ final class MeetingDetector {
     ///   - isMeetingNow: conferencing-call probe (injectable for tests). Default: a native or browser
     ///     app using the mic (macOS 14.4+), or a browser call window (window-title fallback).
     ///   - now: clock (injectable for tests).
+    ///   - onInitialStateObserved: called on the main actor once the first async probe completes.
     ///   - onChange: called on the main actor whenever `isMeetingActive` flips.
     init(
         pollInterval: TimeInterval = 4.0,
@@ -44,12 +59,14 @@ final class MeetingDetector {
             return ConferencingApps.browserCallWindowPresent()
         },
         now: @escaping () -> Date = { Date() },
+        onInitialStateObserved: @escaping () -> Void = {},
         onChange: @escaping (Bool) -> Void
     ) {
         self.pollInterval = pollInterval
         self.offGracePeriod = offGracePeriod
         self.isMeetingNow = isMeetingNow
         self.now = now
+        self.onInitialStateObserved = onInitialStateObserved
         self.onChange = onChange
     }
 
@@ -58,6 +75,7 @@ final class MeetingDetector {
     func start() {
         guard !started else { return }
         started = true
+        probeGeneration &+= 1
 
         let nc = NSWorkspace.shared.notificationCenter
         for name in [
@@ -87,6 +105,9 @@ final class MeetingDetector {
     func stop() {
         guard started else { return }
         started = false
+        probeGeneration &+= 1
+        probeTask?.cancel()
+        probeTask = nil
 
         timer?.invalidate()
         timer = nil
@@ -104,15 +125,28 @@ final class MeetingDetector {
     /// can block (notably right after wake) — then apply the result back on the main actor.
     private func tick() {
         let probe = isMeetingNow
-        Task.detached(priority: .utility) { [weak self] in
+        probeGeneration &+= 1
+        let generation = probeGeneration
+        let weakSelf = WeakMeetingDetector(self)
+        probeTask?.cancel()
+        probeTask = Task.detached(priority: .utility) {
             let detected = probe()
-            await MainActor.run { self?.applyDetected(detected) }
+            await MainActor.run {
+                guard let detector = weakSelf.value,
+                      detector.started,
+                      detector.probeGeneration == generation
+                else { return }
+                detector.applyDetected(detected)
+            }
         }
     }
 
     /// Apply a boolean detection result, honoring the off-hysteresis. Exposed for tests; normally
     /// driven by the poll timer and workspace notifications via `tick()`.
     func applyDetected(_ detected: Bool) {
+        let hadObservedState = hasObservedState
+        hasObservedState = true
+
         if detected {
             // Meeting present: cancel any pending-off and ensure we're active.
             pendingOffDeadline = nil
@@ -131,6 +165,10 @@ final class MeetingDetector {
             // Already inactive and still no meeting.
             pendingOffDeadline = nil
         }
+
+        if !hadObservedState {
+            onInitialStateObserved()
+        }
     }
 
     private func setActive(_ active: Bool) {
@@ -139,4 +177,16 @@ final class MeetingDetector {
         log("MeetingDetector: meeting \(active ? "STARTED" : "ENDED")")
         onChange(active)
     }
+
+    #if DEBUG
+    var currentProbeTaskForTesting: Task<Void, Never>? {
+        probeTask
+    }
+
+    @discardableResult
+    func triggerProbeForTesting() -> Task<Void, Never>? {
+        tick()
+        return probeTask
+    }
+    #endif
 }

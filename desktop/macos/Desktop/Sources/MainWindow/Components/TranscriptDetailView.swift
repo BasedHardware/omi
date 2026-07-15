@@ -9,7 +9,7 @@ struct TranscriptDetailView: View {
 
     var body: some View {
         ScrollView {
-            LazyVStack(spacing: 12) {
+            LazyVStack(spacing: OmiSpacing.md) {
                 ForEach(segments) { segment in
                     SpeakerBubbleView(
                         segment: segment,
@@ -19,7 +19,7 @@ struct TranscriptDetailView: View {
                     )
                 }
             }
-            .padding(16)
+            .padding(OmiSpacing.lg)
         }
     }
 }

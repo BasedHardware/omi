@@ -16,11 +16,71 @@ Map<String, dynamic> _goalSuggestionJsonWithDefaults(Map<String, dynamic> json) 
   return normalized;
 }
 
+double _goalResponseDouble(dynamic value, {double fallback = 0}) {
+  if (value is num) {
+    return value.toDouble();
+  }
+  if (value is String) {
+    return double.tryParse(value) ?? fallback;
+  }
+  return fallback;
+}
+
+bool _goalResponseBool(dynamic value, {bool fallback = true}) {
+  if (value is bool) {
+    return value;
+  }
+  if (value is String) {
+    final normalized = value.trim().toLowerCase();
+    if (normalized == 'true' || normalized == '1') {
+      return true;
+    }
+    if (normalized == 'false' || normalized == '0') {
+      return false;
+    }
+  }
+  if (value is num) {
+    return value != 0;
+  }
+  return fallback;
+}
+
 Map<String, dynamic> _goalJsonWithDefaults(Map<String, dynamic> json) {
   final normalized = Map<String, dynamic>.from(json);
   final now = DateTime.now().toUtc().toIso8601String();
   normalized['created_at'] ??= normalized['updated_at'] ?? now;
-  normalized['updated_at'] ??= normalized['created_at'];
+  normalized['updated_at'] ??= normalized['created_at'] ?? now;
+
+  final id = normalized['id']?.toString() ?? '';
+  normalized['id'] = id;
+  normalized['goal_id'] ??= id;
+  normalized['title'] ??= '';
+  normalized['desired_outcome'] ??= normalized['title'];
+  final status = normalized['status']?.toString();
+  if (status == null || !{'background', 'focused', 'paused', 'achieved', 'abandoned'}.contains(status)) {
+    normalized['status'] = _goalResponseBool(normalized['is_active'], fallback: true) ? 'background' : 'abandoned';
+  }
+  normalized['source'] ??= 'imported';
+
+  final metric = normalized['metric'];
+  if (metric is Map<String, dynamic>) {
+    normalized['goal_type'] ??= metric['type'] ?? 'scale';
+    normalized['target_value'] ??= _goalResponseDouble(metric['target']);
+    normalized['current_value'] ??= _goalResponseDouble(metric['current']);
+    normalized['min_value'] ??= _goalResponseDouble(metric['min']);
+    final target = _goalResponseDouble(normalized['target_value']);
+    normalized['max_value'] ??= metric['max'] ?? (target > 10 ? target : 10);
+  } else {
+    normalized['metric'] = null;
+    normalized['goal_type'] ??= 'scale';
+    normalized['target_value'] ??= 0;
+    normalized['current_value'] ??= 0;
+    normalized['min_value'] ??= 0;
+    normalized['max_value'] ??= 10;
+  }
+
+  normalized['is_active'] ??= normalized['status'] != 'achieved' && normalized['status'] != 'abandoned';
+  normalized['latest_progress_sequence'] ??= 0;
   return normalized;
 }
 
@@ -154,9 +214,11 @@ Future<Goal?> getCurrentGoal() async {
       return Goal.fromGenerated(
         wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(json.decode(response.body) as Map<String, dynamic>)),
       );
-    } on FormatException {
+    } on FormatException catch (error) {
+      Logger.warning('Skipping malformed current goal response: $error');
       return null;
-    } on TypeError {
+    } on TypeError catch (error) {
+      Logger.warning('Skipping malformed current goal response: $error');
       return null;
     }
   }
@@ -169,12 +231,19 @@ Future<List<Goal>> getAllGoals() async {
   if (response == null) return [];
   Logger.debug('getAllGoals response: ${response.body}');
   if (response.statusCode == 200) {
-    return (json.decode(response.body) as List<dynamic>)
-        .map(
-          (e) =>
-              Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(e as Map<String, dynamic>))),
-        )
-        .toList();
+    final goals = <Goal>[];
+    for (final entry in json.decode(response.body) as List<dynamic>) {
+      try {
+        goals.add(
+          Goal.fromGenerated(wire.GeneratedGoalResponse.fromJson(_goalJsonWithDefaults(entry as Map<String, dynamic>))),
+        );
+      } on FormatException catch (error) {
+        Logger.warning('Skipping malformed goal in list: $error');
+      } on TypeError catch (error) {
+        Logger.warning('Skipping malformed goal in list: $error');
+      }
+    }
+    return goals;
   }
   return [];
 }

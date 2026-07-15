@@ -19,7 +19,10 @@ backwards compat) and the router-layer key derivation.
 
 from unittest.mock import MagicMock
 
+from google.api_core.exceptions import Aborted
+
 from database import action_items as action_items_db  # noqa: E402
+from database import firestore_transaction_retry
 from routers import action_items as action_items_router  # noqa: E402
 
 # ---------------------------------------------------------------------------
@@ -34,23 +37,36 @@ def _make_doc(doc_id, data=None):
     return doc
 
 
-def _stub_collection(monkeypatch, existing_docs):
+def _stub_collection(monkeypatch, existing_docs, *, control_generation=None):
     """Stub db.collection('users').document(uid).collection('action_items').
 
     Returns a tuple ``(action_items_ref, captured)`` where ``captured`` is a
     dict that records add() calls for assertions.
     """
-    captured = {'added': []}
+    captured = {'added': [], 'set': {}, 'filters': []}
 
     fake_query = MagicMock()
+
     # Chain: .where(...).where(...).limit(N).stream() — every intermediate
     # call returns the same fake so we don't have to model a query builder.
-    fake_query.where.return_value = fake_query
+    def _where(*, filter):
+        captured['filters'].append((filter.field_path, filter.op_string, filter.value))
+        return fake_query
+
+    fake_query.where.side_effect = _where
     fake_query.limit.return_value = fake_query
-    fake_query.stream.return_value = iter(existing_docs)
+
+    def _stream(**kwargs):
+        generation_filters = [value for field, operator, value in captured['filters'] if field == 'account_generation']
+        if not generation_filters:
+            return iter(existing_docs)
+        generation = generation_filters[-1]
+        return iter([doc for doc in existing_docs if doc.to_dict().get('account_generation') == generation])
+
+    fake_query.stream.side_effect = _stream
 
     fake_action_items_ref = MagicMock()
-    fake_action_items_ref.where.return_value = fake_query
+    fake_action_items_ref.where.side_effect = _where
 
     def _add(payload):
         captured['added'].append(payload)
@@ -59,14 +75,57 @@ def _stub_collection(monkeypatch, existing_docs):
         return (None, ref)
 
     fake_action_items_ref.add.side_effect = _add
+    document_refs = {}
+
+    def _document(document_id=None):
+        if document_id is None:
+            document_id = 'newly-created-id'
+        if document_id in document_refs:
+            return document_refs[document_id]
+        ref = MagicMock()
+        ref.id = document_id
+        ref.get.side_effect = lambda **kwargs: MagicMock(
+            exists=document_id in captured['set'],
+            to_dict=lambda: captured['set'].get(document_id, {}),
+        )
+
+        def _set(payload):
+            captured['set'][document_id] = payload
+            if document_id == 'newly-created-id':
+                captured['added'].append(payload)
+
+        ref.set.side_effect = _set
+        document_refs[document_id] = ref
+        return ref
+
+    fake_action_items_ref.document.side_effect = _document
+
+    fake_control_ref = MagicMock()
+    fake_control_ref.get.side_effect = lambda **kwargs: MagicMock(
+        exists=control_generation is not None,
+        to_dict=lambda: {'account_generation': control_generation} if control_generation is not None else {},
+    )
+    fake_control_collection = MagicMock()
+    fake_control_collection.document.return_value = fake_control_ref
 
     fake_user_doc = MagicMock()
-    fake_user_doc.collection.return_value = fake_action_items_ref
+    fake_user_doc.collection.side_effect = lambda name: (
+        fake_action_items_ref if name == action_items_db.action_items_collection else fake_control_collection
+    )
 
     fake_users = MagicMock()
     fake_users.document.return_value = fake_user_doc
 
-    monkeypatch.setattr(action_items_db, 'db', MagicMock(collection=MagicMock(return_value=fake_users)))
+    transaction = MagicMock()
+    transaction.set.side_effect = lambda ref, payload: ref.set(payload)
+    fake_db = MagicMock(collection=MagicMock(return_value=fake_users))
+    fake_db.transaction.return_value = transaction
+    monkeypatch.setattr(action_items_db, 'db', fake_db)
+    monkeypatch.setattr(
+        action_items_db.firestore,
+        'transactional',
+        lambda function: lambda transaction: function(transaction),
+    )
     return captured
 
 
@@ -115,6 +174,72 @@ def test_idempotency_miss_writes_key_on_new_doc(monkeypatch):
     assert result == 'newly-created-id'
     assert len(captured['added']) == 1
     assert captured['added'][0].get('idempotency_key') == 'abc123'
+
+
+def test_idempotency_does_not_return_prior_generation_task(monkeypatch):
+    captured = _stub_collection(
+        monkeypatch,
+        [_make_doc('old-generation-id', {'completed': False, 'deleted': False, 'account_generation': 6})],
+        control_generation=7,
+    )
+    result = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, idempotency_key='abc123'
+    )
+    assert result == 'newly-created-id'
+    assert captured['added'][0]['account_generation'] == 7
+    assert ('account_generation', '==', 7) in captured['filters']
+
+
+def test_reserved_document_id_is_idempotent_across_crash_retry(monkeypatch):
+    captured = _stub_collection(monkeypatch, [])
+
+    first = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+    )
+    second = action_items_db.create_action_item(
+        'uid', {'description': 'Buy milk', 'completed': False}, document_id='task-reserved'
+    )
+
+    assert first == second == 'task-reserved'
+    assert list(captured['set']) == ['task-reserved']
+    assert captured['added'] == []
+
+
+def test_create_retries_precommit_contention_without_duplicate_write(monkeypatch):
+    captured = _stub_collection(monkeypatch, [])
+    attempts = 0
+
+    def transactional(function):
+        def wrapped(transaction):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise Aborted('read contention')
+            return function(transaction)
+
+        return wrapped
+
+    def fast_retry(transaction_factory, operation, **kwargs):
+        return firestore_transaction_retry.run_with_transaction_contention_retry(
+            transaction_factory,
+            operation,
+            **kwargs,
+            sleep=lambda _delay: None,
+            random_value=lambda: 0.0,
+        )
+
+    monkeypatch.setattr(action_items_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(action_items_db, 'run_with_transaction_contention_retry', fast_retry)
+
+    result = action_items_db.create_action_item(
+        'uid',
+        {'description': 'Buy milk', 'completed': False},
+        idempotency_key='abc123',
+    )
+
+    assert result == 'newly-created-id'
+    assert attempts == 2
+    assert len(captured['added']) == 1
 
 
 # ---------------------------------------------------------------------------

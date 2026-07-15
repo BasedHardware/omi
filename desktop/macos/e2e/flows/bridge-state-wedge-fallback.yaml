@@ -1,0 +1,32 @@
+version: 2
+name: bridge-state-wedge-fallback
+tier: 2
+description: /state must fall back to a cached (stale) snapshot while the MainActor is wedged, not hang
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+preconditions:
+  - automation_bridge_ready
+
+steps:
+  - id: S1
+    name: Baseline /state is live (not stale)
+    state.expect:
+      state.snapshotStale: false
+
+  - id: S2
+    name: Wedge the main thread; /state then answers from the cached (stale) snapshot, not hanging
+    bridge.action:
+      name: debug_block_main_thread
+      params:
+        durationMs: "8000"
+    expect:
+      result.detail.blocking_main_thread_ms: "8000"
+    wait:
+      state.snapshotStale: true
+
+  - id: S3
+    name: Bridge logged the timed-out live refresh
+    log.expect:
+      contains:
+        - "live /state refresh timed out"

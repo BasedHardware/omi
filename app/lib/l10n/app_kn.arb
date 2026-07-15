@@ -1,5 +1,6 @@
 {
     "@@locale": "kn",
+    "sessionExpiredSignInAgain": "ಸೆಷನ್ ಅವಧಿ ಮುಗಿದಿದೆ — ಮತ್ತೆ ಸೈನ್ ಇನ್ ಮಾಡಿ.",
     "@@last_modified": "2024-12-26",
     "appTitle": "ಓಮಿ",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ."
+    "pendantStorageAlmostFull": "ಪೆಂಡೆಂಟ್‌ನ ಸಂಗ್ರಹಣೆ ಬಹುತೇಕ ಭರ್ತಿಯಾಗಿದೆ — ಸಿಂಕ್ ಮಾಡಲು ಆ್ಯಪ್ ಅನ್ನು ತೆರೆದಿಡಿ.",
+    "connectRayBanMeta": "Ray-Ban Meta ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaSetupDescription": "ಸಂವಾದಗಳು ಮತ್ತು ದೃಶ್ಯ ಸನ್ನಿವೇಶಕ್ಕಾಗಿ ನಿಮ್ಮ Ray-Ban Meta ಕನ್ನಡಕವನ್ನು ನಿಮ್ಮ Omi ಸೆರೆಹಿಡಿಯುವ ಸಾಧನವಾಗಿ ಬಳಸಿ. ನಿಮ್ಮ ಕನ್ನಡಕವನ್ನು ಲಿಂಕ್ ಮಾಡಲು Omi Meta AI ಅಪ್ಲಿಕೇಶನ್ ಅನ್ನು ತೆರೆಯುತ್ತದೆ.",
+    "raybanMetaOpenMetaAI": "Meta AI ಮೂಲಕ ಸಂಪರ್ಕಿಸಿ",
+    "raybanMetaWaitingForMetaAI": "Meta AI ಅಪ್ಲಿಕೇಶನ್‌ನಲ್ಲಿ ಸಂಪರ್ಕವನ್ನು ಪೂರ್ಣಗೊಳಿಸಿ, ನಂತರ ಇಲ್ಲಿಗೆ ಹಿಂತಿರುಗಿ.",
+    "raybanMetaCheckAgain": "ಮತ್ತೆ ಪರಿಶೀಲಿಸಿ",
+    "raybanMetaAllowCamera": "ಕನ್ನಡಕದಲ್ಲಿ ಕ್ಯಾಮೆರಾವನ್ನು ಅನುಮತಿಸಿ",
+    "raybanMetaCameraExplanation": "ನಿಮ್ಮ ಸಂವಾದಗಳಿಗೆ ಫೋಟೋಗಳನ್ನು ಸೇರಿಸಲು Omi ನಿಮ್ಮ ಕನ್ನಡಕದ ಕ್ಯಾಮೆರಾವನ್ನು ಬಳಸುತ್ತದೆ. ನೀವು ಇದನ್ನು ಬಿಟ್ಟುಬಿಟ್ಟು ಕೇವಲ ಆಡಿಯೊವನ್ನು ಬಳಸಬಹುದು.",
+    "raybanMetaSkipForNow": "ಸದ್ಯಕ್ಕೆ ಬಿಟ್ಟುಬಿಡಿ",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್",
+    "raybanMetaAudioOnlyExplanation": "Omi ನ ಈ ಆವೃತ್ತಿಯು ಬ್ಲೂಟೂತ್ ಮೂಲಕ ನಿಮ್ಮ ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಅನ್ನು ಬಳಸಬಹುದು. ಫೋಟೋ ಸೆರೆಹಿಡಿಯಲು Omi ನ Meta ಡೆವಲಪರ್ ಬಿಲ್ಡ್ ಅಗತ್ಯವಿದೆ.",
+    "raybanMetaMusicPauseNote": "ಕನ್ನಡಕದ ಮೈಕ್ರೋಫೋನ್ ಬಳಕೆಯಲ್ಲಿರುವಾಗ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲಿನ ಸಂಗೀತವು ವಿರಾಮಗೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaContinue": "ಮುಂದುವರಿಸಿ",
+    "raybanMetaCapturePhoto": "ಫೋಟೋ ಸೆರೆಹಿಡಿಯಿರಿ",
+    "raybanMetaPhotoRequested": "ಫೋಟೋ ವಿನಂತಿಸಲಾಗಿದೆ — ಇದು ನಿಮ್ಮ ಸಂವಾದದಲ್ಲಿ ಕಾಣಿಸಿಕೊಳ್ಳುತ್ತದೆ.",
+    "raybanMetaMicrophoneReady": "ಮೈಕ್ರೋಫೋನ್ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureReady": "ಚಿತ್ರ ಸೆರೆಹಿಡಿಯುವಿಕೆ ಸಿದ್ಧವಾಗಿದೆ",
+    "raybanMetaImageCaptureUnavailable": "ಕೇವಲ-ಆಡಿಯೊ ಮೋಡ್‌ನಲ್ಲಿ ಲಭ್ಯವಿಲ್ಲ",
+    "raybanMetaCamera": "ಕ್ಯಾಮೆರಾ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta ಗೆ ಸಂಪರ್ಕಿಸುವಲ್ಲಿ ದೋಷ: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ."
 }

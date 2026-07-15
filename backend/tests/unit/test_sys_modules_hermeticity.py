@@ -22,6 +22,8 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.slow
+
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 SUBSET_FILE = BACKEND_DIR / "tests" / ".single_process_safe_subset"
 

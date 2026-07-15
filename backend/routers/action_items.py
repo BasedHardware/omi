@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -32,10 +33,24 @@ from utils.notifications import (
 from utils.task_sync import auto_sync_action_item
 from pydantic import BaseModel, Field, ValidationError
 from models.shared import StatusResponse
+from models.action_item import (
+    ActionItemCreateRequest,
+    ActionItemResponse,
+    ActionItemUpdateRequest,
+    ActionItemsResponse,
+    ActionItemsSearchResponse,
+    ConversationActionItemsResponse,
+    PendingSyncResponse,
+)
+from utils.task_intelligence import task_links
 
 router = APIRouter()
 
 logger = logging.getLogger(__name__)
+
+# Import-compatible aliases; canonical ownership lives in models.action_item.
+CreateActionItemRequest = ActionItemCreateRequest
+UpdateActionItemRequest = ActionItemUpdateRequest
 
 
 def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -> dict:
@@ -54,67 +69,8 @@ def _batch_mutation_response(result, *, locked_ids: Optional[set[str]] = None) -
     return body
 
 
-# Request models specific to action items
-class CreateActionItemRequest(BaseModel):
-    description: str = Field(description="The action item description")
-    completed: bool = Field(default=False, description="Whether the action item is completed")
-    due_at: Optional[datetime] = Field(default=None, description="When the action item is due")
-    conversation_id: Optional[str] = Field(
-        default=None, description="ID of the conversation this action item came from"
-    )
-
-
-class UpdateActionItemRequest(BaseModel):
-    description: Optional[str] = Field(default=None, description="Updated description")
-    completed: Optional[bool] = Field(default=None, description="Updated completion status")
-    due_at: Optional[datetime] = Field(default=None, description="Updated due date")
-    exported: Optional[bool] = Field(default=None, description="Whether the item has been exported")
-    export_date: Optional[datetime] = Field(default=None, description="When the item was exported")
-    export_platform: Optional[str] = Field(default=None, description="Platform the item was exported to")
-    apple_reminder_id: Optional[str] = Field(default=None, description="EventKit calendarItemIdentifier")
-    sort_order: Optional[int] = Field(default=None, description="Manual sort order within category")
-    indent_level: Optional[int] = Field(default=None, ge=0, le=3, description="Indentation level (0-3)")
-
-
-class ActionItemResponse(BaseModel):
-    id: str
-    description: str
-    completed: bool
-    created_at: Optional[datetime] = None
-    updated_at: Optional[datetime] = None
-    due_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    conversation_id: Optional[str] = None
-    is_locked: bool = False
-    exported: bool = False
-    export_date: Optional[datetime] = None
-    export_platform: Optional[str] = None
-    apple_reminder_id: Optional[str] = None
-    sort_order: int = 0
-    indent_level: int = 0
-
-
-class ActionItemsResponse(BaseModel):
-    action_items: List[ActionItemResponse]
-    has_more: bool = False
-
-
-class ActionItemsSearchResponse(BaseModel):
-    action_items: List[ActionItemResponse]
-
-
 class ActionItemIdsResponse(BaseModel):
     ids: List[str]
-
-
-class ConversationActionItemsResponse(BaseModel):
-    action_items: List[ActionItemResponse]
-    conversation_id: str
-
-
-class PendingSyncResponse(BaseModel):
-    pending_export: List[ActionItemResponse]
-    synced_items: List[ActionItemResponse]
 
 
 class BatchMutationResponse(BaseModel):
@@ -323,21 +279,25 @@ def _content_idempotency_key(uid: str, description: str) -> str:
 
 
 @router.post("/v1/action-items", response_model=ActionItemResponse, tags=['action-items'])
-def create_action_item(request: CreateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)):
+def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth.get_current_user_uid)):
     """Create a new action item.
 
     Content-idempotent on (uid, normalized description): a retry of the same
     request returns the original action_item rather than creating a duplicate.
     """
-    action_item_data = {
-        'description': request.description,
-        'completed': request.completed,
-        'due_at': request.due_at,
-        'conversation_id': request.conversation_id,
-    }
+    try:
+        task_links.validate_task_links(uid, goal_id=request.goal_id, workstream_id=request.workstream_id)
+    except task_links.TaskLinkValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    action_item_data = request.storage_payload()
 
     idempotency_key = _content_idempotency_key(uid, request.description)
-    action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    try:
+        action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item = action_items_db.get_action_item(uid, action_item_id)
 
     if not action_item:
@@ -469,7 +429,7 @@ def get_action_item(action_item_id: str, uid: str = Depends(auth.get_current_use
 
 @router.patch("/v1/action-items/{action_item_id}", response_model=ActionItemResponse, tags=['action-items'])
 def update_action_item(
-    action_item_id: str, request: UpdateActionItemRequest, uid: str = Depends(auth.get_current_user_uid)
+    action_item_id: str, request: ActionItemUpdateRequest, uid: str = Depends(auth.get_current_user_uid)
 ):
     """Update an action item."""
     # Check if action item exists
@@ -477,39 +437,27 @@ def update_action_item(
     if not existing_item:
         raise HTTPException(status_code=404, detail="Action item not found")
 
-    # Prepare update data
-    update_data = {}
-    if request.description is not None:
-        update_data['description'] = request.description
-    if request.completed is not None:
-        update_data['completed'] = request.completed
-        if request.completed:
-            update_data['completed_at'] = datetime.now(timezone.utc)
-        else:
-            update_data['completed_at'] = None
-    # Check if due_at was explicitly provided (even if None) to allow clearing
-    # In Pydantic v2, we check model_fields_set to see if field was explicitly set
-    if 'due_at' in request.model_fields_set:
-        # Field was explicitly provided (even if None) - update it
-        update_data['due_at'] = request.due_at
-    elif request.due_at is not None:
-        # Fallback: only update if not None (for backwards compatibility)
-        update_data['due_at'] = request.due_at
-    if request.exported is not None:
-        update_data['exported'] = request.exported
-    if request.export_date is not None:
-        update_data['export_date'] = request.export_date
-    if request.export_platform is not None:
-        update_data['export_platform'] = request.export_platform
-    if request.apple_reminder_id is not None:
-        update_data['apple_reminder_id'] = request.apple_reminder_id
-    if request.sort_order is not None:
-        update_data['sort_order'] = request.sort_order
-    if request.indent_level is not None:
-        update_data['indent_level'] = request.indent_level
+    proposed_goal_id = request.goal_id if 'goal_id' in request.model_fields_set else existing_item.get('goal_id')
+    proposed_workstream_id = (
+        request.workstream_id if 'workstream_id' in request.model_fields_set else existing_item.get('workstream_id')
+    )
+    try:
+        task_links.validate_task_links(uid, goal_id=proposed_goal_id, workstream_id=proposed_workstream_id)
+    except task_links.TaskLinkValidationError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    update_data = request.storage_payload()
+    if request.completed is True or request.status == 'completed':
+        update_data['completed_at'] = datetime.now(timezone.utc)
+    elif 'completed' in update_data or 'status' in update_data:
+        update_data['completed_at'] = None
 
     # Update the action item
-    success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    try:
+        success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not success:
         raise HTTPException(status_code=500, detail="Failed to update action item")
 
@@ -518,6 +466,8 @@ def update_action_item(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if updated_item is None:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
     # Reconcile the client-scheduled reminder when completion or due date changed, using the final
     # state: cancel if completed or no due date, (re)schedule only for an open task with a due date
@@ -553,6 +503,8 @@ def toggle_action_item_completion(
 
     # Return updated action item
     updated_item = action_items_db.get_action_item(uid, action_item_id)
+    if updated_item is None:
+        raise HTTPException(status_code=500, detail="Updated action item could not be loaded")
 
     # Cancel the scheduled client reminder on completion, or re-schedule it when un-completing an
     # item that still has a future due date (#5085).
@@ -664,7 +616,7 @@ def delete_conversation_action_items(conversation_id: str, uid: str = Depends(au
 
 @router.post("/v1/action-items/batch", response_model=BatchCreateActionItemsResponse, tags=['action-items'])
 def create_action_items_batch(
-    action_items: List[CreateActionItemRequest], uid: str = Depends(auth.get_current_user_uid)
+    action_items: List[ActionItemCreateRequest], uid: str = Depends(auth.get_current_user_uid)
 ):
     """Create multiple action items in a batch."""
     if not action_items:
@@ -673,16 +625,19 @@ def create_action_items_batch(
     # Prepare action items data
     action_items_data = []
     for item in action_items:
-        action_item_data = {
-            'description': item.description,
-            'completed': False,
-            'due_at': item.due_at,
-            'conversation_id': item.conversation_id,
-        }
-        action_items_data.append(action_item_data)
+        try:
+            task_links.validate_task_links(uid, goal_id=item.goal_id, workstream_id=item.workstream_id)
+        except task_links.TaskLinkValidationError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
+        action_items_data.append(item.storage_payload())
 
     # Create batch
-    created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    try:
+        created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
+    except action_items_db.TaskRelationshipConflictError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
 
     # Fetch created items and send FCM messages
     created_items = []
@@ -692,12 +647,13 @@ def create_action_items_batch(
             created_items.append(ActionItemResponse(**item))
 
             # Send FCM data message if action item has a due date
-            if idx < len(action_items) and action_items[idx].due_at:
+            due_at = action_items[idx].due_at if idx < len(action_items) else None
+            if due_at is not None:
                 send_action_item_data_message(
                     user_id=uid,
                     action_item_id=item_id,
                     description=action_items[idx].description,
-                    due_at=action_items[idx].due_at.isoformat(),
+                    due_at=due_at.isoformat(),
                 )
 
     upsert_action_item_vectors_batch(

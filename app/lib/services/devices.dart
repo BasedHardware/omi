@@ -6,30 +6,13 @@ import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
 import 'package:omi/services/devices/discovery/apple_watch_discoverer.dart';
+import 'package:omi/services/devices/discovery/rayban_meta_discoverer.dart';
 import 'package:omi/services/devices/discovery/device_discoverer.dart';
 import 'package:omi/services/devices/discovery/native_bluetooth_discoverer.dart';
 import 'package:omi/services/devices/errors.dart';
 import 'package:omi/utils/debug_log_manager.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/mutex.dart';
-
-abstract class IDeviceService {
-  void start();
-  void stop();
-  Future<void> discover({String? desirableDeviceId, int timeout = 5});
-
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false});
-
-  void subscribe(IDeviceServiceSubsciption subscription, Object context);
-  void unsubscribe(Object context);
-
-  DateTime? getFirstConnectedAt();
-
-  Future<void> disconnectDevice();
-
-  /// Fully tear down connection + transport for a device being forgotten/unpaired.
-  Future<void> forgetDevice(String deviceId);
-}
 
 enum DeviceServiceStatus { init, ready, scanning, stop }
 
@@ -52,14 +35,21 @@ class OmiFeatures {
 abstract class IDeviceServiceSubsciption {
   void onDevices(List<BtDevice> devices);
   void onStatusChanged(DeviceServiceStatus status);
-  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state);
+  void onDeviceConnectionStateChanged(
+    String deviceId,
+    DeviceConnectionState state,
+  );
 }
 
-class DeviceService implements IDeviceService {
+class DeviceService {
   DeviceServiceStatus _status = DeviceServiceStatus.init;
   List<BtDevice> _devices = [];
 
-  final List<DeviceDiscoverer> _discoverers = [NativeBluetoothDiscoverer(), AppleWatchDiscoverer()];
+  final List<DeviceDiscoverer> _discoverers = [
+    NativeBluetoothDiscoverer(),
+    AppleWatchDiscoverer(),
+    RayBanMetaDiscoverer(),
+  ];
 
   final Map<Object, IDeviceServiceSubsciption> _subscriptions = {};
 
@@ -70,7 +60,6 @@ class DeviceService implements IDeviceService {
 
   DateTime? _firstConnectedAt;
 
-  @override
   Future<void> discover({String? desirableDeviceId, int timeout = 5}) async {
     Logger.debug("Device discovering...");
     if (_status != DeviceServiceStatus.ready) {
@@ -125,12 +114,16 @@ class DeviceService implements IDeviceService {
     _connection = null;
 
     var device = _devices.firstWhereOrNull((f) => f.id == id);
-    Logger.debug('[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})');
+    Logger.debug(
+      '[DeviceService] device lookup result: ${device?.name ?? "NULL"} (locator: ${device?.locator?.kind})',
+    );
 
     // If device not in discovered list, try to get it from SharedPreferences
     // This allows background reconnection without scanning
     if (device == null) {
-      Logger.debug('[DeviceService] Device not in discovered list, checking stored device');
+      Logger.debug(
+        '[DeviceService] Device not in discovered list, checking stored device',
+      );
       device = _getStoredDevice(id);
       if (device != null) {
         Logger.debug('[DeviceService] Using stored device: ${device.name}');
@@ -138,20 +131,25 @@ class DeviceService implements IDeviceService {
           _devices.add(device);
         }
       } else {
-        Logger.debug('[DeviceService] No stored device available for $id, returning');
+        Logger.debug(
+          '[DeviceService] No stored device available for $id, returning',
+        );
         return;
       }
     }
 
     _connection = DeviceConnectionFactory.create(device);
     if (_connection != null) {
-      await _connection!.connect(onConnectionStateChanged: onDeviceConnectionStateChanged);
+      await _connection!.connect(
+        onConnectionStateChanged: onDeviceConnectionStateChanged,
+      );
     } else {
-      Logger.debug('[DeviceService] Failed to create device connection for ${device.id}');
+      Logger.debug(
+        '[DeviceService] Failed to create device connection for ${device.id}',
+      );
     }
   }
 
-  @override
   void subscribe(IDeviceServiceSubsciption subscription, Object context) {
     _subscriptions.remove(context.hashCode);
     _subscriptions.putIfAbsent(context.hashCode, () => subscription);
@@ -161,19 +159,16 @@ class DeviceService implements IDeviceService {
     subscription.onStatusChanged(_status);
   }
 
-  @override
   void unsubscribe(Object context) {
     _subscriptions.remove(context.hashCode);
   }
 
-  @override
   void start() {
     _status = DeviceServiceStatus.ready;
 
     // TODO: Start watchdog to discover automatically, re-connect automatically
   }
 
-  @override
   void stop() {
     _status = DeviceServiceStatus.stop;
     onStatusChanged(_status);
@@ -193,9 +188,15 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  void onDeviceConnectionStateChanged(String deviceId, DeviceConnectionState state) {
+  void onDeviceConnectionStateChanged(
+    String deviceId,
+    DeviceConnectionState state,
+  ) {
     Logger.debug("device connection state changed...$deviceId...$state");
-    DebugLogManager.logEvent('device_connection_state', {'device_id': deviceId, 'state': state.name});
+    DebugLogManager.logEvent('device_connection_state', {
+      'device_id': deviceId,
+      'state': state.name,
+    });
     for (var s in _subscriptions.values) {
       s.onDeviceConnectionStateChanged(deviceId, state);
     }
@@ -208,11 +209,16 @@ class DeviceService implements IDeviceService {
   }
 
   final Mutex _mutex = Mutex();
-  @override
-  Future<DeviceConnection?> ensureConnection(String deviceId, {bool force = false}) async {
+
+  Future<DeviceConnection?> ensureConnection(
+    String deviceId, {
+    bool force = false,
+  }) async {
     await _mutex.acquire();
     try {
-      Logger.debug("ensureConnection ${_connection?.device.id} ${_connection?.status} $force");
+      Logger.debug(
+        "ensureConnection ${_connection?.device.id} ${_connection?.status} $force",
+      );
 
       // Connected to this device — return it
       if (_connection?.device.id == deviceId && _connection?.status == DeviceConnectionState.connected) {
@@ -243,7 +249,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  @override
   DateTime? getFirstConnectedAt() {
     return _firstConnectedAt;
   }
@@ -261,7 +266,6 @@ class DeviceService implements IDeviceService {
     return null;
   }
 
-  @override
   Future<void> disconnectDevice() async {
     if (_connection != null) {
       Logger.debug("DeviceService: Disconnecting device...");
@@ -270,7 +274,6 @@ class DeviceService implements IDeviceService {
     }
   }
 
-  @override
   Future<void> forgetDevice(String deviceId) async {
     Logger.debug("DeviceService: Forgetting device $deviceId");
     if (_connection != null) {
@@ -285,7 +288,9 @@ class DeviceService implements IDeviceService {
       try {
         await _connection!.transport.dispose();
       } catch (e) {
-        Logger.debug("DeviceService: transport dispose during forget failed: $e");
+        Logger.debug(
+          "DeviceService: transport dispose during forget failed: $e",
+        );
       }
       _connection = null;
     }

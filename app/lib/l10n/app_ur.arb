@@ -1,5 +1,6 @@
 {
     "@@locale": "ur",
+    "sessionExpiredSignInAgain": "سیشن کی میعاد ختم ہو گئی — دوبارہ سائن ان کریں۔",
     "@@last_modified": "2024-12-26",
     "appTitle": "Omi",
     "@appTitle": {
@@ -10694,5 +10695,36 @@
             }
         }
     },
-    "pendantStorageAlmostFull": "پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔"
+    "pendantStorageAlmostFull": "پینڈنٹ کا اسٹوریج تقریباً بھر چکا ہے — سنک کے لیے ایپ کھلی رکھیں۔",
+    "connectRayBanMeta": "Ray-Ban Meta جوڑیں",
+    "raybanMetaSetupDescription": "گفتگو اور بصری سیاق و سباق کے لیے اپنی Ray-Ban Meta عینک کو اپنے Omi کیپچر ڈیوائس کے طور پر استعمال کریں۔ Omi آپ کی عینک کو منسلک کرنے کے لیے Meta AI ایپ کھولے گا۔",
+    "raybanMetaOpenMetaAI": "Meta AI کے ذریعے جڑیں",
+    "raybanMetaWaitingForMetaAI": "Meta AI ایپ میں کنکشن مکمل کریں، پھر یہاں واپس آئیں۔",
+    "raybanMetaCheckAgain": "دوبارہ چیک کریں",
+    "raybanMetaAllowCamera": "عینک پر کیمرے کی اجازت دیں",
+    "raybanMetaCameraExplanation": "Omi آپ کی گفتگو میں تصاویر شامل کرنے کے لیے آپ کی عینک کا کیمرہ استعمال کرتا ہے۔ آپ اسے چھوڑ کر صرف آڈیو استعمال کر سکتے ہیں۔",
+    "raybanMetaSkipForNow": "ابھی کے لیے چھوڑ دیں",
+    "raybanMetaAudioOnlyTitle": "Ray-Ban Meta صرف آڈیو موڈ",
+    "raybanMetaAudioOnlyExplanation": "Omi کا یہ ورژن Bluetooth کے ذریعے آپ کی عینک کا مائیکروفون استعمال کر سکتا ہے۔ تصویر کیپچر کے لیے Omi کا Meta ڈیولپر بلڈ درکار ہے۔",
+    "raybanMetaMusicPauseNote": "جب عینک کا مائیکروفون استعمال میں ہو تو آپ کے فون پر موسیقی رک جاتی ہے۔",
+    "raybanMetaContinue": "جاری رکھیں",
+    "raybanMetaCapturePhoto": "تصویر لیں",
+    "raybanMetaPhotoRequested": "تصویر کی درخواست کی گئی — یہ آپ کی گفتگو میں ظاہر ہوگی۔",
+    "raybanMetaMicrophoneReady": "مائیکروفون تیار ہے",
+    "raybanMetaImageCaptureReady": "تصویر کیپچر تیار ہے",
+    "raybanMetaImageCaptureUnavailable": "صرف آڈیو موڈ میں دستیاب نہیں",
+    "raybanMetaCamera": "کیمرہ",
+    "errorConnectingRayBanMeta": "Ray-Ban Meta سے جڑنے میں خرابی: {error}",
+    "@errorConnectingRayBanMeta": {
+        "placeholders": {
+            "error": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageTitle": "آلے کا اسٹوریج",
+    "deviceStoragePercentFull": "{percent}% بھرا",
+    "deviceStorageUsedOfTotal": "{total} میں سے {used} استعمال شدہ",
+    "deviceStorageFree": "{free} خالی",
+    "deviceStorageNearlyFull": "آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔"
 }

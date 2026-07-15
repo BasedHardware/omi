@@ -92,6 +92,7 @@ struct OnboardingChatView: View {
   var onSkip: () -> Void
 
   @State private var inputText: String = ""
+  @State private var inputRevision: UInt64 = 0
   @State private var hasStarted: Bool = false
   @State private var onboardingCompleted: Bool = false
   @State private var quickReplyOptions: [String] = []
@@ -160,8 +161,8 @@ struct OnboardingChatView: View {
         }
         .buttonStyle(.plain)
       }
-      .padding(.horizontal, 24)
-      .padding(.vertical, 16)
+      .padding(.horizontal, OmiSpacing.xxl)
+      .padding(.vertical, OmiSpacing.lg)
 
       Divider()
         .background(OmiColors.backgroundTertiary)
@@ -169,7 +170,7 @@ struct OnboardingChatView: View {
       // Chat messages
       ScrollViewReader { proxy in
         ScrollView {
-          VStack(spacing: 16) {
+          VStack(spacing: OmiSpacing.lg) {
             ForEach(chatProvider.messages) { message in
               OnboardingChatBubble(
                 message: message,
@@ -189,7 +190,7 @@ struct OnboardingChatView: View {
                 isCompleted: explorationCompleted
               )
               .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.leading, 44)  // align with message text
+              .padding(.leading, OmiSpacing.page)  // align with message text
               .id("exploration-card")
             }
 
@@ -203,7 +204,7 @@ struct OnboardingChatView: View {
                 isCompleted: gmailReadingCompleted
               )
               .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.leading, 44)
+              .padding(.leading, OmiSpacing.page)
               .id("gmail-card")
             }
 
@@ -218,7 +219,7 @@ struct OnboardingChatView: View {
                 isCompleted: calendarReadingCompleted
               )
               .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.leading, 44)
+              .padding(.leading, OmiSpacing.page)
               .id("calendar-card")
             }
 
@@ -226,7 +227,7 @@ struct OnboardingChatView: View {
             if chatProvider.isSending {
               TypingIndicator()
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 44)  // align with message text (32px avatar + 12px spacing)
+                .padding(.leading, OmiSpacing.page)  // align with message text (32px avatar + 12px spacing)
                 .id("typing")
             }
 
@@ -237,7 +238,7 @@ struct OnboardingChatView: View {
                   .font(.system(size: 14, weight: .medium))
                   .foregroundColor(OmiColors.textPrimary)
                   .frame(maxWidth: .infinity, alignment: .leading)
-                  .padding(.leading, 44)
+                  .padding(.leading, OmiSpacing.page)
               }
 
               // Show permission media for permission-related quick replies, including
@@ -246,28 +247,28 @@ struct OnboardingChatView: View {
               {
                 OnboardingPermissionImage(permissionType: permType)
                   .frame(maxWidth: .infinity, alignment: .leading)
-                  .padding(.leading, 44)
+                  .padding(.leading, OmiSpacing.page)
               }
 
-              HStack(spacing: 8) {
+              HStack(spacing: OmiSpacing.sm) {
                 ForEach(quickReplyOptions, id: \.self) { option in
                   Button(action: {
                     handleQuickReply(option)
                   }) {
                     Text(option)
                       .font(.system(size: 13, weight: .medium))
-                      .foregroundColor(isGrantButton(option) ? .white : OmiColors.purplePrimary)
-                      .padding(.horizontal, 16)
-                      .padding(.vertical, 8)
+                      .foregroundColor(isGrantButton(option) ? OmiColors.backgroundPrimary : OmiColors.accent)
+                      .padding(.horizontal, OmiSpacing.lg)
+                      .padding(.vertical, OmiSpacing.sm)
                       .background(
                         isGrantButton(option)
-                          ? OmiColors.purplePrimary
-                          : OmiColors.purplePrimary.opacity(0.1)
+                          ? OmiColors.accent
+                          : OmiColors.accent.opacity(0.1)
                       )
-                      .cornerRadius(20)
+                      .cornerRadius(OmiChrome.sectionRadius)
                       .overlay(
-                        RoundedRectangle(cornerRadius: 20)
-                          .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+                        RoundedRectangle(cornerRadius: OmiChrome.sectionRadius)
+                          .stroke(OmiColors.accent.opacity(0.3), lineWidth: 1)
                       )
                   }
                   .buttonStyle(.plain)
@@ -275,7 +276,7 @@ struct OnboardingChatView: View {
                 }
               }
               .frame(maxWidth: .infinity, alignment: .leading)
-              .padding(.leading, 44)  // align with message text
+              .padding(.leading, OmiSpacing.page)  // align with message text
               .id("quick-replies")
             }
 
@@ -297,26 +298,26 @@ struct OnboardingChatView: View {
               if isStillPending {
                 OnboardingPermissionImage(permissionType: pending)
                   .frame(maxWidth: .infinity, alignment: .leading)
-                  .padding(.leading, 44)
+                  .padding(.leading, OmiSpacing.page)
 
                 Button(action: {
                   openSettingsForPermission(pending)
                 }) {
-                  HStack(spacing: 6) {
+                  HStack(spacing: OmiSpacing.xs) {
                     Image(systemName: "gear")
                       .font(.system(size: 12))
                     Text("Open \(permissionLabel(pending)) Settings")
                       .font(.system(size: 13, weight: .medium))
                   }
-                  .foregroundColor(.white)
-                  .padding(.horizontal, 16)
-                  .padding(.vertical, 8)
-                  .background(OmiColors.purplePrimary)
-                  .cornerRadius(20)
+                  .foregroundColor(OmiColors.backgroundPrimary)
+                  .padding(.horizontal, OmiSpacing.lg)
+                  .padding(.vertical, OmiSpacing.sm)
+                  .background(OmiColors.accent)
+                  .cornerRadius(OmiChrome.sectionRadius)
                 }
                 .buttonStyle(.plain)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.leading, 44)
+                .padding(.leading, OmiSpacing.page)
               }
             }
 
@@ -330,20 +331,20 @@ struct OnboardingChatView: View {
               }) {
                 Text("Continue")
                   .font(.system(size: 15, weight: .semibold))
-                  .foregroundColor(.white)
+                  .foregroundColor(OmiColors.backgroundPrimary)
                   .frame(maxWidth: 220)
-                  .padding(.vertical, 12)
-                  .background(OmiColors.purplePrimary)
-                  .cornerRadius(12)
+                  .padding(.vertical, OmiSpacing.md)
+                  .background(OmiColors.accent)
+                  .cornerRadius(OmiChrome.smallControlRadius)
               }
               .buttonStyle(.plain)
-              .padding(.top, 12)
+              .padding(.top, OmiSpacing.md)
             }
 
             // Extra spacing so quick replies / buttons don't sit against the input field
-            Spacer().frame(height: 20)
+            Spacer().frame(height: OmiSpacing.xl)
           }
-          .padding(20)
+          .padding(OmiSpacing.xl)
 
           // Invisible anchor at the very bottom — always scroll to this
           // (same pattern as ChatMessagesView)
@@ -382,7 +383,7 @@ struct OnboardingChatView: View {
       }
 
       // Input area
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         TextField(
           quickReplyOptions.isEmpty ? "Type your message..." : "Or type your own answer...",
           text: $inputText, axis: .vertical
@@ -391,14 +392,14 @@ struct OnboardingChatView: View {
         .font(.system(size: 14))
         .foregroundColor(OmiColors.textPrimary)
         .focused($isInputFocused)
-        .padding(12)
+        .padding(OmiSpacing.md)
         .lineLimit(1...3)
         .onSubmit {
           sendMessage()
         }
         .frame(maxWidth: .infinity)
         .background(OmiColors.backgroundSecondary)
-        .cornerRadius(20)
+        .cornerRadius(OmiChrome.sectionRadius)
 
         if chatProvider.isSending
           && inputText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
@@ -407,7 +408,7 @@ struct OnboardingChatView: View {
           Button(action: stopAgent) {
             Image(systemName: chatProvider.isStopping ? "ellipsis.circle" : "stop.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.accent)
           }
           .buttonStyle(.plain)
           .disabled(chatProvider.isStopping)
@@ -415,17 +416,22 @@ struct OnboardingChatView: View {
           Button(action: sendMessage) {
             Image(systemName: "arrow.up.circle.fill")
               .font(.system(size: 32))
-              .foregroundColor(canSend ? OmiColors.purplePrimary : OmiColors.textTertiary)
+              .foregroundColor(canSend ? OmiColors.accent : OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
           .disabled(!canSend)
         }
       }
-      .padding(.horizontal, 20)
-      .padding(.vertical, 16)
+      .padding(.horizontal, OmiSpacing.xl)
+      .padding(.vertical, OmiSpacing.lg)
     }
     .onAppear {
+      inputText = ChatDraftStore.shared.text(for: .onboardingMain)
       startChat()
+    }
+    .onChange(of: inputText) { _, text in
+      inputRevision &+= 1
+      ChatDraftStore.shared.setText(text, for: .onboardingMain)
     }
     .onReceive(permissionCheckTimer) { _ in
       appState.checkScreenRecordingPermission()
@@ -478,7 +484,10 @@ struct OnboardingChatView: View {
       scheduleRecoveredOnboardingFallback()
     }
     .alert("Are you sure?", isPresented: $showSkipConfirmation) {
-      Button("Skip anyway", role: .destructive) { onSkip() }
+      Button("Skip anyway", role: .destructive) {
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      }
       Button("Continue setup", role: .cancel) {}
     } message: {
       Text("Omi won't be useful for you if it doesn't know enough about you.")
@@ -514,10 +523,12 @@ struct OnboardingChatView: View {
 
   /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
+    if type == "screen_recording" {
+      ScreenCaptureService.openScreenRecordingPreferences()
+      return
+    }
     let urlString: String? = {
       switch type {
-      case "screen_recording":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
       case "microphone":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
       case "accessibility":
@@ -532,11 +543,17 @@ struct OnboardingChatView: View {
     }()
     if let urlString, let url = URL(string: urlString) {
       NSWorkspace.shared.open(url)
+      // Full Disk Access uses the same drag-to-grant mechanic as Screen Recording.
+      if type == "full_disk_access" {
+        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      }
     }
   }
 
   /// Called when a permission is detected as granted (by the 1s timer)
   private func handlePermissionGranted(_ type: String, label: String) {
+    // Permission is granted — drop the floating drag card.
+    PermissionDragGuidance.dismiss()
     bringToFront()
     // If this was the permission we were waiting for, notify the AI
     if pendingPermissionType == type {
@@ -556,10 +573,10 @@ struct OnboardingChatView: View {
   private func scrollToBottom(proxy: ScrollViewProxy, delay: TimeInterval = 0) {
     if delay > 0 {
       DispatchQueue.main.asyncAfter(deadline: .now() + delay) {
-        withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
+        OmiMotion.withGated { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
       }
     } else {
-      withAnimation { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
+      OmiMotion.withGated { proxy.scrollTo("bottom-anchor", anchor: .bottom) }
     }
   }
 
@@ -572,6 +589,7 @@ struct OnboardingChatView: View {
 
     // Set up floating bar so permission help notifications can be shown
     FloatingControlBarManager.shared.setup(appState: appState, chatProvider: chatProvider)
+    FloatingControlBarManager.shared.barState?.switchAIDraft(to: .onboardingFloating)
     FloatingControlBarManager.shared.showTemporarily()
 
     // Wire up onboarding tools
@@ -756,15 +774,15 @@ struct OnboardingChatView: View {
   private func sendMessage() {
     guard canSend else { return }
 
-    let text = inputText.trimmingCharacters(in: .whitespacesAndNewlines)
+    let draft = inputText
+    let submittedRevision = inputRevision
+    let text = draft.trimmingCharacters(in: .whitespacesAndNewlines)
     guard !text.isEmpty else { return }
-    inputText = ""
 
-    // Clear quick replies and unblock any pending ask_followup
+    // Clear quick replies; ask_followup publishes UI and completes immediately.
     quickReplyOptions = []
     quickReplyQuestion = ""
     isTaskSelectionFollowup = false
-    ChatToolExecutor.resumeFollowup(with: text)
 
     Task {
       if awaitingGoalInput {
@@ -774,7 +792,11 @@ struct OnboardingChatView: View {
         await maybeCreateTask(from: text, source: "typed")
         awaitingDailyTaskInput = false
       }
-      await chatProvider.sendMessage(text)
+      await chatProvider.sendMessage(text, onAccepted: {
+        if inputRevision == submittedRevision, inputText == draft {
+          inputText = ""
+        }
+      })
     }
   }
 
@@ -826,7 +848,8 @@ struct OnboardingChatView: View {
       isGrantingPermission = true
       Task {
         let result = await ChatToolExecutor.execute(
-          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil)
+          ToolCall(name: "request_permission", arguments: ["type": permType], thoughtSignature: nil),
+          isOnboardingSurface: true
         )
         isGrantingPermission = false
 
@@ -840,7 +863,7 @@ struct OnboardingChatView: View {
         }
       }
     } else {
-      // Regular quick reply — resume the blocked ask_followup tool, then send as message
+      // Regular quick reply — send the selected response as a new message.
       let shouldCreateFromSelection = awaitingGoalInput && !isTypeYourOwnOption(option)
       if shouldCreateFromSelection {
         awaitingGoalInput = false
@@ -853,7 +876,6 @@ struct OnboardingChatView: View {
       } else if isTypeYourOwnOption(option) && wasTaskSelectionFollowup {
         awaitingDailyTaskInput = true
       }
-      ChatToolExecutor.resumeFollowup(with: option)
       Task {
         if shouldCreateFromSelection {
           await maybeCreateGoal(from: option, source: "selected")
@@ -1131,7 +1153,7 @@ struct OnboardingChatView: View {
         targetValue: config.targetValue,
         currentValue: 0,
         unit: config.unit,
-        source: "onboarding_\(source)"
+        source: "user"
       )
       _ = try? await GoalStorage.shared.syncServerGoal(goal)
       createdGoalTitles.insert(dedupeKey)
@@ -1154,10 +1176,11 @@ struct OnboardingChatView: View {
     permissionHelpTimer = nil
 
     guard let permType = permissionType else { return }
+    guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
     // Only fire once per permission type
     guard !permissionHelpShown.contains(permType) else { return }
 
-    let workItem = DispatchWorkItem { [permType] in
+    let workItem = DispatchWorkItem { [permType, ownerID] in
       // Check permission is still pending — either via pendingPermissionType
       // or via a permission-related question still showing (e.g. FDA "Done!" buttons)
       let stillPending =
@@ -1165,7 +1188,7 @@ struct OnboardingChatView: View {
         || (!quickReplyOptions.isEmpty
           && self.permissionType(for: quickReplyQuestion, options: quickReplyOptions) == permType)
       guard stillPending else { return }
-      showPermissionHelpNotification(for: permType)
+      showPermissionHelpNotification(for: permType, ownerID: ownerID)
     }
     permissionHelpTimer = workItem
     DispatchQueue.main.asyncAfter(deadline: .now() + 15, execute: workItem)
@@ -1173,7 +1196,7 @@ struct OnboardingChatView: View {
   }
 
   /// Take a screenshot, send it to Gemini for analysis, and show the result in the floating bar.
-  private func showPermissionHelpNotification(for permType: String) {
+  private func showPermissionHelpNotification(for permType: String, ownerID: String) {
     // Mark as shown immediately so we don't fire again
     permissionHelpShown.insert(permType)
     log("OnboardingChat: Permission help timer fired for \(permType), capturing screenshot")
@@ -1183,6 +1206,7 @@ struct OnboardingChatView: View {
       await MainActor.run {
         let permLabel = permissionDisplayName(permType)
         FloatingControlBarManager.shared.showNotification(
+          ownerID: ownerID,
           title: "Need help with \(permLabel)?",
           message: helpMessage,
           assistantId: "onboarding",
@@ -1377,7 +1401,7 @@ struct OnboardingChatView: View {
           },
           onToolCall: { @Sendable _, name, input in
             let toolCall = ToolCall(name: name, arguments: input, thoughtSignature: nil)
-            let result = await ChatToolExecutor.execute(toolCall)
+            let result = await ChatToolExecutor.execute(toolCall, isOnboardingSurface: true)
             log("OnboardingChat: Exploration tool \(name) executed")
             return result
           },
@@ -1689,21 +1713,21 @@ struct GmailInsightsCard: View {
     VStack(alignment: .leading, spacing: 0) {
       Button(action: {
         guard !text.isEmpty else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isExpanded.toggle()
         }
       }) {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           if isRunning {
             ProgressView()
               .controlSize(.mini)
           } else {
             Image(systemName: "envelope.open.fill")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.accent)
           }
 
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Reading your emails..." : "Email Insights")
               .font(.system(size: 13, weight: .semibold))
               .foregroundColor(OmiColors.textPrimary)
@@ -1724,30 +1748,30 @@ struct GmailInsightsCard: View {
               .foregroundColor(OmiColors.textTertiary)
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
       }
       .buttonStyle(.plain)
 
       if isExpanded && !text.isEmpty {
         Divider()
-          .padding(.horizontal, 10)
+          .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
           Markdown(text)
             .markdownTheme(.aiMessage())
             .textSelection(.enabled)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
         }
         .frame(maxHeight: 300)
       }
     }
     .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(12)
+    .cornerRadius(OmiChrome.smallControlRadius)
     .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
     )
   }
 }
@@ -1765,21 +1789,21 @@ struct CalendarInsightsCard: View {
     VStack(alignment: .leading, spacing: 0) {
       Button(action: {
         guard !text.isEmpty else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isExpanded.toggle()
         }
       }) {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           if isRunning {
             ProgressView()
               .controlSize(.mini)
           } else {
             Image(systemName: "calendar.badge.checkmark")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.accent)
           }
 
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Reading your calendar..." : "Calendar Insights")
               .font(.system(size: 13, weight: .semibold))
               .foregroundColor(OmiColors.textPrimary)
@@ -1800,30 +1824,30 @@ struct CalendarInsightsCard: View {
               .foregroundColor(OmiColors.textTertiary)
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
       }
       .buttonStyle(.plain)
 
       if isExpanded && !text.isEmpty {
         Divider()
-          .padding(.horizontal, 10)
+          .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
           Markdown(text)
             .markdownTheme(.aiMessage())
             .textSelection(.enabled)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
         }
         .frame(maxHeight: 300)
       }
     }
     .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(12)
+    .cornerRadius(OmiChrome.smallControlRadius)
     .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
     )
   }
 }
@@ -1851,13 +1875,15 @@ struct OnboardingChatBubble: View {
         return false
       case .discoveryCard:
         return true
+      case .agentSpawn, .agentCompletion:
+        return true
       }
     }
   }
 
   var body: some View {
     if hasVisibleContent {
-      HStack(alignment: .top, spacing: 12) {
+      HStack(alignment: .top, spacing: OmiSpacing.md) {
         if message.sender == .ai {
           // Omi logo
           if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
@@ -1873,7 +1899,7 @@ struct OnboardingChatBubble: View {
           }
         }
 
-        VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: 4) {
+        VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
           if message.sender == .ai {
             if message.contentBlocks.isEmpty {
               // Fallback for messages loaded from backend (no contentBlocks, only flat text)
@@ -1881,10 +1907,10 @@ struct OnboardingChatBubble: View {
                 Markdown(message.text)
                   .markdownTheme(.aiMessage())
                   .textSelection(.enabled)
-                  .padding(.horizontal, 14)
-                  .padding(.vertical, 10)
+                  .padding(.horizontal, OmiSpacing.md)
+                  .padding(.vertical, OmiSpacing.sm)
                   .background(OmiColors.backgroundSecondary)
-                  .cornerRadius(18)
+                  .cornerRadius(OmiChrome.controlRadius)
               }
             } else {
               // Use the full message text (which streams continuously) for a single bubble.
@@ -1895,10 +1921,10 @@ struct OnboardingChatBubble: View {
                 Markdown(allText)
                   .markdownTheme(.aiMessage())
                   .textSelection(.enabled)
-                  .padding(.horizontal, 14)
-                  .padding(.vertical, 10)
+                  .padding(.horizontal, OmiSpacing.md)
+                  .padding(.vertical, OmiSpacing.sm)
                   .background(OmiColors.backgroundSecondary)
-                  .cornerRadius(18)
+                  .cornerRadius(OmiChrome.controlRadius)
               }
 
               ForEach(message.contentBlocks) { block in
@@ -1923,12 +1949,17 @@ struct OnboardingChatBubble: View {
           } else {
             if !message.text.isEmpty {
               Markdown(message.text)
-                .markdownTheme(.userMessage())
+                .markdownTheme(
+                  .userMessage().text {
+                    ForegroundColor(OmiColors.backgroundPrimary)
+                    FontSize(14)
+                  }
+                )
                 .textSelection(.enabled)
-                .padding(.horizontal, 14)
-                .padding(.vertical, 10)
-                .background(OmiColors.purplePrimary)
-                .cornerRadius(18)
+                .padding(.horizontal, OmiSpacing.md)
+                .padding(.vertical, OmiSpacing.sm)
+                .background(OmiColors.accent)
+                .cornerRadius(OmiChrome.controlRadius)
             }
           }
         }
@@ -1958,8 +1989,8 @@ struct OnboardingToolIndicator: View {
   var hidePermissionImage: Bool = false
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 8) {
-      HStack(spacing: 6) {
+    VStack(alignment: .leading, spacing: OmiSpacing.sm) {
+      HStack(spacing: OmiSpacing.xs) {
         // Onboarding doesn't wire StallDetector in V1, so .slow / .stalled
         // shouldn't arrive here. Match isInFlight defensively so a future
         // code path doesn't silently render a stalled tool as done.
@@ -1982,7 +2013,7 @@ struct OnboardingToolIndicator: View {
         OnboardingPermissionImage(permissionType: permImage)
       }
     }
-    .padding(.vertical, 2)
+    .padding(.vertical, OmiSpacing.hairline)
   }
 
   /// Whether this tool should be hidden from the UI (e.g. ask_followup renders its own UI)
@@ -2062,9 +2093,9 @@ struct OnboardingPermissionImage: View {
       if info.ext == "gif" {
         AnimatedGIFView(gifName: info.name)
           .frame(maxWidth: 320, maxHeight: 200)
-          .cornerRadius(12)
+          .cornerRadius(OmiChrome.smallControlRadius)
           .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
               .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
           )
       } else if let url = Bundle.resourceBundle.url(
@@ -2075,9 +2106,9 @@ struct OnboardingPermissionImage: View {
           .resizable()
           .scaledToFit()
           .frame(maxWidth: 320, maxHeight: 200)
-          .cornerRadius(12)
+          .cornerRadius(OmiChrome.smallControlRadius)
           .overlay(
-            RoundedRectangle(cornerRadius: 12)
+            RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
               .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
           )
       }
@@ -2100,21 +2131,21 @@ struct ExplorationProfileCard: View {
       // Header
       Button(action: {
         guard !text.isEmpty else { return }
-        withAnimation(.easeInOut(duration: 0.2)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
           isExpanded.toggle()
         }
       }) {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           if isRunning {
             ProgressView()
               .controlSize(.mini)
           } else {
             Image(systemName: "doc.text.magnifyingglass")
               .font(.system(size: 12))
-              .foregroundColor(OmiColors.purplePrimary)
+              .foregroundColor(OmiColors.accent)
           }
 
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isRunning ? "Learning about you..." : "Your Digital Profile")
               .font(.system(size: 13, weight: .semibold))
               .foregroundColor(OmiColors.textPrimary)
@@ -2135,31 +2166,31 @@ struct ExplorationProfileCard: View {
               .foregroundColor(OmiColors.textTertiary)
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
       }
       .buttonStyle(.plain)
 
       // Expanded content
       if isExpanded && !text.isEmpty {
         Divider()
-          .padding(.horizontal, 10)
+          .padding(.horizontal, OmiSpacing.sm)
 
         ScrollView {
           Markdown(text)
             .markdownTheme(.aiMessage())
             .textSelection(.enabled)
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
         }
         .frame(maxHeight: 300)
       }
     }
     .background(OmiColors.backgroundTertiary.opacity(0.5))
-    .cornerRadius(12)
+    .cornerRadius(OmiChrome.smallControlRadius)
     .overlay(
-      RoundedRectangle(cornerRadius: 12)
-        .stroke(OmiColors.purplePrimary.opacity(0.2), lineWidth: 1)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+        .stroke(OmiColors.accent.opacity(0.2), lineWidth: 1)
     )
   }
 }

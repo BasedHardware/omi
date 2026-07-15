@@ -96,6 +96,29 @@ class WalSyncs implements IWalSync {
     return wals;
   }
 
+  /// Enumerate offline recordings from the connected device WITHOUT downloading
+  /// them, so they can be listed (e.g. on the Auto Sync page) even when the user
+  /// has turned auto-sync off. Mirrors the per-firmware device discovery that
+  /// [syncAll] runs in Phase 0/1b, minus the download. SD-card WALs are already
+  /// enumerated on connect via [sdcard.setDevice], so they're not repeated here.
+  /// Safe no-op when no device is set; each sub-sync guards against running
+  /// while a sync is in progress.
+  Future<void> refreshWalsFromDevice({String? firmwareVersion}) async {
+    if (_device == null) return;
+    // Prefer the caller-supplied firmware (resolved from the enriched
+    // pairedDevice) — _device here is the raw connect object whose
+    // firmwareRevision can still be 'Unknown', which would misroute discovery.
+    final fw = (firmwareVersion != null && firmwareVersion.isNotEmpty && firmwareVersion != 'Unknown')
+        ? firmwareVersion
+        : _device?.firmwareRevision;
+    if (isRingBufferFirmware(fw)) {
+      await _ringSync.refreshWalsFromDevice();
+    } else {
+      await _storageSync.refreshWalsFromDevice();
+    }
+    await _flashPageSync.refreshWalsFromDevice();
+  }
+
   Future<WalStats> getWalStats() async {
     final allWals = await getAllWals();
     int phoneFiles = 0;
@@ -213,6 +236,25 @@ class WalSyncs implements IWalSync {
       'phone': allMissing.where((w) => w.storage == WalStorage.disk || w.storage == WalStorage.mem).length,
     });
 
+    // Protect the live path before a potentially multi-hour device drain. The
+    // phone scheduler is lane-aware and sends recent WALs first; its one-job
+    // backfill window prevents this pass from flooding historical work.
+    Logger.debug("WalSyncs: Phase -1 - Uploading already-local fresh recordings");
+    DebugLogManager.logInfo('Sync Phase -1: Uploading fresh phone files first');
+    progress?.onWalSyncedProgress(0.0, phase: SyncPhase.uploadingToCloud);
+    final preDrainResult = await _phoneSync.syncFreshOnly(progress: progress);
+    if (preDrainResult != null) {
+      resp.newConversationIds.addAll(
+        preDrainResult.newConversationIds.where((id) => !resp.newConversationIds.contains(id)),
+      );
+      resp.updatedConversationIds.addAll(
+        preDrainResult.updatedConversationIds.where(
+          (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
+        ),
+      );
+      resp.localUploadFailures += preDrainResult.localUploadFailures;
+    }
+
     // Phase 0: New offline storage sync, gated by firmware version.
     //   fw >= 3.0.20  -> ring-buffer protocol (RingStorageSync)
     //   fw 3.0.17–.19 -> multi-file LittleFS protocol (StorageSync)
@@ -294,6 +336,7 @@ class WalSyncs implements IWalSync {
           (id) => !resp.updatedConversationIds.contains(id) && !resp.newConversationIds.contains(id),
         ),
       );
+      resp.localUploadFailures += partialRes.localUploadFailures;
     }
 
     DebugLogManager.logEvent('sync_completed', {

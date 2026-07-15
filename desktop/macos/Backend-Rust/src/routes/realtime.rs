@@ -401,14 +401,16 @@ async fn mint_gemini(state: &AppState, uid: &str) -> Result<MintResponse, MintEr
 }
 
 fn gemini_auth_token_body(new_session_expire: &str, expire: &str) -> serde_json::Value {
-    // Google's CreateAuthTokenRequest wraps token settings under `authToken`.
-    // Top-level `uses`/`expireTime` fields are ignored/rejected by the v1alpha API.
+    // The Gemini Developer API's CreateAuthToken (POST /v1alpha/auth_tokens)
+    // takes the token settings FLAT at the request root — this matches the
+    // google-genai SDK, whose request converter sets `uses`/`expireTime`/
+    // `newSessionExpireTime` directly on the request body. Wrapping them under
+    // `authToken` makes v1alpha reject the request with
+    // `Unknown name "authToken" ... Cannot find field`.
     serde_json::json!({
-        "authToken": {
-            "uses": 1,
-            "expireTime": expire,
-            "newSessionExpireTime": new_session_expire,
-        }
+        "uses": 1,
+        "expireTime": expire,
+        "newSessionExpireTime": new_session_expire,
     })
 }
 
@@ -478,16 +480,40 @@ struct UsageReport {
     output_text_tokens: i64,
     #[serde(default)]
     output_audio_tokens: i64,
+    /// Opaque SHA-derived identifiers emitted by the desktop cache contract;
+    /// they intentionally contain no rendered context or user content.
+    #[serde(default)]
+    context_plan_id: String,
+    #[serde(default)]
+    stable_cache_identity: String,
+    #[serde(default)]
+    dynamic_context_identity: String,
+    #[serde(default)]
+    context_cache_replaced: bool,
 }
 
 fn usage_cost(r: &UsageReport) -> f64 {
     let rates = realtime_rates(&r.provider, &r.model);
-    (r.input_text_tokens as f64 * rates.in_text
-        + r.input_audio_tokens as f64 * rates.in_audio
-        + r.input_cached_tokens as f64 * rates.cached
-        + r.output_text_tokens as f64 * rates.out_text
-        + r.output_audio_tokens as f64 * rates.out_audio)
+    // Token counts are fully client-reported. Clamp negatives to 0 so a tampered
+    // client cannot drive `cost` (and the Firestore cost/quota ledger) negative.
+    (r.input_text_tokens.max(0) as f64 * rates.in_text
+        + r.input_audio_tokens.max(0) as f64 * rates.in_audio
+        + r.input_cached_tokens.max(0) as f64 * rates.cached
+        + r.output_text_tokens.max(0) as f64 * rates.out_text
+        + r.output_audio_tokens.max(0) as f64 * rates.out_audio)
         / 1_000_000.0
+}
+
+/// Realtime usage is client-reported. Keep cache telemetry privacy-safe even
+/// when a modified client sends arbitrary strings: only the canonical opaque
+/// SHA-256 identifiers are eligible for logs.
+fn safe_cache_identity(value: &str) -> &str {
+    let hex = value.strip_prefix("sha256:").unwrap_or("");
+    if hex.len() == 64 && hex.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        value
+    } else {
+        "invalid_or_missing"
+    }
 }
 
 /// Record one client-reported realtime turn's usage into the llm_usage ledger.
@@ -496,16 +522,19 @@ async fn report_usage(
     user: PaywalledAuthUser,
     Json(report): Json<UsageReport>,
 ) -> StatusCode {
-    let input = report.input_text_tokens + report.input_audio_tokens;
-    let output = report.output_text_tokens + report.output_audio_tokens;
-    let cached = report.input_cached_tokens;
+    // Token counts are fully client-reported; clamp negatives to 0 before summing
+    // so a tampered client cannot record negative usage that understates cost or
+    // resets accrued quota in the shared llm_usage ledger.
+    let input = report.input_text_tokens.max(0) + report.input_audio_tokens.max(0);
+    let output = report.output_text_tokens.max(0) + report.output_audio_tokens.max(0);
+    let cached = report.input_cached_tokens.max(0);
     let total = input + output + cached;
     if total <= 0 {
         return StatusCode::NO_CONTENT;
     }
     let cost = usage_cost(&report);
-    // Funnels into desktop_chat.cost_usd (counted by get_total_llm_cost/quota) plus a
-    // "desktop_chat_realtime.*" breakdown.
+    // Record both the shared desktop_chat aggregate and the
+    // "desktop_chat_realtime.*" reconciliation breakdown.
     if let Err(e) = state
         .firestore
         .record_llm_usage(&user.uid, input, output, cached, 0, total, cost, "realtime")
@@ -527,13 +556,17 @@ async fn report_usage(
         return StatusCode::BAD_GATEWAY;
     }
     tracing::info!(
-        "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5}",
+        "realtime usage uid={} provider={} in={} out={} cached={} cost=${:.5} plan={} stable_cache={} dynamic_context={} cache_replaced={}",
         user.uid,
         report.provider,
         input,
         output,
         cached,
-        cost
+        cost,
+        safe_cache_identity(&report.context_plan_id),
+        safe_cache_identity(&report.stable_cache_identity),
+        safe_cache_identity(&report.dynamic_context_identity),
+        report.context_cache_replaced,
     );
     StatusCode::NO_CONTENT
 }
@@ -549,18 +582,83 @@ mod tests {
     use super::*;
 
     #[test]
-    fn gemini_auth_token_body_wraps_settings_under_auth_token() {
+    fn usage_cost_never_negative_for_negative_client_tokens() {
+        // A tampered client reporting negative token counts must not yield a
+        // negative cost that would understate/negate the shared cost ledger.
+        let report = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: -1_000_000,
+            input_audio_tokens: -1_000_000,
+            input_cached_tokens: -1_000_000,
+            output_text_tokens: -1_000_000,
+            output_audio_tokens: -1_000_000,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
+        };
+        assert_eq!(usage_cost(&report), 0.0);
+    }
+
+    #[test]
+    fn cache_usage_telemetry_logs_only_opaque_sha256_identifiers() {
+        assert_eq!(
+            safe_cache_identity(
+                "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+            ),
+            "sha256:0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+        );
+        assert_eq!(
+            safe_cache_identity("user said secret words"),
+            "invalid_or_missing"
+        );
+    }
+
+    #[test]
+    fn usage_cost_ignores_negative_fields_but_counts_positive_ones() {
+        // A mix of one legitimate positive field and negative padding must equal
+        // the cost of the positive field alone (negatives clamped, not subtracted).
+        let mixed = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: 1000,
+            input_audio_tokens: -5000,
+            input_cached_tokens: -5000,
+            output_text_tokens: 0,
+            output_audio_tokens: 0,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
+        };
+        let positive_only = UsageReport {
+            provider: "openai".to_string(),
+            model: String::new(),
+            input_text_tokens: 1000,
+            input_audio_tokens: 0,
+            input_cached_tokens: 0,
+            output_text_tokens: 0,
+            output_audio_tokens: 0,
+            context_plan_id: String::new(),
+            stable_cache_identity: String::new(),
+            dynamic_context_identity: String::new(),
+            context_cache_replaced: false,
+        };
+        assert_eq!(usage_cost(&mixed), usage_cost(&positive_only));
+        assert!(usage_cost(&mixed) > 0.0);
+    }
+
+    #[test]
+    fn gemini_auth_token_body_is_flat_at_request_root() {
         let body = gemini_auth_token_body("2026-07-03T18:40:00Z", "2026-07-03T19:08:00Z");
 
-        assert_eq!(body["authToken"]["uses"], 1);
-        assert_eq!(
-            body["authToken"]["newSessionExpireTime"],
-            "2026-07-03T18:40:00Z"
-        );
-        assert_eq!(body["authToken"]["expireTime"], "2026-07-03T19:08:00Z");
-        assert!(body.get("uses").is_none());
-        assert!(body.get("expireTime").is_none());
-        assert!(body.get("newSessionExpireTime").is_none());
+        // v1alpha auth_tokens takes the settings flat at the root (google-genai
+        // SDK shape); wrapping under `authToken` is what caused the mint 400s.
+        assert_eq!(body["uses"], 1);
+        assert_eq!(body["newSessionExpireTime"], "2026-07-03T18:40:00Z");
+        assert_eq!(body["expireTime"], "2026-07-03T19:08:00Z");
+        assert!(body.get("authToken").is_none());
     }
 
     #[test]

@@ -1,12 +1,44 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { AsyncLocalStorage } from "node:async_hooks";
+import { mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { z } from "zod";
-import type { AgentArtifact, AgentDelegation, AgentEvent, AgentRun, AgentSession, AdapterBinding, RunAttempt } from "./types.js";
-import { AgentRuntimeKernel, type DesktopAwarenessSnapshot } from "./kernel.js";
+import { isProductionAdapterId } from "../adapters/interface.js";
+import type {
+  AgentArtifact,
+  AgentDelegation,
+  AgentEvent,
+  AgentRun,
+  AgentSession,
+  AdapterBinding,
+  RunAttempt,
+} from "./types.js";
+import { AgentRuntimeKernel, type DesktopAwarenessSnapshot, type ExecuteAgentRunInput } from "./kernel.js";
 import { serializeArtifact } from "./artifact-serialization.js";
+import { defaultArtifactRoot } from "./artifact-storage.js";
+import { assertToolResultEnvelope, makeToolResultEnvelope, type ToolResultEnvelope } from "./tool-result-envelope.js";
 import { agentControlCapabilityManifest, agentControlInputSchema } from "./control-tool-manifest.js";
 import type { McpServerBuildContext } from "./jsonl-transport.js";
+import {
+  parseAgentSpawnProducerJournalDescriptor,
+  type AgentSpawnProducerJournalDescriptor,
+} from "./agent-spawn-journal.js";
 import { evaluateDesktopToolPolicy } from "./desktop-tool-policy.js";
 import type { DesktopCoordinatorBundle } from "./desktop-tool-policy.js";
+import type {
+  EvidenceRef,
+  WorkstreamContinuationCheckpoint,
+  WorkstreamProductContext,
+} from "./workstream-continuity.js";
+import {
+  executionRoleAllowsTool,
+  LEAF_AGENT_CONTROL_TOOLS,
+  providerBoundaryForAdapter,
+  resolveAdapterWithinBoundary,
+  type AgentExecutionRole,
+  type ProviderBoundary,
+} from "./execution-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
 const agentSurfaceKindSchema = z.enum([
@@ -17,6 +49,13 @@ const agentSurfaceKindSchema = z.enum([
   "background_agent",
   "floating_bar",
   "floating_pill",
+]);
+const originSurfaceKindSchema = z.enum([
+  "main_chat",
+  "floating_bar",
+  "realtime",
+  "task_chat",
+  "agent_control",
 ]);
 const artifactRoleSchema = z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]);
 const artifactLifecycleStateSchema = z.enum(["retained", "dismissed", "opened"]);
@@ -109,14 +148,39 @@ const buildDesktopContextPacketSchema = strictObject({
   retentionClass: z.enum(["ephemeral", "debug", "core"]),
 });
 
+const desktopIntentSyntaxFactsSchema = strictObject({
+  delegationNegated: z.boolean().optional(),
+  explicitSessionId: z.string().min(1).nullable().optional(),
+  explicitRunId: z.string().min(1).nullable().optional(),
+  parentRunId: z.string().min(1).nullable().optional(),
+  explicitProvider: z.string().min(1).nullable().optional(),
+  requestedAgentCount: z.coerce.number().int().positive().nullable().optional(),
+});
+
+const desktopIntentProposalSchema = z.discriminatedUnion("intent", [
+  strictObject({ intent: z.literal("answer_inline") }),
+  strictObject({ intent: z.literal("spawn_agent") }),
+  strictObject({ intent: z.literal("continue_run") }),
+  strictObject({
+    intent: z.literal("clarify"),
+    missing: z.array(z.string().min(1)).max(10).optional(),
+  }),
+]);
+
 const routeDesktopIntentSchema = strictObject({
   ownerId: z.string().min(1).optional(),
   utterance: z.string().min(1),
   surfaceKind: z.string().min(1),
   taskId: z.string().min(1).nullable().optional(),
+  snapshotVersion: z.string().min(1).optional(),
+  syntaxFacts: desktopIntentSyntaxFactsSchema.optional(),
+  proposal: desktopIntentProposalSchema.optional(),
 });
 
 const evaluateDesktopToolPolicySchema = strictObject({
+  // Direct app control authenticates the caller through an owner guard that is
+  // merged into every strict control-tool input before dispatch.
+  ownerId: z.string().min(1).optional(),
   toolName: z.string().min(1).optional(),
   selectedBundles: z.array(desktopCoordinatorBundleSchema),
   requestedBundles: z.array(desktopCoordinatorBundleSchema).optional(),
@@ -206,8 +270,22 @@ const updateAgentArtifactLifecycleSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
+const readToolOutputSchema = strictObject({
+  artifactId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  maxBytes: z.coerce.number().int().positive().max(8 * 1024).default(4 * 1024),
+});
+
+const searchToolOutputSchema = strictObject({
+  artifactId: z.string().min(1),
+  ownerId: z.string().min(1).optional(),
+  query: z.string().min(1).max(256),
+  maxMatches: z.coerce.number().int().positive().max(20).default(5),
+});
+
 const sendAgentMessageSchema = strictObject({
   sessionId: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   ownerId: z.string().min(1).optional(),
   prompt: z.string().min(1),
   mode: runModeSchema.default("ask"),
@@ -221,6 +299,7 @@ const sendAgentMessageSchema = strictObject({
 
 const spawnBackgroundAgentSchema = strictObject({
   prompt: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   title: z.string().min(1).optional(),
   surfaceKind: z.string().min(1).default("floating_bar"),
   externalRefKind: z.string().min(1).optional(),
@@ -236,8 +315,13 @@ const spawnBackgroundAgentSchema = strictObject({
   metadata: z.record(z.string(), z.unknown()).default({}),
 });
 
-const spawnAgentSchema = strictObject({
+const spawnAgentPublicShape = {
   objective: z.string().min(1),
+  // Gemini's realtime tool contract advertises this optional pill summary.
+  // Keep it in the canonical strict parser so a valid provider tool call does
+  // not fail before the child-admission boundary.
+  brief: z.string().min(1).optional(),
+  requestedAgentCount: z.coerce.number().int().min(1).max(8).default(1),
   provider: z.enum(["openclaw", "hermes"]).optional(),
   parentRunId: z.string().min(1).optional(),
   visible: z.boolean().default(true),
@@ -250,11 +334,19 @@ const spawnAgentSchema = strictObject({
   requestId: z.string().min(1).optional(),
   clientId: z.string().min(1).default("omi-control-tools"),
   metadata: z.record(z.string(), z.unknown()).default({}),
+} as const;
+
+const spawnAgentSchema = strictObject(spawnAgentPublicShape);
+
+const authorizedSpawnAgentSchema = strictObject({
+  ...spawnAgentPublicShape,
+  originSurfaceKind: originSurfaceKindSchema,
 });
 
 const runAgentAndWaitSchema = strictObject({
   objective: z.string().min(1),
   parentRunId: z.string().min(1),
+  originSurfaceKind: originSurfaceKindSchema,
   context: z.string().max(4000).optional(),
   ownerId: z.string().min(1).optional(),
   adapterId: z.string().min(1).optional(),
@@ -277,6 +369,94 @@ const setDesktopAttentionOverrideSchema = strictObject({
   reason: z.string().min(1).optional(),
 });
 
+const evidenceRefSchema = strictObject({
+  kind: z.enum([
+    "conversation",
+    "memory_item",
+    "workstream_event",
+    "artifact",
+    "chat_message",
+    "local_screen",
+    "external",
+  ]),
+  id: z.string().min(1),
+  version: z.string().min(1).optional(),
+  scope: z.enum(["canonical", "device_local"]),
+  device_id: z.string().min(1).optional(),
+  excerpt_hash: z.string().min(1).optional(),
+});
+
+const prepareWorkstreamContinuitySchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  workstreamId: z.string().min(1),
+  taskIds: z.array(z.string().min(1)).max(100).default([]),
+  checkpoint: strictObject({
+    checkpointId: z.string().min(1),
+    runtimeId: z.string().min(1),
+    lastEventSequence: z.coerce.number().int().nonnegative(),
+    contextSummary: z.string().max(4_000),
+    evidenceRefs: z.array(evidenceRefSchema).max(50).default([]),
+    updatedAtMs: z.coerce.number().int().positive(),
+  })
+    .nullable()
+    .optional(),
+});
+
+const persistWorkstreamContinuitySchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  workstreamId: z.string().min(1),
+  context: z.record(z.string(), z.unknown()),
+  artifacts: z
+    .array(
+      strictObject({
+        logicalKey: z.string().min(1).max(256),
+        evidenceRefs: z.array(evidenceRefSchema).min(1).max(20),
+        kind: z.string().min(1),
+        role: z.enum(["input", "result", "checkpoint", "tool_output", "log", "other"]),
+        uri: z.string().min(1),
+        displayName: z.string().nullable().optional(),
+        mimeType: z.string().nullable().optional(),
+        contentHash: z.string().nullable().optional(),
+        sizeBytes: z.coerce.number().int().nonnegative().nullable().optional(),
+        runId: z.string().nullable().optional(),
+        attemptId: z.string().nullable().optional(),
+        sourceArtifactId: z.string().min(1),
+      }),
+    )
+    .max(50),
+  ttlMs: z.coerce
+    .number()
+    .int()
+    .positive()
+    .max(7 * 24 * 60 * 60 * 1_000)
+    .default(7 * 24 * 60 * 60 * 1_000),
+});
+
+const persistPreparedWorkstreamArtifactSchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  workstreamId: z.string().min(1),
+  logicalKey: z.string().min(1).max(256),
+  evidenceRefs: z.array(evidenceRefSchema).min(1).max(20),
+  kind: z.string().min(1),
+  uri: z.string().min(1),
+  contentHash: z.string().min(16),
+  sourceArtifactId: z.string().min(1),
+  grantId: z.string().min(1),
+});
+
+const resolveWorkstreamContinuityDeliverySchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  deliveryId: z.string().min(1),
+  status: z.enum(["delivered", "failed", "retrying"]),
+  receipt: z.record(z.string(), z.unknown()).optional(),
+  error: z.record(z.string(), z.unknown()).optional(),
+});
+
+const projectWorkstreamContinuitySchema = strictObject({
+  ownerId: z.string().min(1).optional(),
+  workstreamId: z.string().min(1),
+});
+
 export const agentControlToolSchemas = {
   list_agent_sessions: listAgentSessionsSchema,
   get_agent_run: getAgentRunSchema,
@@ -290,24 +470,55 @@ export const agentControlToolSchemas = {
   resolve_desktop_dispatch: resolveDesktopDispatchSchema,
   cancel_agent_run: cancelAgentRunSchema,
   inspect_agent_artifacts: inspectAgentArtifactsSchema,
+  read_tool_output: readToolOutputSchema,
+  search_tool_output: searchToolOutputSchema,
   update_agent_artifact_lifecycle: updateAgentArtifactLifecycleSchema,
   send_agent_message: sendAgentMessageSchema,
   spawn_background_agent: spawnBackgroundAgentSchema,
   spawn_agent: spawnAgentSchema,
   run_agent_and_wait: runAgentAndWaitSchema,
   set_desktop_attention_override: setDesktopAttentionOverrideSchema,
+  prepare_workstream_continuity: prepareWorkstreamContinuitySchema,
+  persist_workstream_continuity: persistWorkstreamContinuitySchema,
+  persist_prepared_workstream_artifact: persistPreparedWorkstreamArtifactSchema,
+  resolve_workstream_continuity_delivery: resolveWorkstreamContinuityDeliverySchema,
+  project_workstream_continuity: projectWorkstreamContinuitySchema,
 } as const;
 
 export type AgentControlToolName = keyof typeof agentControlToolSchemas;
 
-export const AGENT_CONTROL_TOOL_NAMES = Object.keys(agentControlToolSchemas) as AgentControlToolName[];
+export const INTERNAL_AGENT_CONTROL_TOOL_NAMES = [
+  "prepare_workstream_continuity",
+  "persist_workstream_continuity",
+  "persist_prepared_workstream_artifact",
+  "resolve_workstream_continuity_delivery",
+  "project_workstream_continuity",
+] as const satisfies readonly AgentControlToolName[];
 
-/** Control tools advertised to Swift on runtime init (excludes coordinator-internal RPC). */
-export const SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES = AGENT_CONTROL_TOOL_NAMES.filter(
-  (name) => name !== "spawn_background_agent",
+export const AGENT_CONTROL_TOOL_NAMES = agentControlCapabilityManifest.map(
+  (tool) => tool.name,
 ) as AgentControlToolName[];
 
-const CONTROL_TOOL_NAME_SET = new Set<string>(AGENT_CONTROL_TOOL_NAMES);
+/** App-callable tools advertised to Swift; internal continuity RPCs stay out of model manifests. */
+export const SWIFT_ADVERTISED_AGENT_CONTROL_TOOL_NAMES = [
+  ...AGENT_CONTROL_TOOL_NAMES.filter((name) => name !== "spawn_background_agent"),
+  ...INTERNAL_AGENT_CONTROL_TOOL_NAMES,
+] as AgentControlToolName[];
+
+const CONTROL_TOOL_NAME_SET = new Set<string>(Object.keys(agentControlToolSchemas));
+
+/**
+ * The final provider-result boundary needs the authoritative tool identity and
+ * artifact owner even for early validation and catch paths. AsyncLocalStorage
+ * keeps that authority with the request across awaited tool effects without
+ * asking every individual switch branch to remember a serialization step.
+ */
+interface ControlToolOutputScope {
+  context: AgentControlToolContext;
+  toolName: string;
+}
+
+const controlToolOutputScope = new AsyncLocalStorage<ControlToolOutputScope>();
 
 export interface AgentControlToolDefinition {
   name: AgentControlToolName;
@@ -323,93 +534,219 @@ export const agentControlToolDefinitions: AgentControlToolDefinition[] = agentCo
 
 export interface AgentControlToolContext {
   kernel: AgentRuntimeKernel;
+  /**
+   * The adapter selected by the owning desktop surface.  New background work
+   * must inherit this route rather than silently selecting a local provider.
+   */
+  defaultAdapterId?: string;
+  /** Kernel-owned provider and role policy for the active control caller. */
+  providerBoundary?: ProviderBoundary;
+  executionRole?: AgentExecutionRole;
+  /** Persisted caller session used for kernel-level spawn authority checks. */
+  callerSessionId?: string;
+  /** Kernel-synthesized authority; never copied from adapter/model metadata. */
+  authorizedProducerJournal?: AgentSpawnProducerJournalDescriptor;
+  authorizedCallerRunId?: string;
+  /** Exact kernel capability identity for a model-visible control-tool result. */
+  authorizedToolInvocation?: {
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+  };
   trustedUserControl?: boolean;
   getOwnerId?: () => string;
+  /** Broker-owned authority checked immediately around every physical effect. */
+  executionLease?: {
+    readonly signal: AbortSignal;
+    assertCurrentAuthority(): void | Promise<void>;
+    /** Direct desktop control retains admitted children through owner transition. */
+    retainRun?(runId: string): void;
+  };
+  recoverRunInput?: (adapterId: string) => Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError">;
   buildMcpServers?: (
     mode: "ask" | "act",
     cwd: string | undefined,
     sessionKey: string | undefined,
-    context: McpServerBuildContext
+    context: McpServerBuildContext,
   ) => Record<string, unknown>[];
 }
 
-export interface ActiveControlToolOwnerInput {
-  requestKey?: string;
-  runId?: string;
-  attemptId?: string;
-  ownerIdForRequest?: (requestKey: string) => string | undefined;
-  ownerIdForRun?: (runId: string) => string | undefined;
-  ownerIdForAttempt?: (attemptId: string) => string | undefined;
-  fallbackOwnerId?: string;
-  allowFallbackOwner?: boolean;
+interface PartialAgentSpawnCancellation {
+  runId: string;
+  accepted?: boolean;
+  dispatchAttempted?: boolean;
+  adapterAcknowledged?: boolean;
+  error?: string;
 }
 
-export interface ControlRequestKeyInput {
-  requestId?: string;
-  clientId?: string;
+class PartialAgentSpawnError extends Error {
+  readonly code: string;
+  readonly details: {
+    admittedRunIds: string[];
+    cancellations: PartialAgentSpawnCancellation[];
+    cause: string;
+  };
+
+  constructor(input: {
+    cause: unknown;
+    cancellations: PartialAgentSpawnCancellation[];
+  }) {
+    const causeMessage = input.cause instanceof Error ? input.cause.message : String(input.cause);
+    const cleanupFailed = input.cancellations.some((cancellation) => cancellation.error !== undefined);
+    const causeCode = input.cause && typeof input.cause === "object" && "code" in input.cause
+      ? String((input.cause as { code: unknown }).code)
+      : "";
+    super(cleanupFailed
+      ? `Agent spawn failed after admitting children, and compensation failed for at least one child: ${causeMessage}`
+      : `Agent spawn failed after admitting children; every admitted child was cancelled: ${causeMessage}`);
+    this.name = "PartialAgentSpawnError";
+    this.code = /^[a-z0-9_]{1,64}$/.test(causeCode)
+      ? causeCode
+      : cleanupFailed ? "partial_spawn_cleanup_failed" : "partial_spawn_compensated";
+    this.details = {
+      admittedRunIds: input.cancellations.map((cancellation) => cancellation.runId),
+      cancellations: input.cancellations,
+      cause: causeMessage,
+    };
+  }
 }
 
-export interface ControlRequestContextInput extends ControlRequestKeyInput {
-  ownerGuard?: string;
-  activeOwnerId?: string;
-  requireActiveOwner?: boolean;
-  requireOwnerGuard?: boolean;
+function controlRunRecovery(
+  context: AgentControlToolContext,
+  adapterId: string,
+): Pick<ExecuteAgentRunInput, "maxAttempts" | "recoverAfterError"> {
+  return context.recoverRunInput?.(adapterId) ?? {};
 }
 
-export interface SignedDirectControlOwnerInput {
-  requestKey?: string;
-  ownerGuard?: string;
-  ownerIdForRequest: (requestKey: string) => string | undefined;
-  registerOwner: (requestKey: string, ownerId: string) => boolean;
+function defaultControlAdapterId(context: AgentControlToolContext): string {
+  return context.defaultAdapterId ?? "acp";
 }
 
-export interface ResolvedControlRequestContext {
-  requestKey?: string;
-  activeOwnerId: string;
-  ownerGuard?: string;
+function controlSpawnProfile(
+  context: AgentControlToolContext,
+  ownerId: string,
+): { adapterId: string; modelProfile: string | null; workingDirectory: string | undefined } {
+  if (context.callerSessionId) {
+    const profile = context.kernel.sessionExecutionProfile(context.callerSessionId, ownerId);
+    return {
+      adapterId: profile.adapterId,
+      modelProfile: profile.modelProfile,
+      workingDirectory: profile.workingDirectory || undefined,
+    };
+  }
+  if (context.trustedUserControl) {
+    const preference = context.kernel.defaultExecutionProfilePreference(ownerId);
+    if (preference) {
+      return {
+        adapterId: preference.adapterId,
+        modelProfile: preference.modelProfile,
+        workingDirectory: preference.workingDirectory,
+      };
+    }
+  }
+  return {
+    adapterId: defaultControlAdapterId(context),
+    modelProfile: null,
+    workingDirectory: undefined,
+  };
+}
+
+function assertAdapterAllowedForControlRun(context: AgentControlToolContext, adapterId: string): void {
+  if (!context.defaultAdapterId && !context.providerBoundary) {
+    return;
+  }
+  const owningAdapterId = defaultControlAdapterId(context);
+  resolveAdapterWithinBoundary({
+    providerBoundary: context.providerBoundary ?? providerBoundaryForAdapter(owningAdapterId),
+    defaultAdapterId: owningAdapterId,
+    requestedAdapterId: adapterId,
+  });
+}
+
+/**
+ * A signed desktop action, or the explicit `provider` selector on the canonical
+ * top-level spawn_agent tool, may start a new local-provider session. The
+ * active bridge can still be pi-mono because it is only carrying the control
+ * RPC; it is not the owner of the new session's credentials.
+ *
+ * An adapterId alone does not get this exception, and neither does any
+ * parent-linked delegation. Those must stay inside the caller's persisted
+ * provider boundary.
+ */
+function assertAdapterAllowedForTopLevelLocalProviderSpawn(
+  context: AgentControlToolContext,
+  adapterId: string,
+  directedProvider?: "hermes" | "openclaw",
+): void {
+  const hasDirectedLocalProvider = directedProvider === adapterId;
+  if (!context.trustedUserControl && !hasDirectedLocalProvider) {
+    assertAdapterAllowedForControlRun(context, adapterId);
+    return;
+  }
+  if (!isProductionAdapterId(adapterId)) {
+    throw new Error(`Unknown production adapter: ${adapterId}`);
+  }
+  resolveAdapterWithinBoundary({
+    providerBoundary: providerBoundaryForAdapter(adapterId),
+    defaultAdapterId: adapterId,
+    requestedAdapterId: adapterId,
+  });
+}
+
+/**
+ * Signed direct control resumes the target session's persisted boundary. This
+ * keeps a user-selected Hermes/OpenClaw pill usable while the coordinator
+ * bridge itself is using Omi cloud routing, and still prevents adapter changes
+ * on either local or managed sessions.
+ */
+function assertAdapterAllowedForDirectSessionContinuation(
+  context: AgentControlToolContext,
+  adapterId: string,
+  targetPolicy: Pick<AgentSession, "providerBoundary" | "defaultAdapterId">,
+): void {
+  if (!context.trustedUserControl) {
+    assertAdapterAllowedForControlRun(context, adapterId);
+    return;
+  }
+  resolveAdapterWithinBoundary({
+    providerBoundary: targetPolicy.providerBoundary,
+    defaultAdapterId: targetPolicy.defaultAdapterId,
+    requestedAdapterId: adapterId,
+  });
+}
+
+function assertAgentSpawningAllowed(context: AgentControlToolContext): void {
+  if (context.executionRole === "leaf") {
+    throw new Error("Background agents are leaf workers and cannot start additional agents.");
+  }
+}
+
+function assertLeafControlToolsAllowed(context: AgentControlToolContext, name: string): void {
+  if (!LEAF_AGENT_CONTROL_TOOLS.has(name)) return;
+  if (!executionRoleAllowsTool(context.executionRole ?? "coordinator", name)) {
+    throw new Error(
+      name === "send_agent_message"
+        ? "Leaf workers cannot continue agent sessions."
+        : "Background agents are leaf workers and cannot start additional agents.",
+    );
+  }
+}
+
+function backgroundSpawnAuthority(context: AgentControlToolContext): {
+  callerSessionId?: string;
+  trustedUserSpawn?: boolean;
+} {
+  if (context.callerSessionId) {
+    return { callerSessionId: context.callerSessionId };
+  }
+  if (context.trustedUserControl === true || context.executionRole !== "leaf") {
+    return { trustedUserSpawn: true };
+  }
+  return {};
 }
 
 export const DEFAULT_LOCAL_OWNER_ID = "desktop-local-user";
-
-export function controlRequestKey(input: ControlRequestKeyInput): string | undefined {
-  return input.requestId && input.clientId ? JSON.stringify([input.clientId, input.requestId]) : undefined;
-}
-
-export function registerSignedDirectControlOwner(input: SignedDirectControlOwnerInput): boolean {
-  const ownerGuard = input.ownerGuard?.trim();
-  if (!input.requestKey || !ownerGuard || ownerGuard === DEFAULT_LOCAL_OWNER_ID) {
-    return false;
-  }
-  if (input.ownerIdForRequest(input.requestKey)) {
-    return false;
-  }
-  return input.registerOwner(input.requestKey, ownerGuard);
-}
-
-export function resolveControlRequestContext(input: ControlRequestContextInput): ResolvedControlRequestContext {
-  const ownerGuard = input.ownerGuard?.trim();
-  if (input.ownerGuard !== undefined && !ownerGuard) {
-    throw new Error("ownerId cannot be empty");
-  }
-  const activeContextOwnerId = input.activeOwnerId?.trim();
-  if (input.requireOwnerGuard && !ownerGuard) {
-    throw new Error("missing owner guard");
-  }
-  if (input.requireActiveOwner && (!activeContextOwnerId || activeContextOwnerId === DEFAULT_LOCAL_OWNER_ID)) {
-    throw new Error("missing active control owner");
-  }
-  const activeOwnerId = activeContextOwnerId && activeContextOwnerId !== DEFAULT_LOCAL_OWNER_ID
-    ? activeContextOwnerId
-    : ownerGuard || activeContextOwnerId || DEFAULT_LOCAL_OWNER_ID;
-  if (ownerGuard && ownerGuard !== activeOwnerId) {
-    throw new Error("ownerId does not match active control owner");
-  }
-  return {
-    requestKey: controlRequestKey(input),
-    activeOwnerId,
-    ownerGuard,
-  };
-}
 
 export function withDefaultOwnerGuard(input: Record<string, unknown>, ownerGuard: string): Record<string, unknown> {
   if (Object.hasOwn(input, "ownerId")) {
@@ -421,7 +758,7 @@ export function withDefaultOwnerGuard(input: Record<string, unknown>, ownerGuard
 export function withMergedOwnerGuard(
   input: Record<string, unknown>,
   ownerGuard: string | undefined,
-  defaultOwnerGuard: string
+  defaultOwnerGuard: string,
 ): Record<string, unknown> {
   if (!ownerGuard) {
     return withDefaultOwnerGuard(input, defaultOwnerGuard);
@@ -440,43 +777,91 @@ export function isAgentControlToolName(name: string): name is AgentControlToolNa
   return CONTROL_TOOL_NAME_SET.has(name);
 }
 
+async function executeAuthorizedControlEffect<T>(
+  context: AgentControlToolContext,
+  effect: () => T | Promise<T>,
+): Promise<T> {
+  await context.executionLease?.assertCurrentAuthority();
+  if (context.executionLease?.signal.aborted) {
+    throw context.executionLease.signal.reason instanceof Error
+      ? context.executionLease.signal.reason
+      : new Error("Run tool execution authority was revoked");
+  }
+  const result = await effect();
+  await context.executionLease?.assertCurrentAuthority();
+  return result;
+}
+
 export async function handleAgentControlToolCall(
   context: AgentControlToolContext,
   name: string,
-  input: Record<string, unknown>
+  input: Record<string, unknown>,
 ): Promise<string> {
-  if (!isAgentControlToolName(name)) {
-    return JSON.stringify({ ok: false, error: { code: "unknown_control_tool", message: `Unknown control tool: ${name}` } });
-  }
-  if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        code: "policy_denied",
-        message: "resolve_desktop_dispatch requires trusted user control",
-      },
-    });
-  }
+  return controlToolOutputScope.run({ context, toolName: name }, async () => {
+    if (!isAgentControlToolName(name)) {
+      return stringifyToolResult({
+        error: {
+          code: "unknown_control_tool",
+          message: `Unknown control tool: ${name}`,
+        },
+      }, "failed");
+    }
+    if (name === "resolve_desktop_dispatch" && !context.trustedUserControl) {
+      return stringifyToolResult({
+        error: {
+          code: "policy_denied",
+          message: "resolve_desktop_dispatch requires trusted user control",
+        },
+      }, "failed");
+    }
 
-  try {
+    try {
+    assertLeafControlToolsAllowed(context, name);
     switch (name) {
       case "list_agent_sessions": {
         const parsed = agentControlToolSchemas.list_agent_sessions.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        // `background_agent` and `delegated_agent` describe execution intent,
+        // not persisted session surfaces. Realtime models naturally choose
+        // those semantic labels when asked about a child result; passing them
+        // through as exact surface filters hides valid concrete surfaces such
+        // as `floating_bar`. Treat them as leaf-role discovery aliases so a
+        // newer coordinator session cannot win a small result limit.
+        const isChildDiscovery = parsed.surfaceKind === "background_agent"
+          || parsed.surfaceKind === "delegated_agent";
         const sessions = context.kernel.listSessions({
           ...parsed,
           ownerId,
+          surfaceKind: isChildDiscovery ? undefined : parsed.surfaceKind,
+          executionRole: isChildDiscovery ? "leaf" : undefined,
         });
         const overrides = context.kernel.listDesktopAttentionOverrides(ownerId);
-        return stringifyToolResult(serializeAgentSessionsList(sessions, overrides));
+        const projected = serializeAgentSessionsList(sessions, overrides);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "list_agent_sessions",
+          serializeFullSessionListing(sessions, projected),
+          projected,
+          ownerId,
+          context.callerSessionId ?? sessions[0]?.session.sessionId,
+        ));
       }
       case "get_agent_run": {
         const parsed = agentControlToolSchemas.get_agent_run.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const details = context.kernel.getRun({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          ownerId,
         });
-        return stringifyToolResult(serializeRunDetails(details));
+        const full = serializeRunDetails(details);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "get_agent_run",
+          full,
+          projectProviderPayload(full, "get_agent_run"),
+          ownerId,
+          details.session.sessionId,
+        ));
       }
       case "build_desktop_awareness_snapshot": {
         const parsed = agentControlToolSchemas.build_desktop_awareness_snapshot.parse(input);
@@ -484,7 +869,9 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
-        return stringifyToolResult({ snapshot: serializeAwarenessSnapshot(snapshot) });
+        return stringifyToolResult({
+          snapshot: serializeAwarenessSnapshot(snapshot),
+        });
       }
       case "list_desktop_action_queue": {
         const parsed = agentControlToolSchemas.list_desktop_action_queue.parse(input);
@@ -504,20 +891,21 @@ export async function handleAgentControlToolCall(
       }
       case "build_desktop_context_packet": {
         const parsed = agentControlToolSchemas.build_desktop_context_packet.parse(input);
-        const built = context.kernel.persistDesktopContextPacket({
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
-          sessionId: parsed.sessionId ?? null,
-          runId: parsed.runId ?? null,
-          surfaceKind: parsed.surfaceKind,
-          objective: parsed.objective,
-          snippets: parsed.packetJson.snippets,
-          selectedToolBundles: parsed.packetJson.selectedToolBundles,
-          constraints: parsed.packetJson.constraints,
-          evidenceRequired: parsed.packetJson.evidenceRequired,
-          boundaryPolicy: parsed.packetJson.boundaryPolicy,
-          ttlMs: parsed.ttlMs,
-          retentionClass: parsed.retentionClass,
-        });
+        const built = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.persistDesktopContextPacket({
+            ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+            sessionId: parsed.sessionId ?? null,
+            runId: parsed.runId ?? null,
+            surfaceKind: parsed.surfaceKind,
+            objective: parsed.objective,
+            snippets: parsed.packetJson.snippets,
+            selectedToolBundles: parsed.packetJson.selectedToolBundles,
+            constraints: parsed.packetJson.constraints,
+            evidenceRequired: parsed.packetJson.evidenceRequired,
+            boundaryPolicy: parsed.packetJson.boundaryPolicy,
+            ttlMs: parsed.ttlMs,
+            retentionClass: parsed.retentionClass,
+          }));
         return stringifyToolResult({
           packet: {
             ...built.packet,
@@ -532,6 +920,7 @@ export async function handleAgentControlToolCall(
         const route = context.kernel.routeDesktopIntent({
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          callerSessionId: context.callerSessionId,
           taskId: parsed.taskId ?? null,
         });
         return stringifyToolResult({ route });
@@ -547,22 +936,22 @@ export async function handleAgentControlToolCall(
       }
       case "create_desktop_dispatch": {
         const parsed = agentControlToolSchemas.create_desktop_dispatch.parse(input);
-        const dispatch = context.kernel.createDesktopDispatch({
+        const dispatch = await executeAuthorizedControlEffect(context, () => context.kernel.createDesktopDispatch({
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
           payloadJson: JSON.stringify(parsed.payload),
-        });
+        }));
         return stringifyToolResult({ dispatch });
       }
       case "resolve_desktop_dispatch": {
         const parsed = agentControlToolSchemas.resolve_desktop_dispatch.parse(input);
-        const result = context.kernel.resolveDesktopDispatch(parsed.dispatchId, {
+        const result = await executeAuthorizedControlEffect(context, () => context.kernel.resolveDesktopDispatch(parsed.dispatchId, {
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
           status: parsed.status,
           resolvedBy: parsed.resolvedBy ?? "user",
           resolutionJson: JSON.stringify(parsed.resolution),
           grant: parsed.grant,
-        });
+        }));
         return stringifyToolResult({
           dispatch: result.dispatch,
           grant: result.grant,
@@ -572,8 +961,14 @@ export async function handleAgentControlToolCall(
       case "cancel_agent_run": {
         const parsed = agentControlToolSchemas.cancel_agent_run.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
-        const cancellation = await context.kernel.cancelRun(parsed.runId, { ownerId });
-        const details = context.kernel.getRun({ runId: parsed.runId, ownerId, includeEvents: true, eventLimit: 100 });
+        const cancellation = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.cancelRun(parsed.runId, { ownerId }));
+        const details = context.kernel.getRun({
+          runId: parsed.runId,
+          ownerId,
+          includeEvents: true,
+          eventLimit: 100,
+        });
         return stringifyToolResult({
           cancellation,
           run: serializeRun(details.run),
@@ -586,14 +981,52 @@ export async function handleAgentControlToolCall(
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
         });
-        return stringifyToolResult({ artifacts: artifacts.map(serializeArtifact) });
+        return stringifyToolResult({
+          artifacts: artifacts.map(serializeArtifact),
+        });
+      }
+      case "read_tool_output": {
+        const parsed = agentControlToolSchemas.read_tool_output.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const artifact = readToolOutputArtifact(context, parsed.artifactId, ownerId);
+        const fullText = readLocalArtifactText(artifact.uri);
+        const projectedText = truncateUtf8(fullText, parsed.maxBytes);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "read_tool_output",
+          { artifactId: artifact.artifactId, output: fullText, truncated: false },
+          { artifactId: artifact.artifactId, output: projectedText.text, truncated: projectedText.truncated },
+          ownerId,
+          artifact.sessionId,
+          `artifact:${artifact.artifactId}`,
+        ));
+      }
+      case "search_tool_output": {
+        const parsed = agentControlToolSchemas.search_tool_output.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const artifact = readToolOutputArtifact(context, parsed.artifactId, ownerId);
+        const fullText = readLocalArtifactText(artifact.uri);
+        const needle = parsed.query.toLocaleLowerCase();
+        const matches = fullText.split(/\r?\n/)
+          .filter((line) => line.toLocaleLowerCase().includes(needle))
+          .slice(0, parsed.maxMatches)
+          .map((line) => truncateUtf8(line, 512).text);
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "search_tool_output",
+          { artifactId: artifact.artifactId, matches, matchCount: matches.length, fullOutput: fullText },
+          { artifactId: artifact.artifactId, matches, matchCount: matches.length },
+          ownerId,
+          artifact.sessionId,
+          `artifact:${artifact.artifactId}`,
+        ));
       }
       case "update_agent_artifact_lifecycle": {
         const parsed = agentControlToolSchemas.update_agent_artifact_lifecycle.parse(input);
-        const result = context.kernel.updateArtifactLifecycle({
+        const result = await executeAuthorizedControlEffect(context, () => context.kernel.updateArtifactLifecycle({
           ...parsed,
           ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
-        });
+        }));
         return stringifyToolResult({
           artifact: serializeArtifact(result.artifact),
           changed: result.changed,
@@ -602,25 +1035,48 @@ export async function handleAgentControlToolCall(
       }
       case "send_agent_message": {
         const parsed = agentControlToolSchemas.send_agent_message.parse(input);
-        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForSession(parsed.sessionId);
-        rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const targetPolicy = context.kernel.executionPolicyForOwnedSession(parsed.sessionId, ownerId);
+        const adapterId = parsed.adapterId ?? targetPolicy.defaultAdapterId;
+        assertAdapterAllowedForDirectSessionContinuation(context, adapterId, targetPolicy);
+        rejectSynchronousNestedRun(context, adapterId, parsed.sessionId);
         const requestId = parsed.requestId ?? `send-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const result = await context.kernel.sendAgentMessage({
-          ...parsed,
-          ownerId,
-          requestId,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.mode,
-            cwd: parsed.cwd,
+        const routed = await executeAuthorizedControlEffect(context, () => context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.prompt,
+            effect: "continue_run",
+            syntaxFacts: {
+              explicitSessionId: parsed.sessionId,
+              explicitProvider: adapterId,
+            },
+          },
+          () => context.kernel.sendAgentMessage({
+            ...parsed,
+            ...controlRunRecovery(context, adapterId),
             ownerId,
             requestId,
-            clientId: parsed.clientId,
-            adapterId,
+            metadata: { ...(parsed.metadata ?? {}) },
+            authoritySignal: context.executionLease?.signal,
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.mode,
+              cwd: parsed.cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: targetPolicy.executionRole,
+            }),
           }),
-        });
+        ));
+        const result = routed.result;
         return stringifyToolResult({
+          routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
           attempt: serializeAttempt(result.attempt),
@@ -631,138 +1087,380 @@ export async function handleAgentControlToolCall(
         });
       }
       case "spawn_background_agent": {
+        assertAgentSpawningAllowed(context);
         const parsed = agentControlToolSchemas.spawn_background_agent.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const requestId = parsed.requestId ?? `background-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? "acp";
-        const result = await context.kernel.spawnBackgroundAgent({
-          ...parsed,
-          adapterId,
-          defaultAdapterId: adapterId,
-          ownerId,
-          requestId,
-          surfaceKind: parsed.surfaceKind ?? "floating_bar",
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.mode,
-            cwd: parsed.cwd,
+        const spawnProfile = controlSpawnProfile(context, ownerId);
+        const adapterId = parsed.adapterId ?? parsed.defaultAdapterId ?? spawnProfile.adapterId;
+        const cwd = parsed.cwd ?? spawnProfile.workingDirectory;
+        const model = parsed.model ?? spawnProfile.modelProfile ?? undefined;
+        assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId);
+        const routed = await executeAuthorizedControlEffect(context, () => context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.prompt,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              explicitProvider: adapterId,
+              requestedAgentCount: 1,
+            },
+          },
+          () => context.kernel.spawnBackgroundAgent({
+            ...parsed,
+            ...controlRunRecovery(context, adapterId),
+            ...backgroundSpawnAuthority(context),
+            adapterId,
+            defaultAdapterId: adapterId,
+            cwd,
+            model,
             ownerId,
             requestId,
-            clientId: parsed.clientId,
-            adapterId,
+            surfaceKind: parsed.surfaceKind ?? "floating_bar",
+            metadata: { ...(parsed.metadata ?? {}) },
+            authoritySignal: context.executionLease?.signal,
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.mode,
+              cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: "leaf",
+            }),
           }),
-        });
+        ));
+        const result = routed.result;
+        context.executionLease?.retainRun?.(result.run.runId);
         return stringifyToolResult({
+          routeDecision: routed.decision,
           session: serializeSession(result.session),
           run: serializeRun(result.run),
           attempt: result.attempt ? serializeAttempt(result.attempt) : null,
         });
       }
       case "spawn_agent": {
-        const parsed = agentControlToolSchemas.spawn_agent.parse(input);
+        assertAgentSpawningAllowed(context);
+        const parsed = authorizedSpawnAgentSchema.parse(input);
+        const callerMetadata = { ...(parsed.metadata ?? {}) };
+        const proposedProducerJournal = callerMetadata.producerJournal;
+        delete callerMetadata.producerJournal;
+        let producerJournal = context.authorizedProducerJournal;
+        if (!producerJournal && context.trustedUserControl && proposedProducerJournal !== undefined) {
+          producerJournal = parseAgentSpawnProducerJournalDescriptor(proposedProducerJournal);
+          if (producerJournal.producerTurnId) {
+            throw new Error("producerTurnId is reserved for kernel-authorized spawn invocations");
+          }
+        }
+        const parentRunId = context.authorizedCallerRunId ?? parsed.parentRunId;
+        if (context.authorizedCallerRunId && parsed.parentRunId && parsed.parentRunId !== context.authorizedCallerRunId) {
+          throw new Error("Agent spawn parent run does not match authorized caller run");
+        }
+        if (parentRunId) {
+          assertCanonicalRunId(parentRunId, "parentRunId");
+        }
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const spawnProfile = controlSpawnProfile(context, ownerId);
         const requestId = parsed.requestId ?? `spawn-agent-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        if (parsed.provider && parsed.adapterId && parsed.provider !== parsed.adapterId) {
+          throw new Error("provider and adapterId must match when both are supplied");
+        }
         const adapterId =
           parsed.adapterId ??
           (parsed.provider === "openclaw" ? "openclaw" : parsed.provider === "hermes" ? "hermes" : undefined) ??
-          (parsed.parentRunId ? undefined : "acp");
-        const mcpServers = buildControlRunMcpServers(context, {
-          mode: "act",
-          cwd: parsed.cwd,
-          ownerId,
-          requestId,
-          clientId: parsed.clientId,
-          adapterId: adapterId ?? "acp",
+          (parentRunId
+            ? context.kernel.defaultAdapterIdForRun(parentRunId)
+            : spawnProfile.adapterId);
+        /**
+         * Realtime control always stamps its own run as `parentRunId` so the
+         * producer journal is bound to the exact authorized turn.  That
+         * provenance must not turn an explicit user-selected local provider
+         * into a child of the managed pi-mono session: delegateAgent correctly
+         * pins children to their parent's credential boundary.
+         *
+         * The exception is deliberately narrow.  It requires both the
+         * kernel-issued realtime caller/run and its producer-journal
+         * descriptor, an explicit provider selector, and no producerTurnId
+         * whose validation requires an actual child parent_run_id.  Normal
+         * parent-linked delegation stays on the existing boundary-safe path.
+         */
+        const isAuthorizedIndependentLocalProviderSpawn = Boolean(
+          parentRunId
+          && context.authorizedCallerRunId === parentRunId
+          && context.authorizedProducerJournal
+          && parsed.provider
+          && parsed.provider === adapterId
+          && !producerJournal?.producerTurnId,
+        );
+        const inheritsParentExecutionProfile = Boolean(parentRunId) && !isAuthorizedIndependentLocalProviderSpawn;
+        const cwd = parsed.cwd ?? (inheritsParentExecutionProfile ? undefined : spawnProfile.workingDirectory);
+        // An explicitly selected local provider is a new credential/model
+        // boundary.  Its adapter owns model selection, so it must not inherit
+        // the managed Omi model profile from the realtime coordinator (for
+        // example `omi-sonnet`, which Hermes/OpenClaw cannot use with a Codex
+        // ChatGPT account).  An explicitly supplied model remains intentional
+        // user/provider input; ordinary parent-linked children still inherit.
+        const model = parsed.model ?? (
+          inheritsParentExecutionProfile || parsed.provider
+            ? undefined
+            : spawnProfile.modelProfile ?? undefined
+        );
+        if (inheritsParentExecutionProfile) {
+          assertAdapterAllowedForControlRun(context, adapterId);
+        } else {
+          assertAdapterAllowedForTopLevelLocalProviderSpawn(context, adapterId, parsed.provider);
+        }
+        const childSurfaceKind = parsed.visible ? "floating_bar" : "delegated_agent";
+        const childExternalRefKind = parsed.visible ? "pill" : undefined;
+        const producerContextSnapshot = (!parentRunId || isAuthorizedIndependentLocalProviderSpawn) && producerJournal
+          ? context.kernel.contextSnapshotForExactSurface(ownerId, producerJournal.surface)
+          : undefined;
+        const routed = await context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.objective,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              parentRunId,
+              explicitProvider: adapterId,
+              requestedAgentCount: parsed.requestedAgentCount,
+            },
+          },
+          async () => {
+            const siblings: Array<
+              | { kind: "delegated"; result: Awaited<ReturnType<AgentRuntimeKernel["delegateAgent"]>> }
+              | { kind: "background"; result: Awaited<ReturnType<AgentRuntimeKernel["spawnBackgroundAgent"]>> }
+            > = [];
+            try {
+              for (let index = 0; index < parsed.requestedAgentCount; index += 1) {
+                const ordinal = index + 1;
+                const siblingRequestId = parsed.requestedAgentCount === 1 ? requestId : `${requestId}:${ordinal}`;
+                const siblingExternalRefId = parsed.visible
+                  ? parsed.requestedAgentCount === 1
+                    ? (parsed.externalRefId ?? randomUUID())
+                    : randomUUID()
+                  : parsed.externalRefId;
+                const titleSuffix = parsed.requestedAgentCount === 1 ? "" : ` (${ordinal}/${parsed.requestedAgentCount})`;
+                const childTitle = `${parsed.title ?? `${parentRunId ? "Delegated" : "Background"}: ${parsed.objective.slice(0, 80)}`}${titleSuffix}`;
+                const siblingProducerJournal = producerJournal && siblingExternalRefId
+                  ? {
+                      ...producerJournal,
+                      continuityKey: parsed.requestedAgentCount === 1
+                        ? producerJournal.continuityKey
+                        : `${producerJournal.continuityKey}:${ordinal}`,
+                      pillId: siblingExternalRefId,
+                      objective: parsed.objective,
+                      title: childTitle,
+                    }
+                  : undefined;
+                const siblingMetadata = {
+                  ...callerMetadata,
+                  visible: parsed.visible,
+                  siblingOrdinal: ordinal,
+                  ...(parsed.brief ? { brief: parsed.brief } : {}),
+                  ...(parsed.requestedAgentCount > 1 && parsed.externalRefId
+                    ? { siblingGroupExternalRefId: parsed.externalRefId }
+                    : {}),
+                  ...(parsed.visible && siblingExternalRefId ? { pillId: siblingExternalRefId } : {}),
+                  ...(siblingProducerJournal ? { producerJournal: siblingProducerJournal } : {}),
+                };
+                const mcpServers = buildControlRunMcpServers(context, {
+                  mode: "act",
+                  cwd,
+                  ownerId,
+                  requestId: siblingRequestId,
+                  clientId: parsed.clientId,
+                  adapterId: adapterId ?? defaultControlAdapterId(context),
+                  surfaceKind: childSurfaceKind,
+                  externalRefKind: childExternalRefKind,
+                  externalRefId: siblingExternalRefId,
+                  screenContext: true,
+                  executionRole: "leaf",
+                });
+                if (inheritsParentExecutionProfile) {
+                  if (!parentRunId) {
+                    throw new Error("Parent-linked agent spawn is missing its parent run");
+                  }
+                  const result = await executeAuthorizedControlEffect(context, () => context.kernel.delegateAgent({
+                    ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
+                    mode: "spawn",
+                    parentRunId,
+                    objective: parsed.objective,
+                    ownerId,
+                    requestId: siblingRequestId,
+                    adapterId,
+                    defaultAdapterId: adapterId,
+                    childSurfaceKind,
+                    childExternalRefKind,
+                    childExternalRefId: siblingExternalRefId,
+                    childTitle,
+                    cwd,
+                    model,
+                    runMode: "act",
+                    clientId: parsed.clientId,
+                    metadata: siblingMetadata,
+                    authoritySignal: context.executionLease?.signal,
+                    mcpServers,
+                  }));
+                  siblings.push({
+                    kind: "delegated",
+                    result,
+                  });
+                  context.executionLease?.retainRun?.(result.childRun.runId);
+                } else {
+                  const result = await executeAuthorizedControlEffect(context, () => context.kernel.spawnBackgroundAgent({
+                    ...controlRunRecovery(context, adapterId ?? defaultControlAdapterId(context)),
+                    ...(isAuthorizedIndependentLocalProviderSpawn
+                      ? { trustedUserSpawn: true }
+                      : backgroundSpawnAuthority(context)),
+                    ownerId,
+                    clientId: parsed.clientId,
+                    requestId: siblingRequestId,
+                    prompt: parsed.objective,
+                    title: childTitle,
+                    surfaceKind: childSurfaceKind,
+                    externalRefKind: childExternalRefKind,
+                    externalRefId: siblingExternalRefId,
+                    adapterId,
+                    defaultAdapterId: adapterId,
+                    cwd,
+                    model,
+                    mode: "act",
+                    metadata: {
+                      ...siblingMetadata,
+                      provider: parsed.provider ?? null,
+                    },
+                    admittedContextSnapshot: producerContextSnapshot,
+                    authoritySignal: context.executionLease?.signal,
+                    mcpServers,
+                  }));
+                  siblings.push({
+                    kind: "background",
+                    result,
+                  });
+                  context.executionLease?.retainRun?.(result.run.runId);
+                }
+              }
+            } catch (error) {
+              if (siblings.length === 0) throw error;
+              const cancellations: PartialAgentSpawnCancellation[] = [];
+              for (const sibling of siblings) {
+                const runId = sibling.kind === "delegated"
+                  ? sibling.result.childRun.runId
+                  : sibling.result.run.runId;
+                try {
+                  const cancellation = await context.kernel.cancelRun(runId, { ownerId });
+                  cancellations.push({
+                    runId,
+                    accepted: cancellation.accepted,
+                    dispatchAttempted: cancellation.dispatchAttempted,
+                    adapterAcknowledged: cancellation.adapterAcknowledged,
+                  });
+                } catch (cancellationError) {
+                  cancellations.push({
+                    runId,
+                    error: cancellationError instanceof Error
+                      ? cancellationError.message
+                      : String(cancellationError),
+                  });
+                }
+              }
+              throw new PartialAgentSpawnError({ cause: error, cancellations });
+            }
+            return siblings;
+          },
+        );
+        const agents = routed.result.map((sibling) => sibling.kind === "delegated"
+          ? {
+              kind: sibling.kind,
+              delegation: serializeDelegation(sibling.result.delegation),
+              session: serializeSession(sibling.result.childSession),
+              run: serializeRun(sibling.result.childRun),
+              attempt: sibling.result.childAttempt ? serializeAttempt(sibling.result.childAttempt) : null,
+            }
+          : {
+              kind: sibling.kind,
+              delegation: null,
+              session: serializeSession(sibling.result.session),
+              run: serializeRun(sibling.result.run),
+              attempt: sibling.result.attempt ? serializeAttempt(sibling.result.attempt) : null,
+            });
+        const first = agents[0]!;
+        return stringifyToolResult({
+          routeDecision: routed.decision,
+          requestedAgentCount: parsed.requestedAgentCount,
+          agents,
+          delegation: first.delegation,
+          session: first.session,
+          run: first.run,
+          attempt: first.attempt,
         });
-        const visiblePillExternalRefId = parsed.visible
-          ? (parsed.externalRefId ?? randomUUID())
-          : parsed.externalRefId;
-        if (parsed.parentRunId) {
-          const result = await context.kernel.delegateAgent({
-            mode: "spawn",
+      }
+      case "run_agent_and_wait": {
+        assertAgentSpawningAllowed(context);
+        const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
+        assertCanonicalRunId(parsed.parentRunId, "parentRunId");
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
+        assertAdapterAllowedForControlRun(context, adapterId);
+        const routed = await executeAuthorizedControlEffect(context, () => context.kernel.applyDesktopIntentEffect(
+          {
+            ownerId,
+            callerSessionId: context.callerSessionId,
+            restrictiveCallerExecutionRole: context.executionRole,
+            surfaceKind: parsed.originSurfaceKind,
+            snapshotVersion: controlRouteSnapshotVersion(parsed.metadata),
+            utterance: parsed.objective,
+            effect: "spawn_agent",
+            syntaxFacts: {
+              parentRunId: parsed.parentRunId,
+              explicitProvider: adapterId,
+              requestedAgentCount: 1,
+            },
+          },
+          () => context.kernel.delegateAgent({
+            ...controlRunRecovery(context, adapterId),
+            mode: "call",
             parentRunId: parsed.parentRunId,
             objective: parsed.objective,
+            context: parsed.context,
             ownerId,
             requestId,
             adapterId,
             defaultAdapterId: adapterId,
-            childSurfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-            childExternalRefKind: parsed.visible ? "pill" : undefined,
-            childExternalRefId: visiblePillExternalRefId,
-            childTitle: parsed.title ?? `Delegated: ${parsed.objective.slice(0, 80)}`,
             cwd: parsed.cwd,
             model: parsed.model,
-            runMode: "act",
+            runMode: parsed.runMode,
             clientId: parsed.clientId,
-            metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true, visible: parsed.visible },
-            mcpServers,
-          });
-          return stringifyToolResult({
-            delegation: serializeDelegation(result.delegation),
-            session: serializeSession(result.childSession),
-            run: serializeRun(result.childRun),
-            attempt: result.childAttempt ? serializeAttempt(result.childAttempt) : null,
-          });
-        }
-        const result = await context.kernel.spawnBackgroundAgent({
-          ownerId,
-          clientId: parsed.clientId,
-          requestId,
-          prompt: parsed.objective,
-          title: parsed.title ?? `Background: ${parsed.objective.slice(0, 80)}`,
-          surfaceKind: parsed.visible ? "floating_bar" : "delegated_agent",
-          externalRefKind: parsed.visible ? "pill" : undefined,
-          externalRefId: visiblePillExternalRefId,
-          adapterId,
-          defaultAdapterId: adapterId,
-          cwd: parsed.cwd,
-          model: parsed.model,
-          mode: "act",
-          metadata: {
-            ...(parsed.metadata ?? {}),
-            disableSwiftBackedTools: true,
-            visible: parsed.visible,
-            provider: parsed.provider ?? null,
-          },
-          mcpServers,
-        });
-        return stringifyToolResult({
-          session: serializeSession(result.session),
-          run: serializeRun(result.run),
-          attempt: result.attempt ? serializeAttempt(result.attempt) : null,
-        });
-      }
-      case "run_agent_and_wait": {
-        const parsed = agentControlToolSchemas.run_agent_and_wait.parse(input);
-        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
-        const requestId = parsed.requestId ?? `run-and-wait-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-        const adapterId = parsed.adapterId ?? context.kernel.defaultAdapterIdForRun(parsed.parentRunId);
-        const result = await context.kernel.delegateAgent({
-          mode: "call",
-          parentRunId: parsed.parentRunId,
-          objective: parsed.objective,
-          context: parsed.context,
-          ownerId,
-          requestId,
-          adapterId,
-          defaultAdapterId: adapterId,
-          cwd: parsed.cwd,
-          model: parsed.model,
-          runMode: parsed.runMode,
-          clientId: parsed.clientId,
-          maxDepth: parsed.maxDepth,
-          maxBudgetUsd: parsed.maxBudgetUsd,
-          metadata: { ...(parsed.metadata ?? {}), disableSwiftBackedTools: true },
-          mcpServers: buildControlRunMcpServers(context, {
-            mode: parsed.runMode,
-            cwd: parsed.cwd,
-            ownerId,
-            requestId,
-            clientId: parsed.clientId,
-            adapterId,
+            maxDepth: parsed.maxDepth,
+            maxBudgetUsd: parsed.maxBudgetUsd,
+            metadata: { ...(parsed.metadata ?? {}) },
+            authoritySignal: context.executionLease?.signal,
+            mcpServers: buildControlRunMcpServers(context, {
+              mode: parsed.runMode,
+              cwd: parsed.cwd,
+              ownerId,
+              requestId,
+              clientId: parsed.clientId,
+              adapterId,
+              screenContext: true,
+              executionRole: "leaf",
+            }),
           }),
-        });
+        ));
+        const result = routed.result;
         return stringifyToolResult({
+          routeDecision: routed.decision,
           delegation: serializeDelegation(result.delegation),
           session: serializeSession(result.childSession),
           run: serializeRun(result.childRun),
@@ -780,26 +1478,359 @@ export async function handleAgentControlToolCall(
       case "set_desktop_attention_override": {
         const parsed = agentControlToolSchemas.set_desktop_attention_override.parse(input);
         const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
-        const override = context.kernel.setDesktopAttentionOverride({
+        const override = await executeAuthorizedControlEffect(context, () => context.kernel.setDesktopAttentionOverride({
           ownerId,
           subjectKind: parsed.subjectKind,
           subjectId: parsed.subjectId,
           dismissedAtMs: parsed.dismissed ? Date.now() : null,
           hiddenUntilMs: parsed.hiddenUntilMs ?? null,
           reason: parsed.reason ?? null,
-        });
+        }));
         return stringifyToolResult({ override });
       }
+      case "prepare_workstream_continuity": {
+        const parsed = agentControlToolSchemas.prepare_workstream_continuity.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const migration = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.migrateTaskSessionsToWorkstreams({
+            ownerId,
+            mappings: parsed.taskIds.map((taskId) => ({
+              taskId,
+              workstreamId: parsed.workstreamId,
+            })),
+          }));
+        let importedSession = null;
+        if (parsed.checkpoint) {
+          const now = Date.now();
+          const createdAtMs = now;
+          const checkpoint: WorkstreamContinuationCheckpoint = {
+            checkpointId: parsed.checkpoint.checkpointId,
+            ownerId,
+            workstreamId: parsed.workstreamId,
+            sourceRuntimeId: parsed.checkpoint.runtimeId,
+            canonicalSummary: parsed.checkpoint.contextSummary,
+            redactedCanonicalSummary: parsed.checkpoint.contextSummary,
+            summarySensitivityTier: "private",
+            currentTask: null,
+            selectedEvents: [],
+            artifactHeads: [],
+            provenance: {
+              snapshotVersion: `backend-checkpoint:${parsed.checkpoint.lastEventSequence}`,
+              fetchedAtMs: now,
+              source: "canonical_backend",
+            },
+            evidenceRefs: parsed.checkpoint.evidenceRefs as EvidenceRef[],
+            lastEventSequence: parsed.checkpoint.lastEventSequence,
+            createdAtMs,
+            expiresAtMs: now + 7 * 24 * 60 * 60 * 1_000,
+          };
+          importedSession = await executeAuthorizedControlEffect(context, () =>
+            context.kernel.importWorkstreamContinuationCheckpoint(checkpoint));
+        }
+        const session = await executeAuthorizedControlEffect(context, () => context.kernel.resolveWorkstreamSession({
+          ownerId,
+          workstreamId: parsed.workstreamId,
+        }));
+        const summary = context.kernel
+          .listSessions({ ownerId, surfaceKind: "workstream", limit: 200 })
+          .find((candidate) => candidate.session.sessionId === session.agentSessionId);
+        const run = summary?.activeRun ?? summary?.latestRun ?? null;
+        return stringifyToolResult({
+          migration,
+          importedSession,
+          session,
+          run: run
+            ? {
+                runId: run.runId,
+                status: run.status,
+                statusText: run.finalText,
+                errorMessage: run.errorMessage,
+                updatedAtMs: run.updatedAtMs,
+                completedAtMs: run.completedAtMs,
+              }
+            : null,
+          deliveries: context.kernel
+            .listArtifactDeliveries({
+              ownerId,
+              targetRef: parsed.workstreamId,
+              statuses: ["pending", "failed", "retrying"],
+            })
+            .map(serializeContinuityDelivery),
+        });
+      }
+      case "persist_workstream_continuity": {
+        const parsed = agentControlToolSchemas.persist_workstream_continuity.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const contextPacket = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.persistWorkstreamContextPacket({
+            ownerId,
+            workstreamId: parsed.workstreamId,
+            objective: "Continue canonical workstream",
+            context: parsed.context as unknown as WorkstreamProductContext,
+          }));
+        const artifactVersions: Array<ReturnType<AgentRuntimeKernel["persistWorkstreamArtifactVersion"]>> = [];
+        for (const artifact of parsed.artifacts) {
+          artifactVersions.push(await executeAuthorizedControlEffect(context, () =>
+            context.kernel.persistWorkstreamArtifactVersion({
+              ownerId,
+              workstreamId: parsed.workstreamId,
+              logicalKey: artifact.logicalKey,
+              evidenceRefs: artifact.evidenceRefs as EvidenceRef[],
+              sourceArtifactId: artifact.sourceArtifactId,
+              artifact: {
+                kind: artifact.kind,
+                role: artifact.role,
+                uri: artifact.uri,
+                displayName: artifact.displayName ?? null,
+                mimeType: artifact.mimeType ?? null,
+                contentHash: artifact.contentHash ?? null,
+                sizeBytes: artifact.sizeBytes ?? null,
+                runId: artifact.runId ?? null,
+                attemptId: artifact.attemptId ?? null,
+                metadataJson: "{}",
+              },
+            })));
+        }
+        const checkpoint = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.exportWorkstreamContinuationCheckpoint({
+            ownerId,
+            workstreamId: parsed.workstreamId,
+            // Device-local citations can support the local artifact record, but
+            // must not cross the backend checkpoint boundary without a separate
+            // export approval. The durable checkpoint remains useful with its
+            // canonical evidence subset.
+            context: canonicalCheckpointContext(parsed.context as unknown as WorkstreamProductContext),
+            ttlMs: parsed.ttlMs,
+          }));
+        const artifactDeliveries: Array<ReturnType<AgentRuntimeKernel["queueArtifactDelivery"]>> = [];
+        for (const [index, version] of artifactVersions.entries()) {
+          const contentHash = version.artifact.contentHash ?? hashReadableFileArtifact(version.artifact.uri);
+          artifactDeliveries.push(await executeAuthorizedControlEffect(context, () =>
+            context.kernel.queueArtifactDelivery({
+              deliveryId: `artifactDelivery:workstream:${parsed.workstreamId}:${parsed.artifacts[index]!.sourceArtifactId}`,
+              artifactId: version.artifact.artifactId,
+              ownerId,
+              sourceSessionId: version.artifact.sessionId,
+              sourceRunId: version.artifact.runId,
+              sourceAttemptId: version.artifact.attemptId,
+              intendedSurface: "canonical_workstream",
+              targetKind: "task_chat",
+              targetRef: parsed.workstreamId,
+              contentHash,
+              deliveryStatus: contentHash ? "pending" : "cancelled",
+              errorJson: contentHash
+                ? null
+                : JSON.stringify({
+                  code: "local_only_artifact",
+                  message: "Artifact has no content hash and is not a readable local file",
+                }),
+              receiptJson: JSON.stringify({
+                kind: "artifact_descriptor",
+                sourceArtifactId: parsed.artifacts[index]!.sourceArtifactId,
+                logicalKey: version.logicalKey,
+                artifactKind: version.artifact.kind,
+                uri: version.artifact.uri,
+                contentHash,
+                sourceRunId: version.artifact.runId,
+                evidenceRefs: version.evidenceRefs,
+              }),
+            })));
+        }
+        const checkpointArtifactId = `artifact_${checkpoint.checkpointId}`;
+        let checkpointArtifact;
+        try {
+          checkpointArtifact = context.kernel.inspectArtifacts({
+            artifactId: checkpointArtifactId,
+            ownerId,
+            limit: 1,
+          })[0];
+        } catch {
+          checkpointArtifact = undefined;
+        }
+        if (!checkpointArtifact) {
+          const session = await executeAuthorizedControlEffect(context, () => context.kernel.resolveWorkstreamSession({
+            ownerId,
+            workstreamId: parsed.workstreamId,
+          }));
+          checkpointArtifact = await executeAuthorizedControlEffect(context, () => context.kernel.persistArtifact({
+            artifactId: checkpointArtifactId,
+            sessionId: session.agentSessionId,
+            kind: "workstream_continuation_checkpoint",
+            role: "checkpoint",
+            uri: `omi-artifact://workstream-checkpoint/${checkpoint.checkpointId}`,
+            displayName: "Workstream continuation checkpoint",
+            metadata: { checkpoint },
+          }));
+        }
+        const checkpointDelivery = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.queueArtifactDelivery({
+            deliveryId: `artifactDelivery:workstream-checkpoint:${checkpoint.checkpointId}`,
+            artifactId: checkpointArtifact.artifactId,
+            ownerId,
+            sourceSessionId: checkpointArtifact.sessionId,
+            intendedSurface: "canonical_workstream",
+            targetKind: "task_chat",
+            targetRef: parsed.workstreamId,
+            receiptJson: JSON.stringify({
+              kind: "continuation_checkpoint",
+              checkpoint,
+            }),
+          }));
+        return stringifyToolResult({
+          contextPacket: { packetId: contextPacket.packet.packetId },
+          artifactVersions: artifactVersions.map((version, index) => ({
+            sourceArtifactId: parsed.artifacts[index]?.sourceArtifactId,
+            logicalKey: version.logicalKey,
+            version: version.version,
+            supersedesArtifactId: version.supersedesArtifactId,
+            evidenceRefs: version.evidenceRefs,
+            artifact: serializeArtifact(version.artifact),
+          })),
+          checkpoint,
+          deliveries: [...artifactDeliveries, checkpointDelivery]
+            .filter((delivery) => delivery.deliveryStatus !== "delivered" && delivery.deliveryStatus !== "cancelled")
+            .map(serializeContinuityDelivery),
+        });
+      }
+      case "persist_prepared_workstream_artifact": {
+        const parsed = agentControlToolSchemas.persist_prepared_workstream_artifact.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const version = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.persistAuthorizedPreparedArtifact({
+            ownerId,
+            workstreamId: parsed.workstreamId,
+            logicalKey: parsed.logicalKey,
+            evidenceRefs: parsed.evidenceRefs as EvidenceRef[],
+            sourceArtifactId: parsed.sourceArtifactId,
+            grantId: parsed.grantId,
+            artifact: {
+              kind: parsed.kind,
+              role: "result",
+              uri: parsed.uri,
+              contentHash: parsed.contentHash,
+              metadataJson: JSON.stringify({ status: "awaiting_review" }),
+            },
+          }));
+        const delivery = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.queueArtifactDelivery({
+            deliveryId: `artifactDelivery:workstream:${parsed.workstreamId}:${parsed.sourceArtifactId}`,
+            artifactId: version.artifact.artifactId,
+            ownerId,
+            sourceSessionId: version.artifact.sessionId,
+            sourceRunId: version.artifact.runId,
+            sourceAttemptId: version.artifact.attemptId,
+            intendedSurface: "canonical_workstream",
+            targetKind: "task_chat",
+            targetRef: parsed.workstreamId,
+            contentHash: parsed.contentHash,
+            receiptJson: JSON.stringify({
+              kind: "artifact_descriptor",
+              sourceArtifactId: parsed.sourceArtifactId,
+              logicalKey: version.logicalKey,
+              artifactKind: version.artifact.kind,
+              uri: version.artifact.uri,
+              contentHash: parsed.contentHash,
+              sourceRunId: version.artifact.runId,
+              evidenceRefs: version.evidenceRefs,
+            }),
+          }));
+        return stringifyToolResult({
+          artifactVersion: {
+            sourceArtifactId: parsed.sourceArtifactId,
+            logicalKey: version.logicalKey,
+            version: version.version,
+            supersedesArtifactId: version.supersedesArtifactId,
+            evidenceRefs: version.evidenceRefs,
+            artifact: serializeArtifact(version.artifact),
+          },
+          deliveries:
+            delivery.deliveryStatus === "delivered" || delivery.deliveryStatus === "cancelled"
+              ? []
+              : [serializeContinuityDelivery(delivery)],
+        });
+      }
+      case "resolve_workstream_continuity_delivery": {
+        const parsed = agentControlToolSchemas.resolve_workstream_continuity_delivery.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const current = context.kernel
+          .listArtifactDeliveries({ ownerId, limit: 500 })
+          .find((delivery) => delivery.deliveryId === parsed.deliveryId);
+        if (!current) throw new Error(`Unknown continuity delivery ${parsed.deliveryId}`);
+        const delivery = await executeAuthorizedControlEffect(context, () =>
+          context.kernel.updateArtifactDelivery(parsed.deliveryId, {
+            ownerId,
+            deliveryStatus: parsed.status,
+            attemptCount: current.attemptCount + 1,
+            receiptJson: parsed.receipt ? JSON.stringify(parsed.receipt) : current.receiptJson,
+            errorJson: parsed.error ? JSON.stringify(parsed.error) : current.errorJson,
+            deliveredAtMs: parsed.status === "delivered" ? Date.now() : null,
+          }));
+        return stringifyToolResult({
+          delivery: serializeContinuityDelivery(delivery),
+        });
+      }
+      case "project_workstream_continuity": {
+        const parsed = agentControlToolSchemas.project_workstream_continuity.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
+        const projection = context.kernel.projectWorkstreamContinuity({
+          ownerId,
+          workstreamId: parsed.workstreamId,
+        });
+        return stringifyToolResult({
+          projection: {
+            ...projection,
+            artifactVersions: projection.artifactVersions.map((version) => ({
+              ...version,
+              artifact: serializeArtifact(version.artifact),
+            })),
+          },
+        });
+      }
     }
-  } catch (error) {
-    return JSON.stringify({
-      ok: false,
-      error: {
-        code: error instanceof z.ZodError ? "invalid_tool_input" : "control_tool_failed",
-        message: error instanceof Error ? error.message : String(error),
-      },
-    });
-  }
+    } catch (error) {
+      const rawCode = error && typeof error === "object" && "code" in error
+        ? String((error as { code: unknown }).code)
+        : "";
+      const routeReasonCode = error && typeof error === "object" && "reasonCode" in error
+        ? String((error as { reasonCode: unknown }).reasonCode)
+        : "";
+      const details = error instanceof PartialAgentSpawnError ? error.details : undefined;
+      // A directed local provider is a user-visible capability, not an opaque
+      // routing failure. Keep this translation at the control-tool boundary so
+      // every surface (including PTT) receives the same bounded recovery state.
+      const requestedDirectedProvider = name === "spawn_agent"
+        && (input.provider === "hermes" || input.provider === "openclaw")
+        ? input.provider
+        : undefined;
+      const isProviderSetupNeeded = (rawCode === "provider_unavailable" || routeReasonCode === "provider_unavailable")
+        && requestedDirectedProvider !== undefined;
+      const isAuthorizedExternalSpawnAdmission = name === "spawn_agent"
+        && context.authorizedCallerRunId !== undefined
+        && context.authorizedProducerJournal !== undefined;
+      const errorCode = error instanceof z.ZodError
+        ? "invalid_tool_input"
+        : isProviderSetupNeeded ? "provider_setup_needed"
+        : /^[a-z0-9_]{1,64}$/.test(rawCode) ? rawCode : "control_tool_failed";
+      return stringifyToolResult({
+        error: {
+          // Realtime callers consume this response through a model tool result,
+          // so an admission failure needs a stable recovery signal rather than
+          // an adapter/policy exception that may contain implementation detail.
+          code: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+            ? "external_spawn_admission_failed"
+            : errorCode,
+          message: isAuthorizedExternalSpawnAdmission && errorCode === "control_tool_failed"
+            ? "The requested agent could not be started. Try again."
+            : isProviderSetupNeeded
+              ? `${requestedDirectedProvider === "hermes" ? "Hermes" : "OpenClaw"} needs setup before it can run an agent.`
+            : error instanceof Error ? error.message : String(error),
+          ...(isProviderSetupNeeded ? { provider: requestedDirectedProvider } : {}),
+          ...(isAuthorizedExternalSpawnAdmission ? { retryable: true } : {}),
+          ...(details ? { details } : {}),
+        },
+      }, "failed");
+    }
+  });
 }
 
 function buildControlRunMcpServers(
@@ -811,7 +1842,12 @@ function buildControlRunMcpServers(
     requestId: string;
     clientId: string;
     adapterId: string;
-  }
+    surfaceKind?: string;
+    externalRefKind?: string;
+    externalRefId?: string;
+    screenContext?: boolean;
+    executionRole?: AgentExecutionRole;
+  },
 ): Record<string, unknown>[] | undefined {
   if (!context.buildMcpServers) {
     return undefined;
@@ -822,13 +1858,27 @@ function buildControlRunMcpServers(
     clientId: input.clientId,
     adapterId: input.adapterId,
     protocolVersion: 2,
-    includeSwiftBackedTools: false,
+    surfaceKind: input.surfaceKind,
+    externalRefKind: input.externalRefKind,
+    externalRefId: input.externalRefId,
+    includeSwiftBackedTools: true,
+    screenContext: input.screenContext === true,
+    executionRole: input.executionRole,
   });
-  // Direct control-created runs do not have a Swift ActiveRequest with an
-  // onToolCall handler. Keep browser/stdio-independent MCPs available, but do
-  // not expose omi-tools, whose execute_sql/semantic_search calls must be
-  // answered by Swift-backed request routing.
-  return servers.filter((server) => server.name !== "omi-tools");
+  return servers;
+}
+
+function assertCanonicalRunId(value: string, fieldName: string): void {
+  if (!value.startsWith("run_")) {
+    throw new Error(
+      `${fieldName} must be a canonical Omi run_id starting with "run_"; omit it for a top-level background agent`,
+    );
+  }
+}
+
+function controlRouteSnapshotVersion(metadata: Record<string, unknown> | undefined): string {
+  const value = metadata?.contextSnapshotVersion ?? metadata?.snapshotVersion;
+  return typeof value === "string" && value.trim() ? value.trim() : "snapshot:control-unversioned";
 }
 
 function controlToolOwnerId(context: AgentControlToolContext): string {
@@ -836,25 +1886,6 @@ function controlToolOwnerId(context: AgentControlToolContext): string {
   return ownerId || "desktop-local-user";
 }
 
-export function activeControlToolOwnerId(input: ActiveControlToolOwnerInput): string {
-  const requestOwnerId = input.requestKey ? input.ownerIdForRequest?.(input.requestKey)?.trim() : undefined;
-  if (requestOwnerId) {
-    return requestOwnerId;
-  }
-  const attemptOwnerId = input.attemptId ? input.ownerIdForAttempt?.(input.attemptId)?.trim() : undefined;
-  if (attemptOwnerId) {
-    return attemptOwnerId;
-  }
-  const runOwnerId = input.runId ? input.ownerIdForRun?.(input.runId)?.trim() : undefined;
-  if (runOwnerId) {
-    return runOwnerId;
-  }
-  if (!input.allowFallbackOwner) {
-    throw new Error("Owner-scoped control tools require active request, run, or attempt context");
-  }
-  const fallbackOwnerId = input.fallbackOwnerId?.trim();
-  return fallbackOwnerId || "desktop-local-user";
-}
 
 function effectiveControlToolOwnerId(context: AgentControlToolContext, requestedOwnerId?: string): string {
   const activeOwnerId = controlToolOwnerId(context);
@@ -877,86 +1908,659 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
     !context.kernel.hasExecutionCapacityForAdapter(adapterId)
   ) {
     throw new Error(
-      `Synchronous ${adapterId} control-tool runs are unavailable while that adapter is already executing; use spawn mode or retry after the current run finishes.`
+      `Synchronous ${adapterId} control-tool runs are unavailable while that adapter is already executing; use spawn mode or retry after the current run finishes.`,
     );
   }
 }
 
-function stringifyToolResult(payload: Record<string, unknown>): string {
-  return JSON.stringify({ ok: true, ...payload });
+const MAX_REALTIME_TOOL_RESULT_BYTES = 8 * 1024;
+
+function controlToolResultProvenance(
+  context: AgentControlToolContext | undefined,
+  toolName: string,
+): ToolResultEnvelope["provenance"] {
+  const authorized = context?.authorizedToolInvocation;
+  if (authorized) {
+    // The capability tuple is the only identity a provider may observe. This
+    // applies equally to validation, budget, and catch branches.
+    return {
+      invocationId: authorized.invocationId,
+      runId: authorized.runId,
+      attemptId: authorized.attemptId,
+      toolName: authorized.toolName,
+    };
+  }
+  return {
+    invocationId: `control:${toolName}:${randomUUID()}`,
+    runId: context?.authorizedCallerRunId ?? "unknown",
+    attemptId: "unknown",
+    toolName,
+  };
+}
+
+/**
+ * Provider-facing results carry one typed envelope.  The compact response is
+ * useful in a realtime turn, while the full local result is recoverable by a
+ * canonical artifact reference instead of being silently discarded.
+ */
+function withToolResultEnvelope(
+  context: AgentControlToolContext,
+  toolName: string,
+  fullPayload: Record<string, unknown>,
+  projectedPayload: Record<string, unknown>,
+  ownerId: string,
+  sessionId: string | undefined,
+  existingFullOutputRef?: string,
+): Record<string, unknown> {
+  const fullJson = JSON.stringify(fullPayload);
+  const originalBytes = Buffer.byteLength(fullJson, "utf8");
+  const projectedBytes = Buffer.byteLength(JSON.stringify(projectedPayload), "utf8");
+  // Small structural projections are normal response shaping, not an
+  // artifact-backed truncation. Once the full payload cannot cross the
+  // provider boundary (or the caller supplied an existing canonical ref),
+  // it must be recoverable or become a typed failure.
+  const needsArtifactBackedProjection = originalBytes > projectedBytes
+    && (existingFullOutputRef !== undefined || originalBytes > MAX_REALTIME_TOOL_RESULT_BYTES);
+  const fullOutputRef = needsArtifactBackedProjection
+    ? existingFullOutputRef
+      ?? (sessionId
+      ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+      : null)
+    : null;
+  if (needsArtifactBackedProjection && fullOutputRef === null) {
+    // Never relabel a lossy success as an untruncated success. The provider
+    // receives a typed failure unless the complete result is durably readable
+    // through its artifact reference.
+    return providerBudgetFailure(toolName, context);
+  }
+  const isRecoverableProjection = needsArtifactBackedProjection && fullOutputRef !== null;
+  const result = {
+    ...projectedPayload,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "succeeded",
+      truncated: isRecoverableProjection,
+      originalBytes: isRecoverableProjection ? originalBytes : projectedBytes,
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  };
+  if (Buffer.byteLength(JSON.stringify({ ok: true, ...result }), "utf8") > MAX_REALTIME_TOOL_RESULT_BYTES) {
+    const recoveredRef = fullOutputRef ?? (sessionId
+      ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
+      : null);
+    const failure = {
+      error: {
+        code: "tool_result_projection_exceeded_budget",
+        message: `${toolName} output was saved locally; use its fullOutputRef with read_tool_output or search_tool_output.`,
+      },
+    };
+    const failureBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+    if (recoveredRef) {
+      return {
+        ...failure,
+        toolResultEnvelope: makeToolResultEnvelope({
+          status: "failed",
+          truncated: true,
+          originalBytes: Math.max(originalBytes, projectedBytes),
+          projectedBytes: failureBytes,
+          fullOutputRef: recoveredRef,
+          provenance: controlToolResultProvenance(context, toolName),
+        }),
+      };
+    }
+    return providerBudgetFailure(toolName, context);
+  }
+  return result;
+}
+
+function persistToolOutputArtifact(
+  context: AgentControlToolContext,
+  ownerId: string,
+  sessionId: string,
+  toolName: string,
+  fullJson: string,
+): string | null {
+  try {
+    const directory = join(defaultArtifactRoot(), "tool-output", ownerId, sessionId);
+    mkdirSync(directory, { recursive: true });
+    const path = join(directory, `${toolName}-${randomUUID()}.json`);
+    writeFileSync(path, `${fullJson}\n`, "utf8");
+    const artifact = context.kernel.persistArtifact({
+      sessionId,
+      kind: "tool_output",
+      role: "tool_output",
+      uri: pathToFileURL(path).toString(),
+      displayName: `${toolName} full output`,
+      mimeType: "application/json",
+      contentHash: `sha256:${createHash("sha256").update(fullJson).digest("hex")}`,
+      sizeBytes: Buffer.byteLength(fullJson, "utf8"),
+      metadata: { toolName, projection: "provider_bounded", ownerId },
+    });
+    return `artifact:${artifact.artifactId}`;
+  } catch {
+    return null;
+  }
+}
+
+function readToolOutputArtifact(context: AgentControlToolContext, artifactId: string, ownerId: string): AgentArtifact {
+  const canonicalArtifactId = artifactId.startsWith("artifact:") ? artifactId.slice("artifact:".length) : artifactId;
+  const artifact = context.kernel.inspectArtifacts({ artifactId: canonicalArtifactId, ownerId, limit: 1 })[0];
+  if (!artifact || artifact.role !== "tool_output") {
+    throw new Error("Tool output artifact was not found");
+  }
+  return artifact;
+}
+
+function readLocalArtifactText(uri: string): string {
+  if (!uri.startsWith("file://")) throw new Error("Tool output artifact is not locally readable");
+  return readFileSync(fileURLToPath(uri), "utf8");
+}
+
+function truncateUtf8(text: string, maxBytes: number): { text: string; truncated: boolean } {
+  if (Buffer.byteLength(text, "utf8") <= maxBytes) return { text, truncated: false };
+  let end = Math.min(text.length, maxBytes);
+  while (end > 0 && Buffer.byteLength(text.slice(0, end), "utf8") > maxBytes) end -= 1;
+  return { text: text.slice(0, end), truncated: true };
+}
+
+/**
+ * The one and only provider-result finalizer for control tools. It owns both
+ * normal and error output so malformed input, denied policy, and unexpected
+ * throws cannot bypass the envelope/artifact contract.
+ */
+function stringifyToolResult(
+  payload: Record<string, unknown>,
+  requestedStatus?: "succeeded" | "failed" | "cancelled",
+): string {
+  const scope = controlToolOutputScope.getStore();
+  const toolName = scope?.toolName ?? "unscoped_control_tool";
+  const existingEnvelope = payload.toolResultEnvelope;
+  if (existingEnvelope) {
+    // Dedicated detail tools have already persisted the complete source before
+    // returning their compact projection. Preserve that reference verbatim.
+    try {
+      assertToolResultEnvelope(existingEnvelope);
+      const sourceEnvelope = existingEnvelope;
+      const status = requestedStatus ?? sourceEnvelope.status;
+      const envelope = makeToolResultEnvelope({
+        status,
+        truncated: sourceEnvelope.truncated,
+        originalBytes: sourceEnvelope.originalBytes,
+        projectedBytes: sourceEnvelope.projectedBytes,
+        fullOutputRef: sourceEnvelope.fullOutputRef,
+        provenance: controlToolResultProvenance(scope?.context, toolName),
+      });
+      const result = JSON.stringify({ ok: status === "succeeded", ...payload, toolResultEnvelope: envelope });
+      if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+      return stringifyProviderBudgetFailure(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
+    } catch {
+      // An invalid envelope is itself an untrusted transport value. Continue
+      // through the finalizer below so it becomes a typed bounded failure.
+    }
+  }
+
+  const fullJson = JSON.stringify(payload) ?? "{}";
+  const originalBytes = Buffer.byteLength(fullJson, "utf8");
+  const status = requestedStatus ?? (Object.hasOwn(payload, "error") ? "failed" : "succeeded");
+  const ownerId = scope ? safeControlToolOwnerId(scope.context) : null;
+  const sessionId = scope ? scope.context.callerSessionId ?? findSessionIdForToolOutput(payload) : undefined;
+  let persistedFullOutputRef: string | null | undefined;
+  const candidates = [
+    payload,
+    ...([[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10], [32, 3, 8]] as const)
+      .map((limits) => compactProviderPayload(payload, ...limits)),
+  ];
+
+  for (const projectedPayload of candidates) {
+    const projectedJson = JSON.stringify(projectedPayload) ?? "{}";
+    const projectedBytes = Buffer.byteLength(projectedJson, "utf8");
+    const projected = projectedBytes < originalBytes;
+    if (projected && persistedFullOutputRef === undefined) {
+      persistedFullOutputRef = ownerId && sessionId && scope
+        ? persistToolOutputArtifact(scope.context, ownerId, sessionId, toolName, fullJson)
+        : null;
+    }
+    const fullOutputRef = projected ? persistedFullOutputRef ?? null : null;
+    if (projected && !fullOutputRef) {
+      // Do not report a lossy success. The bounded error explicitly tells the
+      // caller that no recoverable projection could be produced.
+      return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+    }
+    const toolResultEnvelope = makeToolResultEnvelope({
+      status,
+      truncated: projected,
+      originalBytes: projected ? originalBytes : projectedBytes,
+      projectedBytes,
+      fullOutputRef,
+      provenance: controlToolResultProvenance(scope?.context, toolName),
+    });
+    const result = JSON.stringify({
+      ok: status === "succeeded",
+      ...projectedPayload,
+      toolResultEnvelope,
+    });
+    if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+  }
+
+  return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
+}
+
+function stringifyProviderBudgetFailure(
+  toolName: string,
+  originalBytes?: number,
+  fullOutputRef: string | null = null,
+  context: AgentControlToolContext | undefined = controlToolOutputScope.getStore()?.context,
+): string {
+  const failure = {
+    error: {
+      code: "tool_result_exceeded_provider_budget",
+      message: "The tool result exceeded the provider budget and was not delivered.",
+    },
+  };
+  const projectedBytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+  const truncated = fullOutputRef !== null && (originalBytes ?? projectedBytes) > projectedBytes;
+  return JSON.stringify({
+    ok: false,
+    ...failure,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "failed",
+      truncated,
+      originalBytes: truncated ? originalBytes! : projectedBytes,
+      projectedBytes,
+      fullOutputRef: truncated ? fullOutputRef : null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  });
+}
+
+function safeControlToolOwnerId(context: AgentControlToolContext): string | null {
+  try {
+    return controlToolOwnerId(context);
+  } catch {
+    return null;
+  }
+}
+
+function findSessionIdForToolOutput(value: unknown, depth = 0): string | undefined {
+  if (depth > 6 || !value || typeof value !== "object") return undefined;
+  if (Array.isArray(value)) {
+    for (const item of value.slice(0, 64)) {
+      const sessionId = findSessionIdForToolOutput(item, depth + 1);
+      if (sessionId) return sessionId;
+    }
+    return undefined;
+  }
+  const record = value as Record<string, unknown>;
+  if (typeof record.sessionId === "string" && record.sessionId.startsWith("ses_")) return record.sessionId;
+  for (const key of ["session", "sessions", "run", "runs", "snapshot", "route", "dispatch", "result"]) {
+    const sessionId = findSessionIdForToolOutput(record[key], depth + 1);
+    if (sessionId) return sessionId;
+  }
+  return undefined;
+}
+
+/**
+ * Last-resort transport guard for every control-tool branch. Operations with a
+ * recoverable full result use `withToolResultEnvelope`; this path makes an
+ * unexpected oversize response a typed failure instead of a provider-specific
+ * disconnect or an unbounded JSONL frame.
+ */
+function providerBudgetFailure(
+  toolName: string,
+  context: AgentControlToolContext | undefined = controlToolOutputScope.getStore()?.context,
+): Record<string, unknown> {
+  const failure = {
+    error: {
+      code: "tool_result_exceeded_provider_budget",
+      message: "The tool result exceeded the provider budget and was not delivered.",
+    },
+  };
+  const bytes = Buffer.byteLength(JSON.stringify(failure), "utf8");
+  return {
+    ...failure,
+    toolResultEnvelope: makeToolResultEnvelope({
+      status: "failed",
+      truncated: false,
+      originalBytes: bytes,
+      projectedBytes: bytes,
+      fullOutputRef: null,
+      provenance: controlToolResultProvenance(context, toolName),
+    }),
+  };
+}
+
+/** A compact projection for detail endpoints whose stored JSON can be huge. */
+function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: string): Record<string, unknown> {
+  const originalBytes = Buffer.byteLength(JSON.stringify(fullPayload), "utf8");
+  const maximumProjectedBytes = 5 * 1024;
+  for (const limits of [[512, 24, 32], [256, 16, 24], [128, 10, 16], [64, 6, 10]] as const) {
+    const compact = compactProviderPayload(fullPayload, ...limits);
+    if (Buffer.byteLength(JSON.stringify(compact), "utf8") <= maximumProjectedBytes) return compact;
+  }
+  const preview = truncateUtf8(JSON.stringify(compactProviderPayload(fullPayload, 64, 6, 10)), maximumProjectedBytes).text;
+  return {
+    projection: "bounded_json_preview",
+    toolName,
+    originalBytes,
+    preview,
+  };
+}
+
+const OMITTED_PROVIDER_VALUE = Symbol("omitted_provider_value");
+
+/**
+ * Central defensive projection for model-visible control results. Dedicated
+ * operations retain a full artifact reference; this fallback keeps unrelated
+ * control responses structurally useful and under the transport ceiling.
+ */
+function compactProviderPayload(
+  payload: Record<string, unknown>,
+  stringLimit = 512,
+  arrayLimit = 24,
+  fieldLimit = 32,
+): Record<string, unknown> {
+  return compactProviderValue(payload, "", 0, stringLimit, arrayLimit, fieldLimit) as Record<string, unknown>;
+}
+
+function compactProviderValue(
+  value: unknown,
+  key: string,
+  depth: number,
+  stringLimit: number,
+  arrayLimit: number,
+  fieldLimit: number,
+): unknown {
+  const lowerKey = key.toLocaleLowerCase();
+  if (lowerKey.includes("surfacecontext") || lowerKey.includes("admittedcontext") || lowerKey === "renderedcontext") {
+    return OMITTED_PROVIDER_VALUE;
+  }
+  if (typeof value === "string") {
+    return truncateUtf8(value, stringLimit).text;
+  }
+  if (Array.isArray(value)) {
+    const retained = value.length <= arrayLimit
+      ? value
+      : [...value.slice(0, Math.min(3, arrayLimit)), ...value.slice(-(arrayLimit - Math.min(3, arrayLimit)))];
+    const items = retained
+      .map((item) => compactProviderValue(item, "", depth + 1, stringLimit, arrayLimit, fieldLimit))
+      .filter((item) => item !== OMITTED_PROVIDER_VALUE);
+    if (value.length > items.length) items.push({ truncatedItemCount: value.length - items.length });
+    return items;
+  }
+  if (!value || typeof value !== "object") return value;
+  if (depth >= 5) return { projection: "depth_limited" };
+  const actualFieldLimit = depth == 0 ? Math.max(fieldLimit, 64) : fieldLimit;
+  const entries = Object.entries(value as Record<string, unknown>).slice(0, actualFieldLimit);
+  const compact: Record<string, unknown> = {};
+  for (const [childKey, childValue] of entries) {
+    const projected = compactProviderValue(childValue, childKey, depth + 1, stringLimit, arrayLimit, fieldLimit);
+    if (projected !== OMITTED_PROVIDER_VALUE) compact[childKey] = projected;
+  }
+  if (Object.keys(value as Record<string, unknown>).length > entries.length) {
+    compact.truncatedFieldCount = Object.keys(value as Record<string, unknown>).length - entries.length;
+  }
+  return compact;
+}
+
+function serializeContinuityDelivery(delivery: {
+  deliveryId: string;
+  artifactId: string;
+  deliveryStatus: string;
+  attemptCount: number;
+  receiptJson: string | null;
+  errorJson: string | null;
+}): Record<string, unknown> {
+  return {
+    deliveryId: delivery.deliveryId,
+    artifactId: delivery.artifactId,
+    status: delivery.deliveryStatus,
+    attemptCount: delivery.attemptCount,
+    payload: delivery.receiptJson ? JSON.parse(delivery.receiptJson) : {},
+    error: delivery.errorJson ? JSON.parse(delivery.errorJson) : null,
+  };
+}
+
+function canonicalCheckpointContext(context: WorkstreamProductContext): WorkstreamProductContext {
+  const canonicalEvidence = (refs: EvidenceRef[] | undefined): EvidenceRef[] | undefined =>
+    refs?.filter((ref) => ref.scope === "canonical");
+  return {
+    ...context,
+    selectedEvents: context.selectedEvents?.map((event) => ({
+      ...event,
+      evidenceRefs: canonicalEvidence(event.evidenceRefs),
+    })),
+    artifactHeads: context.artifactHeads?.map((artifact) => ({
+      ...artifact,
+      evidenceRefs: canonicalEvidence(artifact.evidenceRefs),
+    })),
+  };
+}
+
+function hashReadableFileArtifact(uri: string): string | null {
+  if (!uri.startsWith("file://")) return null;
+  try {
+    return `sha256:${createHash("sha256")
+      .update(readFileSync(fileURLToPath(uri)))
+      .digest("hex")}`;
+  } catch {
+    return null;
+  }
 }
 
 function serializeAgentSessionsList(
   sessions: Parameters<typeof serializeSessionSummary>[0][],
-  overrides: { subjectKind: string; subjectId: string; dismissedAtMs?: number | null; hiddenUntilMs?: number | null }[],
+  overrides: {
+    subjectKind: string;
+    subjectId: string;
+    dismissedAtMs?: number | null;
+    hiddenUntilMs?: number | null;
+  }[],
 ): Record<string, unknown> {
+  // This result is used directly as a realtime provider tool response. Keep
+  // the canonical list well below the provider's aggregate-turn budget so a
+  // routine status lookup cannot prevent the provider from speaking the
+  // completed child result it just found.
+  // Reserve room for the common ToolResultEnvelope. The final guard above is
+  // authoritative and protects every provider response from transport drift.
+  const maximumSerializedBytes = 6 * 1024;
   const dismissed = new Set(
     overrides
-      .filter(
-        (override) =>
-          override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now(),
-      )
+      .filter((override) => override.dismissedAtMs != null || (override.hiddenUntilMs ?? 0) > Date.now())
       .map((override) => `${override.subjectKind}:${override.subjectId}`),
   );
-  const summaries = sessions.map(serializeSessionSummary);
-  const floatingAgentPills = summaries
-    .filter((summary) => {
-      const session = summary.session as Record<string, unknown>;
-      const surfaceKind = session.surfaceKind;
-      if (surfaceKind !== "floating_bar" && surfaceKind !== "background_agent" && surfaceKind !== "floating_pill") {
-        return false;
-      }
-      const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
-      const runId = typeof run?.runId === "string" ? run.runId : null;
-      if (runId && dismissed.has(`run:${runId}`)) return false;
-      const sessionId = typeof session.sessionId === "string" ? session.sessionId : null;
-      if (sessionId && dismissed.has(`session:${sessionId}`)) return false;
-      return true;
-    })
-    .map((summary) => serializeFloatingPillSnapshot(summary));
-  const taskAgents = summaries
-    .filter((summary) => (summary.session as Record<string, unknown>).surfaceKind === "task_chat")
-    .map((summary) => serializeTaskAgentSnapshot(summary));
+  // Keep the canonical list operation compact. A session's persisted run input
+  // can include hundreds of kilobytes of surface context, and returning that
+  // here used to make a routine realtime `list_agent_sessions` response exceed
+  // provider WebSocket limits. Full run/session detail remains available from
+  // `get_agent_run` and the internal awareness snapshot.
+  const serializedSessions: Record<string, unknown>[] = [];
+  const floatingAgentPills: Record<string, unknown>[] = [];
+  const taskAgents: Record<string, unknown>[] = [];
+  let truncated = false;
+
+  for (const summary of sessions) {
+    const serializedSession = serializeSessionListSummary(summary);
+    const run = summary.activeRun ?? summary.latestRun;
+    const runId = run?.runId ?? null;
+    const sessionId = summary.session.sessionId;
+    const surfaceKind = summary.session.surfaceKind;
+    const floatingPill = (
+      (surfaceKind === "floating_bar" || surfaceKind === "background_agent" || surfaceKind === "floating_pill")
+      && !(runId && dismissed.has(`run:${runId}`))
+      && !dismissed.has(`session:${sessionId}`)
+    ) ? serializeFloatingPillSnapshot(summary) : null;
+    const taskAgent = surfaceKind === "task_chat" ? serializeTaskAgentSnapshot(summary) : null;
+
+    serializedSessions.push(serializedSession);
+    if (floatingPill) floatingAgentPills.push(floatingPill);
+    if (taskAgent) taskAgents.push(taskAgent);
+    const candidate = {
+      sessions: serializedSessions,
+      task_agents: taskAgents,
+      floating_agent_pills: floatingAgentPills,
+      truncated: false,
+      fetched_session_count: sessions.length,
+    };
+    if (Buffer.byteLength(JSON.stringify({ ok: true, ...candidate }), "utf8") > maximumSerializedBytes) {
+      serializedSessions.pop();
+      if (floatingPill) floatingAgentPills.pop();
+      if (taskAgent) taskAgents.pop();
+      truncated = true;
+      break;
+    }
+  }
+
   return {
-    sessions: summaries,
+    sessions: serializedSessions,
     task_agents: taskAgents,
     floating_agent_pills: floatingAgentPills,
+    truncated,
+    returned_session_count: serializedSessions.length,
+    fetched_session_count: sessions.length,
   };
 }
 
-function serializeFloatingPillSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
-  const session = summary.session as Record<string, unknown>;
-  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
-  const input = (run?.input as Record<string, unknown> | undefined) ?? {};
-  const metadata = (session.metadata as Record<string, unknown> | undefined) ?? {};
+function serializeFullSessionListing(
+  sessions: Parameters<typeof serializeSessionSummary>[0][],
+  projected: Record<string, unknown>,
+): Record<string, unknown> {
+  return {
+    ...projected,
+    canonicalSessions: sessions.map((summary) => ({
+      session: summary.session,
+      latestRun: summary.latestRun ?? null,
+      activeRun: summary.activeRun ?? null,
+      adapterBindings: summary.adapterBindings,
+    })),
+  };
+}
+
+const CONTROL_LIST_TEXT_LIMIT = 512;
+
+function boundedControlListText(value: unknown, limit = CONTROL_LIST_TEXT_LIMIT): string | null {
+  if (typeof value !== "string" || value.length === 0) return null;
+  return value.length <= limit ? value : `${value.slice(0, limit)}\n[truncated]`;
+}
+
+function serializeSessionListSummary(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+  adapterBindings: AdapterBinding[];
+}): Record<string, unknown> {
+  const session = summary.session;
+  return {
+    session: {
+      sessionId: session.sessionId,
+      ownerId: session.ownerId,
+      title: boundedControlListText(session.title, 160),
+      status: session.status,
+      surfaceKind: session.surfaceKind,
+      executionRole: session.executionRole,
+      externalRefKind: session.externalRefKind,
+      externalRefId: session.externalRefId,
+      defaultAdapterId: session.defaultAdapterId,
+      modelProfile: session.modelProfile,
+      createdAtMs: session.createdAtMs,
+      updatedAtMs: session.updatedAtMs,
+      lastActivityAtMs: session.lastActivityAtMs,
+    },
+    latestRun: summary.latestRun ? serializeRunListSummary(summary.latestRun) : null,
+    activeRun: summary.activeRun ? serializeRunListSummary(summary.activeRun) : null,
+    adapterBindings: summary.adapterBindings.map((binding) => ({
+      bindingId: binding.bindingId,
+      sessionId: binding.sessionId,
+      adapterId: binding.adapterId,
+      adapterNativeSessionId: binding.adapterNativeSessionId,
+      resumeFidelity: binding.resumeFidelity,
+      status: binding.status,
+      modelId: binding.modelId,
+      updatedAtMs: binding.updatedAtMs,
+    })),
+  };
+}
+
+function serializeRunListSummary(run: AgentRun): Record<string, unknown> {
+  const input = parseJsonObject(run.inputJson) as Record<string, unknown>;
+  return appendErrorFields(
+    {
+      runId: run.runId,
+      sessionId: run.sessionId,
+      parentRunId: run.parentRunId,
+      status: run.status,
+      mode: run.mode,
+      input: {
+        prompt: boundedControlListText(input.prompt),
+      },
+      requestedModelId: run.requestedModelId,
+      finalText: boundedControlListText(run.finalText),
+      createdAtMs: run.createdAtMs,
+      startedAtMs: run.startedAtMs,
+      completedAtMs: run.completedAtMs,
+      updatedAtMs: run.updatedAtMs,
+    },
+    run.errorCode,
+    boundedControlListText(run.errorMessage),
+  );
+}
+
+function serializeFloatingPillSnapshot(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+}): Record<string, unknown> {
+  const session = summary.session;
+  const run = summary.activeRun ?? summary.latestRun;
+  const input = (run ? parseJsonObject(run.inputJson) : {}) as Record<string, unknown>;
+  const metadata = parseJsonObject(session.metadataJson) as Record<string, unknown>;
+  const runId = run?.runId ?? null;
+  const sessionId = session.sessionId || null;
+  const errorMessage = run?.errorMessage || null;
+  const errorCode = run?.errorCode || null;
   const pillId =
-    (typeof session.externalRefId === "string" && session.externalRefId) ||
-    (typeof run?.runId === "string" ? run.runId : null);
+    session.externalRefId ||
+    (typeof metadata.pillId === "string" ? metadata.pillId : null) ||
+    runId ||
+    sessionId;
+  const adapterId = session.defaultAdapterId;
+  const authoritativeProvider = adapterId === "openclaw" || adapterId === "hermes"
+    ? adapterId
+    : null;
+  const legacyProvider = metadata.provider === "openclaw" || metadata.provider === "hermes"
+    ? metadata.provider
+    : null;
   return {
     id: pillId,
-    runId: run?.runId ?? null,
-    sessionId: session.sessionId ?? null,
-    title: session.title ?? "Background agent",
-    status: run?.status ?? session.status ?? "unknown",
-    latestActivity: run?.finalText ?? input.prompt ?? session.title ?? "",
-    query: typeof input.prompt === "string" ? input.prompt : "",
+    runId,
+    sessionId,
+    title: boundedControlListText(session.title, 160) ?? "Background agent",
+    status: run?.status ?? session.status,
+    latestActivity: boundedControlListText(run?.finalText ?? errorMessage ?? input.prompt ?? session.title ?? "") ?? "",
+    query: boundedControlListText(input.prompt) ?? "",
     createdAtMs: session.createdAtMs ?? null,
     completedAtMs: run?.completedAtMs ?? null,
-    provider: metadata.provider ?? null,
+    provider: authoritativeProvider ?? legacyProvider,
+    errorCode: boundedControlListText(errorCode, 128),
+    errorMessage: boundedControlListText(errorMessage),
   };
 }
 
-function serializeTaskAgentSnapshot(summary: Record<string, unknown>): Record<string, unknown> {
-  const session = summary.session as Record<string, unknown>;
-  const run = (summary.activeRun ?? summary.latestRun) as Record<string, unknown> | null;
+function serializeTaskAgentSnapshot(summary: {
+  session: AgentSession;
+  latestRun?: AgentRun;
+  activeRun?: AgentRun;
+}): Record<string, unknown> {
+  const session = summary.session;
+  const run = summary.activeRun ?? summary.latestRun;
   return {
     taskId: session.externalRefId ?? null,
     sessionId: session.sessionId ?? null,
     runId: run?.runId ?? null,
-    title: session.title ?? null,
-    status: run?.status ?? session.status ?? "unknown",
-    statusText: run?.finalText ?? null,
-    lastError: run?.errorMessage ?? null,
+    title: boundedControlListText(session.title, 160),
+    status: run?.status ?? session.status,
+    statusText: boundedControlListText(run?.finalText),
+    lastError: boundedControlListText(run?.errorMessage),
     updatedAtMs: run?.updatedAtMs ?? session.updatedAtMs ?? null,
   };
 }
@@ -984,6 +2588,18 @@ function serializeRunDetails(details: {
   events: AgentEvent[];
   parentDelegations: AgentDelegation[];
   childDelegations: AgentDelegation[];
+  toolInvocations: Array<{
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+    status: string;
+    errorCode: string | null;
+    preparedAtMs: number;
+    dispatchedAtMs: number | null;
+    completedAtMs: number | null;
+    updatedAtMs: number;
+  }>;
 }): Record<string, unknown> {
   return {
     session: serializeSession(details.session),
@@ -994,6 +2610,7 @@ function serializeRunDetails(details: {
     events: details.events.map(serializeEvent),
     parentDelegations: details.parentDelegations.map(serializeDelegation),
     childDelegations: details.childDelegations.map(serializeDelegation),
+    toolInvocations: details.toolInvocations,
   };
 }
 
@@ -1020,6 +2637,8 @@ function serializeSession(session: AgentSession): Record<string, unknown> {
     title: session.title,
     status: session.status,
     surfaceKind: session.surfaceKind,
+    executionRole: session.executionRole,
+    providerBoundary: session.providerBoundary,
     externalRefKind: session.externalRefKind,
     externalRefId: session.externalRefId,
     defaultAdapterId: session.defaultAdapterId,

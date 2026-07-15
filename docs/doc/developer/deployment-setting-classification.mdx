@@ -1,0 +1,105 @@
+---
+title: Deployment setting classification
+---
+
+Deployment wiring has three name-only classifications in
+[`config/deployment-setting-classification.json`](https://github.com/BasedHardware/omi/blob/main/config/deployment-setting-classification.json):
+
+| Kind | Use it for | Allowed deployment source |
+| --- | --- | --- |
+| `secret` | Credentials, signing material, passwords, private keys, bearer tokens, and sensitive aggregate configuration | GitHub `secrets.*`, Cloud Run `secrets:`, or Helm / ExternalSecret secret references |
+| `config` | Non-secret service configuration such as identifiers, hosts, model policy, or redirect allowlists | GitHub `vars.*`, the backend runtime ConfigMap, or normal manifest values |
+| `public_build` | Browser-delivered build configuration | Reviewed `config/public-build-values.json` through the shared public-build action |
+
+The policy contains names only. Never put a value, a representative credential,
+or a serialized secret payload in the policy, its tests, CI output, or fixtures.
+
+## Guard
+
+`python3 .github/scripts/check_deployment_secret_boundary.py --base origin/main`
+compares deployment bindings against the base revision. A new or changed binding
+must be classified, and its source must agree with that classification. Existing
+unclassified bindings are a shrinking legacy baseline; copying or moving one
+creates a new binding and fails the check.
+
+Public build settings are an immediate migration requirement: they always fail
+when supplied with `secrets.*` or fetched from Secret Manager, including if the reference predates the base.
+The check is registered in `.github/checks-manifest.yaml`, so `make preflight`,
+pre-push, and PR CI all run it.
+
+An exception is intentionally unusual. Add it only in the policy and include
+the specific allowed source plus an accountable owner, reason, and ISO expiry
+date. Expired or incomplete exceptions fail CI.
+
+## Public build contract
+
+[`config/public-build-contract.json`](https://github.com/BasedHardware/omi/blob/main/config/public-build-contract.json)
+is the canonical wiring inventory for browser-delivered build inputs. Together
+with the versioned, browser-public values in
+[`config/public-build-values.json`](https://github.com/BasedHardware/omi/blob/main/config/public-build-values.json),
+it declares each target's Dockerfile, workflow, source, requiredness, candidate
+browser acceptance command, and promotion rule. These files must never contain
+credentials or server-only configuration.
+
+`python3 .github/scripts/check_public_build_contract.py` is a deterministic
+static check, registered in the manifest. It rejects drift between that
+contract, the `public_build` classification, Docker `ARG`s, Docker empty-value
+guards, client canaries, shared build preparation, candidate deployment, and
+traffic promotion.
+
+`python3 .github/scripts/preflight_public_build_config.py --all --environment prod`
+is the complementary read-only control-plane check. It needs `actions: read`
+and resolves the reviewed source from the exact GitHub ref being deployed; it
+never prints values. It fails before image build if the source is missing,
+unreadable, malformed, or has a required empty input. Every deploy invokes the
+same composite action, and a scheduled workflow checks development and
+production daily.
+
+Every production change is deployed as a no-traffic tagged Cloud Run candidate.
+The shared promotion action waits for that exact revision, resolves its tag URL,
+runs the contract's headless-browser client-initialization canary, confirms the
+candidate is still the latest revision, and only then shifts traffic. A failed
+candidate leaves the serving revision untouched.
+
+When adding a public input, update the contract, classification, Dockerfile,
+reviewed values, client canary, workflow, and focused checker fixture together.
+Do not add a target-specific source scan, a console-only GitHub variable, or a
+fallback/default. This is the enforceable contract introduced by
+[#9824](https://github.com/BasedHardware/omi/issues/9824).
+
+## Backend runtime ConfigMap rollout
+
+`backend/scripts/deploy-backend-config.sh` writes only classified `config`
+settings into `<env>-omi-backend-config`. It requires every setting to be a
+non-empty GitHub environment variable before contacting the cluster, writes the
+values through a temporary file, and reports only the key count. It never reads
+or prints Secret Manager values.
+
+Before enabling a deployment that consumes a newly migrated setting:
+
+1. Set the matching **GitHub environment variable** in both development and
+   production (as applicable).
+2. Run the backend or backend-listen deployment. It applies the ConfigMap
+   before the ExternalSecret and workload rollout.
+3. Confirm the ConfigMap exists, the workload rolls out, and
+   `backend/scripts/verify_k8s_secret_keys.py` still passes for the remaining
+   secret bindings. Do not print ConfigMap data in CI.
+4. Delete the obsolete Secret Manager entry only after the deployed ConfigMap
+   path is validated for that environment.
+
+The standalone pusher deployment requires the ConfigMap to already exist; run
+the backend or backend-listen deployment first when initializing an environment.
+
+## Adding a setting
+
+1. Decide whether the value is a `secret`, `config`, or `public_build` based on
+   what the value grants, not on its variable name.
+2. Add its name to exactly one policy list.
+3. Use the allowed source for that kind. In particular, browser build args use
+   the reviewed public-build configuration, and server credentials never move
+   into a ConfigMap.
+4. Add a focused fake-name fixture to
+   `.github/scripts/test_check_deployment_secret_boundary.py` when a new source
+   shape is introduced.
+5. Run the checker and the relevant deployment contract tests before opening a
+   PR.

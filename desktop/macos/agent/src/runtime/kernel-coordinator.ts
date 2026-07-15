@@ -14,19 +14,8 @@ import {
   resolveSurfaceSession,
   type LegacyMainChatSessionEntry,
   type ResolveSurfaceSessionInput,
+  type ResolveSurfaceSessionResult,
 } from "./surface-session.js";
-import {
-  appendConversationTurn,
-  conversationIdForSession,
-  importConversationTurnsForSurface,
-  recordSurfaceTurn as persistSurfaceTurn,
-} from "./conversation-turns.js";
-import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-} from "./turn-context.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -47,7 +36,15 @@ import type {
 } from "./types.js";
 import { buildDesktopActionQueue, type DesktopActionQueueItem } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type BuiltDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent, type DesktopIntentRoute, type DesktopIntentRouteInput } from "./desktop-intent-router.js";
+import {
+  DesktopIntentRouter,
+  type DesktopIntentEffectKind,
+  type DesktopIntentRoute,
+  type DesktopIntentRouteAuthority,
+  type DesktopIntentRouteRequest,
+  type DesktopIntentSyntaxFacts,
+  type DesktopIntentTarget,
+} from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -134,8 +131,135 @@ import type {
 import { StaleAdapterBindingError } from "./kernel-types.js";
 
 import { KernelSessions } from "./kernel-sessions.js";
+import {
+  buildWorkstreamOpenLoopSnapshot,
+  deliverDesktopTaskCandidate,
+  exportWorkstreamContinuationCheckpoint,
+  importWorkstreamContinuationCheckpoint,
+  migrateTaskSessionsToWorkstreams,
+  persistWorkstreamArtifactVersion,
+  persistAuthorizedPreparedArtifact,
+  persistWorkstreamContextPacket,
+  projectWorkstreamContinuity,
+  projectCanonicalCandidateResolution,
+  readWorkstreamContinuationCheckpoint,
+  reconcileLegacyTaskCandidateOutbox,
+  resolveWorkstreamSession,
+  type CanonicalCandidateTransport,
+  type PersistWorkstreamArtifactVersionInput,
+  type PersistAuthorizedPreparedArtifactInput,
+  type PersistWorkstreamContextInput,
+  type TaskSessionMigrationReport,
+  type WorkstreamContinuationCheckpoint,
+  type WorkstreamOpenLoopSnapshot,
+  type WorkstreamProductContext,
+  type WorkstreamSessionInput,
+} from "./workstream-continuity.js";
 
 export class AgentRuntimeKernel extends KernelSessions {
+  private readonly desktopIntentRouter = new DesktopIntentRouter();
+
+  resolveWorkstreamSession(input: WorkstreamSessionInput): ResolveSurfaceSessionResult {
+    return resolveWorkstreamSession(this.store, input);
+  }
+
+  persistWorkstreamContextPacket(input: PersistWorkstreamContextInput): BuiltDesktopContextPacket {
+    return persistWorkstreamContextPacket(this.store, input);
+  }
+
+  persistWorkstreamArtifactVersion(input: PersistWorkstreamArtifactVersionInput) {
+    return persistWorkstreamArtifactVersion(this.store, input);
+  }
+
+  persistAuthorizedPreparedArtifact(input: PersistAuthorizedPreparedArtifactInput) {
+    return persistAuthorizedPreparedArtifact(this.store, input);
+  }
+
+  projectWorkstreamContinuity(input: { ownerId: string; workstreamId: string; nowMs?: number }) {
+    return projectWorkstreamContinuity(this.store, input);
+  }
+
+  exportWorkstreamContinuationCheckpoint(input: WorkstreamSessionInput & {
+    sourceRuntimeId?: string;
+    context: WorkstreamProductContext;
+    ttlMs: number;
+    nowMs?: number;
+    exportDispatchId?: string;
+  }): WorkstreamContinuationCheckpoint {
+    return exportWorkstreamContinuationCheckpoint(this.store, {
+      ...input,
+      sourceRuntimeId: input.sourceRuntimeId ?? this.runtimeNodeId,
+    });
+  }
+
+  importWorkstreamContinuationCheckpoint(
+    checkpoint: WorkstreamContinuationCheckpoint,
+    input: { targetRuntimeId?: string; nowMs?: number } = {},
+  ): ResolveSurfaceSessionResult {
+    return importWorkstreamContinuationCheckpoint(this.store, checkpoint, {
+      ...input,
+      targetRuntimeId: input.targetRuntimeId ?? this.runtimeNodeId,
+    });
+  }
+
+  deliverDesktopTaskCandidate(input: {
+    ownerId: string;
+    candidateId: string;
+    transport: CanonicalCandidateTransport;
+    nowMs?: () => number;
+  }) {
+    return deliverDesktopTaskCandidate(this.store, input);
+  }
+
+  projectCanonicalCandidateResolution(input: Parameters<typeof projectCanonicalCandidateResolution>[1]) {
+    return projectCanonicalCandidateResolution(this.store, input);
+  }
+
+  reconcileLegacyTaskCandidateOutbox(input: Parameters<typeof reconcileLegacyTaskCandidateOutbox>[1]) {
+    return reconcileLegacyTaskCandidateOutbox(this.store, input);
+  }
+
+  readWorkstreamContinuationCheckpoint(input: Parameters<typeof readWorkstreamContinuationCheckpoint>[1]) {
+    return readWorkstreamContinuationCheckpoint(this.store, input);
+  }
+
+  buildWorkstreamOpenLoopSnapshot(input: {
+    ownerId?: string;
+    ttlMs?: number;
+    nowMs?: number;
+    limit?: number;
+  } = {}): WorkstreamOpenLoopSnapshot {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    const sessionWorkstreamIds = new Map(
+      this.store
+        .allRows(
+          `SELECT session_id, external_ref_id FROM sessions
+           WHERE owner_id = ? AND external_ref_kind = 'workstream'`,
+          [ownerId],
+        )
+        .map((row) => [String(row.session_id), String(row.external_ref_id)] as const),
+    );
+    return buildWorkstreamOpenLoopSnapshot({
+      ownerId,
+      sourceRuntimeId: this.runtimeNodeId,
+      actionQueue: this.listDesktopActionQueue({ ownerId, limit: input.limit }),
+      sessionWorkstreamIds,
+      ttlMs: input.ttlMs,
+      nowMs: input.nowMs,
+    });
+  }
+
+  migrateTaskSessionsToWorkstreams(input: {
+    ownerId: string;
+    mappings: Array<{ taskId: string; workstreamId: string }>;
+    nowMs?: number;
+  }): TaskSessionMigrationReport {
+    return migrateTaskSessionsToWorkstreams(this.store, {
+      ...input,
+      sourceRuntimeId: this.runtimeNodeId,
+    });
+  }
+
   buildDesktopAwarenessSnapshot(input: DesktopAwarenessSnapshotInput): DesktopAwarenessSnapshot {
     const ownerId = input.ownerId ?? "desktop-local-user";
     const limit = boundedLimit(input.limit, 50, 200);
@@ -216,10 +340,8 @@ export class AgentRuntimeKernel extends KernelSessions {
     });
   }
 
-  getDesktopOpenLoops(input: DesktopOpenLoopsInput): DesktopActionQueueItem[] {
-    return this.listDesktopActionQueue(input).filter((item) =>
-      ["dispatch", "failed_run", "artifact_delivery", "stale_run", "candidate_review"].includes(item.kind)
-    );
+  getDesktopOpenLoops(input: DesktopOpenLoopsInput): WorkstreamOpenLoopSnapshot {
+    return this.buildWorkstreamOpenLoopSnapshot(input);
   }
 
   persistDesktopContextPacket(input: DesktopContextPacketPersistInput): BuiltDesktopContextPacket {
@@ -239,14 +361,139 @@ export class AgentRuntimeKernel extends KernelSessions {
     return built;
   }
 
-  routeDesktopIntent(input: Omit<DesktopIntentRouteInput, "nowMs" | "actionQueue" | "sessionCandidates"> & { ownerId?: string }): DesktopIntentRoute {
+  routeDesktopIntent(input: DesktopIntentRouteRequest & { ownerId?: string; callerSessionId?: string }): DesktopIntentRoute {
     const ownerId = input.ownerId ?? "desktop-local-user";
-    return routeDesktopIntent({
-      ...input,
-      nowMs: Date.now(),
-      actionQueue: this.listDesktopActionQueue({ ownerId, limit: 50 }),
-      sessionCandidates: this.desktopIntentSessionCandidates(ownerId, input.surfaceKind, input.taskId ?? null),
+    const caller = this.desktopIntentCallerAuthority({
+      ownerId,
+      callerSessionId: input.callerSessionId,
+      requestedSurfaceKind: input.surfaceKind,
     });
+    const request = this.desktopIntentRequest(input, caller.surfaceKind);
+    return this.desktopIntentRouter.route(request, this.desktopIntentAuthority(ownerId, caller.executionRole, request.syntaxFacts));
+  }
+
+  async applyDesktopIntentEffect<T>(
+    input: {
+      ownerId?: string;
+      callerSessionId?: string;
+      restrictiveCallerExecutionRole?: "coordinator" | "leaf";
+      surfaceKind: string;
+      snapshotVersion?: string;
+      utterance: string;
+      effect: DesktopIntentEffectKind;
+      syntaxFacts?: DesktopIntentSyntaxFacts;
+    },
+    effect: (decision: Extract<DesktopIntentRoute, { intent: DesktopIntentEffectKind }>) => T | Promise<T>,
+  ): Promise<{ decision: Extract<DesktopIntentRoute, { intent: DesktopIntentEffectKind }>; result: T }> {
+    const ownerId = input.ownerId ?? "desktop-local-user";
+    const caller = this.desktopIntentCallerAuthority({
+      ownerId,
+      callerSessionId: input.callerSessionId,
+      requestedSurfaceKind: input.surfaceKind,
+      restrictiveCallerExecutionRole: input.restrictiveCallerExecutionRole,
+    });
+    const request: DesktopIntentRouteRequest = {
+      utterance: input.utterance,
+      surfaceKind: caller.surfaceKind,
+      snapshotVersion: input.snapshotVersion,
+      syntaxFacts: input.syntaxFacts,
+      proposal: { intent: input.effect },
+    };
+    const applied = await this.desktopIntentRouter.routeAndApply(
+      request,
+      this.desktopIntentAuthority(ownerId, caller.executionRole, input.syntaxFacts),
+      input.effect,
+      effect,
+    );
+    return applied as {
+      decision: Extract<DesktopIntentRoute, { intent: DesktopIntentEffectKind }>;
+      result: T;
+    };
+  }
+
+  private desktopIntentRequest(
+    input: DesktopIntentRouteRequest & { callerSessionId?: string },
+    surfaceKind: string,
+  ): DesktopIntentRouteRequest {
+    return {
+      utterance: input.utterance,
+      surfaceKind,
+      taskId: input.taskId,
+      snapshotVersion: input.snapshotVersion,
+      syntaxFacts: input.syntaxFacts,
+      proposal: input.proposal,
+    };
+  }
+
+  private desktopIntentCallerAuthority(input: {
+    ownerId: string;
+    callerSessionId?: string;
+    requestedSurfaceKind: string;
+    restrictiveCallerExecutionRole?: "coordinator" | "leaf";
+  }): { executionRole: "coordinator" | "leaf"; surfaceKind: string } {
+    let executionRole: "coordinator" | "leaf" = "coordinator";
+    let surfaceKind = input.requestedSurfaceKind;
+    if (input.callerSessionId) {
+      const session = this.readSession(input.callerSessionId);
+      this.assertSessionOwner(session, input.ownerId);
+      executionRole = session.executionRole;
+      surfaceKind = session.surfaceKind;
+    }
+    // A call-site hint can only reduce authority. It can never promote a
+    // persisted leaf session into a coordinator.
+    if (input.restrictiveCallerExecutionRole === "leaf") {
+      executionRole = "leaf";
+    }
+    return { executionRole, surfaceKind };
+  }
+
+  private desktopIntentAuthority(
+    ownerId: string,
+    callerExecutionRole: "coordinator" | "leaf",
+    syntaxFacts: DesktopIntentSyntaxFacts | undefined,
+  ): DesktopIntentRouteAuthority {
+    return {
+      ownerId,
+      callerExecutionRole,
+      availableAdapterIds: this.registry.adapterIds(),
+      continuationTarget: this.desktopIntentContinuationTarget(ownerId, syntaxFacts),
+      parentRunAvailable: this.desktopIntentParentRunAvailable(ownerId, syntaxFacts?.parentRunId),
+      nowMs: Date.now(),
+    };
+  }
+
+  private desktopIntentContinuationTarget(
+    ownerId: string,
+    syntaxFacts: DesktopIntentSyntaxFacts | undefined,
+  ): DesktopIntentTarget | null {
+    const requestedSessionId = syntaxFacts?.explicitSessionId?.trim() || null;
+    const requestedRunId = syntaxFacts?.explicitRunId?.trim() || null;
+    if (!requestedSessionId && !requestedRunId) return null;
+    try {
+      const run = requestedRunId ? this.readRun(requestedRunId) : null;
+      const sessionId = requestedSessionId ?? run?.sessionId ?? null;
+      if (!sessionId || (run && run.sessionId !== sessionId)) return null;
+      const session = this.readSession(sessionId);
+      this.assertSessionOwner(session, ownerId);
+      return {
+        sessionId,
+        runId: run?.runId ?? null,
+        status: session.status === "open" ? "open" : "closed",
+      };
+    } catch {
+      return null;
+    }
+  }
+
+  private desktopIntentParentRunAvailable(ownerId: string, parentRunId: string | null | undefined): boolean | undefined {
+    const normalizedParentRunId = parentRunId?.trim();
+    if (!normalizedParentRunId) return undefined;
+    try {
+      this.assertRunOwner(this.readRun(normalizedParentRunId), ownerId);
+      return true;
+    } catch {
+      return false;
+    }
   }
 
   createDesktopDispatch(input: NewDesktopCoordinatorDispatch): DesktopCoordinatorDispatch {

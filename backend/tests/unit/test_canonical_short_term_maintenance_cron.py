@@ -136,8 +136,18 @@ def test_should_run_is_true_when_enabled_with_cohort_on_interval_tick(monkeypatc
     )
 
 
+def test_cohort_runner_noops_when_cron_disabled(monkeypatch):
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "false")
+    summary = run_canonical_short_term_maintenance_for_cohort(now=NOW, run_id="cron-disabled")
+
+    assert summary.user_count == 0
+    assert summary.promoted_total == 0
+    assert summary.errors == []
+
+
 def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A, CANONICAL_B)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
 
     invoked: list[str] = []
@@ -167,6 +177,7 @@ def test_cohort_runner_invokes_maintenance_for_each_canonical_uid_only(monkeypat
 
 def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
 
     summary = run_canonical_short_term_maintenance_for_cohort(db_client=db, now=NOW, run_id="cron-test-2")
@@ -179,6 +190,7 @@ def test_cohort_runner_uses_real_maintenance_with_fake_firestore(monkeypatch):
 
 def test_first_cron_tick_does_not_mass_promote_below_batch_threshold(monkeypatch):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     memory_id = _seed_canonical_short_term(
@@ -208,6 +220,7 @@ def _consolidation_disabled_for_promotion_cron(monkeypatch):
 
 def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()
@@ -228,6 +241,7 @@ def test_first_cron_tick_promotes_at_batch_threshold(monkeypatch, _consolidation
 
 def test_daily_cadence_after_first_promotion_run(monkeypatch, _consolidation_disabled_for_promotion_cron):
     set_canonical_cohort(monkeypatch, CANONICAL_A)
+    monkeypatch.setenv("MEMORY_CANONICAL_PROMOTION_CRON_ENABLED", "true")
     db = _canonical_db_with_control(CANONICAL_A)
     _set_canonical_cohort(monkeypatch, CANONICAL_A)
     threshold = promotion_batch_threshold()

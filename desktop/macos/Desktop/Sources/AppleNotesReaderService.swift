@@ -527,11 +527,16 @@ actor AppleNotesReaderService {
     return normalized.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 
-  private static func isLikelyAttachment(title: String, summary: String) -> Bool {
+  nonisolated static func isLikelyAttachment(title: String, summary: String) -> Bool {
     let combined = "\(title) \(summary)".trimmingCharacters(in: .whitespacesAndNewlines)
     guard !combined.isEmpty else { return true }
 
-    if combined.contains("SOLITE") || combined.contains("exec") || combined.contains("kMDItem") {
+    // "SOLITE" / "kMDItem" are distinctive metadata/artifact tokens safe to match as
+    // substrings. "exec" must match only as a whole word — as a raw substring it wrongly
+    // dropped ordinary notes whose title/summary merely *contained* it ("Q3 execution
+    // plan", "Executive summary", "executed tasks").
+    let hasExecToken = combined.range(of: #"\bexec\b"#, options: [.regularExpression, .caseInsensitive]) != nil
+    if combined.contains("SOLITE") || combined.contains("kMDItem") || hasExecToken {
       return true
     }
 

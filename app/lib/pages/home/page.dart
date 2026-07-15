@@ -61,6 +61,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -482,10 +483,11 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
     if (device.type != DeviceType.omi) return;
     if (!mounted) return;
 
-    // Onboarding targets the consumer pendant; DevKit boards also enumerate as
-    // DeviceType.omi, so skip them. pairedDevice has the GATT model by now.
+    // Onboarding is the CV1 consumer-pendant button tutorial. DevKit/Glass/Neo/
+    // Friend all also enumerate as DeviceType.omi, so only proceed for a positively
+    // identified CV1. pairedDevice has the GATT model by now.
     final pairedModel = Provider.of<DeviceProvider>(context, listen: false).pairedDevice?.modelNumber;
-    if (DeviceUtils.isOmiDevKit(modelNumber: pairedModel, deviceName: device.name)) return;
+    if (!DeviceUtils.isOmiCv1(modelNumber: pairedModel, deviceName: device.name)) return;
 
     if (_deviceOnboardingShown) return;
     if (SharedPreferencesUtil().deviceOnboardingCompleted) return;
@@ -521,7 +523,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
-          syncProvider.syncWals();
+          syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
     });
@@ -806,8 +808,9 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                 width: 42,
                 height: 42,
                 margin: const EdgeInsets.only(right: 6),
+                alignment: Alignment.center,
                 decoration: const BoxDecoration(color: Colors.white, shape: BoxShape.circle),
-                child: FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
+                child: const FaIcon(FontAwesomeIcons.microphone, size: 15, color: Colors.black),
               ),
             ),
           ],

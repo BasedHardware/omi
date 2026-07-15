@@ -34,6 +34,13 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// Threaded down to `ToolCallsGroup`. Optional so existing callers
     /// don't need updating; ChatPage passes `chatProvider.stopAgent`.
     var onCancelTurn: (() -> Void)? = nil
+    /// Opens a spawned background-agent pill from a `spawn_agent` tool row.
+    /// Optional so task/sidebar chat callers that do not expose floating pills
+    /// keep the existing non-clickable tool-card behavior.
+    /// Completion reports whether the agent was resolved and presented.
+    var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil
+    /// Opens via structured agent identity (session/run/pill) when available.
+    var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil
     @ViewBuilder var welcomeContent: () -> WelcomeContent
 
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
@@ -121,13 +128,15 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     @ViewBuilder
     private func scrollContent(proxy: ScrollViewProxy) -> some View {
         ScrollView {
-            LazyVStack(spacing: 18) {
+            LazyVStack(spacing: OmiSpacing.lg) {
                 loadMoreButton
                 messageContent
             }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 22)
-            .textSelection(.enabled)
+            .padding(.horizontal, OmiSpacing.xxl)
+            .padding(.vertical, OmiSpacing.xl)
+            // Do not enable text selection on the whole stack. SelectionOverlay on every
+            // chrome Text (agent card headers, tool summaries, timestamps) can peg the
+            // main thread in GraphHost layout. Message bodies opt in via SelectableMarkdown.
             .background(scrollDetectors)
 
             // Invisible anchor lives OUTSIDE the LazyVStack so it is always
@@ -291,8 +300,14 @@ struct ChatMessagesView<WelcomeContent: View>: View {
         guard let anchorId = prependAnchorId else { return }
         prependAnchorId = nil
 
-        // If the user scrolled during the load, don't override their position
-        guard scrollMode != .freeScrolling else { return }
+        // Only bail if the user is *physically* scrolling right now — not on
+        // scrollMode. Prepend ("Load earlier") only happens while reading history,
+        // i.e. scrollMode == .freeScrolling, so guarding on that mode made this
+        // restore (and the scrollTo below) dead code — the viewport jumped on every
+        // page-up. userIsScrolling is the real "don't fight the user's drag" signal
+        // (set by UserScrollDetector on any scroll interaction — wheel, drag, or
+        // keyboard scroll — and auto-cleared 0.3s after the last one).
+        guard !userIsScrolling else { return }
 
         // Verify the anchor message is still in the list
         let stillExists = messages.contains { $0.id == anchorId }
@@ -300,7 +315,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
         // Scroll anchor to top without animation
         let work = DispatchWorkItem { [self] in
-            guard self.scrollMode != .freeScrolling else { return }
+            guard !self.userIsScrolling else { return }
             proxy.scrollTo(anchorId, anchor: .top)
         }
         initialScrollWorkItems.append(work)
@@ -383,18 +398,18 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .frame(maxWidth: .infinity)
-            .padding(.vertical, 8)
+            .padding(.vertical, OmiSpacing.sm)
         }
     }
 
     @ViewBuilder
     private var messageContent: some View {
         if isLoadingInitial && messages.isEmpty && sessionsLoadError == nil {
-            VStack(spacing: 12) {
+            VStack(spacing: OmiSpacing.md) {
                 ProgressView()
                     .scaleEffect(0.8)
                 Text("Loading...")
-                    .scaledFont(size: 13)
+                    .scaledFont(size: OmiType.body)
                     .foregroundColor(OmiColors.textTertiary)
             }
             .frame(maxWidth: .infinity)
@@ -405,7 +420,8 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             welcomeContent()
         } else {
             let dupeIds = duplicateMessageIds
-            ForEach(messages) { message in
+            let displayMessages = AgentLifecycleDisplayProjection.project(messages)
+            ForEach(displayMessages) { message in
                 ChatBubble(
                     message: message,
                     app: app,
@@ -416,7 +432,9 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         onCitationTap?(citation)
                     },
                     isDuplicate: dupeIds.contains(message.id),
-                    onCancelTurn: onCancelTurn
+                    onCancelTurn: onCancelTurn,
+                    onOpenAgent: onOpenAgent,
+                    onOpenAgentRef: onOpenAgentRef
                 )
                 .id(message.id)
             }
@@ -425,34 +443,34 @@ struct ChatMessagesView<WelcomeContent: View>: View {
 
     @ViewBuilder
     private func errorContent(error: String) -> some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             Image(systemName: "exclamationmark.triangle")
-                .scaledFont(size: 40)
+                .scaledFont(size: OmiType.hero)
                 .foregroundColor(OmiColors.warning)
 
             Text("Failed to load chats")
-                .scaledFont(size: 16, weight: .medium)
+                .scaledFont(size: OmiType.subheading, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
             Text(error)
-                .scaledFont(size: 14)
+                .scaledFont(size: OmiType.body)
                 .foregroundColor(OmiColors.textTertiary)
                 .multilineTextAlignment(.center)
 
             if let onRetry {
                 Button(action: onRetry) {
                     Text("Try Again")
-                        .scaledFont(size: 14, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
                         .foregroundColor(OmiColors.textPrimary)
-                            .padding(.horizontal, 20)
-                            .padding(.vertical, 10)
+                            .padding(.horizontal, OmiSpacing.xl)
+                            .padding(.vertical, OmiSpacing.sm)
                             .omiControlSurface(fill: OmiColors.userBubble, radius: OmiChrome.chipRadius)
                 }
                 .buttonStyle(.plain)
             }
         }
         .frame(maxWidth: .infinity)
-        .padding(32)
+        .padding(OmiSpacing.section)
         .padding(.vertical, 48)
     }
 
@@ -513,7 +531,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
                         .frame(width: 36, height: 36)
                         .shadow(color: .black.opacity(0.2), radius: 4, x: 0, y: 2)
                     Image(systemName: "arrow.down.circle.fill")
-                        .scaledFont(size: 28)
+                        .scaledFont(size: OmiType.title)
                         .foregroundColor(OmiColors.textSecondary)
                 }
                 // Activity pulse: subtle white glow when new content arrived below
@@ -526,10 +544,10 @@ struct ChatMessagesView<WelcomeContent: View>: View {
             }
             .buttonStyle(.plain)
             .accessibilityLabel("Jump to latest message")
-            .padding(.bottom, 16)
+            .padding(.bottom, OmiSpacing.lg)
             .transition(.scale.combined(with: .opacity))
-            .animation(.easeInOut(duration: 0.2), value: scrollMode)
-            .animation(.easeInOut(duration: 0.3), value: hasActivityBelow)
+            .omiAnimation(.easeInOut(duration: 0.2), value: scrollMode)
+            .omiAnimation(.easeInOut(duration: 0.3), value: hasActivityBelow)
         }
     }
 

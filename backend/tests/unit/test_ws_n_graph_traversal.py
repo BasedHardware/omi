@@ -210,6 +210,26 @@ def test_two_hop_from_alice_reaches_seattle(canonical_graph_context):
     assert hop_distances <= {1, 2}
 
 
+def test_user_rejected_memory_cannot_reappear_through_graph_traversal(canonical_graph_context):
+    rejected_items = [
+        item.model_copy(update={"promotion": {"user_review": False}}) if item.memory_id == "mem-alice-omi" else item
+        for item in _canonical_items()
+    ]
+    with patch(
+        "utils.memory.kg_graph_traversal.fetch_authoritative_product_memory_items",
+        return_value=rejected_items,
+    ):
+        result = traverse_knowledge_graph(
+            CANONICAL_UID,
+            "Alice",
+            hops=1,
+            graph=canonical_graph_context["graph"],
+        )
+
+    assert all("mem-alice-omi" not in triple.memory_ids for triple in result.triples)
+    assert all(citation["memory_id"] != "mem-alice-omi" for citation in result.memory_citations)
+
+
 def test_three_hop_request_is_capped(canonical_graph_context):
     result = traverse_knowledge_graph(CANONICAL_UID, "Alice", hops=3, graph=canonical_graph_context["graph"])
     assert result.requested_hops == 3
