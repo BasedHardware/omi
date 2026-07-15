@@ -8,6 +8,35 @@ import {
   type ListenMode,
   type ListenStartArgs
 } from '../../shared/types'
+import { ByokKeyStore } from '../agentKernel/byokStore'
+import { isByokActive, withByokHeaders } from '../../shared/byok'
+
+// Lazy so this module stays import-pure (ByokKeyStore's default path needs
+// app.getPath('userData'), only ready after the app is).
+let byokStore: ByokKeyStore | null = null
+function getByokStore(): ByokKeyStore {
+  if (!byokStore) byokStore = new ByokKeyStore()
+  return byokStore
+}
+
+/**
+ * The listen socket is the Deepgram STT lane. When the user has a full BYOK key
+ * set, attach the four X-BYOK-* headers so transcription runs on their own
+ * Deepgram key (matching the macOS client). All-or-none per request: the backend
+ * 403s a partial set from an enrolled user, and silently drops headers from a
+ * non-enrolled user — so we only attach when all four keys are present. Keys are
+ * read fresh per connection (no caching) and never logged.
+ */
+function byokSttHeaders(base: Record<string, string>): Record<string, string> {
+  try {
+    const keys = getByokStore().getAllKeys()
+    return isByokActive(keys) ? withByokHeaders(base, keys) : base
+  } catch {
+    // A broken/unavailable key store must never fail the listen socket — fall
+    // back to Omi-managed transcription (no BYOK headers) rather than throw.
+    return base
+  }
+}
 
 /**
  * Build the WebSocket endpoint for a listen session by mode.
@@ -276,7 +305,7 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   // there's no per-uid conversation to key.
 
   const ws = new WebSocket(url, {
-    headers: { Authorization: `Bearer ${args.token}` }
+    headers: byokSttHeaders({ Authorization: `Bearer ${args.token}` })
   })
   ws.binaryType = 'arraybuffer'
   const session: Session = {
