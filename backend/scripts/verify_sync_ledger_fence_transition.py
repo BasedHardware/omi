@@ -22,6 +22,7 @@ import subprocess
 import sys
 from dataclasses import asdict, dataclass
 from typing import Any, Mapping, Protocol, Sequence, cast
+from urllib.parse import urlsplit
 
 SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 FENCE_MODE_ENV = 'SYNC_LEDGER_FENCE_MODE'
@@ -70,6 +71,7 @@ class TransitionVerificationConfig:
     project: str
     region: str
     desired_mode: str
+    allow_tagged_no_percent_targets: bool = False
 
 
 @dataclass(frozen=True)
@@ -140,8 +142,39 @@ def _traffic_percent(value: Any, *, service: str) -> int:
     return percent
 
 
-def serving_revision_from_status(service_document: Mapping[str, Any], *, service: str) -> str:
-    """Return the one positive-traffic revision from service status only."""
+def _is_https_url(value: Any) -> bool:
+    if not isinstance(value, str) or not value or value != value.strip():
+        return False
+    parsed = urlsplit(value)
+    return parsed.scheme == 'https' and bool(parsed.netloc)
+
+
+def _is_complete_tag_only_target(target: Mapping[str, Any]) -> bool:
+    """Return whether a no-percent target is a concrete Cloud Run tag route."""
+
+    tag = target.get('tag')
+    revision = target.get('revisionName')
+    return (
+        isinstance(tag, str)
+        and bool(tag)
+        and tag == tag.strip()
+        and isinstance(revision, str)
+        and bool(revision)
+        and _is_https_url(target.get('url'))
+    )
+
+
+def serving_revision_from_status(
+    service_document: Mapping[str, Any], *, service: str, allow_tagged_no_percent_targets: bool = False
+) -> str:
+    """Return the one positive-traffic revision from service status only.
+
+    Cloud Run exposes a tagged no-traffic candidate as a status target with a
+    concrete revision, tag, and URL but without ``percent``.  That target is
+    reachable only through its tagged URL, so it is not serving traffic for
+    this gate.  All other missing percentages remain invalid rather than
+    silently becoming zero.
+    """
 
     status = service_document.get('status')
     if not isinstance(status, Mapping):
@@ -154,12 +187,24 @@ def serving_revision_from_status(service_document: Mapping[str, Any], *, service
     for index, raw_target in enumerate(traffic):
         if not isinstance(raw_target, Mapping):
             raise FenceTransitionVerificationError(f'{service} status traffic target {index} is invalid')
+        if 'percent' not in raw_target and 'tag' in raw_target:
+            if not allow_tagged_no_percent_targets:
+                raise FenceTransitionVerificationError(f'{service} has a non-integer Cloud Run traffic percentage')
+            if not _is_complete_tag_only_target(raw_target):
+                raise FenceTransitionVerificationError(
+                    f'{service} has a malformed tag-only Cloud Run traffic target {index}'
+                )
+            continue
         percent = _traffic_percent(raw_target.get('percent'), service=service)
         if percent == 0:
             continue
         revision = raw_target.get('revisionName')
         if not isinstance(revision, str) or not revision:
             raise FenceTransitionVerificationError(f'{service} has positive traffic without a concrete revision name')
+        if revision in positive_traffic:
+            raise FenceTransitionVerificationError(
+                f'{service} has ambiguous positive traffic entries for revision: {revision}'
+            )
         positive_traffic[revision] = positive_traffic.get(revision, 0) + percent
 
     if not positive_traffic:
@@ -223,7 +268,11 @@ def _read_serving_revision(
         build_describe_service_command(project=config.project, region=config.region, service=service)
     )
     service_document = _json_object(service_result, resource=f'Cloud Run service {service}')
-    revision = serving_revision_from_status(service_document, service=service)
+    revision = serving_revision_from_status(
+        service_document,
+        service=service,
+        allow_tagged_no_percent_targets=config.allow_tagged_no_percent_targets,
+    )
     revision_result = runner.run(
         build_describe_revision_command(project=config.project, region=config.region, revision=revision)
     )
@@ -279,6 +328,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser.add_argument('--project', required=True)
     parser.add_argument('--region', required=True)
     parser.add_argument('--desired-mode', required=True, choices=sorted(FENCE_MODES))
+    parser.add_argument('--allow-tagged-no-percent-targets', action='store_true')
     return parser.parse_args(argv)
 
 
@@ -288,6 +338,7 @@ def main(argv: Sequence[str] | None = None) -> int:
         project=args.project,
         region=args.region,
         desired_mode=args.desired_mode,
+        allow_tagged_no_percent_targets=args.allow_tagged_no_percent_targets,
     )
     try:
         result = verify_transition(config, runner=SubprocessCommandRunner())

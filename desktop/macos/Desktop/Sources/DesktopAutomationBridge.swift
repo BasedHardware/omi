@@ -15,18 +15,31 @@ enum DesktopAutomationLaunchOptions {
   private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
-    guard AppBuild.isNonProduction else {
+    isEnabled(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment
+    )
+  }
+
+  static func isEnabled(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> Bool {
+    guard allowsLocalAutomation else {
       return false
     }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
-    if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
+    if environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
-    // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag.
-    return CommandLine.arguments.contains(enableFlag)
-      || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
-      || AppBuild.isNonProduction
+    // Auto-enable on local bundles (Omi Dev + every `omi-*` named test bundle) so agents
+    // can drive the app without remembering a launch flag. Published previews are excluded
+    // by `allowsLocalAutomation` above even if their process environment is contaminated.
+    return arguments.contains(enableFlag)
+      || environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
+      || allowsLocalAutomation
   }
 
   static var port: UInt16 {
@@ -2379,6 +2392,14 @@ final class DesktopAutomationActionRegistry {
       let anchor = CloudConnectorGuidanceOverlay.anchorRect(fromParam: params["anchor"])
       CloudConnectorGuidanceOverlay.shared.presentInstructionCard(
         title: title, subtitle: subtitle, near: anchor)
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
+      name: "preview_screen_recording_drag_helper",
+      summary: "Open Screen Recording settings and show the drag-to-enable helper"
+    ) { _ in
+      await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
       return CloudConnectorGuidanceOverlay.shared.automationState()
     }
 

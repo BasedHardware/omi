@@ -836,6 +836,7 @@ class LocalWalSyncImpl implements LocalWalSync {
       'updatedConversations': resp.updatedConversationIds.length,
     });
 
+    resp.localUploadFailures = batchesFailed;
     progress?.onWalSyncedProgress(1.0);
     return resp;
   }

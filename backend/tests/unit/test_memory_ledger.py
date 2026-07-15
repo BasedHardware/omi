@@ -20,6 +20,8 @@ import pytest
 
 from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
+from tests.unit.fake_firestore import FakeFirestore
+from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 _BACKEND = Path(__file__).resolve().parents[2]
 
@@ -75,6 +77,56 @@ def _fact(fact_id, content, *, valid_from=None, valid_to=None):
         "subject_entity_id": "user",
         "qualifiers": qualifiers,
     }
+
+
+class _LedgerSnapshot:
+    def __init__(self, data):
+        self._data = data
+        self.exists = data is not None
+
+    def to_dict(self):
+        return self._data
+
+
+class _LedgerDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def collection(self, name):
+        return _LedgerCollection(self._db, f"{self.path}/{name}")
+
+    def get(self, transaction=None):
+        return _LedgerSnapshot(self._db.docs.get(self.path))
+
+
+class _LedgerCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def document(self, document_id):
+        return _LedgerDocument(self._db, f"{self.path}/{document_id}")
+
+
+class _LedgerDb:
+    def __init__(self, docs):
+        self.docs = dict(docs)
+
+    def collection(self, name):
+        return _LedgerCollection(self, name)
+
+
+class _LedgerTransaction:
+    def __init__(self):
+        self.sets = []
+
+    def set(self, ref, payload):
+        self.sets.append((ref.path, payload))
+
+
+def _ledger_state_write(transaction):
+    return next(payload for path, payload in transaction.sets if path.endswith("/memory_state/head"))
 
 
 def test_fold_commits_replays_head_and_valid_time():
@@ -260,6 +312,84 @@ def test_append_commit_to_history_rejects_sibling_heads():
         assert exc.current_head == first["commit"]["commit_id"]
     else:
         raise AssertionError("Expected same-parent sibling append to fail")
+
+
+def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply_control():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+            },
+            f"users/{uid}/memory_state/apply_control": {
+                "uid": uid,
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+    trusted = read_memory_v3_trusted_account_generation(
+        uid=uid,
+        db_client=FakeFirestore({f"users/{uid}/memory_state/head": state_head}),
+    )
+    assert trusted.read_error_reason is None
+    assert trusted.account_generation == 7
+
+
+def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback():
+    uid = "u1"
+    database = _LedgerDb(
+        {
+            f"users/{uid}/memory_state/head": {
+                "current_head_commit_id": "legacy-head",
+                "projection_version": 1,
+                "schema_version": 1,
+                "uid": uid,
+                "source": "memory_state_head",
+                "account_generation": 7,
+                "head_commit_id": "canonical-head",
+                "commit_sequence": 11,
+            },
+        }
+    )
+    transaction = _LedgerTransaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
 
 
 def test_typed_transactional_isolates_sdk_wrapper_state_per_concurrent_call(monkeypatch):

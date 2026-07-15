@@ -5,11 +5,20 @@ on:
     branches: [ "main" ]
     paths:
       - 'desktop/macos/Backend-Rust/**'
+      - 'backend/scripts/firebase_release_probe_token.py'
+      - 'scripts/voice-provider-probe.sh'
   workflow_dispatch:
+    inputs:
+      skip_provider_probe:
+        description: 'Skip the managed realtime-provider probe during an active upstream outage'
+        required: false
+        default: false
+        type: boolean
 
 env:
   SERVICE: desktop-backend
   REGION: us-central1
+  FIREBASE_AUTH_PROJECT_ID: based-hardware
   DEFAULT_DESKTOP_BACKEND_BASE_API_URL: https://desktop-backend-dt5lrfkkoa-uc.a.run.app
 
 concurrency:
@@ -99,7 +108,7 @@ jobs:
           image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           flags: '--allow-unauthenticated'
           env_vars: |
-            FIREBASE_PROJECT_ID=based-hardware
+            FIREBASE_PROJECT_ID=${{ env.FIREBASE_AUTH_PROJECT_ID }}
             GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
             BASE_API_URL=${{ steps.desktop-base-api-url.outputs.base_api_url }}
             OMI_DESKTOP_RELEASE_SHA=${{ github.sha }}
@@ -202,6 +211,52 @@ jobs:
 
           echo "Development desktop-backend did not report the deployed release identity." >&2
           exit 1
+
+      - name: Prove managed realtime provider paths
+        env:
+          PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          SKIP_PROVIDER_PROBE: ${{ github.event.inputs.skip_provider_probe || 'false' }}
+        run: |
+          set -euo pipefail
+          if [[ "$SKIP_PROVIDER_PROBE" == "true" ]]; then
+            echo "::warning title=Managed realtime provider probe skipped::skip_provider_probe=true was requested during a provider outage."
+            echo "### Managed realtime provider probe skipped" >> "$GITHUB_STEP_SUMMARY"
+            echo "Reason: workflow_dispatch input skip_provider_probe=true" >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
+
+          SERVICE_URL=$(gcloud run services describe "$SERVICE" \
+            --region "$REGION" \
+            --project "$PROJECT_ID" \
+            --format='value(status.url)')
+          if [[ -z "$SERVICE_URL" ]]; then
+            echo "Could not resolve the deployed desktop-backend URL for the provider probe." >&2
+            exit 1
+          fi
+
+          token_file="$(mktemp "$RUNNER_TEMP/omi-voice-provider-probe.XXXXXX")"
+          trap 'rm -f "$token_file"' EXIT
+          python3 backend/scripts/firebase_release_probe_token.py \
+            --secret-project "$PROJECT_ID" \
+            --firebase-project "$FIREBASE_AUTH_PROJECT_ID" \
+            --token-output "$token_file"
+
+          for provider in openai gemini; do
+            for attempt in 1 2 3; do
+              probe_exit=0
+              scripts/voice-provider-probe.sh "$provider" "$SERVICE_URL" \
+                --bearer-token-file "$token_file" || probe_exit=$?
+              if [[ "$probe_exit" -eq 0 ]]; then
+                break
+              fi
+              if [[ "$probe_exit" -ne 75 || "$attempt" -eq 3 ]]; then
+                echo "Managed realtime provider proof failed for $provider." >&2
+                exit "$probe_exit"
+              fi
+              echo "Retrying $provider provider proof after a retryable upstream failure ($attempt/3)."
+              sleep 5
+            done
+          done
 
       - name: Show Output
         run: echo "Desktop backend deployed to development environment"

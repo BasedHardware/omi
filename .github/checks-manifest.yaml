@@ -17,6 +17,11 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: agents-md-lean
+    command: ["python3", ".github/scripts/check_agents_md_lean.py"]
+    triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
+    lanes: ["local", "ci"]
+    reason: "root AGENTS.md stays a lean index; detail lives in component guides"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -112,6 +117,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/testing/workflow_contracts.json", ".github/workflows/**/*.yml", ".github/actions/detect-changes/**", "scripts/pre-push", "scripts/changed-files"]
     lanes: ["local", "ci"]
     reason: "workflow boundary sources changed"
+  - id: conversation-lifecycle-write-guard
+    command: ["python3", "backend/scripts/check_conversation_lifecycle_writes.py"]
+    triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
+    lanes: ["local", "ci"]
+    reason: "conversation lifecycle has one mutation owner"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
@@ -122,6 +132,11 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
     lanes: ["local", "ci"]
     reason: "floating control bar timing surfaces changed"
+  - id: desktop-hub-controller-ratchet
+    command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
+    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "realtime hub ownership/line-count anti-regrowth ratchet"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]
@@ -132,6 +147,21 @@ checks:
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check_desktop_test_quality.py", "desktop/macos/scripts/swift-test-suites.sh"]
     lanes: ["local", "ci"]
     reason: "desktop Swift production or test structure changed"
+  - id: desktop-agent-runtime-convergence-ratchet
+    command: ["python3", "desktop/macos/scripts/check-agent-runtime-convergence-ratchet.py"]
+    triggers: ["desktop/macos/Desktop/Sources/Providers/ChatProvider.swift", "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift", "desktop/macos/Desktop/Sources/Chat/AgentRuntimeBridgeLifecycle.swift", "desktop/macos/scripts/check-agent-runtime-convergence-ratchet.py", "desktop/macos/scripts/agent-runtime-convergence-ratchet.json"]
+    lanes: ["local", "ci"]
+    reason: "#9688 keeps bridge lifecycle/context decisions extracted and both historic coordinator files bounded"
+  - id: desktop-agent-runtime-contract-conformance
+    command: ["bash", "desktop/macos/scripts/test-tool-surfaces.sh"]
+    triggers: ["desktop/macos/agent/contracts/**", "desktop/macos/agent/src/adapters/**/*.ts", "desktop/macos/agent/src/runtime/control-tools.ts", "desktop/macos/agent/src/runtime/contract-schema.ts", "desktop/macos/agent/src/runtime/relay-tool-result.ts", "desktop/macos/agent/src/runtime/tool-result-envelope.ts", "desktop/macos/agent/tests/agent-runtime-contract-fixtures.test.ts", "desktop/macos/agent/tests/control-tools.test.ts", "desktop/macos/agent/tests/relay-tool-result.test.ts", "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts", "desktop/macos/scripts/test-tool-surfaces.sh", "desktop/macos/scripts/agent-logic-harness.sh"]
+    lanes: ["local", "ci"]
+    reason: "#9688 gates adapter lifecycle fixtures and artifact-backed bounded tool-result delivery"
+  - id: desktop-spawn-receipt-fixtures-v1
+    command: ["bash", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh"]
+    triggers: ["desktop/macos/agent/src/runtime/agent-spawn-journal.ts", "desktop/macos/agent/fixtures/spawn-receipt/**", "desktop/macos/agent/tests/spawn-receipt-fixtures.test.ts", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh", "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift", "desktop/macos/Desktop/Tests/RealtimeHubSpawnAgentTests.swift"]
+    lanes: ["local", "ci"]
+    reason: "cross-language realtime spawn receipt producer/consumer contract"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"

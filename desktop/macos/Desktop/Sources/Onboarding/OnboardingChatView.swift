@@ -484,7 +484,10 @@ struct OnboardingChatView: View {
       scheduleRecoveredOnboardingFallback()
     }
     .alert("Are you sure?", isPresented: $showSkipConfirmation) {
-      Button("Skip anyway", role: .destructive) { onSkip() }
+      Button("Skip anyway", role: .destructive) {
+        PermissionDragGuidance.dismiss()
+        onSkip()
+      }
       Button("Continue setup", role: .cancel) {}
     } message: {
       Text("Omi won't be useful for you if it doesn't know enough about you.")
@@ -520,10 +523,12 @@ struct OnboardingChatView: View {
 
   /// Open System Settings to the correct pane for a permission type
   private func openSettingsForPermission(_ type: String) {
+    if type == "screen_recording" {
+      ScreenCaptureService.openScreenRecordingPreferences()
+      return
+    }
     let urlString: String? = {
       switch type {
-      case "screen_recording":
-        return "x-apple.systempreferences:com.apple.preference.security?Privacy_ScreenCapture"
       case "microphone":
         return "x-apple.systempreferences:com.apple.preference.security?Privacy_Microphone"
       case "accessibility":
@@ -538,11 +543,17 @@ struct OnboardingChatView: View {
     }()
     if let urlString, let url = URL(string: urlString) {
       NSWorkspace.shared.open(url)
+      // Full Disk Access uses the same drag-to-grant mechanic as Screen Recording.
+      if type == "full_disk_access" {
+        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+      }
     }
   }
 
   /// Called when a permission is detected as granted (by the 1s timer)
   private func handlePermissionGranted(_ type: String, label: String) {
+    // Permission is granted — drop the floating drag card.
+    PermissionDragGuidance.dismiss()
     bringToFront()
     // If this was the permission we were waiting for, notify the AI
     if pendingPermissionType == type {

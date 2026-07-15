@@ -264,6 +264,12 @@ struct ChatBubble: View {
         }
 
         // Rating buttons, copy button, and message metadata
+        if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
+          Text("Couldn't save this reply")
+            .scaledFont(size: OmiType.micro, weight: .medium)
+            .foregroundColor(.orange.opacity(0.9))
+        }
+
         if message.sender == .ai && !message.isStreaming && message.isSynced {
           messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
         } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {

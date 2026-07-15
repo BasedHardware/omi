@@ -41,6 +41,8 @@ describe("omi tool manifest", () => {
       "create_desktop_dispatch",
       "cancel_agent_run",
       "inspect_agent_artifacts",
+      "read_tool_output",
+      "search_tool_output",
       "update_agent_artifact_lifecycle",
       "send_agent_message",
       "spawn_agent",
@@ -61,9 +63,17 @@ describe("omi tool manifest", () => {
       "capture_screen",
       "check_permission_status",
       "request_permission",
+      "screenshot",
       "get_work_context",
     ]);
     expect(toolNamesForAdapter("pi-mono")).not.toContain("resolve_desktop_dispatch");
+  });
+
+  it("keeps the realtime screenshot executor capability-registered", () => {
+    const screenshot = toolsForAdapter("pi-mono").find((tool) => tool.name === "screenshot");
+
+    expect(screenshot?.surfaces).toEqual(["realtime_voice"]);
+    expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
   });
 
   it("routes current-screen questions to work context before raw screenshots", () => {

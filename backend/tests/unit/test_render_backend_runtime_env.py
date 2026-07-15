@@ -54,6 +54,33 @@ def test_network_flags_still_required(monkeypatch):
         _MODULE['_render_flags']({'--network': {'env_var': 'CLOUD_RUN_VPC_NETWORK'}})
 
 
+def test_selected_job_renders_only_shared_network_and_named_job_outputs(capsys, monkeypatch):
+    monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
+    monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-dev-subnet-1')
+    monkeypatch.setattr(
+        'sys.argv',
+        ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'memory-maintenance-job'],
+    )
+
+    assert _MODULE['main']() == 0
+
+    output = capsys.readouterr().out
+    assert 'cloud_run_flags<<' in output
+    assert 'memory_maintenance_job_flags<<' in output
+    assert 'memory_maintenance_job_env_vars<<' in output
+    assert 'backend_env_vars<<' not in output
+    assert 'notifications_job_env_vars<<' not in output
+
+
+def test_selected_job_rejects_unknown_name_without_emitting_partial_output(capsys, monkeypatch):
+    monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'dev', '--job', 'unknown-job'])
+
+    with pytest.raises(ValueError, match='unknown Cloud Run job'):
+        _MODULE['main']()
+
+    assert capsys.readouterr().out == ''
+
+
 def test_render_dev_emits_memory_maintenance_job_outputs(capsys, monkeypatch):
     monkeypatch.setenv('CLOUD_RUN_VPC_NETWORK', 'omi-dev-vpc-1')
     monkeypatch.setenv('CLOUD_RUN_VPC_SUBNET', 'omi-us-central1-dev-vpc-1-subnet-1')
@@ -128,6 +155,11 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_ID', 'fake-claude-client-id')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_CLIENT_NAME', 'Claude')
     monkeypatch.setenv('MCP_OAUTH_CLAUDE_REDIRECT_URIS', 'https://claude.example/callback')
+    monkeypatch.setenv(
+        'ACCOUNT_DELETION_HANDLER_URL', 'https://backend-sync.example.com/v1/users/account-deletion-wipes/run'
+    )
+    monkeypatch.setenv('SYNC_TASKS_HANDLER_URL', 'https://backend-sync.example.com/v2/sync-jobs/run')
+    monkeypatch.setenv('SYNC_TASKS_INVOKER_SA', 'invoker@project.iam.gserviceaccount.com')
     monkeypatch.setattr('sys.argv', ['render_backend_runtime_env.py', '--env', 'prod'])
     rc = _MODULE['main']()
     assert rc == 0
@@ -137,6 +169,8 @@ def test_render_prod_keeps_memory_maintenance_job_promotion_off(capsys, monkeypa
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED=false' in job_env
     assert 'MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED=false' in job_env
     assert 'MEMORY_ENABLED_USERS=vi7SA9ckQCe4ccobWNxlbdcNdC23' not in job_env
+
+    assert 'DESKTOP_PREVIEW_PUBLISH_KEY=DESKTOP_PREVIEW_PUBLISH_KEY:latest' in _job_secret_lines(out, 'backend')
 
     notifications_env = _job_env_block(out, 'notifications_job')
     assert 'MEMORY_CANONICAL_PROMOTION_CRON_ENABLED' not in notifications_env
@@ -162,6 +196,7 @@ def test_notifications_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}' in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
+    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job notifications-job' in text
     assert 'env_vars_update_strategy: overwrite' not in text
     assert 'secrets_update_strategy: overwrite' not in text
     assert (
@@ -188,3 +223,12 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert "id-token: 'write'" not in text
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
+    assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
+
+
+def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
+    workflow = Path(__file__).resolve().parents[3] / '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
+
+    assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in workflow.read_text(
+        encoding='utf-8'
+    )

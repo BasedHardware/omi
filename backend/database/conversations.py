@@ -1,8 +1,6 @@
 import copy
-import inspect
 import json
 import logging
-import threading
 import uuid
 import zlib
 from datetime import datetime, timedelta, timezone
@@ -11,7 +9,6 @@ from typing import List, Optional, Dict, Any
 from google.api_core.exceptions import AlreadyExists, Conflict, NotFound
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-from prometheus_client import Counter
 
 import utils.other.hume as hume
 from database import users as users_db
@@ -20,7 +17,7 @@ from models.conversation_enums import ConversationStatus, PostProcessingModel, P
 from models.conversation_photo import ConversationPhoto
 from models.transcript_segment import TranscriptSegment
 from utils import encryption
-from ._client import db
+from ._client import db, get_firestore_client
 from .helpers import set_data_protection_level, prepare_for_write, prepare_for_read, with_photos
 from utils.other.storage import list_audio_chunks
 
@@ -29,62 +26,7 @@ logger = logging.getLogger(__name__)
 conversations_collection = 'conversations'
 
 
-# This is intentionally a temporary inventory, not a new lifecycle abstraction.
-# #9516 first characterizes the current many-writer state so the convergence
-# change can prove every legacy writer reached zero before removal.
-# Prometheus registration mutates the process-global collector registry. Keep it
-# lazy so importing this database module remains pure.
-CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS: Optional[Counter] = None
-_LEGACY_LIFECYCLE_METRIC_LOCK = threading.Lock()
-
-_LIFECYCLE_WRITER_LABELS = {
-    'routers.transcribe': 'transcribe',
-    'routers.pusher': 'pusher',
-    'routers.conversations': 'conversations_router',
-    'routers.sync': 'sync_router',
-    'routers.developer': 'developer_router',
-    'utils.sync.pipeline': 'sync_pipeline',
-    'utils.conversations.process_conversation': 'process_conversation',
-    'utils.conversations.postprocess_conversation': 'postprocess_conversation',
-    'utils.conversations.merge_conversations': 'merge_conversations',
-    'utils.imports.limitless': 'limitless_import',
-}
 _LIFECYCLE_FIELDS = frozenset({'status', 'discarded'})
-
-
-def lifecycle_writer_label(module_name: str) -> str:
-    """Return a bounded label for the module that initiated a lifecycle write."""
-    return _LIFECYCLE_WRITER_LABELS.get(module_name, 'other')
-
-
-def _legacy_lifecycle_writer() -> str:
-    """Find the first caller outside this database module and its write decorators."""
-    frame = inspect.currentframe()
-    try:
-        frame = frame.f_back if frame is not None else None
-        while frame is not None:
-            module_name = frame.f_globals.get('__name__', '')
-            if module_name not in {__name__, 'database.helpers'}:
-                return lifecycle_writer_label(module_name)
-            frame = frame.f_back
-    finally:
-        # Frame references retain local variables. Clear ours promptly because this
-        # helper runs on every currently-direct lifecycle mutation.
-        del frame
-    return 'other'
-
-
-def _record_legacy_lifecycle_mutation(operation: str) -> None:
-    global CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS
-    if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
-        with _LEGACY_LIFECYCLE_METRIC_LOCK:
-            if CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS is None:
-                CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS = Counter(
-                    'conversation_lifecycle_legacy_mutations_total',
-                    'Conversation lifecycle mutations by the current direct writer and operation',
-                    ['writer', 'operation'],
-                )
-    CONVERSATION_LIFECYCLE_LEGACY_MUTATIONS.labels(writer=_legacy_lifecycle_writer(), operation=operation).inc()
 
 
 def get_conversation_ids(uid: str) -> List[str]:
@@ -272,7 +214,7 @@ def get_conversation_photos(uid: str, conversation_id: str):
 
 @set_data_protection_level(data_arg_name='conversation_data')
 @prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def upsert_conversation(uid: str, conversation_data: dict):
+def upsert_conversation_with_lifecycle(uid: str, conversation_data: dict):
     # `updated_at` is Firestore document metadata exposed by reads, never an
     # application-owned field to replay into a later write.
     conversation_data.pop('updated_at', None)
@@ -313,13 +255,76 @@ def upsert_conversation(uid: str, conversation_data: dict):
         transaction.set(conversation_ref, write_data)
 
     _write_processing_result(transaction)
-    if _LIFECYCLE_FIELDS.intersection(conversation_data):
-        _record_legacy_lifecycle_mutation('upsert')
 
 
 @set_data_protection_level(data_arg_name='conversation_data')
-@prepare_for_write(data_arg_name='conversation_data', prepare_func=_prepare_conversation_for_write)
-def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
+@prepare_for_write(
+    data_arg_name='conversation_data',
+    prepare_func=_prepare_conversation_for_write,
+    preserve_result=True,
+)
+def persist_processing_result_with_lifecycle(
+    uid: str,
+    conversation_data: dict,
+    *,
+    expected_statuses: set[str],
+) -> bool:
+    """Persist a processor result only while its lifecycle generation remains current.
+
+    A processor works from an in-memory snapshot.  This transaction fences that
+    snapshot against a concurrent discard, delete, or terminal transition before
+    merging generated content back into the conversation document.
+    """
+    conversation_data.pop('updated_at', None)
+    if 'audio_base64_url' in conversation_data:
+        del conversation_data['audio_base64_url']
+    if 'photos' in conversation_data:
+        del conversation_data['photos']
+
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
+    transaction = db.transaction()
+
+    @firestore.transactional
+    def _persist(transaction) -> bool:
+        write_data = copy.deepcopy(conversation_data)
+        existing_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(existing_snapshot, 'exists', False):
+            # A processor is never an authority to recreate a conversation.
+            # Treat deletion as the same terminal fence as a discard so a
+            # finalizer cannot resurrect it and emit derived side effects.
+            return False
+
+        existing = existing_snapshot.to_dict() or {}
+        if existing.get('discarded') or existing.get('status') not in expected_statuses:
+            return False
+
+        # Generated processing content never owns user-managed fields.
+        for field in ('starred', 'folder_id', 'visibility', 'user_title'):
+            if field in existing:
+                write_data[field] = existing[field]
+
+        user_title = existing.get('user_title')
+        if isinstance(user_title, str):
+            structured = write_data.get('structured')
+            if not isinstance(structured, dict):
+                structured = {}
+                write_data['structured'] = structured
+            structured['title'] = user_title
+
+        transaction.set(conversation_ref, write_data, merge=True)
+        return True
+
+    return _persist(transaction)
+
+
+@set_data_protection_level(data_arg_name='conversation_data')
+@prepare_for_write(
+    data_arg_name='conversation_data',
+    prepare_func=_prepare_conversation_for_write,
+    preserve_result=True,
+)
+def create_conversation_if_absent_with_lifecycle(uid: str, conversation_data: dict) -> bool:
     """Atomically create a conversation document if it does not already exist."""
     conversation_data.pop('updated_at', None)
     if 'audio_base64_url' in conversation_data:
@@ -331,8 +336,6 @@ def create_conversation_if_absent(uid: str, conversation_data: dict) -> bool:
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_data['id'])
     try:
         conversation_ref.create(conversation_data)
-        if _LIFECYCLE_FIELDS.intersection(conversation_data):
-            _record_legacy_lifecycle_mutation('create_if_absent')
         return True
     except (AlreadyExists, Conflict):
         return False
@@ -507,6 +510,12 @@ def iter_all_conversations(uid: str, batch_size: int = 400, include_discarded: b
 
 
 def update_conversation(uid: str, conversation_id: str, update_data: dict):
+    lifecycle_fields = _LIFECYCLE_FIELDS.intersection(update_data)
+    if lifecycle_fields:
+        raise ValueError(
+            'lifecycle fields may only be changed through utils.conversations.lifecycle: '
+            + ', '.join(sorted(lifecycle_fields))
+        )
     doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
     doc_snapshot = doc_ref.get()
     if not doc_snapshot.exists:
@@ -515,8 +524,6 @@ def update_conversation(uid: str, conversation_id: str, update_data: dict):
     doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
     prepared_data = _prepare_conversation_for_write(update_data, uid, doc_level)
     doc_ref.update(prepared_data)
-    if _LIFECYCLE_FIELDS.intersection(update_data):
-        _record_legacy_lifecycle_mutation('generic_update')
 
 
 def create_audio_files_from_chunks(
@@ -948,11 +955,10 @@ def get_processing_conversations(uid: str):
     return conversations
 
 
-def update_conversation_status(uid: str, conversation_id: str, status: str):
+def transition_conversation_status(uid: str, conversation_id: str, status: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'status': status})
-    _record_legacy_lifecycle_mutation('status_update')
 
 
 def claim_conversation_status(
@@ -973,7 +979,7 @@ def claim_conversation_status(
         if not snapshot.exists:
             raise NotFound(f'Conversation {conversation_id} not found')
         current = snapshot.to_dict() or {}
-        if current.get('status') != expected_status.value:
+        if current.get('discarded') or current.get('status') != expected_status.value:
             return False
         updates = {'status': claimed_status.value}
         if extra_updates:
@@ -982,8 +988,6 @@ def claim_conversation_status(
         return True
 
     claimed = _claim(transaction)
-    if claimed:
-        _record_legacy_lifecycle_mutation('conditional_claim')
     return claimed
 
 
@@ -991,7 +995,12 @@ def set_conversation_as_discarded(uid: str, conversation_id: str):
     user_ref = db.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
     conversation_ref.update({'discarded': True})
-    _record_legacy_lifecycle_mutation('discard')
+
+
+def restore_conversation_from_discarded(uid: str, conversation_id: str):
+    user_ref = db.collection('users').document(uid)
+    conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
+    conversation_ref.update({'discarded': False})
 
 
 # *********************************
@@ -1134,24 +1143,36 @@ def update_conversation_segments(
     segments: List[dict],
     finished_at: datetime = None,
     data_protection_level: str = None,
+    *,
+    started_at: datetime = None,
+    firestore_client: Any = None,
 ):
-    doc_ref = db.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
-    if data_protection_level is not None:
-        doc_level = data_protection_level
-    else:
-        doc_snapshot = doc_ref.get(field_paths=['data_protection_level'])
-        if not doc_snapshot.exists:
-            return
-        doc_level = doc_snapshot.to_dict().get('data_protection_level', 'standard')
-    update_payload = {'transcript_segments': segments}
-    if finished_at:
-        update_payload['finished_at'] = finished_at
-    prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
-    try:
-        doc_ref.update(prepared_payload)
-    except NotFound:
-        # Document was deleted between cache read and write — safe to skip
-        return
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    doc_ref = client.collection('users').document(uid).collection(conversations_collection).document(conversation_id)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _write_segments(transaction) -> bool:
+        doc_snapshot = doc_ref.get(transaction=transaction)
+        if not getattr(doc_snapshot, 'exists', False):
+            return False
+        current = doc_snapshot.to_dict() or {}
+        doc_level = data_protection_level or current.get('data_protection_level', 'standard')
+        update_payload = {
+            'transcript_segments': segments,
+            # Once a live generation has received content, empty cleanup must
+            # never reclaim it even if an older in-memory snapshot is empty.
+            'has_content': bool(current.get('has_content')) or bool(segments),
+        }
+        if finished_at:
+            update_payload['finished_at'] = finished_at
+        if started_at:
+            update_payload['started_at'] = started_at
+        prepared_payload = _prepare_conversation_for_write(update_payload, uid, doc_level)
+        transaction.update(doc_ref, prepared_payload)
+        return True
+
+    return _write_segments(transaction)
 
 
 # ***********************************
@@ -1281,25 +1302,35 @@ def get_conversation_transcripts_by_model(uid: str, conversation_id: str):
 # ***********************************
 
 
-def store_conversation_photos(uid: str, conversation_id: str, photos: List[ConversationPhoto]):
-    user_ref = db.collection('users').document(uid)
+def store_conversation_photos(
+    uid: str,
+    conversation_id: str,
+    photos: List[ConversationPhoto],
+    *,
+    firestore_client: Any = None,
+) -> bool:
+    client = firestore_client if firestore_client is not None else get_firestore_client()
+    user_ref = client.collection('users').document(uid)
     conversation_ref = user_ref.collection(conversations_collection).document(conversation_id)
-
-    conversation_snapshot = conversation_ref.get(field_paths=['data_protection_level'])
-    level = 'standard'
-    if conversation_snapshot.exists:
-        level = conversation_snapshot.to_dict().get('data_protection_level', 'standard')
-
     photos_ref = conversation_ref.collection('photos')
-    batch = db.batch()
-    for photo in photos:
-        photo_id = photo.id or str(uuid.uuid4())
-        photo_ref = photos_ref.document(photo_id)
-        data = photo.model_dump()
-        data['id'] = photo_id
-        prepared_data = _prepare_photo_for_write(data, uid, level)
-        batch.set(photo_ref, prepared_data)
-    batch.commit()
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def _store(transaction) -> bool:
+        conversation_snapshot = conversation_ref.get(transaction=transaction)
+        if not getattr(conversation_snapshot, 'exists', False):
+            return False
+        level = (conversation_snapshot.to_dict() or {}).get('data_protection_level', 'standard')
+        for photo in photos:
+            photo_id = photo.id or str(uuid.uuid4())
+            photo_ref = photos_ref.document(photo_id)
+            data = photo.model_dump()
+            data['id'] = photo_id
+            transaction.set(photo_ref, _prepare_photo_for_write(data, uid, level))
+        transaction.update(conversation_ref, {'has_content': True})
+        return True
+
+    return _store(transaction)
 
 
 # ********************************

@@ -12,6 +12,7 @@ from database.users import get_user_store_recording_permission
 from models.conversation import Conversation
 from models.conversation_enums import PostProcessingStatus
 from utils.conversations.factory import deserialize_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from models.transcript_segment import TranscriptSegment
 from utils.conversations.process_conversation import process_conversation, process_user_emotion
 from utils.other.storage import upload_postprocessing_audio, delete_postprocessing_audio, upload_conversation_recording
@@ -103,7 +104,7 @@ def postprocess_conversation(
         if not fal_failed:
             conversation.transcript_segments = fal_segments
 
-        conversations_db.upsert_conversation(
+        lifecycle_service.persist_processed_conversation(
             uid, conversation.model_dump()
         )  # Store transcript segments at least if smth fails later
         if fal_failed:

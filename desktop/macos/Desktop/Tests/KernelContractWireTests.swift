@@ -315,6 +315,7 @@ final class KernelContractWireTests: XCTestCase {
       "rendererFingerprint": "renderer-2",
       "capabilityVersion": "1:digest",
       "renderedContext": "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}",
+      "contextPlan": contextPlan(),
       "ownerId": "owner",
       "sessionId": "session",
       "conversationId": "conversation",
@@ -336,6 +337,8 @@ final class KernelContractWireTests: XCTestCase {
       capabilityVersion: "1:digest"))
     XCTAssertEqual(snapshot.sourceRevision(for: .screen), "sha256:abc")
     XCTAssertEqual(snapshot.renderedContext, "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[]}")
+    XCTAssertEqual(snapshot.contextPlan.planId, "sha256:plan")
+    XCTAssertEqual(snapshot.contextPlan.olderHistoryStrategy, "none")
   }
 
   func testExplicitProfileMigrationCarriesGenerationFenceAndReason() {
@@ -398,6 +401,10 @@ final class KernelContractWireTests: XCTestCase {
       projection.freshnessIdentity,
       "version-a:renderer-2:1:digest"
     )
+    XCTAssertEqual(projection.contextPlanID, snapshot.contextPlan.planId)
+    XCTAssertEqual(projection.stableCacheIdentity, snapshot.contextPlan.stableCacheIdentity)
+    XCTAssertEqual(projection.dynamicContextIdentity, snapshot.contextPlan.dynamicContextIdentity)
+    XCTAssertEqual(projection.semanticGuidance, snapshot.contextPlan.semanticGuidance)
     XCTAssertEqual(projection.turnIDs, Set(["system", "user", "assistant", "pending"]))
   }
 
@@ -460,6 +467,7 @@ final class KernelContractWireTests: XCTestCase {
       "rendererFingerprint": "renderer-2",
       "capabilityVersion": "1:digest",
       "renderedContext": renderedContext,
+      "contextPlan": contextPlan(retainedTurnCount: recentTurns.count),
       "ownerId": "owner",
       "sessionId": "session",
       "conversationId": "conversation",
@@ -478,6 +486,23 @@ final class KernelContractWireTests: XCTestCase {
         "allowedToolNames": ["dangerous_capability_name"],
       ],
     ]))
+  }
+
+  private func contextPlan(retainedTurnCount: Int = 0) -> [String: Any] {
+    [
+      "version": 1,
+      "planId": "sha256:plan",
+      "semanticGuidanceVersion": "kernel-semantic-guidance@1",
+      "semanticGuidance": "Kernel-owned semantic guidance.",
+      "retainedTurnStartSeq": retainedTurnCount == 0 ? NSNull() : 1,
+      "retainedTurnEndSeq": retainedTurnCount == 0 ? NSNull() : retainedTurnCount,
+      "retainedTurnCount": retainedTurnCount,
+      "totalTurnCount": retainedTurnCount,
+      "omittedTurnCount": 0,
+      "olderHistoryStrategy": "none",
+      "stableCacheIdentity": "sha256:stable",
+      "dynamicContextIdentity": "sha256:dynamic",
+    ]
   }
 
   private func recentTurn(

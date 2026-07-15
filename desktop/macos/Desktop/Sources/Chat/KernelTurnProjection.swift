@@ -7,6 +7,10 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
     conversationId: "",
     context: "",
     freshnessIdentity: "",
+    contextPlanID: "",
+    stableCacheIdentity: "",
+    dynamicContextIdentity: "",
+    semanticGuidance: "",
     turnIDs: []
   )
 
@@ -14,6 +18,11 @@ struct KernelVoiceContextSnapshot: Equatable, Sendable {
   let conversationId: String
   let context: String
   let freshnessIdentity: String
+  let contextPlanID: String
+  /// Opaque cache identities are safe to include in diagnostics.
+  let stableCacheIdentity: String
+  let dynamicContextIdentity: String
+  let semanticGuidance: String
   let turnIDs: Set<String>
 
   /// `.empty` is a transport/bridge failure sentinel, not a valid blank
@@ -1032,6 +1041,10 @@ final class KernelTurnProjection {
       conversationId: snapshot.conversationId,
       context: snapshot.renderedContext,
       freshnessIdentity: freshnessIdentity,
+      contextPlanID: snapshot.contextPlan.planId,
+      stableCacheIdentity: snapshot.contextPlan.stableCacheIdentity,
+      dynamicContextIdentity: snapshot.contextPlan.dynamicContextIdentity,
+      semanticGuidance: snapshot.contextPlan.semanticGuidance,
       turnIDs: Set(snapshot.typedRecentTurns.map(\.turnId))
     )
   }

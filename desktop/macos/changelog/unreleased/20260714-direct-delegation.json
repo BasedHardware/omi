@@ -1,0 +1,3 @@
+{
+  "change": "Fixed clear voice delegation requests to start the requested agent directly without repeated confirmation"
+}

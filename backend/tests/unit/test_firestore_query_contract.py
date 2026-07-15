@@ -1,7 +1,7 @@
 import ast
 import json
 from datetime import datetime, timedelta, timezone
-from pathlib import Path
+from pathlib import Path, PurePosixPath, PureWindowsPath
 from types import SimpleNamespace
 
 import pytest
@@ -138,6 +138,7 @@ def test_generated_firestore_manifest_matches_the_checked_in_contract():
         'fields': [
             {'fieldPath': 'account_generation', 'order': 'ASCENDING'},
             {'fieldPath': 'expires_at', 'order': 'ASCENDING'},
+            {'fieldPath': '__name__', 'order': 'ASCENDING'},
         ],
     }
 
@@ -217,3 +218,13 @@ def test_query_coverage_baseline_tracks_current_raw_and_unsupported_debt():
     report = firestore_query_coverage.report_for(firestore_query_coverage.inventory(waiver_ids=set()))
 
     assert firestore_query_coverage.check_ratchet(report, committed) == []
+
+
+def test_query_source_paths_are_posix_canonical_on_every_host_platform():
+    windows_path = PureWindowsPath('backend\\database\\conversations.py')
+    posix_path = PurePosixPath('backend/database/conversations.py')
+
+    assert firestore_query_coverage.canonical_source_path(windows_path) == 'backend/database/conversations.py'
+    assert firestore_query_coverage.canonical_source_path(
+        windows_path
+    ) == firestore_query_coverage.canonical_source_path(posix_path)

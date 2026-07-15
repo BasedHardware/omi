@@ -21,6 +21,7 @@ import 'package:omi/services/notifications.dart';
 import 'package:omi/services/services.dart';
 import 'package:omi/services/battery_widget_service.dart';
 import 'package:omi/services/wals/wal_syncs.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/other/debouncer.dart';
@@ -480,6 +481,11 @@ class DeviceProvider extends ChangeNotifier implements IDeviceServiceSubsciption
     syncs.flashPage.setDevice(device);
     syncs.storage.setDevice(device);
     syncs.ring.setDevice(device);
+
+    // Device connection and inventory are a recovery wake, even when the
+    // home page is not mounted. The coordinator serializes it with every
+    // other foreground trigger and applies the auto-sync preference itself.
+    unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.deviceConnected));
 
     // Auto-sync: check if device has offline files
     _checkAndStartAutoSync(device);

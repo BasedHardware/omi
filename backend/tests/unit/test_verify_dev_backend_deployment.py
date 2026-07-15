@@ -290,6 +290,7 @@ def test_legacy_binding_migration_rejects_non_dev_projects_without_gcloud_calls(
 
 def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    production_workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')
 
     assert 'environment: development' in text
@@ -298,6 +299,23 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
     for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
         assert f'--migrate-legacy-public-binding {service}' in text
     assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
+    assert '--check-runtime-bindings' in text
+    assert text.index('migrate-legacy-public-binding') < text.index('--check-runtime-bindings')
+    assert text.index('--check-runtime-bindings') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
+    assert '--check-runtime-bindings' not in production_workflow.read_text(encoding='utf-8')
+
+
+def test_dev_deploy_uses_manifest_derived_gcloud_index_provisioning_only() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
+    production_workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'environment: development' in text
+    assert 'backend/scripts/reconcile_firestore_indexes.py' in text
+    assert '--provision-missing' in text
+    assert 'firebase' not in text
+    assert 'setup-node' not in text
+    assert '--provision-missing' not in production_workflow.read_text(encoding='utf-8')
 
 
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:
@@ -336,6 +354,16 @@ def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     assert 'cloud_run/backend: expected revision does not receive 100% traffic' in errors
     assert 'gke/deployment: desired replicas are not all available' in errors
     assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert errors == []
 
 
 def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_template() -> None:

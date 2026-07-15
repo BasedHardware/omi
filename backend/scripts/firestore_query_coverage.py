@@ -19,7 +19,7 @@ import json
 import sys
 from dataclasses import dataclass, field
 from datetime import date
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any, Iterable, Mapping
 
 ROOT = Path(__file__).resolve().parents[2]
@@ -32,6 +32,11 @@ BASELINE_PATH = BACKEND_ROOT / 'scripts' / 'firestore_query_coverage_baseline.js
 WAIVERS_PATH = BACKEND_ROOT / 'scripts' / 'firestore_query_coverage_waivers.json'
 QUERY_SPEC_SOURCE = Path('backend/database/firestore_index_registry.py')
 NON_SERVING_SEGMENTS = {'tests', 'scripts', 'migrations', 'migration'}
+
+
+def canonical_source_path(path: PurePath) -> str:
+    """Return a repository-relative source path stable across host platforms."""
+    return path.as_posix()
 
 
 @dataclass(frozen=True)
@@ -357,7 +362,7 @@ def inventory(*, waiver_ids: set[str]) -> list[QueryShape]:
         constants = _module_constants(tree)
         non_serving_scope = _non_serving_scope(relative)
         module_analyzer = FunctionQueryAnalyzer(
-            source=str(relative),
+            source=canonical_source_path(relative),
             symbol='<module>',
             constants=constants,
             non_serving_scope=non_serving_scope,
@@ -370,7 +375,7 @@ def inventory(*, waiver_ids: set[str]) -> list[QueryShape]:
             if not isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)):
                 continue
             analyzer = FunctionQueryAnalyzer(
-                source=str(relative),
+                source=canonical_source_path(relative),
                 symbol=node.name,
                 constants=constants,
                 non_serving_scope=non_serving_scope,
@@ -386,7 +391,7 @@ def inventory(*, waiver_ids: set[str]) -> list[QueryShape]:
             0,
         )
         shape = QueryShape(
-            source=str(QUERY_SPEC_SOURCE),
+            source=canonical_source_path(QUERY_SPEC_SOURCE),
             symbol=spec.identifier,
             line=line,
             collection_group=spec.collection_group,

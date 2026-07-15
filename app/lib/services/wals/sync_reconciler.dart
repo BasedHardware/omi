@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:omi/backend/schema/conversation.dart';
 import 'package:omi/services/wals/local_wal_sync.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/services/wals/wal.dart';
 import 'package:omi/utils/logger.dart';
 
@@ -11,8 +12,8 @@ import 'package:omi/utils/logger.dart';
 typedef ConversationSurfaceCallback = Future<void> Function(SyncLocalFilesResponse result);
 
 /// Drives [LocalWalSyncImpl.reconcileUploadedWals] off the upload critical
-/// path: on demand (`poke`), on a backed-off foreground timer while any
-/// recording is still `uploaded`, and (via the owner) on app start.
+/// path. [RecordingTransferCoordinator] owns when a pass runs; this service
+/// remains the callee that resolves already-uploaded server jobs.
 ///
 /// All state lives in the persisted WAL list, so this survives navigation and
 /// app-kill — a fresh process just `poke`s on startup and resumes. Scheduling
@@ -38,12 +39,15 @@ class SyncReconciler {
     _onConversations = onConversations;
   }
 
-  /// Run one reconcile pass now. Debounced — a no-op if a pass is already in
-  /// flight, so it is safe to call from many triggers (startup, screen open,
-  /// just-finished upload, timer).
+  /// Run one reconcile pass now. Wake coalescing belongs to
+  /// [RecordingTransferCoordinator], so a caller never loses a recovery event
+  /// because a previous pass is in flight.
   Future<void> poke() async {
     final phone = _phone;
-    if (phone == null || _running) return;
+    if (phone == null) return;
+    if (_running) {
+      throw StateError('SyncReconciler invoked outside RecordingTransferCoordinator');
+    }
     _running = true;
     try {
       final resp = await phone.reconcileUploadedWals();
@@ -58,6 +62,7 @@ class SyncReconciler {
       }
     } catch (e) {
       Logger.debug('SyncReconciler: reconcile pass failed: $e');
+      rethrow;
     } finally {
       _running = false;
     }
@@ -81,14 +86,17 @@ class SyncReconciler {
     }
     final secs = _backoffSecs[_idleStreak.clamp(0, _backoffSecs.length - 1)];
     _idleStreak++;
-    _timer = Timer(Duration(seconds: secs), poke);
+    _timer = Timer(Duration(seconds: secs), () {
+      unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed));
+    });
   }
 
   /// App came to the foreground — resume fast cadence and check immediately.
   void onForeground() {
     _foreground = true;
     _idleStreak = 0;
-    poke();
+    RecordingTransferCoordinator.instance.setForeground(true);
+    unawaited(RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded));
   }
 
   /// App backgrounded — stop the timer. State is persisted; a later
@@ -97,6 +105,7 @@ class SyncReconciler {
     _foreground = false;
     _timer?.cancel();
     _timer = null;
+    RecordingTransferCoordinator.instance.setForeground(false);
   }
 
   void dispose() {

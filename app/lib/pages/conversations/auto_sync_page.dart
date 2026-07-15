@@ -46,7 +46,7 @@ class _AutoSyncPageState extends State<AutoSyncPage> {
       // hit the same device and would otherwise contend on the GATT link.
       await syncProvider.discoverDeviceWals(firmwareVersion: deviceProvider.currentFirmwareVersion);
       await deviceProvider.refreshRingStorageStatus();
-      SyncReconciler.instance.poke();
+      await RecordingTransferCoordinator.instance.wake(WakeTrigger.foregrounded);
     });
   }
 

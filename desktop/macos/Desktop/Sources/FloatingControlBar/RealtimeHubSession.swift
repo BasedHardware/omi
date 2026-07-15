@@ -109,6 +109,12 @@ final class RealtimeHubSession: NSObject {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
   private let instructions: String
+  private let availableDirectedProviders: [String]
+  /// Opaque cache-plan fields only; never raw conversation material.
+  private let contextPlanID: String
+  private let stableCacheIdentity: String
+  private let dynamicContextIdentity: String
+  private let contextCacheReplaced: Bool
   private weak var delegate: RealtimeHubSessionDelegate?
 
   /// Mic PCM input rate per provider (Gemini 16k native, OpenAI GA needs 24k).
@@ -182,10 +188,25 @@ final class RealtimeHubSession: NSObject {
   /// clear which model produced which event.
   private var tag: String { "RealtimeHub[\(provider == .openai ? "openai" : "gemini"):\(provider.modelID)]" }
 
-  init(provider: RealtimeHubProvider, auth: HubAuth, instructions: String, delegate: RealtimeHubSessionDelegate) {
+  init(
+    provider: RealtimeHubProvider,
+    auth: HubAuth,
+    instructions: String,
+    availableDirectedProviders: [String] = [],
+    contextPlanID: String = "",
+    stableCacheIdentity: String = "",
+    dynamicContextIdentity: String = "",
+    contextCacheReplaced: Bool = false,
+    delegate: RealtimeHubSessionDelegate
+  ) {
     self.provider = provider
     self.auth = auth
     self.instructions = instructions
+    self.availableDirectedProviders = availableDirectedProviders
+    self.contextPlanID = contextPlanID
+    self.stableCacheIdentity = stableCacheIdentity
+    self.dynamicContextIdentity = dynamicContextIdentity
+    self.contextCacheReplaced = contextCacheReplaced
     self.delegate = delegate
     super.init()
   }
@@ -592,11 +613,27 @@ final class RealtimeHubSession: NSObject {
   }
 
   /// Return a tool's result to the model and let it continue (speak).
-  func sendToolResult(callId: String, name: String, output: String) {
+  ///
+  /// Gemini handles realtime video and tool responses as concurrent streams, so sending a
+  /// screenshot as `realtimeInput.video` and then unblocking the function can race: the model
+  /// may answer from older context before it processes the frame. Gemini 3 supports inline
+  /// FunctionResponse parts; attach the fresh pixels there so the paused screenshot call resumes
+  /// only with the exact image it captured.
+  func sendToolResult(callId: String, name: String, output: String, image: Data? = nil) {
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
       case .openai:
+        if let image {
+          let b64 = image.base64EncodedString()
+          self.send(json: [
+            "type": "conversation.item.create",
+            "item": [
+              "type": "message", "role": "user",
+              "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
+            ],
+          ])
+        }
         self.pendingOpenAIToolCallIds.remove(callId)
         self.send(json: [
           "type": "conversation.item.create",
@@ -609,34 +646,41 @@ final class RealtimeHubSession: NSObject {
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
-        self.send(json: [
-          "toolResponse": [
-            "functionResponses": [["id": callId, "name": name, "response": ["result": output]]]
-          ]
-        ])
+        self.send(json: Self.geminiToolResponse(
+          callId: callId,
+          name: name,
+          output: output,
+          image: image))
       }
     }
   }
 
-  /// Attach fresh pixels captured by the kernel-authorized screenshot executor.
-  /// No ambient or speculative caller may invoke this path.
-  func injectImage(_ image: Data) {
-    let b64 = image.base64EncodedString()
-    q.async { [weak self] in
-      guard let self else { return }
-      switch self.provider {
-      case .openai:
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": [
-            "type": "message", "role": "user",
-            "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
-          ],
-        ])
-      case .gemini:
-        self.send(json: ["realtimeInput": ["video": ["data": b64, "mimeType": "image/jpeg"]]])
-      }
+  static func geminiToolResponse(
+    callId: String,
+    name: String,
+    output: String,
+    image: Data?
+  ) -> [String: Any] {
+    var functionResponse: [String: Any] = [
+      "id": callId,
+      "name": name,
+      "response": ["result": output],
+    ]
+    if let image {
+      let displayName = "live-screenshot.jpg"
+      functionResponse["response"] = [
+        "result": output,
+        "image": ["$ref": displayName],
+      ]
+      functionResponse["parts"] = [[
+        "inlineData": [
+          "mimeType": "image/jpeg",
+          "data": image.base64EncodedString(),
+          "displayName": displayName,
+        ]
+      ]]
     }
+    return ["toolResponse": ["functionResponses": [functionResponse]]]
   }
 
   // OpenAI: ask for a response with the given modality (audio for spoken turns).
@@ -734,7 +778,7 @@ final class RealtimeHubSession: NSObject {
           ],
           "output": ["format": ["type": "audio/pcm", "rate": 24000], "voice": "marin"],
         ],
-        "tools": RealtimeHubTools.openAITools,
+        "tools": RealtimeHubTools.openAITools(availableDirectedProviders: availableDirectedProviders),
         "tool_choice": "auto",
       ],
     ]
@@ -766,7 +810,7 @@ final class RealtimeHubSession: NSObject {
             ],
           ],
           "systemInstruction": ["parts": [["text": instructions]]],
-          "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations]],
+          "tools": [["functionDeclarations": RealtimeHubTools.geminiFunctionDeclarations(availableDirectedProviders: availableDirectedProviders)]],
           "inputAudioTranscription": [:],
           "outputAudioTranscription": [:],
           // turnCoverage = ALL_VIDEO so an injected screenshot frame is part of the turn
@@ -990,7 +1034,11 @@ final class RealtimeHubSession: NSObject {
     Task {
       await APIClient.shared.reportRealtimeUsage(
         provider: providerName, model: model,
-        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa)
+        inputText: it, inputAudio: ia, inputCached: ic, outputText: ot, outputAudio: oa,
+        contextPlanID: self.contextPlanID,
+        stableCacheIdentity: self.stableCacheIdentity,
+        dynamicContextIdentity: self.dynamicContextIdentity,
+        contextCacheReplaced: self.contextCacheReplaced)
     }
   }
 

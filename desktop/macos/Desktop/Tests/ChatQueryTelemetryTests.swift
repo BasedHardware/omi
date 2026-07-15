@@ -111,6 +111,10 @@ final class ChatQueryTelemetryTests: XCTestCase {
     XCTAssertTrue(
       ChatQueryFailureDisposition.classify(BridgeError.timeout).presentsUserError
     )
+    XCTAssertEqual(
+      ChatQueryFailureDisposition.classify(BridgeError.failedToStart(.launchFailed)),
+      .failed(.bridgeStartFailed)
+    )
   }
 
   @MainActor

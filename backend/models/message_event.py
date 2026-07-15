@@ -27,6 +27,12 @@ class ConversationEvent(MessageEvent):
     # for older producers, but identified listen sessions must propagate it so
     # clients never infer ownership from the WebSocket that delivered the event.
     recording_session_id: Optional[str] = None
+    # Versioned recording-session envelope. These are additive so older
+    # producers and clients retain their existing compatibility path.
+    conversation_id: Optional[str] = None
+    lifecycle_version: Optional[int] = None
+    lifecycle_phase: Optional[str] = None
+    lifecycle_sequence: Optional[int] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")
@@ -105,6 +111,9 @@ class ConversationSessionEvent(MessageEvent):
     conversation_id: str
     status: str = "in_progress"
     recording_session_id: Optional[str] = None
+    lifecycle_version: Optional[int] = None
+    lifecycle_phase: Optional[str] = None
+    lifecycle_sequence: Optional[int] = None
 
     def to_json(self):
         j = self.model_dump(mode="json")

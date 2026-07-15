@@ -293,7 +293,8 @@ extension KernelJournalTurn {
       resources: ChatResource.hydrateFileStates(
         ChatResource.decodeResourcesFromPersistence(resourcesJSON)
       ),
-      turnOwner: owner
+      turnOwner: owner,
+      journalStatus: status
     )
   }
 

@@ -43,11 +43,65 @@ function fixture(surfaceKind = "main_chat", maxWorkers = 1) {
 }
 
 describe("kernel ContextSnapshot", () => {
+  it("declares 63/64/65-turn retention and keeps the stable cache boundary independent of history", () => {
+    const { store } = fixture();
+    const surface = resolveSurfaceSession(store, {
+      ownerId: "owner-history",
+      surfaceRef: { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "history" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    let at63: ReturnType<typeof buildContextSnapshot> | undefined;
+    let at64: ReturnType<typeof buildContextSnapshot> | undefined;
+    let at65: ReturnType<typeof buildContextSnapshot> | undefined;
+
+    for (let sequence = 1; sequence <= 65; sequence += 1) {
+      recordJournalTurn(store, {
+        ownerId: "owner-history",
+        conversationId: surface.conversationId,
+        turnId: `turn-${sequence}`,
+        role: sequence % 2 ? "user" : "assistant",
+        surfaceKind: "main_chat",
+        origin: "typed_chat",
+        status: "completed",
+        content: `canonical turn ${sequence}`,
+        contentBlocks: [],
+        createdAtMs: sequence,
+      });
+      const snapshot = buildContextSnapshot(store, surface.agentSessionId, "owner-history", sequence);
+      if (sequence === 63) at63 = snapshot;
+      if (sequence === 64) at64 = snapshot;
+      if (sequence === 65) at65 = snapshot;
+    }
+
+    expect(at63?.contextPlan).toMatchObject({
+      totalTurnCount: 63, retainedTurnCount: 63, omittedTurnCount: 0, olderHistoryStrategy: "none",
+    });
+    expect(at64?.contextPlan).toMatchObject({
+      totalTurnCount: 64, retainedTurnCount: 64, omittedTurnCount: 0, olderHistoryStrategy: "none",
+    });
+    expect(at65?.contextPlan).toMatchObject({
+      totalTurnCount: 65, retainedTurnCount: 64, omittedTurnCount: 1, olderHistoryStrategy: "truncated",
+    });
+    expect(at65?.recentTurns[0]?.content).toBe("canonical turn 2");
+    expect(at65?.contextPlan.stableCacheIdentity).toBe(at64?.contextPlan.stableCacheIdentity);
+    expect(at65?.contextPlan.dynamicContextIdentity).not.toBe(at64?.contextPlan.dynamicContextIdentity);
+    expect(at65?.contextPlan.semanticGuidance).toContain("recentTurns are the canonical history");
+    const cacheBoundedPolicy = kernelSystemPolicy("main_chat", "coordinator", at65!.contextPlan);
+    expect(cacheBoundedPolicy).toContain(`stable=${at65?.contextPlan.stableCacheIdentity}`);
+    expect(cacheBoundedPolicy).toContain("dynamic=per_turn");
+    expect(cacheBoundedPolicy).not.toContain(at65!.contextPlan.dynamicContextIdentity);
+    expect(renderContextSnapshot(at65!, "main_chat", "coordinator"))
+      .toContain(at65!.contextPlan.dynamicContextIdentity);
+    store.close();
+  });
+
   it("requires direct conversational recall from canonical recent turns", () => {
     const policy = kernelSystemPolicy("realtime_voice", "coordinator");
 
     expect(policy).toContain("recentTurns are the canonical history");
     expect(policy).toContain("before searching memories");
+    expect(policy).toContain("Clear instructions to start or delegate a task are authorization to submit it now");
+    expect(policy).toContain("Do not ask for a second confirmation merely to delegate");
   });
 
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
