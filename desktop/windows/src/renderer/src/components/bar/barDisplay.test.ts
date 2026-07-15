@@ -44,6 +44,13 @@ describe('deriveOrbState', () => {
     expect(deriveOrbState({ ...base, recording: true, status: 'sending' }).state).toBe('speaking')
   })
 
+  it('a tap-to-locked capture shows the distinct listening pose, still amplitude-reactive', () => {
+    expect(deriveOrbState({ ...base, recording: true, locked: true })).toEqual({
+      state: 'listening',
+      withAmplitude: true
+    })
+  })
+
   it('TTS playback → speaking WITHOUT amplitude (Omi is talking)', () => {
     expect(deriveOrbState({ ...base, status: 'speaking' })).toEqual({
       state: 'speaking',
@@ -202,7 +209,9 @@ describe('nextConversationDraft', () => {
   const codex: BarAgentRow = { id: 'codex', displayName: 'Codex', working: false }
 
   it('seeds the agent phrasing when an agent row opens an empty draft', () => {
-    expect(nextConversationDraft({ target: acp, previous: null, current: '' })).toBe('Claude Code, ')
+    expect(nextConversationDraft({ target: acp, previous: null, current: '' })).toBe(
+      'Claude Code, '
+    )
   })
 
   it('leaves the Omi thread draft empty when the Omi row opens', () => {
@@ -211,22 +220,22 @@ describe('nextConversationDraft', () => {
 
   it('drops a stale agent seed when returning to the Omi row (no leftover prefill)', () => {
     // Open Claude Code (draft seeded), go back, open Omi → clean, empty draft.
-    expect(
-      nextConversationDraft({ target: null, previous: acp, current: 'Claude Code, ' })
-    ).toBe('')
+    expect(nextConversationDraft({ target: null, previous: acp, current: 'Claude Code, ' })).toBe(
+      ''
+    )
   })
 
   it('replaces one agent seed with the next agent seed when switching agents', () => {
-    expect(
-      nextConversationDraft({ target: codex, previous: acp, current: 'Claude Code, ' })
-    ).toBe('Codex, ')
+    expect(nextConversationDraft({ target: codex, previous: acp, current: 'Claude Code, ' })).toBe(
+      'Codex, '
+    )
   })
 
   it('never clobbers text the user actually typed', () => {
     // Typed an Omi message, wandered to the list, opened an agent → keep the text.
-    expect(
-      nextConversationDraft({ target: acp, previous: null, current: 'draft I wrote' })
-    ).toBe('draft I wrote')
+    expect(nextConversationDraft({ target: acp, previous: null, current: 'draft I wrote' })).toBe(
+      'draft I wrote'
+    )
     // Typed on top of a seed, then returned to Omi → not a bare seed, so kept.
     expect(
       nextConversationDraft({ target: null, previous: acp, current: 'Claude Code, do X' })
