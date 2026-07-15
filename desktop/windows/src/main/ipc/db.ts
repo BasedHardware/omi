@@ -56,6 +56,12 @@ import {
   rewindFramesNeedingEmbeddingSql,
   searchEmbeddingPageSql
 } from './rewindEmbeddingSql'
+import {
+  REWIND_SAMPLE_TARGET,
+  REWIND_DAY_COUNT_SQL,
+  rewindSampleStep,
+  buildRewindSampledSql
+} from './rewindSampleSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -1351,6 +1357,26 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
         .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE ts BETWEEN ? AND ? ORDER BY ts`)
         .all(from, to) as RewindFrame[]
   )
+}
+
+/**
+ * A day's frames, evenly down-sampled to ~`target` (macOS getScreenshotsSampled).
+ * `<= target` returns them all; a busier day returns every Nth by timestamp so the
+ * timeline stays ~target frames instead of pulling an unbounded row count into one
+ * IPC round-trip. Always oldest-first. See rewindSampleSql.ts for the contract.
+ */
+export function listRewindFramesSampled(
+  from: number,
+  to: number,
+  target = REWIND_SAMPLE_TARGET
+): RewindFrame[] {
+  return timed('listRewindFramesSampled', () => {
+    const d = get()
+    const { n } = d.prepare(REWIND_DAY_COUNT_SQL).get(from, to) as { n: number }
+    if (n <= target) return listRewindFrames(from, to)
+    const step = rewindSampleStep(n, target)
+    return d.prepare(buildRewindSampledSql(REWIND_COLUMNS)).all(from, to, step) as RewindFrame[]
+  })
 }
 
 // --- Track 4: Rewind FTS5 search ---

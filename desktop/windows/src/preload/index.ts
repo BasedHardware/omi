@@ -189,6 +189,8 @@ const omi: OmiBridgeApi = {
     return () => ipcRenderer.removeListener('memories:deleteProgress', listener)
   },
   rewindFrames: (from: number, to: number) => ipcRenderer.invoke('rewind:frames', from, to),
+  rewindFramesSampled: (from: number, to: number) =>
+    ipcRenderer.invoke('rewind:framesSampled', from, to),
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),

@@ -4,6 +4,7 @@ import { resolve, sep } from 'path'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   listRewindFrames,
+  listRewindFramesSampled,
   searchRewindFrames,
   rewindDayBounds,
   rewindFrameCount,
@@ -60,6 +61,12 @@ let searchSeq = 0
 export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
+  )
+  // A day's frames, evenly down-sampled to ~500 (macOS parity + row-limit backstop).
+  // The day-scoped timeline loads through this; 'rewind:frames' stays the unsampled
+  // primitive for the small incremental live-append.
+  ipcMain.handle('rewind:framesSampled', async (_e, from: number, to: number) =>
+    listRewindFramesSampled(from, to)
   )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:frameCount', async () => rewindFrameCount())

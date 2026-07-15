@@ -1,105 +1,104 @@
-import { useEffect, useState } from 'react'
-import { Search, Play, Pause, ArrowLeft } from 'lucide-react'
+import { useEffect, useRef, useState } from 'react'
+import { Search, Play, Pause, X } from 'lucide-react'
 import { useRewind } from '../hooks/useRewind'
 import { RewindPlayer } from '../components/rewind/RewindPlayer'
 import { RewindTimelineBar } from '../components/rewind/RewindTimelineBar'
 import { RewindThumbnailStrip } from '../components/rewind/RewindThumbnailStrip'
-import { RewindSearchBar } from '../components/rewind/RewindSearchBar'
+import { RewindDatePicker } from '../components/rewind/RewindDatePicker'
 import { SearchResultsFilmstrip } from '../components/rewind/SearchResultsFilmstrip'
 
-// Compact header control matching the Phase-8 token set (neutral/white, hairline
-// border, rounded-control) — shared by the search, play/pause, and back buttons.
+// macOS parity: typing is debounced before the search runs (RewindViewModel 300ms).
+const SEARCH_DEBOUNCE_MS = 300
+
 const CTRL =
   'inline-flex items-center gap-1.5 rounded-control border border-line bg-white/[0.06] px-3 py-1.5 text-sm text-white/80 transition-colors hover:border-line-strong hover:bg-white/[0.10] hover:text-white'
 
 export function Rewind(): React.JSX.Element {
   const r = useRewind()
-  const [showSearch, setShowSearch] = useState(false)
-  // Gate the results filmstrip until a query actually runs, so the "No matches."
-  // empty state doesn't flash the moment search opens.
-  const [hasSearched, setHasSearched] = useState(false)
-  // Last query run — kept after jumping back to the timeline so the frame viewer
-  // keeps boxing the matching OCR lines on the jumped-to frame.
-  const [highlightQuery, setHighlightQuery] = useState('')
+  // Stable useCallbacks — destructured so effects can depend on them without
+  // re-running on every render (the `r` object identity changes each render).
+  const { search } = r
+  // The search field is always present in the top bar (macOS keeps one page — the
+  // content switches between the day timeline and the search results, it is not a
+  // separate mode/route). A non-empty query IS "searching".
+  const [query, setQuery] = useState('')
+  const searching = query.trim().length > 0
+  const inputRef = useRef<HTMLInputElement>(null)
 
-  const openSearch = (): void => {
-    setHasSearched(false)
-    setShowSearch(true)
-  }
-  const closeSearch = (): void => setShowSearch(false)
+  // Debounced search — re-runs whenever the query changes, clears when emptied.
+  useEffect(() => {
+    const q = query.trim()
+    if (!q) return
+    const id = setTimeout(() => void search(q), SEARCH_DEBOUNCE_MS)
+    return () => clearTimeout(id)
+  }, [query, search])
 
-  // Ctrl/Cmd+F opens search while on this page; Escape returns to the timeline.
+  // Ctrl/Cmd+F focuses the search field; Escape clears it (back to the timeline).
   useEffect(() => {
     const onKey = (e: KeyboardEvent): void => {
       if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'f') {
         e.preventDefault()
-        openSearch()
-      } else if (e.key === 'Escape' && showSearch) {
+        inputRef.current?.focus()
+      } else if (e.key === 'Escape' && searching) {
         e.preventDefault()
-        closeSearch()
+        setQuery('')
       }
     }
     document.addEventListener('keydown', onKey)
     return () => document.removeEventListener('keydown', onKey)
-  }, [showSearch])
+  }, [searching])
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 p-4">
-      <div className="flex items-center justify-between">
-        <h1 className="text-lg font-semibold text-white">Rewind</h1>
-        <div className="flex items-center gap-2">
-          {showSearch ? (
-            <button onClick={closeSearch} className={CTRL} title="Back to timeline (Esc)">
-              <ArrowLeft className="h-4 w-4" />
-              Timeline
-            </button>
-          ) : (
-            <>
-              <button onClick={openSearch} className={CTRL} title="Search screen history (Ctrl+F)">
-                <Search className="h-4 w-4" />
-                Search
-              </button>
+      <div className="flex items-center justify-between gap-3">
+        <h1 className="shrink-0 text-lg font-semibold text-white">Rewind</h1>
+        <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
+          <div className="relative min-w-0 max-w-xs flex-1">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-white/35" />
+            <input
+              ref={inputRef}
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Search what was on screen…"
+              className="w-full rounded-control border border-line bg-white/[0.07] py-1.5 pl-8 pr-8 text-sm text-white outline-none transition-colors placeholder:text-white/35 focus:border-line-strong"
+            />
+            {searching && (
               <button
-                onClick={() => r.setPlaying(!r.playing)}
-                className={CTRL}
-                title={r.playing ? 'Pause' : 'Play'}
+                onClick={() => setQuery('')}
+                className="absolute right-2 top-1/2 -translate-y-1/2 text-white/40 transition-colors hover:text-white"
+                title="Clear search (Esc)"
               >
-                {r.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
-                {r.playing ? 'Pause' : 'Play'}
+                <X className="h-4 w-4" />
               </button>
-            </>
+            )}
+          </div>
+          <RewindDatePicker selectedDate={r.selectedDate} onSelect={r.selectDate} />
+          {!searching && (
+            <button
+              onClick={() => r.setPlaying(!r.playing)}
+              className={CTRL}
+              title={r.playing ? 'Pause' : 'Play'}
+            >
+              {r.playing ? <Pause className="h-4 w-4" /> : <Play className="h-4 w-4" />}
+              {r.playing ? 'Pause' : 'Play'}
+            </button>
           )}
         </div>
       </div>
 
-      {showSearch ? (
-        <div className="flex min-h-0 flex-col gap-3">
-          <RewindSearchBar
-            onSearch={(q) => {
-              setHasSearched(true)
-              setHighlightQuery(q)
-              void r.search(q)
+      {searching ? (
+        <div className="min-h-0 flex-1 overflow-y-auto">
+          <SearchResultsFilmstrip
+            groups={r.results}
+            onJump={(ts) => {
+              r.jumpTo(ts)
+              setQuery('')
             }}
           />
-          {hasSearched ? (
-            <div className="min-h-0 overflow-y-auto">
-              <SearchResultsFilmstrip
-                groups={r.results}
-                onJump={(ts) => {
-                  r.setCursorTs(ts)
-                  setShowSearch(false)
-                }}
-              />
-            </div>
-          ) : (
-            <p className="px-1 py-2 text-sm text-white/35">
-              Type a word that appeared on your screen to jump back to that moment.
-            </p>
-          )}
         </div>
       ) : (
         <>
-          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} highlightQuery={highlightQuery} />
+          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} highlightQuery={query} />
           <RewindThumbnailStrip frames={r.frames} cursorTs={r.cursorTs} onSeek={r.setCursorTs} />
           <RewindTimelineBar
             frames={r.frames}

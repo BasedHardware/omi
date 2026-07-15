@@ -1,85 +1,128 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import type { RewindFrame, RewindSearchGroup } from '../../../shared/types'
-import { mergeFrames, isFollowingLive } from '../lib/rewindLive'
+import { startOfLocalDay, endOfLocalDay } from '../lib/conversations/filtering'
 
-const DAY_MS = 24 * 60 * 60 * 1000
-// How often the open timeline polls for newly-captured frames.
-const LIVE_POLL_MS = 1000
+// macOS parity: only "today" auto-refreshes, and silently — every 3.0s, never
+// touching the loading state and republishing only when the frame set actually
+// changed, so a live capture never destroys scrub position or a typed note.
+const TODAY_REFRESH_MS = 3000
 
 export type RewindState = {
   frames: RewindFrame[]
   bounds: { min: number; max: number } | null
+  /** Local-midnight ms of the day currently in view. */
+  selectedDate: number
+  /** True when `selectedDate` is today (drives the silent auto-refresh + live edge). */
+  isToday: boolean
+  /** Jump the timeline to a whole day (local-midnight ms of any moment in it).
+   *  Reloads only when the day actually changes. */
+  selectDate: (dayMs: number) => void
+  /** Jump to a specific moment — loads that moment's DAY first if it isn't the one
+   *  in view, THEN seeks. This is the shipped search "jump to result" fix: seeking
+   *  alone left the player empty whenever the hit fell outside the loaded window. */
+  jumpTo: (ts: number) => void
+  loading: boolean
   cursorTs: number
   setCursorTs: (ts: number) => void
   playing: boolean
   setPlaying: (p: boolean) => void
   results: RewindSearchGroup[]
   search: (q: string) => Promise<void>
-  reload: () => Promise<void>
+}
+
+/** Same frames, by id, in the same order — the "did the day actually change" test
+ *  the silent today-refresh gates on (macOS compares the fetched id list). */
+function sameFrameIds(a: RewindFrame[], b: RewindFrame[]): boolean {
+  if (a.length !== b.length) return false
+  for (let i = 0; i < a.length; i++) if (a[i].id !== b[i].id) return false
+  return true
 }
 
 export function useRewind(): RewindState {
+  const [selectedDate, setSelectedDate] = useState(() => startOfLocalDay(Date.now()))
   const [frames, setFrames] = useState<RewindFrame[]>([])
-  const [bounds, setBounds] = useState<{ min: number; max: number } | null>(null)
+  const [loading, setLoading] = useState(true)
   const [cursorTs, setCursorTs] = useState<number>(() => Date.now())
   const [playing, setPlaying] = useState(false)
   const [results, setResults] = useState<RewindSearchGroup[]>([])
-  const playTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+
   const framesRef = useRef(frames)
   useEffect(() => {
     framesRef.current = frames
   }, [frames])
-  const cursorRef = useRef(cursorTs)
+  const selectedDateRef = useRef(selectedDate)
   useEffect(() => {
-    cursorRef.current = cursorTs
-  }, [cursorTs])
-  // The query whose results are currently on screen, so a late-arriving semantic
-  // result for a superseded query can be dropped.
+    selectedDateRef.current = selectedDate
+  }, [selectedDate])
+
+  const playTimer = useRef<ReturnType<typeof setInterval> | null>(null)
+  // Guards the async day load against races: pick day A then B fast, and A must not
+  // land after B and clobber the view.
+  const loadSeq = useRef(0)
+  // A pending `jumpTo` target: set the cursor to this exact moment once the day it
+  // lives in has loaded, instead of the day's newest frame.
+  const pendingJump = useRef<number | null>(null)
+  // The query whose results are on screen, so a late semantic result for a
+  // superseded query can be dropped.
   const queryRef = useRef('')
 
-  const reload = useCallback(async () => {
-    const b = await window.omi.rewindDayBounds()
-    setBounds(b)
-    const to = b?.max ?? Date.now()
-    const from = to - DAY_MS
-    const f = await window.omi.rewindFrames(from, to)
+  const bounds = { min: selectedDate, max: endOfLocalDay(selectedDate) }
+
+  // Load one day's frames, evenly down-sampled to ~500 (see rewindFramesSampled).
+  const loadDay = useCallback(async (dayStart: number) => {
+    const seq = ++loadSeq.current
+    setLoading(true)
+    const f = await window.omi.rewindFramesSampled(dayStart, endOfLocalDay(dayStart))
+    if (seq !== loadSeq.current) return // a newer day was selected mid-flight
     setFrames(f)
-    if (f.length > 0) setCursorTs(f[f.length - 1].ts)
+    setLoading(false)
+    const jump = pendingJump.current
+    pendingJump.current = null
+    if (jump != null) setCursorTs(jump)
+    else if (f.length > 0) setCursorTs(f[f.length - 1].ts)
+    else setCursorTs(dayStart)
   }, [])
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
-    void reload()
-  }, [reload])
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- load-on-mount / reload-on-day-change; not a self-retriggering loop
+    void loadDay(selectedDate)
+  }, [selectedDate, loadDay])
 
-  // Live refresh: poll for newly-captured frames and extend the timeline in
-  // place. We append (never reload) so the user's scrub position is preserved;
-  // the cursor only jumps to the newest frame when they're already following
-  // the live edge.
+  // Silent today-only refresh (macOS): resample the day and republish ONLY when the
+  // frame set changed. Never sets loading, never moves the cursor — preserves the
+  // user's scrub position and any transient view state. Past days are static.
   useEffect(() => {
+    const dayStart = selectedDate
+    if (startOfLocalDay(Date.now()) !== dayStart) return // only today ticks
     let alive = true
     const id = setInterval(async () => {
-      const b = await window.omi.rewindDayBounds()
-      if (!alive || !b) return
-      // Keep the same object when unchanged so we don't re-render every tick.
-      setBounds((prev) => (prev && prev.min === b.min && prev.max === b.max ? prev : b))
-      const current = framesRef.current
-      const haveMax = current.length > 0 ? current[current.length - 1].ts : 0
-      if (b.max <= haveMax) return
-      const incoming = await window.omi.rewindFrames(haveMax + 1, b.max)
-      if (!alive || incoming.length === 0) return
-      const following = isFollowingLive(cursorRef.current, current)
-      const merged = mergeFrames(current, incoming)
-      setFrames(merged)
-      if (following) setCursorTs(merged[merged.length - 1].ts)
-    }, LIVE_POLL_MS)
+      if (startOfLocalDay(Date.now()) !== dayStart) return // rolled past midnight
+      const f = await window.omi.rewindFramesSampled(dayStart, endOfLocalDay(dayStart))
+      if (!alive) return
+      setFrames((prev) => (sameFrameIds(prev, f) ? prev : f))
+    }, TODAY_REFRESH_MS)
     return () => {
       alive = false
       clearInterval(id)
     }
+  }, [selectedDate])
+
+  const selectDate = useCallback((dayMs: number) => {
+    const day = startOfLocalDay(dayMs)
+    setSelectedDate((prev) => (prev === day ? prev : day)) // reload only if it changed
   }, [])
 
-  // Playback advances the cursor frame-by-frame.
+  const jumpTo = useCallback((ts: number) => {
+    const day = startOfLocalDay(ts)
+    if (day === selectedDateRef.current) {
+      setCursorTs(ts) // same day already loaded — just seek
+      return
+    }
+    pendingJump.current = ts
+    setSelectedDate(day) // loads the day, then the cursor lands on `ts`
+  }, [])
+
+  // Playback advances the cursor frame-by-frame through the loaded day.
   useEffect(() => {
     if (playTimer.current) clearInterval(playTimer.current)
     if (!playing || frames.length === 0) return
@@ -95,32 +138,38 @@ export function useRewind(): RewindState {
     }
   }, [playing, frames])
 
-  // Keyword results, immediately — this never waits on the network. Semantic hits
-  // are merged in later by the subscription below, if they arrive at all.
+  // Keyword results, immediately — never waits on the network. Semantic hits are
+  // merged in later by the subscription below, if they arrive at all.
   const search = useCallback(async (q: string) => {
     queryRef.current = q.trim()
     setResults(await window.omi.rewindSearch(q))
   }, [])
 
   // Phase 2 of a search (see the rewind:search handler): the same list with
-  // semantic recall merged in. Applied only if it belongs to the query currently
-  // on screen — a slow round-trip for "invoice" must not overwrite the results
-  // the user is now looking at for "receipt".
+  // semantic recall merged in. Applied only if it belongs to the query currently on
+  // screen — a slow round-trip for "invoice" must not overwrite "receipt".
   useEffect(() => {
     return window.omi.onRewindSearchResults(({ query, groups }) => {
       if (query === queryRef.current) setResults(groups)
     })
   }, [])
 
+  // eslint-disable-next-line react-hooks/purity -- "is the day in view today?" is inherently clock-relative; recomputed each render so it flips at midnight
+  const isToday = startOfLocalDay(Date.now()) === selectedDate
+
   return {
     frames,
     bounds,
+    selectedDate,
+    isToday,
+    selectDate,
+    jumpTo,
+    loading,
     cursorTs,
     setCursorTs,
     playing,
     setPlaying,
     results,
-    search,
-    reload
+    search
   }
 }
