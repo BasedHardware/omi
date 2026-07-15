@@ -135,7 +135,12 @@ function tokenizeSql(sql: string): SqlToken[] {
  *  are subqueries scanned on their own). `ok` is false when a table slot held
  *  something this parser can't classify (e.g. a token where a table name was
  *  expected) — the caller then fails closed. */
-function collectTables(toks: SqlToken[]): { tables: string[]; bound: Set<string>; ok: boolean } {
+function collectTables(toks: SqlToken[]): {
+  tables: string[]
+  bound: Set<string>
+  ok: boolean
+  qualified: boolean
+} {
   const bound = new Set<string>()
   for (let i = 0; i + 2 < toks.length; i++) {
     const a = toks[i]
@@ -152,6 +157,7 @@ function collectTables(toks: SqlToken[]): { tables: string[]; bound: Set<string>
 
   const tables: string[] = []
   let ok = true
+  let qualified = false
   for (let i = 0; i < toks.length; i++) {
     const kw = toks[i]
     if (kw.t !== 'word' || (kw.v !== 'from' && kw.v !== 'join')) continue
@@ -167,8 +173,15 @@ function collectTables(toks: SqlToken[]): { tables: string[]; bound: Set<string>
       let name = nx.v
       const dot = toks[j + 1]
       const after = toks[j + 2]
-      if (dot && dot.t === 'punct' && dot.v === '.' && after && (after.t === 'word' || after.t === 'ident')) {
+      if (
+        dot &&
+        dot.t === 'punct' &&
+        dot.v === '.' &&
+        after &&
+        (after.t === 'word' || after.t === 'ident')
+      ) {
         name = after.v // schema.table → the table part
+        qualified = true // a schema-qualified ref (e.g. main.rewind_frames)
         j += 2
       }
       tables.push(name)
@@ -186,17 +199,28 @@ function collectTables(toks: SqlToken[]): { tables: string[]; bound: Set<string>
       break
     }
   }
-  return { tables, bound, ok }
+  return { tables, bound, ok, qualified }
 }
 
-/** True iff every table the query reads is in the allowlist. Fail-closed: any
- *  table slot the parser can't confidently classify rejects the whole query. Runs
- *  AFTER the read-only checks — it only narrows *which* tables a valid SELECT may
- *  touch, it never widens what counts as read-only. */
-export function tablesAllowed(sql: string): boolean {
-  const { tables, bound, ok } = collectTables(tokenizeSql(sql))
+/** True iff every table the query reads is in `allowed` (the CTE-bound relation
+ *  names are always permitted — their bodies are scanned on their own). Fail-
+ *  closed: any table slot the parser can't confidently classify rejects the whole
+ *  query. Runs AFTER the read-only checks — it only narrows *which* tables a valid
+ *  SELECT may touch, it never widens what counts as read-only.
+ *
+ *  `rejectQualified` additionally refuses any schema-qualified table reference
+ *  (e.g. `main.rewind_frames`). The denylist closure shadows the unqualified
+ *  `rewind_frames` with a filtered CTE; a schema-qualified ref would bypass that
+ *  CTE and hit the real table, so under a denylist qualified refs are rejected. */
+export function tablesAllowed(
+  sql: string,
+  allowed: ReadonlySet<string> = TABLE_ALLOWLIST,
+  rejectQualified = false
+): boolean {
+  const { tables, bound, ok, qualified } = collectTables(tokenizeSql(sql))
   if (!ok) return false
-  return tables.every((name) => TABLE_ALLOWLIST.has(name) || bound.has(name))
+  if (rejectQualified && qualified) return false
+  return tables.every((name) => allowed.has(name) || bound.has(name))
 }
 
 /** Strip everything the keyword blocklist must NOT see so it scans SQL *structure*
@@ -295,12 +319,115 @@ export function formatRows(columns: string[], rows: unknown[][]): string {
   return lines.join('\n')
 }
 
+/** When the user has a non-empty Insight denylist, execute_sql is closed to the
+ *  FTS mirror as well: `rewind_frames_fts` is external-content over
+ *  `rewind_frames` and exposes `ocr_text`/`window_title`/`app` DIRECTLY (and MATCH
+ *  can't be run against a CTE), so it cannot be shadow-filtered like the base
+ *  table. Dropping it leaves the base table (now filtered) as the only readable
+ *  relation — the model falls back to a LIKE scan, correct if slower. */
+const DENYLIST_ALLOWLIST: ReadonlySet<string> = new Set(['rewind_frames'])
+
+/** sql.ts's own copy of the LIKE-metachar escaper (db.ts keeps a sibling copy;
+ *  neither layer imports the other). */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
+/** A SQL single-quoted string literal for `raw` (embedded quotes doubled). */
+function sqlStringLiteral(raw: string): string {
+  return `'${raw.replace(/'/g, "''")}'`
+}
+
+/** The WHERE body that keeps only NON-denied frames: for each term, the
+ *  concatenated identity columns must NOT contain it (case-insensitive substring,
+ *  the SAME predicate as the per-frame gate isUserDeniedApp). Terms are inlined as
+ *  escaped literals because the query runner takes only a SQL string (no bound
+ *  params). Empty when there are no usable terms (the caller then skips shadowing). */
+export function buildDenyFilter(terms: string[]): string {
+  const usable = terms.map((t) => t.trim()).filter((t) => t.length > 0)
+  if (usable.length === 0) return ''
+  return usable
+    .map((t) => {
+      const literal = sqlStringLiteral(`%${escapeLikeTerm(t)}%`)
+      return `(app || ' ' || window_title || ' ' || process_name) NOT LIKE ${literal} ESCAPE '\\'`
+    })
+    .join(' AND ')
+}
+
+/** Skip leading whitespace + comments and report whether the statement begins
+ *  with `WITH` (optionally `WITH RECURSIVE`), plus the char offset right after
+ *  that keyword (where a new leading CTE is spliced in). */
+function scanLeadingWith(sql: string): { isWith: boolean; insertAt: number } {
+  const n = sql.length
+  let i = 0
+  const skip = (): void => {
+    for (;;) {
+      while (i < n && /\s/.test(sql[i])) i++
+      if (sql[i] === '-' && sql[i + 1] === '-') {
+        i += 2
+        while (i < n && sql[i] !== '\n') i++
+        continue
+      }
+      if (sql[i] === '/' && sql[i + 1] === '*') {
+        i += 2
+        while (i < n && !(sql[i] === '*' && sql[i + 1] === '/')) i++
+        i += 2
+        continue
+      }
+      break
+    }
+  }
+  const word = (): string => {
+    let v = ''
+    while (i < n && /[A-Za-z_]/.test(sql[i])) {
+      v += sql[i]
+      i++
+    }
+    return v
+  }
+  skip()
+  if (word().toLowerCase() !== 'with') return { isWith: false, insertAt: -1 }
+  let insertAt = i // right after WITH
+  skip()
+  const save = i
+  if (word().toLowerCase() === 'recursive') insertAt = i
+  else i = save
+  return { isWith: true, insertAt }
+}
+
+/** Shadow the real `rewind_frames` table with a same-named CTE that filters out
+ *  denied frames, so every unqualified `rewind_frames` reference in the query —
+ *  including `WHERE app='Signal'` — resolves to the filtered relation and can
+ *  physically never return a denied row. The CTE body reads the real table via a
+ *  SCHEMA-QUALIFIED name (`main.rewind_frames`) so it isn't self-recursive; the
+ *  caller has already rejected any user-supplied schema-qualified ref that would
+ *  otherwise bypass this CTE. Merges ahead of an existing WITH / WITH RECURSIVE.
+ *  A no-op when there are no usable terms. */
+export function applyDenylistShadow(sql: string, terms: string[]): string {
+  const filter = buildDenyFilter(terms)
+  if (!filter) return sql
+  const cte = `rewind_frames AS (SELECT * FROM main.rewind_frames WHERE ${filter})`
+  const { isWith, insertAt } = scanLeadingWith(sql)
+  if (isWith) return `${sql.slice(0, insertAt)} ${cte},${sql.slice(insertAt)}`
+  return `WITH ${cte} ${sql}`
+}
+
 /**
  * Run one execute_sql tool call. Returns the string that becomes the
  * functionResponse `result` sent back to Gemini — an error string (never a
  * throw) on any rejection, so the tool loop continues rather than aborting.
+ *
+ * `denylist` (the user's Insight denylist): when non-empty, execute_sql is closed
+ * so a denylisted app's rows can NEVER be retrieved — the FTS mirror is dropped
+ * from the allowlist, schema-qualified refs are rejected, and every unqualified
+ * `rewind_frames` reference is shadowed by a filtered CTE. Empty denylist → the
+ * path is byte-for-byte unchanged.
  */
-export function executeSql(rawQuery: unknown, runQuery: QueryRunner): string {
+export function executeSql(
+  rawQuery: unknown,
+  runQuery: QueryRunner,
+  denylist: string[] = []
+): string {
   const query = typeof rawQuery === 'string' ? rawQuery.trim() : ''
   if (!query) return 'Error: empty query'
 
@@ -314,14 +441,21 @@ export function executeSql(rawQuery: unknown, runQuery: QueryRunner): string {
 
   if (!isReadOnlySql(single)) return 'Error: only read-only SELECT/WITH queries are allowed'
 
+  const denyTerms = denylist.map((t) => t.trim()).filter((t) => t.length > 0)
+  const denyActive = denyTerms.length > 0
+
   // Even a valid read-only SELECT may only touch the rewind frame tables — other
-  // tables' contents would flow to Gemini (a deliberate deviation from Mac).
-  if (!tablesAllowed(single)) return 'Error: only the rewind_frames table is queryable'
+  // tables' contents would flow to Gemini (a deliberate deviation from Mac). Under
+  // an active denylist the allowlist tightens to the base table only and schema-
+  // qualified refs are rejected (see tablesAllowed / applyDenylistShadow).
+  if (!tablesAllowed(single, denyActive ? DENYLIST_ALLOWLIST : TABLE_ALLOWLIST, denyActive))
+    return 'Error: only the rewind_frames table is queryable'
 
   const limited = appendLimit(single, MAX_ROWS)
+  const finalSql = denyActive ? applyDenylistShadow(limited, denyTerms) : limited
   let result: { columns: string[]; rows: unknown[][] }
   try {
-    result = runQuery(limited)
+    result = runQuery(finalSql)
   } catch (e) {
     // Message only — a better-sqlite3 error message names columns/syntax, never
     // row contents. Safe to surface to the model; do not log it here.

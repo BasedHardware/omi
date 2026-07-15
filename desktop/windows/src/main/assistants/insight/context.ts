@@ -57,22 +57,28 @@ export async function getUserLanguage(now: number = Date.now()): Promise<string 
 }
 
 /** Assemble the Phase-1 context data. All local reads; the lookback window is
- *  [lookbackStartMs, now]. */
+ *  [lookbackStartMs, now]. `denylist` (the user's Insight denylist) is threaded
+ *  into the activity aggregate so a denylisted app's names/titles never appear in
+ *  the prompt — even when Insight triggered on a different, allowed app. */
 export function loadInsightContext(args: {
   frame: Pick<RewindFrame, 'app' | 'windowTitle'>
   now: Date
   lookbackStartMs: number
+  denylist: string[]
 }): InsightContextData {
   const nowMs = args.now.getTime()
-  const activity: ActivityRow[] = rewindActivityAggregate(args.lookbackStartMs, nowMs, 30).map(
-    (r) => ({
-      app: r.app,
-      windowTitle: r.windowTitle,
-      count: r.count,
-      firstSeen: r.firstSeen,
-      lastSeen: r.lastSeen
-    })
-  )
+  const activity: ActivityRow[] = rewindActivityAggregate(
+    args.lookbackStartMs,
+    nowMs,
+    30,
+    args.denylist
+  ).map((r) => ({
+    app: r.app,
+    windowTitle: r.windowTitle,
+    count: r.count,
+    firstSeen: r.firstSeen,
+    lastSeen: r.lastSeen
+  }))
   const spanMinutes = Math.max(0, (nowMs - args.lookbackStartMs) / 60_000)
   const previousInsights = recentInsights(MAX_INSIGHTS_IN_PROMPT)
     .map((r) => r.advice)

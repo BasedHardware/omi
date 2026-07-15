@@ -13,6 +13,7 @@ import {
   NotificationThrottle,
   isNotificationSnoozed,
   minIntervalMs,
+  notificationsActive,
   notifyProactive,
   setNotificationSnooze,
   type ThrottleInput
@@ -174,5 +175,45 @@ describe('notifyProactive (delivery)', () => {
     h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 0 })
     expect(notifyProactive('focus', payload, { now: T0 })).toBe(false)
     expect(h.deliverInsight).not.toHaveBeenCalled()
+  })
+})
+
+describe('notificationsActive (would-a-toast-appear predicate)', () => {
+  beforeEach(() => {
+    setNotificationSnooze(null)
+    h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 3 })
+  })
+
+  it('true when master on, frequency > 0, and not snoozed', () => {
+    expect(notificationsActive('insight', T0)).toBe(true)
+  })
+
+  it('true at Maximum (level 5 — no throttle)', () => {
+    h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 5 })
+    expect(notificationsActive('insight', T0)).toBe(true)
+  })
+
+  it('false at the default Off frequency (0), and for a junk level', () => {
+    h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 0 })
+    expect(notificationsActive('insight', T0)).toBe(false)
+    h.getAppSettings.mockReturnValue({ notificationsEnabled: true, notificationFrequency: 99 })
+    expect(notificationsActive('insight', T0)).toBe(false)
+  })
+
+  it('false when the master toggle is off', () => {
+    h.getAppSettings.mockReturnValue({ notificationsEnabled: false, notificationFrequency: 3 })
+    expect(notificationsActive('insight', T0)).toBe(false)
+  })
+
+  it('false while snoozed', () => {
+    setNotificationSnooze(T0 + 10 * MIN)
+    expect(notificationsActive('insight', T0)).toBe(false)
+  })
+
+  it('does NOT consult the per-interval rate limit — two back-to-back calls stay true', () => {
+    // "Inside a rate window" is "not yet", not "silenced"; the predicate reflects
+    // only snooze/master/frequency, never the rate clocks.
+    expect(notificationsActive('insight', T0)).toBe(true)
+    expect(notificationsActive('insight', T0 + 1)).toBe(true)
   })
 })

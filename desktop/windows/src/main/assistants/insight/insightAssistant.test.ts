@@ -10,6 +10,8 @@ const h = vi.hoisted(() => ({
   runTwoPhasePipeline: vi.fn(),
   persistInsight: vi.fn((): number | null => 1),
   notifyProactive: vi.fn(() => true),
+  notificationsActive: vi.fn(() => true),
+  runReadonlySelect: vi.fn(() => ({ columns: [] as string[], rows: [] as unknown[][] })),
   getBackendSession: vi.fn(
     (): { apiBase: string; desktopApiBase: string; token: string } | null => ({
       apiBase: 'a',
@@ -32,13 +34,19 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../../appSettings', () => ({ getAppSettings: () => h.appSettings }))
 vi.mock('../../insight/state', () => ({ getInsightSettings: () => h.insightSettings }))
-vi.mock('../core/notify', () => ({ notifyProactive: h.notifyProactive }))
+vi.mock('../core/notify', () => ({
+  notifyProactive: h.notifyProactive,
+  notificationsActive: h.notificationsActive
+}))
 vi.mock('../core/session', () => ({
   getBackendSession: h.getBackendSession,
   getSessionEpoch: h.getSessionEpoch
 }))
 vi.mock('../core/frameImage', () => ({ readFrameImageBase64: async () => null }))
-vi.mock('../../ipc/db', () => ({ runReadonlySelect: vi.fn(), rewindFramesByIds: vi.fn(() => []) }))
+vi.mock('../../ipc/db', () => ({
+  runReadonlySelect: h.runReadonlySelect,
+  rewindFramesByIds: vi.fn(() => [])
+}))
 vi.mock('./gemini', () => ({ runTwoPhasePipeline: h.runTwoPhasePipeline }))
 vi.mock('./persist', async () => {
   const actual = await vi.importActual<typeof import('./persist')>('./persist')
@@ -85,6 +93,8 @@ beforeEach(() => {
   h.appSettings = { notificationsEnabled: true }
   h.insightSettings = { enabled: true, intervalMin: 10, denylist: [] }
   h.persistInsight.mockReturnValue(1)
+  h.notificationsActive.mockReturnValue(true)
+  h.runReadonlySelect.mockReturnValue({ columns: [], rows: [] })
   h.getSessionEpoch.mockReturnValue(7)
   h.getBackendSession.mockReturnValue({ apiBase: 'a', desktopApiBase: 'd', token: 't' })
 })
@@ -92,14 +102,20 @@ beforeEach(() => {
 afterEach(() => vi.restoreAllMocks())
 
 describe('isEnabled', () => {
-  it('is the AND of enabled and notificationsEnabled', () => {
+  it('requires the feature toggle AND a deliverable notification (notificationsActive)', () => {
     const a = new InsightAssistant()
     expect(a.isEnabled()).toBe(true)
+    // Feature toggle off → disabled.
     h.insightSettings.enabled = false
     expect(a.isEnabled()).toBe(false)
+    // Feature on but notifications effectively silenced (off / freq 0 / snoozed) →
+    // disabled: a glow-less Insight run whose toast can't appear is wasted spend.
     h.insightSettings.enabled = true
-    h.appSettings.notificationsEnabled = false
+    h.notificationsActive.mockReturnValue(false)
     expect(a.isEnabled()).toBe(false)
+    // Both on → enabled.
+    h.notificationsActive.mockReturnValue(true)
+    expect(a.isEnabled()).toBe(true)
   })
   it('is false after stop()', () => {
     const a = new InsightAssistant()
@@ -145,6 +161,33 @@ describe('analyze', () => {
     h.getBackendSession.mockReturnValue(null)
     await new InsightAssistant().analyze(frame())
     expect(h.runTwoPhasePipeline).not.toHaveBeenCalled()
+  })
+
+  it('threads the user denylist into the Phase-1 activity context', async () => {
+    // FIX 4(a): the denylist must reach loadInsightContext even when Insight
+    // triggered on a DIFFERENT, allowed app (here Terminal).
+    h.insightSettings.denylist = ['Signal']
+    h.runTwoPhasePipeline.mockResolvedValue({ insight: null, sqlCount: 0 })
+    await new InsightAssistant().analyze(frame())
+    expect(h.loadInsightContext).toHaveBeenCalledWith(
+      expect.objectContaining({ denylist: ['Signal'] })
+    )
+  })
+
+  it('binds the denylist into the execute_sql closure (denied rows shadow-filtered)', async () => {
+    // FIX 4(b): the execSql the pipeline receives is bound to the denylist, so a
+    // `WHERE app='Signal'` query is rewritten to a filtered CTE before it runs.
+    h.insightSettings.denylist = ['Signal']
+    let opts: { execSql: (q: string) => string } | undefined
+    h.runTwoPhasePipeline.mockImplementation(async (o: unknown) => {
+      opts = o as { execSql: (q: string) => string }
+      return { insight: null, sqlCount: 0 }
+    })
+    await new InsightAssistant().analyze(frame())
+    opts!.execSql("SELECT ocr_text FROM rewind_frames WHERE app='Signal'")
+    expect(h.runReadonlySelect).toHaveBeenCalledWith(
+      expect.stringContaining('WITH rewind_frames AS')
+    )
   })
 })
 

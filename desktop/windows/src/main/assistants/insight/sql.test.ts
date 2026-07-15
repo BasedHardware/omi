@@ -1,12 +1,16 @@
+import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it, vi } from 'vitest'
 import {
   appendLimit,
+  applyDenylistShadow,
+  buildDenyFilter,
   executeSql,
   formatRows,
   isReadOnlySql,
   loadScreenshotBase64,
   MAX_ROWS,
-  CELL_CAP
+  CELL_CAP,
+  type QueryRunner
 } from './sql'
 
 describe('isReadOnlySql', () => {
@@ -34,13 +38,21 @@ describe('isReadOnlySql', () => {
   it('ignores keywords that only appear inside a string literal', () => {
     // OCR text / window titles routinely contain these words — they must not trip
     // the blocklist when they live in a literal rather than as SQL structure.
-    expect(isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%delete%'")).toBe(true)
-    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE window_title LIKE '%Create%'")).toBe(true)
+    expect(isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%delete%'")).toBe(
+      true
+    )
+    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE window_title LIKE '%Create%'")).toBe(
+      true
+    )
     expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE ocr_text LIKE '%update%'")).toBe(true)
-    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE ocr_text LIKE '%insert file%'")).toBe(true)
+    expect(isReadOnlySql("SELECT id FROM rewind_frames WHERE ocr_text LIKE '%insert file%'")).toBe(
+      true
+    )
   })
   it('handles an escaped quote inside a literal and still allows it', () => {
-    expect(isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%it''s delete%'")).toBe(true)
+    expect(
+      isReadOnlySql("SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%it''s delete%'")
+    ).toBe(true)
   })
   it('ignores a keyword used as a double-quoted identifier', () => {
     expect(isReadOnlySql('SELECT "create" FROM rewind_frames')).toBe(true)
@@ -128,7 +140,10 @@ describe('executeSql table allowlist', () => {
     const runQuery = vi.fn(() => ({ columns: ['id'], rows: [[1]] }))
     executeSql("SELECT rowid FROM rewind_frames_fts WHERE rewind_frames_fts MATCH 'foo'", runQuery)
     expect(runQuery).toHaveBeenCalledTimes(1)
-    executeSql('SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id', runQuery)
+    executeSql(
+      'SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id',
+      runQuery
+    )
     expect(runQuery).toHaveBeenCalledTimes(2)
   })
   it('allows a CTE / derived table that only reads rewind_frames', () => {
@@ -205,5 +220,168 @@ describe('loadScreenshotBase64', () => {
       readImageBase64: async () => null
     })
     expect(b).toBeNull()
+  })
+})
+
+// --- FIX 4(b): the execute_sql denylist closure ------------------------------
+
+describe('buildDenyFilter', () => {
+  it('is empty when there are no usable terms', () => {
+    expect(buildDenyFilter([])).toBe('')
+    expect(buildDenyFilter(['   ', ''])).toBe('')
+  })
+  it('emits one NOT LIKE per term over the concatenated identity columns', () => {
+    expect(buildDenyFilter(['Signal'])).toBe(
+      "(app || ' ' || window_title || ' ' || process_name) NOT LIKE '%Signal%' ESCAPE '\\'"
+    )
+    expect(buildDenyFilter(['a', 'b'])).toContain(' AND ')
+  })
+  it('escapes LIKE metacharacters and embedded quotes so a term matches literally', () => {
+    expect(buildDenyFilter(["100%_o'clock"])).toBe(
+      "(app || ' ' || window_title || ' ' || process_name) NOT LIKE '%100\\%\\_o''clock%' ESCAPE '\\'"
+    )
+  })
+})
+
+describe('applyDenylistShadow', () => {
+  it('is a no-op with no usable terms', () => {
+    expect(applyDenylistShadow('SELECT 1', [])).toBe('SELECT 1')
+  })
+  it('prepends a filtered CTE for a plain SELECT', () => {
+    const out = applyDenylistShadow('SELECT app FROM rewind_frames', ['Signal'])
+    expect(out.startsWith('WITH rewind_frames AS (SELECT * FROM main.rewind_frames WHERE ')).toBe(
+      true
+    )
+    expect(out.endsWith('SELECT app FROM rewind_frames')).toBe(true)
+  })
+  it('merges ahead of an existing WITH', () => {
+    const out = applyDenylistShadow('WITH x AS (SELECT 1) SELECT * FROM x', ['Signal'])
+    expect(out).toMatch(/^WITH rewind_frames AS \(.*\), x AS \(SELECT 1\) SELECT \* FROM x$/s)
+  })
+  it('merges after WITH RECURSIVE, keeping RECURSIVE first', () => {
+    const out = applyDenylistShadow('WITH RECURSIVE r AS (SELECT 1) SELECT * FROM r', ['Signal'])
+    expect(out).toMatch(/^WITH RECURSIVE rewind_frames AS \(.*\), r AS/s)
+  })
+  it('detects a WITH hidden behind a leading comment', () => {
+    const out = applyDenylistShadow('/* c */ WITH x AS (SELECT 1) SELECT * FROM x', ['Signal'])
+    expect(out).toMatch(/WITH rewind_frames AS \(.*\), x AS/s)
+  })
+})
+
+describe('executeSql under an active denylist', () => {
+  it('leaves the query unchanged when the denylist is empty', () => {
+    const runQuery = vi.fn(() => ({ columns: ['app'], rows: [['X']] }))
+    executeSql('SELECT app FROM rewind_frames', runQuery, [])
+    expect(runQuery).toHaveBeenCalledWith('SELECT app FROM rewind_frames LIMIT 200')
+  })
+  it('shadows rewind_frames with a filtered CTE before running', () => {
+    const runQuery = vi.fn((_sql: string) => ({ columns: ['app'], rows: [] as unknown[][] }))
+    executeSql('SELECT app FROM rewind_frames', runQuery, ['Signal'])
+    const sql = runQuery.mock.calls[0][0]
+    expect(sql).toContain('WITH rewind_frames AS (SELECT * FROM main.rewind_frames WHERE')
+    expect(sql).toContain('SELECT app FROM rewind_frames LIMIT 200')
+  })
+  it('rejects the FTS mirror (it cannot be shadow-filtered) before running', () => {
+    const runQuery = vi.fn()
+    const out = executeSql(
+      "SELECT ocr_text FROM rewind_frames_fts WHERE rewind_frames_fts MATCH 'x'",
+      runQuery,
+      ['Signal']
+    )
+    expect(out).toMatch(/only the rewind_frames table is queryable/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('rejects a schema-qualified ref that would bypass the CTE, before running', () => {
+    const runQuery = vi.fn()
+    const out = executeSql("SELECT ocr_text FROM main.rewind_frames WHERE app='Signal'", runQuery, [
+      'Signal'
+    ])
+    expect(out).toMatch(/only the rewind_frames table is queryable/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('rejects a schema-qualified ref hidden in a subquery', () => {
+    const runQuery = vi.fn()
+    executeSql('SELECT * FROM (SELECT * FROM main.rewind_frames) t', runQuery, ['Signal'])
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('still allows an unqualified CTE that reads rewind_frames', () => {
+    const runQuery = vi.fn(() => ({ columns: ['app'], rows: [] }))
+    executeSql('WITH r AS (SELECT app FROM rewind_frames) SELECT app FROM r', runQuery, ['Signal'])
+    expect(runQuery).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('executeSql denylist closure (real SQLite)', () => {
+  // rewind_frames DDL verbatim from db.ts get(); better-sqlite3 can't load under
+  // vitest, so — same node:sqlite pattern as rewindFtsSearch.test.ts — the DDL is
+  // replicated while the LOGIC under test (executeSql + applyDenylistShadow) is the
+  // REAL exported code driven against a real engine.
+  const SCHEMA = `
+    CREATE TABLE rewind_frames (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ts INTEGER NOT NULL,
+      app TEXT NOT NULL DEFAULT '',
+      window_title TEXT NOT NULL DEFAULT '',
+      process_name TEXT NOT NULL DEFAULT '',
+      ocr_text TEXT NOT NULL DEFAULT '',
+      image_path TEXT NOT NULL,
+      width INTEGER NOT NULL DEFAULT 0,
+      height INTEGER NOT NULL DEFAULT 0,
+      indexed INTEGER NOT NULL DEFAULT 0
+    );
+  `
+  function makeDb(): DatabaseSync {
+    const db = new DatabaseSync(':memory:')
+    db.exec(SCHEMA)
+    const ins = db.prepare(
+      'INSERT INTO rewind_frames (ts, app, window_title, process_name, ocr_text, image_path) VALUES (?, ?, ?, ?, ?, ?)'
+    )
+    ins.run(1, 'Signal', 'John Doe', 'Signal.exe', 'SECRET signal message', '/1.jpg')
+    ins.run(2, 'Chrome', 'Docs', 'chrome.exe', 'ordinary web page', '/2.jpg')
+    ins.run(3, 'Chrome', 'signal group chat', 'chrome.exe', 'TITLELEAK denied in title', '/3.jpg')
+    return db
+  }
+  function runnerFor(db: DatabaseSync): QueryRunner {
+    return (sql) => {
+      const rows = db.prepare(sql).all() as Record<string, unknown>[]
+      const columns = rows.length ? Object.keys(rows[0]) : []
+      return { columns, rows: rows.map((r) => Object.values(r)) }
+    }
+  }
+
+  it('a WHERE app=<denied> query physically returns no rows', () => {
+    const db = makeDb()
+    const out = executeSql("SELECT ocr_text FROM rewind_frames WHERE app='Signal'", runnerFor(db), [
+      'Signal'
+    ])
+    expect(out).toBe('No results')
+    expect(out).not.toContain('SECRET')
+    db.close()
+  })
+  it('excludes a denied term that appears only in the window title (matches the frame gate)', () => {
+    const db = makeDb()
+    const out = executeSql('SELECT app, ocr_text FROM rewind_frames ORDER BY ts', runnerFor(db), [
+      'Signal'
+    ])
+    expect(out).toContain('ordinary web page') // the one allowed row survives
+    expect(out).not.toContain('SECRET') // app match excluded
+    expect(out).not.toContain('TITLELEAK') // window-title match excluded too
+    db.close()
+  })
+  it('is case-insensitive: denylist "signal" excludes app "Signal"', () => {
+    const db = makeDb()
+    const out = executeSql('SELECT ocr_text FROM rewind_frames', runnerFor(db), ['signal'])
+    expect(out).not.toContain('SECRET')
+    db.close()
+  })
+  it('an empty denylist returns the denied row unchanged (baseline)', () => {
+    const db = makeDb()
+    const out = executeSql(
+      "SELECT ocr_text FROM rewind_frames WHERE app='Signal'",
+      runnerFor(db),
+      []
+    )
+    expect(out).toContain('SECRET signal message')
+    db.close()
   })
 })

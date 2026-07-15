@@ -104,6 +104,19 @@ describe('isEnabled — the master AND-gate', () => {
     a.stop()
     expect(a.isEnabled()).toBe(false)
   })
+
+  it('is UNAFFECTED by proactive-notification silencing (Focus glows, so it keeps running)', () => {
+    // Regression guard for FIX 5: only Insight (glow-less) gates on
+    // notificationsActive. Focus must keep judging + glowing even with proactive
+    // toasts fully off / at frequency 0 / snoozed — it reads only its own two
+    // toggles and never consults the notification frequency, master, or snooze.
+    const a = new FocusAssistant()
+    Object.assign(h.settings, {
+      notificationsEnabled: false,
+      notificationFrequency: 0
+    })
+    expect(a.isEnabled()).toBe(true)
+  })
 })
 
 describe('analyze — local gates', () => {

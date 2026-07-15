@@ -11,9 +11,8 @@
 //
 // Titles, OCR, SQL results and profile text are NEVER logged — only app names,
 // verdict counts, and confidence percentages.
-import { getAppSettings } from '../../appSettings'
 import { getInsightSettings } from '../../insight/state'
-import { notifyProactive } from '../core/notify'
+import { notificationsActive, notifyProactive } from '../core/notify'
 import { readFrameImageBase64 } from '../core/frameImage'
 import { getBackendSession, getSessionEpoch } from '../core/session'
 import { runReadonlySelect, rewindFramesByIds } from '../../ipc/db'
@@ -41,13 +40,19 @@ export class InsightAssistant implements ProactiveAssistant {
   private lastCommittedSeq = -1
   private stopped = false
 
-  /** Master gate: Mac's `isEnabled && notificationsEnabled`. On Windows `enabled`
-   *  is the Insight feature toggle (InsightSettings) and `notificationsEnabled` is
-   *  the proactive-notifications master (AppSettings) — with it off, no Gemini call
-   *  runs at all, exactly Mac's cost-control gate. */
+  /** Master gate. On Windows `enabled` is the Insight feature toggle
+   *  (InsightSettings). DEVIATION from Mac's `isEnabled && notificationsEnabled`:
+   *  because Insight has NO glow, a run whose notification can't be delivered
+   *  produces zero visible output — pure wasted spend. So we additionally require
+   *  that a notification WOULD actually be deliverable (master on AND frequency > 0
+   *  AND not snoozed), reusing notify.ts's own suppression reads. NOT gated on the
+   *  per-interval rate limit — that is "not yet", not "silenced". Net effect: at
+   *  the default Off frequency the pipeline never runs ($0); raising the frequency
+   *  turns it on. (Focus is untouched: it glows, so it keeps running when toasts
+   *  are off.) */
   isEnabled(): boolean {
     if (this.stopped) return false
-    return getInsightSettings().enabled && getAppSettings().notificationsEnabled
+    return getInsightSettings().enabled && notificationsActive(this.identifier)
   }
 
   /** Insight's only cadence control: the fixed extraction interval. DEVIATION: the
@@ -102,18 +107,25 @@ export class InsightAssistant implements ProactiveAssistant {
     const lookbackStartMs = Math.max(this.lastAnalysisAtMs, nowMs - MAX_LOOKBACK_MS)
     this.lastAnalysisAtMs = nowMs
 
+    // The user denylist gates EVERYTHING sent to Gemini, not just the trigger
+    // frame: it is excluded from the Phase-1 activity summary AND from execute_sql
+    // (so the model physically cannot retrieve a denylisted app's rows).
+    const denylist = getInsightSettings().denylist ?? []
+
     let result: PipelineResult
     try {
       const language = await getUserLanguage(nowMs)
       const systemPrompt = buildSystemPrompt(getInsightAnalysisPrompt(), language)
-      const phase1Prompt = buildPhase1Prompt(loadInsightContext({ frame, now, lookbackStartMs }))
+      const phase1Prompt = buildPhase1Prompt(
+        loadInsightContext({ frame, now, lookbackStartMs, denylist })
+      )
 
       result = await runTwoPhasePipeline({
         session,
         systemPrompt,
         phase1Prompt,
         buildPhase2Prompt,
-        execSql: (query) => executeSql(query, runReadonlySelect),
+        execSql: (query) => executeSql(query, runReadonlySelect, denylist),
         loadScreenshot: (id) =>
           loadScreenshotBase64(id, {
             getFramesByIds: rewindFramesByIds,
