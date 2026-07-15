@@ -107,7 +107,17 @@ export type HubSession = {
 export type HubSocket = {
   send(data: string): void
   close(): void
+  /** The live `WebSocket.readyState` (0 CONNECTING · 1 OPEN · 2 CLOSING · 3
+   *  CLOSED). Optional so a minimal test fake may omit it — an absent readyState
+   *  is treated as always-sendable (backward compatible with existing fakes). The
+   *  real factory exposes it so `BaseHubSession.send` can drop a control frame
+   *  that races a not-yet-open socket instead of throwing `InvalidStateError`. */
+  readonly readyState?: number
 }
+
+/** `WebSocket.OPEN` as a bare literal — used off the DOM (vitest node env has no
+ *  global `WebSocket`), and identical to the spec constant. */
+const WEBSOCKET_OPEN = 1
 export type HubSocketFactory = (spec: {
   url: string
   protocols?: string[]
@@ -142,6 +152,9 @@ const defaultSocketFactory: HubSocketFactory = (spec) => {
       } catch {
         /* already closing */
       }
+    },
+    get readyState() {
+      return ws.readyState
     }
   }
 }
@@ -407,7 +420,18 @@ export abstract class BaseHubSession implements HubSession {
   // MARK: Emit helpers (subclass → events, never logging PII)
 
   protected send(json: object): void {
-    this.socket?.send(JSON.stringify(json))
+    const socket = this.socket
+    if (socket === null) return
+    // Drop a control frame that races the socket still CONNECTING. A slow-warm
+    // barge-in cancel (`cancelTurn` → the provider's `input_audio_buffer.clear` /
+    // Gemini activity-end) can fire before the socket opened; a real
+    // `WebSocket.send` throws `InvalidStateError` in any non-OPEN state and would
+    // escape `send()`. Dropping is safe: nothing was sent on this socket yet, so
+    // there is nothing to cancel, and the session-setup frame is sent from
+    // `onSocketOpen` where readyState is provably OPEN. A fake without a readyState
+    // (undefined) is treated as sendable — unchanged for existing tests.
+    if (socket.readyState !== undefined && socket.readyState !== WEBSOCKET_OPEN) return
+    socket.send(JSON.stringify(json))
   }
 
   protected flushPendingAudio(): void {
