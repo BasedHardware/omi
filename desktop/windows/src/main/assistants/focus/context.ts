@@ -20,9 +20,11 @@ type Task = { description: string; priority?: string | null }
 
 let cache: { at: number; goals: Goal[]; tasks: Task[]; memories: string[] } | null = null
 
-async function authedGet<T>(path: string, pick: (data: unknown) => T, fallback: T): Promise<T> {
+// Fail-open: [] on no-session, non-OK status, or any thrown error (see the
+// module header). Never throws.
+async function authedGet<T>(path: string, pick: (data: unknown) => T[]): Promise<T[]> {
   const session = getBackendSession()
-  if (!session) return fallback
+  if (!session) return []
   const external = getAbortSignal()
   const ctrl = new AbortController()
   const onAbort = (): void => ctrl.abort()
@@ -38,12 +40,12 @@ async function authedGet<T>(path: string, pick: (data: unknown) => T, fallback: 
     if (!res.ok) {
       // Status only — never a body. Titles/PII could ride in an error echo.
       console.warn(`[focus] context source ${path} HTTP ${res.status}`)
-      return fallback
+      return []
     }
     return pick(await res.json())
   } catch (e) {
     console.warn(`[focus] context source ${path} failed:`, e instanceof Error ? e.name : 'Error')
-    return fallback
+    return []
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onAbort)
@@ -57,54 +59,42 @@ function asArray<T>(data: unknown, key: string): T[] {
 }
 
 async function fetchGoals(): Promise<Goal[]> {
-  return authedGet(
-    '/v1/goals/all',
-    (data) => {
-      const goals = asArray<{ title?: string; description?: string; is_active?: boolean }>(
-        data,
-        'goals'
-      )
-      return goals
-        .filter((g) => g.is_active !== false && g.title)
-        .slice(0, MAX_GOALS)
-        .map((g) => ({ title: g.title as string, description: g.description ?? null }))
-    },
-    []
-  )
+  return authedGet('/v1/goals/all', (data) => {
+    const goals = asArray<{ title?: string; description?: string; is_active?: boolean }>(
+      data,
+      'goals'
+    )
+    return goals
+      .filter((g) => g.is_active !== false && g.title)
+      .slice(0, MAX_GOALS)
+      .map((g) => ({ title: g.title as string, description: g.description ?? null }))
+  })
 }
 
 async function fetchTasks(): Promise<Task[]> {
-  return authedGet(
-    '/v1/action-items?limit=50&offset=0',
-    (data) => {
-      // Windows ActionItemResponse has no `priority` field (Mac does); it comes
-      // back undefined and the prompt falls back to "medium".
-      const items = asArray<{ description?: string; completed?: boolean; priority?: string }>(
-        data,
-        'action_items'
-      )
-      return items
-        .filter((t) => t.completed !== true && t.description)
-        .slice(0, MAX_TASKS)
-        .map((t) => ({ description: t.description as string, priority: t.priority ?? null }))
-    },
-    []
-  )
+  return authedGet('/v1/action-items?limit=50&offset=0', (data) => {
+    // Windows ActionItemResponse has no `priority` field (Mac does); it comes
+    // back undefined and the prompt falls back to "medium".
+    const items = asArray<{ description?: string; completed?: boolean; priority?: string }>(
+      data,
+      'action_items'
+    )
+    return items
+      .filter((t) => t.completed !== true && t.description)
+      .slice(0, MAX_TASKS)
+      .map((t) => ({ description: t.description as string, priority: t.priority ?? null }))
+  })
 }
 
 async function fetchCoreMemories(): Promise<string[]> {
-  return authedGet(
-    '/v3/memories?limit=100&offset=0',
-    (data) => {
-      const items = asArray<{ content?: string; category?: string }>(data, 'memories')
-      return items
-        .filter((m) => m.category === 'core' && m.content)
-        .slice(0, MAX_MEMORIES)
-        .map((m) => (m.content as string).trim())
-        .filter((s) => s.length > 0)
-    },
-    []
-  )
+  return authedGet('/v3/memories?limit=100&offset=0', (data) => {
+    const items = asArray<{ content?: string; category?: string }>(data, 'memories')
+    return items
+      .filter((m) => m.category === 'core' && m.content)
+      .slice(0, MAX_MEMORIES)
+      .map((m) => (m.content as string).trim())
+      .filter((s) => s.length > 0)
+  })
 }
 
 /** Assemble the context data. Cached 120s; the clock is `now`'s Date. */
