@@ -46,6 +46,13 @@ const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
 
 import { useChat, CHAT_STREAM_TIMEOUT_MS } from './useChat'
+import {
+  addAttachments,
+  awaitUploadsSettled,
+  clearAttachments
+} from '../lib/chatAttachments'
+import type { FileChat } from '../lib/omiApi.generated'
+import type { PickedChatFile } from '../../../shared/types'
 
 const b64 = (s: string): string => Buffer.from(s, 'utf-8').toString('base64')
 
@@ -100,6 +107,7 @@ function makeManualStream(signal?: AbortSignal): {
 
 let streams: ReturnType<typeof makeManualStream>[] = []
 let signals: Array<AbortSignal | undefined> = []
+let bodies: string[] = []
 let persisted: ChatMessage[][] = []
 // Coding-agent bridge harness (agent-task path).
 let agentEventCb: ((e: CodingAgentEvent) => void) | null = null
@@ -111,7 +119,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   streams = []
   signals = []
+  bodies = []
   persisted = []
+  clearAttachments() // reset the module-level pending-attachment singleton
   agentEventCb = null
   agentRunTaskId = null
   agentRunResolve = null
@@ -119,10 +129,11 @@ beforeEach(() => {
   agentMocks.detectAgentTask.mockReturnValue(null)
   agentMocks.resolveTaskCwd.mockReset()
   agentMocks.resolveTaskCwd.mockResolvedValue('/tmp/cwd')
-  global.fetch = vi.fn(async (_url: unknown, init?: { signal?: AbortSignal }) => {
+  global.fetch = vi.fn(async (_url: unknown, init?: { signal?: AbortSignal; body?: unknown }) => {
     const s = makeManualStream(init?.signal)
     streams.push(s)
     signals.push(init?.signal)
+    bodies.push(typeof init?.body === 'string' ? init.body : String(init?.body ?? ''))
     return { ok: true, body: { getReader: () => s.reader } } as unknown as Response
   }) as unknown as typeof fetch
   ;(window as unknown as { omi: unknown }).omi = {
@@ -508,5 +519,89 @@ describe('useChat — C5 abort on reset (agent-task path)', () => {
     expect(lastAssistant(result.current.history)?.content).toBe('clean answer')
     const finalThread = persisted.at(-1) as ChatMessage[]
     expect(finalThread.some((m) => /zombie/i.test(m.content))).toBe(false)
+  })
+})
+
+describe('useChat — chat attachments (file_ids)', () => {
+  const pick = (name: string): PickedChatFile => ({
+    name,
+    mimeType: 'text/plain',
+    size: 3,
+    bytes: new Uint8Array([1, 2, 3])
+  })
+  const fileChat = (name: string): FileChat => ({
+    id: `srv-${name}`,
+    name,
+    mime_type: 'text/plain',
+    openai_file_id: `oai-${name}`,
+    created_at: '2026-07-14T00:00:00Z'
+  })
+  const immediateUpload = async (f: { name: string }): Promise<FileChat> => fileChat(f.name)
+  // An upload whose settlement the test controls.
+  function deferredUpload(): {
+    upload: (f: { name: string }) => Promise<FileChat>
+    resolve: (n: string) => void
+  } {
+    const resolvers = new Map<string, (fc: FileChat) => void>()
+    const upload = (f: { name: string }): Promise<FileChat> =>
+      new Promise<FileChat>((res) => resolvers.set(f.name, res))
+    return { upload, resolve: (n) => resolvers.get(n)?.(fileChat(n)) }
+  }
+
+  it('sends NO file_ids and a byte-identical body when there are no attachments (regression guard)', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('hi')
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'hello' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    // Body is exactly `{ text: 'hi' }` — no file_ids key at all.
+    expect(JSON.parse(bodies[0])).toEqual({ text: 'hi' })
+    expect(bodies[0]).not.toContain('file_ids')
+  })
+
+  it('includes uploaded attachments as file_ids and attaches them to the user message', async () => {
+    addAttachments([pick('a.txt')], { upload: immediateUpload })
+    await awaitUploadsSettled()
+
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('describe this')
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'ok' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+
+    expect(JSON.parse(bodies[0])).toEqual({ text: 'describe this', file_ids: ['srv-a.txt'] })
+    const userMsg = result.current.history.find((m) => m.role === 'user') as {
+      attachments?: { id: string; name: string; mimeType: string }[]
+    }
+    expect(userMsg.attachments).toEqual([{ id: 'srv-a.txt', name: 'a.txt', mimeType: 'text/plain' }])
+  })
+
+  it('blocks the send until an in-flight upload settles (no half-uploaded send)', async () => {
+    const { upload, resolve } = deferredUpload()
+    addAttachments([pick('a.txt')], { upload }) // stays `uploading`
+
+    const { result } = renderHook(() => useChat())
+    let sendP: Promise<void> | undefined
+    await act(async () => {
+      sendP = result.current.send('later')
+      await flush()
+    })
+    // The upload hasn't settled, so send must NOT have opened the /v2/messages fetch.
+    expect(streams[0]).toBeUndefined()
+
+    await act(async () => {
+      resolve('a.txt') // upload finishes → send unblocks
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'ok' }))}\n\n`)
+      streams[0].close()
+      await sendP
+    })
+    expect(JSON.parse(bodies[0])).toEqual({ text: 'later', file_ids: ['srv-a.txt'] })
   })
 })

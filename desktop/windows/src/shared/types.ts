@@ -69,10 +69,17 @@ export type ConversationPayload = {
  *  backend has already stripped the matching `[n]` markers from the reply text. */
 export type ChatCitation = { id: string; title: string; emoji?: string }
 
+/** A file attached to a sent chat message, as rendered in the thread. `id` is the
+ *  server file id (FileChat.id) that was passed in the message's `file_ids`. */
+export type ChatAttachment = { id: string; name: string; mimeType: string }
+
 export type ChatMessage = {
   id?: string
   role: 'user' | 'assistant'
   content: string
+  /** Files attached to this (user) message. Round-trips through the persisted
+   *  messages JSON blob so a reloaded thread can still render them. */
+  attachments?: ChatAttachment[]
   // --- Finalized from the terminal `done:` SSE payload (assistant messages only;
   // absent on user messages and on a still-streaming reply). Additive: older
   // persisted rows simply lack them. ---

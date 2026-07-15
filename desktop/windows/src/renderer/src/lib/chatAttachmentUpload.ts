@@ -34,7 +34,12 @@ export async function uploadChatFile(file: UploadableFile, deps: UploadDeps = {}
   const token = deps.getToken ? await deps.getToken() : await auth.currentUser?.getIdToken()
 
   const form = new FormData()
-  form.append('files', new Blob([file.bytes], { type: file.mimeType }), file.name)
+  // Copy into a fresh ArrayBuffer-backed view: the incoming Uint8Array may be
+  // backed by a SharedArrayBuffer/pooled buffer, which TS's `BlobPart` rejects,
+  // and the copy also drops any byteOffset so the Blob is exactly these bytes.
+  const bytes = new Uint8Array(file.bytes.byteLength)
+  bytes.set(file.bytes)
+  form.append('files', new Blob([bytes], { type: file.mimeType }), file.name)
 
   const res = await doFetch(`${OMI_BASE}/v2/files`, {
     method: 'POST',

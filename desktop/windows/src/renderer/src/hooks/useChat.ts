@@ -6,7 +6,17 @@ import { readCurrentScreen } from '../lib/screenContext'
 import { looksLikeAction, looksLikeRawPlan, planActions } from '../lib/actionPlanner'
 import { callAgentLLM } from '../lib/agentLLM'
 import { detectAgentTask, resolveTaskCwd } from '../lib/agentTask'
-import type { AutomationPlan, CodingAgentEvent, ChatCitation } from '../../../shared/types'
+import type {
+  AutomationPlan,
+  CodingAgentEvent,
+  ChatCitation,
+  ChatAttachment
+} from '../../../shared/types'
+import {
+  awaitUploadsSettled,
+  clearAttachments,
+  getPendingAttachments
+} from '../lib/chatAttachments'
 import { getPreferences } from '../lib/preferences'
 import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
@@ -27,6 +37,9 @@ export type ChatMsg = {
   chartData?: unknown
   /** Whether the backend flagged this turn for an NPS prompt. */
   askForNps?: boolean
+  /** Files attached to this (user) message — rendered as chips in the thread and
+   *  round-tripped through the persisted messages JSON. */
+  attachments?: ChatAttachment[]
 }
 
 const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
@@ -433,7 +446,28 @@ export function useChat(): UseChat {
     // agent/plan branches finish synchronously enough to keep their own flow.
     const myGen = ++genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
-    const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: text }
+    // Chat attachments (Track 1 platform layer): if files are pending, wait for
+    // their optimistic uploads to settle, then snapshot the uploaded server ids
+    // (file_ids) and their render metadata onto this user message. Uploads kick
+    // off on add, so by now they're almost always done — the await is usually
+    // instant. With ZERO pending attachments there is no await and the request
+    // body below is byte-identical to before (regression guard).
+    let sendFileIds: string[] = []
+    let sentAttachments: ChatAttachment[] | undefined
+    if (getPendingAttachments().length > 0) {
+      await awaitUploadsSettled()
+      const uploaded = getPendingAttachments().filter((a) => a.status === 'uploaded' && a.serverId)
+      sendFileIds = uploaded.map((a) => a.serverId as string)
+      sentAttachments = uploaded.map((a) => ({ id: a.serverId as string, name: a.name, mimeType: a.mimeType }))
+      // The message now owns these files; clear the composer's pending list.
+      clearAttachments()
+    }
+    const userMsg: ChatMsg = {
+      id: crypto.randomUUID(),
+      role: 'user',
+      content: text,
+      ...(sentAttachments && sentAttachments.length ? { attachments: sentAttachments } : {})
+    }
     const baseHistory = history
     // Show the user's message immediately, BEFORE the (potentially ~2s) action-
     // planner snapshot+LLM round-trip, so the chat never appears to hang. The
@@ -543,7 +577,12 @@ export function useChat(): UseChat {
           // Windows-appropriate answers instead of defaulting to macOS steps.
           'X-App-Platform': 'windows'
         },
-        body: JSON.stringify({ text: textToSend }),
+        // Only include file_ids when there are uploaded attachments; with none
+        // the body stays exactly `{ text }` (no key) — the backend defaults
+        // file_ids to [], so this preserves today's request byte-for-byte.
+        body: JSON.stringify(
+          sendFileIds.length ? { text: textToSend, file_ids: sendFileIds } : { text: textToSend }
+        ),
         signal: ac.signal
       })
       if (!res.ok || !res.body) throw new Error(`HTTP ${res.status}`)
