@@ -137,6 +137,9 @@ private struct SuggestedCandidateCard: View {
         .buttonStyle(.borderedProminent)
         .tint(OmiColors.textPrimary)
         .foregroundColor(.black)
+        // Empty-title gate applies only to task creation — Later/Dismiss must stay
+        // usable even when the editable title is cleared.
+        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
         .accessibilityIdentifier("suggested-do-now-\(candidate.id)")
 
         Button("Later") {
@@ -158,7 +161,7 @@ private struct SuggestedCandidateCard: View {
         Spacer()
         if isBusy { ProgressView().controlSize(.small) }
       }
-      .disabled(isBusy || title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+      .disabled(isBusy)
     }
     .padding(12)
     .background(
