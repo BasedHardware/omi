@@ -212,7 +212,7 @@ describe('begin (flag on, hub warm)', () => {
 
     const ev = h.hub.events()
     ev.onSpeakingStart?.() // providerResponseStarted + playbackStarted
-    ev.onTurnDone?.() // providerTurnFinished
+    ev.onTurnDone?.(null) // providerTurnFinished
     ev.onSpeakingEnd?.() // playbackDrained -> terminal(success)
 
     // Terminal reached: the driver told the bar to drop back to its local orb.
@@ -287,7 +287,7 @@ describe('system-audio duck', () => {
     h.driver.end()
     const ev = h.hub.events()
     ev.onSpeakingStart?.()
-    ev.onTurnDone?.()
+    ev.onTurnDone?.(null)
     ev.onSpeakingEnd?.()
     expect(h.spies.restoreSystemAudio).toHaveBeenCalledTimes(1)
   })
