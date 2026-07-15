@@ -63,6 +63,23 @@ class ManifestContractTests(unittest.TestCase):
         invalid = type(manifest)((local_only, *manifest.checks[1:]), manifest.exempt)
         self.assertTrue(any("missing required lanes: ci" in error for error in validate_manifest(invalid, REPO_ROOT)))
 
+    def test_requires_pr_body_must_be_boolean(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        first = manifest.checks[0]
+        malformed = Check(
+            first.id,
+            first.command,
+            first.triggers,
+            first.lanes,
+            first.reason,
+            requires_pr_body="yes",  # type: ignore[arg-type]
+        )
+        invalid = type(manifest)((malformed, *manifest.checks[1:]), manifest.exempt)
+        self.assertIn(
+            f"{first.id}: requires_pr_body must be a boolean",
+            validate_manifest(invalid, REPO_ROOT),
+        )
+
     def test_workflow_checks_are_registered_or_exempt(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         registered = registered_script_paths()
@@ -73,6 +90,7 @@ class ManifestContractTests(unittest.TestCase):
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
         self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
+        self.assertIn("--skip-pr-body-checks", workflow)
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
 
@@ -107,6 +125,21 @@ class RunnerBehaviorTests(unittest.TestCase):
         for lane in ("local", "ci"):
             selected = {check.id for check in resolve_checks(manifest, ["app/lib/example.dart"], lane)}
             self.assertIn("failure-class-protocol", selected)
+
+    def test_main_push_excludes_only_pr_body_checks(self) -> None:
+        manifest = load_manifest(MANIFEST_PATH)
+        selected = {
+            check.id
+            for check in resolve_checks(
+                manifest,
+                ["app/lib/example.dart"],
+                "ci",
+                include_pr_body_checks=False,
+            )
+        }
+        self.assertNotIn("product-invariants", selected)
+        self.assertNotIn("failure-class-protocol", selected)
+        self.assertIn("diff-hygiene", selected)
 
     def test_backend_datetime_sort_sentinel_ratchet_runs_for_backend_sources(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
