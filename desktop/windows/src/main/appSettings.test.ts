@@ -106,7 +106,7 @@ describe('appSettings', () => {
       memoryExtractionIntervalMin: 10,
       memoryMinConfidence: 0.7,
       memoryExcludedApps: [],
-      taskEnabled: false,
+      taskEnabled: true,
       taskFallbackIntervalMin: 10,
       taskMinConfidence: 0.75,
       taskExcludedApps: []
@@ -169,12 +169,13 @@ describe('appSettings', () => {
       sanitizeAppSettings({ memoryExcludedApps: ['Zoom', '', '  Music  '] as never })
         .memoryExcludedApps
     ).toEqual(['Zoom', 'Music'])
-    // Task: master flag is opt-IN (default OFF, only an explicit true enables it);
-    // interval reuses the cooldown sanitizer (junk → 10); min-confidence clamps to
-    // [0,1] with a 0.75 floor (vs Memory's 0.7); excluded-apps sanitize.
-    expect(sanitizeAppSettings(null).taskEnabled).toBe(false)
+    // Task: master flag is default-ON (only an explicit false disables it, same
+    // idiom as screenAnalysisEnabled); interval reuses the cooldown sanitizer
+    // (junk → 10); min-confidence clamps to [0,1] with a 0.75 floor (vs Memory's
+    // 0.7); excluded-apps sanitize.
+    expect(sanitizeAppSettings(null).taskEnabled).toBe(true)
+    expect(sanitizeAppSettings({ taskEnabled: false }).taskEnabled).toBe(false)
     expect(sanitizeAppSettings({ taskEnabled: true }).taskEnabled).toBe(true)
-    expect(sanitizeAppSettings({ taskEnabled: 'yes' } as never).taskEnabled).toBe(false)
     expect(sanitizeAppSettings(null).taskFallbackIntervalMin).toBe(10)
     expect(sanitizeAppSettings({ taskFallbackIntervalMin: 15 }).taskFallbackIntervalMin).toBe(15)
     expect(sanitizeAppSettings({ taskFallbackIntervalMin: 0 }).taskFallbackIntervalMin).toBe(10)

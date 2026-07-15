@@ -106,10 +106,10 @@ export class TaskAssistant implements ProactiveAssistant {
    *  TTL map — 15s messaging, 60s otherwise. */
   private readonly analyzedWindows = new Map<string, number>()
 
-  /** Master gate: `taskEnabled` ONLY (default OFF — opt-in; decoupled from
-   *  notifications, per DECIDED #1 / Deviation D2). The coordinator's
-   *  `screenAnalysisEnabled` master already gates the whole loop for every peer,
-   *  so it is NOT re-checked here. */
+  /** Master gate: `taskEnabled` ONLY (default ON, matching Mac; decoupled from
+   *  notifications). The coordinator's `screenAnalysisEnabled` master already gates
+   *  the whole loop for every peer (and is the screenshot-consent lever), so it is
+   *  NOT re-checked here. */
   isEnabled(): boolean {
     if (this.stopped) return false
     return getAppSettings().taskEnabled

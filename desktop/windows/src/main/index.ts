@@ -1025,7 +1025,8 @@ app.whenReady().then(async () => {
     registerMemoryAssistant()
     // Track 3 (Task assistant): Mac's screen→task extractor. A coordinator peer to
     // Focus/Insight/Memory (same shared loop) that stages tasks silently, gated on
-    // the opt-in `taskEnabled` setting. Bring the task-title embedding index up too
+    // the `taskEnabled` setting (default ON, under the screenAnalysisEnabled master).
+    // Bring the task-title embedding index up too
     // (loadIndex + a one-shot backfill once the renderer relays a session) — those
     // PR-A primitives were shipped but never wired until now.
     registerTaskAssistant()

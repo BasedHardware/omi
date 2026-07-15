@@ -100,14 +100,15 @@ export type AppSettings = {
    *  `memoryExcludedApps`. Default []. */
   memoryExcludedApps: string[]
   /** Track 3 (Task assistant): whether the screen→task extractor judges the
-   *  screen at all. Default OFF — like the Memory scraper, any screen→AI feature
-   *  is opt-in on Windows (a deliberate deviation from Mac's default-ON
-   *  `taskAssistantEnabled`; one-line flip to ON if wanted). It is the SOLE gate
-   *  for the Task assistant (see taskAssistant.isEnabled) — decoupled from
-   *  notifications, since extraction stages durable tasks whether or not a toast
-   *  ever fires (Mac keeps a separate `taskNotificationsEnabled`; quiet discovery
-   *  is never gated on the notification setting). The master "may I send
-   *  screenshots to Gemini" lever remains `screenAnalysisEnabled`. */
+   *  screen at all. Default ON, matching Mac's `taskAssistantEnabled`. It sits
+   *  UNDER the `screenAnalysisEnabled` master (the actual "may I send screenshots
+   *  to Gemini" consent, itself default-ON and shared with Focus/Insight), so a
+   *  default-ON here adds tasks to the already-consented screen-analysis feature
+   *  rather than opening a new cloud-vision surface. It is the SOLE task-specific
+   *  gate (see taskAssistant.isEnabled) — decoupled from notifications, since
+   *  extraction stages durable tasks whether or not a toast ever fires (Mac keeps
+   *  a separate `taskNotificationsEnabled`; quiet discovery is never gated on the
+   *  notification setting). */
   taskEnabled: boolean
   /** Track 3 (Task): apps the user never wants the task extractor to look at, on
    *  top of the capture-time and privacy exclusions. Mirrors `memoryExcludedApps`.
@@ -225,9 +226,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
     memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
-    // Opt-IN (=== true): default OFF, mirroring the Memory scraper — any
-    // screen→AI feature is opt-in on Windows (Mac's `taskAssistantEnabled` is ON).
-    taskEnabled: r.taskEnabled === true,
+    // Default ON (!== false, same idiom as screenAnalysisEnabled), matching Mac's
+    // `taskAssistantEnabled`. The screenAnalysisEnabled master is the screenshot
+    // consent gate; this only decides whether tasks ride that already-on feature.
+    taskEnabled: r.taskEnabled !== false,
     // Reuses the cooldown sanitizer: same contract (positive integer minutes,
     // default 10, capped at a day). A junk interval falls back to 10, never 0.
     taskFallbackIntervalMin: sanitizeCooldownMinutes(r.taskFallbackIntervalMin),
