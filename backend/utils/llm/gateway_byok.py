@@ -15,7 +15,19 @@ _BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
 _BYOK_GATEWAY_HEADER_SUFFIX = '-Key'
 
 _usage_callback = get_usage_callback()
+
+# Cache gateway BYOK LLM clients, bounded so a long-lived process serving many distinct BYOK keys
+# (the cache key includes a per-key fingerprint) cannot grow this map of clients without limit.
+_MAX_BYOK_GATEWAY_CLIENTS = 256
 _byok_gateway_llm_cache: Dict[tuple[Any, ...], Any] = {}
+
+
+def _remember_byok_client(cache_key: tuple[Any, ...], client: Any) -> None:
+    # Re-inserting refreshes recency; evict the oldest entry once the cap is reached.
+    _byok_gateway_llm_cache.pop(cache_key, None)
+    while len(_byok_gateway_llm_cache) >= _MAX_BYOK_GATEWAY_CLIENTS:
+        _byok_gateway_llm_cache.pop(next(iter(_byok_gateway_llm_cache)), None)
+    _byok_gateway_llm_cache[cache_key] = client
 
 
 def byok_gateway_header_name(provider: str) -> str:
@@ -74,5 +86,5 @@ def get_or_create_omi_gateway_llm_for_byok(
         kwargs['streaming'] = True
         kwargs['stream_options'] = {'include_usage': True}
     client = ChatOpenAI(model=lane_id, **kwargs)
-    _byok_gateway_llm_cache[cache_key] = client
+    _remember_byok_client(cache_key, client)
     return client
