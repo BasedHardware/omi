@@ -108,11 +108,13 @@ struct BeeperInfo: Codable, Equatable {
 
 struct BeeperLiveEvent: Codable, Equatable {
   let type: String  // message.upserted | message.deleted | chat.upserted | chat.deleted | ready | ...
-  var seq: Int?
-  var ts: Double?
   var chatID: String?
   var ids: [String]?
   var entries: [BeeperMessage]?
+  // NOTE: the wire also carries `seq` and `ts`, but Beeper sends `ts` as an
+  // ISO-8601 STRING on live events (and a number elsewhere). They are not
+  // declared here on purpose: unknown JSON keys are ignored, so a variable
+  // `ts`/`seq` type can never fail decoding of the whole event.
 }
 
 // MARK: - Client

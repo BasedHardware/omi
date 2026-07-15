@@ -250,10 +250,14 @@ final class AICloneService: ObservableObject {
     guard event.type == "message.upserted", let chatID = event.chatID else { return }
     let mode = configuration.mode(for: chatID)
     guard mode != .off else { return }
+    log("AIClone: message.upserted in enabled chat (mode=\(mode.rawValue))")
     guard let inbound = Self.latestActionableInbound(
       entries: event.entries ?? [],
       since: listeningSince)
-    else { return }
+    else {
+      log("AIClone: event had no fresh inbound message to act on")
+      return
+    }
     guard !inFlightChatIDs.contains(chatID) else { return }
     inFlightChatIDs.insert(chatID)
     defer { inFlightChatIDs.remove(chatID) }
@@ -296,6 +300,7 @@ final class AICloneService: ObservableObject {
       let outcome = decision.plannedOutcome(
         mode: mode,
         autoConfidenceThreshold: configuration.autoSendConfidenceThreshold)
+      log("AIClone: reply decision shouldReply=\(decision.shouldReply) confidence=\(decision.confidence) injection=\(decision.suspectedInjection) outcome=\(outcome.rawValue)")
       try await perform(
         outcome: outcome,
         decision: decision,
