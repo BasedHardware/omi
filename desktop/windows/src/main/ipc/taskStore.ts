@@ -510,6 +510,20 @@ export function getLocalActionItemsOn(
   return rows.map(mapAction)
 }
 
+/** Recent ACTIVE action items ordered strictly by recency (created_at DESC).
+ *  Unlike getLocalActionItems (sortOrder→due→created list order), this gives the
+ *  task-extraction context "recent-N by recency" it wants (Mac's
+ *  getRecentActiveTasks, TA:1409). Active = completed = 0 AND deleted = 0. */
+export function getRecentActiveActionItemsOn(d: TaskStoreDb, limit = 30): ActionItemRecord[] {
+  const rows = d
+    .prepare(
+      `SELECT ${ACTION_COLUMNS} FROM action_items
+         WHERE deleted = 0 AND completed = 0 ORDER BY created_at DESC LIMIT ?`
+    )
+    .all(limit) as ActionItemRow[]
+  return rows.map(mapAction)
+}
+
 /** Dashboard slices (overdue / today / no-due). Always active (completed = 0,
  *  deleted = 0), filtered by a due_at window. `dueIsNull` true → only tasks with no
  *  due date; false → only tasks with a due date. */
@@ -925,11 +939,17 @@ function sanitizeFtsQuery(query: string): string {
     .join(' ')
 }
 
-/** Full-text search over active action-item descriptions, BM25-ranked. */
+/** Full-text search over action-item descriptions, BM25-ranked. Excludes deleted
+ *  rows always; `includeCompleted` (default false) keeps the historical
+ *  active-only behavior — set true so the task-extraction dedup tool
+ *  (`search_keywords`) also sees COMPLETED action items (Mac parity: Mac's
+ *  keyword search runs with `includeCompleted:true`; Windows has no deleted rows
+ *  to add). Default false preserves every existing caller's behavior exactly. */
 export function searchActionItemsFTSOn(
   d: TaskStoreDb,
   query: string,
-  limit = 20
+  limit = 20,
+  includeCompleted = false
 ): {
   id: number
   description: string
@@ -940,12 +960,13 @@ export function searchActionItemsFTSOn(
 }[] {
   const q = sanitizeFtsQuery(query)
   if (!q) return []
+  const completedClause = includeCompleted ? '' : 'AND a.completed = 0 '
   const rows = d
     .prepare(
       `SELECT a.id, a.description, a.completed, a.deleted, a.deleted_by AS deletedBy,
               a.relevance_score AS relevanceScore
          FROM action_items a JOIN action_items_fts fts ON fts.rowid = a.id
-         WHERE action_items_fts MATCH ? AND a.completed = 0 AND a.deleted = 0
+         WHERE action_items_fts MATCH ? ${completedClause}AND a.deleted = 0
          ORDER BY bm25(action_items_fts) ASC LIMIT ?`
     )
     .all(q, limit) as {

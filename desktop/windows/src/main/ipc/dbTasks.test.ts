@@ -15,6 +15,7 @@ import {
   TASK_TABLES_SCHEMA,
   insertLocalActionItemOn,
   getLocalActionItemsOn,
+  getRecentActiveActionItemsOn,
   getFilteredActionItemsOn,
   updateCompletionStatusOn,
   updateActionItemFieldsOn,
@@ -467,6 +468,25 @@ describe('FTS search', () => {
     expect(searchActionItemsFTSOn(db, '   ')).toEqual([]) // sanitized to empty → no query
   })
 
+  it('action_items: includeCompleted surfaces completed rows for the dedup tool (default hides them)', () => {
+    insertLocalActionItemOn(db, ai({ description: 'ship the budget deck' }))
+    insertLocalActionItemOn(db, ai({ description: 'budget review call', completed: true }))
+    insertLocalActionItemOn(db, ai({ description: 'archived budget task', deleted: true }))
+
+    // default (active-only) sees just the incomplete row
+    expect(searchActionItemsFTSOn(db, 'budget').map((h) => h.description)).toEqual([
+      'ship the budget deck'
+    ])
+    // includeCompleted=true adds the completed row but STILL excludes deleted
+    const withCompleted = searchActionItemsFTSOn(db, 'budget', 20, true)
+    expect(withCompleted.map((h) => h.description).sort()).toEqual([
+      'budget review call',
+      'ship the budget deck'
+    ])
+    expect(withCompleted.some((h) => h.description === 'archived budget task')).toBe(false)
+    expect(withCompleted.find((h) => h.description === 'budget review call')?.completed).toBe(true)
+  })
+
   it('FTS stays in sync after a hard delete (AFTER DELETE trigger)', () => {
     const rec = insertLocalActionItemOn(db, ai({ description: 'ephemeral note', backendId: 'b1' }))
     expect(searchActionItemsFTSOn(db, 'ephemeral')).toHaveLength(1)
@@ -479,6 +499,42 @@ describe('FTS search', () => {
     insertLocalStagedTaskOn(db, st({ description: 'draft the launch email' }))
     const hits = searchStagedTasksFTSOn(db, 'launch')
     expect(hits.map((h) => h.description)).toEqual(['draft the launch email'])
+  })
+})
+
+describe('getRecentActiveActionItems (recency order, active-only)', () => {
+  it('orders by created_at DESC and excludes completed + deleted', () => {
+    insertLocalActionItemOn(db, ai({ description: 'oldest', createdAt: 1000, updatedAt: 1000 }))
+    insertLocalActionItemOn(db, ai({ description: 'newest', createdAt: 3000, updatedAt: 3000 }))
+    insertLocalActionItemOn(db, ai({ description: 'middle', createdAt: 2000, updatedAt: 2000 }))
+    insertLocalActionItemOn(
+      db,
+      ai({ description: 'done', completed: true, createdAt: 9000, updatedAt: 9000 })
+    )
+    insertLocalActionItemOn(
+      db,
+      ai({ description: 'gone', deleted: true, createdAt: 9500, updatedAt: 9500 })
+    )
+
+    // strict recency order (unlike getLocalActionItems' sortOrder→due→created list order)
+    expect(getRecentActiveActionItemsOn(db).map((r) => r.description)).toEqual([
+      'newest',
+      'middle',
+      'oldest'
+    ])
+    // completed + deleted are excluded even though they are the most recent rows
+    expect(getRecentActiveActionItemsOn(db, 30).some((r) => r.description === 'done')).toBe(false)
+    expect(getRecentActiveActionItemsOn(db, 30).some((r) => r.description === 'gone')).toBe(false)
+  })
+
+  it('honors the limit', () => {
+    for (let i = 0; i < 5; i++) {
+      insertLocalActionItemOn(
+        db,
+        ai({ description: `t${i}`, createdAt: 1000 + i, updatedAt: 1000 })
+      )
+    }
+    expect(getRecentActiveActionItemsOn(db, 2).map((r) => r.description)).toEqual(['t4', 't3'])
   })
 })
 
