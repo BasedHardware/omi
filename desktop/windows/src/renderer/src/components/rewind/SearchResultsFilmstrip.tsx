@@ -108,6 +108,7 @@ export function SearchResultsFilmstrip({
         return (
           <button
             key={g.id}
+            data-testid="rewind-result"
             onClick={() => onSelect(g)}
             className="flex items-start gap-3 rounded-control border border-line bg-white/[0.04] p-2.5 text-left transition-colors hover:border-line-strong hover:bg-white/[0.08]"
           >

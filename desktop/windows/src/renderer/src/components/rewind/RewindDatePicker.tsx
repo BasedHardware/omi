@@ -92,7 +92,10 @@ export function RewindDatePicker({
         <>
           {/* Outside-click catcher. */}
           <div className="fixed inset-0 z-[90]" onClick={() => setOpen(false)} />
-          <div className="surface-panel absolute right-0 z-[100] mt-2 w-64 p-3">
+          <div
+            data-testid="rewind-calendar"
+            className="surface-panel absolute right-0 z-[100] mt-2 w-64 p-3"
+          >
             <div className="mb-2 flex items-center justify-between">
               <button
                 onClick={() => step(-1)}
@@ -161,7 +164,7 @@ function DayCell({
     'flex h-8 w-8 items-center justify-center justify-self-center rounded-full text-xs transition-colors'
   if (disabled) {
     return (
-      <button disabled className={`${base} cursor-default text-white/20`}>
+      <button disabled data-day={label} className={`${base} cursor-default text-white/20`}>
         {label}
       </button>
     )
@@ -169,6 +172,7 @@ function DayCell({
   return (
     <button
       onClick={onClick}
+      data-day={label}
       style={selected ? { backgroundColor: MAC_PURPLE } : undefined}
       className={`${base} ${
         selected

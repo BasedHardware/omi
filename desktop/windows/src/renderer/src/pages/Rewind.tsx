@@ -83,7 +83,7 @@ export function Rewind(): React.JSX.Element {
   }, [group, query])
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3 p-4">
+    <div data-testid="rewind-page" className="flex h-full min-h-0 flex-col gap-3 p-4">
       <div className="flex items-center justify-between gap-3">
         <h1 className="shrink-0 text-lg font-semibold text-white">Rewind</h1>
         <div className="flex min-w-0 flex-1 items-center justify-end gap-2">
