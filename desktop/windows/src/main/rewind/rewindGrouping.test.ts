@@ -83,6 +83,22 @@ describe('groupFrames', () => {
     expect(groups[0].matchSnippet.toLowerCase()).toContain('performance')
   })
 
+  // Semantic affordance: with the keyword id set supplied (phase-2 merged results),
+  // a group whose frames were NONE of the keyword hits is flagged as vector-only.
+  it('flags a purely-semantic group (no keyword member) when keywordIds is given', () => {
+    const kw = frame({ id: 1, ts: 1_000, app: 'Mail', ocrText: 'the invoice is attached' })
+    const semantic = frame({ id: 2, ts: 9_000_000, app: 'Web', ocrText: 'billing overview' })
+    const groups = groupFrames([kw, semantic], 'invoice', { keywordIds: new Set([1]) })
+    const byRep = new Map(groups.map((g) => [g.representative.id, g]))
+    expect(byRep.get(1)?.matchedSemantically).toBe(false) // keyword hit
+    expect(byRep.get(2)?.matchedSemantically).toBe(true) // vector-only
+  })
+
+  it('never flags semantic without a keyword id set (phase-1 keyword-only results)', () => {
+    const groups = groupFrames([frame({ id: 1, ocrText: 'hello' })], 'hello')
+    expect(groups[0].matchedSemantically).toBe(false)
+  })
+
   it('keeps frames inside a group in chronological order', () => {
     const groups = groupFrames([frame({ id: 2, ts: 20 }), frame({ id: 1, ts: 10 })], 'hello')
     expect(groups).toHaveLength(1)

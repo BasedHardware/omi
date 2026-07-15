@@ -96,9 +96,12 @@ export function registerRewindHandlers(): void {
       if (hits.length === 0) return // keyword-only; the phase-1 reply already stands
       if (seq !== searchSeq) return // a newer query has since been issued
       if (e.sender.isDestroyed()) return
+      // Which frames were keyword hits, so groupFrames can flag the purely-semantic
+      // groups (those that exist only because vector recall added them).
+      const keywordIds = new Set(fts.map((f) => f.id).filter((id): id is number => id != null))
       e.sender.send('rewind:search-results', {
         query: q,
-        groups: groupFrames(mergeRewindSearchResults(fts, hits), q)
+        groups: groupFrames(mergeRewindSearchResults(fts, hits), q, { keywordIds })
       })
     })()
 

@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react'
-import { Images } from 'lucide-react'
+import { Images, Sparkles } from 'lucide-react'
 import type { RewindSearchGroup } from '../../../../shared/types'
 import { parseWindowTitle } from '../../lib/windowTitle'
 import { highlightTerms } from '../../lib/rewindOverlay'
@@ -114,7 +114,20 @@ export function SearchResultsFilmstrip({
             <ResultThumb imagePath={g.representative.imagePath} />
             <div className="flex min-w-0 flex-1 flex-col gap-0.5">
               <div className="flex items-center justify-between gap-2">
-                <span className="truncate text-sm font-medium text-white/90">{app}</span>
+                <span className="flex min-w-0 items-center gap-1.5">
+                  <span className="truncate text-sm font-medium text-white/90">{app}</span>
+                  {g.matchedSemantically && (
+                    // Neutral "related" chip — this hit came from semantic recall, not
+                    // a literal keyword match. Mac renders no purple here, so neither do we.
+                    <span
+                      className="inline-flex shrink-0 items-center gap-1 rounded-full border border-white/15 px-1.5 py-0.5 text-[10px] text-white/55"
+                      title="Matched by meaning, not an exact keyword"
+                    >
+                      <Sparkles className="h-2.5 w-2.5" />
+                      Related
+                    </span>
+                  )}
+                </span>
                 <span className="shrink-0 text-xs text-white/45">
                   {timeRange(g.startTs, g.endTs)}
                 </span>

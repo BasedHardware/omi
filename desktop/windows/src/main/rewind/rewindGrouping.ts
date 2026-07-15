@@ -51,7 +51,19 @@ function snippet(text: string, terms: string[]): string {
  * order as any. Adding a second, weaker source of results is what turned the
  * discarded ordering into a correctness bug.)
  */
-export function groupFrames(frames: RewindFrame[], query: string): RewindSearchGroup[] {
+/** Options for annotating grouped results. */
+export type GroupOptions = {
+  /** The frame ids that were KEYWORD (FTS) hits. When given, a group with none of
+   *  these ids is flagged `matchedSemantically` — it exists only via vector recall. */
+  keywordIds?: Set<number>
+}
+
+export function groupFrames(
+  frames: RewindFrame[],
+  query: string,
+  opts: GroupOptions = {}
+): RewindSearchGroup[] {
+  const { keywordIds } = opts
   // Expanded literal terms, computed once — used for both representative
   // selection and the snippet so a sub-part-only match still highlights (M-2).
   const terms = rewindMatchTerms(query)
@@ -77,6 +89,11 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
         const lower = f.ocrText.toLowerCase()
         return terms.some((t) => lower.includes(t))
       }) ?? last
+    // Purely semantic when no member was a keyword hit (only meaningful once the
+    // caller supplies the keyword id set — i.e. on the merged phase-2 results).
+    const matchedSemantically = keywordIds
+      ? current.every((f) => f.id == null || !keywordIds.has(f.id))
+      : false
     groups.push({
       id: `${first.app}-${first.ts}`,
       app: first.app,
@@ -85,7 +102,8 @@ export function groupFrames(frames: RewindFrame[], query: string): RewindSearchG
       endTs: last.ts,
       frames: [...current],
       representative: rep,
-      matchSnippet: snippet(rep.ocrText, terms)
+      matchSnippet: snippet(rep.ocrText, terms),
+      matchedSemantically
     })
     current = []
   }

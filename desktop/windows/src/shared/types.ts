@@ -1397,6 +1397,10 @@ export type RewindSearchGroup = {
   frames: RewindFrame[]
   representative: RewindFrame
   matchSnippet: string
+  /** True when this group surfaced ONLY via semantic (vector) recall — no frame in
+   *  it was a keyword/FTS hit. Lets the UI distinguish a fuzzy "related" match from
+   *  an exact keyword match. Set only on the phase-2 (merged) results. */
+  matchedSemantically?: boolean
 }
 
 export type RewindSettings = {
