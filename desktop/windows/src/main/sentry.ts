@@ -23,6 +23,20 @@ function scrub<T extends Sentry.Event>(event: T): T {
   return scrubEventPii(event)
 }
 
+/** Report a non-fatal error the app healed from (e.g. database corruption
+ *  recovery). No-ops when Sentry is not initialized/enabled, exactly like the
+ *  crash path — so dev and self-builds still report nothing. Scrubbing is applied
+ *  by the beforeSend hook above. */
+export function captureError(
+  err: unknown,
+  context: { area: string; extra?: Record<string, unknown> }
+): void {
+  Sentry.captureException(err, {
+    tags: { area: context.area },
+    extra: context.extra
+  })
+}
+
 let initialized = false
 
 export function initSentry(): void {

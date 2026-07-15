@@ -236,6 +236,13 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('rewind:capture-directive', listener)
     return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
   },
+  dbRecoveryStatus: () => ipcRenderer.invoke('db:recoveryStatus'),
+  onDbCorruptionDetected: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('db:corruption-detected', listener)
+    return () => ipcRenderer.removeListener('db:corruption-detected', listener)
+  },
+  relaunchApp: () => ipcRenderer.send('app:relaunch'),
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
