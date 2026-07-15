@@ -170,10 +170,12 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         a PR where the manifest source is unchanged."""
         job = self.jobs["desktop-swift-release-compile"]
         combined = "\n".join(_run_texts(job))
-        self.assertIn(
-            "PACKAGE_RESOLVED",
-            combined,
-            "release-compile job must check for Package.resolved changes",
+        # The variable must be wired into the SHOULD_RUN conditional, not just
+        # declared or logged — removing the gate while keeping other references
+        # must fail this test.
+        self.assertTrue(
+            re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
+            "release-compile job must gate SHOULD_RUN on PACKAGE_RESOLVED=true",
         )
 
     # --- adversarial: removing any guard must fail -------------------------
@@ -209,6 +211,22 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         )
         key = cache_step["with"]["key"]
         self.assertNotIn("Package.resolved", key)
+
+    def test_adversarial_remove_package_resolved_gate_detected(self):
+        """Removing the PACKAGE_RESOLVED gate from SHOULD_RUN while keeping
+        other references must fail the positive gate assertion."""
+        wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
+        tampered = wf_text.replace('|| [ "$PACKAGE_RESOLVED" = "true" ]', "")
+        tampered_wf = yaml.safe_load(tampered)
+        job = tampered_wf["jobs"]["desktop-swift-release-compile"]
+        combined = "\n".join(_run_texts(job))
+        # PACKAGE_RESOLVED still appears (declared, detected, echoed) but the
+        # gate condition is gone — the regex must fail to match.
+        self.assertIn("PACKAGE_RESOLVED", combined)  # still referenced
+        self.assertIsNone(
+            re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
+            "gate condition must be absent after removal",
+        )
 
 
 if __name__ == "__main__":
