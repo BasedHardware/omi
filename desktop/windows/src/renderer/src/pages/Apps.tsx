@@ -17,8 +17,19 @@ import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
 import { rankSearchResults } from '../lib/appRanking'
-import { buildCatalog, sectionPreview, searchCatalog, type CatalogSection } from '../lib/appCatalog'
-import type { AppCatalogItem, AppCatalogResponse, AppSearchResponse } from '../lib/omiApi.generated'
+import {
+  buildCatalog,
+  mergeAppPool,
+  sectionPreview,
+  searchCatalog,
+  type CatalogSection
+} from '../lib/appCatalog'
+import type {
+  App as AppEntry,
+  AppCatalogItem,
+  AppCatalogResponse,
+  AppSearchResponse
+} from '../lib/omiApi.generated'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -147,6 +158,10 @@ function AppGrid({
 
 export function Apps(): React.JSX.Element {
   const [allApps, setAllApps] = useState<AppCatalogItem[]>([])
+  // Merged v2-union + per-user v1 /apps pool, deduped (v1 wins). Backs the Installed
+  // view + count so a user's private/unapproved/tester apps (absent from the
+  // approved-only v2 catalog) still render.
+  const [installedPool, setInstalledPool] = useState<AppCatalogItem[]>([])
   const [sections, setSections] = useState<CatalogSection[]>([])
   const [enabled, setEnabled] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
@@ -167,18 +182,34 @@ export function Apps(): React.JSX.Element {
   const load = async (): Promise<void> => {
     setError(null)
     try {
-      // v2 catalog is grouped by capability. `enabled` is per-user, but the grouped
-      // catalog is a shared (uid-less) cache, so its per-app `enabled` flag is not
-      // reliable — the /v1/apps/enabled list stays the source of truth for installs.
-      const [catalogRes, enabledRes] = await Promise.all([
+      // v2 = approved-only capability catalog (marketplace sections). v1 /apps is the
+      // per-user list (includes the user's private/unapproved/tester apps) and backs
+      // the Installed view; enabled is the per-user install set. The grouped v2 cache
+      // is uid-less, so its per-app `enabled` flag is unreliable — enabled stays the
+      // install source of truth.
+      const [catalogRes, v1Res, enabledRes] = await Promise.all([
         omiApi.get<AppCatalogResponse>('/v2/apps', {
           params: { limit: 100, include_reviews: false }
         }),
+        omiApi
+          .get<AppEntry[]>('/v1/apps', { params: { include_reviews: false } })
+          .catch(() => ({ data: [] as AppEntry[] })),
         omiApi.get<string[]>('/v1/apps/enabled').catch(() => ({ data: [] as string[] }))
       ])
       const { sections: nextSections, allApps: nextApps } = buildCatalog(catalogRes.data?.groups)
+      // A capped fetch must not silently drop apps: the limit applies per group, so
+      // warn when any rendered section was truncated on the server (repo rule).
+      for (const s of nextSections) {
+        if (s.truncated) {
+          console.warn(
+            `[apps] "${s.title}" section truncated: showing ${s.apps.length} of ${s.total} — refine via search`
+          )
+        }
+      }
+      const v1Apps = Array.isArray(v1Res.data) ? v1Res.data : []
       setSections(nextSections)
       setAllApps(nextApps)
+      setInstalledPool(mergeAppPool(nextApps, v1Apps))
       setEnabled(new Set(Array.isArray(enabledRes.data) ? enabledRes.data : []))
     } catch (e) {
       setError((e as Error).message)
@@ -198,6 +229,14 @@ export function Apps(): React.JSX.Element {
     return () => clearTimeout(t)
   }, [query])
 
+  // Latest-value ref for the search fallback's local corpus, so `allApps` changing
+  // (e.g. after a refresh) doesn't re-trigger the search effect and re-issue a
+  // request for the same query.
+  const allAppsRef = useRef(allApps)
+  useEffect(() => {
+    allAppsRef.current = allApps
+  }, [allApps])
+
   // Run a remote search (with client fallback) whenever the debounced query changes
   // on the Marketplace tab. The Installed tab searches its small local set inline.
   // Intentional data-fetching effect: it syncs search state to the debounced query,
@@ -212,6 +251,10 @@ export function Apps(): React.JSX.Element {
       return
     }
     let stale = false
+    // Clear stale results so the spinner shows for the NEW query instead of the
+    // previous query's cards lingering until this request resolves.
+    setSearchResults(null)
+    setSearchFallback(false)
     setSearchLoading(true)
     void searchCatalog(
       q,
@@ -221,7 +264,7 @@ export function Apps(): React.JSX.Element {
         })
         return res.data?.data ?? []
       },
-      allApps
+      allAppsRef.current
     ).then(({ apps, usedFallback }) => {
       if (stale) return
       setSearchResults(apps)
@@ -231,7 +274,7 @@ export function Apps(): React.JSX.Element {
     return () => {
       stale = true
     }
-  }, [debouncedQuery, tab, allApps])
+  }, [debouncedQuery, tab])
   /* eslint-enable react-hooks/set-state-in-effect */
 
   // Close the filter dropdown when clicking outside of it.
@@ -336,12 +379,20 @@ export function Apps(): React.JSX.Element {
 
   const isSearching = debouncedQuery.trim().length > 0
 
+  // The user's installed apps, resolved from the merged v1+v2 pool (so private/
+  // tester apps still appear) filtered to the enabled set. Drives both the Installed
+  // view and the header count, so the count always equals what is renderable.
+  const installedApps = useMemo(
+    () => installedPool.filter((a) => enabled.has(a.id)),
+    [installedPool, enabled]
+  )
+
   // What to render in the content area, derived from tab/search/filter state:
   //   - 'sections': macOS-style capability sections (Marketplace browse, no search/filter)
   //   - 'grid': a flat card grid (search results, category filter, or the Installed list)
   const view = useMemo<{ kind: 'sections' } | { kind: 'grid'; apps: AppCatalogItem[] }>(() => {
     if (tab === 'installed') {
-      let base = allApps.filter((a) => enabled.has(a.id))
+      let base = installedApps
       if (isSearching) base = rankSearchResults(base, debouncedQuery)
       else if (selectedCats.size > 0) base = base.filter(catFilter)
       return { kind: 'grid', apps: base }
@@ -355,7 +406,7 @@ export function Apps(): React.JSX.Element {
       return { kind: 'grid', apps: allApps.filter(catFilter) }
     }
     return { kind: 'sections' }
-  }, [tab, allApps, enabled, isSearching, debouncedQuery, selectedCats, catFilter, searchResults])
+  }, [tab, allApps, installedApps, isSearching, debouncedQuery, selectedCats, catFilter, searchResults])
 
   const showSearchSpinner = tab === 'all' && isSearching && searchLoading && searchResults === null
 
@@ -363,7 +414,9 @@ export function Apps(): React.JSX.Element {
     <div className="flex h-full flex-col">
       <PageHeader
         title="Apps"
-        subtitle={loading ? 'Loading…' : `${allApps.length} available · ${enabled.size} installed`}
+        subtitle={
+          loading ? 'Loading…' : `${allApps.length} available · ${installedApps.length} installed`
+        }
         actions={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
@@ -630,6 +683,11 @@ export function Apps(): React.JSX.Element {
                       busy={busy}
                       onToggle={toggle}
                     />
+                    {isExpanded && section.truncated && (
+                      <p className="text-xs text-white/45">
+                        Showing {section.apps.length} of {section.total}. Use search to find the rest.
+                      </p>
+                    )}
                   </div>
                 )
               })
