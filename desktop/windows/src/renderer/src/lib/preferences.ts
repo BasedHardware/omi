@@ -113,6 +113,14 @@ export type Preferences = {
   // 'openai'/'gemini' pins a concrete lane. Resolved to a concrete VoiceProvider
   // at session start via resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
   voiceProvider?: VoiceProviderSetting
+  // Warm-hub system-wide PTT kill-switch (Track 2 / A5 PR-6). Default OFF: the
+  // shipped `omniSTT` cascade is the ONLY path a PTT turn takes, byte-for-byte as
+  // it does today. When true, a PTT press whose hub is available routes to the
+  // warm realtime hub (with graceful cascade fallback). Flipping it off at runtime
+  // restores the merged behavior with no restart — the next route selection picks
+  // `omniSTT`. Undefined ⇒ OFF; never defaulted true here (flipping the default is
+  // a separate post-soak PR).
+  pttHubEnabled?: boolean
 }
 
 const defaults: Preferences = {
