@@ -421,7 +421,7 @@ public class ProactiveAssistantsPlugin: NSObject {
                     do {
                         _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
                     } catch {
-                        logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch: \(error)")
+                        logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)
                     }
 
                     await MainActor.run {

@@ -281,7 +281,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame: \(error)")
+            logError("RewindIndexer: Failed to process frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -362,7 +362,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process CGImage frame: \(error)")
+            logError("RewindIndexer: Failed to process CGImage frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -472,7 +472,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame with metadata: \(error)")
+            logError("RewindIndexer: Failed to process frame with metadata", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -541,7 +541,7 @@ actor RewindIndexer {
         do {
             _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
         } catch {
-            logError("RewindIndexer: Failed to flush video chunk: \(error)")
+            logError("RewindIndexer: Failed to flush video chunk", error: error)
             return false
         }
 
