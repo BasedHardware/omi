@@ -65,6 +65,11 @@ src/main/automation/helper/bin/
 src/main/automation/helper/obj/
 resources/win-automation-helper/*.pdb
 
+# .NET build artifacts (win-audio-helper)
+src/main/audio/helper/bin/
+src/main/audio/helper/obj/
+resources/win-audio-helper/*.pdb
+
 # Orb harness artifacts (contact sheets, pixel dumps) — generated
 .orb-out/
 orb-harness/dist/

@@ -1,3 +1,6 @@
+// BYOK provider key types used by the OmiBridgeApi surface below.
+import type { ByokKeys, ByokProvider } from './byok'
+
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
  *  pre-session queue (usePushToTalk) and the main process's pre-OPEN WebSocket
@@ -168,6 +171,9 @@ export type LocalConversation = {
   cloudId?: string | null
   syncAttempts?: number
   syncError?: string | null
+  // --- Track 4: local mirror of the cloud starred/folder fields (additive) ---
+  starred?: boolean
+  folderId?: string | null
 }
 
 export type ListenSource = 'mic' | 'system'
@@ -242,6 +248,9 @@ export type CaptureCommand =
   | { type: 'ptt-start'; captureId: string; backfillMs: number }
   | { type: 'ptt-drain'; captureId: string }
   | { type: 'ptt-dispose'; captureId: string }
+  // Rebuild the warm mic graph (silent-mic recovery escalation, A7b) — the capture
+  // window tears down + reopens getUserMedia with a retry ladder. Fire-and-forget.
+  | { type: 'ptt-rebuild' }
   // A decorative desktop-video session (the screen-record mode's preview stream).
   // `sourceId` is the user-picked capture source; the capture window falls back to
   // the primary screen when it's absent.
@@ -402,6 +411,11 @@ export type BarChatState = {
  *  in main/bar/window.ts). */
 export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
 
+/** A bar send blocked by the chat usage limit, relayed to the main window (which
+ *  owns the shared usage-limit modal and the TTS voice). `spoken` = the blocked
+ *  turn came from PTT, so the limit line is answered aloud (Mac speaks it). */
+export type BarUsageLimitPayload = { message: string; spoken: boolean }
+
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
@@ -424,6 +438,16 @@ export type OmiBarApi = {
   /** Send a chat message through the bar→main bridge (the main window's single
    *  chat engine owns the thread). `fromVoice` requests a spoken reply. */
   sendChat: (text: string, fromVoice: boolean) => void
+  /** Barge-in: a new PTT hold started — stop Omi's still-playing spoken reply.
+   *  The reply plays in the MAIN window (useChat → voiceController), so this hops
+   *  over the bar→main bridge; ChatBridgeHost calls interruptCurrentResponse. */
+  interruptTts: () => void
+  /** A bar send was refused by the chat usage limit. The shared UsageLimitPopup
+   *  and TTS playback both live in the MAIN window, so the bar hops over the
+   *  bridge; ChatBridgeHost raises the popup (and speaks `message` for a voice
+   *  turn). Mac parity: the modal always shows on the main window, even when the
+   *  block came from the floating bar. */
+  notifyUsageLimit: (payload: BarUsageLimitPayload) => void
   /** Ask the main window to (re)broadcast the current chat state — called on
    *  mount / each reveal so the bar shows the ongoing thread. */
   requestChatState: () => void
@@ -441,12 +465,70 @@ export type OmiBarApi = {
   setContentProtection: (enabled: boolean) => Promise<boolean>
 }
 
+// --- Halo overlay (main/glow/*) -----------------------------------------------
+//
+// The halo is a GENERIC capability: "draw a soft glowing ring around the user's
+// active window". The window, geometry, gates, park pattern and follow-tick know
+// nothing about WHY it is being drawn — the caller picks an appearance. Focus is
+// simply the first caller; a recording indicator or a listening cue would be a new
+// preset (a data change), not a change to any of the machinery.
+
+/** How a halo LOOKS — colour-agnostic. `hues` are three neighbouring tones as
+ *  space-separated RGB channels ("239 68 68"); the ring cross-fades between them
+ *  so it breathes. `intensity` is the envelope's peak opacity. */
+export type GlowPaint = {
+  hues: [string, string, string]
+  intensity: number
+}
+
+/** Named appearances. Adding one is a data change in main/glow/glowPresets.ts —
+ *  no window, geometry or renderer code moves. */
+export type GlowPresetName = 'distracted' | 'focused'
+
+/** One halo run. `pad` (the ring's inset inside the overlay window), `overlap`
+ *  (how far the ring is pulled INSIDE the target's edge) and `radius` (0 when the
+ *  target's own corners are square — Win11 doesn't round maximized or snapped
+ *  windows) are computed in main from the target's real geometry, so the renderer
+ *  never guesses. `maximized` tells the ring that its outward glow is
+ *  off-screen/under the taskbar and only its inset layers will be visible.
+ *  `token` is echoed back via `showAck` once the ring has painted. */
+export type GlowShowPayload = {
+  paint: GlowPaint
+  runId: number
+  token: number
+  pad: number
+  overlap: number
+  radius: number
+  maximized: boolean
+}
+
+/** Renderer bridge for the halo window (see main/glow/glowWindow.ts). */
+export type OmiGlowApi = {
+  /** The halo renderer has mounted — flush any deferred show. */
+  ready: () => void
+  /** Paint acknowledgement: the ring's first frame is composited, so main may
+   *  unpark the window without flashing the previous (stale) frame. */
+  showAck: (token: number) => void
+  /** Draw a halo around the active window in the named appearance. This is the
+   *  Focus assistant's entry point (and today, the dev/QA trigger). */
+  trigger: (preset: GlowPresetName) => void
+  dismiss: () => void
+  getCurrent: () => Promise<{ preset: GlowPresetName; runId: number } | null>
+  onShow: (cb: (p: GlowShowPayload) => void) => () => void
+  onHide: (cb: () => void) => () => void
+}
+
 /** Listening state the renderer reports to the tray (drives icon/tooltip/menu).
  *  Mirrors the main-process TrayState in main/trayState.ts. */
 export type TrayListeningState = 'idle' | 'listening' | 'paused'
 
-/** The mic record chord and whether the OS accepted its registration. */
-export type RecordHotkeyState = { accelerator: string; registered: boolean }
+/** The mic record chord and whether the OS accepted its registration. `enabled`
+ *  is whether the chord is registered at all: the Record card (only) lets the user
+ *  turn it fully off (default Ctrl+Space collides with the Windows IME switch), and
+ *  main leaves it unregistered while off. The summon path reuses this shape and
+ *  does not populate `enabled` (its card has no Off affordance) — hence optional;
+ *  consumers must treat `undefined` as enabled (`enabled !== false`). */
+export type RecordHotkeyState = { accelerator: string; registered: boolean; enabled?: boolean }
 
 /** Outcome of a manual "check for updates" from Settings → About.
  *  - `unsupported`: the updater is inert (unpackaged dev build) — updates install
@@ -482,6 +564,27 @@ export type OmiBridgeApi = {
    *  stale-snapshot second driver from re-POSTing. `resetAttempts` restarts the
    *  attempt counter (manual re-sync of a wedged row). */
   claimConversationForPosting: (id: string, resetAttempts?: boolean) => Promise<boolean>
+  // --- Track 4: conversation folders / starred (local cache + mirror) ---
+  /** Cached folders for instant paint (ordered), reconciled from /v1/folders. */
+  listConversationFolders: () => Promise<ConversationFolder[]>
+  /** Replace the whole folder cache from a backend fetch. */
+  replaceConversationFolders: (folders: ConversationFolder[]) => Promise<void>
+  /** Optimistic single-folder upsert (create/edit) before the reconcile lands. */
+  upsertConversationFolder: (folder: ConversationFolder) => Promise<void>
+  /** Drop a folder from the cache (optimistic delete). */
+  deleteConversationFolder: (id: string) => Promise<void>
+  // --- Track 2: Voice & PTT depth (voice turn outbox) ---
+  /** Enqueue (idempotent UPSERT on idempotencyKey) a voice turn for durable
+   *  delivery. A re-enqueue for the same key updates the assistant text /
+   *  interrupted flag (a barge-in follow-up) rather than inserting a duplicate. */
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) => Promise<void>
+  /** Pending turns oldest-first (created_at ascending), to preserve the
+   *  single-writer drain ordering. Optional cap on rows returned. */
+  listPendingVoiceTurns: (limit?: number) => Promise<VoiceTurnOutboxEntry[]>
+  /** Delete the row on a positive kernel ack (Mac deletes on ack). */
+  markVoiceTurnAcked: (idempotencyKey: string) => Promise<void>
+  /** Record a failed delivery attempt: bumps attempts, stores the last error. */
+  recordVoiceTurnFailure: (idempotencyKey: string, error: string) => Promise<void>
   /** Sign-out teardown: delete every user-scoped local table (conversations,
    *  captions, local KG, rewind frames, app usage, insights, indexed files) so a
    *  different account on this machine starts clean. */
@@ -571,6 +674,22 @@ export type OmiBridgeApi = {
   onMemoriesDeleteProgress: (
     cb: (p: { deleted: number; failed: number; total: number; done: boolean }) => void
   ) => () => void
+  // --- Track 3 (AI user profile) ---
+  // Once-daily synthesized "about the user" doc, generated + stored + synced in
+  // the main process. The renderer pushes a session (Firebase token + base URLs)
+  // since the token lives renderer-side, and drives generation.
+  aiProfileSetSession: (
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => Promise<void>
+  aiProfileGenerateNow: (session?: {
+    apiBase: string
+    desktopApiBase: string
+    token: string
+  }) => Promise<AiUserProfileRecord>
+  aiProfileGetLatest: () => Promise<string | null>
+  aiProfileEdit: (id: number, text: string) => Promise<void>
+  aiProfileDelete: (id: number) => Promise<void>
+  aiProfileDeleteAll: () => Promise<void>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>
@@ -615,14 +734,37 @@ export type OmiBridgeApi = {
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
+  /** Phase 1 of a Rewind search: KEYWORD (FTS5/BM25) results, immediately. Never
+   *  waits on the network — semantic hits follow on `onRewindSearchResults`. */
   rewindSearch: (query: string) => Promise<RewindSearchGroup[]>
+  /** Phase 2: the same result list with semantic hits merged in, delivered if and
+   *  when the embedding round-trip lands. Never fires when semantic search is
+   *  unavailable (signed out, backend down, nothing indexed) — the keyword results
+   *  from `rewindSearch` simply stand. Callers must ignore a payload whose `query`
+   *  is not the one they are currently showing. */
+  onRewindSearchResults: (
+    cb: (r: { query: string; groups: RewindSearchGroup[] }) => void
+  ) => () => void
+  /** Relay the Firebase session to the main-process Rewind embedding indexer
+   *  (Track 4); null on sign-out. Without it, semantic search stays inert and
+   *  `rewindSearch` returns keyword-only results. */
+  rewindSetEmbedSession: (
+    session: { desktopApiBase: string; token: string } | null
+  ) => Promise<void>
   rewindFrameImage: (imagePath: string) => Promise<string>
+  // --- Track 4 --- per-line OCR bounding boxes (normalized 0..1) for the
+  // on-image search highlight overlay in the Rewind frame viewer.
+  rewindFrameOcrLines: (frameId: number) => Promise<OcrLine[]>
   rewindGetSettings: () => Promise<RewindSettings>
   rewindSetSettings: (next: RewindSettings) => Promise<RewindSettings>
   rewindPruneNow: () => Promise<number>
   rewindPrimarySourceId: () => Promise<string | null>
   rewindSaveFrame: (data: Uint8Array) => Promise<{ captured: boolean; reason?: string }>
   onRewindSettings: (cb: (s: RewindSettings) => void) => () => void
+  /** Runtime capture directive (pause + effective cadence) the main process derives
+   *  from OS power/lock state; the capture host prefers it over the base interval. */
+  rewindGetCaptureDirective: () => Promise<RewindCaptureDirective>
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => () => void
   /** Capture the primary screen once and OCR it, returning the recognized text
    *  (or '' on failure/timeout). Used by the chat to read the screen at send time. */
   screenReadText: () => Promise<string>
@@ -689,6 +831,12 @@ export type OmiBridgeApi = {
     plan: AutomationPlan
   ) => Promise<{ ok: boolean; canceled?: boolean; message?: string }>
   onAutomationStep: (cb: (r: StepResult) => void) => () => void
+  // --- Track 2 A4: system-audio mute during PTT capture ---
+  // Fire-and-forget (never awaited): the PTT hold path must never wait on the
+  // native helper. Mute is gated renderer-side on the pttMuteSystemAudio pref;
+  // restore is unconditional so a mute is ALWAYS undone, even on error paths.
+  muteSystemAudio: () => void
+  restoreSystemAudio: () => void
   // Cross-window conversations refresh: a renderer that writes a local
   // conversation calls notifyConversationsChanged(); main broadcasts
   // 'conversations:changed' to ALL windows so each invalidates its own
@@ -700,6 +848,13 @@ export type OmiBridgeApi = {
   /** The bar sent a message — the main window's ChatBridgeHost drives the ONE
    *  chat.send() (with fromVoice). Main-window renderer only. */
   onBarChatSend: (cb: (payload: { text: string; fromVoice: boolean }) => void) => () => void
+  /** A bar PTT hold started — the main window barge-in: ChatBridgeHost calls
+   *  voiceController.interruptCurrentResponse(). Main-window renderer only. */
+  onBarChatInterrupt: (cb: () => void) => () => void
+  /** A bar send was refused by the chat usage limit — ChatBridgeHost raises the
+   *  shared UsageLimitPopup here (and speaks the line for a voice turn).
+   *  Main-window renderer only. */
+  onBarUsageLimit: (cb: (payload: BarUsageLimitPayload) => void) => () => void
   /** The bar (re)requested current chat state — ChatBridgeHost publishes now. */
   onBarRequestChatState: (cb: () => void) => () => void
   /** Broadcast the projected chat state to the bar (history + streaming + status). */
@@ -729,6 +884,10 @@ export type OmiBridgeApi = {
   /** Rebind the record chord (persisted). Never throws on a conflict — returns
    *  registered=false when the chord is owned by another app. */
   setRecordHotkey: (accelerator: string) => Promise<{ ok: boolean; registered: boolean }>
+  /** Turn the record chord fully on/off (Record card's "Off" chip). Off leaves it
+   *  unregistered so the OS releases Ctrl+Space; on re-registers the stored chord
+   *  (returns registered=false if now held by another app). Returns the fresh state. */
+  setRecordHotkeyEnabled: (enabled: boolean) => Promise<RecordHotkeyState>
   /** The current floating-bar summon chord and whether the OS accepted it. Same
    *  shape as the record chord; the summon accelerator is persisted in renderer
    *  preferences (overlayShortcut) and re-applied to main on startup. */
@@ -769,6 +928,39 @@ export type OmiBridgeApi = {
     commandOverrides?: CodingAgentCommandOverrides
   ) => Promise<{ ok: boolean; error?: string }>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  // --- BYOK (bring-your-own-key) provider keys (encrypted at rest in main) ---
+  /** Every stored provider key, decrypted. Returns key material to the renderer
+   *  Settings UI (same trust model as the app). Empty map when none stored. */
+  byokGetAll: () => Promise<ByokKeys>
+  /** Encrypt + persist one provider's key. A blank key clears that provider. */
+  byokSet: (provider: ByokProvider, key: string) => Promise<void>
+  /** Remove one provider's stored key. */
+  byokClear: (provider: ByokProvider) => Promise<void>
+  /** Remove all stored provider keys. */
+  byokClearAll: () => Promise<void>
+  /** True only when all four providers have a key (backend all-or-nothing). */
+  byokIsActive: () => Promise<boolean>
+  // --- Track 6 (UI surfaces) additions ---
+  /** Settings → General → Font Size "Reset Window Size": restore the main window
+   *  to its default content size (1280×820) and re-center it. */
+  resetWindowSize: () => Promise<void>
+  // --- Track 1 (agent control plane) ---
+  /**
+   * Call one agent-control tool as TRUSTED DIRECT CONTROL. The renderer is the
+   * user's own UI, so a call from here carries the user's authority — which is
+   * what lets it resolve a dispatch. Returns the raw JSON envelope:
+   * `{"ok":true,...}` or `{"ok":false,"error":{"code","message"}}`.
+   *
+   * Tool names: see `AGENT_CONTROL_TOOL_NAMES` in shared/agentControlTools.ts.
+   */
+  agentControlCall: (name: string, input?: Record<string, unknown>) => Promise<string>
+  // There is deliberately no `agentControlSetOwner`. The active owner — the
+  // identity every control call's data is scoped to — is main-side host state and
+  // is not settable from the renderer. See src/main/ipc/agentControl.ts.
+  /** The control tools this caller may see. */
+  agentControlTools: () => Promise<
+    Array<{ name: string; description: string; inputSchema: Record<string, unknown> }>
+  >
 }
 
 // --- Coding agents ---
@@ -1154,6 +1346,81 @@ export type RewindSettings = {
   excludedApps: string[]
 }
 
+/** Runtime capture directive pushed main→renderer, derived from OS power/lock state.
+ *  `paused` tears down the capture stream (sleep/lock); `intervalMs` is the effective
+ *  cadence (base × battery multiplier). Separate from the persisted RewindSettings. */
+export type RewindCaptureDirective = {
+  paused: boolean
+  intervalMs: number
+}
+
+// --- Track 4: Rewind/Conversations/capture ---
+// Row/DTO shapes for the additive PR0 tables. Handlers land with their features
+// in later Track 4 PRs; these are the accurate column mirrors they build on.
+// (OcrLine — per-line OCR box, persisted as rewind_frames.ocr_lines_json — is
+// already defined above with the OCR helper types.)
+
+/** Maps a rewind frame to the hash of its OCR content (rewind_embeddings row).
+ *  Many frames share one hash — consecutive screenshots of a static screen have
+ *  byte-identical text — and the vector is stored once per hash, not per frame. */
+export type RewindEmbeddingRow = {
+  frameId: number
+  hash: string
+}
+
+/** The stored vector for one unique piece of content (rewind_embedding_vectors
+ *  row). `vec` is the raw BLOB — a Uint8Array from better-sqlite3 (Buffer is a
+ *  subclass) — holding L2-normalized Float32s. */
+export type RewindEmbeddingVectorRow = {
+  hash: string
+  dim: number
+  model: string
+  vec: Uint8Array
+  createdAt: number
+}
+
+/** A user/system conversation folder (conversation_folders row; mirrors the Mac
+ *  Folder DTO). */
+export type ConversationFolder = {
+  id: string
+  name: string
+  color?: string | null
+  icon?: string | null
+  orderIdx: number
+  isSystem: boolean
+  conversationCount: number
+  updatedAt?: number | null
+}
+
+/** Per-conversation speaker naming (conversation_speaker_names row). */
+export type ConversationSpeakerName = {
+  conversationId: string
+  speakerId: number
+  name?: string | null
+  personId?: string | null
+  isUser: boolean
+}
+
+/** A live meeting note (live_notes row) — AI-generated or manually authored. */
+export type LiveNote = {
+  id: string
+  sessionId: string
+  text: string
+  isAi: boolean
+  segStart?: number | null
+  segEnd?: number | null
+  createdAt: number
+}
+
+/** A buffered live transcript segment persisted for crash recovery
+ *  (rescue_segments row). `segmentJson` is a serialized wire-shape segment. */
+export type RescueSegment = {
+  sessionId: string
+  seq: number
+  segmentJson: string
+  ts: number
+}
+
 // --- Proactive Insights (Rewind OCR → Gemini → acrylic toast) ---
 export type InsightCategory = 'productivity' | 'communication' | 'learning' | 'health' | 'other'
 
@@ -1171,6 +1438,76 @@ export type InsightPayload = {
 export type InsightRecord = InsightPayload & { id: number; ts: number; dismissed: number }
 
 export type InsightNotificationStyle = 'omi' | 'native'
+
+// ---- Track 3 (proactive) ----
+// Local persistence backing the proactive-intelligence + memory features. All
+// three sets mirror the macOS reference implementation; see src/main/ipc/db.ts
+// for the tables and readers/writers.
+
+// Local history of the daily-synthesized AI User Profile. The backend is the
+// source of truth; local rows exist so the stage-2 consolidation can read up to
+// 5 past profiles.
+export type AiUserProfileRecord = {
+  id: number
+  profileText: string
+  dataSourcesUsed: string[] // parsed from the stored JSON array (never null)
+  generatedAt: number // epoch ms
+  backendSynced: boolean
+}
+
+// Insert input: id is assigned by SQLite; backendSynced defaults to false.
+export type AiUserProfileInput = {
+  profileText: string
+  dataSourcesUsed?: string[]
+  generatedAt: number
+  backendSynced?: boolean
+}
+
+export type FocusSessionStatus = 'focused' | 'distracted'
+
+// One Focus-assistant analysis. Mac has no backend focus API, so sessions live
+// locally (and are dual-written as memories elsewhere).
+export type FocusSessionRecord = {
+  id: number
+  screenshotId: string | null
+  status: FocusSessionStatus
+  appOrSite: string | null
+  description: string | null
+  message: string | null
+  durationSeconds: number
+  backendId: string | null
+  backendSynced: boolean
+  createdAt: number // epoch ms
+  windowTitle: string | null
+}
+
+// Insert input: id is assigned by SQLite; optional fields default to null/0/false.
+export type FocusSessionInput = {
+  screenshotId?: string | null
+  status: FocusSessionStatus
+  appOrSite?: string | null
+  description?: string | null
+  message?: string | null
+  durationSeconds?: number
+  backendId?: string | null
+  backendSynced?: boolean
+  createdAt: number
+  windowTitle?: string | null
+}
+
+export type TaskEmbeddingSource = 'action_item' | 'staged_task'
+
+// Persisted Gemini embedding vector for a task / staged-task (semantic ranking).
+// The composite (source, item_id) primary key is a deliberate fix ported from
+// macOS: ids from different source tables must not collide.
+export type TaskEmbeddingRecord = {
+  source: TaskEmbeddingSource
+  itemId: string
+  vector: Float32Array // L2-normalized, Float32 little-endian
+  text: string
+  model: string
+  updatedAt: number
+}
 
 // --- Meeting detection (Phase 5) ---
 export type MeetingMode = 'off' | 'ask' | 'auto'
@@ -1273,4 +1610,53 @@ export interface PlanRunResult {
   ok: boolean
   failedStepIndex?: number
   message?: string
+}
+
+// --- Track 2: Voice & PTT depth (voice turn outbox) ---
+// Durable main-process outbox for a voice turn (PTT or realtime-session
+// utterance) that must survive an app restart mid-flight. Mirrors the macOS
+// RealtimeVoiceTurnOutboxEntry 1:1 (see the Track 2 Phase-B ground-truth doc);
+// backed by the voice_turn_outbox SQLite table in main/ipc/db.ts. Unconsumed
+// until Phase B / Track 1 publish the kernel-write path — the table + CRUD land
+// early to claim the shared additive files.
+
+/** A pending voice turn is either awaiting a positive kernel ack ('pending') or
+ *  removed once acked (Mac deletes the row on ack — 'acked' is a terminal marker
+ *  callers rarely observe, kept for parity/debuggability). */
+export type VoiceTurnStatus = 'pending' | 'acked'
+
+/** Fields the caller supplies when enqueuing a voice turn. Drain bookkeeping
+ *  (status/attempts/lastError/updatedAtMs) is owned by the outbox itself. The
+ *  same idempotencyKey is reused across a turn's completed/interrupted/optimistic
+ *  variants so a re-enqueue is an idempotent UPSERT, not a duplicate. */
+export interface VoiceTurnOutboxInput {
+  /** UUID string, one per logical turn (natural dedup key). */
+  idempotencyKey: string
+  ownerId: string
+  /** The surface triple (surface kind / app / session). Null until wired. */
+  surface?: string | null
+  appId?: string | null
+  sessionId?: string | null
+  userText?: string | null
+  assistantText?: string | null
+  /** True only for a barge-in-captured partial turn. */
+  interrupted?: boolean
+  createdAtMs: number
+}
+
+/** A durable voice_turn_outbox row (the shape listPendingVoiceTurns returns). */
+export interface VoiceTurnOutboxEntry {
+  idempotencyKey: string
+  ownerId: string
+  surface: string | null
+  appId: string | null
+  sessionId: string | null
+  userText: string | null
+  assistantText: string | null
+  interrupted: boolean
+  createdAtMs: number
+  status: VoiceTurnStatus
+  attempts: number
+  lastError: string | null
+  updatedAtMs: number
 }

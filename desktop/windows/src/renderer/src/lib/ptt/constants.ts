@@ -77,9 +77,61 @@ export const MIC_TAP_RELEASE_MS = 2000
 /** Batch transcription contract — shared by the transport and the live E2E
  *  suite so the harness can never green-test a stale request shape. */
 export const BATCH_TRANSCRIBE_PATH = '/v2/voice-message/transcribe'
-export function batchTranscribeParams(language: string): Record<string, string | number> {
-  return { language: language || 'en', sample_rate: 16000, encoding: 'linear16', channels: 1 }
+export function batchTranscribeParams(
+  language: string,
+  keywords?: string
+): Record<string, string | number> {
+  const params: Record<string, string | number> = {
+    language: language || 'en',
+    sample_rate: 16000,
+    encoding: 'linear16',
+    channels: 1
+  }
+  // PTT vocabulary boosting (A2): a comma-separated keyword list biases STT
+  // toward on-screen proper nouns / product names. Omitted entirely when the
+  // caller passes none (keeps the live-E2E harness request shape unchanged); the
+  // PTT batch path always passes at least the "Omi,OMI" brand prepend — see
+  // pttKeywordsParam in vocabulary.ts.
+  if (keywords) params.keywords = keywords
+  return params
 }
+
+// --- PTT vocabulary boosting tuning (A2, macOS PTTContextVocabularyProvider) ---
+
+/** Collector cap: at most this many candidate terms are gathered from all
+ *  sources before the wire pass (macOS maxKeywords). */
+export const PTT_VOCAB_MAX_COLLECTED = 100
+
+/** Wire cap: the final comma-separated `keywords` param carries at most this
+ *  many terms, brand prepend included (bounds the query string). */
+export const PTT_VOCAB_MAX_WIRE = 40
+
+/** Recent-activity lookback for rewind-frame OCR terms (macOS lookbackSeconds). */
+export const PTT_VOCAB_LOOKBACK_MS = 120_000
+
+/** Most recent rewind frames to mine for terms (macOS getScreenshots limit). */
+export const PTT_VOCAB_MAX_FRAMES = 12
+
+/** Clip the active-screen OCR text before tokenizing (macOS maxImmediateOCRLength). */
+export const PTT_VOCAB_IMMEDIATE_OCR_CHARS = 2000
+
+/** Clip each rewind frame's OCR text before tokenizing (macOS maxTextLengthPerScreenshot). */
+export const PTT_VOCAB_FRAME_OCR_CHARS = 3000
+
+/** Ceiling on the active-screen OCR call — this rides the gesture-critical batch
+ *  path, so a slow capture must never stall the turn; time out and send what we
+ *  have (typically just the brand prepend). */
+export const PTT_VOCAB_OCR_TIMEOUT_MS = 700
+
+/** Ceiling on the rewind-frame lookup (a local SQLite read; normally < 100ms). */
+export const PTT_VOCAB_REWIND_TIMEOUT_MS = 700
+
+/** How long batchTranscribe waits on the hold-start collection before shipping.
+ *  Collection is kicked off at hold-start and overlaps the user's speech, so on a
+ *  normal hold (> the OCR ceiling above) it is already resolved by key-up and this
+ *  wait returns instantly. A very short hold that released before collection
+ *  finished degrades to the brand prepend instead of stalling the transcribe. */
+export const PTT_VOCAB_CONSUME_TIMEOUT_MS = 300
 
 /** One copy of the user-facing over-length message (hint + 413 error share it). */
 export const RECORDING_TOO_LONG_MESSAGE = 'Recording too long — keep it under 5 minutes'
