@@ -295,17 +295,19 @@ function resolveBundledPi(): string {
 
 /** Resolve the omi-provider extension file bundled alongside the app.
  *
- *  The pi-mono-extension (tool relay + omi provider registration) is NOT ported
- *  in this PR — it arrives in PR-C together with the omi-tool-manifest and the
- *  OMI_BRIDGE_PIPE relay server. Until then, callers must inject an explicit
- *  extension path (tests do); starting the real subprocess without one fails
- *  loud rather than passing pi a bogus `-e` argument.
+ *  The pi-mono-extension (omi provider registration + Windows denylist + the
+ *  OMI_BRIDGE_PIPE relay client) lives at ./pi-mono-extension/index.ts, a raw
+ *  `.ts` file pi loads on the fly via jiti (no precompile). This resolver
+ *  returns its on-disk path relative to this module's source.
+ *
+ *  DARK: the adapter is still unregistered, so this resolver is never called in
+ *  production yet — every production path either injects an explicit
+ *  extensionPath or does not spawn pi at all. Final packaging (asar-unpack of
+ *  the extension source + its .ts dep tree so the plain-Node child can read it)
+ *  is finished when the adapter is activated in PR-D/E.
  */
 function resolveBundledExtension(): string {
-  throw new Error(
-    'pi-mono extension is not bundled yet (wired in PR-C). ' +
-      'Pass an explicit extensionPath or set PI_EXTENSION_PATH.'
-  )
+  return join(dirname(fileURLToPath(import.meta.url)), 'pi-mono-extension', 'index.ts')
 }
 
 /**

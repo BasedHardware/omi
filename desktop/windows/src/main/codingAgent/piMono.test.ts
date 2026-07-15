@@ -266,6 +266,47 @@ describe('PiMonoAdapter prompt correlation', () => {
     expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
   })
 
+  // M1 — ported from desktop/macos/agent/tests/pi-mono-adapter.test.ts:246-286.
+  // A runtime attempt writes a relay context; after it completes, a DIRECT
+  // sendPrompt (no 7th relayContext arg) must not carry a stale context — the
+  // writeRelayContext(undefined) path clears it (piMono.ts:816-829). A stale
+  // file is seeded first so the assertion actually exercises the clear.
+  it('clears stale relay context when direct prompt execution has no runtime context', async () => {
+    const { adapter } = createAdapter()
+    seedSessions(adapter, 'session-1')
+
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+    const execution = runtime.executeAttempt(
+      makeAttemptContext({ binding: { adapterNativeSessionId: 'session-1' } }),
+      () => {},
+      new AbortController().signal
+    )
+    expect(existsSync(internals(adapter).contextFilePath)).toBe(true)
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('done'))
+    await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
+
+    // Simulate a leftover context from a prior run so the direct-prompt clear is
+    // observable rather than trivially-already-absent.
+    writeFileSync(
+      internals(adapter).contextFilePath,
+      JSON.stringify({ adapterId: 'pi-mono', attemptId: 'att_stale' })
+    )
+    expect(existsSync(internals(adapter).contextFilePath)).toBe(true)
+
+    const directPrompt = adapter.sendPrompt(
+      'session-1',
+      [{ type: 'text', text: 'direct' }],
+      [],
+      'act',
+      () => {},
+      async () => ''
+    )
+
+    expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('direct done'))
+    await expect(directPrompt).resolves.toMatchObject({ text: 'direct done' })
+  })
+
   it('rejects a second prompt while one is in flight and never emits a result event', async () => {
     const { adapter, events } = createAdapter()
     seedSessions(adapter, 'session-1', 'session-2')
