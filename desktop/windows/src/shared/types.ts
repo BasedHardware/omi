@@ -553,6 +553,19 @@ export type UpdateCheckResult = {
 /** Result of an in-app Stripe Checkout flow (main/billing/checkoutWindow). */
 export type CheckoutOutcome = 'success' | 'cancel' | 'closed'
 
+/** A file chosen for chat attachment. Produced in the main process by the native
+ *  file picker (`chat:openFiles`, which reads the bytes) or built in the renderer
+ *  from a drag-drop `File`. `path` is only set for the picker path. `bytes` is
+ *  null when the main process skipped reading an over-cap file, so the pending
+ *  state layer can reject it with a reason instead of main ever loading it. */
+export type PickedChatFile = {
+  path?: string
+  name: string
+  mimeType: string
+  size: number
+  bytes: Uint8Array | null
+}
+
 export type OmiBridgeApi = {
   getCaptureSources: () => Promise<CaptureSource[]>
   remapConversationId: (fromId: string, toId: string) => Promise<number>
@@ -710,6 +723,11 @@ export type OmiBridgeApi = {
     parentPageId: string
     memories: ExportMemory[]
   }) => Promise<MemoryExportResult>
+  // Chat attachments: open a native multi-select file picker and read the chosen
+  // files' bytes in main. The renderer uploads them to /v2/files itself (it holds
+  // the auth token). Over-cap files come back with `bytes: null` so the renderer
+  // can reject them without main ever loading a huge file.
+  openChatFiles: () => Promise<PickedChatFile[]>
   // --- Local knowledge graph (M2) ---
   /** Aggregate indexed_files into a digest for synthesis. */
   kgFileIndexDigest: () => Promise<FileIndexDigest>

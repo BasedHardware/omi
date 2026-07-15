@@ -30,6 +30,7 @@ import { registerFileIndexHandlers } from './ipc/fileIndex'
 import { cancelStartupRescan } from './fileIndex/indexer'
 import { registerMemoryImportHandlers } from './ipc/memoryImport'
 import { registerMemoryExportHandlers } from './ipc/memoryExport'
+import { registerChatFilesHandlers } from './ipc/chatFiles'
 import { registerKgHandlers } from './ipc/kg'
 import { registerAuthHandlers } from './ipc/auth'
 import { registerIntegrationsHandlers } from './ipc/integrations'
@@ -620,6 +621,7 @@ app.whenReady().then(async () => {
   registerLocalGraphHandlers()
   registerMemoryImportHandlers()
   registerMemoryExportHandlers()
+  registerChatFilesHandlers()
   registerKgHandlers()
   // Google sign-in (system browser + loopback). On success, surface the main
   // window OVER the browser: Windows blocks background apps from stealing
