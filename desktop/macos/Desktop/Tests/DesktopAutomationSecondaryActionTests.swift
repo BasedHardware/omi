@@ -243,9 +243,11 @@ final class DesktopAutomationSecondaryActionTests: XCTestCase {
   func testMemoryAtlasHarnessActionsPostBoundedViewportNotifications() throws {
     let openBody = try actionBody(named: "open_memory_atlas", in: try bridgeSource())
     XCTAssertTrue(openBody.contains("desktopAutomationOpenMemoryAtlasRequested"))
+    XCTAssertTrue(openBody.contains("\"target\": \"page\""))
 
     let viewportBody = try actionBody(named: "memory_atlas_set_viewport", in: try bridgeSource())
     XCTAssertTrue(viewportBody.contains("desktopAutomationMemoryAtlasViewportRequested"))
+    XCTAssertTrue(viewportBody.contains("\"page\""))
     for parameter in ["target", "zoom", "pan_x", "pan_y", "reset"] {
       XCTAssertTrue(viewportBody.contains("\"\(parameter)\""))
     }

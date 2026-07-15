@@ -15,39 +15,103 @@ extension Notification.Name {
   static let desktopAutomationMemoryAtlasViewportRequested = Notification.Name(
     "desktopAutomationMemoryAtlasViewportRequested"
   )
+  static let desktopAutomationMemoryAtlasTimeRequested = Notification.Name(
+    "desktopAutomationMemoryAtlasTimeRequested"
+  )
 }
 
 // MARK: - Atlas Layout
 
 enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
-  case projects
-  case collaborators
-  case tools
+  case person
+  case organization
+  case place
+  case thing
+  case concept
 
   var id: String { rawValue }
 
   var title: String {
     switch self {
-    case .projects: return "Building & projects"
-    case .collaborators: return "People & organizations"
-    case .tools: return "Tools & platforms"
+    case .person: return "People"
+    case .organization: return "Organizations"
+    case .place: return "Places"
+    case .thing: return "Things"
+    case .concept: return "Concepts"
     }
   }
 
   var color: Color {
     switch self {
-    case .projects: return Color(red: 0.33, green: 0.84, blue: 0.67)
-    case .collaborators: return Color(red: 0.96, green: 0.66, blue: 0.22)
-    case .tools: return Color(red: 0.27, green: 0.63, blue: 0.96)
+    case .person: return Color(red: 0.31, green: 0.77, blue: 0.96)
+    case .organization: return Color(red: 0.96, green: 0.66, blue: 0.22)
+    case .place: return Color(red: 0.33, green: 0.84, blue: 0.67)
+    case .thing: return OmiColors.textSecondary
+    case .concept: return Color(red: 0.27, green: 0.63, blue: 0.96)
     }
   }
 
-  var center: CGPoint {
-    switch self {
-    case .projects: return CGPoint(x: 0.24, y: 0.45)
-    case .collaborators: return CGPoint(x: 0.51, y: 0.42)
-    case .tools: return CGPoint(x: 0.78, y: 0.45)
+  /// Present types orbit the person at the center as a shallow five-petal
+  /// constellation. The two radii counterbalance the wide desktop canvas so
+  /// the ring reads as a circle rather than a flattened row.
+  static let starCenter = CGPoint(x: 0.5, y: 0.5)
+  private static let starHorizontalRadius: CGFloat = 0.15
+  private static let starVerticalRadius: CGFloat = 0.25
+
+  static func centers(for activeClusters: [Self]) -> [Self: CGPoint] {
+    guard !activeClusters.isEmpty else { return [:] }
+
+    let startingAngle = -Double.pi / 2
+    let angularStep = 2 * Double.pi / Double(activeClusters.count)
+    var result: [Self: CGPoint] = [:]
+    for (index, cluster) in activeClusters.enumerated() {
+      let angle = startingAngle + Double(index) * angularStep
+      result[cluster] = CGPoint(
+        x: starCenter.x + CGFloat(cos(angle)) * starHorizontalRadius,
+        y: starCenter.y + CGFloat(sin(angle)) * starVerticalRadius
+      )
     }
+    return result
+  }
+}
+
+/// The time axis behind the atlas. Built from entity `createdAt` timestamps so
+/// the user can scrub — or watch — their memory come into being. It degrades
+/// gracefully: when the graph carries no meaningful spread of timestamps (for
+/// example a freshly rebuilt graph where every node shares one build date) the
+/// factory returns `nil` and the surface simply hides the timeline.
+struct MemoryAtlasTimeline: Equatable {
+  let start: Date
+  let end: Date
+  /// Entity-birth counts across evenly spaced buckets, for the histogram.
+  let buckets: [Int]
+
+  var span: TimeInterval { max(end.timeIntervalSince(start), 1) }
+
+  func date(atFraction fraction: Double) -> Date {
+    start.addingTimeInterval(span * min(max(fraction, 0), 1))
+  }
+
+  func fraction(for date: Date) -> Double {
+    min(max(date.timeIntervalSince(start) / span, 0), 1)
+  }
+
+  /// A short window (relative to the whole span) during which a freshly born
+  /// entity still reads as "new" — drives the spawn-pop bloom as the playhead
+  /// sweeps past it.
+  var spawnWindow: TimeInterval { span / 26 }
+
+  static func make(from nodes: [KnowledgeGraphNode], bucketCount: Int = 40) -> MemoryAtlasTimeline? {
+    let dates = nodes.map(\.createdAt)
+    guard let start = dates.min(), let end = dates.max(), end > start else { return nil }
+    let span = end.timeIntervalSince(start)
+    var buckets = Array(repeating: 0, count: max(bucketCount, 1))
+    for date in dates {
+      let fraction = date.timeIntervalSince(start) / span
+      let index = min(buckets.count - 1, max(0, Int(fraction * Double(buckets.count))))
+      buckets[index] += 1
+    }
+    return MemoryAtlasTimeline(start: start, end: end, buckets: buckets)
   }
 }
 
@@ -74,6 +138,8 @@ struct MemoryAtlasSnapshot {
   let nodes: [MemoryAtlasNodePlacement]
   let edges: [MemoryAtlasEdgePlacement]
   let anchorNodeID: String?
+  let activeClusters: [MemoryAtlasCluster]
+  let clusterCenters: [MemoryAtlasCluster: CGPoint]
   let nodeByID: [String: MemoryAtlasNodePlacement]
   /// Edge order is computed once when the graph is received. Camera updates can
   /// then filter this stable order instead of sorting the whole graph per frame.
@@ -83,15 +149,21 @@ struct MemoryAtlasSnapshot {
   let detailEdges: [MemoryAtlasEdgePlacement]
   let edgesByNodeID: [String: [MemoryAtlasEdgePlacement]]
   let neighborIDsByNodeID: [String: Set<String>]
+  /// The time axis for this graph, or `nil` when timestamps carry no spread.
+  let timeline: MemoryAtlasTimeline?
 
   init(
     nodes: [MemoryAtlasNodePlacement],
     edges: [MemoryAtlasEdgePlacement],
-    anchorNodeID: String?
+    anchorNodeID: String?,
+    clusterCenters: [MemoryAtlasCluster: CGPoint]
   ) {
     self.nodes = nodes
     self.edges = edges
     self.anchorNodeID = anchorNodeID
+    self.activeClusters = MemoryAtlasCluster.allCases.filter { clusterCenters[$0] != nil }
+    self.clusterCenters = clusterCenters
+    self.timeline = MemoryAtlasTimeline.make(from: nodes.map(\.node))
     let indexedNodes = Dictionary(lastWriteWins: nodes.map { ($0.id, $0) })
     nodeByID = indexedNodes
 
@@ -136,6 +208,10 @@ struct MemoryAtlasSnapshot {
     }
   }
 
+  func center(for cluster: MemoryAtlasCluster) -> CGPoint {
+    clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter
+  }
+
   private static func edgeRank(
     _ placement: MemoryAtlasEdgePlacement,
     nodes: [String: MemoryAtlasNodePlacement]
@@ -167,17 +243,76 @@ enum MemoryAtlasDetailLevel: Equatable {
 enum MemoryAtlasZoomPolicy {
   static let minimumZoom: CGFloat = 0.75
   static let compactMaximumZoom: CGFloat = 1.35
-  static let expandedMaximumZoom: CGFloat = 16
   static let focusModeZoom: CGFloat = 3.2
   static let inspectModeZoom: CGFloat = 7.5
   static let focusTargetZoom: CGFloat = 4
 
-  static func maximumZoom(compact: Bool) -> CGFloat {
-    compact ? compactMaximumZoom : expandedMaximumZoom
+  /// The final inspection level needs enough screen-space for every entity to
+  /// have a readable label. A square-root curve tracks the area required by a
+  /// larger graph: four times as many entities need roughly twice the zoom.
+  /// This intentionally has no arbitrary product ceiling, so a growing memory
+  /// graph always has a reachable all-labelled state.
+  static func fullyLabelledZoom(nodeCount: Int) -> CGFloat {
+    // Labels need substantially more room than dots. The 3.6x factor comes
+    // from the label footprint rather than node radius, then rounds to a
+    // usable 500% increment for the zoom control. This yields 16,000% for
+    // the sampled ~1,946-entity graph, leaving dense constellations legible.
+    let densityScaledZoom = ceil(sqrt(CGFloat(max(nodeCount, 1))) * 3.6 / 5) * 5
+    return max(16, densityScaledZoom)
   }
 
-  static func focusedZoom(currentZoom: CGFloat, compact: Bool) -> CGFloat {
-    min(max(currentZoom, focusTargetZoom), maximumZoom(compact: compact))
+  /// Begins Canvas-based labels before the final all-labelled state. This uses
+  /// the same density curve as the maximum zoom, so a larger memory graph
+  /// earns more room before every visible dot is named. At this level Canvas
+  /// draws labels only for nodes inside the current viewport; it never creates
+  /// a SwiftUI label view per entity.
+  static func automaticCanvasLabelZoom(nodeCount: Int) -> CGFloat {
+    let threshold = fullyLabelledZoom(nodeCount: nodeCount) * 0.25
+    return max(inspectModeZoom, ceil(threshold * 2) / 2)
+  }
+
+  static func maximumZoom(nodeCount: Int, compact: Bool) -> CGFloat {
+    compact ? compactMaximumZoom : fullyLabelledZoom(nodeCount: nodeCount)
+  }
+
+  static func focusedZoom(currentZoom: CGFloat, nodeCount: Int, compact: Bool) -> CGFloat {
+    min(max(currentZoom, focusTargetZoom), maximumZoom(nodeCount: nodeCount, compact: compact))
+  }
+
+  static func panPreservingCenterZoom(
+    _ pan: CGSize,
+    from currentZoom: CGFloat,
+    to nextZoom: CGFloat
+  ) -> CGSize {
+    let ratio = nextZoom / max(currentZoom, minimumZoom)
+    return CGSize(width: pan.width * ratio, height: pan.height * ratio)
+  }
+}
+
+enum MemoryAtlasNodeVisualPolicy {
+  /// Deep inspection keeps dots at a stable, usable size. The dynamic maximum
+  /// zoom adds label fidelity; it must not make a node harder to see or target.
+  static func radius(
+    clusterRank: Int,
+    zoom: CGFloat,
+    compact: Bool,
+    isFullyLabelled: Bool,
+    isInspect: Bool,
+    isFocus: Bool
+  ) -> CGFloat {
+    if isFullyLabelled || isInspect {
+      return clusterRank == 0 ? 16 : 12
+    }
+    if isFocus {
+      return clusterRank == 0 ? 10 : 7.2
+    }
+    if clusterRank == 0 {
+      if compact { return 5 }
+      return zoom >= 4.2 ? 8 : 6
+    }
+    if compact { return zoom >= 1.2 ? 2.4 : 2.1 }
+    if zoom >= 4.2 { return 4.8 }
+    return zoom >= 1.45 ? 2.8 : 2.1
   }
 }
 
@@ -186,6 +321,13 @@ struct MemoryAtlasRenderPlan {
   let visibleEdges: [MemoryAtlasEdgePlacement]
   let interactiveNodes: [MemoryAtlasNodePlacement]
   let labelNodeIDs: Set<String>
+  /// Canvas labels from the automatic inspection threshold onward. Keeping
+  /// these outside the SwiftUI overlay means a large graph can label every
+  /// on-screen dot without building thousands of view/hit-test nodes per
+  /// frame.
+  let canvasLabelNodes: [MemoryAtlasNodePlacement]
+  let usesCanvasLabels: Bool
+  let isFullyLabelled: Bool
   let relatedNodeIDs: Set<String>
   let detailLevel: MemoryAtlasDetailLevel
 }
@@ -199,8 +341,16 @@ enum MemoryAtlasRenderPlanner {
     compact: Bool,
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
-    matchingEdges: [MemoryAtlasEdgePlacement]? = nil
+    matchingEdges: [MemoryAtlasEdgePlacement]? = nil,
+    asOf: Date? = nil
   ) -> MemoryAtlasRenderPlan {
+    let fullyLabelledZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(
+      nodeCount: snapshot.nodes.count
+    )
+    let isFullyLabelled = !compact && zoom >= fullyLabelledZoom
+    let usesCanvasLabels = !compact && zoom >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
+      nodeCount: snapshot.nodes.count
+    )
     let detailLevel: MemoryAtlasDetailLevel = if zoom < 1.35 {
       .overview
     } else if zoom < 1.9 {
@@ -213,33 +363,38 @@ enum MemoryAtlasRenderPlanner {
       .inspect
     }
 
-    let maximumNodeLimit: Int = switch detailLevel {
+    // Detail must be additive. The previous planner reduced the node budget
+    // from 1,200 to 600 immediately after overview, which made visible dots
+    // disappear on a small zoom-in. Keep a stable, salience-ordered cohort and
+    // only add more of it as fidelity increases.
+    let maximumNodeLimit: Int = if isFullyLabelled {
+      snapshot.nodes.count
+    } else { switch detailLevel {
     case .overview: 1_200
-    case .neighborhood: 600
-    case .detail: 450
-    case .focus: 72
-    case .inspect: 64
-    }
+    case .neighborhood: 1_600
+    case .detail: 2_400
+    case .focus, .inspect: 3_200
+    } }
     let edgeLimit: Int = switch detailLevel {
     case .overview: 36
     case .neighborhood: 96
     case .detail: 160
-    case .focus: 80
-    case .inspect: 64
+    case .focus: 260
+    case .inspect: 360
     }
     let labelsPerCluster: Int = switch detailLevel {
     case .overview: compact ? 2 : 3
     case .neighborhood: compact ? 4 : 7
     case .detail: compact ? 5 : 11
     case .focus: compact ? 5 : 24
-    case .inspect: compact ? 5 : 64
+    case .inspect: compact ? 5 : 96
     }
     let labelLimit: Int = switch detailLevel {
     case .overview: 12
     case .neighborhood: 24
     case .detail: 36
     case .focus: 72
-    case .inspect: 64
+    case .inspect: 96
     }
 
     var relatedNodeIDs: Set<String> = []
@@ -248,36 +403,31 @@ enum MemoryAtlasRenderPlanner {
       relatedNodeIDs.insert(selectedNodeID)
     }
 
-    let paddedBounds = CGRect(origin: .zero, size: viewportSize).insetBy(dx: -48, dy: -48)
-    let viewportCandidates = snapshot.nodes.filter { placement in
-      if placement.id == selectedNodeID { return true }
-      return paddedBounds.contains(
-        renderedPoint(
-          for: placement.normalizedPosition,
-          viewportSize: viewportSize,
-          zoom: zoom,
-          pan: pan
-        )
-      )
-    }
-    // At focus zoom, cap based on viewport density so the scene deliberately
-    // becomes an inspectable set of circles rather than a smaller dot cloud.
-    let nodeLimit: Int = if detailLevel == .focus {
-      min(maximumNodeLimit, max(40, viewportCandidates.count / 3))
-    } else if detailLevel == .inspect {
-      min(maximumNodeLimit, viewportCandidates.count)
+    // The time cursor is a visibility filter layered over the stable layout: a
+    // node keeps its position and simply has not been "born" yet. The anchor is
+    // always present — "you" are the constant the rest of the memory accretes
+    // around.
+    let timeFilteredNodes: [MemoryAtlasNodePlacement]
+    if let asOf {
+      timeFilteredNodes = snapshot.nodes.filter { placement in
+        placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf
+      }
     } else {
-      maximumNodeLimit
+      timeFilteredNodes = snapshot.nodes
     }
 
+    // Camera movement changes where a node is painted, not whether it belongs
+    // to the rendered cohort. Canvas clipping handles off-screen content while
+    // this stable source order guarantees that zoom never drops entities just
+    // because a threshold or viewport candidate set changed.
     let visibleNodes = priorityOrderedPrefix(
-      viewportCandidates,
-      limit: nodeLimit,
+      timeFilteredNodes,
+      limit: maximumNodeLimit,
       anchorNodeID: snapshot.anchorNodeID,
       selectedNodeID: selectedNodeID,
       relatedNodeIDs: relatedNodeIDs,
       matchingNodeIDs: matchingNodeIDs,
-      includeBackgroundNodes: (detailLevel != .focus && detailLevel != .inspect) || selectedNodeID == nil
+      includeBackgroundNodes: true
     )
     let visibleNodeIDs = Set(visibleNodes.map(\.id))
 
@@ -289,14 +439,15 @@ enum MemoryAtlasRenderPlanner {
         matchingNodeIDs.contains(edge.edge.sourceId) || matchingNodeIDs.contains(edge.edge.targetId)
       }
     } else {
-      edgeCandidates = snapshot.rankedEdges(for: detailLevel)
+      edgeCandidates = snapshot.rankedEdges
     }
 
     let selectedEdgeLimit = selectedNodeID == nil ? edgeLimit : min(edgeLimit, 80)
     let visibleEdges = Array(
       edgeCandidates.lazy
         .filter {
-          visibleNodeIDs.contains($0.edge.sourceId) && visibleNodeIDs.contains($0.edge.targetId)
+          (asOf == nil || $0.edge.createdAt <= asOf!)
+            && visibleNodeIDs.contains($0.edge.sourceId) && visibleNodeIDs.contains($0.edge.targetId)
         }
         .prefix(selectedEdgeLimit)
     )
@@ -323,17 +474,58 @@ enum MemoryAtlasRenderPlanner {
       forcedNodeIDs: Set([selectedNodeID, snapshot.anchorNodeID].compactMap { $0 })
     )
 
-    let inspectNodeIDs = Set(visibleNodes.map(\.id))
-    let interactiveNodes = detailLevel == .inspect ? visibleNodes : labels
-    let labelNodeIDs = detailLevel == .inspect ? inspectNodeIDs : Set(labels.map(\.id))
-
     return MemoryAtlasRenderPlan(
       visibleNodes: visibleNodes,
       visibleEdges: visibleEdges,
-      interactiveNodes: interactiveNodes,
-      labelNodeIDs: labelNodeIDs,
+      // Every entity remains on the Canvas at deep zoom, while the expensive
+      // SwiftUI hit-target/label overlay stays bounded and grows gradually.
+      interactiveNodes: labels,
+      // Once inspection has enough density-aware space, labels move into
+      // Canvas immediately. They therefore appear while panning/zooming and
+      // are not gated by selection or by the bounded SwiftUI overlay.
+      labelNodeIDs: usesCanvasLabels ? [] : Set(labels.map(\.id)),
+      canvasLabelNodes: usesCanvasLabels ? visibleNodes : [],
+      usesCanvasLabels: usesCanvasLabels,
+      isFullyLabelled: isFullyLabelled,
       relatedNodeIDs: relatedNodeIDs,
       detailLevel: detailLevel
+    )
+  }
+
+  /// Fixed, non-interactive overview used by the Memories page. It keeps the
+  /// preview cheap even for large graphs and deliberately does no camera work.
+  static func makePreviewPlan(
+    snapshot: MemoryAtlasSnapshot,
+    nodeLimit: Int = 260,
+    edgeLimit: Int = 24
+  ) -> MemoryAtlasRenderPlan {
+    let visibleNodes = priorityOrderedPrefix(
+      snapshot.nodes,
+      limit: nodeLimit,
+      anchorNodeID: snapshot.anchorNodeID,
+      selectedNodeID: nil,
+      relatedNodeIDs: [],
+      matchingNodeIDs: nil,
+      includeBackgroundNodes: true
+    )
+    let visibleNodeIDs = Set(visibleNodes.map(\.id))
+    let visibleEdges = Array(
+      snapshot.overviewEdges.lazy
+        .filter {
+          visibleNodeIDs.contains($0.edge.sourceId) && visibleNodeIDs.contains($0.edge.targetId)
+        }
+        .prefix(edgeLimit)
+    )
+    return MemoryAtlasRenderPlan(
+      visibleNodes: visibleNodes,
+      visibleEdges: visibleEdges,
+      interactiveNodes: [],
+      labelNodeIDs: [],
+      canvasLabelNodes: [],
+      usesCanvasLabels: false,
+      isFullyLabelled: false,
+      relatedNodeIDs: [],
+      detailLevel: .overview
     )
   }
 
@@ -490,16 +682,13 @@ enum MemoryAtlasLayoutEngine {
     let edges = uniqueEdges(from: graph.edges)
 
     guard !nodes.isEmpty else {
-      return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil)
+      return MemoryAtlasSnapshot(nodes: [], edges: [], anchorNodeID: nil, clusterCenters: [:])
     }
 
     var degree: [String: Int] = [:]
-    var relationLabels: [String: [String]] = [:]
     for edge in edges {
       degree[edge.sourceId, default: 0] += 1
       degree[edge.targetId, default: 0] += 1
-      relationLabels[edge.sourceId, default: []].append(edge.label)
-      relationLabels[edge.targetId, default: []].append(edge.label)
     }
 
     let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
@@ -511,22 +700,32 @@ enum MemoryAtlasLayoutEngine {
       (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
     }
 
-    var anchorRelationLabels: [String: [String]] = [:]
-    if let anchor {
-      for edge in edges {
-        if edge.sourceId == anchor.id {
-          anchorRelationLabels[edge.targetId, default: []].append(edge.label)
-        } else if edge.targetId == anchor.id {
-          anchorRelationLabels[edge.sourceId, default: []].append(edge.label)
-        }
-      }
-    }
+    // Collapse every entity that stands in for the account holder — a generic
+    // "User"/"Me" node, or a second person node sharing the user's name — into
+    // the single anchor. Two ego nodes ("User" floating apart from "David") read
+    // as a data bug; the atlas should have exactly one unmistakable "you" at the
+    // center. Their relationships are rerouted onto the anchor below.
+    let selfSynonyms: Set<String> = ["user", "me", "myself", "i", "the user"]
+    let collapsedIDs: Set<String> = {
+      guard let anchor else { return [] }
+      return Set(
+        nodes.filter { node in
+          guard node.id != anchor.id else { return false }
+          let label = node.label.lowercased()
+          if let normalizedUserName, !normalizedUserName.isEmpty, label == normalizedUserName {
+            return true
+          }
+          return node.nodeType == .person && selfSynonyms.contains(label)
+        }.map(\.id)
+      )
+    }()
 
     var grouped: [MemoryAtlasCluster: [KnowledgeGraphNode]] = [:]
-    for node in nodes where node.id != anchor?.id {
-      let labels = anchorRelationLabels[node.id] ?? relationLabels[node.id] ?? []
-      grouped[cluster(for: node, relationLabels: labels), default: []].append(node)
+    for node in nodes where node.id != anchor?.id && !collapsedIDs.contains(node.id) {
+      grouped[cluster(for: node), default: []].append(node)
     }
+    let activeClusters = MemoryAtlasCluster.allCases.filter { !(grouped[$0] ?? []).isEmpty }
+    let clusterCenters = MemoryAtlasCluster.centers(for: activeClusters)
 
     var placements: [MemoryAtlasNodePlacement] = []
     if let anchor {
@@ -534,14 +733,14 @@ enum MemoryAtlasLayoutEngine {
         MemoryAtlasNodePlacement(
           node: anchor,
           cluster: nil,
-          normalizedPosition: CGPoint(x: 0.5, y: 0.77),
+          normalizedPosition: MemoryAtlasCluster.starCenter,
           degree: degree[anchor.id] ?? 0,
           clusterRank: 0
         )
       )
     }
 
-    for cluster in MemoryAtlasCluster.allCases {
+    for cluster in activeClusters {
       let sorted = (grouped[cluster] ?? []).sorted {
         let lhsScore = salience(node: $0, degree: degree[$0.id] ?? 0)
         let rhsScore = salience(node: $1, degree: degree[$1.id] ?? 0)
@@ -555,9 +754,10 @@ enum MemoryAtlasLayoutEngine {
             node: node,
             cluster: cluster,
             normalizedPosition: position(
-              in: cluster,
+              center: clusterCenters[cluster] ?? MemoryAtlasCluster.starCenter,
               index: index,
               count: sorted.count,
+              activeClusterCount: activeClusters.count,
               nodeID: node.id
             ),
             degree: degree[node.id] ?? 0,
@@ -571,13 +771,42 @@ enum MemoryAtlasLayoutEngine {
     let clusters = Dictionary(lastWriteWins: placements.compactMap { placement in
       placement.cluster.map { (placement.id, $0) }
     })
+    let canonicalID: (String) -> String = { id in
+      guard let anchorID = anchor?.id, collapsedIDs.contains(id) else { return id }
+      return anchorID
+    }
     let edgePlacements = edges.compactMap { edge -> MemoryAtlasEdgePlacement? in
-      guard let source = positions[edge.sourceId], let target = positions[edge.targetId] else { return nil }
-      let cluster = clusters[edge.sourceId] ?? clusters[edge.targetId] ?? .collaborators
-      return MemoryAtlasEdgePlacement(edge: edge, source: source, target: target, cluster: cluster)
+      let sourceId = canonicalID(edge.sourceId)
+      let targetId = canonicalID(edge.targetId)
+      // A relationship the collapsed self-node had with the anchor becomes a
+      // self-loop after rerouting — drop it rather than draw a node to itself.
+      guard sourceId != targetId else { return nil }
+      guard let source = positions[sourceId], let target = positions[targetId] else { return nil }
+      let cluster = clusters[sourceId] ?? clusters[targetId] ?? .concept
+      // Only rebuild the edge when an endpoint actually moved, so neighbor and
+      // evidence lookups resolve against the single center node.
+      let placedEdge: KnowledgeGraphEdge
+      if sourceId == edge.sourceId && targetId == edge.targetId {
+        placedEdge = edge
+      } else {
+        placedEdge = KnowledgeGraphEdge(
+          id: edge.id,
+          sourceId: sourceId,
+          targetId: targetId,
+          label: edge.label,
+          memoryIds: edge.memoryIds,
+          createdAt: edge.createdAt
+        )
+      }
+      return MemoryAtlasEdgePlacement(edge: placedEdge, source: source, target: target, cluster: cluster)
     }
 
-    return MemoryAtlasSnapshot(nodes: placements, edges: edgePlacements, anchorNodeID: anchor?.id)
+    return MemoryAtlasSnapshot(
+      nodes: placements,
+      edges: edgePlacements,
+      anchorNodeID: anchor?.id,
+      clusterCenters: clusterCenters
+    )
   }
 
   private static func uniqueNodes(from nodes: [KnowledgeGraphNode]) -> [KnowledgeGraphNode] {
@@ -596,35 +825,19 @@ enum MemoryAtlasLayoutEngine {
     return Array(newestFirst.reversed())
   }
 
-  static func cluster(
-    for node: KnowledgeGraphNode,
-    relationLabels: [String]
-  ) -> MemoryAtlasCluster {
-    let labels = relationLabels.map(normalizeRelationship)
-    if labels.contains(where: { projectsRelationships.contains($0) }) { return .projects }
-    if labels.contains(where: { collaboratorRelationships.contains($0) }) { return .collaborators }
-    if labels.contains(where: { toolRelationships.contains($0) }) { return .tools }
-
+  static func cluster(for node: KnowledgeGraphNode) -> MemoryAtlasCluster {
     switch node.nodeType {
-    case .person, .organization: return .collaborators
-    case .place, .thing: return .tools
-    case .concept: return .projects
+    case .person: return .person
+    case .organization: return .organization
+    case .place: return .place
+    case .thing: return .thing
+    case .concept: return .concept
     }
   }
 
   static func relationshipDisplayName(_ rawValue: String) -> String {
     normalizeRelationship(rawValue).replacingOccurrences(of: "_", with: " ")
   }
-
-  private static let projectsRelationships: Set<String> = [
-    "works_on", "builds", "built", "maintains", "created", "founded", "develops",
-  ]
-  private static let collaboratorRelationships: Set<String> = [
-    "works_with", "collaborates_with", "plans_with", "knows", "reports_to", "manages",
-  ]
-  private static let toolRelationships: Set<String> = [
-    "uses", "opens", "stores_work_in", "checks", "prefers", "runs_on", "lives_in",
-  ]
 
   private static func normalizeRelationship(_ value: String) -> String {
     value
@@ -652,26 +865,31 @@ enum MemoryAtlasLayoutEngine {
   ]
 
   private static func position(
-    in cluster: MemoryAtlasCluster,
+    center: CGPoint,
     index: Int,
     count: Int,
+    activeClusterCount: Int,
     nodeID: String
   ) -> CGPoint {
-    guard count > 0 else { return cluster.center }
-    if index == 0 { return cluster.center }
+    guard count > 0 else { return center }
+    if index == 0 { return center }
 
     let ringIndex = index - 1
     let jitter = stableFraction(nodeID)
     let angle = Double(ringIndex) * 2.399_963_229_728_653 + (jitter - 0.5) * 0.7
     let normalizedIndex = Double(ringIndex + 1) / Double(max(count, 1))
     let radialJitter = 0.9 + jitter * 0.2
-    let radiusX = (0.075 + 0.115 * sqrt(normalizedIndex)) * radialJitter
-    let radiusY = (0.065 + 0.12 * sqrt(normalizedIndex)) * radialJitter
-    let x = cluster.center.x + cos(angle) * radiusX
-    let y = cluster.center.y + sin(angle) * radiusY
+    // Keep a stable, circular-looking local spread in the same screen space as
+    // the star. More active groups should get slightly denser, but never
+    // collapse into a single point at overview scale.
+    let densityScale = 1 - 0.05 * Double(max(activeClusterCount - 1, 0))
+    let radiusY = (0.04 + 0.11 * sqrt(normalizedIndex)) * densityScale * radialJitter
+    let radiusX = radiusY * 0.58
+    let x = center.x + cos(angle) * radiusX
+    let y = center.y + sin(angle) * radiusY
     return CGPoint(
-      x: min(max(x, 0.08), 0.92),
-      y: min(max(y, 0.2), 0.68)
+      x: min(max(x, 0.04), 0.96),
+      y: min(max(y, 0.08), 0.92)
     )
   }
 
@@ -689,8 +907,7 @@ enum MemoryAtlasLayoutEngine {
 
 struct CanonicalMemoryAtlasInlineCard: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
-  let onViewEvidence: ([String]) -> Void
-  @State private var showExpandedAtlas = false
+  let onOpenAtlas: () -> Void
 
   var body: some View {
     VStack(alignment: .leading, spacing: 12) {
@@ -699,17 +916,15 @@ struct CanonicalMemoryAtlasInlineCard: View {
           Text("Memory atlas")
             .scaledFont(size: 15, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
-          Text("Explore how the people, projects, and tools in your memories connect")
+          Text("Explore the people, organizations, places, things, and concepts in your memories")
             .scaledFont(size: 12)
             .foregroundColor(OmiColors.textTertiary)
         }
 
         Spacer()
 
-        Button {
-          showExpandedAtlas = true
-        } label: {
-          Label("Open atlas", systemImage: "arrow.up.left.and.arrow.down.right")
+        Button(action: onOpenAtlas) {
+          Label("Open atlas", systemImage: "arrow.right")
             .scaledFont(size: 12, weight: .medium)
             .foregroundColor(OmiColors.textSecondary)
             .padding(.horizontal, 12)
@@ -720,9 +935,14 @@ struct CanonicalMemoryAtlasInlineCard: View {
         .accessibilityIdentifier("memory_atlas_expand")
       }
 
-      atlasContent(compact: true)
-        .frame(height: 460)
-        .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      Button(action: onOpenAtlas) {
+        atlasPreview
+          .frame(height: 320)
+          .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+      }
+      .buttonStyle(.plain)
+      .accessibilityIdentifier("memory_atlas_preview")
+      .help("Open memory atlas")
     }
     .padding(16)
     .omiPanel(
@@ -734,20 +954,10 @@ struct CanonicalMemoryAtlasInlineCard: View {
       shadowY: 8
     )
     .task { await viewModel.prepareCanonicalAtlas() }
-    .sheet(isPresented: $showExpandedAtlas) {
-      CanonicalMemoryAtlasPage(
-        viewModel: viewModel,
-        onViewEvidence: onViewEvidence
-      )
-      .frame(minWidth: 1120, idealWidth: 1320, minHeight: 740, idealHeight: 860)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
-      showExpandedAtlas = true
-    }
   }
 
   @ViewBuilder
-  private func atlasContent(compact: Bool) -> some View {
+  private var atlasPreview: some View {
     if viewModel.isLoading && viewModel.graphResponse.nodes.isEmpty {
       ZStack {
         OmiColors.backgroundPrimary
@@ -756,31 +966,29 @@ struct CanonicalMemoryAtlasInlineCard: View {
     } else if viewModel.graphResponse.nodes.isEmpty {
       MemoryAtlasEmptyState()
     } else {
-      CanonicalMemoryAtlasSurface(
-        graph: viewModel.graphResponse,
-        compact: compact,
-        onViewEvidence: onViewEvidence
-      )
+      CanonicalMemoryAtlasPreview(graph: viewModel.graphResponse)
     }
   }
 }
 
-private struct CanonicalMemoryAtlasPage: View {
+struct CanonicalMemoryAtlasPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
+  let onBack: () -> Void
   let onViewEvidence: ([String]) -> Void
-  @Environment(\.dismiss) private var dismiss
 
   var body: some View {
     VStack(spacing: 0) {
       HStack(spacing: 12) {
-        Button { dismiss() } label: {
-          Image(systemName: "xmark")
+        Button(action: onBack) {
+          Label("Memories", systemImage: "chevron.left")
             .scaledFont(size: 12, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
-            .frame(width: 30, height: 30)
+            .padding(.horizontal, 10)
+            .frame(height: 30)
             .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 11)
         }
         .buttonStyle(.plain)
+        .accessibilityIdentifier("memory_atlas_back_to_memories")
 
         Text("Memory atlas")
           .scaledFont(size: 17, weight: .semibold)
@@ -801,21 +1009,147 @@ private struct CanonicalMemoryAtlasPage: View {
       CanonicalMemoryAtlasSurface(
         graph: viewModel.graphResponse,
         compact: false,
-        onViewEvidence: { memoryIds in
-          dismiss()
-          DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
-            onViewEvidence(memoryIds)
-          }
-        }
+        onViewEvidence: onViewEvidence
       )
     }
     .background(OmiColors.backgroundPrimary)
+    .accessibilityIdentifier("canonical_memory_atlas_page")
     .task { await viewModel.prepareCanonicalAtlas() }
     .onAppear {
       memoryAtlasLogger.info(
-        "Expanded atlas opened nodes=\(viewModel.graphResponse.nodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
+        "Atlas page opened nodes=\(viewModel.graphResponse.nodes.count, privacy: .public) edges=\(viewModel.graphResponse.edges.count, privacy: .public)"
       )
     }
+  }
+}
+
+/// The Memories page deliberately uses this bounded Canvas-only preview rather
+/// than embedding a second interactive atlas. It gives the page a fast visual
+/// cue while reserving gesture, search, and hit-testing work for the full page.
+private struct CanonicalMemoryAtlasPreview: View {
+  private let snapshot: MemoryAtlasSnapshot
+
+  init(graph: KnowledgeGraphResponse) {
+    let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: graph,
+      userName: givenName.isEmpty ? nil : givenName
+    )
+  }
+
+  var body: some View {
+    GeometryReader { proxy in
+      let plan = MemoryAtlasRenderPlanner.makePreviewPlan(snapshot: snapshot)
+      ZStack {
+        OmiColors.backgroundPrimary
+        Canvas(opaque: false, colorMode: .linear) { context, _ in
+          drawContours(context: &context, size: proxy.size)
+          drawEdges(context: &context, size: proxy.size, plan: plan)
+          drawNodes(context: &context, size: proxy.size, plan: plan)
+        }
+
+        ForEach(snapshot.activeClusters) { cluster in
+          Text(cluster.title)
+            .scaledFont(size: 10, weight: .medium)
+            .foregroundColor(cluster.color.opacity(0.82))
+            .position(point(for: previewTitlePosition(for: cluster), in: proxy.size))
+        }
+
+        Label("Open full atlas", systemImage: "arrow.right")
+          .scaledFont(size: 11, weight: .medium)
+          .foregroundColor(OmiColors.textSecondary)
+          .padding(.horizontal, 10)
+          .padding(.vertical, 7)
+          .omiControlSurface(fill: OmiColors.backgroundRaised.opacity(0.92), radius: 10)
+          .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+          .padding(12)
+      }
+      .clipped()
+    }
+    .accessibilityHidden(true)
+  }
+
+  private func drawContours(context: inout GraphicsContext, size: CGSize) {
+    let diameter = min(size.width * 0.22, size.height * 0.36)
+    for cluster in snapshot.activeClusters {
+      let center = point(for: snapshot.center(for: cluster), in: size)
+      for inset in 0..<2 {
+        let amount = CGFloat(inset) * 8
+        let rect = CGRect(
+          x: center.x - diameter / 2 + amount,
+          y: center.y - diameter / 2 + amount,
+          width: diameter - amount * 2,
+          height: diameter - amount * 2
+        )
+        context.stroke(
+          Path(ellipseIn: rect),
+          with: .color(cluster.color.opacity(0.07 - Double(inset) * 0.02)),
+          lineWidth: 1
+        )
+      }
+    }
+  }
+
+  private func drawEdges(
+    context: inout GraphicsContext,
+    size: CGSize,
+    plan: MemoryAtlasRenderPlan
+  ) {
+    for cluster in snapshot.activeClusters {
+      var path = Path()
+      for edge in plan.visibleEdges where edge.cluster == cluster {
+        path.move(to: point(for: edge.source, in: size))
+        path.addLine(to: point(for: edge.target, in: size))
+      }
+      guard !path.isEmpty else { continue }
+      context.stroke(path, with: .color(cluster.color.opacity(0.18)), lineWidth: 0.75)
+    }
+  }
+
+  private func drawNodes(
+    context: inout GraphicsContext,
+    size: CGSize,
+    plan: MemoryAtlasRenderPlan
+  ) {
+    for cluster in snapshot.activeClusters {
+      var path = Path()
+      for placement in plan.visibleNodes where placement.cluster == cluster {
+        let radius: CGFloat = placement.clusterRank == 0 ? 4 : 1.8
+        let center = point(for: placement.normalizedPosition, in: size)
+        path.addEllipse(in: CGRect(
+          x: center.x - radius,
+          y: center.y - radius,
+          width: radius * 2,
+          height: radius * 2
+        ))
+      }
+      guard !path.isEmpty else { continue }
+      context.fill(path, with: .color(cluster.color.opacity(0.8)))
+    }
+
+    if let anchorNodeID = snapshot.anchorNodeID,
+       let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID }) {
+      let center = point(for: anchor.normalizedPosition, in: size)
+      context.fill(
+        Path(ellipseIn: CGRect(x: center.x - 6, y: center.y - 6, width: 12, height: 12)),
+        with: .color(OmiColors.textPrimary.opacity(0.9))
+      )
+    }
+  }
+
+  private func point(for normalized: CGPoint, in size: CGSize) -> CGPoint {
+    CGPoint(x: normalized.x * size.width, y: normalized.y * size.height)
+  }
+
+  private func previewTitlePosition(for cluster: MemoryAtlasCluster) -> CGPoint {
+    let center = snapshot.center(for: cluster)
+    let deltaX = center.x - MemoryAtlasCluster.starCenter.x
+    let deltaY = center.y - MemoryAtlasCluster.starCenter.y
+    let distance = max(hypot(deltaX, deltaY), 0.001)
+    return CGPoint(
+      x: min(max(center.x + deltaX / distance * 0.13, 0.08), 0.92),
+      y: min(max(center.y + deltaY / distance * 0.13, 0.1), 0.88)
+    )
   }
 }
 
@@ -845,6 +1179,9 @@ private struct CanonicalMemoryAtlasSurface: View {
   let compact: Bool
   let onViewEvidence: ([String]) -> Void
   private let snapshot: MemoryAtlasSnapshot
+  /// Deterministic offscreen renders (ViewExporter QA) pin the time cursor and
+  /// suppress auto-play so the timeline captures a stable frame.
+  private let previewTimeCursor: Double?
 
   @State private var searchText = ""
   @State private var selectedNodeID: String?
@@ -856,15 +1193,28 @@ private struct CanonicalMemoryAtlasSurface: View {
   @State private var isCameraMoving = false
   @State private var matchingNodeIDs: Set<String>? = nil
   @State private var matchingEdges: [MemoryAtlasEdgePlacement]? = nil
+  /// Normalized as-of position on the time axis, 1 == now (show everything).
+  @State private var timeCursor: Double = 1
+  @State private var isTimePlaying = false
+  @State private var didAutoplay = false
+  @State private var playbackTask: Task<Void, Never>? = nil
+  /// Persisted: once the user pauses or scrubs the timeline, the atlas stops
+  /// auto-playing its growth animation on open. Playing all the way through is
+  /// the delightful default; interrupting it is an explicit opt-out.
+  @AppStorage("memory_atlas_timeline_autoplay") private var autoplayEnabled = true
+  @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
   init(
     graph: KnowledgeGraphResponse,
     compact: Bool,
-    onViewEvidence: @escaping ([String]) -> Void
+    onViewEvidence: @escaping ([String]) -> Void,
+    previewTimeCursor: Double? = nil
   ) {
     self.graph = graph
     self.compact = compact
     self.onViewEvidence = onViewEvidence
+    self.previewTimeCursor = previewTimeCursor
+    _timeCursor = State(initialValue: previewTimeCursor ?? 1)
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: graph,
@@ -887,6 +1237,27 @@ private struct CanonicalMemoryAtlasSurface: View {
     return graph.edges.filter { $0.createdAt >= threshold }.count
   }
 
+  private var timeline: MemoryAtlasTimeline? { snapshot.timeline }
+
+  /// The active as-of date, or `nil` when the cursor is parked at "now" (which
+  /// means: render the whole atlas, no time filtering).
+  private var asOfDate: Date? {
+    guard let timeline, timeCursor < 0.9995 else { return nil }
+    return timeline.date(atFraction: timeCursor)
+  }
+
+  private var visibleEntityCount: Int {
+    guard let asOf = asOfDate else { return snapshot.nodes.count }
+    return snapshot.nodes.reduce(0) { count, placement in
+      count + ((placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf) ? 1 : 0)
+    }
+  }
+
+  private var visibleConnectionCount: Int {
+    guard let asOf = asOfDate else { return snapshot.edges.count }
+    return snapshot.edges.reduce(0) { $0 + ($1.edge.createdAt <= asOf ? 1 : 0) }
+  }
+
   private var recentConnectionLabel: String {
     recentConnectionCount > 99 ? "99+ new connections" : "\(recentConnectionCount) new connections"
   }
@@ -904,7 +1275,8 @@ private struct CanonicalMemoryAtlasSurface: View {
           compact: compact,
           selectedNodeID: selectedNodeID,
           matchingNodeIDs: matchingNodeIDs,
-          matchingEdges: matchingEdges
+          matchingEdges: matchingEdges,
+          asOf: asOfDate
         )
 
         ZStack {
@@ -944,19 +1316,29 @@ private struct CanonicalMemoryAtlasSurface: View {
         .clipped()
       }
 
-      if let selectedNode {
-        selectionStrip(for: selectedNode)
-      } else if !compact {
-        atlasLegend
+      VStack(spacing: 0) {
+        if let selectedNode {
+          selectionStrip(for: selectedNode)
+        }
+        if !compact, timeline != nil {
+          timelineBar
+        } else if !compact, selectedNode == nil {
+          // No meaningful timestamp spread — keep the legacy legend so the
+          // level indicator and type key stay available.
+          atlasLegend
+        }
       }
     }
     .background(OmiColors.backgroundPrimary)
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("canonical_memory_atlas")
+    .onAppear(perform: maybeAutoplayTimeline)
+    .onDisappear { stopPlayback(userInitiated: false) }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasViewportRequested)) {
       notification in
-      let target = notification.userInfo?["target"] as? String ?? "expanded"
-      guard (target == "inline") == compact else { return }
+      let target = notification.userInfo?["target"] as? String ?? "page"
+      let isInlineTarget = target == "inline"
+      guard isInlineTarget == compact else { return }
       if notification.userInfo?["reset"] as? Bool == true {
         resetViewport()
         selectedNodeID = nil
@@ -978,6 +1360,30 @@ private struct CanonicalMemoryAtlasSurface: View {
         settledPan = pan
       }
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationMemoryAtlasTimeRequested)) {
+      notification in
+      let target = notification.userInfo?["target"] as? String ?? "page"
+      guard (target == "inline") == compact else { return }
+      if notification.userInfo?["reset"] as? Bool == true {
+        stopPlayback(userInitiated: true)
+        withAnimation(.easeOut(duration: 0.2)) { timeCursor = 1 }
+        return
+      }
+      if let fraction = notification.userInfo?["fraction"] as? Double {
+        stopPlayback(userInitiated: true)
+        timeCursor = min(max(fraction, 0), 1)
+      }
+      if let play = notification.userInfo?["play"] as? Bool {
+        if play {
+          startPlayback(resetToStart: notification.userInfo?["reset_to_start"] as? Bool ?? false)
+        } else {
+          stopPlayback(userInitiated: true)
+        }
+      }
+      memoryAtlasLogger.debug(
+        "Automation timeline target=\(target, privacy: .public) cursor=\(timeCursor, privacy: .public) playing=\(isTimePlaying, privacy: .public)"
+      )
+    }
   }
 
   private var atlasToolbar: some View {
@@ -987,7 +1393,7 @@ private struct CanonicalMemoryAtlasSurface: View {
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
 
-        TextField("Search people, projects, and tools", text: $searchText)
+      TextField("Search your entities", text: $searchText)
           .textFieldStyle(.plain)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textPrimary)
@@ -1016,7 +1422,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       if recentConnectionCount > 0 {
         HStack(spacing: 6) {
           Circle()
-            .fill(MemoryAtlasCluster.projects.color)
+            .fill(snapshot.activeClusters.first?.color ?? OmiColors.textSecondary)
             .frame(width: 6, height: 6)
           Text(recentConnectionLabel)
             .scaledFont(size: 11, weight: .medium)
@@ -1034,22 +1440,25 @@ private struct CanonicalMemoryAtlasSurface: View {
       drawClusterContours(context: &context, size: size)
       drawEdges(context: &context, size: size, plan: plan)
       drawNodes(context: &context, size: size, plan: plan)
+      drawCanvasLabels(context: &context, size: size, plan: plan)
     }
     .accessibilityHidden(true)
   }
 
   private func drawClusterContours(context: inout GraphicsContext, size: CGSize) {
-    for cluster in MemoryAtlasCluster.allCases {
-      let center = point(for: cluster.center, in: size)
-      let width = size.width * 0.29 * zoom
-      let height = size.height * 0.64 * zoom
+    let diameter = min(
+      size.width * (snapshot.activeClusters.count >= 4 ? 0.22 : 0.27),
+      size.height * (compact ? 0.36 : 0.44)
+    ) * zoom
+    for cluster in snapshot.activeClusters {
+      let center = point(for: snapshot.center(for: cluster), in: size)
       for inset in 0..<3 {
         let amount = CGFloat(inset) * 10
         let rect = CGRect(
-          x: center.x - width / 2 + amount,
-          y: center.y - height / 2 + amount,
-          width: width - amount * 2,
-          height: height - amount * 2
+          x: center.x - diameter / 2 + amount,
+          y: center.y - diameter / 2 + amount,
+          width: diameter - amount * 2,
+          height: diameter - amount * 2
         )
         context.stroke(
           Path(ellipseIn: rect),
@@ -1065,7 +1474,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     size: CGSize,
     plan: MemoryAtlasRenderPlan
   ) {
-    for cluster in MemoryAtlasCluster.allCases {
+    for cluster in snapshot.activeClusters {
       var path = Path()
       for placement in plan.visibleEdges where placement.cluster == cluster {
         path.move(to: point(for: placement.source, in: size))
@@ -1085,15 +1494,38 @@ private struct CanonicalMemoryAtlasSurface: View {
     size: CGSize,
     plan: MemoryAtlasRenderPlan
   ) {
-    for cluster in MemoryAtlasCluster.allCases {
+    // While the time cursor is engaged, an entity that was just "born" blooms
+    // briefly as the playhead sweeps past its creation date, then settles into
+    // the constellation — the atlas visibly grows rather than snapping in.
+    let asOf = asOfDate
+    let spawnWindow = asOf != nil ? (snapshot.timeline?.spawnWindow ?? 0) : 0
+
+    for cluster in snapshot.activeClusters {
       var primaryPath = Path()
       var mutedPath = Path()
       for placement in plan.visibleNodes where placement.cluster == cluster {
         guard placement.id != selectedNodeID else { continue }
         let related = selectedNodeID == nil || plan.relatedNodeIDs.contains(placement.id)
         let matches = matchingNodeIDs == nil || matchingNodeIDs?.contains(placement.id) == true
-        let radius = nodeRadius(for: placement)
+        var radius = nodeRadius(for: placement)
         let center = point(for: placement.normalizedPosition, in: size)
+
+        var pop = 0.0
+        if let asOf, spawnWindow > 0 {
+          let age = asOf.timeIntervalSince(placement.node.createdAt)
+          if age >= 0, age < spawnWindow { pop = 1 - age / spawnWindow }
+        }
+        if pop > 0 {
+          radius *= CGFloat(1 + 0.9 * pop)
+          let bloom = radius * 2.6
+          context.fill(
+            Path(ellipseIn: CGRect(
+              x: center.x - bloom / 2, y: center.y - bloom / 2, width: bloom, height: bloom
+            )),
+            with: .color(cluster.color.opacity(0.3 * pop))
+          )
+        }
+
         let rect = CGRect(
           x: center.x - radius,
           y: center.y - radius,
@@ -1156,33 +1588,87 @@ private struct CanonicalMemoryAtlasSurface: View {
     context.fill(Path(ellipseIn: rect), with: .color(color.opacity(opacity)))
   }
 
+  private func drawCanvasLabels(
+    context: inout GraphicsContext,
+    size: CGSize,
+    plan: MemoryAtlasRenderPlan
+  ) {
+    guard plan.usesCanvasLabels else { return }
+
+    // From the density-aware inspection threshold onward, every dot on this
+    // canvas gets a label. Skip labels outside the clipped canvas before
+    // resolving Text, which makes a 10k-node graph cost proportional to the
+    // current viewport rather than the total graph size.
+    let visibleBounds = CGRect(origin: .zero, size: size)
+    for placement in plan.canvasLabelNodes {
+      let center = point(for: placement.normalizedPosition, in: size)
+      guard visibleBounds.contains(center) else { continue }
+
+      let color = placement.cluster?.color ?? OmiColors.textPrimary
+      let estimatedLabelWidth = min(
+        152.0,
+        max(44.0, CGFloat(placement.node.label.count) * 6.4 + 18)
+      )
+      let labelCenterX = min(
+        max(center.x, estimatedLabelWidth / 2),
+        size.width - estimatedLabelWidth / 2
+      )
+      let text = Text(placement.node.label)
+        .font(.system(size: 11, weight: placement.id == snapshot.anchorNodeID ? .semibold : .medium))
+        .foregroundStyle(OmiColors.textPrimary)
+      let labelOffset: CGFloat = if placement.id == selectedNodeID {
+        34
+      } else if placement.id == snapshot.anchorNodeID {
+        24
+      } else {
+        nodeRadius(for: placement) + 5
+      }
+      context.draw(text, at: CGPoint(x: labelCenterX, y: center.y + labelOffset), anchor: .top)
+
+      // A small leading color marker keeps labels scannable while preserving
+      // the neutral text treatment used elsewhere in the Atlas.
+      context.fill(
+        Path(ellipseIn: CGRect(x: center.x - 3, y: center.y + labelOffset + 4, width: 3, height: 3)),
+        with: .color(color)
+      )
+    }
+  }
+
   private func nodeRadius(for placement: MemoryAtlasNodePlacement) -> CGFloat {
-    if isInspectMode {
-      return placement.clusterRank == 0 ? 16 : 12
-    }
-    if isFocusMode {
-      return placement.clusterRank == 0 ? 10 : 7.2
-    }
-    if placement.clusterRank == 0 {
-      if compact { return 5 }
-      return zoom >= 4.2 ? 8 : 6
-    }
-    if compact { return zoom >= 1.2 ? 2.4 : 2.1 }
-    if zoom >= 4.2 { return 4.8 }
-    return zoom >= 1.45 ? 2.8 : 2.1
+    MemoryAtlasNodeVisualPolicy.radius(
+      clusterRank: placement.clusterRank,
+      zoom: zoom,
+      compact: compact,
+      isFullyLabelled: isFullyLabelledMode,
+      isInspect: isInspectMode,
+      isFocus: isFocusMode
+    )
   }
 
   @ViewBuilder
   private func clusterTitles(size: CGSize) -> some View {
-    ForEach(MemoryAtlasCluster.allCases) { cluster in
+    ForEach(snapshot.activeClusters) { cluster in
+      let titlePosition = clusterTitlePosition(for: cluster)
       Text(cluster.title)
         .scaledFont(size: compact ? 10 : 12, weight: .medium)
         .foregroundColor(cluster.color.opacity(0.82))
         .position(
-          x: point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).x,
-          y: max(18, point(for: CGPoint(x: cluster.center.x, y: 0.105), in: size).y)
+          x: point(for: titlePosition, in: size).x,
+          y: max(18, point(for: titlePosition, in: size).y)
         )
     }
+  }
+
+  private func clusterTitlePosition(for cluster: MemoryAtlasCluster) -> CGPoint {
+    let center = snapshot.center(for: cluster)
+    let deltaX = center.x - MemoryAtlasCluster.starCenter.x
+    let deltaY = center.y - MemoryAtlasCluster.starCenter.y
+    let distance = max(hypot(deltaX, deltaY), 0.001)
+    let titleOffset: CGFloat = 0.13
+    return CGPoint(
+      x: min(max(center.x + deltaX / distance * titleOffset, 0.08), 0.92),
+      y: min(max(center.y + deltaY / distance * titleOffset, 0.1), 0.88)
+    )
   }
 
   private func nodeButton(
@@ -1315,7 +1801,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 
       Spacer()
 
-      ForEach(MemoryAtlasCluster.allCases) { cluster in
+      ForEach(snapshot.activeClusters) { cluster in
         HStack(spacing: 5) {
           Circle().fill(cluster.color).frame(width: 6, height: 6)
           Text(cluster.title)
@@ -1329,9 +1815,223 @@ private struct CanonicalMemoryAtlasSurface: View {
     .background(OmiColors.backgroundSecondary)
   }
 
+  // MARK: - Time axis
+
+  private var timelineBar: some View {
+    VStack(spacing: 9) {
+      HStack(spacing: 12) {
+        Button(action: togglePlayback) {
+          ZStack {
+            Circle().fill(OmiColors.textPrimary).frame(width: 30, height: 30)
+            Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
+              .scaledFont(size: 11, weight: .bold)
+              .foregroundColor(OmiColors.backgroundPrimary)
+              .offset(x: isTimePlaying ? 0 : 1)
+          }
+        }
+        .buttonStyle(.plain)
+        .help(isTimePlaying ? "Pause" : "Play your memory forward")
+        .accessibilityIdentifier("memory_atlas_timeline_play")
+
+        VStack(alignment: .leading, spacing: 1) {
+          Text(asOfLabel)
+            .scaledFont(size: 12, weight: .semibold)
+            .foregroundColor(OmiColors.textPrimary)
+          Text("\(visibleEntityCount) entities · \(visibleConnectionCount) connections")
+            .scaledFont(size: 10)
+            .foregroundColor(OmiColors.textTertiary)
+            .monospacedDigit()
+        }
+
+        Spacer()
+
+        Text(atlasLevelLabel)
+          .scaledFont(size: 10, weight: .medium)
+          .foregroundColor(OmiColors.textTertiary)
+
+        if timeCursor < 0.9995 {
+          Button(action: jumpToNow) {
+            Text("Now")
+              .scaledFont(size: 10, weight: .semibold)
+              .foregroundColor(OmiColors.textSecondary)
+              .padding(.horizontal, 10)
+              .frame(height: 24)
+              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 8)
+          }
+          .buttonStyle(.plain)
+          .accessibilityIdentifier("memory_atlas_timeline_now")
+        }
+      }
+
+      timelineTrack
+
+      HStack {
+        Text(shortDate(timeline?.start))
+        Spacer()
+        Text("Now")
+      }
+      .scaledFont(size: 9)
+      .foregroundColor(OmiColors.textQuaternary)
+    }
+    .padding(.horizontal, 18)
+    .padding(.vertical, 12)
+    .background(OmiColors.backgroundSecondary)
+    .overlay(alignment: .top) {
+      Divider().overlay(OmiColors.border.opacity(0.24))
+    }
+    .accessibilityIdentifier("memory_atlas_timeline")
+  }
+
+  private var timelineTrack: some View {
+    GeometryReader { geo in
+      Canvas(opaque: false, colorMode: .linear) { context, size in
+        drawTimeline(context: &context, size: size)
+      }
+      .contentShape(Rectangle())
+      .gesture(
+        DragGesture(minimumDistance: 0)
+          .onChanged { value in scrub(to: value.location.x / max(geo.size.width, 1)) }
+      )
+    }
+    .frame(height: 40)
+    .accessibilityIdentifier("memory_atlas_timeline_track")
+  }
+
+  private func drawTimeline(context: inout GraphicsContext, size: CGSize) {
+    guard let timeline else { return }
+    let buckets = timeline.buckets
+    let maxCount = CGFloat(max(buckets.max() ?? 1, 1))
+    let barWidth = size.width / CGFloat(max(buckets.count, 1))
+    let cursorX = CGFloat(timeCursor) * size.width
+    let baseY = size.height - 6
+
+    for (index, count) in buckets.enumerated() {
+      let barHeight = CGFloat(count) / maxCount * (size.height - 12)
+      let x = CGFloat(index) * barWidth
+      let born = (x + barWidth / 2) <= cursorX
+      let rect = CGRect(
+        x: x + 1, y: baseY - barHeight, width: max(barWidth - 2, 1), height: max(barHeight, 0.5)
+      )
+      context.fill(
+        Path(roundedRect: rect, cornerRadius: 1),
+        with: .color(OmiColors.textPrimary.opacity(born ? 0.3 : 0.08))
+      )
+    }
+
+    var baseline = Path()
+    baseline.move(to: CGPoint(x: 0, y: baseY))
+    baseline.addLine(to: CGPoint(x: size.width, y: baseY))
+    context.stroke(baseline, with: .color(OmiColors.border.opacity(0.5)), lineWidth: 1)
+
+    var filled = Path()
+    filled.move(to: CGPoint(x: 0, y: baseY))
+    filled.addLine(to: CGPoint(x: cursorX, y: baseY))
+    context.stroke(filled, with: .color(OmiColors.textPrimary.opacity(0.85)), lineWidth: 1.5)
+
+    var playhead = Path()
+    playhead.move(to: CGPoint(x: cursorX, y: 0))
+    playhead.addLine(to: CGPoint(x: cursorX, y: size.height))
+    context.stroke(playhead, with: .color(OmiColors.textPrimary.opacity(0.85)), lineWidth: 1.5)
+
+    context.fill(
+      Path(ellipseIn: CGRect(x: cursorX - 5, y: baseY - 5, width: 10, height: 10)),
+      with: .color(OmiColors.textPrimary)
+    )
+  }
+
+  private var asOfLabel: String {
+    guard let asOf = asOfDate else { return "Now — the whole atlas" }
+    let formatter = DateFormatter()
+    formatter.dateStyle = .medium
+    formatter.timeStyle = .none
+    return "As of \(formatter.string(from: asOf))"
+  }
+
+  private func shortDate(_ date: Date?) -> String {
+    guard let date else { return "" }
+    let formatter = DateFormatter()
+    formatter.dateFormat = "MMM d, yyyy"
+    return formatter.string(from: date)
+  }
+
+  private func maybeAutoplayTimeline() {
+    guard previewTimeCursor == nil else { return }
+    guard !compact, timeline != nil, autoplayEnabled, !didAutoplay, !reduceMotion else { return }
+    didAutoplay = true
+    startPlayback(resetToStart: true)
+  }
+
+  private func togglePlayback() {
+    if isTimePlaying {
+      stopPlayback(userInitiated: true)
+    } else {
+      startPlayback(resetToStart: timeCursor >= 0.9995)
+    }
+  }
+
+  private func startPlayback(resetToStart: Bool) {
+    guard timeline != nil else { return }
+    playbackTask?.cancel()
+    if resetToStart || timeCursor >= 0.9995 {
+      timeCursor = 0
+    }
+    isTimePlaying = true
+    // Suppress the interactive overlay + floating titles for a clean, smooth
+    // growth animation; restored the moment playback ends.
+    isCameraMoving = true
+    playbackTask = Task { @MainActor in
+      var last = Date()
+      let totalSeconds = 6.5
+      while !Task.isCancelled {
+        try? await Task.sleep(nanoseconds: 33_000_000)
+        if Task.isCancelled { return }
+        let now = Date()
+        let delta = now.timeIntervalSince(last)
+        last = now
+        let next = timeCursor + delta / totalSeconds
+        if next >= 1 {
+          timeCursor = 1
+          finishPlaybackNaturally()
+          return
+        }
+        timeCursor = next
+      }
+    }
+  }
+
+  /// Playing to the end is not an opt-out — the delightful default survives.
+  private func finishPlaybackNaturally() {
+    playbackTask = nil
+    isTimePlaying = false
+    isCameraMoving = false
+  }
+
+  private func stopPlayback(userInitiated: Bool) {
+    playbackTask?.cancel()
+    playbackTask = nil
+    if isTimePlaying { isCameraMoving = false }
+    isTimePlaying = false
+    if userInitiated { autoplayEnabled = false }
+  }
+
+  private func scrub(to fraction: Double) {
+    if isTimePlaying || playbackTask != nil {
+      stopPlayback(userInitiated: true)
+    } else {
+      // Grabbing the timeline is an explicit opt-out of auto-play on open.
+      autoplayEnabled = false
+    }
+    timeCursor = min(max(fraction, 0), 1)
+  }
+
+  private func jumpToNow() {
+    stopPlayback(userInitiated: true)
+    withAnimation(.easeOut(duration: 0.25)) { timeCursor = 1 }
+  }
+
   private var zoomControls: some View {
     HStack(spacing: 1) {
-      Button { updateZoom(zoom - 0.2) } label: {
+      Button { zoomOut() } label: {
         Image(systemName: "minus").frame(width: 28, height: 28)
       }
       .accessibilityIdentifier("memory_atlas_zoom_out")
@@ -1342,11 +2042,11 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
       .help("Return to overview")
       .accessibilityIdentifier("memory_atlas_reset_viewport")
-      Button { updateZoom(zoom + 0.2) } label: {
+      Button { zoomIn() } label: {
         Image(systemName: "plus").frame(width: 28, height: 28)
       }
       .disabled(zoom >= maximumZoom)
-      .help(compact ? "Open the atlas for deeper exploration" : "Zoom in")
+      .help(compact ? "Open the atlas for deeper exploration" : "Zoom in (accelerates for large atlases)")
       .accessibilityIdentifier("memory_atlas_zoom_in")
     }
     .scaledFont(size: 10)
@@ -1396,7 +2096,13 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
   }
 
-  private var maximumZoom: CGFloat { MemoryAtlasZoomPolicy.maximumZoom(compact: compact) }
+  private var maximumZoom: CGFloat {
+    MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: compact)
+  }
+
+  private var isFullyLabelledMode: Bool {
+    !compact && zoom >= maximumZoom
+  }
 
   private var isFocusMode: Bool {
     !compact && zoom >= MemoryAtlasZoomPolicy.focusModeZoom
@@ -1407,6 +2113,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private var atlasLevelLabel: String {
+    if isFullyLabelledMode { return "All labelled" }
     if isInspectMode { return "Inspect" }
     if isFocusMode { return "Focus" }
     if zoom < 1.35 { return "Overview" }
@@ -1475,13 +2182,38 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func updateZoom(_ value: CGFloat) {
-    zoom = min(max(value, MemoryAtlasZoomPolicy.minimumZoom), maximumZoom)
-    settledZoom = zoom
+    let nextZoom = min(max(value, MemoryAtlasZoomPolicy.minimumZoom), maximumZoom)
+    // Buttons, automation, and selection focus zoom around the atlas center.
+    // Scaling pan by the same ratio keeps a focused entity in place instead of
+    // throwing it off-screen as deep zoom increases.
+    pan = MemoryAtlasZoomPolicy.panPreservingCenterZoom(
+      pan,
+      from: zoom,
+      to: nextZoom
+    )
+    settledPan = pan
+    zoom = nextZoom
+    settledZoom = nextZoom
+  }
+
+  private func zoomIn() {
+    let increment = max(0.2, zoom * 0.25)
+    updateZoom(min(zoom + increment, maximumZoom))
+  }
+
+  private func zoomOut() {
+    guard zoom > MemoryAtlasZoomPolicy.minimumZoom else { return }
+    let decrementedZoom = zoom > 2 ? zoom / 1.25 : zoom - 0.2
+    updateZoom(max(decrementedZoom, MemoryAtlasZoomPolicy.minimumZoom))
   }
 
   private func focus(on placement: MemoryAtlasNodePlacement) {
     guard viewportSize.width > 0, viewportSize.height > 0 else { return }
-    let focusedZoom = MemoryAtlasZoomPolicy.focusedZoom(currentZoom: zoom, compact: compact)
+    let focusedZoom = MemoryAtlasZoomPolicy.focusedZoom(
+      currentZoom: zoom,
+      nodeCount: snapshot.nodes.count,
+      compact: compact
+    )
     let focusedPan = CGSize(
       width: (0.5 - placement.normalizedPosition.x) * viewportSize.width * focusedZoom,
       height: (0.5 - placement.normalizedPosition.y) * viewportSize.height * focusedZoom
@@ -1501,5 +2233,84 @@ private struct CanonicalMemoryAtlasSurface: View {
       pan = .zero
       settledPan = .zero
     }
+  }
+}
+
+// MARK: - Export / QA preview
+
+/// Deterministic, data-backed atlas for offscreen `ViewExporter` renders. The
+/// live atlas needs a signed-in account and a server graph, so QA has no way to
+/// visually regression-test the timeline without this fixed sample. Same file as
+/// the private surface so it can construct it directly.
+enum MemoryAtlasExportPreview {
+  static func surface(timeCursor: Double = 0.55) -> AnyView {
+    AnyView(
+      CanonicalMemoryAtlasSurface(
+        graph: sampleGraph(),
+        compact: false,
+        onViewEvidence: { _ in },
+        previewTimeCursor: timeCursor
+      )
+    )
+  }
+
+  private static func sampleGraph() -> KnowledgeGraphResponse {
+    let now = Date(timeIntervalSince1970: 1_752_000_000)
+    let span: TimeInterval = 120 * 24 * 60 * 60
+    var seed: UInt64 = 0x9e37_79b9_7f4a_7c15
+    func rand() -> Double {
+      seed ^= seed << 13
+      seed ^= seed >> 7
+      seed ^= seed << 17
+      return Double(seed % 10_000) / 10_000
+    }
+
+    let clusters: [(KnowledgeGraphNodeType, [String], Int)] = [
+      (.person, ["Sarah", "Alex", "Priya", "Marcus", "Elena", "Mom"], 34),
+      (.organization, ["Google Cloud", "Omi", "Stripe", "Anthropic", "Notion"], 26),
+      (.place, ["New York City", "San Francisco", "Tokyo", "Blue Bottle"], 22),
+      (.thing, ["Telegram", "MacBook", "iPhone", "Tesla", "AirPods"], 40),
+      (.concept, ["burnout", "sleep", "running", "design", "focus", "pricing"], 48),
+    ]
+
+    var nodes: [KnowledgeGraphNode] = [
+      KnowledgeGraphNode(
+        id: "david", label: "David", nodeType: .person, memoryIds: ["m0"],
+        createdAt: now.addingTimeInterval(-span)
+      ),
+      // A generic self node so the render exercises the center-collapse too.
+      KnowledgeGraphNode(
+        id: "user", label: "User", nodeType: .person,
+        createdAt: now.addingTimeInterval(-span * 0.9)
+      ),
+    ]
+    var edges: [KnowledgeGraphEdge] = []
+
+    for (type, names, count) in clusters {
+      for index in 0..<count {
+        let id = "\(type.rawValue)-\(index)"
+        let name = index < names.count ? names[index] : "\(names[index % names.count]) \(index)"
+        let created = now.addingTimeInterval(-span * (1 - rand()))
+        nodes.append(
+          KnowledgeGraphNode(
+            id: id, label: name, nodeType: type, memoryIds: ["mem-\(id)"], createdAt: created
+          )
+        )
+        if index < 3 {
+          edges.append(
+            KnowledgeGraphEdge(
+              id: "edge-\(id)",
+              sourceId: index == 0 ? "user" : "david",
+              targetId: id,
+              label: "knows",
+              memoryIds: ["mem-\(id)"],
+              createdAt: created
+            )
+          )
+        }
+      }
+    }
+
+    return KnowledgeGraphResponse(nodes: nodes, edges: edges)
   }
 }

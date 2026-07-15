@@ -40,6 +40,7 @@ struct DesktopHomeView: View {
   @State private var selectedSettingsSection: SettingsContentView.SettingsSection = .general
   @State private var highlightedSettingId: String? = nil
   @State private var showTryAskingPopup = false
+  @State private var isShowingMemoryAtlasPage = false
   @State private var previousIndexBeforeSettings: Int = 0
   @State private var logoPulse = false
   @State private var lastActivationRefresh = Date.distantPast
@@ -946,7 +947,7 @@ struct DesktopHomeView: View {
           // Settings has its own Back affordance in SettingsSidebar, so skip the
           // redundant Home chrome there.
           if !useLegacyHomeDesign && selectedIndex != SidebarNavItem.dashboard.rawValue
-            && !isInSettings
+            && !isInSettings && !isShowingMemoryAtlasPage
           {
             PageChromeBar(
               onHome: {
@@ -964,7 +965,8 @@ struct DesktopHomeView: View {
             viewModelContainer: viewModelContainer,
             selectedSettingsSection: $selectedSettingsSection,
             highlightedSettingId: $highlightedSettingId,
-            selectedTabIndex: $selectedIndex
+            selectedTabIndex: $selectedIndex,
+            isShowingMemoryAtlasPage: $isShowingMemoryAtlasPage
           )
         }
         .onExitCommand {
@@ -1044,6 +1046,10 @@ struct DesktopHomeView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
       selectedIndex = SidebarNavItem.tasks.rawValue
     }
+    .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationOpenMemoryAtlasRequested)) { _ in
+      selectedIndex = SidebarNavItem.memories.rawValue
+      isShowingMemoryAtlasPage = true
+    }
     .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
       if let rawValue = notification.userInfo?["rawValue"] as? Int,
         let item = SidebarNavItem(rawValue: rawValue)
@@ -1052,6 +1058,9 @@ struct DesktopHomeView: View {
       }
     }
     .onChange(of: selectedIndex) { oldValue, newValue in
+      if newValue != SidebarNavItem.memories.rawValue {
+        isShowingMemoryAtlasPage = false
+      }
       // Track the previous index when navigating to settings
       if newValue == SidebarNavItem.settings.rawValue
         && oldValue != SidebarNavItem.settings.rawValue
@@ -1077,6 +1086,10 @@ struct DesktopHomeView: View {
   }
 
   private func navigateHomeOnEscapeIfNeeded() {
+    if isShowingMemoryAtlasPage {
+      isShowingMemoryAtlasPage = false
+      return
+    }
     guard !useLegacyHomeDesign else { return }
     guard let item = SidebarNavItem(rawValue: selectedIndex) else { return }
     guard [.conversations, .memories, .tasks, .rewind].contains(item) else { return }
@@ -1142,6 +1155,7 @@ private struct PageContentView: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingId: String?
   @Binding var selectedTabIndex: Int
+  @Binding var isShowingMemoryAtlasPage: Bool
 
   var body: some View {
     Group {
@@ -1163,9 +1177,25 @@ private struct PageContentView: View {
           appProvider: viewModelContainer.appProvider, chatProvider: viewModelContainer.chatProvider
         )
       case 3:
-        MemoriesPage(
-          viewModel: viewModelContainer.memoriesViewModel,
-          graphViewModel: viewModelContainer.memoryGraphViewModel)
+        if isShowingMemoryAtlasPage {
+          CanonicalMemoryAtlasPage(
+            viewModel: viewModelContainer.memoryGraphViewModel,
+            onBack: { isShowingMemoryAtlasPage = false },
+            onViewEvidence: { memoryIds in
+              isShowingMemoryAtlasPage = false
+              DispatchQueue.main.async {
+                viewModelContainer.memoriesViewModel.selectedMemory =
+                  viewModelContainer.memoriesViewModel.memories.first { memoryIds.contains($0.id) }
+              }
+            }
+          )
+        } else {
+          MemoriesPage(
+            viewModel: viewModelContainer.memoriesViewModel,
+            graphViewModel: viewModelContainer.memoryGraphViewModel,
+            onOpenAtlas: { isShowingMemoryAtlasPage = true }
+          )
+        }
       case 4:
         TasksPage(
           viewModel: viewModelContainer.tasksViewModel,

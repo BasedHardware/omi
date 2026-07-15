@@ -1508,6 +1508,7 @@ class MemoriesViewModel: ObservableObject {
 struct MemoriesPage: View {
   @ObservedObject var viewModel: MemoriesViewModel
   let graphViewModel: MemoryGraphViewModel
+  let onOpenAtlas: () -> Void
   @State private var showCategoryFilter = false
   @State private var categorySearchText = ""
   @State private var pendingSelectedTags: Set<MemoryTag> = []
@@ -2107,14 +2108,13 @@ struct MemoriesPage: View {
     ScrollView {
       LazyVStack(alignment: .leading, spacing: OmiSpacing.md) {
         switch MemoryGraphPresentationMode.resolve(
-          canonicalLifecycleExposed: viewModel.canonicalLifecycleExposed
+          canonicalLifecycleExposed: viewModel.canonicalLifecycleExposed,
+          forceCanonicalAtlasForLocalQA: MemoryGraphPresentationMode.localQAOverrideEnabled
         ) {
         case .canonicalAtlas:
           CanonicalMemoryAtlasInlineCard(
             viewModel: graphViewModel,
-            onViewEvidence: { memoryIds in
-              viewModel.selectedMemory = viewModel.memories.first { memoryIds.contains($0.id) }
-            }
+            onOpenAtlas: onOpenAtlas
           )
         case .legacyBrainMap:
           MemoryGraphInlineCard(viewModel: graphViewModel)

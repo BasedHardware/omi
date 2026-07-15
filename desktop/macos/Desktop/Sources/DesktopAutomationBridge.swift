@@ -2932,7 +2932,7 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "open_memory_atlas",
-      summary: "Open the canonical memory atlas sheet for non-production UI and performance harnesses"
+      summary: "Open the canonical memory atlas page for non-production UI and performance harnesses"
     ) { _ in
       await MainActor.run {
         NotificationCenter.default.post(
@@ -2940,7 +2940,7 @@ final class DesktopAutomationActionRegistry {
           object: nil
         )
       }
-      return ["opened": "true", "target": "expanded"]
+      return ["opened": "true", "target": "page"]
     }
 
     register(
@@ -2948,7 +2948,7 @@ final class DesktopAutomationActionRegistry {
       summary: "Set memory atlas zoom and pan for deterministic non-production performance sweeps",
       params: ["target", "zoom", "pan_x", "pan_y", "reset"]
     ) { params in
-      let target = params["target"] == "inline" ? "inline" : "expanded"
+      let target = params["target"] == "inline" ? "inline" : "page"
       var userInfo: [String: Any] = ["target": target]
       if let zoom = params["zoom"].flatMap(Double.init) { userInfo["zoom"] = zoom }
       if let panX = params["pan_x"].flatMap(Double.init) { userInfo["pan_x"] = panX }
@@ -2967,6 +2967,32 @@ final class DesktopAutomationActionRegistry {
         "zoom": params["zoom"] ?? "unchanged",
         "pan_x": params["pan_x"] ?? "unchanged",
         "pan_y": params["pan_y"] ?? "unchanged",
+      ]
+    }
+
+    register(
+      name: "memory_atlas_set_time",
+      summary: "Scrub or play the memory atlas time axis for deterministic non-production checks",
+      params: ["target", "fraction", "play", "reset_to_start", "reset"]
+    ) { params in
+      let target = params["target"] == "inline" ? "inline" : "page"
+      var userInfo: [String: Any] = ["target": target]
+      if let fraction = params["fraction"].flatMap(Double.init) { userInfo["fraction"] = fraction }
+      if let play = params["play"] { userInfo["play"] = play == "true" }
+      if let resetToStart = params["reset_to_start"] { userInfo["reset_to_start"] = resetToStart == "true" }
+      if let reset = params["reset"] { userInfo["reset"] = reset == "true" }
+      await MainActor.run {
+        NotificationCenter.default.post(
+          name: .desktopAutomationMemoryAtlasTimeRequested,
+          object: nil,
+          userInfo: userInfo
+        )
+      }
+      return [
+        "posted": "true",
+        "target": target,
+        "fraction": params["fraction"] ?? "unchanged",
+        "play": params["play"] ?? "unchanged",
       ]
     }
 

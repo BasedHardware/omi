@@ -3,13 +3,13 @@ import XCTest
 
 /// Deterministic production-scale input for Memory Atlas performance loops.
 ///
-/// The fixture intentionally sits just above the sampled account graph (about
-/// 1,124 nodes and 1,668 edges), so a passing optimization is not accidentally
+/// The fixture intentionally sits above the sampled account graph (about
+/// 1,946 nodes and 2,784 edges), so a passing optimization is not accidentally
 /// tuned only for a small unit-test graph. Work-budget assertions belong here;
 /// wall-clock measurements are diagnostic because runner hardware varies.
 final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
-  private let productionScaleNodeCount = 1_200
-  private let productionScaleEdgeCount = 1_800
+  private let productionScaleNodeCount = 2_400
+  private let productionScaleEdgeCount = 3_600
 
   func testProductionScaleFixtureAndLayoutAreCompleteAndDeterministic() {
     let graph = makeProductionScaleGraph()
@@ -25,6 +25,13 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     XCTAssertEqual(first.edges.count, productionScaleEdgeCount)
     XCTAssertEqual(first.nodes.map(\.id), second.nodes.map(\.id))
     XCTAssertEqual(first.nodes.map(\.normalizedPosition), second.nodes.map(\.normalizedPosition))
+    XCTAssertEqual(
+      first.activeClusters,
+      [.person, .organization, .place, .thing, .concept]
+    )
+    XCTAssertTrue(first.activeClusters.map(first.center(for:)).allSatisfy { center in
+      abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
+    })
   }
 
   func testRenderPlannerKeepsOverviewWorkWithinBudgets() {
@@ -35,38 +42,122 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
     assertWorkBudgets(plan, nodes: 1_200, edges: 36, labels: 12)
   }
 
-  func testRenderPlannerCullsAndBoundsNeighborhoodWork() {
+  func testRenderPlannerAddsTheNeighborhoodCohortWithoutDroppingOverviewDots() {
     let snapshot = makeProductionScaleSnapshot()
     let plan = makePlan(snapshot: snapshot, zoom: 1.5)
 
     XCTAssertEqual(plan.detailLevel, .neighborhood)
-    assertWorkBudgets(plan, nodes: 600, edges: 96, labels: 24)
-    XCTAssertLessThan(plan.visibleNodes.count, snapshot.nodes.count)
+    assertWorkBudgets(plan, nodes: 1_600, edges: 96, labels: 24)
+    XCTAssertEqual(plan.visibleNodes.count, 1_600)
   }
 
-  func testRenderPlannerCullsAndBoundsDetailWork() {
+  func testRenderPlannerAddsTheFullAccountCohortAtDetailZoom() {
     let snapshot = makeProductionScaleSnapshot()
     let plan = makePlan(snapshot: snapshot, zoom: 2.2)
 
     XCTAssertEqual(plan.detailLevel, .detail)
-    assertWorkBudgets(plan, nodes: 450, edges: 160, labels: 36)
-    XCTAssertLessThan(plan.visibleNodes.count, snapshot.nodes.count)
+    assertWorkBudgets(plan, nodes: 2_400, edges: 160, labels: 36)
+    XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
-  func testInspectModeExpandsEveryVisibleEntityWithoutGrowingWorkUnbounded() {
+  func testInspectModeMovesAutomaticLabelsToCanvasWithoutViewExplosion() {
     let snapshot = makeProductionScaleSnapshot()
-    let plan = makePlan(snapshot: snapshot, zoom: 15.5)
+    let automaticCanvasLabelZoom = MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
+      nodeCount: snapshot.nodes.count
+    )
+    let plan = makePlan(snapshot: snapshot, zoom: automaticCanvasLabelZoom)
 
-    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(compact: false), 16)
-    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(compact: true), 1.35)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: false), 180)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: true), 1.35)
+    XCTAssertEqual(automaticCanvasLabelZoom, 45)
     XCTAssertEqual(plan.detailLevel, .inspect)
-    assertWorkBudgets(plan, nodes: 64, edges: 64, labels: 64)
-    XCTAssertLessThan(plan.visibleNodes.count, snapshot.nodes.count)
-    XCTAssertEqual(Set(plan.interactiveNodes.map(\.id)), Set(plan.visibleNodes.map(\.id)))
-    XCTAssertEqual(plan.labelNodeIDs, Set(plan.visibleNodes.map(\.id)))
+    assertWorkBudgets(plan, nodes: 3_200, edges: 360, labels: 96)
+    XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
+    XCTAssertLessThan(plan.interactiveNodes.count, plan.visibleNodes.count)
+    XCTAssertTrue(plan.labelNodeIDs.isEmpty)
+    XCTAssertTrue(plan.usesCanvasLabels)
+    XCTAssertFalse(plan.isFullyLabelled)
+    XCTAssertEqual(Set(plan.canvasLabelNodes.map(\.id)), Set(plan.visibleNodes.map(\.id)))
   }
 
-  func testSelectedFocusModeExcludesUnrelatedBackgroundNodes() throws {
+  func testDynamicMaximumZoomGrowsWithGraphDensity() {
+    XCTAssertEqual(MemoryAtlasZoomPolicy.fullyLabelledZoom(nodeCount: 1), 16)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.fullyLabelledZoom(nodeCount: 1_946), 160)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.fullyLabelledZoom(nodeCount: 10_000), 360)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(nodeCount: 1_946), 40)
+    XCTAssertEqual(MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(nodeCount: 10_000), 90)
+  }
+
+  func testFullyLabelledNodesRetainTheInspectTargetSize() {
+    let inspectRadius = MemoryAtlasNodeVisualPolicy.radius(
+      clusterRank: 3,
+      zoom: 56.49,
+      compact: false,
+      isFullyLabelled: false,
+      isInspect: true,
+      isFocus: true
+    )
+    let fullyLabelledRadius = MemoryAtlasNodeVisualPolicy.radius(
+      clusterRank: 3,
+      zoom: 160,
+      compact: false,
+      isFullyLabelled: true,
+      isInspect: true,
+      isFocus: true
+    )
+
+    XCTAssertEqual(inspectRadius, 12)
+    XCTAssertEqual(fullyLabelledRadius, inspectRadius)
+  }
+
+  func testDynamicMaximumZoomLabelsEveryVisibleEntityWithoutViewExplosion() {
+    let snapshot = makeProductionScaleSnapshot()
+    let maximumZoom = MemoryAtlasZoomPolicy.maximumZoom(
+      nodeCount: snapshot.nodes.count,
+      compact: false
+    )
+    let plan = makePlan(snapshot: snapshot, zoom: maximumZoom)
+
+    XCTAssertTrue(plan.isFullyLabelled)
+    XCTAssertTrue(plan.usesCanvasLabels)
+    XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
+    XCTAssertEqual(Set(plan.canvasLabelNodes.map(\.id)), Set(plan.visibleNodes.map(\.id)))
+    XCTAssertTrue(plan.labelNodeIDs.isEmpty)
+    XCTAssertLessThanOrEqual(plan.interactiveNodes.count, 96)
+  }
+
+  func testCenterAnchoredDeepZoomKeepsTheFocusedEntityInView() {
+    let viewport = CGSize(width: 1_200, height: 800)
+    let focusedPosition = CGPoint(x: 0.357_342, y: 0.422_746)
+    let startingZoom: CGFloat = 4
+    let startingPan = CGSize(
+      width: (0.5 - focusedPosition.x) * viewport.width * startingZoom,
+      height: (0.5 - focusedPosition.y) * viewport.height * startingZoom
+    )
+    let maximumZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(nodeCount: 1_946)
+    let endingPan = MemoryAtlasZoomPolicy.panPreservingCenterZoom(
+      startingPan,
+      from: startingZoom,
+      to: maximumZoom
+    )
+
+    let startingPoint = MemoryAtlasRenderPlanner.renderedPoint(
+      for: focusedPosition,
+      viewportSize: viewport,
+      zoom: startingZoom,
+      pan: startingPan
+    )
+    let endingPoint = MemoryAtlasRenderPlanner.renderedPoint(
+      for: focusedPosition,
+      viewportSize: viewport,
+      zoom: maximumZoom,
+      pan: endingPan
+    )
+    XCTAssertEqual(startingPoint.x, endingPoint.x, accuracy: 0.000_1)
+    XCTAssertEqual(startingPoint.y, endingPoint.y, accuracy: 0.000_1)
+  }
+
+  func testSelectedFocusModeRetainsTheRenderedBackgroundCohort() throws {
     let snapshot = makeProductionScaleSnapshot()
     let selected = try XCTUnwrap(snapshot.nodeByID["node-2"])
     let viewport = CGSize(width: 1_200, height: 800)
@@ -88,16 +179,20 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
 
     XCTAssertEqual(plan.detailLevel, .focus)
     XCTAssertTrue(plan.visibleNodes.contains { $0.id == selected.id })
-    XCTAssertTrue(plan.visibleNodes.allSatisfy { plan.relatedNodeIDs.contains($0.id) })
+    XCTAssertTrue(plan.relatedNodeIDs.allSatisfy { relatedID in
+      plan.visibleNodes.contains { $0.id == relatedID }
+    })
+    XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
-  func testSelectedHighDegreeNodeShowsOnlyBoundedDirectNeighborhood() {
+  func testSelectedHighDegreeNodeShowsOnlyBoundedDirectNeighborhood() throws {
     let snapshot = makeProductionScaleSnapshot()
     let viewport = CGSize(width: 1_200, height: 800)
     let zoom: CGFloat = 2
+    let owner = try XCTUnwrap(snapshot.nodeByID["owner"])
     let ownerPan = CGSize(
       width: 0,
-      height: (0.5 - 0.77) * viewport.height * zoom
+      height: (0.5 - owner.normalizedPosition.y) * viewport.height * zoom
     )
     let plan = MemoryAtlasRenderPlanner.makePlan(
       snapshot: snapshot,
@@ -138,14 +233,62 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         matchingNodeIDs: nil
       )
 
-      let nodeLimit = zoom < 1.35 ? 1_200 : (zoom < 1.9 ? 600 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 450 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 72 : 64)))
-      let baseEdgeLimit = zoom < 1.35 ? 36 : (zoom < 1.9 ? 96 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 160 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 80 : 64)))
+      let nodeLimit = zoom < 1.35 ? 1_200 : (zoom < 1.9 ? 1_600 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 2_400 : 3_200))
+      let baseEdgeLimit = zoom < 1.35 ? 36 : (zoom < 1.9 ? 96 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 160 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 260 : 360)))
       let edgeLimit = frame.isMultiple(of: 3) ? min(baseEdgeLimit, 80) : baseEdgeLimit
       XCTAssertLessThanOrEqual(plan.visibleNodes.count, nodeLimit)
       XCTAssertLessThanOrEqual(plan.visibleEdges.count, edgeLimit)
-      let labelLimit = zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 64 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
+      let labelLimit = zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 96 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
       XCTAssertLessThanOrEqual(plan.interactiveNodes.count, labelLimit)
     }
+  }
+
+  func testZoomOnlyAddsStableEntityCohorts() {
+    let snapshot = makeProductionScaleSnapshot()
+    let zooms: [CGFloat] = [1, 1.35, 1.9, 3.2, 7.5]
+    let plans = zooms.map { makePlan(snapshot: snapshot, zoom: $0) }
+
+    for (current, next) in zip(plans, plans.dropFirst()) {
+      let currentIDs = Set(current.visibleNodes.map(\.id))
+      let nextIDs = Set(next.visibleNodes.map(\.id))
+      XCTAssertTrue(currentIDs.isSubset(of: nextIDs))
+      XCTAssertGreaterThanOrEqual(next.visibleNodes.count, current.visibleNodes.count)
+      XCTAssertGreaterThanOrEqual(next.visibleEdges.count, current.visibleEdges.count)
+    }
+  }
+
+  func testCameraMotionDoesNotChangeTheRenderedEntityCohort() {
+    let snapshot = makeProductionScaleSnapshot()
+    let stationary = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 1_200, height: 800),
+      zoom: 1.5,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil
+    )
+    let panned = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 1_200, height: 800),
+      zoom: 1.5,
+      pan: CGSize(width: 480, height: -260),
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil
+    )
+
+    XCTAssertEqual(stationary.visibleNodes.map(\.id), panned.visibleNodes.map(\.id))
+  }
+
+  func testStaticPreviewUsesBoundedNonInteractiveWork() {
+    let preview = MemoryAtlasRenderPlanner.makePreviewPlan(snapshot: makeProductionScaleSnapshot())
+
+    XCTAssertEqual(preview.detailLevel, .overview)
+    XCTAssertLessThanOrEqual(preview.visibleNodes.count, 260)
+    XCTAssertLessThanOrEqual(preview.visibleEdges.count, 24)
+    XCTAssertTrue(preview.interactiveNodes.isEmpty)
+    XCTAssertTrue(preview.labelNodeIDs.isEmpty)
   }
 
   /// Run with:

@@ -11,8 +11,20 @@ enum MemoryGraphPresentationMode: Equatable {
   case canonicalAtlas
   case legacyBrainMap
 
-  static func resolve(canonicalLifecycleExposed: Bool) -> Self {
-    canonicalLifecycleExposed ? .canonicalAtlas : .legacyBrainMap
+  /// Local QA can exercise the canonical-only surface without changing the
+  /// server-owned rollout state. Production bundles always remain gate-driven.
+  static var localQAOverrideEnabled: Bool {
+    AppBuild.isNonProduction
+      && ProcessInfo.processInfo.environment["OMI_FORCE_CANONICAL_MEMORY_ATLAS"] == "1"
+  }
+
+  static func resolve(
+    canonicalLifecycleExposed: Bool,
+    forceCanonicalAtlasForLocalQA: Bool = false
+  ) -> Self {
+    canonicalLifecycleExposed || forceCanonicalAtlasForLocalQA
+      ? .canonicalAtlas
+      : .legacyBrainMap
   }
 }
 
