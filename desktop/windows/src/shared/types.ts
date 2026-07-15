@@ -741,6 +741,28 @@ export type OmiBridgeApi = {
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
   focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
+  /** Dev/QA only: run the REAL Insight Phase-1 activity aggregate over the last 24h
+   *  with `denylist` and return ONLY the distinct app names (never OCR/titles).
+   *  Proves a denylisted app is excluded at the SQL layer. Absent in production. */
+  insightDebugActivity: (denylist: string[]) => Promise<{ apps: string[]; rowCount: number }>
+  /** Dev/QA only: run the REAL execute_sql closure with `denylist` and return ONLY
+   *  the row count (or a content-free error). Proves the denylist CTE-shadow filters
+   *  a denylisted app to zero rows. Absent in production. */
+  insightDebugSql: (
+    query: string,
+    denylist: string[]
+  ) => Promise<{ rowCount: number; error?: string }>
+  /** Dev/QA only: optionally apply a notifications patch, then return the REAL
+   *  insightAssistant.isEnabled() and the inputs deciding it. Absent in production. */
+  insightDebugIsEnabled: (patch?: {
+    notificationsEnabled?: boolean
+    notificationFrequency?: number
+  }) => Promise<{
+    isEnabled: boolean
+    insightEnabled: boolean
+    notificationsEnabled: boolean
+    notificationFrequency: number
+  }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>

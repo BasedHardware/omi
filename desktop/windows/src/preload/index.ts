@@ -176,6 +176,31 @@ const omi: OmiBridgeApi = {
   // waiting for a natural context switch.
   focusAnalyzeNow: () =>
     ipcRenderer.invoke('focus:analyzeNow') as Promise<{ ok: boolean; reason?: string }>,
+  // Dev/QA only (handlers registered on dev builds): observe the REAL Insight
+  // privacy/cost gates. debugActivity returns only distinct app names from the
+  // real Phase-1 aggregate; debugSql returns only a row count from the real
+  // execute_sql closure; debugIsEnabled returns the real isEnabled() (optionally
+  // after applying a notifications patch).
+  insightDebugActivity: (denylist: string[]) =>
+    ipcRenderer.invoke('insight:debugActivity', denylist) as Promise<{
+      apps: string[]
+      rowCount: number
+    }>,
+  insightDebugSql: (query: string, denylist: string[]) =>
+    ipcRenderer.invoke('insight:debugSql', query, denylist) as Promise<{
+      rowCount: number
+      error?: string
+    }>,
+  insightDebugIsEnabled: (patch?: {
+    notificationsEnabled?: boolean
+    notificationFrequency?: number
+  }) =>
+    ipcRenderer.invoke('insight:debugIsEnabled', patch) as Promise<{
+      isEnabled: boolean
+      insightEnabled: boolean
+      notificationsEnabled: boolean
+      notificationFrequency: number
+    }>,
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (

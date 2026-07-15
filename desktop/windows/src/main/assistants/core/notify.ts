@@ -118,6 +118,26 @@ export function isNotificationSnoozed(now: number = Date.now()): boolean {
   return snoozedUntil !== null && now < snoozedUntil
 }
 
+/** Would a proactive notification from `assistantId` be deliverable at all right
+ *  now, ignoring ONLY the per-interval rate-limit clocks? True iff the user has
+ *  not silenced us: not snoozed AND the master toggle is on AND the frequency
+ *  level is not Off (0/junk). It deliberately does NOT consult the rate clocks —
+ *  being inside a rate window is "not yet", not "silenced".
+ *
+ *  This exists for a glow-less assistant (Insight): with no visible output other
+ *  than a toast, running its ~12-call Gemini pipeline while notifications are
+ *  silenced is pure wasted spend, so Insight gates its `isEnabled()` on this.
+ *  Reuses the SAME snooze/master/frequency reads as `notifyProactive` so the two
+ *  can never disagree about whether a toast could appear. `assistantId` is
+ *  accepted for symmetry with `notifyProactive` and a future per-assistant master;
+ *  today the gate is global. */
+export function notificationsActive(_assistantId: string, now: number = Date.now()): boolean {
+  const settings = getAppSettings()
+  if (isNotificationSnoozed(now)) return false
+  if (!settings.notificationsEnabled) return false
+  return minIntervalMs(settings.notificationFrequency) !== Infinity
+}
+
 /** Deliver an assistant's notification through the throttle and the app's one
  *  existing toast path. Returns whether it was shown. */
 export function notifyProactive(

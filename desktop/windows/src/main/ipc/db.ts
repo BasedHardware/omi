@@ -1650,6 +1650,69 @@ export function rewindFramesByIds(ids: number[]): RewindFrame[] {
   return ids.map((id) => byId.get(id)).filter((f): f is RewindFrame => f !== undefined)
 }
 
+/** Run a caller-supplied read-only SELECT (Insight's execute_sql tool). The
+ *  read-only enforcement lives in the caller (assistants/insight/sql.ts); this is
+ *  the impure edge only. `stmt.reader` is a second guard: better-sqlite3 marks a
+ *  non-row-returning statement `reader === false`, so a write that slipped the
+ *  caller's blocklist still cannot run through `.all()`. Returns column names +
+ *  row arrays. Never log the rows — they are raw OCR/screen text. */
+export function runReadonlySelect(sql: string): { columns: string[]; rows: unknown[][] } {
+  const stmt = get().prepare(sql)
+  if (stmt.reader === false) throw new Error('statement is not a read query')
+  const columns = stmt.columns().map((c) => c.name)
+  const rows = stmt.raw().all() as unknown[][]
+  return { columns, rows }
+}
+
+/** Escape LIKE metacharacters so a denylist term matches literally under an
+ *  `ESCAPE '\'` clause (kept local — db.ts must not import upward from the
+ *  assistants layer; sql.ts has its own copy for the execute_sql closure). */
+function escapeLikeTerm(term: string): string {
+  return term.replace(/[\\%_]/g, (c) => `\\${c}`)
+}
+
+/** Mac's `buildActivitySummary` aggregate over the frame timeline: per (app,
+ *  window) screenshot counts + first/last-seen, most-active first.
+ *
+ *  `excludedTerms` (Insight's user denylist) removes any frame whose
+ *  app / window title / process name contains a term (case-insensitive substring —
+ *  the SAME predicate the per-frame gate `isUserDeniedApp` applies), so a
+ *  denylisted app's rows never enter the aggregate and thus never reach Gemini's
+ *  Phase-1 prompt. SQL-level exclusion (not a post-filter) so the rows never leave
+ *  the DB. */
+export function rewindActivityAggregate(
+  fromMs: number,
+  toMs: number,
+  limit = 30,
+  excludedTerms: string[] = []
+): { app: string; windowTitle: string; count: number; firstSeen: number; lastSeen: number }[] {
+  const terms = excludedTerms.map((t) => t.trim()).filter((t) => t.length > 0)
+  // One bound `NOT LIKE` per term over the concatenated identity columns. LIKE is
+  // ASCII case-insensitive in SQLite, matching isUserDeniedApp's lower-cased compare.
+  const exclusion = terms
+    .map(() => `AND (app || ' ' || window_title || ' ' || process_name) NOT LIKE ? ESCAPE '\\'`)
+    .join(' ')
+  const patterns = terms.map((t) => `%${escapeLikeTerm(t)}%`)
+  return get()
+    .prepare(
+      `SELECT app, window_title AS windowTitle, COUNT(*) AS count,
+              MIN(ts) AS firstSeen, MAX(ts) AS lastSeen
+         FROM rewind_frames
+        WHERE ts >= ? AND ts <= ? AND app IS NOT NULL AND app != ''
+        ${exclusion}
+        GROUP BY app, window_title
+        ORDER BY count DESC
+        LIMIT ?`
+    )
+    .all(fromMs, toMs, ...patterns, limit) as {
+    app: string
+    windowTitle: string
+    count: number
+    firstSeen: number
+    lastSeen: number
+  }[]
+}
+
 // --- Proactive Insights ---
 
 const INSIGHT_COLUMNS =
