@@ -136,6 +136,7 @@ const omi: OmiBridgeApi = {
   memoryExportFile: (memories: ExportMemory[]) => ipcRenderer.invoke('memoryExport:file', memories),
   memoryExportNotion: (args: { token: string; parentPageId: string; memories: ExportMemory[] }) =>
     ipcRenderer.invoke('memoryExport:notion', args),
+  openChatFiles: () => ipcRenderer.invoke('chat:openFiles'),
   kgFileIndexDigest: () => ipcRenderer.invoke('kg:fileIndexDigest'),
   kgSaveGraph: (graph) => ipcRenderer.invoke('kg:saveGraph', graph),
   kgStatus: () => ipcRenderer.invoke('kg:status'),
