@@ -413,8 +413,12 @@ export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
 
 /** A bar send blocked by the chat usage limit, relayed to the main window (which
  *  owns the shared usage-limit modal and the TTS voice). `spoken` = the blocked
- *  turn came from PTT, so the limit line is answered aloud (Mac speaks it). */
-export type BarUsageLimitPayload = { message: string; spoken: boolean }
+ *  turn came from PTT, so the limit line is answered aloud (Mac speaks it).
+ *  `popup` (default true) = raise the shared modal. The blocked-voice send path
+ *  sets it false because the pre-capture PTT veto already owns the modal for
+ *  voice — mirrors macOS, whose post-transcription voice path speaks without
+ *  re-showing the popup. */
+export type BarUsageLimitPayload = { message: string; spoken: boolean; popup?: boolean }
 
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
@@ -690,6 +694,10 @@ export type OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
+  /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
+   *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
+   *  the handler is absent entirely on production builds. */
+  focusAnalyzeNow: () => Promise<{ ok: boolean; reason?: string }>
   // Memory import (3b): parse a pasted ChatGPT/Claude dump into memory strings.
   // The renderer POSTs them to /v3/memories itself (it holds the auth token).
   memoryImportParse: (dump: string) => Promise<string[]>

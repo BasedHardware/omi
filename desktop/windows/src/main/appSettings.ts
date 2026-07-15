@@ -33,13 +33,28 @@ export type AppSettings = {
    *  never shown (fresh install / pre-feature) → baseline silently, no toast. */
   lastShownChangelogVersion: string | null
   /** Track 3 (AI user profile): whether the once-daily synthesized "about the
-   *  user" doc auto-generates in the background. Default OFF for now: nothing
-   *  consumes the profile yet (the Focus assistant's context block is the
-   *  consumer and lands in the next PR) and there is no Settings toggle yet, so
-   *  a default-on daily two-stage LLM call that uploads a synthesized personal
-   *  dossier would cost the user with no benefit and no off-switch. The PR that
-   *  adds the consumer flips this default on. */
+   *  user" doc auto-generates in the background. Default ON: the Focus assistant
+   *  is now the consumer — the profile grounds Focus's context block, so the
+   *  daily two-stage LLM call has a concrete payoff (a focus coach that knows who
+   *  the user is). Was default OFF while it had no consumer. */
   aiProfileEnabled: boolean
+  /** Track 3 (Focus assistant): whether Focus judges the screen at all. Default
+   *  ON, mirroring Mac's `focusAssistantEnabled`. Gated further by
+   *  `focusNotificationsEnabled` — see the AND-gate in focusAssistant.isEnabled. */
+  focusEnabled: boolean
+  /** Track 3 (Focus): Mac's `focusNotificationsEnabled`. Default ON. This is NOT
+   *  the frequency throttle — it is Mac's second half of the master gate: with it
+   *  off, Focus makes NO Gemini call at all ("no notification setting, no
+   *  analysis"), not merely a silent verdict. Separate from
+   *  `notificationFrequency` (0=Off), so out of the box Focus judges + glows but
+   *  never toasts until the user raises the frequency. */
+  focusNotificationsEnabled: boolean
+  /** Track 3 (Focus): minutes of analysis cooldown after a distraction verdict,
+   *  Mac's `focusCooldownInterval`. Default 10. A context switch bypasses it. */
+  focusCooldownMinutes: number
+  /** Track 3 (Focus): apps the user never wants Focus to look at, on top of the
+   *  capture-time and privacy exclusions. Mac's `focusExcludedApps`. Default []. */
+  focusExcludedApps: string[]
   /** Track 3 (focus halo): whether the Focus assistant may draw its glowing ring
    *  around the active window (red when it judges the user distracted, green when
    *  they refocus). Default ON — it only ever appears in response to a Focus
@@ -99,6 +114,26 @@ function sanitizeFrequency(raw: unknown): number {
   return raw
 }
 
+// Cooldown minutes: a positive integer, else Mac's default 10. Zero/negative/
+// junk falls back rather than disabling the cooldown (which would let a
+// distracted user be re-billed for a Gemini call every few seconds).
+function sanitizeCooldownMinutes(raw: unknown): number {
+  if (typeof raw !== 'number' || !Number.isInteger(raw) || raw <= 0) return 10
+  return Math.min(raw, 24 * 60) // a day is already absurd; cap the blast radius.
+}
+
+// Excluded apps: a bounded array of non-empty strings. Cap the count and length
+// so a malformed/hostile settings file can't bloat memory or a query.
+function sanitizeExcludedApps(raw: unknown): string[] {
+  if (!Array.isArray(raw)) return []
+  const out: string[] = []
+  for (const v of raw) {
+    if (out.length >= 256) break
+    if (typeof v === 'string' && v.trim() && v.length <= 256) out.push(v.trim())
+  }
+  return out
+}
+
 // Coerce a partial/untrusted object into fully-valid settings. Passing null/
 // undefined yields the defaults, so defaults live in exactly one place.
 export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined): AppSettings {
@@ -122,9 +157,12 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     meeting: sanitizeMeeting(r.meeting),
     lastShownChangelogVersion:
       typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
-    // Opt-IN (=== true), unlike the other flags' opt-out (!== false) — see the
-    // AppSettings field comment.
-    aiProfileEnabled: r.aiProfileEnabled === true,
+    // Opt-OUT (!== false): default ON now that Focus consumes the profile.
+    aiProfileEnabled: r.aiProfileEnabled !== false,
+    focusEnabled: r.focusEnabled !== false,
+    focusNotificationsEnabled: r.focusNotificationsEnabled !== false,
+    focusCooldownMinutes: sanitizeCooldownMinutes(r.focusCooldownMinutes),
+    focusExcludedApps: sanitizeExcludedApps(r.focusExcludedApps),
     glowOverlayEnabled: r.glowOverlayEnabled !== false,
     screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
     notificationsEnabled: r.notificationsEnabled !== false,

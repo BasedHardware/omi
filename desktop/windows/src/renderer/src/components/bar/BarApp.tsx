@@ -162,6 +162,14 @@ export function BarApp(): React.JSX.Element {
   const ptt = usePushToTalk({
     // A blocked voice turn involves no draft — the main window speaks the line.
     onCommit: (text) => void sendFromBar(text, true),
+    // Pre-capture usage veto (macOS PushToTalkManager.isBlockedByUsageLimit): refuse
+    // a PTT hold BEFORE the mic opens when the user is over their monthly chat cap,
+    // instead of recording + transcribing a whole turn only to refuse it at send.
+    // sender.checkSync reads the already-synced local snapshot — synchronous and
+    // fail-open, so the press never awaits. On a block we raise the shared popup on
+    // the main window (spoken:false — the gesture veto is visual only, matching Mac).
+    checkUsageLimit: () => sender.checkSync(),
+    onUsageLimitBlocked: (message) => window.omiBar.notifyUsageLimit({ message, spoken: false }),
     // Barge-in: a new PTT hold cuts off Omi's still-playing spoken reply. The
     // reply plays in the MAIN window (useChat → voiceController), so hop over the
     // bar→main bridge; ChatBridgeHost calls interruptCurrentResponse there.

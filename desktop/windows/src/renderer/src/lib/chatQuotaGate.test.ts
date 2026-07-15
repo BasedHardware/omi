@@ -143,3 +143,39 @@ describe('createChatQuotaGate', () => {
     expect(await gate.check()).toEqual({ blocked: false })
   })
 })
+
+describe('checkSync — synchronous PTT pre-capture veto', () => {
+  it('blocks (with the limit line) from the local snapshot, no network', () => {
+    const fetchQuota = vi.fn(async () => quota({ allowed: false, used: 30 }))
+    const gate = createChatQuotaGate(fetchQuota)
+    gate.applyQuota(quota({ allowed: false, used: 30 }))
+    expect(gate.checkSync()).toEqual({
+      blocked: true,
+      message: limitMessage(quota({ allowed: false, used: 30 }))
+    })
+    // Never awaits a fetch — the gesture path must not stall on the network.
+    expect(fetchQuota).not.toHaveBeenCalled()
+  })
+
+  it('allows an in-quota snapshot', () => {
+    const gate = createChatQuotaGate()
+    gate.applyQuota(quota({ used: 2 }))
+    expect(gate.checkSync()).toEqual({ blocked: false })
+  })
+
+  it('FAILS OPEN with no snapshot — a cold-start hold must let the user speak, never await', () => {
+    const fetchQuota = vi.fn(async () => quota({ allowed: false }))
+    const gate = createChatQuotaGate(fetchQuota)
+    // No sync() yet: unlike check(), checkSync does NOT force a cold-start fetch.
+    expect(gate.checkSync()).toEqual({ blocked: false })
+    expect(fetchQuota).not.toHaveBeenCalled()
+  })
+
+  it('respects the optimistic delta — back-to-back holds between syncs cannot slip past', () => {
+    const gate = createChatQuotaGate()
+    gate.applyQuota(quota({ used: 29 }))
+    expect(gate.checkSync()).toEqual({ blocked: false })
+    gate.recordQuery() // 29 + 1 === 30
+    expect(gate.checkSync()).toMatchObject({ blocked: true })
+  })
+})
