@@ -20,10 +20,15 @@ import {
 import { EchoGate, isHeadsetOutput } from './echoGate'
 import { GATE_REASSERT_MS } from '../../capture/assistantGate'
 import { mintRealtimeToken, MintError } from './tokenMint'
+import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelector'
+import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
+import { buildVoiceSystemInstruction } from './systemInstruction'
+import { getPreferences } from '../preferences'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
 import { synthesizeTts, DEFAULT_TTS_VOICE } from './tts'
+import { chunkTts } from './ttsChunker'
 import type { ProviderSessionCallbacks, ProviderSessionHandle } from './providerSession'
 
 type Listener = (state: VoiceSessionState) => void
@@ -47,6 +52,33 @@ let sinkId = '' // '' = system default
 // In-flight TTS element teardown hook — stopVoiceSession must silence TTS too,
 // otherwise the gate is force-released while Omi is still audible on speakers.
 let stopCurrentTts: (() => void) | null = null
+
+// ── Chunked bar-TTS pipeline state ────────────────────────────────────────────
+// A non-realtime spoken reply is split into chunks (small first, larger after)
+// and synthesized+played pipelined so time-to-first-audio ≈ one small chunk.
+// `ttsGeneration` invalidates every in-flight synth/playback/filler closure the
+// instant a new reply supersedes it OR a PTT barge-in interrupts (macOS
+// FloatingBarVoicePlaybackService.playbackGeneration). `currentTtsAbort` aborts
+// the in-flight chunk fetch so an interrupt resolves speakText promptly — which
+// clears useChat.speaking → the bar orb's speaking glow.
+let ttsGeneration = 0
+let currentTtsAbort: AbortController | null = null
+// The filler phrase (system voice) covering first-chunk synth latency; its own
+// cancel handle, independent of stopCurrentTts, so it can never clobber a real
+// chunk's playback teardown.
+let stopCurrentFiller: (() => void) | null = null
+// Ported from macOS FloatingBarVoicePlaybackService.fillerPhrases. Exported for
+// the pipeline unit test.
+export const FILLER_PHRASES = [
+  'Let me check.',
+  'One moment.',
+  'Looking into it.',
+  'Let me see.',
+  'Checking now.',
+  'Hold on.',
+  'One sec.',
+  'Working on it.'
+]
 
 const events: VoiceEventRecord[] = []
 function record(type: string, detail?: string): void {
@@ -170,8 +202,9 @@ function teardown(): void {
   handle?.stop()
   handle = null
   // Silence any in-flight TTS — releasing the gate while a TTS element keeps
-  // playing on speakers would leak Omi's voice into transcription.
-  stopCurrentTts?.()
+  // playing on speakers would leak Omi's voice into transcription. Also aborts a
+  // chunk fetch, cancels the filler, and bumps the generation so the pipeline bails.
+  resetTtsPipeline()
   navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange)
   // Release the gate NOW — with the session gone there is no more assistant
   // audio; a stuck gate would silently deafen continuous transcription.
@@ -206,16 +239,28 @@ export function getVoiceEvents(): VoiceEventRecord[] {
   return events.slice()
 }
 
-export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Promise<void> {
+export async function startVoiceSession(preferred?: VoiceProvider): Promise<void> {
   if (state.status === 'connecting' || state.status === 'live') return
+  // Refresh the daily Auto pick if stale (fire-and-forget, no-op when fresh) so
+  // the NEXT session uses a current pick; THIS session resolves synchronously
+  // from the cache below. Mirrors Mac's "call refreshIfStale at session start".
+  refreshIfStale()
+  // Same contract for the <about_user> card (macOS refreshAboutUserCard): rebuild
+  // it in the BACKGROUND and start THIS session from the cached value. A cache
+  // miss omits the card rather than adding a network round-trip to PTT latency.
+  refreshAboutUserCard()
+  // No explicit lane (the UI path) → honor the user's provider setting, resolving
+  // 'auto' to the cached concrete pick (macOS effectiveProvider). An explicit
+  // provider (a forced-lane caller / test) bypasses the selector entirely.
+  const preferredProvider = preferred ?? resolveEffectiveVoiceProvider()
   const mySeq = ++startSeq
-  dispatch({ type: 'start', provider: preferred })
-  record('start', preferred)
+  dispatch({ type: 'start', provider: preferredProvider })
+  record('start', preferredProvider)
 
   const headset = await refreshHeadsetState()
 
   // Mint, falling back to the other lane when THIS provider is down/unconfigured.
-  let provider = preferred
+  let provider = preferredProvider
   let token: string
   try {
     try {
@@ -249,6 +294,13 @@ export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Pr
   if (mySeq !== startSeq) return
 
   const cb = makeCallbacks(mySeq)
+  // Assembled synchronously (cached card + a preference read) so both lanes get
+  // the same grounded instruction without delaying the handshake. The continuity
+  // block stays empty until Track 1 feeds the voice-session seed in here.
+  const instructions = buildVoiceSystemInstruction({
+    aboutUser: getAboutUserCard(),
+    userLanguages: getPreferences().voiceLanguages ?? []
+  })
   // Await into a LOCAL first — publishing to the module `handle` before the
   // staleness check would let a stale start overwrite (and then stop+null) a
   // newer session's handle, orphaning its live mic/socket.
@@ -258,11 +310,17 @@ export async function startVoiceSession(preferred: VoiceProvider = 'openai'): Pr
       provider === 'openai'
         ? await startOpenAiSession({
             clientSecret: token,
+            instructions,
             onSpeakers: !headset,
             sinkId: sinkId || undefined,
             cb
           })
-        : await startGeminiSession({ authToken: token, sinkId: sinkId || undefined, cb })
+        : await startGeminiSession({
+            authToken: token,
+            instructions,
+            sinkId: sinkId || undefined,
+            cb
+          })
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })
@@ -316,29 +374,34 @@ async function playTtsBlob(blob: Blob): Promise<void> {
   const url = URL.createObjectURL(blob)
   const el = new Audio()
   el.src = url
-  if (sinkId) {
-    await el.setSinkId(sinkId).catch(() => {
-      /* unknown device — default */
-    })
+  let finish: () => void = () => {}
+  const done = new Promise<void>((resolve) => {
+    finish = resolve
+  })
+  let stopped = false
+  el.onended = () => finish()
+  el.onerror = () => finish()
+  // teardown()/barge-in silences an in-flight TTS: pause the element AND resolve
+  // the waiter so the caller's finally drains the gate immediately. Installed
+  // BEFORE the setSinkId await below so an interrupt landing during device
+  // selection marks this element stopped and it never starts — otherwise it
+  // would play to completion as stale audio after the barge-in.
+  stopCurrentTts = () => {
+    stopped = true
+    try {
+      el.pause()
+    } catch {
+      /* ignore */
+    }
+    finish()
   }
   try {
-    let finish: () => void = () => {}
-    const done = new Promise<void>((resolve) => {
-      finish = resolve
-    })
-    el.onended = () => finish()
-    el.onerror = () => finish()
-    // teardown() silences an in-flight TTS: pause the element AND resolve the
-    // waiter so the caller's finally drains the gate immediately.
-    stopCurrentTts = () => {
-      try {
-        el.pause()
-      } catch {
-        /* ignore */
-      }
-      finish()
+    if (sinkId) {
+      await el.setSinkId(sinkId).catch(() => {
+        /* unknown device — default */
+      })
     }
-    await el.play()
+    if (!stopped) await el.play()
     await done
   } finally {
     stopCurrentTts = null
@@ -418,23 +481,84 @@ export async function playSystemVoice(text: string): Promise<void> {
   })
 }
 
-/**
- * Speak a non-realtime reply through the SAME gated output path: gate on while
- * audible, source text injected into the record, gate releases after playback
- * drains. Works with or without a live session. Prefers backend TTS
- * (/v1/tts/synthesize); when that fails (e.g. the backend's server-key TTS is
- * unavailable) it falls back to the system voice — the same contract as the
- * macOS client — so a spoken reply still happens.
- */
 let ttsSeq = 0
-export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
-  // Resolve the audio source FIRST — if neither lane can speak, throw without
-  // ever engaging the gate or injecting a line for words never said.
-  let play: () => Promise<void>
+
+/** Play a filler phrase (via the system voice) while the FIRST chunk is still
+ *  synthesizing, so a voice reply isn't preceded by dead air. It is cancelled the
+ *  instant the first real chunk's audio is ready (see runChunkedTts) so it can
+ *  only ever fill the pre-first-chunk silence and never overlaps real audio. Its
+ *  own cancel handle keeps it independent of a real chunk's stopCurrentTts. */
+function startFiller(): void {
+  if (typeof window === 'undefined' || !window.speechSynthesis) return
+  const phrase = FILLER_PHRASES[Math.floor(Math.random() * FILLER_PHRASES.length)]
   try {
-    const blob = await synthesizeTts(text, voiceId)
-    play = () => playTtsBlob(blob)
+    const u = new SpeechSynthesisUtterance(phrase)
+    stopCurrentFiller = () => {
+      stopCurrentFiller = null
+      try {
+        window.speechSynthesis.cancel()
+      } catch {
+        /* ignore */
+      }
+    }
+    window.speechSynthesis.speak(u)
+    record('tts-filler', phrase)
+  } catch {
+    stopCurrentFiller = null
+  }
+}
+
+function cancelFiller(): void {
+  const stop = stopCurrentFiller
+  stopCurrentFiller = null
+  stop?.()
+}
+
+/** Invalidate every in-flight synth/playback/filler closure: bump the
+ *  generation, abort the in-flight chunk fetch, cancel the filler, and stop the
+ *  current audio element / system-voice utterance. Shared by a superseding new
+ *  reply, a PTT barge-in (interruptCurrentResponse), and session teardown. */
+function resetTtsPipeline(): void {
+  ttsGeneration++
+  currentTtsAbort?.abort()
+  currentTtsAbort = null
+  cancelFiller()
+  stopCurrentTts?.()
+}
+
+/**
+ * PTT barge-in: stop the current spoken reply immediately — stop playback,
+ * cancel any in-flight synth + filler, reset the pipeline. Wired (over IPC) to
+ * the start of every new PTT hold (macOS PushToTalkManager.startListening →
+ * FloatingBarVoicePlaybackService.interruptCurrentResponse). Aborting the
+ * in-flight synth resolves the pending speakText promise promptly, which clears
+ * useChat.speaking → the bar orb's speaking glow. Safe no-op when nothing plays.
+ */
+export function interruptCurrentResponse(): void {
+  record('tts-interrupt')
+  resetTtsPipeline()
+}
+
+type ChunkAudio =
+  | { kind: 'blob'; blob: Blob; text: string }
+  | { kind: 'fallback'; text: string }
+  | { kind: 'aborted' }
+
+/** Synthesize one chunk, mapping a provider failure to a system-voice fallback
+ *  (with the shared fallback telemetry). A generation bump / abort means an
+ *  interrupt superseded this synth — NOT a provider failure, so no fallback and
+ *  no telemetry. */
+async function synthChunk(
+  text: string,
+  voiceId: string,
+  gen: number,
+  signal: AbortSignal
+): Promise<ChunkAudio> {
+  try {
+    const blob = await synthesizeTts(text, voiceId, signal)
+    return { kind: 'blob', blob, text }
   } catch (e) {
+    if (gen !== ttsGeneration || signal.aborted) return { kind: 'aborted' }
     record('tts-fallback', (e as Error)?.message)
     trackEvent('fallback_triggered', {
       component: 'voice_tts',
@@ -443,9 +567,85 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
       reason: 'provider_unavailable',
       outcome: 'degraded'
     })
-    play = () => playSystemVoice(text)
+    return { kind: 'fallback', text }
   }
+}
+
+async function playChunkAudio(res: ChunkAudio, gen: number): Promise<void> {
+  if (gen !== ttsGeneration || res.kind === 'aborted') return
+  if (res.kind === 'blob') {
+    try {
+      await playTtsBlob(res.blob)
+      return
+    } catch {
+      if (gen !== ttsGeneration) return
+      // Synthesized audio that won't play (bad blob / device gone) — speak this
+      // chunk with the system voice rather than dropping it (macOS parity), and
+      // record the fail-open per the fallback contract.
+      record('tts-fallback', 'playback')
+      trackEvent('fallback_triggered', {
+        component: 'voice_tts',
+        from: 'openai_tts',
+        to: 'system_voice',
+        reason: 'provider_unavailable',
+        outcome: 'degraded'
+      })
+    }
+  }
+  if (gen !== ttsGeneration) return
+  await playSystemVoice(res.text)
+}
+
+/** Pipeline: begin synthesizing chunk N+1 while chunk N plays, so a long reply's
+ *  time-to-first-audio is one small chunk, not the whole reply. */
+async function runChunkedTts(
+  chunks: string[],
+  voiceId: string,
+  gen: number,
+  signal: AbortSignal
+): Promise<void> {
+  // Cover the first-chunk synth latency with a filler ONLY for multi-chunk
+  // replies — a short single-chunk reply keeps its original (filler-free) shape.
+  const useFiller = chunks.length > 1
+  if (useFiller) startFiller()
+  let nextSynth = synthChunk(chunks[0], voiceId, gen, signal)
+  for (let i = 0; i < chunks.length; i++) {
+    const res = await nextSynth
+    if (gen !== ttsGeneration) return
+    // Kick the NEXT chunk's synthesis before playing THIS one (pipelining).
+    if (i + 1 < chunks.length) nextSynth = synthChunk(chunks[i + 1], voiceId, gen, signal)
+    // First real audio preempts the filler — cancel it before any real audio.
+    if (i === 0 && useFiller) cancelFiller()
+    if (res.kind === 'aborted') return
+    await playChunkAudio(res, gen)
+    if (gen !== ttsGeneration) return
+  }
+}
+
+/**
+ * Speak a non-realtime reply through the SAME gated output path: gate on while
+ * audible, source text injected into the record, gate releases after playback
+ * drains. Works with or without a live session. The reply is split into chunks
+ * (small first for a fast start, larger after) and synthesized+played pipelined;
+ * each chunk prefers backend TTS (/v1/tts/synthesize) and falls back to the
+ * system voice — the same contract as the macOS client — so a spoken reply still
+ * happens. A short single-chunk reply keeps the original one-synth-then-play
+ * shape (no filler).
+ */
+export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOICE): Promise<void> {
+  const chunks = chunkTts(text)
+  if (chunks.length === 0) return
+
+  // A fresh reply supersedes anything still playing/synthesizing and takes a new
+  // generation + abort handle (so a barge-in can invalidate exactly this run).
+  resetTtsPipeline()
+  const gen = ttsGeneration
+  const abort = new AbortController()
+  currentTtsAbort = abort
+
   record('tts-start', text.slice(0, 80))
+  // Inject the FULL reply text into the capture record once (echo-gate contract),
+  // regardless of how many chunks it plays as.
   window.omi?.captureCommand({
     type: 'assistant-utterance',
     utteranceId: `tts-${ttsSeq++}`,
@@ -455,8 +655,9 @@ export async function speakText(text: string, voiceId: string = DEFAULT_TTS_VOIC
   gate.playbackStarted(Date.now())
   syncGate()
   try {
-    await play()
+    await runChunkedTts(chunks, voiceId, gen, abort.signal)
   } finally {
+    if (currentTtsAbort === abort) currentTtsAbort = null
     record('tts-end')
     gate.playbackDrained(Date.now())
     syncGate()

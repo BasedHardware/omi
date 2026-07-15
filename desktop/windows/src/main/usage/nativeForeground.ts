@@ -10,6 +10,15 @@ const EVENT_SYSTEM_FOREGROUND = 0x0003
 const WINEVENT_OUTOFCONTEXT = 0x0000
 const OBJID_WINDOW = 0
 
+// DWMWA_EXTENDED_FRAME_BOUNDS. GetWindowRect returns the frame INCLUDING the
+// invisible resize border Win10/11 keeps around every window (~8px/side), and for
+// a MAXIMIZED window that frame deliberately hangs off-screen. EFB returns the
+// visually correct frame — the rect a human sees. Anything that draws relative to
+// a window's edges must use this, never GetWindowRect. Size of a RECT = 16 bytes.
+const DWMWA_EXTENDED_FRAME_BOUNDS = 9
+const SIZEOF_RECT = 16
+const S_OK = 0
+
 export type ForegroundWindowInfo = {
   handle: string | null
   exePath: string | null
@@ -20,6 +29,33 @@ export type ForegroundWindowInfo = {
 
 /** Screen rect in PHYSICAL pixels (Win32 coordinates, not DIPs). */
 export type ForegroundRect = { x: number; y: number; width: number; height: number }
+
+/**
+ * The foreground window sampled atomically in ONE GetForegroundWindow() call:
+ * its DWM extended frame bounds (the visually correct frame, physical px) plus
+ * the state flags a drawing consumer needs to decide whether to draw at all.
+ * `rect` is null when the window has no readable frame (EFB failed AND
+ * GetWindowRect failed).
+ */
+export type ForegroundFrame = {
+  handle: string | null
+  rect: ForegroundRect | null
+  className: string | null
+  exePath: string | null
+  maximized: boolean
+  minimized: boolean
+  visible: boolean
+}
+
+const NO_FRAME: ForegroundFrame = {
+  handle: null,
+  rect: null,
+  className: null,
+  exePath: null,
+  maximized: false,
+  minimized: false,
+  visible: false
+}
 
 type Win32 = {
   getForegroundExePath: () => string | null
@@ -36,6 +72,9 @@ type Win32 = {
     className: string | null
     exePath: string | null
   }
+  // Foreground window's DWM extended frame bounds + state flags — the geometry
+  // source for anything drawn around a window (the focus halo).
+  getForegroundWindowFrame: () => ForegroundFrame
   // Fire `cb` whenever the foreground window changes. Returns an unsubscribe.
   subscribeForegroundChange: (cb: () => void) => () => void
 }
@@ -74,7 +113,64 @@ function load(): Win32 | null {
       bottom: 'int32'
     })
     const GetWindowRect = user32.func('bool GetWindowRect(void* hWnd, _Out_ OMI_RECT* lpRect)')
+    const IsZoomed = user32.func('bool IsZoomed(void* hWnd)')
+    const IsIconic = user32.func('bool IsIconic(void* hWnd)')
+    const IsWindowVisible = user32.func('bool IsWindowVisible(void* hWnd)')
     void RECT
+
+    // dwmapi is loaded lazily-but-eagerly here alongside user32; if it is
+    // unavailable the frame reader falls back to GetWindowRect (and the halo's
+    // maximized gate then rejects, which is the safe direction).
+    let DwmGetWindowAttribute: ((...args: unknown[]) => number) | null = null
+    try {
+      const dwmapi = koffi.load('dwmapi.dll')
+      DwmGetWindowAttribute = dwmapi.func(
+        'int32 DwmGetWindowAttribute(void* hwnd, uint32 dwAttribute, _Out_ OMI_RECT* pvAttribute, uint32 cbAttribute)'
+      ) as (...args: unknown[]) => number
+    } catch (e) {
+      console.warn('[usage] dwmapi unavailable; falling back to GetWindowRect:', e)
+    }
+
+    const rectFrom = (out: {
+      left?: number
+      top?: number
+      right?: number
+      bottom?: number
+    }): ForegroundRect | null => {
+      if (typeof out.left !== 'number' || typeof out.top !== 'number') return null
+      if (typeof out.right !== 'number' || typeof out.bottom !== 'number') return null
+      return {
+        x: out.left,
+        y: out.top,
+        width: out.right - out.left,
+        height: out.bottom - out.top
+      }
+    }
+
+    // The window's VISUALLY correct frame (physical px). EFB first; GetWindowRect
+    // only as a last resort (it includes the invisible resize border — callers
+    // that need exact edges must treat that fallback as untrustworthy).
+    const frameRectFromHwnd = (hwnd: unknown): ForegroundRect | null => {
+      if (DwmGetWindowAttribute) {
+        try {
+          const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+          const hr = DwmGetWindowAttribute(hwnd, DWMWA_EXTENDED_FRAME_BOUNDS, out, SIZEOF_RECT)
+          if (hr === S_OK) {
+            const r = rectFrom(out)
+            if (r) return r
+          }
+        } catch {
+          // fall through to GetWindowRect
+        }
+      }
+      try {
+        const out: { left?: number; top?: number; right?: number; bottom?: number } = {}
+        if (GetWindowRect(hwnd, out)) return rectFrom(out)
+      } catch {
+        return null
+      }
+      return null
+    }
 
     // Read an HWND's title text. Returns null on any edge. Titles can be long
     // (browser tabs include the page name), so allow 512 UTF-16 chars.
@@ -213,6 +309,25 @@ function load(): Win32 | null {
           rect = null
         }
         return { rect, className: classNameFromHwnd(hwnd), exePath: exePathFromHwnd(hwnd) }
+      },
+      getForegroundWindowFrame(): ForegroundFrame {
+        const hwnd = GetForegroundWindow()
+        if (!hwnd) return NO_FRAME
+        let handle: string | null = null
+        try {
+          handle = koffi.address(hwnd).toString()
+        } catch {
+          handle = null
+        }
+        return {
+          handle,
+          rect: frameRectFromHwnd(hwnd),
+          className: classNameFromHwnd(hwnd),
+          exePath: exePathFromHwnd(hwnd),
+          maximized: !!IsZoomed(hwnd),
+          minimized: !!IsIconic(hwnd),
+          visible: !!IsWindowVisible(hwnd)
+        }
       }
     }
     return cached
@@ -273,6 +388,24 @@ export function getForegroundWindowRect(): {
   } catch (e) {
     console.warn('[usage] getForegroundWindowRect failed:', e)
     return { rect: null, className: null, exePath: null }
+  }
+}
+
+// Returns the current foreground window's DWM extended frame bounds (physical px)
+// + class/exe + maximized/minimized/visible flags, sampled in one
+// GetForegroundWindow() call. All-null/false when unavailable. Never throws.
+//
+// Use this — NOT getForegroundWindowRect — for anything drawn around the window's
+// edges: GetWindowRect's rect includes the invisible resize border and hangs
+// off-screen when maximized (that bug shipped once already: three of four glow
+// bands landed off-screen and the fourth read as a stray bar).
+export function getForegroundWindowFrame(): ForegroundFrame {
+  if (process.platform !== 'win32') return NO_FRAME
+  try {
+    return load()?.getForegroundWindowFrame() ?? NO_FRAME
+  } catch (e) {
+    console.warn('[usage] getForegroundWindowFrame failed:', e)
+    return NO_FRAME
   }
 }
 

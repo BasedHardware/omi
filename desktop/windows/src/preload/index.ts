@@ -4,10 +4,15 @@ import type {
   OmiBridgeApi,
   OmiOverlayApi,
   OmiBarApi,
+  OmiGlowApi,
+  GlowPresetName,
+  GlowShowPayload,
   BarMode,
   BarShowPayload,
   BarChatState,
+  BarUsageLimitPayload,
   LocalConversation,
+  ConversationFolder,
   ConversationSyncPatch,
   CaptureChoice,
   ListenStartArgs,
@@ -21,6 +26,8 @@ import type {
   OnboardingGraphEdge,
   UsageSettings,
   RewindSettings,
+  RewindSearchGroup,
+  RewindCaptureDirective,
   InsightPayload,
   MeetingToastPayload,
   WhatsNewPayload,
@@ -29,8 +36,11 @@ import type {
   CodingAgentCommandOverrides,
   CodingAgentEvent,
   CodingAgentId,
-  CodingAgentRunArgs
+  CodingAgentRunArgs,
+  VoiceTurnOutboxInput,
+  AiUserProfileRecord
 } from '../shared/types'
+import type { ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -46,8 +56,22 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('db:updateLocalConversationTitle', id, title),
   updateLocalConversationSync: (id: string, patch: ConversationSyncPatch) =>
     ipcRenderer.invoke('db:updateLocalConversationSync', id, patch),
+  // --- Track 4: conversation folders / starred ---
+  listConversationFolders: () => ipcRenderer.invoke('db:listConversationFolders'),
+  replaceConversationFolders: (folders: ConversationFolder[]) =>
+    ipcRenderer.invoke('db:replaceConversationFolders', folders),
+  upsertConversationFolder: (folder: ConversationFolder) =>
+    ipcRenderer.invoke('db:upsertConversationFolder', folder),
+  deleteConversationFolder: (id: string) => ipcRenderer.invoke('db:deleteConversationFolder', id),
   claimConversationForPosting: (id: string, resetAttempts?: boolean) =>
     ipcRenderer.invoke('db:claimConversationForPosting', id, resetAttempts),
+  // --- Track 2: Voice & PTT depth (voice turn outbox) ---
+  insertVoiceTurn: (entry: VoiceTurnOutboxInput) => ipcRenderer.invoke('db:insertVoiceTurn', entry),
+  listPendingVoiceTurns: (limit?: number) => ipcRenderer.invoke('db:listPendingVoiceTurns', limit),
+  markVoiceTurnAcked: (idempotencyKey: string) =>
+    ipcRenderer.invoke('db:markVoiceTurnAcked', idempotencyKey),
+  recordVoiceTurnFailure: (idempotencyKey: string, error: string) =>
+    ipcRenderer.invoke('db:recordVoiceTurnFailure', idempotencyKey, error),
   wipeUserData: () => ipcRenderer.invoke('db:wipeUserData'),
   onRecordHotkey: (cb: (choice: CaptureChoice) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, choice: CaptureChoice): void => cb(choice)
@@ -127,6 +151,16 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  // --- Track 3 (AI user profile) ---
+  aiProfileSetSession: (
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => ipcRenderer.invoke('aiProfile:setSession', session),
+  aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
+    ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
+  aiProfileGetLatest: () => ipcRenderer.invoke('aiProfile:getLatest') as Promise<string | null>,
+  aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
+  aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
+  aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
   memoriesBulkDelete: (args: { baseURL: string; token: string; ids: string[] }) =>
     ipcRenderer.invoke('memories:bulkDelete', args),
   onMemoriesDeleteProgress: (
@@ -143,7 +177,21 @@ const omi: OmiBridgeApi = {
   rewindDayBounds: () => ipcRenderer.invoke('rewind:dayBounds'),
   rewindFrameCount: () => ipcRenderer.invoke('rewind:frameCount'),
   rewindSearch: (query: string) => ipcRenderer.invoke('rewind:search', query),
+  // --- Track 4 (Rewind semantic search) --- Phase 2 of a search: the same results
+  // with semantic hits merged in, pushed if/when the embedding round-trip lands.
+  // Keyword results are already on screen by then — see the rewind:search handler.
+  onRewindSearchResults: (cb: (r: { query: string; groups: RewindSearchGroup[] }) => void) => {
+    const listener = (_e: unknown, r: { query: string; groups: RewindSearchGroup[] }): void => cb(r)
+    ipcRenderer.on('rewind:search-results', listener)
+    return () => ipcRenderer.removeListener('rewind:search-results', listener)
+  },
+  // Session relay for the main-process embedding indexer + query embedder, which
+  // are inert without a Firebase token.
+  rewindSetEmbedSession: (session: { desktopApiBase: string; token: string } | null) =>
+    ipcRenderer.invoke('rewind:setEmbedSession', session),
   rewindFrameImage: (imagePath: string) => ipcRenderer.invoke('rewind:frameImage', imagePath),
+  // --- Track 4 --- per-line OCR boxes for the on-image search highlight overlay
+  rewindFrameOcrLines: (frameId: number) => ipcRenderer.invoke('rewind:frameOcrLines', frameId),
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
@@ -161,6 +209,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
   },
+  byokGetAll: () => ipcRenderer.invoke('byok:getAll'),
+  byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
+  byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),
+  byokClearAll: () => ipcRenderer.invoke('byok:clearAll'),
+  byokIsActive: () => ipcRenderer.invoke('byok:isActive'),
   screenSynthFramesSince: () => ipcRenderer.invoke('screenSynth:framesSince'),
   screenSynthGetState: () => ipcRenderer.invoke('screenSynth:getState'),
   screenSynthSetState: (patch) => ipcRenderer.invoke('screenSynth:setState', patch),
@@ -170,6 +223,12 @@ const omi: OmiBridgeApi = {
     const listener = (_e: unknown, s: RewindSettings): void => cb(s)
     ipcRenderer.on('rewind:settings', listener)
     return () => ipcRenderer.removeListener('rewind:settings', listener)
+  },
+  rewindGetCaptureDirective: () => ipcRenderer.invoke('rewind:getCaptureDirective'),
+  onRewindCaptureDirective: (cb: (d: RewindCaptureDirective) => void) => {
+    const listener = (_e: unknown, d: RewindCaptureDirective): void => cb(d)
+    ipcRenderer.on('rewind:capture-directive', listener)
+    return () => ipcRenderer.removeListener('rewind:capture-directive', listener)
   },
   insightGetSettings: () => ipcRenderer.invoke('insight:getSettings'),
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
@@ -231,6 +290,10 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('automation:step', listener)
     return () => ipcRenderer.removeListener('automation:step', listener)
   },
+  // PTT system-audio mute (Track 2 A4). `send`, never `invoke` — the hold path
+  // is never awaited, so a slow or missing helper can't delay a capture.
+  muteSystemAudio: () => ipcRenderer.send('audio:muteSystemAudio'),
+  restoreSystemAudio: () => ipcRenderer.send('audio:restoreSystemAudio'),
   notifyConversationsChanged: () => ipcRenderer.send('conversations:notify-changed'),
   onConversationsChanged: (cb: () => void) => {
     const listener = (): void => cb()
@@ -245,6 +308,17 @@ const omi: OmiBridgeApi = {
     ): void => cb(payload)
     ipcRenderer.on('chat:barSend', listener)
     return () => ipcRenderer.removeListener('chat:barSend', listener)
+  },
+  onBarChatInterrupt: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('chat:barInterrupt', listener)
+    return () => ipcRenderer.removeListener('chat:barInterrupt', listener)
+  },
+  onBarUsageLimit: (cb: (payload: BarUsageLimitPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, payload: BarUsageLimitPayload): void =>
+      cb(payload)
+    ipcRenderer.on('chat:barUsageLimit', listener)
+    return () => ipcRenderer.removeListener('chat:barUsageLimit', listener)
   },
   onBarRequestChatState: (cb: () => void) => {
     const listener = (): void => cb()
@@ -274,13 +348,23 @@ const omi: OmiBridgeApi = {
   },
   getRecordHotkey: () => ipcRenderer.invoke('shortcuts:get-record'),
   setRecordHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-record', accelerator),
+  setRecordHotkeyEnabled: (enabled: boolean) =>
+    ipcRenderer.invoke('shortcuts:set-record-enabled', enabled),
   getSummonHotkey: () => ipcRenderer.invoke('shortcuts:get-summon'),
   setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
-  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture')
+  resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),
+  // --- Track 6 (UI surfaces) additions ---
+  resetWindowSize: () => ipcRenderer.invoke('window:resetSize'),
+  // --- Track 1 (agent control plane) — trusted direct control ---
+  agentControlCall: (name: string, input: Record<string, unknown> = {}) =>
+    ipcRenderer.invoke('agentControl:call', name, input),
+  // No agentControlSetOwner: the renderer must not be able to repoint the
+  // kernel's active owner. See src/main/ipc/agentControl.ts.
+  agentControlTools: () => ipcRenderer.invoke('agentControl:tools')
 }
 
 const omiOverlay: OmiOverlayApi = {
@@ -343,6 +427,8 @@ const omiBar: OmiBarApi = {
   keepAlive: (active: boolean) => ipcRenderer.send('bar:keepAlive', active),
   sendChat: (text: string, fromVoice: boolean) =>
     ipcRenderer.send('bar:sendChat', { text, fromVoice }),
+  interruptTts: () => ipcRenderer.send('bar:interruptTts'),
+  notifyUsageLimit: (payload: BarUsageLimitPayload) => ipcRenderer.send('bar:usageLimit', payload),
   requestChatState: () => ipcRenderer.send('bar:requestChatState'),
   onChatState: (cb: (state: BarChatState) => void) => {
     const listener = (_e: Electron.IpcRendererEvent, state: BarChatState): void => cb(state)
@@ -374,12 +460,31 @@ const omiBar: OmiBarApi = {
     ipcRenderer.invoke('bar:setContentProtection', enabled)
 }
 
+const omiGlow: OmiGlowApi = {
+  ready: () => ipcRenderer.send('glow:ready'),
+  showAck: (token: number) => ipcRenderer.send('glow:showAck', token),
+  trigger: (preset: GlowPresetName) => ipcRenderer.send('glow:trigger', preset),
+  dismiss: () => ipcRenderer.send('glow:dismiss'),
+  getCurrent: () => ipcRenderer.invoke('glow:getCurrent'),
+  onShow: (cb: (p: GlowShowPayload) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, p: GlowShowPayload): void => cb(p)
+    ipcRenderer.on('glow:show', listener)
+    return () => ipcRenderer.removeListener('glow:show', listener)
+  },
+  onHide: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('glow:hide', listener)
+    return () => ipcRenderer.removeListener('glow:hide', listener)
+  }
+}
+
 if (process.contextIsolated) {
   try {
     contextBridge.exposeInMainWorld('electron', electronAPI)
     contextBridge.exposeInMainWorld('omi', omi)
     contextBridge.exposeInMainWorld('omiOverlay', omiOverlay)
     contextBridge.exposeInMainWorld('omiBar', omiBar)
+    contextBridge.exposeInMainWorld('omiGlow', omiGlow)
   } catch (error) {
     console.error(error)
   }
@@ -392,4 +497,6 @@ if (process.contextIsolated) {
   window.omiOverlay = omiOverlay
   // @ts-ignore (define in dts)
   window.omiBar = omiBar
+  // @ts-ignore (define in dts)
+  window.omiGlow = omiGlow
 }

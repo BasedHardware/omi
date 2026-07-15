@@ -1,7 +1,14 @@
 import { useEffect, useRef, useState } from 'react'
 import { reduce, initialState, type PttEvent, type PttState } from '../lib/ptt/machine'
 import { voicedStats } from '../lib/ptt/gate'
-import { startPttCapture, warmPttMic, releasePttMic, type PttCapture } from '../lib/ptt/capture'
+import {
+  startPttCapture,
+  warmPttMic,
+  releasePttMic,
+  rebuildPttMic,
+  type PttCapture
+} from '../lib/ptt/capture'
+import { DeadMicPolicy, applyDeadMicTurn } from '../lib/ptt/deadMicPolicy'
 import {
   startPttStream,
   batchTranscribe,
@@ -9,6 +16,8 @@ import {
   prefetchAuthToken,
   type PttStream
 } from '../lib/ptt/transport'
+import { startPttKeywordCollection } from '../lib/ptt/vocabulary'
+import { applyPttSystemAudio, restoreSystemAudio } from '../lib/ptt/systemAudioMute'
 import {
   HOLD_THRESHOLD_MS,
   STREAM_FINALIZE_DEADLINE_MS,
@@ -44,6 +53,11 @@ type Options = {
   restoreDraft: (snapshot: string) => void
   /** Current draft, read at key-down on the window-level (unfocused) hold path. */
   getDraft: () => string
+  /** Fires at the start of every new PTT hold (once the hold threshold is
+   *  crossed and capture begins) — the barge-in seam. macOS calls
+   *  FloatingBarVoicePlaybackService.interruptCurrentResponse() at exactly this
+   *  point so a new hold cuts off Omi's still-playing spoken reply. */
+  onHoldStart?: () => void
 }
 
 export type PushToTalk = {
@@ -77,6 +91,12 @@ const HINTS = {
   'too-long': { text: RECORDING_TOO_LONG_MESSAGE, ms: TOO_LONG_HINT_MS },
   'dead-mic': {
     text: 'Mic heard nothing — check your input device in Windows sound settings',
+    ms: TOO_LONG_HINT_MS
+  },
+  // Escalated after repeated dead-mic turns (silent-mic recovery, A7b): the
+  // automatic capture-stack rebuild didn't help, so prompt a stronger action.
+  'dead-mic-escalated': {
+    text: 'Mic still silent — check your microphone, or restart Omi',
     ms: TOO_LONG_HINT_MS
   }
 } as const
@@ -133,6 +153,9 @@ export function usePushToTalk(opts: Options): PushToTalk {
   // Space-inactivity window (short after a mere tap, long after PTT use) — or on
   // overlay blur/hide.
   const micIdleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  // Consecutive dead-mic turns across holds (macOS PTTSilentMicRecoveryPolicy):
+  // drives the capture-rebuild-then-escalate ladder. Persists across holds.
+  const deadMicPolicyRef = useRef(new DeadMicPolicy())
 
   const optsRef = useRef(opts)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref (once-registered listeners read the newest callbacks)
@@ -187,7 +210,19 @@ export function usePushToTalk(opts: Options): PushToTalk {
     const { state, effects } = reduce(job.state, event)
     job.state = state
 
+    // Whether THIS step's terminal turn was classed dead-mic — the dead-mic hint's
+    // display is deferred to captureEnded so the silent-mic policy can pick base vs
+    // escalated text (showHint and captureEnded arrive in the same effects batch).
+    let deadMicTurn = false
+
     for (const eff of effects) {
+      // System-audio mute (A4, macOS SystemAudioMuteController): mute other apps
+      // at capture-START (startCapture) and restore at EVERY capture-END path —
+      // release (startDrain), cancel / watchdog / unmount (stopCapture). See
+      // lib/ptt/systemAudioMute.ts for the pref gate and the mapping. Foreground
+      // only: a superseded background job's late teardown must never unmute the
+      // hold that replaced it. Fire-and-forget — never delays PTT.
+      if (isForeground(job)) applyPttSystemAudio(eff.kind)
       switch (eff.kind) {
         case 'startCapture': {
           job.capturePromise = startPttCapture({
@@ -226,6 +261,13 @@ export function usePushToTalk(opts: Options): PushToTalk {
               dispatch(job, { type: 'CANCEL' })
               return null
             })
+          break
+        }
+        case 'startVocabulary': {
+          // Overlap keyword collection with the hold so its bounded OCR is free
+          // by key-up; batchTranscribe consumes the cached result. Best-effort —
+          // startPttKeywordCollection never throws.
+          startPttKeywordCollection()
           break
         }
         case 'startStream': {
@@ -319,6 +361,12 @@ export function usePushToTalk(opts: Options): PushToTalk {
           break
         }
         case 'showHint': {
+          // Defer the dead-mic hint to the policy step (base vs escalated); show
+          // the other hints (too-short / too-long) immediately.
+          if (eff.hint === 'dead-mic') {
+            deadMicTurn = true
+            break
+          }
           if (isForeground(job)) showHint(eff.hint)
           break
         }
@@ -329,6 +377,16 @@ export function usePushToTalk(opts: Options): PushToTalk {
         }
         case 'captureEnded': {
           optsRef.current.onCaptureEnd?.()
+          // Silent-mic escalation (A7b, macOS PTTSilentMicRecoveryPolicy): count
+          // consecutive dead-mic turns — rebuild the capture stack at 2, escalate
+          // the hint + emit distinct telemetry at 3. A non-dead turn resets. Only
+          // the foreground turn drives UI + recovery.
+          if (isForeground(job)) {
+            applyDeadMicTurn(deadMicPolicyRef.current, deadMicTurn, {
+              rebuild: rebuildPttMic,
+              showHint
+            })
+          }
           break
         }
       }
@@ -349,6 +407,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
   }
 
   const startHold = (): void => {
+    // Barge-in: a new hold interrupts Omi's still-playing spoken reply at
+    // hold-start (macOS PushToTalkManager.startListening → interruptCurrentResponse),
+    // before mic capture begins. Safe no-op when nothing is playing.
+    optsRef.current.onHoldStart?.()
     // A prior job still pre-release can't coexist with a new hold (only possible
     // via focus glitches); one already transcribing keeps running in the
     // background and commits on its own — the new hold never kills it.
@@ -517,6 +579,10 @@ export function usePushToTalk(opts: Options): PushToTalk {
         if (job.state.phase !== 'idle') dispatch(job, { type: 'CANCEL' })
       }
       releasePttMic()
+      // Belt-and-braces: the CANCELs above already restore via stopCapture, but a
+      // mute must NEVER outlive the hook — an unmount is the last chance to undo
+      // it. Unconditional + idempotent (a no-op when nothing is muted).
+      restoreSystemAudio()
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
