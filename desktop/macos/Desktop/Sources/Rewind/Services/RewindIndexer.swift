@@ -88,8 +88,20 @@ actor RewindIndexer {
     }
 
     /// Try to initialize with exponential backoff. Returns true if initialized.
-    private func ensureInitialized() async -> Bool {
-        if isInitialized { return true }
+    func ensureInitialized() async -> Bool {
+        if isInitialized {
+            // The database is the authoritative readiness signal. It closes its own
+            // pool after repeated I/O/corruption errors (RewindDatabase.reportQueryError);
+            // this cached flag then goes stale and every frame fails with
+            // databaseNotInitialized until periodic cleanup reopens it up to 6h later.
+            // Revalidate against the database and drop the stale flag so this frame
+            // reopens it through the normal backoff path below.
+            if await RewindDatabase.shared.isInitialized {
+                return true
+            }
+            isInitialized = false
+            log("RewindIndexer: Database closed after initialization (self-recovery); reinitializing")
+        }
 
         // Check backoff timer - skip if too soon after last failure
         if Date() < nextRetryTime {
