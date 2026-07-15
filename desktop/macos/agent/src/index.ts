@@ -791,6 +791,53 @@ function startOmiToolsRelay(): Promise<string> {
                 continue;
               }
 
+              if (authorized.canonicalToolName === "search_chat_history") {
+                void (async () => {
+                  let result: string;
+                  let outcome: "succeeded" | "failed" = "succeeded";
+                  try {
+                    if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+                    runtimeKernel.markRunToolInvocationDispatched(authorized);
+                    const search = runtimeKernel.searchAuthorizedChatHistory({
+                      invocation: authorized,
+                      toolInput: routedProposal.toolInput,
+                      activeOwnerId: () => currentOwnerId,
+                    });
+                    result = JSON.stringify(search);
+                  } catch {
+                    outcome = "failed";
+                    // Search results and journal details are transcript data.
+                    // Keep relay diagnostics shape-only even on malformed input.
+                    result = relayError("chat_history_search_failed", "Chat history search could not be completed");
+                  }
+                  const finalizedResult = finalizeRelayResult(msg.callId, result, authorized, outcome);
+                  const finalizedOutcome = controlToolInvocationOutcome(finalizedResult);
+                  try {
+                    runtimeKernel?.completeRunToolInvocation({
+                      invocationId: authorized.invocationId,
+                      ownerId: authorized.ownerId,
+                      sessionId: authorized.sessionId,
+                      runId: authorized.runId,
+                      attemptId: authorized.attemptId,
+                      profileGeneration: authorized.profileGeneration,
+                      manifestVersion: authorized.manifestVersion,
+                      manifestDigest: authorized.manifestDigest,
+                      daemonBootEpoch: authorized.daemonBootEpoch,
+                      executionGeneration: authorized.executionGeneration,
+                      inputHash: authorized.inputHash,
+                      capabilityRef: authorized.capabilityRef,
+                      activeOwnerId: currentOwnerId,
+                      outcome: finalizedOutcome,
+                      result: finalizedResult,
+                    });
+                  } catch (error) {
+                    logErr(`Failed to complete chat-history invocation ${authorized.invocationId}: ${error}`);
+                  }
+                  writeFinalizedRelayToolResult(client, msg.callId, finalizedResult);
+                })();
+                continue;
+              }
+
               const callId = msg.callId;
               const pendingKey = toolCallPendingKey({
                 invocationId,

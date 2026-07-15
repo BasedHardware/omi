@@ -25,6 +25,7 @@ import {
   migrateJournalConversation,
   recordJournalExchange,
   recordJournalTurn,
+  searchJournalConversation,
   settleClearedBackendTurnClaim,
   assertPublicJournalUpdatePolicy,
   terminalizeJournalTurn,
@@ -148,6 +149,106 @@ describe("kernel conversation journal", () => {
       expect(journalStorageSnapshot(fixture.store)).toEqual(before);
       fixture.store.close();
     }
+  });
+
+  it("searches the current journal generation with date bounds, excerpts, and a capped result count", () => {
+    const fixture = newSurface("main_chat", "chat", "history-search");
+    recordCompletedTextTurn(fixture, "search-old", "Decision: keep the ambient notes private.", 1_000);
+    recordCompletedTextTurn(fixture, "search-outside-range", "Decision: keep the ambient notes private.", 2_000);
+    for (let index = 0; index < 24; index += 1) {
+      recordCompletedTextTurn(fixture, `search-limit-${index}`, `Decision ${index}: keep the ambient notes private.`, 3_000 + index);
+    }
+
+    const dateFiltered = searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "ambient notes",
+      startDate: new Date(1_000).toISOString(),
+      endDate: new Date(1_000).toISOString(),
+    });
+    expect(dateFiltered).toEqual([{
+      timestamp: new Date(1_000).toISOString(),
+      role: "assistant",
+      excerpt: "Decision: keep the ambient notes private.",
+    }]);
+
+    const capped = searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "ambient notes",
+      limit: 999,
+    });
+    expect(capped).toHaveLength(20);
+    expect(capped[0]?.timestamp).toBe(new Date(3_023).toISOString());
+    expect(capped.every((match) => match.excerpt.length <= 322)).toBe(true);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "no matching journal text",
+    })).toEqual([]);
+    fixture.store.close();
+  });
+
+  it("keeps search owner-fenced and excludes a cleared journal generation", () => {
+    const fixture = newSurface("main_chat", "chat", "history-generation");
+    recordCompletedTextTurn(fixture, "search-cleared", "A private historic decision.", 1_000);
+    const other = insertSurface(fixture.store, "main_chat", "chat", "history-other", "other-owner");
+    recordJournalTurn(fixture.store, {
+      ownerId: other.ownerId,
+      conversationId: other.conversationId,
+      turnId: "search-other-owner",
+      role: "assistant",
+      surfaceKind: "main_chat",
+      origin: "typed_chat",
+      status: "completed",
+      content: "A private historic decision.",
+      contentBlocks: [],
+      createdAtMs: 1_001,
+    });
+
+    expect(() => searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: other.conversationId,
+      query: "private historic",
+    })).toThrow(/outside owner scope/i);
+    const cleared = clearJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      expectedGeneration: 1,
+      nowMs: 2_000,
+    });
+    recordCompletedTextTurn(fixture, "search-current", "A current private decision.", 2_001);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "historic decision",
+    })).toEqual([]);
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "current private",
+    })).toEqual([{
+      timestamp: new Date(2_001).toISOString(),
+      role: "assistant",
+      excerpt: "A current private decision.",
+    }]);
+    expect(cleared.generation).toBe(2);
+    fixture.store.close();
+  });
+
+  it("never scans past the newest 500 current-generation journal turns", () => {
+    const fixture = newSurface("main_chat", "chat", "history-bounded");
+    recordCompletedTextTurn(fixture, "search-outside-window", "needle only in the oldest turn", 1_000);
+    for (let index = 0; index < 500; index += 1) {
+      recordCompletedTextTurn(fixture, `search-window-${index}`, `Recent non-match ${index}`, 2_000 + index);
+    }
+
+    expect(searchJournalConversation(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+      query: "needle only",
+    })).toEqual([]);
+    fixture.store.close();
   });
 
   it("projects shared chat revisions through the requesting binding with owner-fenced wakes", () => {

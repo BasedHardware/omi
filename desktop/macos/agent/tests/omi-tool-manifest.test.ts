@@ -169,9 +169,10 @@ describe("omi tool manifest", () => {
     expect(capabilityOffBytes).toBe(legacyBytes);
     expect(nonMainBytes).toBe(legacyBytes);
     expect(capabilityOffBytes).not.toContain("render_chat_blocks");
+    expect(capabilityOffBytes).not.toContain("search_chat_history");
   });
 
-  it("exposes render_chat_blocks only to the authorized main-chat stdio projection", () => {
+  it("exposes chat-first tools only to the authorized main-chat stdio projection", () => {
     const enabled = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
     });
@@ -180,7 +181,9 @@ describe("omi tool manifest", () => {
     });
 
     expect(enabled.map((tool) => tool.name)).toContain("render_chat_blocks");
+    expect(enabled.map((tool) => tool.name)).toContain("search_chat_history");
     expect(snapshot.advertisedToolNames).toContain("render_chat_blocks");
+    expect(snapshot.advertisedToolNames).toContain("search_chat_history");
     expect(snapshot.manifestDigest).not.toBe(buildToolAvailabilitySnapshot("omi-tools-stdio").manifestDigest);
     expect(toolNamesForAdapter("pi-mono", {
       surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
