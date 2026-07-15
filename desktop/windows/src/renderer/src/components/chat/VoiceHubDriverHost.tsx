@@ -35,6 +35,7 @@ export function VoiceHubDriverHost(): null {
   //   * final transcript — the ONE chat engine's send (fromVoice ⇒ spoken reply).
   //   * orb projection — publishVoiceHubState (main → bar).
   const [driver] = useState(
+    // eslint-disable-next-line react-hooks/refs -- latest-ref (sendRef) is read at turn-commit time inside the once-built driver, never during render
     () =>
       new VoiceHubTurnDriver({
         createHub: (events) => new HubController({ events }),
