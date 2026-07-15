@@ -594,6 +594,59 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
     await expect(adapter.start()).rejects.toThrow('requires config.authToken')
     expect(spawn).not.toHaveBeenCalled()
   })
+
+  it('injects the complete OMI_BYOK_* set from config.byokEnv at spawn', async () => {
+    const adapter = new PiMonoAdapter(
+      {
+        authToken: 'firebase-id-token-xyz',
+        byokEnv: {
+          OMI_BYOK_OPENAI: 'sk-openai',
+          OMI_BYOK_ANTHROPIC: 'sk-ant',
+          OMI_BYOK_GEMINI: 'gm-key',
+          OMI_BYOK_DEEPGRAM: 'dg-key'
+        }
+      },
+      { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    await adapter.start()
+
+    const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+      string,
+      string[],
+      { env: Record<string, string> }
+    ]
+    expect(options.env.OMI_BYOK_OPENAI).toBe('sk-openai')
+    expect(options.env.OMI_BYOK_ANTHROPIC).toBe('sk-ant')
+    expect(options.env.OMI_BYOK_GEMINI).toBe('gm-key')
+    expect(options.env.OMI_BYOK_DEEPGRAM).toBe('dg-key')
+    // Managed OMI_API_KEY is always the Firebase token, never a BYOK key.
+    expect(options.env.OMI_API_KEY).toBe('firebase-id-token-xyz')
+
+    await adapter.stop()
+  })
+
+  it('scrubs inherited OMI_BYOK_* and injects nothing when config.byokEnv is absent', async () => {
+    // A stale OMI_BYOK_* leaking from the parent env must never reach the child.
+    process.env.OMI_BYOK_OPENAI = 'stale-inherited'
+    try {
+      const adapter = new PiMonoAdapter(
+        { authToken: 'firebase-id-token-xyz' },
+        { piPath: '/fake/pi.js', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      await adapter.start()
+
+      const [, , options] = vi.mocked(spawn).mock.calls[0] as [
+        string,
+        string[],
+        { env: Record<string, string> }
+      ]
+      expect(options.env.OMI_BYOK_OPENAI).toBeUndefined()
+
+      await adapter.stop()
+    } finally {
+      delete process.env.OMI_BYOK_OPENAI
+    }
+  })
 })
 
 describe('PiMonoAdapter image channel (no bytes leak into text)', () => {
