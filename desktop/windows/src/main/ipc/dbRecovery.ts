@@ -75,10 +75,10 @@ export interface RecoveryDriver {
 
 // Primary result codes (err & 0xff). 11 = SQLITE_CORRUPT, 26 = SQLITE_NOTADB
 // ("file is not a database" — what a garbage/overwritten header produces).
+// SQLITE_IOERR_CORRUPTFS (extended 6922, primary 10 = SQLITE_IOERR) is corruption
+// too, but its primary code is access-like, so it is matched by its exact extended
+// code at the very top of isCorruptionError, ahead of the access gate.
 const CORRUPT_PRIMARY_CODES = new Set([11, 26])
-// Extended codes whose primary code is NOT itself corruption. 6922 =
-// SQLITE_IOERR_CORRUPTFS (primary 10 = SQLITE_IOERR), which macOS matches by name.
-const CORRUPT_EXTENDED_CODES = new Set([6922])
 
 const CORRUPT_MESSAGE_PATTERNS = [
   'database disk image is malformed',
@@ -140,7 +140,6 @@ export function isCorruptionError(err: unknown): boolean {
   if (isAccessError(err)) return false
   if (code.startsWith('SQLITE_CORRUPT') || code.startsWith('SQLITE_NOTADB')) return true
   if (typeof e.errcode === 'number') {
-    if (CORRUPT_EXTENDED_CODES.has(e.errcode)) return true
     // eslint-disable-next-line no-bitwise -- SQLite extended codes are primary | (sub << 8)
     if (CORRUPT_PRIMARY_CODES.has(e.errcode & 0xff)) return true
   }

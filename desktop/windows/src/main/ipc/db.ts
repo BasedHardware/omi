@@ -234,13 +234,17 @@ export function initDatabase(): RecoveryStatus {
 function get(): Database.Database {
   if (db) return db
   const file = dbFilePath()
+  const backups = backupsDir()
+  const log = (m: string): void => console.log(m)
+  const reopen = (): RecoveryDb =>
+    openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backups }).db
   // Detect + recover corruption BEFORE any schema work. A healthy database is
   // opened untouched; only a positively-classified corrupt one is backed up,
   // salvaged and replaced. See dbRecovery.ts.
   const opened = openDatabaseWithRecovery(file, betterSqliteDriver, {
-    backupsDir: backupsDir(),
+    backupsDir: backups,
     hooks: {
-      log: (m) => console.log(m),
+      log,
       onCorruption: (err) => {
         // Silent UX healing is fine; silent ops is not (AGENTS.md). No Windows
         // recordFallback emitter exists, so this is console + Sentry.
@@ -258,18 +262,18 @@ function get(): Database.Database {
   // state, and gives up after MAX_REPAIR_ATTEMPTS rather than looping forever.
   if (!recoveryStatus.recovered && isCorruptionSuspected(handle)) {
     const hooks = {
-      log: (m: string) => console.log(m),
+      log,
       onCorruption: (err: unknown) => {
         console.error('db: corruption confirmed on restart — repairing', err)
         captureError(err, { area: 'db_corruption_confirmed', extra: { file } })
       }
     }
     const outcome = repairSuspectedCorruption(handle, file, betterSqliteDriver, {
-      backupsDir: backupsDir(),
+      backupsDir: backups,
       hooks
     })
     if (outcome.action === 'repaired') {
-      handle = openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backupsDir() }).db
+      handle = reopen()
       recoveryStatus = outcome.status
       // The salvage copied app_meta across, flag and all — clear it on the repaired DB.
       clearCorruptionFlags(handle)
@@ -296,7 +300,7 @@ function get(): Database.Database {
       }
       // The handle was closed by the repair on the kept_original path; reopen.
       if (outcome.action === 'kept_original') {
-        handle = openDatabaseWithRecovery(file, betterSqliteDriver, { backupsDir: backupsDir() }).db
+        handle = reopen()
       }
     }
     // 'no_repair_needed' (false alarm) leaves the handle and the DB untouched.
