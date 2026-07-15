@@ -52,6 +52,16 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       "Every judgeable PTT turn must record a pending capture-rebuild outcome")
     XCTAssertTrue(source.contains("recoveryAction: \"capture_rebuild\""))
     XCTAssertTrue(source.contains("DesktopDiagnosticsManager.shared.recordPTTDeviceRouteChanged"))
+    // CoreAudio rebuild owns outcome arming; Bluetooth keeps recordCaptureRebuild unarmed.
+    XCTAssertTrue(source.contains("silentMicRecoveryPolicy.armCaptureRebuildOutcome()"))
+    let recoveryHelper = source.components(separatedBy: "private func requestCoreAudioCaptureRecovery").last ?? ""
+    let recoveryBody = recoveryHelper.components(separatedBy: "private func recordSilentMicRecoveryOutcome").first ?? ""
+    XCTAssertTrue(
+      recoveryBody.contains("armCaptureRebuildOutcome()"),
+      "requestCoreAudioCaptureRecovery must arm capture_rebuild outcomes")
+    XCTAssertFalse(
+      recoveryBody.contains("recordCaptureRebuild()"),
+      "requestCoreAudioCaptureRecovery must not call Bluetooth-only recordCaptureRebuild")
 
     // The two previously-unwired buffered paths must now participate.
     XCTAssertTrue(source.contains("source: \"buffered_hub\""))

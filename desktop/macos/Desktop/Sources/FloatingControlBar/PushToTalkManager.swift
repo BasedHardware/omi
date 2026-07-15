@@ -59,8 +59,17 @@ struct PTTSilentMicRecoveryPolicy {
     return resolveRecoveryOutcome(.succeeded)
   }
 
+  /// Bluetooth silent-mic fallback only needs the dead-mic streak cleared. It must
+  /// not arm `capture_rebuild` outcomes — that recovery uses `switch_to_built_in_mic`.
   mutating func recordCaptureRebuild() {
     consecutiveDeadMicTurns = 0
+  }
+
+  /// Arm truthful success/failure reporting for a CoreAudio capture rebuild. Used by
+  /// both the dead-mic threshold path and the mid-turn silent-mic watchdog rebuild.
+  mutating func armCaptureRebuildOutcome() {
+    consecutiveDeadMicTurns = 0
+    awaitingRecoveryOutcome = true
   }
 
   private mutating func resolveRecoveryOutcome(_ outcome: RecoveryOutcome) -> RecoveryOutcome? {
@@ -1938,7 +1947,10 @@ class PushToTalkManager: ObservableObject {
 
   private func requestCoreAudioCaptureRecovery(reason: String, restartPTT: Bool, batchMode: Bool) {
     log("PushToTalkManager: requesting CoreAudio capture rebuild — \(reason)")
-    silentMicRecoveryPolicy.recordCaptureRebuild()
+    // Arm here (not in recordCaptureRebuild) so Bluetooth built-in fallback cannot
+    // mislabel switch_to_built_in_mic results as capture_rebuild outcomes, while the
+    // silent-mic watchdog CoreAudio path still gets a next-turn success/failure.
+    silentMicRecoveryPolicy.armCaptureRebuildOutcome()
     stopMicCapture()
     clearBufferedTurnAudio()
     NotificationCenter.default.post(

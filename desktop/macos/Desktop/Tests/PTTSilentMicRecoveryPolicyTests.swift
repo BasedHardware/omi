@@ -105,6 +105,27 @@ final class PTTSilentMicRecoveryPolicyTests: XCTestCase {
     XCTAssertNil(policy.recordSuccessfulTurn())
   }
 
+  func testCoreAudioCaptureRebuildArmsOutcomeForNextJudgeableTurn() {
+    var policy = PTTSilentMicRecoveryPolicy()
+
+    policy.armCaptureRebuildOutcome()
+
+    XCTAssertEqual(policy.consecutiveDeadMicTurns, 0)
+    XCTAssertEqual(policy.recordSuccessfulTurn(), .succeeded)
+    XCTAssertNil(policy.recordSuccessfulTurn())
+  }
+
+  func testCoreAudioCaptureRebuildFailureIsRecordedWithoutImmediateRearm() {
+    var policy = PTTSilentMicRecoveryPolicy()
+
+    policy.armCaptureRebuildOutcome()
+    let nextTurn = policy.recordDiscardedTurn(totalSec: 1.0, peak: 0)
+
+    XCTAssertEqual(nextTurn.recoveryOutcome, .failed)
+    XCTAssertFalse(nextTurn.shouldRebuildCapture)
+    XCTAssertEqual(policy.consecutiveDeadMicTurns, 1)
+  }
+
   private func armedRecoveryPolicy() -> PTTSilentMicRecoveryPolicy {
     var policy = PTTSilentMicRecoveryPolicy()
     XCTAssertFalse(policy.recordDiscardedTurn(totalSec: 1.0, peak: 0).shouldRebuildCapture)
