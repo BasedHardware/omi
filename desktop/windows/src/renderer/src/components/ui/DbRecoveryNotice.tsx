@@ -43,8 +43,8 @@ function describe(s: DbRecoveryStatus): { title: string; body: string } {
 
 /** An offer of something the user can DO about the state of their database. A list,
  *  not a single slot: the Rewind index rebuild (macOS has that button in exactly
- *  this banner) will hang off the same row without reshaping the component. */
-type NoticeAction = { label: string; onClick: () => void }
+ *  this banner) hangs off the same row without reshaping the component. */
+type NoticeAction = { label: string; onClick: () => void; disabled?: boolean }
 
 /** Shell for every state, so the notices look and behave identically. */
 function Notice({
@@ -73,7 +73,8 @@ function Notice({
               <button
                 key={a.label}
                 onClick={a.onClick}
-                className="btn-primary px-3 py-1 text-xs"
+                disabled={a.disabled}
+                className="btn-primary px-3 py-1 text-xs disabled:cursor-default disabled:opacity-60"
                 type="button"
               >
                 {a.label}
@@ -93,10 +94,17 @@ function Notice({
   )
 }
 
+// Progress of the optional "Rebuild Rewind Index" action. When the local DB was
+// reset/recovered, rewind_frames may have been wiped while the screenshot JPEGs
+// survived on disk — this lets the user re-create those rows (indexed=0 so the OCR
+// backfill re-indexes them). Idempotent + insert-only on the main side.
+type RebuildState = { phase: 'idle' } | { phase: 'running' } | { phase: 'done'; count: number }
+
 export function DbRecoveryNotice(): React.JSX.Element | null {
   const [status, setStatus] = useState<DbRecoveryStatus | null>(null)
   const [needsRestart, setNeedsRestart] = useState(false)
   const [dismissed, setDismissed] = useState(false)
+  const [rebuild, setRebuild] = useState<RebuildState>({ phase: 'idle' })
 
   useEffect(() => {
     let alive = true
@@ -136,5 +144,37 @@ export function DbRecoveryNotice(): React.JSX.Element | null {
 
   if (!status || dismissed) return null
   const { title, body } = describe(status)
-  return <Notice title={title} body={body} onDismiss={() => setDismissed(true)} />
+
+  // Offer the Rewind rebuild only when rows may actually have been lost — i.e. the
+  // DB was reset or repaired. On the 'unrepairable' path nothing was touched, so
+  // there's nothing to rebuild. The rebuild itself is safe (insert-only, idempotent)
+  // regardless, but showing it there would just be noise.
+  const rowsMayBeLost = status.reset || status.recovered
+  const actions: NoticeAction[] = []
+  if (rowsMayBeLost && !status.unrepairable) {
+    const runRebuild = (): void => {
+      setRebuild({ phase: 'running' })
+      void window.omi
+        .rewindRebuildIndex()
+        .then((count) => setRebuild({ phase: 'done', count }))
+        // A failure just returns the button to idle so the user can retry; the
+        // rebuild never partially destroys anything, so there's nothing to warn about.
+        .catch(() => setRebuild({ phase: 'idle' }))
+    }
+    const label =
+      rebuild.phase === 'running'
+        ? 'Rebuilding Rewind index…'
+        : rebuild.phase === 'done'
+          ? rebuild.count > 0
+            ? `Rebuilt Rewind index (${rebuild.count.toLocaleString()} recovered)`
+            : 'Rewind index up to date'
+          : 'Rebuild Rewind Index'
+    actions.push({
+      label,
+      onClick: runRebuild,
+      disabled: rebuild.phase !== 'idle'
+    })
+  }
+
+  return <Notice title={title} body={body} onDismiss={() => setDismissed(true)} actions={actions} />
 }

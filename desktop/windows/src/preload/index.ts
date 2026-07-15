@@ -212,6 +212,7 @@ const omi: OmiBridgeApi = {
   rewindGetSettings: () => ipcRenderer.invoke('rewind:getSettings'),
   rewindSetSettings: (next: RewindSettings) => ipcRenderer.invoke('rewind:setSettings', next),
   rewindPruneNow: () => ipcRenderer.invoke('rewind:pruneNow'),
+  rewindRebuildIndex: () => ipcRenderer.invoke('rewind:rebuildIndex'),
   rewindPrimarySourceId: () => ipcRenderer.invoke('rewind:primarySourceId'),
   rewindSaveFrame: (data: Uint8Array) => ipcRenderer.invoke('rewind:saveFrame', data),
   screenReadText: () => ipcRenderer.invoke('screen:readNow'),
