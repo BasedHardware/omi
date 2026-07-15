@@ -21,6 +21,9 @@ import { EchoGate, isHeadsetOutput } from './echoGate'
 import { GATE_REASSERT_MS } from '../../capture/assistantGate'
 import { mintRealtimeToken, MintError } from './tokenMint'
 import { refreshIfStale, resolveEffectiveVoiceProvider } from './autoModelSelector'
+import { getAboutUserCard, refreshAboutUserCard } from './aboutUser'
+import { buildVoiceSystemInstruction } from './systemInstruction'
+import { getPreferences } from '../preferences'
 import { reportRealtimeUsage } from './usageReport'
 import { startOpenAiSession } from './openaiSession'
 import { startGeminiSession } from './geminiSession'
@@ -242,6 +245,10 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   // the NEXT session uses a current pick; THIS session resolves synchronously
   // from the cache below. Mirrors Mac's "call refreshIfStale at session start".
   refreshIfStale()
+  // Same contract for the <about_user> card (macOS refreshAboutUserCard): rebuild
+  // it in the BACKGROUND and start THIS session from the cached value. A cache
+  // miss omits the card rather than adding a network round-trip to PTT latency.
+  refreshAboutUserCard()
   // No explicit lane (the UI path) → honor the user's provider setting, resolving
   // 'auto' to the cached concrete pick (macOS effectiveProvider). An explicit
   // provider (a forced-lane caller / test) bypasses the selector entirely.
@@ -287,6 +294,13 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
   if (mySeq !== startSeq) return
 
   const cb = makeCallbacks(mySeq)
+  // Assembled synchronously (cached card + a preference read) so both lanes get
+  // the same grounded instruction without delaying the handshake. The continuity
+  // block stays empty until Track 1 feeds the voice-session seed in here.
+  const instructions = buildVoiceSystemInstruction({
+    aboutUser: getAboutUserCard(),
+    userLanguages: getPreferences().voiceLanguages ?? []
+  })
   // Await into a LOCAL first — publishing to the module `handle` before the
   // staleness check would let a stale start overwrite (and then stop+null) a
   // newer session's handle, orphaning its live mic/socket.
@@ -296,11 +310,17 @@ export async function startVoiceSession(preferred?: VoiceProvider): Promise<void
       provider === 'openai'
         ? await startOpenAiSession({
             clientSecret: token,
+            instructions,
             onSpeakers: !headset,
             sinkId: sinkId || undefined,
             cb
           })
-        : await startGeminiSession({ authToken: token, sinkId: sinkId || undefined, cb })
+        : await startGeminiSession({
+            authToken: token,
+            instructions,
+            sinkId: sinkId || undefined,
+            cb
+          })
   } catch (e) {
     if (mySeq !== startSeq) return
     dispatch({ type: 'fail', message: (e as Error)?.message ?? String(e), retryable: true })

@@ -37,6 +37,7 @@ import { BackgroundConsentInterstitial } from './components/consent/BackgroundCo
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
+import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
 
 // The overlay, insight-toast, and hidden capture windows load this same bundle at
 // their own hash routes. Window-singleton hosts (tray state, auth-change fan-out)
@@ -209,10 +210,23 @@ function App(): React.JSX.Element {
   // asynchronously, so firing at mount would go out unauthenticated, 401, and cache
   // the Gemini fallback with a fresh 24h timestamp — pinning the user to Gemini for
   // a day. (Mac has no such window; its auth is restored before the launch call.)
+  //
+  // The <about_user> card is warmed on the same signal and for the same reason
+  // (macOS builds it when the hub starts — RealtimeHubController.swift:813 — not
+  // when a session starts). Starting a session refreshes it too, but reads the
+  // CACHE synchronously, so a launch-time miss would ship the user's FIRST voice
+  // session with no card at all — exactly the "assistant doesn't know who I am"
+  // gap this card exists to close. Sign-out drops it so it cannot outlive the
+  // account (and abandons any in-flight build).
   useEffect(() => {
     if (IS_SECONDARY_WINDOW) return
     return onAuthStateChanged(auth, (user) => {
-      if (user) refreshIfStale()
+      if (user) {
+        refreshIfStale()
+        refreshAboutUserCard()
+      } else {
+        resetAboutUserCard()
+      }
     })
   }, [])
 
