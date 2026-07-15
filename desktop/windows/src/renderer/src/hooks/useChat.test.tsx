@@ -46,7 +46,12 @@ const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
 
 import { useChat, CHAT_STREAM_TIMEOUT_MS } from './useChat'
-import { addAttachments, awaitUploadsSettled, clearAttachments } from '../lib/chatAttachments'
+import {
+  addAttachments,
+  awaitUploadsSettled,
+  clearAttachments,
+  getPendingAttachments
+} from '../lib/chatAttachments'
 import type { FileChat } from '../lib/omiApi.generated'
 import type { PickedChatFile } from '../../../shared/types'
 
@@ -582,6 +587,48 @@ describe('useChat — chat attachments (file_ids)', () => {
     expect(userMsg.attachments).toEqual([
       { id: 'srv-a.txt', name: 'a.txt', mimeType: 'text/plain' }
     ])
+  })
+
+  it('allows an attachment-only send (empty text) — the guard keys on text OR files', async () => {
+    addAttachments([pick('img.png')], { upload: immediateUpload })
+    await awaitUploadsSettled()
+
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('')
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'ok' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    // NOT dropped: it opened /v2/messages with the file_ids and empty text.
+    expect(JSON.parse(bodies[0])).toEqual({ text: '', file_ids: ['srv-img.png'] })
+  })
+
+  it('still drops a truly empty send — no text AND no attachments', async () => {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('   ')
+      await flush()
+    })
+    expect(streams[0]).toBeUndefined() // never opened a fetch
+  })
+
+  it('aborts an attachment-only send when every upload FAILED (no empty POST)', async () => {
+    // The guard passes at click time (an attachment is pending), but after the
+    // uploads settle they all failed → zero file_ids + empty text. Must NOT post.
+    const failing = (): Promise<never> => Promise.reject(new Error('upload failed'))
+    addAttachments([pick('x.png')], { upload: failing })
+    await awaitUploadsSettled()
+
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('')
+      await flush()
+    })
+    expect(streams[0]).toBeUndefined() // no fetch opened — the empty send was aborted
+    // The failed attachment is LEFT for retry/remove, not silently cleared.
+    expect(getPendingAttachments().map((a) => a.status)).toEqual(['failed'])
   })
 
   it('blocks the send until an in-flight upload settles (no half-uploaded send)', async () => {

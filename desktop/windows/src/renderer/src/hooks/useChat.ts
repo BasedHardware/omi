@@ -436,7 +436,10 @@ export function useChat(): UseChat {
 
   const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
-    if (!text.trim() || sendingRef.current) return
+    // A send is allowed with text OR with staged attachments (Mac parity —
+    // attachment-only sends); only a truly empty send is dropped. The file_ids
+    // are drained from the pending list below.
+    if ((!text.trim() && getPendingAttachments().length === 0) || sendingRef.current) return
     const fromVoice = !!opts?.fromVoice
     setBusy(true)
     // Open a new generation. reset()/dismiss bumps genRef, so `isCurrent()` goes
@@ -463,6 +466,14 @@ export function useChat(): UseChat {
         name: a.name,
         mimeType: a.mimeType
       }))
+      // Guard the attachment-only path: if EVERY upload failed there are no
+      // file_ids, and with empty text this would POST an empty message + render a
+      // blank user bubble. Abort instead, and leave the failed attachments in the
+      // composer so the user can retry or remove them (don't clear).
+      if (!text.trim() && sendFileIds.length === 0) {
+        setBusy(false)
+        return
+      }
       // The message now owns these files; clear the composer's pending list.
       clearAttachments()
     }

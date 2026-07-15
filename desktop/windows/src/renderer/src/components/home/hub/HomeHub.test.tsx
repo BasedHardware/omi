@@ -183,11 +183,13 @@ describe('HubAskBar — no control that cannot do what it looks like it does', (
     expect(busy.querySelector('button')).toBeNull()
   })
 
-  it('renders no paperclip — the app has no attachment path to back one', () => {
+  it('renders a LIVE paperclip — attachments now have a real backing path', () => {
+    // Once the paperclip was omitted precisely because clicking would do nothing.
+    // Track 1 shipped the attachment API (window.omi.openChatFiles + the pending
+    // list), so the paperclip is now a real control that opens the picker — its
+    // detailed behavior is covered in HubAskBar.test.tsx.
     renderHub()
-    // Not "hidden from screen readers": absent. A visible paperclip invites a click
-    // that would do nothing at all.
-    expect(document.querySelector('.lucide-paperclip')).toBeNull()
+    expect(screen.getByLabelText('Attach files')).not.toBeNull()
   })
 })
 
