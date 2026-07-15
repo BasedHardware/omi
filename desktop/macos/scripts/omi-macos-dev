@@ -26,9 +26,11 @@ from typing import Any
 
 
 SCHEMA_VERSION = 1
+OUTPUT_SCHEMA_VERSION = 1
 NAMED_PREFIX = "com.omi.omi-"
 PROTECTED_BUNDLE_IDS = {"com.omi.computer-macos", "com.omi.desktop-dev"}
 MANIFEST_NAME = ".omi-dev-runtime.json"
+SUMMARY_ITEM_LIMIT = 20
 
 
 def home() -> Path:
@@ -229,6 +231,101 @@ def profile_databases(
     return entries
 
 
+def limited_entries(entries: list[Any]) -> tuple[list[Any], int]:
+    return entries[:SUMMARY_ITEM_LIMIT], max(0, len(entries) - SUMMARY_ITEM_LIMIT)
+
+
+def counts_by(items: list[dict[str, Any]], key: str) -> dict[str, int]:
+    counts: dict[str, int] = {}
+    for item in items:
+        value = str(item.get(key, "unknown"))
+        counts[value] = counts.get(value, 0) + 1
+    return dict(sorted(counts.items()))
+
+
+def database_summary(databases: list[dict[str, Any]]) -> dict[str, Any]:
+    holder_pids = sorted({pid for database in databases for pid in database["holders"]})
+    visible_pids, omitted_pids = limited_entries(holder_pids)
+    return {
+        "count": len(databases),
+        "bytes": sum(database["bytes"] for database in databases),
+        "holder_check_counts": counts_by(databases, "holder_check"),
+        "holder_pids": visible_pids,
+        "holder_pids_omitted_count": omitted_pids,
+    }
+
+
+def logs_summary(logs: list[dict[str, Any]]) -> dict[str, int]:
+    return {"count": len(logs), "bytes": sum(log["bytes"] for log in logs)}
+
+
+def actions_summary(actions: list[dict[str, Any]]) -> dict[str, Any]:
+    return {
+        "count": len(actions),
+        "bytes": sum(action["bytes"] for action in actions),
+        "kind_counts": counts_by(actions, "kind"),
+    }
+
+
+def bundle_summary(record: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "app_name": record["app_name"],
+        "bundle_id": record["bundle_id"],
+        "installed_app_path": record["installed_app_path"],
+        "pid": record["pid"],
+        "active": record["active"],
+        "automation_port": record["automation_port"],
+        "backend": record["backend"],
+        "profile_root": record["profile_root"],
+        "profile_root_expected": record["profile_root_expected"],
+        "profile_bytes": record["profile_bytes"],
+        "database_summary": database_summary(record["databases"]),
+        "isolation": record["isolation"],
+        "manifest": record["manifest"],
+        "log_summary": logs_summary(record["logs"]),
+    }
+
+
+def inventory_output(state: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    if verbose:
+        return {
+            **state,
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
+            "detail_mode": "full",
+            "details_available": False,
+        }
+
+    bundles = [bundle_summary(record) for record in state["bundles"]]
+    visible_bundles, omitted_bundles = limited_entries(bundles)
+    legacy_databases = state["legacy_databases"]
+    visible_shared, omitted_shared = limited_entries(state["shared_storage_bundle_ids"])
+    all_bundle_databases = [database for record in state["bundles"] for database in record["databases"]]
+    all_bundle_logs = [log for record in state["bundles"] for log in record["logs"]]
+    return {
+        "schema_version": state["schema_version"],
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
+        "detail_mode": "summary",
+        "details_available": True,
+        "protected_bundle_ids": state["protected_bundle_ids"],
+        "legacy_shared_root": state["legacy_shared_root"],
+        "legacy_shared_bytes": state["legacy_shared_bytes"],
+        "legacy_database_summary": database_summary(legacy_databases),
+        "bundle_summary": {
+            "count": len(bundles),
+            "active_count": sum(record["active"] for record in state["bundles"]),
+            "isolation_counts": counts_by(state["bundles"], "isolation"),
+            "profile_bytes": sum(record["profile_bytes"] for record in state["bundles"]),
+            "database_summary": database_summary(all_bundle_databases),
+            "log_summary": logs_summary(all_bundle_logs),
+        },
+        "bundles": visible_bundles,
+        "bundles_omitted_count": omitted_bundles,
+        "shared_storage_bundle_ids": visible_shared,
+        "shared_storage_bundle_ids_omitted_count": omitted_shared,
+        "diagnostic": state["diagnostic"],
+    }
+
+
 def automation_health(port: object) -> dict[str, Any]:
     if not isinstance(port, int) or not 1 <= port <= 65535:
         return {"status": "unavailable", "reason": "invalid_port"}
@@ -417,6 +514,87 @@ def clean_plan(older_than_days: int) -> dict[str, Any]:
     }
 
 
+def clean_plan_output(plan: dict[str, Any], verbose: bool) -> dict[str, Any]:
+    if verbose:
+        return {
+            **plan,
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
+            "detail_mode": "full",
+            "details_available": False,
+        }
+    return {
+        **{key: value for key, value in plan.items() if key != "actions"},
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
+        "detail_mode": "summary",
+        "details_available": True,
+        "action_summary": actions_summary(plan["actions"]),
+    }
+
+
+def log_list_output(logs: list[dict[str, Any]], verbose: bool) -> dict[str, Any]:
+    if verbose:
+        return {
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
+            "detail_mode": "full",
+            "details_available": False,
+            "logs": logs,
+        }
+    return {
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
+        "detail_mode": "summary",
+        "details_available": True,
+        "log_summary": logs_summary(logs),
+    }
+
+
+def log_prune_output(
+    older_than_days: int,
+    actions: list[dict[str, Any]],
+    retained: list[dict[str, Any]],
+    applied: bool,
+    verbose: bool,
+) -> dict[str, Any]:
+    if verbose:
+        return {
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
+            "detail_mode": "full",
+            "details_available": False,
+            "older_than_days": older_than_days,
+            "actions": actions,
+            "retained": retained,
+            "applied": applied,
+        }
+    return {
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
+        "detail_mode": "summary",
+        "details_available": True,
+        "older_than_days": older_than_days,
+        "action_summary": actions_summary(actions),
+        "retained_summary": logs_summary(retained),
+        "applied": applied,
+    }
+
+
+def completed_cleanup_output(plan: str, completed: list[dict[str, Any]], verbose: bool) -> dict[str, Any]:
+    if verbose:
+        return {
+            "output_schema_version": OUTPUT_SCHEMA_VERSION,
+            "detail_mode": "full",
+            "details_available": False,
+            "plan": plan,
+            "completed": completed,
+            "reclaimed_bytes": sum(item["bytes"] for item in completed),
+        }
+    return {
+        "output_schema_version": OUTPUT_SCHEMA_VERSION,
+        "detail_mode": "summary",
+        "details_available": True,
+        "plan": plan,
+        "completed_summary": actions_summary(completed),
+        "reclaimed_bytes": sum(item["bytes"] for item in completed),
+    }
+
+
 def delete_action(action: dict[str, Any]) -> None:
     path = Path(action["path"])
     kind = action["kind"]
@@ -442,10 +620,12 @@ def delete_action(action: dict[str, Any]) -> None:
         raise RuntimeError("unknown_action")
 
 
-def cleanup_tcc(apply: bool) -> dict[str, Any]:
+def cleanup_tcc(apply: bool, verbose: bool) -> dict[str, Any]:
     command = [str(Path(__file__).with_name("cleanup-omi-tcc.sh")), "--json"]
     if apply:
         command.append("--apply-tccutil")
+    if verbose:
+        command.append("--verbose")
     environment = os.environ.copy()
     environment["OMI_TCC_HOME"] = str(home())
     environment["OMI_TCC_APP_ROOTS"] = os.pathsep.join(str(root) for root in app_roots())
@@ -454,7 +634,7 @@ def cleanup_tcc(apply: bool) -> dict[str, Any]:
         payload = json.loads(result.stdout)
     except json.JSONDecodeError:
         payload = {"raw_stdout": result.stdout.strip()}
-    return {"returncode": result.returncode, "inventory": payload, "stderr": result.stderr.strip()}
+    return {**payload, "returncode": result.returncode, "stderr": result.stderr.strip()}
 
 
 def emit(payload: dict[str, Any], human: bool) -> None:
@@ -468,54 +648,56 @@ def main() -> int:
     parser = argparse.ArgumentParser(prog="omi-macos-dev")
     parser.add_argument("--human", action="store_true", help="pretty-print JSON for interactive use")
     subparsers = parser.add_subparsers(dest="command", required=True)
-    doctor = subparsers.add_parser("doctor")
+    detail_parser = argparse.ArgumentParser(add_help=False)
+    detail_parser.add_argument("--verbose", action="store_true", help="include every path-level record")
+    doctor = subparsers.add_parser("doctor", parents=[detail_parser])
     doctor.add_argument("--bundle")
     bundle = subparsers.add_parser("bundle")
     bundle_subparsers = bundle.add_subparsers(dest="bundle_command", required=True)
-    bundle_subparsers.add_parser("list")
+    bundle_subparsers.add_parser("list", parents=[detail_parser])
     permissions = subparsers.add_parser("permissions")
     permission_subparsers = permissions.add_subparsers(dest="permission_command", required=True)
-    permission_subparsers.add_parser("list")
-    reset = permission_subparsers.add_parser("reset")
+    permission_subparsers.add_parser("list", parents=[detail_parser])
+    reset = permission_subparsers.add_parser("reset", parents=[detail_parser])
     reset.add_argument("--apply", action="store_true")
     reset.add_argument("--yes", action="store_true")
     logs = subparsers.add_parser("logs")
     logs_subparsers = logs.add_subparsers(dest="logs_command", required=True)
-    logs_subparsers.add_parser("list")
-    prune = logs_subparsers.add_parser("prune")
+    logs_subparsers.add_parser("list", parents=[detail_parser])
+    prune = logs_subparsers.add_parser("prune", parents=[detail_parser])
     prune.add_argument("--older-than", type=int, default=14)
     prune.add_argument("--apply", action="store_true")
     prune.add_argument("--yes", action="store_true")
     clean = subparsers.add_parser("clean")
     clean_subparsers = clean.add_subparsers(dest="clean_command", required=True)
-    plan = clean_subparsers.add_parser("plan")
+    plan = clean_subparsers.add_parser("plan", parents=[detail_parser])
     plan.add_argument("--older-than", type=int, default=14)
-    apply = clean_subparsers.add_parser("apply")
+    apply = clean_subparsers.add_parser("apply", parents=[detail_parser])
     apply.add_argument("--older-than", type=int, default=14)
     apply.add_argument("--plan", required=True)
     apply.add_argument("--yes", action="store_true")
     args = parser.parse_args()
 
     if args.command == "doctor":
-        payload = inventory(args.bundle)
+        payload = inventory_output(inventory(args.bundle), args.verbose)
         emit(payload, args.human)
         return 10 if payload["shared_storage_bundle_ids"] else 0
     if args.command == "bundle":
-        emit(inventory(), args.human)
+        emit(inventory_output(inventory(), args.verbose), args.human)
         return 0
     if args.command == "permissions":
         if args.permission_command == "reset" and (not args.apply or not args.yes):
             emit({"error": "permissions reset requires --apply --yes"}, args.human)
             return 2
-        result = cleanup_tcc(args.permission_command == "reset")
+        result = cleanup_tcc(args.permission_command == "reset", args.verbose)
         emit(result, args.human)
         return result["returncode"]
     if args.command == "logs":
         if args.logs_command == "list":
-            emit({"logs": all_logs()}, args.human)
+            emit(log_list_output(all_logs(), args.verbose), args.human)
             return 0
-        if args.older_than < 1:
-            emit({"error": "--older-than must be at least 1"}, args.human)
+        if args.older_than < 0:
+            emit({"error": "--older-than must be non-negative"}, args.human)
             return 2
         logs, retained = old_logs(args.older_than)
         if args.apply and args.yes:
@@ -524,15 +706,15 @@ def main() -> int:
         elif args.apply:
             emit({"error": "logs prune --apply requires --yes"}, args.human)
             return 2
-        emit({"older_than_days": args.older_than, "actions": logs, "retained": retained, "applied": bool(args.apply and args.yes)}, args.human)
+        emit(log_prune_output(args.older_than, logs, retained, bool(args.apply and args.yes), args.verbose), args.human)
         return 0
     if args.command == "clean":
-        if args.older_than < 1:
-            emit({"error": "--older-than must be at least 1"}, args.human)
+        if args.older_than < 0:
+            emit({"error": "--older-than must be non-negative"}, args.human)
             return 2
         planned = clean_plan(args.older_than)
         if args.clean_command == "plan":
-            emit(planned, args.human)
+            emit(clean_plan_output(planned, args.verbose), args.human)
             return 0
         if not args.yes:
             emit({"error": "clean apply requires --yes", "current_plan": planned["plan"]}, args.human)
@@ -544,7 +726,7 @@ def main() -> int:
         for action in planned["actions"]:
             delete_action(action)
             completed.append(action)
-        emit({"plan": planned["plan"], "completed": completed, "reclaimed_bytes": sum(item["bytes"] for item in completed)}, args.human)
+        emit(completed_cleanup_output(planned["plan"], completed, args.verbose), args.human)
         return 0
     raise AssertionError("unreachable")
 
