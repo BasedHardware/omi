@@ -225,6 +225,7 @@ struct GoalLinkView: View {
   let goalID: String
   let summary: String
   let navigation: ChatFirstShellNavigation
+  @ObservedObject var goalsStore: CanonicalGoalsStore
 
   @State private var isOpening = false
   @State private var isUnavailable = false
@@ -251,14 +252,13 @@ struct GoalLinkView: View {
     isOpening = true
     Task { @MainActor in
       defer { isOpening = false }
-      do {
-        // Validate the canonical entity at interaction time. The actual
-        // destination stays typed and is owned by the shell.
-        _ = try await APIClient.shared.getCanonicalGoalDetail(goalID: goalID)
-        navigation.open(focus: .goal(id: goalID))
-      } catch {
+      // Validate through the root-owned canonical projection. The actual
+      // destination remains a typed shell focus, never a display-string URL.
+      guard await goalsStore.loadDetail(goalID: goalID) != nil else {
         isUnavailable = true
+        return
       }
+      navigation.open(focus: .goal(id: goalID))
     }
   }
 }

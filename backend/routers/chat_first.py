@@ -35,7 +35,11 @@ from models.chat_first import (
 from utils.metrics import CHAT_FIRST_PROACTIVE_TOTAL
 from utils.other import endpoints as auth
 from utils.task_intelligence.chat_first_eligibility import resolve_chat_first_eligibility
-from utils.task_intelligence.proactive_engine import persist_daily_opener_intent
+from utils.task_intelligence.proactive_engine import (
+    classify_cold_start_profile,
+    persist_cold_start_intent,
+    persist_daily_opener_intent,
+)
 from utils.task_intelligence.rollout import resolve_task_intelligence_for_user
 
 router = APIRouter()
@@ -92,6 +96,22 @@ def _maybe_persist_daily_opener(uid: str, *, control_generation: int, now: datet
     """Best-effort lazy opener preparation; a failure never breaks Chat fetch."""
 
     try:
+        if chat_first_intents_db.has_active_sparse_cold_start_sequence(
+            uid,
+            account_generation=control_generation,
+        ):
+            # A sparse sequence is itself the deterministic Chat tail. Keep a
+            # later daily opener out of the server queue until that journaled
+            # sequence ends, rather than letting it compete behind a question.
+            return
+        if chat_first_intents_db.has_cold_start_intent_created_on(
+            uid,
+            account_generation=control_generation,
+            date_value=now.date(),
+        ):
+            # The cold-start turn is this UTC day's first opener. Do not make
+            # a second card compete with the new Chat experience.
+            return
         blocks, subject = _daily_opener_blocks(uid)
         if not blocks:
             return
@@ -108,6 +128,35 @@ def _maybe_persist_daily_opener(uid: str, *, control_generation: int, now: datet
         logger.warning('chat_first_daily_opener_prepare_failed uid=%s error=%s', uid, type(exc).__name__)
 
 
+def _maybe_persist_cold_start(uid: str, *, control_generation: int, now: datetime) -> None:
+    """Persist the stable first-run intent only after capability admission."""
+
+    try:
+        # The documented decision table depends only on canonical existence,
+        # not focus scoring or model inference. Fetch the richer opener shape
+        # only when the deterministic counts admit it.
+        canonical_goals = goals_db.get_user_goals(uid, limit=1)
+        open_tasks = action_items_db.get_action_items(uid, completed=False, limit=1)
+        profile = classify_cold_start_profile(
+            canonical_goal_count=len(canonical_goals),
+            open_task_count=len(open_tasks),
+        )
+        rich_blocks, rich_subject = _daily_opener_blocks(uid) if profile == 'rich' else ([], None)
+        persist_cold_start_intent(
+            uid,
+            profile=profile,
+            rich_blocks=rich_blocks,
+            rich_subject=rich_subject,
+            expected_generation=control_generation,
+            now=now,
+            eligibility_resolver=_eligibility,
+        )
+    except Exception as exc:
+        # First-run preparation is retryable and must not turn an ordinary
+        # foreground Chat fetch into an error or leak product content.
+        logger.warning('chat_first_cold_start_prepare_failed uid=%s error=%s', uid, type(exc).__name__)
+
+
 def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, TaskCardSpec):
         task = action_items_db.get_action_item(uid, block.task_id)
@@ -119,6 +168,10 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
         return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
     if isinstance(block, QuestionCardSpec):
         subject = block.subject
+        if subject.kind == 'cold_start':
+            # Synthetic cold-start subjects are admitted only through the
+            # deterministic materialization endpoint, never agent tool input.
+            return False
         if subject.kind == 'task':
             task = action_items_db.get_action_item(uid, subject.id)
             return bool(task and not task.get('is_locked', False))
@@ -191,6 +244,11 @@ def materialize_prompts(
         owner_fence=request.owner_fence,
         control_generation=request.control_generation,
     )
+    # A materialization request is meaningful only from the already-loaded
+    # rich main-Chat transcript. This keeps cold start and all proactive
+    # delivery inert for legacy, notch, and background callers.
+    if not request.initial_page_loaded or not request.window_foreground:
+        return MaterializePromptsResponse()
     now = datetime.now(timezone.utc)
     for receipt in request.receipts:
         try:
@@ -210,6 +268,30 @@ def materialize_prompts(
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='invalid materialization receipt') from exc
         CHAT_FIRST_PROACTIVE_TOTAL.labels(event='kernel_receipt', source='materialization').inc()
 
+    # The kernel can only emit this after it durably terminalizes the scripted
+    # sequence in its canonical journal. This is an acknowledgement on the
+    # existing sparse intent, not a client-controlled rollout/completion flag.
+    for terminal_receipt in request.cold_start_sequence_terminal_receipts:
+        try:
+            chat_first_intents_db.acknowledge_sparse_cold_start_sequence_terminal(
+                uid,
+                sequence_id=terminal_receipt.sequence_id,
+                receipt_id=terminal_receipt.receipt_id,
+                terminal_state=terminal_receipt.terminal_state,
+                account_generation=request.control_generation,
+                now=now,
+            )
+        except chat_first_intents_db.ChatFirstIntentGenerationMismatch as exc:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='account generation mismatch') from exc
+        except (
+            chat_first_intents_db.ChatFirstIntentConflictError,
+            chat_first_intents_db.ProactiveIntentNotReady,
+        ) as exc:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, detail='invalid cold-start terminal receipt'
+            ) from exc
+        CHAT_FIRST_PROACTIVE_TOTAL.labels(event='cold_start_terminal_receipt', source='cold_start_sparse').inc()
+
     try:
         released = chat_first_intents_db.release_due_deferrals(
             uid,
@@ -218,8 +300,8 @@ def materialize_prompts(
         )
         for _intent in released:
             CHAT_FIRST_PROACTIVE_TOTAL.labels(event='deferral_released', source='deferral_reraise').inc()
-        if request.window_foreground:
-            _maybe_persist_daily_opener(uid, control_generation=request.control_generation, now=now)
+        _maybe_persist_cold_start(uid, control_generation=request.control_generation, now=now)
+        _maybe_persist_daily_opener(uid, control_generation=request.control_generation, now=now)
         intents = chat_first_intents_db.fetch_ready_intents(
             uid,
             account_generation=request.control_generation,

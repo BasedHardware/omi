@@ -2,6 +2,8 @@
 
 from datetime import datetime, timezone
 
+import pytest
+
 import utils.task_intelligence.proactive_engine as engine
 from models.chat_first import (
     ChatFirstSubject,
@@ -12,6 +14,11 @@ from utils.task_intelligence.chat_first_eligibility import ChatFirstEligibility
 
 NOW = datetime(2026, 7, 15, 12, tzinfo=timezone.utc)
 SUBJECT = ChatFirstSubject(kind='goal', id='goal-1')
+
+
+@pytest.fixture(autouse=True)
+def _no_sparse_cold_start(monkeypatch):
+    monkeypatch.setattr(engine.intent_db, 'has_active_sparse_cold_start_sequence', lambda *args, **kwargs: False)
 
 
 class _Judge:
@@ -38,6 +45,35 @@ def _question():
         subject=SUBJECT,
         options=[QuestionOption(option_id='yes', label='Yes', prepared_answer='Yes')],
     )
+
+
+def test_cold_start_decision_table_requires_both_canonical_facts():
+    assert engine.classify_cold_start_profile(canonical_goal_count=0, open_task_count=0) == 'sparse'
+    assert engine.classify_cold_start_profile(canonical_goal_count=1, open_task_count=0) == 'sparse'
+    assert engine.classify_cold_start_profile(canonical_goal_count=0, open_task_count=1) == 'sparse'
+    assert engine.classify_cold_start_profile(canonical_goal_count=1, open_task_count=1) == 'rich'
+
+
+def test_sparse_cold_start_suppresses_agent_tier_without_calling_the_judge(monkeypatch):
+    monkeypatch.setattr(engine.intent_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(engine.intent_db, 'has_active_sparse_cold_start_sequence', lambda *args, **kwargs: True)
+    monkeypatch.setattr(
+        engine.intent_db,
+        'admit_agent_judgment',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('agent admission must stay quiet')),
+    )
+    judge = _Judge(engine.ProactiveSelection(blocks=[_question()]))
+
+    result = engine.wake_after_commit(
+        'user-1',
+        _trigger(),
+        judge=judge,
+        now=NOW,
+        eligibility_resolver=lambda _uid: ChatFirstEligibility(enabled=True, account_generation=7),
+    )
+
+    assert result.outcome == 'suppressed_by_cold_start'
+    assert judge.calls == 0
 
 
 def test_capability_off_wake_has_zero_feature_store_provider_and_metric_work(monkeypatch):

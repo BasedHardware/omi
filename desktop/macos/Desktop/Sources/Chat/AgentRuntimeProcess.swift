@@ -560,6 +560,7 @@ actor AgentRuntimeProcess {
     let suppressedByStreamingTail: Bool = false
     let materializationStoppedByTail: Bool = false
     let materializationReceipts: [ChatFirstMaterializationReceipt] = []
+    let coldStartSequenceTerminalReceipts: [ChatFirstColdStartSequenceTerminalReceipt] = []
     let acknowledgedReceiptCount: Int = 0
   }
 
@@ -2151,7 +2152,7 @@ actor AgentRuntimeProcess {
     sessionID: String,
     controlGeneration: Int,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-  ) async throws -> [ChatFirstMaterializationReceipt] {
+  ) async throws -> ChatFirstPromptReceiptBatch {
     guard surface.surfaceKind == "main_chat", controlGeneration >= 0 else {
       throw BridgeError.agentError("Invalid chat-first receipt listing")
     }
@@ -2164,7 +2165,10 @@ actor AgentRuntimeProcess {
       payload: ["sessionId": sessionID, "controlGeneration": controlGeneration, "limit": 16],
       authorizationSnapshot: authorizationSnapshot
     )
-    return result.materializationReceipts
+    return ChatFirstPromptReceiptBatch(
+      materializationReceipts: result.materializationReceipts,
+      coldStartSequenceTerminalReceipts: result.coldStartSequenceTerminalReceipts
+    )
   }
 
   @discardableResult
@@ -2174,10 +2178,14 @@ actor AgentRuntimeProcess {
     ownerID: String,
     sessionID: String,
     controlGeneration: Int,
-    receipts: [ChatFirstMaterializationReceipt],
+    receipts: ChatFirstPromptReceiptBatch,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> Int {
-    guard surface.surfaceKind == "main_chat", controlGeneration >= 0, receipts.count <= 16 else {
+    guard surface.surfaceKind == "main_chat",
+      controlGeneration >= 0,
+      receipts.materializationReceipts.count <= 16,
+      receipts.coldStartSequenceTerminalReceipts.count <= 16
+    else {
       throw BridgeError.agentError("Invalid chat-first receipt acknowledgement")
     }
     let result = try await journalOperation(
@@ -2189,7 +2197,16 @@ actor AgentRuntimeProcess {
       payload: [
         "sessionId": sessionID,
         "controlGeneration": controlGeneration,
-        "receipts": receipts.map { ["intentId": $0.intentID, "receiptId": $0.receiptID] },
+        "receipts": receipts.materializationReceipts.map {
+          ["intentId": $0.intentID, "receiptId": $0.receiptID]
+        },
+        "coldStartSequenceTerminalReceipts": receipts.coldStartSequenceTerminalReceipts.map {
+          [
+            "sequenceId": $0.sequenceID,
+            "receiptId": $0.receiptID,
+            "terminalState": $0.terminalState.rawValue,
+          ]
+        },
       ],
       authorizationSnapshot: authorizationSnapshot
     )
@@ -3877,7 +3894,10 @@ actor AgentRuntimeProcess {
         materializationReceipts: Self.chatFirstMaterializationReceipts(
           from: message.payload["materializationReceipts"]
         ),
-        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0
+        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0,
+        coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
+          from: message.payload["coldStartSequenceTerminalReceipts"]
+        )
       ))
   }
 
@@ -3892,6 +3912,26 @@ actor AgentRuntimeProcess {
         !receiptID.isEmpty
       else { return nil }
       return ChatFirstMaterializationReceipt(intentID: intentID, receiptID: receiptID)
+    }
+  }
+
+  private nonisolated static func chatFirstColdStartSequenceTerminalReceipts(
+    from payload: Any?
+  ) -> [ChatFirstColdStartSequenceTerminalReceipt] {
+    guard let values = payload as? [[String: Any]] else { return [] }
+    return values.compactMap { value in
+      guard let sequenceID = value["sequenceId"] as? String,
+        !sequenceID.isEmpty,
+        let receiptID = value["receiptId"] as? String,
+        !receiptID.isEmpty,
+        let rawState = value["terminalState"] as? String,
+        let terminalState = ChatFirstColdStartSequenceTerminalReceipt.TerminalState(rawValue: rawState)
+      else { return nil }
+      return ChatFirstColdStartSequenceTerminalReceipt(
+        sequenceID: sequenceID,
+        receiptID: receiptID,
+        terminalState: terminalState
+      )
     }
   }
 

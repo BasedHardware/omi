@@ -110,8 +110,10 @@ export type ConversationContentBlock =
       id: string;
       questionId: string;
       text: string;
-      subject: { kind: "task" | "goal" | "capture"; id: string };
+      subject: { kind: "task" | "goal" | "capture" | "cold_start"; id: string };
       options: Array<{ optionId: string; label: string; preparedAnswer: string; defer?: boolean }>;
+      /** Explicit local script identity; never inferred from question text. */
+      coldStartSequence?: { sequenceId: string; step: 1 | 2 | 3; retired?: true };
       /**
        * Kernel-owned selection receipt. A question remains readable after an
        * answer, but this durable value retires its options on every projection.

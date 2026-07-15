@@ -7,12 +7,13 @@ enum ChatFirstPromptMaterializationPolicy {
   static let minimumInterval: TimeInterval = 60
 
   static func shouldStart(
+    hasChatFirstMainChatContext: Bool,
     transcriptFirstPageLoaded: Bool,
     isRunning: Bool,
     lastAttemptAt: Date?,
     now: Date
   ) -> Bool {
-    guard transcriptFirstPageLoaded, !isRunning else { return false }
+    guard hasChatFirstMainChatContext, transcriptFirstPageLoaded, !isRunning else { return false }
     guard let lastAttemptAt else { return true }
     return now.timeIntervalSince(lastAttemptAt) >= minimumInterval
   }
@@ -23,7 +24,7 @@ enum ChatFirstPromptMaterializationPolicy {
 /// state remain on the backend/kernel respectively.
 @MainActor
 final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
-  private weak var chatProvider: ChatProvider?
+  private var driver: (any ChatFirstPromptMaterializationDriving)?
   private var didLoadTranscriptFirstPage = false
   private var lastAttemptAt: Date?
   private var requestTask: Task<Void, Never>?
@@ -35,7 +36,14 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   }
 
   func activate(using chatProvider: ChatProvider) {
-    self.chatProvider = chatProvider
+    driver = APIChatFirstPromptMaterializationDriver(chatProvider: chatProvider)
+  }
+
+  /// Test seam for the same narrow driver used in production. This does not
+  /// accept a local capability or transcript writer, so it cannot bypass the
+  /// provider/kernel authority boundary.
+  func activate(driver: any ChatFirstPromptMaterializationDriving) {
+    self.driver = driver
   }
 
   /// Called from the one rich main-chat page after its first transcript page is
@@ -63,19 +71,20 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
 
   private func requestMaterialization(windowForeground: Bool) {
     guard ChatFirstPromptMaterializationPolicy.shouldStart(
+      hasChatFirstMainChatContext: driver?.materializationContext() != nil,
       transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
       isRunning: requestTask != nil,
       lastAttemptAt: lastAttemptAt,
       now: now()
-    ), let chatProvider, chatProvider.chatFirstMaterializationContext() != nil
+    ), let driver
     else { return }
 
     lastAttemptAt = now()
     requestGeneration &+= 1
     let generation = requestGeneration
-    requestTask = Task { [weak self, weak chatProvider] in
-      guard let self, let chatProvider else { return }
-      await self.materialize(using: chatProvider, windowForeground: windowForeground, generation: generation)
+    requestTask = Task { [weak self, driver] in
+      guard let self, let driver else { return }
+      await self.materialize(using: driver, windowForeground: windowForeground, generation: generation)
       if self.requestGeneration == generation {
         self.requestTask = nil
       }
@@ -83,36 +92,21 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
   }
 
   private func materialize(
-    using chatProvider: ChatProvider,
+    using driver: any ChatFirstPromptMaterializationDriving,
     windowForeground: Bool,
     generation: Int
   ) async {
     guard isCurrentMaterialization(generation) else { return }
-    guard let context = chatProvider.chatFirstMaterializationContext() else { return }
+    guard let context = driver.materializationContext() else { return }
     do {
-      let pendingReceipts = try await chatProvider.pendingChatFirstMaterializationReceipts()
-      guard isCurrentMaterialization(generation) else { return }
-      // The endpoint atomically accepts prior receipts before returning ready
-      // intents. Only after a success response do we remove their local copies.
-      let response = try await APIClient.shared.materializeChatFirstPrompts(
-        ownerID: context.ownerID,
-        controlGeneration: context.controlGeneration,
+      try await ChatFirstPromptMaterializationRunner.run(
+        driver: driver,
+        context: context,
         windowForeground: windowForeground,
-        receipts: pendingReceipts
+        isCurrent: { [weak self] in
+          self?.isCurrentMaterialization(generation) ?? false
+        }
       )
-      guard isCurrentMaterialization(generation) else { return }
-      if !pendingReceipts.isEmpty {
-        _ = try await chatProvider.acknowledgeChatFirstMaterializationReceipts(pendingReceipts)
-        guard isCurrentMaterialization(generation) else { return }
-      }
-
-      guard isCurrentMaterialization(generation),
-        response.intents.allSatisfy({ $0.accountGeneration == context.controlGeneration })
-      else { return }
-      // Preserve the server's `(created_at, intent_id)` order in one kernel
-      // transaction. The kernel stops after a question or any blocked tail;
-      // Swift never reorders, caches, or locally schedules these intents.
-      _ = try await chatProvider.materializeChatFirstIntents(response.intents)
     } catch {
       // Failure is intentionally quiet and retryable on the next debounced
       // foreground/open. Do not create a notification, badge, or Chat row.

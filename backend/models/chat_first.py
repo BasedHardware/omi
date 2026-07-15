@@ -14,7 +14,7 @@ class _StrictModel(BaseModel):
 
 
 class ChatFirstSubject(_StrictModel):
-    kind: Literal['task', 'goal', 'capture']
+    kind: Literal['task', 'goal', 'capture', 'cold_start']
     id: StableId
 
 
@@ -25,12 +25,20 @@ class QuestionOption(_StrictModel):
     defer: bool = False
 
 
+class ColdStartSequence(_StrictModel):
+    """Explicit local-only identity for the fixed sparse cold-start script."""
+
+    sequence_id: StableId
+    step: int = Field(ge=1, le=3)
+
+
 class QuestionCardSpec(_StrictModel):
     type: Literal['questionCard']
     question_id: StableId
     text: str = Field(min_length=1, max_length=300)
     subject: ChatFirstSubject
     options: list[QuestionOption] = Field(min_length=1, max_length=4)
+    cold_start_sequence: ColdStartSequence | None = None
 
     @model_validator(mode='after')
     def validate_options(self):
@@ -39,6 +47,14 @@ class QuestionCardSpec(_StrictModel):
             raise ValueError('question option IDs must be unique')
         if sum(option.defer for option in self.options) > 1:
             raise ValueError('question card may contain at most one defer option')
+        is_cold_start = self.subject.kind == 'cold_start'
+        if is_cold_start != (self.cold_start_sequence is not None):
+            raise ValueError('cold-start subject and sequence descriptor must be paired')
+        if self.cold_start_sequence is not None:
+            if self.subject.id != self.cold_start_sequence.sequence_id:
+                raise ValueError('cold-start subject must match sequence identity')
+            if self.cold_start_sequence.step != 1:
+                raise ValueError('server cold-start intent must begin at sequence step one')
         return self
 
 
@@ -87,16 +103,25 @@ class ChatFirstBlockValidationReceipt(_StrictModel):
     blocks: list[dict[str, object]] = Field(default_factory=list)
 
 
-ProactiveIntentSource = Literal['daily_opener', 'capture_arrival', 'deferral_reraise', 'agent_judgment']
-ProactiveIntentDeliveryState = Literal['ready', 'delivered']
+ProactiveIntentSource = Literal[
+    'daily_opener',
+    'capture_arrival',
+    'deferral_reraise',
+    'agent_judgment',
+    'cold_start_rich',
+    'cold_start_sparse',
+]
+ProactiveIntentDeliveryState = Literal['ready', 'pending_kernel_receipt', 'delivered']
+ColdStartSequenceTerminalState = Literal['completed', 'abandoned']
 
 
 class ProactiveIntent(_StrictModel):
     """A server-side instruction, not a Chat transcript row.
 
     The local desktop kernel is the sole writer of the visible assistant turn.
-    This record remains ready until that kernel has committed and acknowledged
-    its stable ``intent_id``.
+    This record remains deliverable until that kernel has committed and
+    acknowledged its stable ``intent_id``; cold-start intents make that
+    explicit as ``pending_kernel_receipt``.
     """
 
     intent_id: StableId
@@ -109,6 +134,25 @@ class ProactiveIntent(_StrictModel):
     created_at: datetime
     delivered_at: datetime | None = None
     materialization_receipt_id: StableId | None = None
+    # This is a terminal local-journal receipt on the same sparse cold-start
+    # intent, never an operator-owned completion switch. It is the bounded
+    # server projection needed to stop suppressing agent-tier turns once the
+    # sequence has actually ended in the canonical transcript.
+    cold_start_sequence_terminal_state: ColdStartSequenceTerminalState | None = None
+    cold_start_sequence_terminal_receipt_id: StableId | None = None
+
+    @model_validator(mode='after')
+    def validate_cold_start_sequence_state(self):
+        has_terminal_receipt = self.cold_start_sequence_terminal_receipt_id is not None
+        has_terminal_state = self.cold_start_sequence_terminal_state is not None
+        if has_terminal_receipt != has_terminal_state:
+            raise ValueError('cold-start terminal state and receipt must be paired')
+        if self.source == 'cold_start_sparse':
+            if self.subject is None or self.subject.kind != 'cold_start':
+                raise ValueError('sparse cold-start intent requires a cold-start subject')
+        elif has_terminal_receipt:
+            raise ValueError('only sparse cold-start intents may carry a terminal receipt')
+        return self
 
     @property
     def consumes_turn_budget(self) -> bool:
@@ -135,18 +179,33 @@ class ProactiveMaterializationReceipt(_StrictModel):
     receipt_id: StableId
 
 
+class ColdStartSequenceTerminalReceipt(_StrictModel):
+    """A durable local-journal acknowledgement that sparse sequencing ended."""
+
+    sequence_id: StableId
+    receipt_id: StableId
+    terminal_state: ColdStartSequenceTerminalState
+
+
 class MaterializePromptsRequest(_StrictModel):
     source_surface: Literal['main_chat']
     control_generation: int = Field(ge=0)
     owner_fence: StableId
     window_foreground: bool = False
+    initial_page_loaded: bool = False
     receipts: list[ProactiveMaterializationReceipt] = Field(default_factory=list, max_length=16)
+    cold_start_sequence_terminal_receipts: list[ColdStartSequenceTerminalReceipt] = Field(
+        default_factory=list, max_length=16
+    )
 
     @model_validator(mode='after')
     def validate_unique_receipts(self):
         intent_ids = [receipt.intent_id for receipt in self.receipts]
         if len(intent_ids) != len(set(intent_ids)):
             raise ValueError('materialization receipt intent IDs must be unique')
+        sequence_ids = [receipt.sequence_id for receipt in self.cold_start_sequence_terminal_receipts]
+        if len(sequence_ids) != len(set(sequence_ids)):
+            raise ValueError('cold-start terminal receipt sequence IDs must be unique')
         return self
 
 
@@ -168,6 +227,8 @@ class DeferralCreateRequest(_StrictModel):
     def require_question_subject_match(self):
         if self.question.subject != self.subject:
             raise ValueError('deferral question subject must match the deferred subject')
+        if self.subject.kind == 'cold_start':
+            raise ValueError('cold-start question cards cannot be deferred')
         return self
 
 
@@ -205,6 +266,9 @@ __all__ = [
     'ChatFirstBlockValidationReceipt',
     'ChatFirstBlockValidationRequest',
     'ChatFirstSubject',
+    'ColdStartSequenceTerminalReceipt',
+    'ColdStartSequenceTerminalState',
+    'ColdStartSequence',
     'DeferralCreateRequest',
     'DeferralReceipt',
     'GoalLinkSpec',

@@ -280,7 +280,7 @@ enum AgentClient {
       ownerID: String,
       sessionID: String,
       controlGeneration: Int
-    ) async throws -> [ChatFirstMaterializationReceipt] {
+    ) async throws -> ChatFirstPromptReceiptBatch {
       try await bridge.listChatFirstMaterializationReceipts(
         surface: surface,
         ownerID: ownerID,
@@ -295,7 +295,7 @@ enum AgentClient {
       ownerID: String,
       sessionID: String,
       controlGeneration: Int,
-      receipts: [ChatFirstMaterializationReceipt]
+      receipts: ChatFirstPromptReceiptBatch
     ) async throws -> Int {
       try await bridge.acknowledgeChatFirstMaterializationReceipts(
         surface: surface,

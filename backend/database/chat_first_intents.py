@@ -2,7 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Iterable, cast
 
 from google.cloud import firestore
@@ -11,6 +11,7 @@ from database._client import get_firestore_client
 from models.chat_first import (
     ChatFirstBlockSpec,
     ChatFirstSubject,
+    ColdStartSequenceTerminalState,
     DeferralReceipt,
     ProactiveBudgetState,
     ProactiveDeferral,
@@ -301,6 +302,169 @@ def create_intent(
     return apply(transaction)
 
 
+def get_or_create_cold_start_intent(
+    uid: str,
+    *,
+    source: ProactiveIntentSource,
+    continuity_key: str,
+    subject: ChatFirstSubject | None,
+    blocks: list[ChatFirstBlockSpec],
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any = None,
+) -> tuple[ProactiveIntent, bool]:
+    """Persist exactly one generation-bound cold-start intent.
+
+    Cold-start richness is sampled only for the first writer. The stable ID is
+    deliberately independent of the selected rich/sparse source so a retry
+    after canonical data changes returns the original ready intent rather than
+    producing a second first-run experience.
+    """
+
+    if source not in {'cold_start_rich', 'cold_start_sparse'}:
+        raise ValueError('cold-start intents require a cold-start source')
+    client = _db(firestore_client)
+    intent_id = _stable_id('cfi', uid, account_generation, 'cold_start', continuity_key)
+    intent = ProactiveIntent(
+        intent_id=intent_id,
+        continuity_key=continuity_key,
+        account_generation=account_generation,
+        source=source,
+        subject=subject,
+        blocks=blocks,
+        delivery_state='pending_kernel_receipt',
+        created_at=now,
+    )
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+        _require_control(control_snapshot, account_generation)
+        existing_snapshot = intent_ref.get(transaction=write_transaction)
+        if existing_snapshot.exists:
+            existing = ProactiveIntent.model_validate(_snapshot_dict(existing_snapshot))
+            if (
+                existing.account_generation != account_generation
+                or existing.continuity_key != continuity_key
+                or existing.source not in {'cold_start_rich', 'cold_start_sparse'}
+            ):
+                raise ChatFirstIntentConflictError('cold-start continuity key was reused')
+            return existing, False
+        write_transaction.set(intent_ref, _intent_payload(intent))
+        return intent, True
+
+    return apply(transaction)
+
+
+def has_cold_start_intent_created_on(
+    uid: str,
+    *,
+    account_generation: int,
+    date_value: date,
+    firestore_client: Any = None,
+) -> bool:
+    """Whether this generation already used today's deterministic opener slot."""
+
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    for snapshot in collection.stream():
+        payload = _snapshot_dict(snapshot)
+        if payload.get('account_generation') != account_generation:
+            continue
+        if payload.get('source') not in {'cold_start_rich', 'cold_start_sparse'}:
+            continue
+        intent = ProactiveIntent.model_validate(payload)
+        if intent.created_at.date() == date_value:
+            return True
+    return False
+
+
+def acknowledge_sparse_cold_start_sequence_terminal(
+    uid: str,
+    *,
+    sequence_id: str,
+    receipt_id: str,
+    terminal_state: ColdStartSequenceTerminalState,
+    account_generation: int,
+    now: datetime,
+    firestore_client: Any = None,
+) -> ProactiveIntent:
+    """Accept one local-journal terminal receipt for the sparse sequence.
+
+    The receipt is attached to the original cold-start intent so it cannot
+    become a client/operator completion flag. A sparse sequence remains active
+    through the crash window before its initial materialization receipt reaches
+    the server, then releases agent-tier judgment only after this terminal
+    journal fact is durably acknowledged.
+    """
+
+    expected_sequence_id = f'cold-start:{account_generation}'
+    if sequence_id != expected_sequence_id:
+        raise ChatFirstIntentConflictError('cold-start terminal sequence does not match generation')
+    client = _db(firestore_client)
+    intent_id = _stable_id('cfi', uid, account_generation, 'cold_start', sequence_id)
+    intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
+    transaction = client.transaction()
+
+    @firestore.transactional
+    def apply(write_transaction: Any) -> ProactiveIntent:
+        control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
+        _require_control(control_snapshot, account_generation)
+        snapshot = intent_ref.get(transaction=write_transaction)
+        if not snapshot.exists:
+            raise ProactiveIntentNotReady('cold-start intent is not ready')
+        intent = ProactiveIntent.model_validate(_snapshot_dict(snapshot))
+        if (
+            intent.account_generation != account_generation
+            or intent.source != 'cold_start_sparse'
+            or intent.subject != ChatFirstSubject(kind='cold_start', id=sequence_id)
+            or intent.delivery_state != 'delivered'
+            or intent.materialization_receipt_id is None
+        ):
+            raise ProactiveIntentNotReady('cold-start sequence is not ready for terminal acknowledgement')
+        if intent.cold_start_sequence_terminal_receipt_id is not None:
+            if (
+                intent.cold_start_sequence_terminal_receipt_id != receipt_id
+                or intent.cold_start_sequence_terminal_state != terminal_state
+            ):
+                raise ChatFirstIntentConflictError('cold-start sequence was already terminalized differently')
+            return intent
+        terminalized = intent.model_copy(
+            update={
+                'cold_start_sequence_terminal_state': terminal_state,
+                'cold_start_sequence_terminal_receipt_id': receipt_id,
+            }
+        )
+        write_transaction.set(intent_ref, _intent_payload(terminalized))
+        return terminalized
+
+    return apply(transaction)
+
+
+def has_active_sparse_cold_start_sequence(
+    uid: str,
+    *,
+    account_generation: int,
+    firestore_client: Any = None,
+) -> bool:
+    """Whether a sparse local-journal sequence can still own the Chat tail."""
+
+    client = _db(firestore_client)
+    _require_current_control(uid, account_generation=account_generation, firestore_client=client)
+    collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
+    for snapshot in collection.stream():
+        payload = _snapshot_dict(snapshot)
+        if payload.get('account_generation') != account_generation or payload.get('source') != 'cold_start_sparse':
+            continue
+        intent = ProactiveIntent.model_validate(payload)
+        if intent.cold_start_sequence_terminal_receipt_id is None:
+            return True
+    return False
+
+
 def fetch_ready_intents(
     uid: str,
     *,
@@ -316,7 +480,10 @@ def fetch_ready_intents(
     ready: list[ProactiveIntent] = []
     for snapshot in collection.stream():
         payload = _snapshot_dict(snapshot)
-        if payload.get('account_generation') != account_generation or payload.get('delivery_state') != 'ready':
+        if payload.get('account_generation') != account_generation or payload.get('delivery_state') not in {
+            'ready',
+            'pending_kernel_receipt',
+        }:
             continue
         ready.append(ProactiveIntent.model_validate(payload))
     ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))
@@ -354,7 +521,7 @@ def acknowledge_materialization(
             if intent.materialization_receipt_id != receipt_id:
                 raise ChatFirstIntentConflictError('intent was already acknowledged by a different receipt')
             return intent
-        if intent.delivery_state != 'ready':
+        if intent.delivery_state not in {'ready', 'pending_kernel_receipt'}:
             raise ProactiveIntentNotReady('proactive intent is not ready')
 
         delivered = intent.model_copy(
@@ -534,6 +701,10 @@ __all__ = [
     'acknowledge_materialization',
     'admit_agent_judgment',
     'create_intent',
+    'get_or_create_cold_start_intent',
+    'has_cold_start_intent_created_on',
+    'acknowledge_sparse_cold_start_sequence_terminal',
+    'has_active_sparse_cold_start_sequence',
     'fetch_ready_intents',
     'get_budget_state',
     'iter_ready_intent_ids',

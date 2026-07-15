@@ -18,13 +18,15 @@ def _client() -> TestClient:
     return TestClient(app)
 
 
-def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None) -> dict:
+def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None, terminal_receipts=None) -> dict:
     return {
         'source_surface': 'main_chat',
         'control_generation': generation,
         'owner_fence': owner_fence,
-        'window_foreground': False,
+        'window_foreground': True,
+        'initial_page_loaded': True,
         'receipts': receipts or [],
+        'cold_start_sequence_terminal_receipts': terminal_receipts or [],
     }
 
 
@@ -64,7 +66,12 @@ def test_materialize_capability_off_does_zero_feature_store_or_metric_work(monke
         'resolve_task_intelligence_for_user',
         lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
     )
-    for name in ('acknowledge_materialization', 'release_due_deferrals', 'fetch_ready_intents'):
+    for name in (
+        'acknowledge_materialization',
+        'acknowledge_sparse_cold_start_sequence_terminal',
+        'release_due_deferrals',
+        'fetch_ready_intents',
+    ):
         monkeypatch.setattr(
             chat_first_router.chat_first_intents_db,
             name,
@@ -109,19 +116,36 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
         created_at=datetime(2026, 7, 15, tzinfo=timezone.utc),
     )
     acknowledgements = []
+    terminal_acknowledgements = []
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,
         'acknowledge_materialization',
         lambda *args, **kwargs: acknowledgements.append(kwargs) or intent,
     )
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'acknowledge_sparse_cold_start_sequence_terminal',
+        lambda *args, **kwargs: terminal_acknowledgements.append(kwargs) or intent,
+    )
     monkeypatch.setattr(chat_first_router.chat_first_intents_db, 'release_due_deferrals', lambda *args, **kwargs: [])
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_cold_start', lambda *args, **kwargs: None)
+    monkeypatch.setattr(chat_first_router, '_maybe_persist_daily_opener', lambda *args, **kwargs: None)
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db, 'fetch_ready_intents', lambda *args, **kwargs: [intent]
     )
 
     response = _client().post(
         '/v1/chat/materialize-prompts',
-        json=_request(receipts=[{'intent_id': 'intent-1', 'receipt_id': 'kernel-receipt-1'}]),
+        json=_request(
+            receipts=[{'intent_id': 'intent-1', 'receipt_id': 'kernel-receipt-1'}],
+            terminal_receipts=[
+                {
+                    'sequence_id': 'cold-start:7',
+                    'receipt_id': 'sequence-terminal-1',
+                    'terminal_state': 'completed',
+                }
+            ],
+        ),
     )
 
     assert response.status_code == 200
@@ -129,8 +153,38 @@ def test_materialize_returns_ready_intents_and_acknowledges_only_kernel_receipts
     assert acknowledgements[0]['intent_id'] == 'intent-1'
     assert acknowledgements[0]['receipt_id'] == 'kernel-receipt-1'
     assert acknowledgements[0]['account_generation'] == 7
+    assert len(terminal_acknowledgements) == 1
+    assert terminal_acknowledgements[0]['sequence_id'] == 'cold-start:7'
+    assert terminal_acknowledgements[0]['receipt_id'] == 'sequence-terminal-1'
+    assert terminal_acknowledgements[0]['terminal_state'] == 'completed'
+    assert terminal_acknowledgements[0]['account_generation'] == 7
+    assert terminal_acknowledgements[0]['now'].tzinfo is not None
     assert response.json()['intents'][0]['intent_id'] == 'intent-1'
     assert response.json()['intents'][0]['delivery_state'] == 'ready'
+
+
+def test_daily_opener_waits_for_an_active_sparse_cold_start_sequence(monkeypatch):
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'has_active_sparse_cold_start_sequence',
+        lambda *args, **kwargs: True,
+    )
+    monkeypatch.setattr(
+        chat_first_router.chat_first_intents_db,
+        'has_cold_start_intent_created_on',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('daily lookup must not run')),
+    )
+    monkeypatch.setattr(
+        chat_first_router,
+        'persist_daily_opener_intent',
+        lambda *args, **kwargs: (_ for _ in ()).throw(AssertionError('daily intent must not be created')),
+    )
+
+    chat_first_router._maybe_persist_daily_opener(
+        'user-1',
+        control_generation=7,
+        now=datetime(2026, 7, 15, tzinfo=timezone.utc),
+    )
 
 
 def test_deferral_receiver_is_capability_gated_before_its_store(monkeypatch):

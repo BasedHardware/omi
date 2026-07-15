@@ -149,13 +149,32 @@ export interface ChatFirstMaterializationReceipt {
   receiptId: string;
 }
 
+/** A restart-safe journal receipt that a sparse cold-start script has ended. */
+export interface ChatFirstColdStartSequenceTerminalReceipt {
+  sequenceId: string;
+  receiptId: string;
+  terminalState: "completed" | "abandoned";
+}
+
+/** The two receipt classes travel through one foreground materialize fetch. */
+export interface ChatFirstPromptReceiptBatch {
+  materializationReceipts: ChatFirstMaterializationReceipt[];
+  coldStartSequenceTerminalReceipts: ChatFirstColdStartSequenceTerminalReceipt[];
+}
+
 export interface MaterializeChatFirstIntentInput {
   ownerId: string;
   conversationId: string;
   controlGeneration: number;
   intentId: string;
   continuityKey: string;
-  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment";
+  source:
+    | "daily_opener"
+    | "capture_arrival"
+    | "deferral_reraise"
+    | "agent_judgment"
+    | "cold_start_rich"
+    | "cold_start_sparse";
   blocks: readonly unknown[];
   nowMs?: number;
 }
@@ -412,7 +431,6 @@ export function recordJournalTurn(
     const canonicalDelivery = canonicalJournalDelivery(store, input.ownerId, input.conversationId);
     assertCanonicalJournalDelivery(input.surfaceKind, canonicalDelivery);
     assertProducingRunOwner(store, input.producingRunId ?? null, input.ownerId);
-
     const existingByTurnId = findJournalTurnById(store, turnId);
     const existingByProducer = findJournalTurnByProducer(store, input.conversationId, producerId);
     if (
@@ -442,6 +460,8 @@ export function recordJournalTurn(
       });
       return { turn: existing, created: false, duplicate: true, outboxStatus };
     }
+
+    retirePendingColdStartQuestionForUnrelatedUserTurn(store, input, now);
 
     const sequence = nextJournalSequence(store, input.conversationId, now);
     const payloadHash = journalTurnPayloadHash({
@@ -535,6 +555,62 @@ export function recordJournalExchange(
       turns: results.map((result) => result.turn),
       createdTurns: results.filter((result) => result.created).map((result) => result.turn),
     };
+  });
+}
+
+/**
+ * A user may always bypass sparse cold-start suggestions by composing a
+ * normal main-Chat message. Mark only the current unselected script card as
+ * retired before recording that ordinary user turn; a card selected through
+ * `recordQuestionInteractionReply` is already marked selected and is left
+ * untouched. This state is journal-local and never inferred from prose.
+ */
+function retirePendingColdStartQuestionForUnrelatedUserTurn(
+  store: AgentStore,
+  input: RecordJournalTurnInput,
+  nowMs: number,
+): void {
+  if (input.role !== "user" || input.surfaceKind !== "main_chat") return;
+  const tail = store.getOptionalRow(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+    [input.conversationId],
+  );
+  if (!tail) return;
+  const parent = requireJournalTurn(store, input.conversationId, String(tail.turn_id));
+  if (parent.role !== "assistant" || parent.status !== "completed") return;
+  const questionIndex = parent.contentBlocks.findIndex((block) => (
+    block.type === "questionCard"
+    && block.selectedOptionId === undefined
+    && block.coldStartSequence !== undefined
+    && block.coldStartSequence.retired !== true
+  ));
+  if (questionIndex < 0) return;
+  const retiredBlocks = parent.contentBlocks.map((block, index) => {
+    if (index !== questionIndex || block.type !== "questionCard" || !block.coldStartSequence) {
+      return structuredClone(block);
+    }
+    return {
+      ...structuredClone(block),
+      coldStartSequence: { ...block.coldStartSequence, retired: true as const },
+    };
+  });
+  updateJournalTurn(store, {
+    ownerId: input.ownerId,
+    conversationId: input.conversationId,
+    turnId: parent.turnId,
+    replaceContentBlocks: retiredBlocks,
+    nowMs,
+  });
+  const retired = parent.contentBlocks[questionIndex];
+  if (retired?.type !== "questionCard" || !retired.coldStartSequence) return;
+  recordColdStartSequenceTerminalReceipt(store, {
+    ownerId: input.ownerId,
+    conversationId: input.conversationId,
+    sequenceId: retired.coldStartSequence.sequenceId,
+    terminalState: "abandoned",
+    terminalTurnId: parent.turnId,
+    nowMs,
   });
 }
 
@@ -810,7 +886,10 @@ export function recordQuestionInteractionReply(
       return emptyQuestionInteractionReceipt();
     }
     const questionIndex = parent.contentBlocks.findIndex((block) => (
-      block.type === "questionCard" && block.questionId === questionId && block.selectedOptionId === undefined
+      block.type === "questionCard"
+      && block.questionId === questionId
+      && block.selectedOptionId === undefined
+      && block.coldStartSequence?.retired !== true
     ));
     if (questionIndex < 0) return emptyQuestionInteractionReceipt();
     const question = parent.contentBlocks[questionIndex] as Extract<ConversationContentBlock, { type: "questionCard" }>;
@@ -847,7 +926,10 @@ export function recordQuestionInteractionReply(
           status: "completed",
           content: option.preparedAnswer,
           contentBlocks: [{ type: "text", id: `${userTurnId}:text`, text: option.preparedAnswer }],
-          metadataJson: JSON.stringify({ continuityKey }),
+          metadataJson: JSON.stringify({
+            continuityKey,
+            ...(question.coldStartSequence ? { coldStartSequence: question.coldStartSequence } : {}),
+          }),
           createdAtMs: now,
         },
         {
@@ -858,7 +940,11 @@ export function recordQuestionInteractionReply(
           status: "streaming",
           content: "",
           contentBlocks: [],
-          metadataJson: JSON.stringify({ continuityKey, hiddenUntilOutput: true }),
+          metadataJson: JSON.stringify({
+            continuityKey,
+            hiddenUntilOutput: true,
+            ...(question.coldStartSequence ? { coldStartSequence: question.coldStartSequence } : {}),
+          }),
           createdAtMs: now + 1,
         },
       ],
@@ -903,10 +989,17 @@ function materializeChatFirstIntentInTransaction(
   if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
     throw new Error("Chat-first materialization requires a valid control generation");
   }
-  if (!["daily_opener", "capture_arrival", "deferral_reraise", "agent_judgment"].includes(input.source)) {
+  if (![
+    "daily_opener",
+    "capture_arrival",
+    "deferral_reraise",
+    "agent_judgment",
+    "cold_start_rich",
+    "cold_start_sparse",
+  ].includes(input.source)) {
     throw new Error("Chat-first materialization source is invalid");
   }
-  const blocks = chatFirstIntentBlocks(intentId, input.blocks);
+  const blocks = chatFirstIntentBlocks(intentId, input.controlGeneration, input.source, input.blocks);
   const turnId = stableChatFirstIntentTurnID(intentId);
   const receiptId = stableChatFirstMaterializationReceiptID(intentId, continuityKey);
 
@@ -1021,23 +1114,39 @@ export function materializeChatFirstIntents(
 export function listChatFirstMaterializationReceipts(
   store: AgentStore,
   input: { ownerId: string; controlGeneration: number; limit?: number },
-): ChatFirstMaterializationReceipt[] {
+): ChatFirstPromptReceiptBatch {
   if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
     throw new Error("Chat-first receipt listing requires a valid control generation");
   }
   const limit = Math.max(1, Math.min(input.limit ?? 16, 16));
-  return store.allRows(
+  const materializationReceipts = store.allRows(
     `SELECT intent_id, receipt_id FROM chat_first_materialization_receipts
      WHERE owner_id = ? AND control_generation = ?
      ORDER BY created_at_ms ASC LIMIT ?`,
     [input.ownerId, input.controlGeneration, limit],
   ).map((row) => ({ intentId: String(row.intent_id), receiptId: String(row.receipt_id) }));
+  const coldStartSequenceTerminalReceipts = store.allRows(
+    `SELECT sequence_id, receipt_id, terminal_state FROM chat_first_cold_start_sequence_receipts
+     WHERE owner_id = ? AND control_generation = ?
+     ORDER BY created_at_ms ASC LIMIT ?`,
+    [input.ownerId, input.controlGeneration, limit],
+  ).map((row) => ({
+    sequenceId: String(row.sequence_id),
+    receiptId: String(row.receipt_id),
+    terminalState: String(row.terminal_state) as "completed" | "abandoned",
+  }));
+  return { materializationReceipts, coldStartSequenceTerminalReceipts };
 }
 
 /** Delete only the exact server-acknowledged receipt identities. */
 export function acknowledgeChatFirstMaterializationReceipts(
   store: AgentStore,
-  input: { ownerId: string; controlGeneration: number; receipts: readonly ChatFirstMaterializationReceipt[] },
+  input: {
+    ownerId: string;
+    controlGeneration: number;
+    receipts: readonly ChatFirstMaterializationReceipt[];
+    coldStartSequenceTerminalReceipts: readonly ChatFirstColdStartSequenceTerminalReceipt[];
+  },
 ): number {
   if (!Number.isSafeInteger(input.controlGeneration) || input.controlGeneration < 0) {
     throw new Error("Chat-first receipt acknowledgement requires a valid control generation");
@@ -1051,6 +1160,20 @@ export function acknowledgeChatFirstMaterializationReceipts(
         `DELETE FROM chat_first_materialization_receipts
          WHERE intent_id = ? AND owner_id = ? AND control_generation = ? AND receipt_id = ?`,
         [intentId, input.ownerId, input.controlGeneration, receiptId],
+      );
+      acknowledged += result;
+    }
+    for (const receipt of input.coldStartSequenceTerminalReceipts) {
+      const sequenceId = nonEmpty(receipt.sequenceId, "cold-start sequence ID");
+      const receiptId = nonEmpty(receipt.receiptId, "cold-start terminal receipt ID");
+      if (receipt.terminalState !== "completed" && receipt.terminalState !== "abandoned") {
+        throw new Error("Cold-start terminal receipt state is invalid");
+      }
+      const result = store.execute(
+        `DELETE FROM chat_first_cold_start_sequence_receipts
+         WHERE sequence_id = ? AND owner_id = ? AND control_generation = ?
+           AND receipt_id = ? AND terminal_state = ?`,
+        [sequenceId, input.ownerId, input.controlGeneration, receiptId, receipt.terminalState],
       );
       acknowledged += result;
     }
@@ -1395,8 +1518,213 @@ export function terminalizeJournalTurn(
     if (input.disposition === "discard") {
       markDiscardedBackendProjection(store, input.turnId, now);
     }
+    if (input.disposition === "accept" && terminalized.status === "completed") {
+      appendNextColdStartSequenceQuestion(store, input.ownerId, terminalized, now);
+    }
     return terminalized;
   });
+}
+
+/**
+ * Advance the fixed sparse sequence only from the selected option's ordinary
+ * assistant continuation after that continuation reaches a successful
+ * terminal state. The same SQLite transaction commits both facts, making a
+ * crash retry replay-safe without a separate sequence-completed flag.
+ */
+function appendNextColdStartSequenceQuestion(
+  store: AgentStore,
+  ownerId: string,
+  terminalized: ConversationTurn,
+  nowMs: number,
+): void {
+  const metadata = parseObjectJson(terminalized.metadataJson) as Record<string, unknown>;
+  const descriptor = localColdStartSequenceDescriptor(metadata.coldStartSequence);
+  const continuityKey = typeof metadata.continuityKey === "string" ? metadata.continuityKey : null;
+  if (!descriptor || !continuityKey) return;
+  const tail = store.getOptionalRow(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ? ORDER BY turn_seq DESC LIMIT 1`,
+    [terminalized.conversationId],
+  );
+  if (!tail || String(tail.turn_id) !== terminalized.turnId) return;
+  if (!selectedColdStartParentMatchesContinuation(store, terminalized, descriptor, continuityKey)) return;
+
+  if (descriptor.step === 3) {
+    recordColdStartSequenceTerminalReceipt(store, {
+      ownerId,
+      conversationId: terminalized.conversationId,
+      sequenceId: descriptor.sequenceId,
+      terminalState: "completed",
+      terminalTurnId: terminalized.turnId,
+      nowMs,
+    });
+    return;
+  }
+
+  const nextStep = (descriptor.step + 1) as 2 | 3;
+  const nextQuestion = coldStartSequenceQuestion(descriptor.sequenceId, nextStep);
+  const turnId = stableColdStartSequenceTurnID(descriptor.sequenceId, nextStep);
+  recordJournalTurn(store, {
+    ownerId,
+    conversationId: terminalized.conversationId,
+    turnId,
+    producerId: `cold-start-sequence:${descriptor.sequenceId}:step:${nextStep}`,
+    role: "assistant",
+    surfaceKind: "main_chat",
+    origin: "typed_chat",
+    status: "completed",
+    content: "",
+    contentBlocks: [nextQuestion],
+    metadataJson: JSON.stringify({ coldStartSequence: { sequenceId: descriptor.sequenceId, step: nextStep } }),
+    createdAtMs: nowMs + 1,
+  });
+}
+
+function localColdStartSequenceDescriptor(
+  value: unknown,
+): { sequenceId: string; step: 1 | 2 | 3 } | null {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return null;
+  const record = value as Record<string, unknown>;
+  const sequenceId = typeof record.sequenceId === "string" ? record.sequenceId : "";
+  const step = record.step;
+  if (!sequenceId || (step !== 1 && step !== 2 && step !== 3)) return null;
+  return { sequenceId, step };
+}
+
+function selectedColdStartParentMatchesContinuation(
+  store: AgentStore,
+  terminalized: ConversationTurn,
+  descriptor: { sequenceId: string; step: 1 | 2 | 3 },
+  continuityKey: string,
+): boolean {
+  const rows = store.allRows(
+    `SELECT turn_id FROM conversation_turns
+     WHERE conversation_id = ? AND role = 'assistant' AND turn_seq < ?
+     ORDER BY turn_seq DESC`,
+    [terminalized.conversationId, terminalized.turnSeq],
+  );
+  for (const row of rows) {
+    const turn = requireJournalTurn(store, terminalized.conversationId, String(row.turn_id));
+    for (const block of turn.contentBlocks) {
+      if (
+        block.type !== "questionCard"
+        || block.selectedOptionId === undefined
+        || block.coldStartSequence?.retired === true
+        || block.coldStartSequence?.sequenceId !== descriptor.sequenceId
+        || block.coldStartSequence?.step !== descriptor.step
+      ) continue;
+      if (questionInteractionContinuityKey(block.questionId, block.selectedOptionId) === continuityKey) return true;
+    }
+  }
+  return false;
+}
+
+function coldStartSequenceQuestion(
+  sequenceId: string,
+  step: 2 | 3,
+): Extract<ConversationContentBlock, { type: "questionCard" }> {
+  const questionId = `${sequenceId}:step:${step}`;
+  const options = step === 2
+    ? [
+      {
+        optionId: `${sequenceId}:goal:create`,
+        label: "Yes, create a goal",
+        preparedAnswer: "Yes, turn that into a goal for me.",
+      },
+      {
+        optionId: `${sequenceId}:goal:not-yet`,
+        label: "Not yet",
+        preparedAnswer: "Not yet. I want to keep thinking about it first.",
+      },
+    ]
+    : [
+      {
+        optionId: `${sequenceId}:tasks:draft`,
+        label: "Yes, draft tasks",
+        preparedAnswer: "Yes, draft a few first tasks for me.",
+      },
+      {
+        optionId: `${sequenceId}:tasks:not-yet`,
+        label: "I will add them later",
+        preparedAnswer: "I will add tasks later.",
+      },
+    ];
+  return {
+    type: "questionCard",
+    id: stableColdStartSequenceBlockID(sequenceId, step),
+    questionId,
+    text: step === 2
+      ? "Would you like me to turn that into a goal?"
+      : "Want me to draft a few first tasks?",
+    subject: { kind: "cold_start", id: sequenceId },
+    options,
+    coldStartSequence: { sequenceId, step },
+  };
+}
+
+function stableColdStartSequenceTurnID(sequenceId: string, step: 2 | 3): string {
+  return `turn_cfs_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 24)}`;
+}
+
+function stableColdStartSequenceBlockID(sequenceId: string, step: 2 | 3): string {
+  return `cfs_block_${createHash("sha256").update(`${sequenceId}\u0000${step}`).digest("hex").slice(0, 20)}`;
+}
+
+function recordColdStartSequenceTerminalReceipt(
+  store: AgentStore,
+  input: {
+    ownerId: string;
+    conversationId: string;
+    sequenceId: string;
+    terminalState: "completed" | "abandoned";
+    terminalTurnId: string;
+    nowMs: number;
+  },
+): void {
+  const controlGeneration = coldStartSequenceGeneration(input.sequenceId);
+  if (controlGeneration === null) throw new Error("Cold-start sequence identity is invalid");
+  const receiptId = `cfs_terminal_${createHash("sha256")
+    .update(`${input.sequenceId}\u0000${input.terminalState}\u0000${input.terminalTurnId}`)
+    .digest("hex")
+    .slice(0, 24)}`;
+  const existing = store.getOptionalRow(
+    `SELECT owner_id, conversation_id, control_generation, receipt_id, terminal_state
+     FROM chat_first_cold_start_sequence_receipts WHERE sequence_id = ?`,
+    [input.sequenceId],
+  );
+  if (existing) {
+    if (
+      String(existing.owner_id) !== input.ownerId
+      || String(existing.conversation_id) !== input.conversationId
+      || Number(existing.control_generation) !== controlGeneration
+      || String(existing.receipt_id) !== receiptId
+      || String(existing.terminal_state) !== input.terminalState
+    ) {
+      throw new Error("Cold-start sequence terminal receipt conflicts with canonical journal state");
+    }
+    return;
+  }
+  store.execute(
+    `INSERT INTO chat_first_cold_start_sequence_receipts(
+       sequence_id, owner_id, conversation_id, control_generation, receipt_id, terminal_state, created_at_ms
+     ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    [
+      input.sequenceId,
+      input.ownerId,
+      input.conversationId,
+      controlGeneration,
+      receiptId,
+      input.terminalState,
+      input.nowMs,
+    ],
+  );
+}
+
+function coldStartSequenceGeneration(sequenceId: string): number | null {
+  const match = /^cold-start:(\d+)$/.exec(sequenceId);
+  if (!match) return null;
+  const generation = Number(match[1]);
+  return Number.isSafeInteger(generation) && generation >= 0 ? generation : null;
 }
 
 function markDiscardedBackendProjection(store: AgentStore, turnId: string, nowMs: number): void {
@@ -3102,7 +3430,11 @@ function materializationTailState(
   return {
     unansweredQuestion: assistant
       && turn.status === "completed"
-      && turn.contentBlocks.some((block) => block.type === "questionCard" && block.selectedOptionId === undefined),
+      && turn.contentBlocks.some((block) => (
+        block.type === "questionCard"
+        && block.selectedOptionId === undefined
+        && block.coldStartSequence?.retired !== true
+      )),
     streaming: assistant && (turn.status === "pending" || turn.status === "streaming"),
   };
 }
@@ -3114,6 +3446,8 @@ function materializationTailState(
  */
 function chatFirstIntentBlocks(
   intentId: string,
+  controlGeneration: number,
+  source: MaterializeChatFirstIntentInput["source"],
   rawBlocks: readonly unknown[],
 ): ConversationContentBlock[] {
   if (rawBlocks.length < 1 || rawBlocks.length > 8) {
@@ -3129,6 +3463,25 @@ function chatFirstIntentBlocks(
     switch (type) {
       case "questionCard": {
         const subject = recordValue(block.subject, "chat-first question subject");
+        const subjectKind = chatFirstSubjectKind(subject.kind);
+        const subjectId = nonEmptyString(subject.id, "chat-first question subject ID");
+        const coldStartSequence = block.cold_start_sequence === undefined
+          ? undefined
+          : coldStartSequenceValue(block.cold_start_sequence);
+        const isColdStart = subjectKind === "cold_start";
+        if (isColdStart !== (coldStartSequence !== undefined)) {
+          throw new Error("chat-first cold-start question descriptor is invalid");
+        }
+        if (coldStartSequence) {
+          if (
+            source !== "cold_start_sparse"
+            || coldStartSequence.step !== 1
+            || coldStartSequence.sequenceId !== subjectId
+            || subjectId !== `cold-start:${controlGeneration}`
+          ) {
+            throw new Error("chat-first cold-start question is invalid");
+          }
+        }
         const options = arrayValue(block.options, "chat-first question options").map((rawOption) => {
           const option = recordValue(rawOption, "chat-first question option");
           const defer = option.defer === undefined ? undefined : booleanValue(option.defer, "chat-first question defer");
@@ -3145,10 +3498,11 @@ function chatFirstIntentBlocks(
           questionId: nonEmptyString(block.question_id, "chat-first question ID"),
           text: nonEmptyString(block.text, "chat-first question text"),
           subject: {
-            kind: chatFirstSubjectKind(subject.kind),
-            id: nonEmptyString(subject.id, "chat-first question subject ID"),
+            kind: subjectKind,
+            id: subjectId,
           },
           options,
+          ...(coldStartSequence ? { coldStartSequence } : {}),
         };
       }
       case "taskCard":
@@ -3199,6 +3553,16 @@ function booleanValue(value: unknown, name: string): boolean {
   return value;
 }
 
+function coldStartSequenceValue(value: unknown): { sequenceId: string; step: 1 | 2 | 3 } {
+  const sequence = recordValue(value, "chat-first cold-start sequence");
+  const step = safeNonNegativeInteger(sequence.step, "chat-first cold-start sequence step");
+  if (step < 1 || step > 3) throw new Error("chat-first cold-start sequence step is invalid");
+  return {
+    sequenceId: nonEmptyString(sequence.sequence_id, "chat-first cold-start sequence ID"),
+    step: step as 1 | 2 | 3,
+  };
+}
+
 function safeNonNegativeInteger(value: unknown, name: string): number {
   if (typeof value !== "number" || !Number.isSafeInteger(value) || value < 0) {
     throw new Error(`${name} is invalid`);
@@ -3206,8 +3570,8 @@ function safeNonNegativeInteger(value: unknown, name: string): number {
   return value;
 }
 
-function chatFirstSubjectKind(value: unknown): "task" | "goal" | "capture" {
-  if (value === "task" || value === "goal" || value === "capture") return value;
+function chatFirstSubjectKind(value: unknown): "task" | "goal" | "capture" | "cold_start" {
+  if (value === "task" || value === "goal" || value === "capture" || value === "cold_start") return value;
   throw new Error("chat-first question subject kind is invalid");
 }
 
@@ -3267,6 +3631,9 @@ function enqueueChatFirstDeferral(
   },
 ): void {
   const question = structuredClone(input.question);
+  if (question.subject.kind === "cold_start") {
+    throw new Error("Cold-start sequence questions cannot enter the deferral outbox");
+  }
   // The backend schema deliberately does not carry renderer state. Selection
   // is transcript-local; the verbatim question payload remains canonical.
   delete question.selectedOptionId;
@@ -3324,7 +3691,21 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
       nonEmpty(block.questionId, "question ID");
       if (block.text.length === 0 || block.text.length > 300) throw new Error("Question card text is out of bounds");
       nonEmpty(block.subject.id, "question subject ID");
-      if (!["task", "goal", "capture"].includes(block.subject.kind)) throw new Error("Question subject kind is invalid");
+      if (!["task", "goal", "capture", "cold_start"].includes(block.subject.kind)) {
+        throw new Error("Question subject kind is invalid");
+      }
+      const isColdStart = block.subject.kind === "cold_start";
+      if (isColdStart !== (block.coldStartSequence !== undefined)) {
+        throw new Error("Cold-start question descriptor is invalid");
+      }
+      if (block.coldStartSequence) {
+        if (
+          block.coldStartSequence.sequenceId !== block.subject.id
+          || ![1, 2, 3].includes(block.coldStartSequence.step)
+        ) {
+          throw new Error("Cold-start question sequence is invalid");
+        }
+      }
       if (block.options.length < 1 || block.options.length > 4) throw new Error("Question card option count is out of bounds");
       const optionIds = new Set<string>();
       let defers = 0;

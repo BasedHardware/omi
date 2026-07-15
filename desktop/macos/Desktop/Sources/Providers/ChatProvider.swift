@@ -3863,8 +3863,8 @@ class ChatProvider: ObservableObject {
     )
   }
 
-  func pendingChatFirstMaterializationReceipts() async throws -> [ChatFirstMaterializationReceipt] {
-    guard let session = try await chatFirstMaterializationSession() else { return [] }
+  func pendingChatFirstMaterializationReceipts() async throws -> ChatFirstPromptReceiptBatch {
+    guard let session = try await chatFirstMaterializationSession() else { return .empty }
     return try await resolvedAgentClient().listChatFirstMaterializationReceipts(
       surface: session.surface,
       ownerID: session.ownerID,
@@ -3875,7 +3875,7 @@ class ChatProvider: ObservableObject {
 
   @discardableResult
   func acknowledgeChatFirstMaterializationReceipts(
-    _ receipts: [ChatFirstMaterializationReceipt]
+    _ receipts: ChatFirstPromptReceiptBatch
   ) async throws -> Int {
     guard !receipts.isEmpty, let session = try await chatFirstMaterializationSession() else { return 0 }
     return try await resolvedAgentClient().acknowledgeChatFirstMaterializationReceipts(

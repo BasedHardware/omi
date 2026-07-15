@@ -2277,6 +2277,71 @@ class TasksStore: ObservableObject {
     }
   }
 
+  /// Hydrates a canonical goal-detail task through the owner-fenced store
+  /// before a goal page attempts any mutation.
+  func resolveCanonicalTask(
+    id: String,
+    expectedOwnerID: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
+    operations: OwnerBoundOperations = OwnerBoundOperations()
+  ) async -> TaskActionItem? {
+    let normalizedID = id.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !normalizedID.isEmpty,
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return nil }
+
+    if let existing = tasks.first(where: { $0.id == normalizedID && $0.deleted != true }) {
+      return existing
+    }
+    do {
+      let remoteTask: TaskActionItem?
+      if let fetchTaskDetail = operations.fetchTaskDetail {
+        remoteTask = try await fetchTaskDetail(normalizedID, lease.ownerID)
+      } else {
+        remoteTask = try await APIClient.shared.getActionItem(
+          id: normalizedID,
+          expectedOwnerId: lease.ownerID,
+          authorizationSnapshot: lease.authorizationSnapshot
+        )
+      }
+      guard isCurrent(lease),
+        let remoteTask,
+        remoteTask.id == normalizedID,
+        remoteTask.deleted != true
+      else { return nil }
+      try await syncPage([remoteTask], lease: lease, operations: operations)
+      guard isCurrent(lease),
+        let hydratedTask = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: normalizedID),
+        hydratedTask.deleted != true
+      else { return nil }
+      publishHydratedCanonicalTask(hydratedTask)
+      await refreshDashboard(lease: lease, operations: operations)
+      guard isCurrent(lease) else { return nil }
+      return hydratedTask
+    } catch {
+      guard isCurrent(lease) else { return nil }
+      self.error = "This task is no longer available."
+      logError("TasksStore: Failed to hydrate canonical task", error: error)
+      return nil
+    }
+  }
+
+  private func publishHydratedCanonicalTask(_ task: TaskActionItem) {
+    incompleteTasks.removeAll { $0.id == task.id }
+    completedTasks.removeAll { $0.id == task.id }
+    deletedTasks.removeAll { $0.id == task.id }
+    if task.deleted == true {
+      deletedTasks.insert(task, at: 0)
+    } else if task.completed {
+      completedTasks.insert(task, at: 0)
+    } else {
+      incompleteTasks.insert(task, at: 0)
+    }
+  }
+
   func toggleTask(
     _ task: TaskActionItem,
     expectedOwnerID: String? = nil,
