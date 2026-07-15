@@ -33,25 +33,15 @@ export const LEAF_AGENT_CONTROL_TOOLS = new Set([
   'run_agent_and_wait'
 ])
 
-/**
- * Adapter ids whose credentials are Omi-managed cloud routing but which have no
- * Windows adapter implementation yet. macOS ships `pi-mono` as a managed-cloud
- * production adapter, so a session persisted against it must pin to
- * `managed_cloud` here too — otherwise the same session would resolve to a
- * different credential scope on the two platforms, which is exactly what the
- * provider boundary exists to prevent. Remove an id from this set once a real
- * Windows adapter for it is registered in ADAPTER_CAPABILITY_MATRIX.
- */
-const MANAGED_CLOUD_ADAPTER_IDS = new Set<string>(['pi-mono'])
-
 export function providerBoundaryForAdapter(adapterId: string): ProviderBoundary {
+  // pi-mono is now a registered managed_cloud production adapter (PR-D added its
+  // ADAPTER_CAPABILITY_MATRIX entry), so `isProductionAdapterId` + credentialScope
+  // handle it — no special-case set is needed. Non-production (test/dev) adapters
+  // pin to their own local boundary.
   if (isProductionAdapterId(adapterId)) {
     return adapterCredentialScopeFor(adapterId) === 'managed_cloud'
       ? 'managed_cloud'
       : `local_user:${adapterId}`
-  }
-  if (MANAGED_CLOUD_ADAPTER_IDS.has(adapterId)) {
-    return 'managed_cloud'
   }
   return `local_user:${adapterId}`
 }

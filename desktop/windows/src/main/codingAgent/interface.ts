@@ -2,9 +2,9 @@
 // adapter layer (desktop/macos/agent/src/adapters/interface.ts), trimmed to the
 // adapters that exist on Windows: Claude Code (adapter id "acp", built-in ACP
 // bridge, no external install) plus three user-connected external ACP commands
-// (OpenClaw, Hermes, Codex). The macOS kernel/session-store, worker pools, and
-// placeholder adapters (pi-mono, a2a) are deliberately not ported — Windows has
-// no kernel; callers hold bindings in memory for the life of a task.
+// (OpenClaw, Hermes, Codex), plus the managed-cloud default-chat adapter pi-mono
+// (a production adapter but not a user-selectable coding agent). macOS's `a2a`
+// placeholder is deliberately not ported.
 
 /** How a run's tool use is gated: "ask" surfaces approvals, "act" auto-approves. */
 export type RunMode = 'ask' | 'act'
@@ -91,11 +91,11 @@ export interface AdapterCapabilityExpectation {
 }
 
 /**
- * Where an adapter's credentials come from. Windows only ships local-user
- * adapters (Claude Code plus user-connected external ACP commands); the macOS
- * `managed_cloud` scope (pi-mono) has no Windows adapter. The kernel's
- * execution-policy boundary checks read this so a session pinned to a local
- * provider can never be rerouted to a managed one.
+ * Where an adapter's credentials come from. Windows ships local-user coding
+ * agents (Claude Code plus user-connected external ACP commands) and the
+ * `managed_cloud` default-chat adapter (pi-mono). The kernel's execution-policy
+ * boundary checks read this so a session pinned to a local provider can never be
+ * rerouted to a managed one (or vice versa).
  */
 export type AdapterCredentialScope = 'managed_cloud' | 'local_user'
 
@@ -226,11 +226,49 @@ export const ADAPTER_CAPABILITY_MATRIX = {
         'Process-local Codex bindings are stale after adapter restarts; active attempts are abandoned.'
       )
     }
+  },
+  // pi-mono is the Omi-managed-cloud DEFAULT-CHAT engine (macOS parity). Unlike
+  // acp/openclaw/hermes/codex it is NOT a user-selectable coding agent — it is
+  // reached only through the default-chat (main_chat) path, never a pill or a
+  // delegated-task fallback (see PRODUCTION_ADAPTER_IDS below). Its matrix
+  // membership is what makes `isProductionAdapterId('pi-mono')` true, which pins
+  // its sessions to the `managed_cloud` provider boundary.
+  'pi-mono': {
+    adapterId: 'pi-mono',
+    credentialScope: 'managed_cloud',
+    expectations: {
+      nativeResume: unsupported(
+        'pi-mono session ids are process-local and are stale after daemon restart.'
+      ),
+      cancellationDispatch: required('pi-mono supports abort dispatch for the active prompt.'),
+      cancellationAck: knownLimitation(
+        'pi-mono abort resolves locally without an independent adapter ack.',
+        'win-agents-cancel-ack'
+      ),
+      pinnedWorker: required(
+        'pi-mono keeps session state in the adapter process and must stay worker-pinned while active.'
+      ),
+      modelSwitching: required('pi-mono maps desktop model ids and sends set_model.'),
+      artifactEmission: unsupported('pi-mono runtime does not emit artifact references yet.'),
+      toolSupport: required('pi-mono uses the Omi extension/tool relay path for tools.'),
+      restartOrphanSemantics: required(
+        'Startup reconciliation orphans active attempts and marks non-resumable bindings stale.'
+      )
+    }
   }
 } as const satisfies Record<string, AdapterCapabilityMatrixEntry>
 
 export type ProductionAdapterId = keyof typeof ADAPTER_CAPABILITY_MATRIX
 
+/**
+ * The user-selectable coding agents surfaced as pills and usable as delegated-
+ * task fallbacks (== the shared `CodingAgentId` union). This intentionally
+ * EXCLUDES managed-cloud default-chat adapters like `pi-mono`: pi-mono's
+ * production-ness comes structurally from ADAPTER_CAPABILITY_MATRIX membership
+ * via `isProductionAdapterId`, NOT from this list. Do not add pi-mono here — it
+ * is the default-chat engine (reached via the `chatEngine` flag + main_chat
+ * routing), never a coding-agent pill or fallback.
+ */
 export const PRODUCTION_ADAPTER_IDS = [
   'acp',
   'openclaw',
@@ -238,14 +276,24 @@ export const PRODUCTION_ADAPTER_IDS = [
   'codex'
 ] as const satisfies readonly ProductionAdapterId[]
 
+/**
+ * The user-selectable coding-agent ids (structurally == the shared `CodingAgentId`
+ * union). Narrower than `ProductionAdapterId`, which also includes managed-cloud
+ * default-chat adapters like `pi-mono`. Coding-agent-task code (taskRunner,
+ * failures) uses THIS so pi-mono can never leak into a pill, a task fallback, or
+ * a failure label.
+ */
+export type CodingAgentAdapterId = (typeof PRODUCTION_ADAPTER_IDS)[number]
+
 export function isProductionAdapterId(adapterId: string): adapterId is ProductionAdapterId {
   return Object.prototype.hasOwnProperty.call(ADAPTER_CAPABILITY_MATRIX, adapterId)
 }
 
 /**
- * Windows ships no placeholder adapters (macOS's `a2a`/`pi-mono` scaffolds are
- * not ported). The kernel adapter-registry still calls this guard before
- * registering a factory, so it exists for parity and always returns false.
+ * Windows ships no placeholder adapters (macOS's `a2a` scaffold is not ported;
+ * pi-mono IS ported as a real managed_cloud adapter, so it is not a placeholder).
+ * The kernel adapter-registry still calls this guard before registering a
+ * factory, so it exists for parity and always returns false.
  */
 export function isPlaceholderAdapterId(_adapterId: string): boolean {
   return false

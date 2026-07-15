@@ -13,7 +13,12 @@ import {
   adapterIsActivated,
   type AdapterCommandOverrides
 } from './adapterRegistry'
-import { PRODUCTION_ADAPTER_IDS, type ProductionAdapterId, type RuntimeAdapter } from './interface'
+import {
+  PRODUCTION_ADAPTER_IDS,
+  type CodingAgentAdapterId,
+  type ProductionAdapterId,
+  type RuntimeAdapter
+} from './interface'
 import { failureFromError, messageFrom } from './failures'
 import type { CodingAgentEvent, CodingAgentResult, CodingAgentRunArgs } from '../../shared/types'
 
@@ -21,10 +26,10 @@ import type { CodingAgentEvent, CodingAgentResult, CodingAgentRunArgs } from '..
 export const AGENT_FALLBACK_ORDER = PRODUCTION_ADAPTER_IDS
 
 export function candidateAgents(
-  named: ProductionAdapterId | undefined,
+  named: CodingAgentAdapterId | undefined,
   overrides: AdapterCommandOverrides,
   env: NodeJS.ProcessEnv = process.env
-): ProductionAdapterId[] {
+): CodingAgentAdapterId[] {
   const connected = AGENT_FALLBACK_ORDER.filter((id) => adapterIsActivated(id, overrides, env))
   if (!named) return [...connected]
   return [named, ...connected.filter((id) => id !== named)]

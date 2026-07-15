@@ -99,6 +99,12 @@ export type AppSettings = {
    *  on top of the capture-time and privacy exclusions. Mac's
    *  `memoryExcludedApps`. Default []. */
   memoryExcludedApps: string[]
+  /** Which engine renders default typed chat. `'legacy_sse'` = today's
+   *  `fetch('/v2/messages')` path; `'pi_mono'` = the kernel main_chat → pi-mono
+   *  adapter path (PR-E). Default `'legacy_sse'` until pi-mono is proven end to
+   *  end. INERT in PR-D1: no consumer reads it yet — PR-E's main_chat routing
+   *  does. */
+  chatEngine: 'legacy_sse' | 'pi_mono'
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -204,7 +210,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // default 10, capped at a day). A junk interval falls back to 10, never 0.
     memoryExtractionIntervalMin: sanitizeCooldownMinutes(r.memoryExtractionIntervalMin),
     memoryMinConfidence: sanitizeMinConfidence(r.memoryMinConfidence),
-    memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps)
+    memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
+    // Only the explicit 'pi_mono' opt-in flips this; anything else (junk, unset)
+    // is the safe legacy path.
+    chatEngine: r.chatEngine === 'pi_mono' ? 'pi_mono' : 'legacy_sse'
   }
 }
 

@@ -30,6 +30,7 @@ import {
   type AgentControlToolContext
 } from './controlTools'
 import { LEAF_AGENT_CONTROL_TOOLS } from './executionPolicy'
+import { adapterCapabilitiesFor, type RuntimeAdapter } from '../codingAgent/interface'
 
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
 const createdDirs: string[] = []
@@ -754,4 +755,106 @@ describe('set_desktop_attention_override', () => {
     expect(override.subjectId).toBe('run_1')
     expect(override.dismissedAtMs).toBeTypeOf('number')
   })
+})
+
+// === DARK invariant: managed-cloud pi-mono is un-spawnable via control tools ===
+// PR-D registered pi-mono, flipping isProductionAdapterId('pi-mono') true. Without
+// the managed-cloud scope guard, the trusted-direct-control path (the app's own
+// agentControl:call IPC → trustedUserControl:true, no owning session boundary)
+// could spawn AND invoke it through the agent-control tools while nothing routes
+// to it deliberately yet. This is the guard that keeps DARK dark: it must refuse
+// all three spawn/run tools and never build/invoke the adapter. If someone deletes
+// `assertControlSpawnAdapterNotManagedCloud`, this suite goes red — spawn_agent and
+// spawn_background_agent would persist a session + build the adapter, and
+// run_agent_and_wait would surface a downstream error instead of the scope refusal.
+describe('DARK invariant: managed-cloud pi-mono is un-spawnable via control tools', () => {
+  // A benign pi-mono adapter registered into the kernel: if the guard were bypassed,
+  // a spawn would really acquire and build it — so `factoryCalls > 0` proves invocation.
+  function piMonoFake(onBuild: () => void): RuntimeAdapter {
+    onBuild()
+    return {
+      adapterId: 'pi-mono',
+      capabilities: adapterCapabilitiesFor('pi-mono'),
+      async start() {
+        /* no-op fake */
+      },
+      async stop() {
+        /* no-op fake */
+      },
+      async openBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId: 'pi-mono',
+          adapterNativeSessionId: `native-${input.sessionId}`,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async resumeBinding(input) {
+        return {
+          sessionId: input.sessionId,
+          adapterId: 'pi-mono',
+          adapterNativeSessionId: input.adapterNativeSessionId,
+          resumeFidelity: 'none',
+          cwd: input.cwd
+        }
+      },
+      async executeAttempt(context) {
+        return {
+          text: 'ok',
+          adapterSessionId: context.binding.adapterNativeSessionId,
+          terminalStatus: 'succeeded'
+        }
+      },
+      async cancelAttempt() {
+        return { accepted: true, dispatchAttempted: true, adapterAcknowledged: false }
+      }
+    }
+  }
+
+  function newKernelWithPiMonoSpy(): {
+    kernel: AgentRuntimeKernel
+    store: SqliteAgentStore
+    factoryCalls: () => number
+  } {
+    const dir = mkdtempSync(join(tmpdir(), 'omi-pimono-guard-'))
+    createdDirs.push(dir)
+    const store = new SqliteAgentStore({
+      databaseFactory: nodeSqliteFactory,
+      databasePath: join(dir, 'omi-agentd.sqlite3')
+    })
+    openStores.push(store)
+    const registry = new AdapterRegistry()
+    let calls = 0
+    registry.register('pi-mono', () => piMonoFake(() => (calls += 1)))
+    const kernel = new AgentRuntimeKernel({ store, registry })
+    return { kernel, store, factoryCalls: () => calls }
+  }
+
+  // Valid input for each tool, so a rejection can only be the scope guard, never
+  // schema validation. run_agent_and_wait needs a canonical parentRunId.
+  const cases: Array<[string, Record<string, unknown>]> = [
+    ['spawn_agent', { objective: 'x', adapterId: 'pi-mono' }],
+    ['spawn_background_agent', { prompt: 'x', adapterId: 'pi-mono' }],
+    ['run_agent_and_wait', { objective: 'x', parentRunId: 'run_darktest', adapterId: 'pi-mono' }]
+  ]
+
+  it.each(cases)(
+    'refuses a trusted-control spawn of pi-mono via %s and never invokes the adapter',
+    async (name, input) => {
+      const { kernel, store, factoryCalls } = newKernelWithPiMonoSpy()
+      const before = store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n
+
+      const result = await call(coordinatorContext(kernel), name, input)
+
+      expect(result.ok).toBe(false)
+      // Refused by the managed-cloud SCOPE guard specifically — not a downstream
+      // "run not found" / "adapter not registered" error. This is what would break
+      // if the guard were removed.
+      expect(result.error?.message).toMatch(/managed-cloud adapter and cannot be spawned or run/)
+      // No kernel work: no session persisted, and the adapter was never built/invoked.
+      expect(store.allRows('SELECT COUNT(*) AS n FROM sessions')[0].n).toBe(before)
+      expect(factoryCalls()).toBe(0)
+    }
+  )
 })
