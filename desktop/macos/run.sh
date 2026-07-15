@@ -80,8 +80,12 @@ fi
 apply_yolo_env() {
     export OMI_SKIP_BACKEND=1
     export OMI_SKIP_TUNNEL=1
-    export OMI_DESKTOP_API_URL="https://desktop-backend-dt5lrfkkoa-uc.a.run.app"
-    export OMI_PYTHON_API_URL="https://api.omiapi.com"
+    # `--yolo` supplies remote-development defaults, but must not discard an
+    # explicitly targeted backend. Named QA and fault-injection bundles use
+    # these overrides to exercise a chosen service revision without requiring
+    # a local Rust backend or .env file.
+    export OMI_DESKTOP_API_URL="${OMI_DESKTOP_API_URL:-https://desktop-backend-dt5lrfkkoa-uc.a.run.app}"
+    export OMI_PYTHON_API_URL="${OMI_PYTHON_API_URL:-https://api.omiapi.com}"
     export FIREBASE_API_KEY="AIzaSyD9dzBdglc7IO9pPDIOvqnCoTis_xKkkC8"
 }
 

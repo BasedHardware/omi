@@ -2,18 +2,37 @@ import Foundation
 
 /// Runtime switches for the harness-owned Omi Dev local profile.
 ///
-/// Production and beta keep their existing bundle identifiers. The local harness
-/// reuses the default ``Omi Dev`` bundle (`com.omi.desktop-dev`) so macOS
-/// permissions and storage paths are preserved; only API endpoints and Firebase
-/// Auth switch to localhost emulators when ``OMI_DESKTOP_LOCAL_PROFILE=1``.
+/// Production and beta keep their existing bundle identifiers and storage paths.
+/// The default Omi Dev bundle (`com.omi.desktop-dev`) also retains the established
+/// Omi storage root. Every other named development bundle gets a dedicated root,
+/// so parallel QA bundles cannot race one another against the same SQLite/WAL files.
 package enum DesktopLocalProfile {
   package static var isEnabled: Bool {
     value("OMI_DESKTOP_LOCAL_PROFILE") == "1"
   }
 
   package static var storageDirectoryName: String {
-    guard isEnabled else { return "Omi" }
-    return nonEmpty(value("OMI_LOCAL_PROFILE_STORAGE_NAME")) ?? "Omi"
+    storageDirectoryName(
+      bundleIdentifier: Bundle.main.bundleIdentifier,
+      localProfileEnabled: isEnabled,
+      localProfileStorageName: nonEmpty(value("OMI_LOCAL_PROFILE_STORAGE_NAME")))
+  }
+
+  /// Resolves the app-support directory name without reading process state so the
+  /// production, Omi Dev, local-profile, and named-bundle boundaries stay testable.
+  package static func storageDirectoryName(
+    bundleIdentifier: String?,
+    localProfileEnabled: Bool,
+    localProfileStorageName: String?
+  ) -> String {
+    if localProfileEnabled {
+      return localProfileStorageName ?? "Omi"
+    }
+
+    guard let bundleIdentifier, isNamedDevelopmentBundle(bundleIdentifier) else {
+      return "Omi"
+    }
+    return "Omi-\(sanitizeForDirectoryName(bundleIdentifier))"
   }
 
   package static var authEmulatorHost: String? {
@@ -44,5 +63,16 @@ package enum DesktopLocalProfile {
   private static func nonEmpty(_ value: String?) -> String? {
     guard let value, !value.isEmpty else { return nil }
     return value
+  }
+
+  private static func isNamedDevelopmentBundle(_ bundleIdentifier: String) -> Bool {
+    bundleIdentifier.hasPrefix("com.omi.")
+      && bundleIdentifier != "com.omi.computer-macos"
+      && bundleIdentifier != "com.omi.desktop-dev"
+  }
+
+  private static func sanitizeForDirectoryName(_ value: String) -> String {
+    let allowed = CharacterSet.alphanumerics.union(CharacterSet(charactersIn: ".-_"))
+    return String(value.unicodeScalars.map { allowed.contains($0) ? Character($0) : "_" })
   }
 }

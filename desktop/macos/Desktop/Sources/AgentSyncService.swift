@@ -349,6 +349,14 @@ actor AgentSyncService {
         )
     }
 
+    /// Forward local query failures to the database lifecycle owner. AgentSync
+    /// touches every table on a short polling interval, so ignoring a recoverable
+    /// SQLite I/O error here leaves a stale pool running indefinitely instead of
+    /// allowing RewindDatabase to rotate and recover it.
+    static func reportDatabaseReadFailure(_ error: Error) async {
+        await RewindDatabase.shared.reportQueryError(error)
+    }
+
     private func syncTable(_ spec: TableSpec, generation: UInt64) async -> Int {
         guard syncGeneration == generation else { return 0 }
         guard let dbPool = await getDBPool() else { return 0 }
@@ -370,8 +378,10 @@ actor AgentSyncService {
                 guard syncGeneration == generation else { return 0 }
                 cachedTableColumns[spec.name] = fetched
                 columns = fetched
+                await RewindDatabase.shared.reportQuerySuccess()
             } catch {
                 log("AgentSync: error fetching schema for \(spec.name) — \(error.localizedDescription)")
+                await Self.reportDatabaseReadFailure(error)
                 return 0
             }
         }
@@ -423,6 +433,7 @@ actor AgentSyncService {
             }
 
             guard syncGeneration == generation else { return 0 }
+            await RewindDatabase.shared.reportQuerySuccess()
 
             guard !rows.isEmpty else { return 0 }
 
@@ -457,6 +468,7 @@ actor AgentSyncService {
             }
         } catch {
             log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
+            await Self.reportDatabaseReadFailure(error)
         }
         return 0
     }

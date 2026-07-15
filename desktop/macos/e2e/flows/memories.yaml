@@ -4,6 +4,7 @@ tier: 2
 description: Memories page navigation and refresh via automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/OmiSupport/DesktopLocalProfile.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PersonaPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift

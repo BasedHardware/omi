@@ -95,11 +95,30 @@ actor RewindDatabase {
 
     /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
     private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-        guard let dbError = error as? DatabaseError else { return false }
-        if isBusyDatabaseError(error) { return false }
-        let code = dbError.resultCode
-        let extendedCode = dbError.extendedResultCode.rawValue
-        return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+        if let dbError = error as? DatabaseError {
+            if isBusyDatabaseError(error) { return false }
+            let code = dbError.resultCode
+            let extendedCode = dbError.extendedResultCode.rawValue
+            return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+        }
+
+        // DatabasePool can bridge a SQLite failure through NSError before the
+        // storage actor sees it. Keep this to SQLite's stable primary codes so
+        // ordinary network or application errors can never trigger destructive
+        // local-cache recovery.
+        let nsError = error as NSError
+        if nsError.code == 10 || nsError.code == 11 || nsError.code == 6922 {
+            return true
+        }
+
+        // Some GRDB failures cross the actor boundary with a generic NSError
+        // code but retain SQLite's canonical error text. Match only those exact
+        // primary codes, rather than broad I/O wording, so non-database errors
+        // cannot rotate the local cache.
+        let description = error.localizedDescription.lowercased()
+        return description.contains("sqlite error 10")
+            || description.contains("sqlite error 11")
+            || description.contains("sqlite error 6922")
     }
 
     private func isBusyDatabaseError(_ error: Error) -> Bool {
