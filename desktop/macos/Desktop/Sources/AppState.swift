@@ -462,9 +462,36 @@ class AppState: ObservableObject {
     set { servicesCoordinator.bluetoothStateCancellable = newValue }
   }
 
+  private var ownerChangeObserver: NSObjectProtocol?
+
+  /// Clear account-owned conversation UI state on an in-place account switch.
+  /// The .userDidSignOut handler in DesktopHomeView covers full sign-out (and
+  /// additionally resets onboarding and stops transcription); an in-place
+  /// switch posts only .runtimeOwnerDidChange, so without this the previous
+  /// account's folders, filters, counts, and people kept rendering.
+  func resetOwnerScopedContent() {
+    folders = []
+    selectedFolderId = nil
+    selectedDateFilter = nil
+    showStarredOnly = false
+    totalConversationsCount = nil
+    filteredConversationsCount = nil
+    conversationsError = nil
+    isLoadingConversations = false
+    isLoadingFolders = false
+    people = []
+  }
+
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetOwnerScopedContent()
+      }
+    }
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
@@ -741,6 +768,9 @@ class AppState: ObservableObject {
 
   deinit {
     servicesCoordinator.removeLifecycleObservers()
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 }
 
