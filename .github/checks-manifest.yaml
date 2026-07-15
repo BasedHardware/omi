@@ -102,6 +102,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
     lanes: ["local", "ci"]
     reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
+  - id: firestore-model-read-boundary
+    command: ["python3", ".github/scripts/check_firestore_model_read_boundary.py"]
+    triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
