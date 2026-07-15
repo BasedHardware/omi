@@ -129,6 +129,53 @@ def _ledger_state_write(transaction):
     return next(payload for path, payload in transaction.sets if path.endswith("/memory_state/head"))
 
 
+class ReadAfterWriteError(Exception):
+    """Mirror of Firestore's read-after-write guard for strict ordering tests."""
+
+
+class _StrictLedgerTransaction:
+    """Transaction fake that enforces Firestore's read-before-write ordering."""
+
+    def __init__(self):
+        self.sets = []
+        self.has_written = False
+
+    def set(self, ref, payload):
+        self.has_written = True
+        self.sets.append((ref.path, payload))
+
+
+class _StrictLedgerDocument:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def collection(self, name):
+        return _StrictLedgerCollection(self._db, f"{self.path}/{name}")
+
+    def get(self, transaction=None):
+        if transaction is not None and transaction.has_written:
+            raise ReadAfterWriteError("Attempted read after write in a transaction.")
+        return _LedgerSnapshot(self._db.docs.get(self.path))
+
+
+class _StrictLedgerCollection:
+    def __init__(self, db, path):
+        self._db = db
+        self.path = path
+
+    def document(self, document_id):
+        return _StrictLedgerDocument(self._db, f"{self.path}/{document_id}")
+
+
+class _StrictLedgerDb:
+    def __init__(self, docs):
+        self.docs = dict(docs)
+
+    def collection(self, name):
+        return _StrictLedgerCollection(self, name)
+
+
 def test_fold_commits_replays_head_and_valid_time():
     january = datetime(2026, 1, 15, tzinfo=timezone.utc)
     february = datetime(2026, 2, 1, tzinfo=timezone.utc)
@@ -355,6 +402,76 @@ def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply
     )
     assert trusted.read_error_reason is None
     assert trusted.account_generation == 7
+
+
+def _clobbered_state_docs(uid):
+    """State head lacks trusted canonical fields, so the write must fall back to
+    reading memory_state/apply_control — the read that regressed to happen after
+    the commit/projection writes (issue #9780)."""
+    return {
+        f"users/{uid}/memory_state/head": {
+            "current_head_commit_id": "legacy-head",
+            "projection_version": 1,
+        },
+        f"users/{uid}/memory_state/apply_control": {
+            "uid": uid,
+            "account_generation": 7,
+            "head_commit_id": "canonical-head",
+            "commit_sequence": 11,
+        },
+    }
+
+
+def test_ledger_append_reads_apply_control_before_any_write():
+    """Regression for #9780: the apply_control fallback read must precede writes.
+
+    The strict transaction fake raises ReadAfterWriteError if a get() lands after
+    a set(), reproducing Firestore's ordering contract that the pre-fix code and
+    the lenient fake did not enforce.
+    """
+    uid = "u1"
+    database = _StrictLedgerDb(_clobbered_state_docs(uid))
+    transaction = _StrictLedgerTransaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        lambda _transaction: None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_reads_apply_control_before_any_write():
+    """Regression for #9780 on the builder append path."""
+    uid = "u1"
+    database = _StrictLedgerDb(_clobbered_state_docs(uid))
+    transaction = _StrictLedgerTransaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
 
 
 def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback():
