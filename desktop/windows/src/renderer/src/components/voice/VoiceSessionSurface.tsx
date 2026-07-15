@@ -87,7 +87,7 @@ export function VoiceSessionSurface(props: { onClose?: () => void }): React.JSX.
         <>
           <div className="flex-1 text-sm text-white/70">Talk with Omi, hands-free</div>
           <button
-            onClick={() => void startVoiceSession('openai')}
+            onClick={() => void startVoiceSession()}
             className="rounded-xl bg-white/[0.08] px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.14]"
           >
             Start voice chat
@@ -156,7 +156,7 @@ export function VoiceSessionSurface(props: { onClose?: () => void }): React.JSX.
           </div>
           {state.retryable && (
             <button
-              onClick={() => void startVoiceSession('openai')}
+              onClick={() => void startVoiceSession()}
               aria-label="Try again"
               className="inline-flex items-center gap-1.5 rounded-xl bg-white/[0.08] px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-white/[0.14]"
             >

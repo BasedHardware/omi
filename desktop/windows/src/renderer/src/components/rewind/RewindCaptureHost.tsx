@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import type { RewindSettings } from '../../../../shared/types'
+import type { RewindSettings, RewindCaptureDirective } from '../../../../shared/types'
 
 // Cap the longest sampled edge — plenty for a timeline + OCR, and keeps each
 // canvas grab + JPEG encode cheap.
@@ -22,6 +22,10 @@ export function RewindCaptureHost(): React.JSX.Element {
   const canvasRef = useRef<HTMLCanvasElement | null>(null)
   const savingRef = useRef(false)
   const [settings, setSettings] = useState<RewindSettings | null>(null)
+  // Runtime directive from main (pause + effective cadence), derived from OS
+  // power/lock state. Preferred over the persisted interval once received; null
+  // until the first fetch/push, when we fall back to the base settings interval.
+  const [directive, setDirective] = useState<RewindCaptureDirective | null>(null)
 
   // Load settings once, then react to changes pushed from the Settings page.
   useEffect(() => {
@@ -29,9 +33,30 @@ export function RewindCaptureHost(): React.JSX.Element {
     return window.omi.onRewindSettings(setSettings)
   }, [])
 
+  // Fetch the current capture directive on mount, then react to pushes. Subscribe
+  // BEFORE the fetch and drop the fetched value once any push has landed, so a
+  // push that arrives mid-fetch (e.g. a lock's paused:true) can't be clobbered by
+  // the now-stale getter result.
   useEffect(() => {
-    const enabled = !!settings?.captureEnabled
-    const intervalMs = settings?.intervalMs ?? 1000
+    const pushed = { current: false }
+    const unsub = window.omi.onRewindCaptureDirective((d) => {
+      pushed.current = true
+      setDirective(d)
+    })
+    void window.omi.rewindGetCaptureDirective().then((d) => {
+      if (!pushed.current) setDirective(d)
+    })
+    return unsub
+  }, [])
+
+  // Effective cadence prefers the directive (base × battery); pause tears the
+  // stream down (sleep/lock). Fall back to the base interval before first directive.
+  const effectiveIntervalMs = directive?.intervalMs ?? settings?.intervalMs ?? 1000
+  const paused = directive?.paused ?? false
+
+  useEffect(() => {
+    const enabled = !!settings?.captureEnabled && !paused
+    const intervalMs = effectiveIntervalMs
     let cancelled = false
 
     const stop = (): void => {
@@ -129,7 +154,7 @@ export function RewindCaptureHost(): React.JSX.Element {
       cancelled = true
       stop()
     }
-  }, [settings?.captureEnabled, settings?.intervalMs])
+  }, [settings?.captureEnabled, effectiveIntervalMs, paused])
 
   return (
     <video

@@ -12,6 +12,14 @@
 
 export type VoiceProvider = 'openai' | 'gemini'
 
+// Settings-level provider choice (macOS RealtimeOmniProvider.selectedProvider).
+// 'auto' (the out-of-the-box default) defers to autoModelSelector's daily
+// quality/speed pick; a concrete value pins that lane. DISTINCT from
+// VoiceProvider — the resolved lane the machine actually connects with is never
+// 'auto' (resolveEffectiveVoiceProvider collapses it to a concrete provider,
+// mirroring Mac's selectedProvider vs. effectiveProvider split).
+export type VoiceProviderSetting = 'auto' | VoiceProvider
+
 export type VoiceSessionState =
   | { status: 'idle' }
   | { status: 'connecting'; provider: VoiceProvider }

@@ -2,8 +2,29 @@
 // setters write back to localStorage and notify subscribers so live components
 // can react.
 import { DEFAULT_LANGUAGE } from './languages'
+import type { VoiceProviderSetting } from './voice/sessionMachine'
 
 const KEY = 'omi-windows-prefs-v1'
+
+// Font-scale bounds live here (the SSOT) and are re-exported by lib/fontScale.ts,
+// which consumers import from. Declaring them in this low-level module keeps the
+// dependency one-directional (fontScale.ts → preferences.ts) with no import cycle,
+// so `normalizeFontScale` can run safely at eval time (in load() below) regardless
+// of module load order.
+export const FONT_SCALE_MIN = 0.5
+export const FONT_SCALE_MAX = 2.0
+export const FONT_SCALE_DEFAULT = 1.0
+
+// Font scale is user-tunable in [0.5, 2.0] (see lib/fontScale.ts). Clamp on both
+// read and write so a hand-edited localStorage blob can't push the whole UI to an
+// unusable size; drop non-finite junk so the 1.0 default applies.
+function normalizeFontScale(p: Preferences): void {
+  if (typeof p.fontScale !== 'number' || !Number.isFinite(p.fontScale)) {
+    delete p.fontScale
+    return
+  }
+  p.fontScale = Math.min(FONT_SCALE_MAX, Math.max(FONT_SCALE_MIN, p.fontScale))
+}
 
 export type Preferences = {
   captionIntervalMs: number
@@ -12,6 +33,13 @@ export type Preferences = {
   // Set during the startup wizard.
   displayName?: string
   language: string
+  // Spoken-language candidates for push-to-talk (A3). Empty/undefined (default)
+  // ⇒ INERT: PTT transcribes with the static `language` above, exactly as
+  // before. Non-empty ⇒ per-turn feed-forward — the last provider-detected
+  // language, when it is one of these candidates, hints the NEXT PTT turn
+  // instead of the static pref (corrects the provider mislabeling short
+  // utterances). Base ISO 639-1 codes, e.g. ['en', 'ru'].
+  voiceLanguages?: string[]
   // Chat conversation grouping. 'per-launch' = a new conversation each app run
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
@@ -55,11 +83,33 @@ export type Preferences = {
   // AudioSessionHost); PTT is passthrough regardless. Undefined = enabled
   // (gated), the macOS-faithful default. Set false to send all audio ungated.
   vadGateEnabled?: boolean
+  // Mute other apps' system audio while push-to-talk is capturing (macOS
+  // SystemAudioMuteController parity — so a playing video doesn't bleed into the
+  // mic and you can hear yourself think). Undefined = ON, the macOS-faithful
+  // default; set false to leave system audio alone. Only the MUTE call is gated
+  // on this — the restore is unconditional, so flipping the pref off mid-hold can
+  // never strand the machine muted.
+  pttMuteSystemAudio?: boolean
+  // Speak Omi's reply to TYPED floating-bar questions too (macOS
+  // shortcut_floatingBarTypedQuestionVoiceAnswersEnabled). Undefined = off
+  // (opt-in), matching macOS's default: PTT/voice-originated replies are always
+  // spoken; a typed bar question is spoken only when this is true.
+  floatingBarTypedVoiceEnabled?: boolean
   // Launch commands for the external coding agents (OpenClaw/Hermes/Codex).
   // Set in Settings → Agents; undefined = not connected (the matching
   // OMI_*_ADAPTER_COMMAND env var still works as a power-user override).
   // Claude Code is built in and needs no command.
   agentCommands?: { openclaw?: string; hermes?: string; codex?: string }
+  // Global UI font-scale multiplier (macOS FontScaleSettings parity), applied as
+  // a root rem multiplier in lib/fontScale.ts. Range [0.5, 2.0], clamped on
+  // read/write; undefined = 1.0 (default). Set in Settings → General → Font Size
+  // and via the Ctrl+= / Ctrl+- / Ctrl+0 shortcuts.
+  fontScale?: number
+  // Realtime-voice provider selection (macOS RealtimeOmniProvider.selectedProvider).
+  // 'auto' (default) defers to autoModelSelector's daily quality/speed pick;
+  // 'openai'/'gemini' pins a concrete lane. Resolved to a concrete VoiceProvider
+  // at session start via resolveEffectiveVoiceProvider(). Track-6 owns the UI toggle.
+  voiceProvider?: VoiceProviderSetting
 }
 
 const defaults: Preferences = {
@@ -70,7 +120,10 @@ const defaults: Preferences = {
   // Infinite by default: one ongoing conversation that persists across launches
   // and is accessible from the beginning (the Home thread windows it in as you
   // scroll up). Users can switch back to 'per-launch' in Settings.
-  chatHistoryMode: 'infinite'
+  chatHistoryMode: 'infinite',
+  // Auto is the out-of-the-box default (macOS RealtimeOmniProvider.auto): the
+  // daily benchmark pick decides the lane until the user pins one in Settings.
+  voiceProvider: 'auto'
 }
 
 function load(): Preferences {
@@ -78,7 +131,9 @@ function load(): Preferences {
     const raw = localStorage.getItem(KEY)
     if (!raw) return { ...defaults }
     const parsed = JSON.parse(raw) as Partial<Preferences>
-    return { ...defaults, ...parsed }
+    const merged = { ...defaults, ...parsed }
+    normalizeFontScale(merged)
+    return merged
   } catch {
     return { ...defaults }
   }
@@ -113,6 +168,7 @@ export function setPreferences(patch: Partial<Preferences>): void {
   // (lost-update clobber, found live during Phase 2 verification). Merging the
   // patch onto a fresh load makes writes field-granular.
   current = { ...load(), ...patch }
+  normalizeFontScale(current)
   try {
     localStorage.setItem(KEY, JSON.stringify(current))
   } catch {
