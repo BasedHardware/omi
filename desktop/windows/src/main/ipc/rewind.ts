@@ -4,6 +4,7 @@ import { resolve, sep } from 'path'
 import { getPrimarySourceId } from '../rewind/sourceId'
 import {
   listRewindFrames,
+  listRewindFramesSampled,
   searchRewindFrames,
   rewindDayBounds,
   rewindFrameCount,
@@ -61,6 +62,12 @@ export function registerRewindHandlers(): void {
   ipcMain.handle('rewind:frames', async (_e, from: number, to: number) =>
     listRewindFrames(from, to)
   )
+  // A day's frames, evenly down-sampled to ~500 (macOS parity + row-limit backstop).
+  // The day-scoped timeline loads through this; 'rewind:frames' stays the unsampled
+  // primitive for the small incremental live-append.
+  ipcMain.handle('rewind:framesSampled', async (_e, from: number, to: number) =>
+    listRewindFramesSampled(from, to)
+  )
   ipcMain.handle('rewind:dayBounds', async () => rewindDayBounds())
   ipcMain.handle('rewind:frameCount', async () => rewindFrameCount())
   // Hybrid search, in TWO PHASES.
@@ -89,9 +96,12 @@ export function registerRewindHandlers(): void {
       if (hits.length === 0) return // keyword-only; the phase-1 reply already stands
       if (seq !== searchSeq) return // a newer query has since been issued
       if (e.sender.isDestroyed()) return
+      // Which frames were keyword hits, so groupFrames can flag the purely-semantic
+      // groups (those that exist only because vector recall added them).
+      const keywordIds = new Set(fts.map((f) => f.id).filter((id): id is number => id != null))
       e.sender.send('rewind:search-results', {
         query: q,
-        groups: groupFrames(mergeRewindSearchResults(fts, hits), q)
+        groups: groupFrames(mergeRewindSearchResults(fts, hits), q, { keywordIds })
       })
     })()
 

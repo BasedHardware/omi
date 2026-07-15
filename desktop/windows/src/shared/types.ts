@@ -789,6 +789,10 @@ export type OmiBridgeApi = {
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
+  /** A day's frames, evenly down-sampled to ~500 (macOS parity). The day-scoped
+   *  timeline loads through this; `rewindFrames` stays the unsampled primitive for
+   *  the small incremental live-append on today. */
+  rewindFramesSampled: (from: number, to: number) => Promise<RewindFrame[]>
   rewindDayBounds: () => Promise<{ min: number; max: number } | null>
   /** Total captured frames, all time — a COUNT(*), not a row fetch. */
   rewindFrameCount: () => Promise<number>
@@ -1409,6 +1413,10 @@ export type RewindSearchGroup = {
   frames: RewindFrame[]
   representative: RewindFrame
   matchSnippet: string
+  /** True when this group surfaced ONLY via semantic (vector) recall — no frame in
+   *  it was a keyword/FTS hit. Lets the UI distinguish a fuzzy "related" match from
+   *  an exact keyword match. Set only on the phase-2 (merged) results. */
+  matchedSemantically?: boolean
 }
 
 /** The real Windows microphone consent, read from the registry in main.

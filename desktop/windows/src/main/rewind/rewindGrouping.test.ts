@@ -63,6 +63,42 @@ describe('groupFrames', () => {
     expect(groups[0].startTs).toBeLessThan(groups[1].startTs)
   })
 
+  // Bug fix: grouping/snippet used to test the RAW query as one literal substring.
+  // A frame that FTS surfaced only via camelCase/digit/prefix expansion — where the
+  // raw query never appears verbatim in the OCR text — then got the wrong
+  // representative (fell through to `last`) and an un-highlighted `slice(0,80)`
+  // head. groupFrames now uses the same expanded terms buildRewindFtsMatch searches.
+  it('picks the representative + highlights via FTS-expanded terms, not the raw query', () => {
+    // Raw query "ActivityPerformance" — its camelCase split yields "Activity" /
+    // "Performance", either of which FTS prefix-matches. Neither frame contains the
+    // literal "activityperformance" substring, so the OLD raw-substring code found
+    // no match and fell back to `last` (id 2) + a snippet head.
+    const other = frame({ id: 1, ts: 1000, ocrText: 'Quarterly Performance review notes' })
+    const noise = frame({ id: 2, ts: 1005, ocrText: 'unrelated trailing content xxxxxxxxxx' })
+    const groups = groupFrames([other, noise], 'ActivityPerformance')
+    expect(groups).toHaveLength(1)
+    // The frame whose text actually contains an expanded term wins — not `last`.
+    expect(groups[0].representative.id).toBe(1)
+    // ...and the snippet is centered on the real match, so it highlights.
+    expect(groups[0].matchSnippet.toLowerCase()).toContain('performance')
+  })
+
+  // Semantic affordance: with the keyword id set supplied (phase-2 merged results),
+  // a group whose frames were NONE of the keyword hits is flagged as vector-only.
+  it('flags a purely-semantic group (no keyword member) when keywordIds is given', () => {
+    const kw = frame({ id: 1, ts: 1_000, app: 'Mail', ocrText: 'the invoice is attached' })
+    const semantic = frame({ id: 2, ts: 9_000_000, app: 'Web', ocrText: 'billing overview' })
+    const groups = groupFrames([kw, semantic], 'invoice', { keywordIds: new Set([1]) })
+    const byRep = new Map(groups.map((g) => [g.representative.id, g]))
+    expect(byRep.get(1)?.matchedSemantically).toBe(false) // keyword hit
+    expect(byRep.get(2)?.matchedSemantically).toBe(true) // vector-only
+  })
+
+  it('never flags semantic without a keyword id set (phase-1 keyword-only results)', () => {
+    const groups = groupFrames([frame({ id: 1, ocrText: 'hello' })], 'hello')
+    expect(groups[0].matchedSemantically).toBe(false)
+  })
+
   it('keeps frames inside a group in chronological order', () => {
     const groups = groupFrames([frame({ id: 2, ts: 20 }), frame({ id: 1, ts: 10 })], 'hello')
     expect(groups).toHaveLength(1)
