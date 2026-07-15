@@ -159,9 +159,9 @@ struct RealtimeScreenScreenshotRequest: Equatable {
   }
 }
 
-/// This is a local enqueue receipt, not a provider delivery acknowledgement. It proves that the
-/// matching JPEG function result was handed to this exact active session; a report cannot use
-/// model-supplied ids or application labels to recreate that authority.
+/// This is a local transport-enqueue receipt, not a provider delivery acknowledgement. It proves
+/// that the session accepted the matching JPEG function-result wire for this exact active turn; a
+/// report cannot use model-supplied ids or application labels to recreate that authority.
 struct RealtimeScreenObservationReceipt: Equatable {
   let descriptor: RealtimeScreenEvidenceDescriptor
   let turnID: VoiceTurnID
@@ -226,6 +226,30 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 enum RealtimeScreenGroundingPolicy {
   static let failureText = "I couldn't verify the current screen."
 
+  /// Mints the local presentation receipt only after the session reports that it accepted the
+  /// exact image/function-response wire. The caller owns waiting for that asynchronous transport
+  /// event; this pure transition protects against stale callbacks after barge-in or replacement.
+  static func receiptAfterTransportEnqueued(
+    state: RealtimeScreenGroundingState,
+    attachment: RealtimeScreenEvidenceAttachment,
+    sourceObjectID: ObjectIdentifier,
+    activeTurnID: VoiceTurnID?,
+    activeResponseID: VoiceResponseID?,
+    currentTurnEpoch: Int,
+    callID: String
+  ) -> RealtimeScreenObservationReceipt? {
+    guard case .awaitingScreenshot(let request) = state,
+      request.acceptsTransportDispatch(
+        attachment: attachment,
+        sourceObjectID: sourceObjectID,
+        activeTurnID: activeTurnID,
+        activeResponseID: activeResponseID,
+        currentTurnEpoch: currentTurnEpoch,
+        callID: callID)
+    else { return nil }
+    return RealtimeScreenObservationReceipt(request: request, descriptor: attachment.descriptor)
+  }
+
   static func reportDecision(
     state: RealtimeScreenGroundingState,
     answer: String,
@@ -273,14 +297,6 @@ enum RealtimeScreenGroundingPolicy {
   ) -> Bool {
     let normalizedAnswer = RealtimeScreenEvidenceDescriptor.normalizedAppName(answer)
     let normalizedFrontmost = RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
-    let identityMarkers = [
-      "you are in ", "you're in ", "currently in ", "frontmost app", "application", "app is ",
-    ]
-    if identityMarkers.contains(where: normalizedAnswer.contains),
-      !normalizedAnswer.contains(normalizedFrontmost)
-    {
-      return true
-    }
     let commonDesktopApps = [
       "cursor", "codex", "xcode", "finder", "terminal", "safari", "google chrome",
       "visual studio code", "vs code", "slack", "notion", "figma",
@@ -288,7 +304,21 @@ enum RealtimeScreenGroundingPolicy {
     let candidates = Set((knownApplicationNames + commonDesktopApps)
       .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
       .filter { !$0.isEmpty && $0 != normalizedFrontmost })
-    return candidates.contains { normalizedAnswer.contains($0) }
+    // Only reject a direct statement about which app is foreground. A screenshot description
+    // naturally says things such as "application windows" or can mention an app visible inside
+    // content; neither statement contradicts the native frontmost-app fact. The app prepends the
+    // native identity itself in `presentedAnswer`, so this guard protects provenance without
+    // requiring a model to repeat it.
+    let foregroundClaimPrefixes = [
+      "you are in ", "you're in ", "currently in ",
+      "frontmost app is ", "frontmost application is ",
+      "active app is ", "active application is ",
+    ]
+    return candidates.contains { candidate in
+      foregroundClaimPrefixes.contains { prefix in
+        normalizedAnswer.contains(prefix + candidate)
+      }
+    }
   }
 }
 

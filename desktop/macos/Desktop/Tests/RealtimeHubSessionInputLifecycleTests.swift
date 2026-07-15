@@ -176,6 +176,40 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     XCTAssertEqual(inlineData?["displayName"], "live-screenshot.jpg")
   }
 
+  func testScreenToolWireFailureTerminatesInsteadOfLeavingAReceiptPending() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    let attachment = RealtimeScreenEvidenceAttachment(
+      descriptor: RealtimeScreenEvidenceDescriptor(
+        evidenceID: "evidence-no-transport",
+        turnID: VoiceTurnID(),
+        capturedAt: Date(),
+        target: .frontmostDisplay,
+        frontmostApp: "Codex",
+        frontmostBundleID: "com.openai.codex",
+        windowID: 1,
+        displayID: 1,
+        imageByteCount: 3,
+        imageDigest: "digest"),
+      jpeg: Data([1, 2, 3]))
+    var wireEnqueued: Bool?
+
+    session.sendToolResult(
+      callId: "screenshot-call",
+      name: HubTool.screenshot.rawValue,
+      output: "Live screenshot captured just now.",
+      screenEvidence: attachment,
+      onWireEnqueued: { result in
+        Task { @MainActor in wireEnqueued = result }
+      })
+
+    for _ in 0..<100 where wireEnqueued == nil || delegate.errors.isEmpty {
+      await Task.yield()
+    }
+    XCTAssertEqual(wireEnqueued, false)
+    XCTAssertEqual(delegate.errors, ["Realtime transport is not connected."])
+  }
+
   func testOpenAIOnlyNeedsTransportReadiness() async {
     let delegate = RealtimeHubSessionDelegateSpy()
     let session = makeSession(provider: .openai, delegate: delegate)
@@ -280,6 +314,7 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
 @MainActor
 private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {
   private(set) var connectCount = 0
+  private(set) var errors: [String] = []
 
   func hubDidConnect(source: RealtimeHubSession) { connectCount += 1 }
   func hubDidReceiveInputTranscript(
@@ -299,5 +334,5 @@ private final class RealtimeHubSessionDelegateSpy: RealtimeHubSessionDelegate {
     source: RealtimeHubSession
   ) {}
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {}
-  func hubDidError(_ message: String, source: RealtimeHubSession) {}
+  func hubDidError(_ message: String, source: RealtimeHubSession) { errors.append(message) }
 }

@@ -344,6 +344,9 @@ private struct DesktopAutomationHealth: Codable {
   let ok: Bool
   let name: String
   let bundleIdentifier: String
+  let processID: Int32
+  let logFilePath: String
+  let logLaunchID: String
   let bridgePort: UInt16
   let requiresAuth: Bool
   let backendEnvironment: String
@@ -3566,6 +3569,9 @@ final class DesktopAutomationBridge {
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          processID: getpid(),
+          logFilePath: omiLogFilePath(),
+          logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
           requiresAuth: true,
           backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends

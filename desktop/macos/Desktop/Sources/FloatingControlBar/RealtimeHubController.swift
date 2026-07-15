@@ -3612,19 +3612,37 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         + "provider_bytes=\(providerResult.output.utf8.count) oversized=\(providerResult.wasOversized)"
     )
     if let screenEvidence {
-      logScreenEvidence(stage: "attached", evidence: screenEvidence.descriptor, callID: callId)
-    }
-    source.sendToolResult(
-      callId: callId,
-      name: name,
-      output: providerResult.output,
-      screenEvidence: screenEvidence)
-    if let screenEvidence {
-      markScreenEvidenceTransportDispatched(
-        screenEvidence,
-        source: source,
-        callID: callId,
-        turnEpoch: turnEpoch)
+      // `sendToolResult` crosses the provider session's serial queue. Do not mint the visual
+      // receipt until that queue has accepted the exact image/function-response wire; scheduling
+      // the asynchronous call is not yet a transport fact.
+      logScreenEvidence(stage: "tool_wire_scheduled", evidence: screenEvidence.descriptor, callID: callId)
+      source.sendToolResult(
+        callId: callId,
+        name: name,
+        output: providerResult.output,
+        screenEvidence: screenEvidence,
+        onWireEnqueued: { [weak self, weak source] didEnqueue in
+          DispatchQueue.main.async {
+            guard let self, let source else { return }
+            guard didEnqueue else {
+              self.logScreenEvidence(
+                stage: "tool_wire_enqueue_failed",
+                evidence: screenEvidence.descriptor,
+                callID: callId)
+              return
+            }
+            self.markScreenEvidenceTransportEnqueued(
+              screenEvidence,
+              source: source,
+              callID: callId,
+              turnEpoch: turnEpoch)
+          }
+        })
+    } else {
+      source.sendToolResult(
+        callId: callId,
+        name: name,
+        output: providerResult.output)
     }
   }
 

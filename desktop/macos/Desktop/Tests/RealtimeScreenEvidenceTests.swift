@@ -121,6 +121,32 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         callID: "screenshot-1"))
   }
 
+  func testTransportReceiptCannotExistUntilTheExactWireEnqueueCallback() {
+    let descriptor = evidence()
+    let attachment = RealtimeScreenEvidenceAttachment(descriptor: descriptor, jpeg: Data([1, 2, 3]))
+    let state = RealtimeScreenGroundingState.awaitingScreenshot(request(descriptor: descriptor))
+
+    XCTAssertNil(
+      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+        state: state,
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        callID: "different-screenshot-call"))
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+        state: state,
+        attachment: attachment,
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        callID: "screenshot-1")?.screenshotCallID,
+      "screenshot-1")
+  }
+
   func testContradictoryApplicationTextCannotReachNativePresentation() {
     let descriptor = evidence()
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
@@ -138,6 +164,36 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         evidence: descriptor,
         answer: "A dark editor window."),
       "The frontmost app is Codex. A dark editor window.")
+  }
+
+  func testGenericApplicationLanguageDoesNotRejectFinderGroundedVisualDetail() {
+    let descriptor = evidence(app: "Finder")
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt(descriptor: descriptor)),
+        answer: "I see a file manager window with multiple application windows on the left.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        knownApplicationNames: ["Finder", "Codex", "Cursor"]),
+      .accepted)
+  }
+
+  func testVisibleNonForegroundAppDoesNotRejectVisualDetail() {
+    let descriptor = evidence(app: "Finder")
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt(descriptor: descriptor)),
+        answer: "A Cursor document is visible behind the Finder window.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        knownApplicationNames: ["Finder", "Cursor"]),
+      .accepted)
   }
 
   func testEmptyReportIsRejectedAfterLocalDispatch() {

@@ -477,8 +477,8 @@ sleep 0.5  # Let cfprefsd flush after process death
 auth_debug "AFTER pkill: auth_isSignedIn=$(defaults read "$BUNDLE_ID" auth_isSignedIn 2>&1 || true)"
 auth_debug "AFTER pkill: ALL_KEYS=$(defaults read "$BUNDLE_ID" 2>&1 | grep -E 'auth_|hasCompleted|hasLaunched|currentTier|userShow' || true)"
 
-# Clear log file for fresh run (must be before backend starts)
-rm -f /tmp/omi-dev.log 2>/dev/null || true
+# Each non-production app writes to its own bundle-and-launch log path. Never clear a
+# machine-global log here: another named QA or qualification bundle may still be running.
 
 step "Cleaning up conflicting app bundles..."
 # Clean old build names from local build dir
@@ -630,6 +630,14 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
     step "Starting Rust backend..."
     cd "$BACKEND_DIR"
 
+    # Backend stdout is part of launch diagnostics, but must never share a file
+    # with a Swift named bundle or another QA run. `mktemp -d` creates a private
+    # per-launch directory; the backend itself writes only to stdout.
+    SAFE_BUNDLE_ID="$(printf '%s' "$BUNDLE_ID" | tr -c 'A-Za-z0-9._-' '-')"
+    BACKEND_LOG_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-${SAFE_BUNDLE_ID}-backend.XXXXXX")"
+    chmod 700 "$BACKEND_LOG_DIR"
+    BACKEND_LOG_FILE="$BACKEND_LOG_DIR/backend.log"
+
     # Fail loud (don't clobber) if our derived port is already held — another worktree
     # likely owns it (or a stale process). Better to stop than to silently steal it.
     PORT_HOLDER="$(lsof -ti tcp:"$BACKEND_PORT" -sTCP:LISTEN 2>/dev/null | head -1)"
@@ -646,9 +654,10 @@ if [ "${OMI_SKIP_BACKEND:-0}" != "1" ]; then
         cargo build --release
     fi
 
-    ./target/release/omi-desktop-backend &
+    ./target/release/omi-desktop-backend >>"$BACKEND_LOG_FILE" 2>&1 &
     BACKEND_PID=$!
     echo "$BACKEND_PID" > "$OMI_DEV_DIR/rust-backend.pid"
+    substep "Backend log: $BACKEND_LOG_FILE"
     cd - > /dev/null
 
     step "Waiting for backend to start..."

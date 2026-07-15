@@ -9,6 +9,11 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
     XCTAssertFalse(VoicePlaybackStartPolicy.accepts(started: false))
   }
 
+  func testCancelledOneShotSynthesisCannotBecomeSystemVoiceFallback() {
+    XCTAssertFalse(OneShotVoiceFallbackPolicy.shouldUseSystemVoice(afterCancellation: true))
+    XCTAssertTrue(OneShotVoiceFallbackPolicy.shouldUseSystemVoice(afterCancellation: false))
+  }
+
   func testFillerCarriesTextIntoSystemVoiceFallback() throws {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()

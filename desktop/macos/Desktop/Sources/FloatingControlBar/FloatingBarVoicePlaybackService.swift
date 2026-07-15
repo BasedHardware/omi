@@ -403,6 +403,15 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
           await MainActor.run {
             guard let self, self.playbackGeneration == generation else { return }
             self.isOneShotSynthesizing = false
+            guard OneShotVoiceFallbackPolicy.shouldUseSystemVoice(
+              afterCancellation: Self.isCancellation(error))
+            else {
+              log("FloatingBarVoicePlaybackService: one-shot synthesis cancelled before fallback")
+              return
+            }
+            log(
+              "FloatingBarVoicePlaybackService: one-shot synthesis failed; rendering the same response with system voice "
+                + "reason=\(Self.ttsFallbackReason(for: error))")
             self.recordSelectedVoiceFallback(
               to: "system_voice_fallback", reason: Self.ttsFallbackReason(for: error), outcome: .degraded)
             self.enqueueSystemSpeech(trimmed)
@@ -969,6 +978,11 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
 enum VoicePlaybackStartPolicy {
   static func accepts(started: Bool) -> Bool { started }
+}
+
+/// A cancelled cloud synthesis belongs to a revoked turn; it must never become new system speech.
+enum OneShotVoiceFallbackPolicy {
+  static func shouldUseSystemVoice(afterCancellation: Bool) -> Bool { !afterCancellation }
 }
 
 private enum PlaybackMode: Sendable {

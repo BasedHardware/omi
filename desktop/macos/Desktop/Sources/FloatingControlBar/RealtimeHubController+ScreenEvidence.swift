@@ -93,30 +93,27 @@ extension RealtimeHubController {
     }
   }
 
-  /// The synchronous `sendToolResult` handoff is the only transport fact we own. It is not a
-  /// remote delivery acknowledgement, so the receipt is named `transport_dispatched` and is
-  /// scoped to the exact session, response, tool call, and epoch that created the image.
-  func markScreenEvidenceTransportDispatched(
+  /// The session reports this only after its local websocket transport has accepted the exact
+  /// image/function-response wire. It is not a remote provider acknowledgement, so the receipt
+  /// is scoped to the exact session, response, tool call, and epoch that created the image.
+  func markScreenEvidenceTransportEnqueued(
     _ attachment: RealtimeScreenEvidenceAttachment,
     source: RealtimeHubSession,
     callID: String,
     turnEpoch: Int
   ) {
-    guard case .awaitingScreenshot(let request) = screenGroundingState,
-      request.acceptsTransportDispatch(
-        attachment: attachment,
-        sourceObjectID: ObjectIdentifier(source),
-        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-        activeResponseID: voiceResponseID,
-        currentTurnEpoch: realtimeToolTurnEpoch,
-        callID: callID),
+    guard let receipt = RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+      state: screenGroundingState,
+      attachment: attachment,
+      sourceObjectID: ObjectIdentifier(source),
+      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+      activeResponseID: voiceResponseID,
+      currentTurnEpoch: realtimeToolTurnEpoch,
+      callID: callID),
       turnEpoch == realtimeToolTurnEpoch
     else { return }
-    let receipt = RealtimeScreenObservationReceipt(
-      request: request,
-      descriptor: attachment.descriptor)
     screenGroundingState = .awaitingReport(receipt)
-    logScreenEvidence(stage: "transport_dispatched", evidence: attachment.descriptor, callID: callID)
+    logScreenEvidence(stage: "tool_wire_enqueued", evidence: attachment.descriptor, callID: callID)
   }
 
   func logScreenEvidence(
@@ -152,7 +149,7 @@ extension RealtimeHubController {
     if case .rejected = screenGroundingState { return }
     screenGroundingState = .rejected(evidence)
     if let evidence {
-      logScreenEvidence(stage: "report_rejected", evidence: evidence)
+      logScreenEvidence(stage: "report_rejected_\(reason)", evidence: evidence)
     }
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "realtime_hub",

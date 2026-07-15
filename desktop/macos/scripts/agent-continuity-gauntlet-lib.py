@@ -31,7 +31,6 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
-DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
 TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
 DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
@@ -196,6 +195,19 @@ def bridge_request(
         return {"ok": False, "error": f"bridge_http_timeout after {timeout_sec:.0f}s: {exc}"}
     except http.client.RemoteDisconnected as exc:
         return {"ok": False, "error": f"bridge_http_disconnected: {exc}"}
+
+
+def resolve_active_log_path(port: int, explicit_path: str | None) -> str:
+    if explicit_path:
+        return explicit_path
+    health = bridge_request(port, "GET", "/health")
+    raw_path = health.get("logFilePath") if health.get("ok") else None
+    if not isinstance(raw_path, str) or not raw_path or not Path(raw_path).is_absolute():
+        raise SystemExit(
+            "automation health did not provide an absolute logFilePath; use a current named bundle "
+            "or pass --log-path explicitly"
+        )
+    return raw_path
 
 
 def bridge_action(
@@ -4413,7 +4425,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bundle-id", default=os.environ.get("OMI_GAUNTLET_BUNDLE_ID", f"com.omi.{DEFAULT_BUNDLE_SUFFIX}"))
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--run-dir", default=None)
-    parser.add_argument("--log-path", default=str(DEFAULT_LOG))
+    parser.add_argument("--log-path", default=None)
     parser.add_argument("--turn-timeout-ms", type=int, default=180_000)
     parser.add_argument(
         "--suite",
@@ -4435,6 +4447,7 @@ def main() -> int:
     args = parse_args()
     if args.self_check:
         return self_check()
+    args.log_path = resolve_active_log_path(args.port, args.log_path)
     return GauntletRunner(args).run()
 
 

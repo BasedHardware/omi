@@ -634,7 +634,8 @@ final class RealtimeHubSession: NSObject {
     callId: String,
     name: String,
     output: String,
-    screenEvidence: RealtimeScreenEvidenceAttachment? = nil
+    screenEvidence: RealtimeScreenEvidenceAttachment? = nil,
+    onWireEnqueued: ((Bool) -> Void)? = nil
   ) {
     q.async { [weak self] in
       guard let self else { return }
@@ -644,7 +645,7 @@ final class RealtimeHubSession: NSObject {
           self.activeScreenEvidence = screenEvidence.descriptor
           let b64 = screenEvidence.jpeg.base64EncodedString()
           log(
-            "\(self.tag): ptt_screen_evidence stage=attached evidence=\(screenEvidence.descriptor.opaqueID) "
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
               + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(b64.utf8.count)")
           self.send(json: [
             "type": "conversation.item.create",
@@ -652,17 +653,21 @@ final class RealtimeHubSession: NSObject {
               "type": "message", "role": "user",
               "content": [["type": "input_image", "image_url": "data:image/jpeg;base64,\(b64)"]],
             ],
-          ])
-        }
-        self.pendingOpenAIToolCallIds.remove(callId)
-        self.send(json: [
-          "type": "conversation.item.create",
-          "item": ["type": "function_call_output", "call_id": callId, "output": output],
-        ])
-        if self.pendingOpenAIToolCallIds.isEmpty {
-          self.requestResponse(audio: true)
+          ]) { [weak self] imageError in
+            guard let self, imageError == nil else {
+              onWireEnqueued?(false)
+              return
+            }
+            self.enqueueOpenAIToolResult(
+              callId: callId,
+              output: output,
+              onWireEnqueued: onWireEnqueued)
+          }
         } else {
-          log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
+          self.enqueueOpenAIToolResult(
+            callId: callId,
+            output: output,
+            onWireEnqueued: onWireEnqueued)
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
@@ -677,10 +682,38 @@ final class RealtimeHubSession: NSObject {
         if let screenEvidence {
           let serializedBytes = (try? JSONSerialization.data(withJSONObject: wire))?.count ?? 0
           log(
-            "\(self.tag): ptt_screen_evidence stage=attached evidence=\(screenEvidence.descriptor.opaqueID) "
+            "\(self.tag): ptt_screen_evidence stage=tool_wire_prepared evidence=\(screenEvidence.descriptor.opaqueID) "
               + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(serializedBytes)")
         }
-        self.send(json: wire)
+        self.send(json: wire) { error in
+          onWireEnqueued?(error == nil)
+        }
+      }
+    }
+  }
+
+  /// Runs on the session queue after an optional image write has completed. The completion is a
+  /// local transport fact only: the websocket accepted both exact function-response writes; it
+  /// is not a provider acknowledgement or proof that Gemini/OpenAI has processed the image.
+  private func enqueueOpenAIToolResult(
+    callId: String,
+    output: String,
+    onWireEnqueued: ((Bool) -> Void)?
+  ) {
+    pendingOpenAIToolCallIds.remove(callId)
+    send(json: [
+      "type": "conversation.item.create",
+      "item": ["type": "function_call_output", "call_id": callId, "output": output],
+    ]) { [weak self] error in
+      guard let self, error == nil else {
+        onWireEnqueued?(false)
+        return
+      }
+      onWireEnqueued?(true)
+      if self.pendingOpenAIToolCallIds.isEmpty {
+        self.requestResponse(audio: true)
+      } else {
+        log("\(self.tag): waiting for \(self.pendingOpenAIToolCallIds.count) OpenAI tool result(s) before response.create")
       }
     }
   }
@@ -1308,16 +1341,55 @@ final class RealtimeHubSession: NSObject {
 
   // MARK: - Send (on q)
 
-  private func send(json: [String: Any]) {
+  private func send(json: [String: Any], completion: ((Error?) -> Void)? = nil) {
     guard let data = try? JSONSerialization.data(withJSONObject: json),
       let text = String(data: data, encoding: .utf8)
-    else { return }
-    if usesRawWS {
-      rawWS?.sendText(text)
+    else {
+      failSend(RealtimeHubSessionSendError.encodingFailed, completion: completion)
       return
     }
-    task?.send(.string(text)) { [weak self] error in
-      if let error { self?.q.async { self?.notifyError(error.localizedDescription) } }
+    if usesRawWS {
+      guard let rawWS else {
+        failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+        return
+      }
+      rawWS.sendText(text) { [weak self] error in
+        self?.q.async {
+          if let error { self?.notifyError(error.localizedDescription) }
+          completion?(error)
+        }
+      }
+      return
+    }
+    guard let task else {
+      failSend(RealtimeHubSessionSendError.notConnected, completion: completion)
+      return
+    }
+    task.send(.string(text)) { [weak self] error in
+      self?.q.async {
+        if let error { self?.notifyError(error.localizedDescription) }
+        completion?(error)
+      }
+    }
+  }
+
+  /// Every local send failure is a terminal session failure, including synchronous no-transport
+  /// and encoding paths. A screen-evidence receipt must never wait for a provider deadline after
+  /// the session has already proved it cannot enqueue the exact wire.
+  private func failSend(_ error: Error, completion: ((Error?) -> Void)?) {
+    notifyError(error.localizedDescription)
+    completion?(error)
+  }
+}
+
+private enum RealtimeHubSessionSendError: LocalizedError {
+  case encodingFailed
+  case notConnected
+
+  var errorDescription: String? {
+    switch self {
+    case .encodingFailed: "Could not encode realtime transport data."
+    case .notConnected: "Realtime transport is not connected."
     }
   }
 }

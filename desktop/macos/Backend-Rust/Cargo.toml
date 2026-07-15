@@ -38,7 +38,6 @@ base64 = "0.21"
 # Logging
 tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter", "local-time"] }
-tracing-appender = "0.2"
 time = { version = "0.3.36", features = ["macros", "formatting", "local-offset"] }
 
 # Async utilities
