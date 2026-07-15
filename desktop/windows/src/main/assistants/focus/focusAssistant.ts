@@ -16,6 +16,7 @@
 // of their own tests.
 import { getAppSettings } from '../../appSettings'
 import { showGlow } from '../../glow/glowWindow'
+import { mayAnalyzeFrame } from '../core/privacy'
 import { readFrameImageBase64 } from '../core/frameImage'
 import { notifyProactive } from '../core/notify'
 import { getBackendSession, getSessionEpoch } from '../core/session'
@@ -55,6 +56,10 @@ export class FocusAssistant implements ProactiveAssistant {
    *  discarded (Mac's stale-frame guard). */
   private seq = 0
   private lastCommittedSeq = -1
+  /** Floor for a run to still be valid: clearPendingWork raises it to the current
+   *  seq so any run started before a context switch is discarded even if nothing
+   *  newer committed. */
+  private minValidSeq = 0
   private stopped = false
 
   /** Master gate: Mac's rule that a disabled notification setting stops screen
@@ -75,9 +80,14 @@ export class FocusAssistant implements ProactiveAssistant {
 
   clearPendingWork(): void {
     // The context changed under us; the run in flight is now for a stale context.
-    // We can't cancel the awaited pipeline, but bumping seq means its result will
-    // be discarded as stale rather than applied to the new context.
+    // We can't cancel the awaited pipeline, but bumping seq AND raising the
+    // minValidSeq floor to it means its result is discarded rather than applied to
+    // the new context. Deliberate deviation from Mac: Mac raises its equivalent of
+    // seq but never the floor its guard checks, so this discard is dead on Mac — a
+    // stale verdict there can still glow/notify against the NEW window. That is a
+    // real UX bug; here the floor makes the discard actually fire.
     this.seq++
+    this.minValidSeq = this.seq
   }
 
   /** The whole pipeline. Returns null always (like Mac) — the verdict's side
@@ -110,8 +120,7 @@ export class FocusAssistant implements ProactiveAssistant {
     const app = (frame.app || '').toLowerCase()
     if (HARD_SKIP.has(proc) || HARD_SKIP.has(app)) return false
 
-    const excluded = getAppSettings().focusExcludedApps.map((a) => a.toLowerCase())
-    if (excluded.includes(app) || (proc && excluded.includes(proc))) return false
+    if (this.isExcludedApp(frame)) return false
 
     const now = Date.now()
     const input: SkipInput = {
@@ -132,6 +141,16 @@ export class FocusAssistant implements ProactiveAssistant {
     this.lastAnalyzedApp = frame.app
     this.lastAnalyzedWindowTitle = frame.windowTitle
     return true
+  }
+
+  /** The user's excluded-apps check: true when this frame's app OR process name is
+   *  in `focusExcludedApps`. Shared by the production gate and the dev path so both
+   *  honour the same exclusion list. */
+  private isExcludedApp(frame: RewindFrame): boolean {
+    const app = (frame.app || '').toLowerCase()
+    const proc = (frame.processName || '').toLowerCase()
+    const excluded = getAppSettings().focusExcludedApps.map((a) => a.toLowerCase())
+    return excluded.includes(app) || (!!proc && excluded.includes(proc))
   }
 
   private async runPipeline(frame: RewindFrame): Promise<void> {
@@ -183,9 +202,10 @@ export class FocusAssistant implements ProactiveAssistant {
       return
     }
 
-    // Stale-result guard: a newer run already committed while this one was in the
-    // Gemini call (only reachable via the out-of-band analyzeNow path). Drop it.
-    if (mySeq <= this.lastCommittedSeq) {
+    // Stale-result guard: drop the verdict if a newer run already committed while
+    // this one was in the Gemini call, OR if the context switched under us
+    // (clearPendingWork raised minValidSeq above this run's seq).
+    if (mySeq <= this.lastCommittedSeq || mySeq < this.minValidSeq) {
       console.log('[focus] discarding stale verdict')
       return
     }
@@ -242,15 +262,31 @@ export class FocusAssistant implements ProactiveAssistant {
     }
   }
 
-  /** Dev/QA hook: force one analysis of a given frame, bypassing the smart skip
-   *  gate but NOT the hard skips (lock screen / excluded apps) or the session
-   *  check. Used by the `focus:analyzeNow` IPC to exercise the pipeline without
-   *  waiting for a natural context switch. */
+  /** Dev/QA hook: force one analysis of a given frame, bypassing ONLY the smart
+   *  skip gate (the cooldown/backoff/duplicate-context throttle). Every privacy-
+   *  and safety-relevant gate the coordinator applies in production is still
+   *  enforced here: the lock-screen hard skip, the frame privacy gate
+   *  (`mayAnalyzeFrame` — incognito / bank / password-manager / login pages), the
+   *  user's excluded-apps list, and the session/epoch check inside runPipeline.
+   *  Used by the `focus:analyzeNow` IPC to exercise the pipeline without waiting
+   *  for a natural context switch. */
   async analyzeNowForDev(frame: RewindFrame): Promise<void> {
     const proc = (frame.processName || '').toLowerCase()
     const app = (frame.app || '').toLowerCase()
     if (HARD_SKIP.has(proc) || HARD_SKIP.has(app)) {
       console.log('[focus] analyzeNow: hard-skipped frame')
+      return
+    }
+    // The SAME privacy gate the coordinator runs before every production analyze,
+    // so the dev path can never upload an incognito/bank/password-manager frame's
+    // pixels to Gemini. Log carries no title/app detail.
+    if (!mayAnalyzeFrame(frame)) {
+      console.log('[focus] analyzeNow skipped — privacy gate')
+      return
+    }
+    // The SAME user excluded-apps check passesLocalGates enforces.
+    if (this.isExcludedApp(frame)) {
+      console.log('[focus] analyzeNow skipped — excluded app')
       return
     }
     this.lastAnalyzedApp = frame.app

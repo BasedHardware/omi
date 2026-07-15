@@ -33,7 +33,10 @@ export class GeminiHttpError extends Error {
  *  user's battery. */
 function isTransient(e: unknown): boolean {
   if (e instanceof GeminiHttpError) return e.status === 429 || e.status >= 500
-  // A network error / timeout (TypeError from net.fetch, AbortError) — retry.
+  // A per-request TIMEOUT (withTimeout surfaces it as a 'TimeoutError') and a bare
+  // network error (TypeError from net.fetch) are both worth retrying. Only a
+  // genuine session sign-out — the external AbortSignal firing, surfaced as
+  // 'AbortError' — is terminal: the token is dead, so retrying is pointless.
   return !(e instanceof Error && e.name === 'AbortError')
 }
 
@@ -52,18 +55,33 @@ function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   })
 }
 
+/** Run `fn` with a per-request timeout, composed with an optional external
+ *  (session) abort signal. The two abort sources are made DISTINGUISHABLE: a
+ *  timeout surfaces as a 'TimeoutError' (retryable), while the external signal
+ *  surfaces as an 'AbortError' (a session sign-out — terminal). `fn` sees a single
+ *  composed signal and doesn't care which fired. */
 async function withTimeout<T>(
   ms: number,
   fn: (signal: AbortSignal) => Promise<T>,
   external?: AbortSignal
 ): Promise<T> {
   const ctrl = new AbortController()
-  const onAbort = (): void => ctrl.abort()
-  const timer = setTimeout(() => ctrl.abort(), ms)
-  if (external?.aborted) ctrl.abort()
+  let timedOut = false
+  const onAbort = (): void => ctrl.abort(external?.reason)
+  const timer = setTimeout(() => {
+    timedOut = true
+    ctrl.abort(new DOMException('request timed out', 'TimeoutError'))
+  }, ms)
+  if (external?.aborted) ctrl.abort(external.reason)
   else external?.addEventListener('abort', onAbort, { once: true })
   try {
     return await fn(ctrl.signal)
+  } catch (e) {
+    // Whatever net.fetch rejected with, classify by WHICH source aborted us: our
+    // own timer → TimeoutError (retryable); anything else (incl. the external
+    // session signal) propagates unchanged so a sign-out stays an AbortError.
+    if (timedOut) throw new DOMException('request timed out', 'TimeoutError')
+    throw e
   } finally {
     clearTimeout(timer)
     external?.removeEventListener('abort', onAbort)

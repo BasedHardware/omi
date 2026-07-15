@@ -212,6 +212,56 @@ describe('analyze — error backoff', () => {
   })
 })
 
+describe('analyzeNowForDev — privacy + exclusion gates', () => {
+  it('skips (no Gemini) a privacy-denied frame (incognito window)', async () => {
+    const a = new FocusAssistant()
+    await a.analyzeNowForDev(
+      frame({ app: 'Google Chrome', windowTitle: 'Search — Incognito', processName: 'chrome' })
+    )
+    expect(h.analyzeScreenshot).not.toHaveBeenCalled()
+    expect(h.persistFocusSession).not.toHaveBeenCalled()
+  })
+
+  it('skips (no Gemini) a frame whose app is in focusExcludedApps', async () => {
+    h.settings.focusExcludedApps = ['slack']
+    const a = new FocusAssistant()
+    await a.analyzeNowForDev(frame({ app: 'Slack', windowTitle: 'general', processName: 'slack' }))
+    expect(h.analyzeScreenshot).not.toHaveBeenCalled()
+    expect(h.persistFocusSession).not.toHaveBeenCalled()
+  })
+
+  it('runs the pipeline for an ordinary, allowed frame', async () => {
+    h.analyzeScreenshot.mockResolvedValue(verdict({ status: 'focused' }))
+    const a = new FocusAssistant()
+    await a.analyzeNowForDev(frame({ app: 'VS Code', windowTitle: 'code', processName: 'code' }))
+    expect(h.analyzeScreenshot).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('clearPendingWork — context-switch discard', () => {
+  it('discards a verdict whose run predates a context switch (no glow/notify/persist)', async () => {
+    const a = new FocusAssistant()
+    let resolveA!: (v: ScreenAnalysis) => void
+    h.analyzeScreenshot.mockImplementationOnce(
+      () => new Promise<ScreenAnalysis>((res) => (resolveA = res))
+    )
+    const runA = a.analyze(frame({ app: 'VS Code', windowTitle: 'code' }))
+    // Let run A progress until it is parked inside the (pending) Gemini call.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(h.analyzeScreenshot).toHaveBeenCalledTimes(1)
+
+    // The context switches under the in-flight run: minValidSeq is raised above
+    // run A's seq, so A's verdict must be discarded when it lands.
+    a.clearPendingWork()
+    resolveA(verdict({ status: 'distracted' }))
+    await runA
+
+    expect(h.persistFocusSession).not.toHaveBeenCalled()
+    expect(h.showGlow).not.toHaveBeenCalled()
+    expect(h.notifyProactive).not.toHaveBeenCalled()
+  })
+})
+
 describe('analyzeNowForDev — stale-result discard', () => {
   it('discards an older run whose result lands after a newer run committed', async () => {
     const a = new FocusAssistant()
