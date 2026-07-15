@@ -22,8 +22,11 @@ export type MemoryToPersist = {
   category: MemoryCategory
   sourceApp: string
   contextSummary: string
-  /** Stored locally AND sent to the backend — Mac §4 passes windowTitle to
-   *  createMemory (unlike Focus, which withholds the title). Faithful to Mac. */
+  /** Stored in the local `memories` table ONLY — never sent to the backend.
+   *  Raw window titles are unfiltered PII ("Chase — Log in", "MyChart — Lab
+   *  Results"); the synced memory carries the curated content/context/source_app
+   *  instead. Matches the sibling Focus assistant's deliberate split
+   *  (focus/persist.ts:90-92); deviates from Mac, which leaks the raw title. */
   windowTitle: string | null
   confidence: number
   /** The rewind_frames.id the memory came from (null if unknown). */
@@ -60,7 +63,7 @@ async function syncToBackend(
         confidence: mem.confidence,
         source_app: mem.sourceApp,
         context_summary: mem.contextSummary,
-        window_title: mem.windowTitle ?? '',
+        // window_title is deliberately NOT sent — see MemoryToPersist.windowTitle.
         // Windows Focus/Insight convention (Mac's MemoryAssistant omits `source`);
         // included so all three desktop assistants tag their memories 'desktop'.
         source: 'desktop'

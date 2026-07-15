@@ -90,7 +90,7 @@ describe('persistMemory — epoch guard', () => {
 })
 
 describe('persistMemory — backend dual-write', () => {
-  it('POSTs /v3/memories with the exact body shape (incl. source:desktop, window_title)', () => {
+  it('POSTs /v3/memories with the exact body shape (source:desktop, NO window_title)', () => {
     persistMemory(mem, 5)
     const [url, opts] = h.fetch.mock.calls[0]
     expect(url).toBe('https://api/v3/memories')
@@ -102,7 +102,6 @@ describe('persistMemory — backend dual-write', () => {
       confidence: 0.9,
       source_app: 'Slack',
       context_summary: 'Viewing a Slack workspace',
-      window_title: 'Acme — general',
       source: 'desktop'
     })
   })
@@ -130,9 +129,13 @@ describe('persistMemory — backend dual-write', () => {
     expect(h.markMemorySynced).not.toHaveBeenCalled()
   })
 
-  it('sends an empty window_title when the frame had none', () => {
-    persistMemory({ ...mem, windowTitle: null }, 5)
+  it('never sends window_title to the backend (privacy — raw titles are PII)', () => {
+    persistMemory(mem, 5)
     const body = JSON.parse(h.fetch.mock.calls[0][1].body)
-    expect(body.window_title).toBe('')
+    expect('window_title' in body).toBe(false)
+    // …but the title IS still mirrored into the local memories table.
+    expect(h.insertMemory).toHaveBeenCalledWith(
+      expect.objectContaining({ windowTitle: 'Acme — general' })
+    )
   })
 })
