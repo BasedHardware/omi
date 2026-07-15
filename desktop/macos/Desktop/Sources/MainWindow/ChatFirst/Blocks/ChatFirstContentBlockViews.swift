@@ -10,6 +10,7 @@ struct QuestionCardView: View {
   private struct Option: Identifiable {
     let id: String
     let label: String
+    let isDeferral: Bool
 
     init?(_ dictionary: [String: Any]) {
       guard let id = dictionary["optionId"] as? String,
@@ -19,6 +20,7 @@ struct QuestionCardView: View {
       else { return nil }
       self.id = id
       self.label = label
+      self.isDeferral = dictionary["defer"] as? Bool ?? false
     }
   }
 
@@ -27,7 +29,7 @@ struct QuestionCardView: View {
   let options: [[String: Any]]
   let selectedOptionID: String?
   let isActionable: Bool
-  let onSelect: (String) -> Void
+  let onSelect: (String, Bool) -> Void
 
   private var validOptions: [Option] { options.compactMap(Option.init) }
 
@@ -45,7 +47,7 @@ struct QuestionCardView: View {
         FlowLayout(spacing: OmiSpacing.sm) {
           ForEach(validOptions) { option in
             Button {
-              onSelect(option.id)
+              onSelect(option.id, option.isDeferral)
             } label: {
               Text(option.label)
                 .scaledFont(size: OmiType.caption, weight: .medium)
@@ -77,6 +79,16 @@ struct QuestionCardView: View {
     )
     .accessibilityElement(children: .contain)
     .accessibilityIdentifier("chat-first-question-\(questionID)")
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .questionCard, outcome: .rendered, action: .none)
+      )
+      AnalyticsManager.shared.chatFirst(.question(lifecycle: .shown))
+    }
+    .onChange(of: isActionable) { wasActionable, nowActionable in
+      guard wasActionable, !nowActionable, selectedOptionID == nil else { return }
+      AnalyticsManager.shared.chatFirst(.question(lifecycle: .retiredUnseen))
+    }
   }
 }
 
@@ -104,8 +116,18 @@ struct TaskCardView: View {
     Group {
       if let task {
         card(task)
+          .onAppear {
+            AnalyticsManager.shared.chatFirst(
+              .richBlock(kind: .taskCard, outcome: .rendered, action: .none)
+            )
+          }
       } else {
         ChatFirstUnavailableBlockView(entityName: "Task")
+          .onAppear {
+            AnalyticsManager.shared.chatFirst(
+              .richBlock(kind: .taskCard, outcome: .stalePlaceholder, action: .none)
+            )
+          }
       }
     }
     .accessibilityIdentifier("chat-first-task-\(taskID)")
@@ -181,16 +203,35 @@ struct TaskCardView: View {
     guard !isToggling else { return }
     let intendedCompletion = !task.completed
     isToggling = true
+    AnalyticsManager.shared.chatFirst(
+      .richBlock(kind: .taskCard, outcome: .acted, action: .toggle)
+    )
+    AnalyticsManager.shared.chatFirst(
+      .taskMutation(lifecycle: .attempt, mutation: .completion)
+    )
 
     Task { @MainActor in
       await tasksStore.toggleTask(task)
       isToggling = false
 
+      let reconciledTask = self.task
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(
+          lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,
+          mutation: .completion
+        )
+      )
+      if reconciledTask?.completed != intendedCompletion {
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .taskCard, outcome: .rejected, action: .toggle)
+        )
+      }
+
       // `TasksStore` owns local-first mutation and rollback. Acknowledgement
       // is derived only from its reconciled record, never from the tap.
       guard ChatFirstTaskCardReconciliation.shouldShowCompletionAcknowledgement(
         intendedCompletion: intendedCompletion,
-        reconciledTask: self.task
+        reconciledTask: reconciledTask
       )
       else { return }
       OmiMotion.withGated(.spring(response: 0.26, dampingFraction: 0.72)) {
@@ -245,6 +286,11 @@ struct GoalLinkView: View {
         openGoal()
       }
     }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .goalLink, outcome: .rendered, action: .none)
+      )
+    }
   }
 
   private func openGoal() {
@@ -256,8 +302,14 @@ struct GoalLinkView: View {
       // destination remains a typed shell focus, never a display-string URL.
       guard await goalsStore.loadDetail(goalID: goalID) != nil else {
         isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .goalLink, outcome: .stalePlaceholder, action: .open)
+        )
         return
       }
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .goalLink, outcome: .acted, action: .open)
+      )
       navigation.open(focus: .goal(id: goalID))
     }
   }
@@ -287,6 +339,11 @@ struct CaptureLinkView: View {
         openCapture()
       }
     }
+    .onAppear {
+      AnalyticsManager.shared.chatFirst(
+        .richBlock(kind: .captureLink, outcome: .rendered, action: .none)
+      )
+    }
   }
 
   private func openCapture() {
@@ -297,9 +354,15 @@ struct CaptureLinkView: View {
       do {
         _ = try await APIClient.shared.getConversation(id: conversationID)
         let moment = momentTimestampMs.map { TimeInterval($0) / 1_000 }
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .captureLink, outcome: .acted, action: .open)
+        )
         navigation.open(focus: .capture(id: conversationID, momentTs: moment))
       } catch {
         isUnavailable = true
+        AnalyticsManager.shared.chatFirst(
+          .richBlock(kind: .captureLink, outcome: .stalePlaceholder, action: .open)
+        )
       }
     }
   }

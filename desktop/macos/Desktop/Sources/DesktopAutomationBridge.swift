@@ -131,6 +131,11 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   /// Shape-only focus telemetry for route acknowledgement; entity IDs stay local.
   var pendingFocusKind: String?
   var acknowledgedFocusKind: String?
+  /// The focused entity is available only through the local non-production
+  /// bridge so named-bundle probes can prove the acknowledgement target. It is
+  /// never an analytics dimension or a persisted navigation value.
+  var focusedEntityID: String?
+  var isFocusedEntityAcknowledged: Bool
   var showsPrimarySidebar: Bool
   var isSidebarCollapsed: Bool
   var hasCompletedOnboarding: Bool
@@ -442,6 +447,8 @@ final class DesktopAutomationStateStore {
     chatFirstRoute: nil,
     pendingFocusKind: nil,
     acknowledgedFocusKind: nil,
+    focusedEntityID: nil,
+    isFocusedEntityAcknowledged: false,
     showsPrimarySidebar: false,
     isSidebarCollapsed: true,
     hasCompletedOnboarding: false,
@@ -782,6 +789,27 @@ final class DesktopAutomationActionRegistry {
         "key_code": "\(keyCode)",
         "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
       ]
+    }
+
+    if AppBuild.isNonProduction {
+      register(
+        name: "chat_first_fixture_contract",
+        summary: "Read one deterministic Chat-first non-production fixture contract without user content",
+        params: ["scenario"],
+        category: "read",
+        surfaces: ["main_chat"],
+      safety: "read_only",
+      sideEffects: []
+    ) { params in
+        guard let scenario = ChatFirstAutomationFixture.Scenario(
+          rawValue: params["scenario"] ?? ""
+        ) else {
+          throw DesktopAutomationActionError.invalidParams(
+            "scenario must be interactive_question, deferred_question, mixed_capture, ui_flag_off, or out_of_cohort"
+          )
+        }
+        return ChatFirstAutomationFixture.contract(for: scenario).bridgeDetail
+      }
     }
 
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can

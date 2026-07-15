@@ -343,10 +343,16 @@ struct ChatFirstTasksPage: View {
 
     addingGroups.insert(group)
     Task { @MainActor in
-      _ = await tasksStore.createTask(
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(lifecycle: .attempt, mutation: .create)
+      )
+      let created = await tasksStore.createTask(
         description: description,
         dueAt: ChatFirstTaskPagePolicy.suggestedDueDate(for: group),
         priority: nil
+      )
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(lifecycle: created == nil ? .rollback : .success, mutation: .create)
       )
       addDrafts[group] = ""
       addingGroups.remove(group)
@@ -502,8 +508,19 @@ private struct ChatFirstTaskRow: View {
   private func toggle() {
     guard !isToggling else { return }
     isToggling = true
+    let intendedCompletion = !task.completed
     Task { @MainActor in
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(lifecycle: .attempt, mutation: .completion)
+      )
       await tasksStore.toggleTask(task)
+      let reconciledTask = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(
+          lifecycle: reconciledTask?.completed == intendedCompletion ? .success : .rollback,
+          mutation: .completion
+        )
+      )
       isToggling = false
     }
   }
@@ -521,10 +538,19 @@ private struct ChatFirstTaskRow: View {
     isEditing = false
     isSaving = true
     Task { @MainActor in
-      _ = await tasksStore.updateTask(
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(lifecycle: .attempt, mutation: .rename)
+      )
+      let outcome = await tasksStore.updateTask(
         task,
         description: description,
         remoteFailureBehavior: .rollbackForChatFirst
+      )
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(
+          lifecycle: ChatFirstTaskMutationTelemetry.terminalLifecycle(for: outcome),
+          mutation: .rename
+        )
       )
       isSaving = false
     }
@@ -540,10 +566,19 @@ private struct ChatFirstTaskRow: View {
     guard !isSaving else { return }
     isSaving = true
     Task { @MainActor in
-      _ = await tasksStore.updateTask(
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(lifecycle: .attempt, mutation: .schedule)
+      )
+      let outcome = await tasksStore.updateTask(
         task,
         dueAt: ChatFirstTaskPagePolicy.suggestedDueDate(for: moveTarget),
         remoteFailureBehavior: .rollbackForChatFirst
+      )
+      AnalyticsManager.shared.chatFirst(
+        .taskMutation(
+          lifecycle: ChatFirstTaskMutationTelemetry.terminalLifecycle(for: outcome),
+          mutation: .schedule
+        )
       )
       isSaving = false
     }
