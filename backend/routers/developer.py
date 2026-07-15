@@ -57,7 +57,7 @@ from utils.other.endpoints import with_rate_limit, get_current_user_uid
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
 from utils.conversations import lifecycle as lifecycle_service
-from utils.conversations.location import get_google_maps_location
+from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -1467,14 +1467,8 @@ def create_conversation(
     if finished_at < started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1653,14 +1647,8 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
