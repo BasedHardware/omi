@@ -157,6 +157,22 @@ describe('isCorruptionError', () => {
     expect(isAccessError(new Error('permission denied'))).toBe(true)
     expect(isAccessError({ code: 'SQLITE_CORRUPT' })).toBe(false)
   })
+
+  // Access WINS over corruption when an error looks like both. This is the exact
+  // line the classifier's access-first exclusion exists for: a BUSY/LOCKED/FULL
+  // error whose message happens to carry a "malformed" phrase must NOT be treated
+  // as corruption, or a merely-busy database would be rebuilt out from under a
+  // concurrent writer. Without the exclusion these would classify as corrupt.
+  it('never calls a busy/locked/full error corrupt, even when its text says malformed', () => {
+    expect(
+      isCorruptionError({ code: 'SQLITE_BUSY', message: 'database disk image is malformed' })
+    ).toBe(false)
+    expect(
+      isCorruptionError({ code: 'SQLITE_FULL', message: 'database disk image is malformed' })
+    ).toBe(false)
+    // errcode 5 = BUSY; the message alone must not override the access code.
+    expect(isCorruptionError({ errcode: 5, message: 'file is not a database' })).toBe(false)
+  })
 })
 
 describe('archiving the corrupt database', () => {
