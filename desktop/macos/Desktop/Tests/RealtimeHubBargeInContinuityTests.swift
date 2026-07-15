@@ -440,19 +440,36 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 2, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .awaitPendingTools)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 1, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .awaitPendingTools)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 0, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .requestPostToolContinuation)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 0, postToolContinuationRequired: false),
       .finalizeLogicalTurn)
+  }
+
+  func testUnavailablePostToolContinuationFinishesPromptlyButInFlightAndStaleDoNot() {
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.transportUnavailable),
+      .finishProviderNoResponse)
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.exhausted),
+      .finishProviderNoResponse)
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.alreadyInFlight),
+      .waitForProvider,
+      "a healthy response already in flight must not be cut off")
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.stale),
+      .ignoreStaleCallback,
+      "an old session callback must not affect a replacement turn")
   }
 
   func testSecondBargeInTurnExecutesAuthorizedToolWithoutFinalTranscriptAndFencesOldTurn() throws {
@@ -991,10 +1008,16 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let harness = try XCTUnwrap(
       source.range(of: "private func runHeadlessPTTTurn("))
     let tail = source[harness.lowerBound...]
+    // omi-test-quality: source-inspection -- static contract: the live probe must
+    // freeze screen evidence at the physical PTT boundary, before warmup can let a
+    // focus change turn into a false current-screen assertion.
     let begin = try XCTUnwrap(
       tail.range(of: "let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let route = try XCTUnwrap(
       tail.range(of: ".selectRoute(turnID: turnID, route: .hub(sessionID: nil))"))
+    let capture = try XCTUnwrap(
+      tail.range(of: "PushToTalkManager.shared.captureScreenEvidenceForAutomation(turnID: turnID)"))
+    let warm = try XCTUnwrap(tail.range(of: "ensureWarm()"))
     let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
     let finalize = try XCTUnwrap(
       tail.range(of: "VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))"))
@@ -1002,8 +1025,30 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     XCTAssertLessThan(begin.lowerBound, route.lowerBound)
     XCTAssertLessThan(route.lowerBound, controllerBegin.lowerBound)
+    XCTAssertLessThan(route.lowerBound, capture.lowerBound)
+    XCTAssertLessThan(capture.lowerBound, warm.lowerBound)
+    XCTAssertLessThan(warm.lowerBound, controllerBegin.lowerBound)
     XCTAssertLessThan(controllerBegin.lowerBound, finalize.lowerBound)
     XCTAssertLessThan(finalize.lowerBound, commit.lowerBound)
+  }
+
+  func testHeadlessPTTHarnessWaitsForPlaybackTerminalAfterPersistenceDiagnostics() {
+    let turnID = VoiceTurnID()
+    XCTAssertNil(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: nil),
+      "persistence can finish while native audio still plays; it is not probe completion")
+    XCTAssertEqual(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: VoiceTurnTerminalRecord(turnID: turnID, reason: .success, route: .hub(sessionID: nil))),
+      .success)
+    XCTAssertNil(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: VoiceTurnTerminalRecord(turnID: VoiceTurnID(), reason: .success, route: .hub(sessionID: nil))),
+      "a terminal record from another PTT turn must never complete this probe")
   }
 
   func testRapidBurstHarnessCommitsEveryClipWithoutWaitingForReplies() throws {

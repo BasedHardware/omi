@@ -62,6 +62,43 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       RealtimeScreenGroundingState.awaitingScreenshot(request()).suppressesProviderOutput)
   }
 
+  func testAcceptedScreenEvidenceReopensProviderOutputForTheGroundedAnswer() {
+    XCTAssertTrue(
+      RealtimeScreenGroundingState.awaitingReport(receipt()).suppressesProviderOutput,
+      "output stays gated until the provider proves it used the current evidence")
+    XCTAssertFalse(
+      RealtimeScreenGroundingState.accepted(receipt()).suppressesProviderOutput,
+      "the verified provider continuation is the user-facing answer and must not be discarded")
+  }
+
+  func testProviderOutputPresentationHasOneContractForAudioAndText() {
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .awaitingReport(receipt()),
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: false),
+      .suppressScreenGrounding)
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .accepted(receipt()),
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: false),
+      .present,
+      "the verified continuation must reach both native audio and text presentation")
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        hasCanonicalSpawnReceipt: true,
+        reducerOutputSuppressed: false),
+      .suppressCanonicalLocalResult)
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: true),
+      .suppressReducerOwnedOutput)
+  }
+
   func testProtocolTokenSurvivesTransportReceiptAndLocalRejection() {
     let request = request()
     let receipt = RealtimeScreenObservationReceipt(request: request, descriptor: evidence())
@@ -255,9 +292,22 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Codex", "Cursor"],
         now: freshNow)
     XCTAssertEqual(decision, .contradictoryApplication)
+  }
+
+  func testFrozenReceiptDoesNotDependOnLaterAmbientApplicationState() {
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt()),
+        observation: "You are in Codex.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        now: freshNow),
+      .accepted,
+      "only the frontmost app stored in the frozen receipt may participate in verification")
   }
 
   func testGenericApplicationLanguageDoesNotRejectFinderGroundedVisualDetail() {
@@ -271,7 +321,6 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Codex", "Cursor"],
         now: freshNow),
       .accepted)
   }
@@ -287,7 +336,6 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Cursor"],
         now: freshNow),
       .accepted)
   }

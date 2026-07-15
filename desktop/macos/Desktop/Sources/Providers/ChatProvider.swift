@@ -4007,10 +4007,24 @@ private var activeBridgeSendGeneration: Int?
                     // but they must not manufacture a screen-permission request for generic utterances.
                 } else {
                     screenContextEligibleForTurn = true
-                    let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
-                    let screenContextPayload = screenContextReason.isExplicitScreenRequest
-                        ? rawScreenContextPayload
-                        : ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    let screenContextPayload: [String: Any]
+                    if screenContextReason.isExplicitScreenRequest {
+                        // An explicit current-screen question gets one capture
+                        // scoped to this exact turn. Never let a Rewind frame or
+                        // OCR summary impersonate the image the model receives.
+                        if screenRecordingGranted {
+                            effectiveImageData = await Task.detached(priority: .userInitiated) {
+                                ScreenCaptureManager.captureScreenData()
+                            }.value
+                        }
+                        screenContextPayload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+                            screenRecordingGranted: screenRecordingGranted,
+                            imageAttached: effectiveImageData != nil
+                        )
+                    } else {
+                        let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+                        screenContextPayload = ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    }
                     screenPayload = [
                         "permission": [
                             "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
@@ -4435,8 +4449,8 @@ private var activeBridgeSendGeneration: Int?
                     cacheWriteTokens: queryResult.cacheWriteTokens,
                     costUsd: queryResult.costUsd,
                     systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration)",
-                    hasScreenshot: imageData != nil,
-                    screenshotSizeBytes: imageData?.count,
+                    hasScreenshot: effectiveImageData != nil,
+                    screenshotSizeBytes: effectiveImageData?.count,
                     toolNames: toolNames,
                     sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
                     sqlQueryCount: metricsSnapshot.sqlQueryCount

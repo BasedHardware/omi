@@ -43,7 +43,9 @@ extension RealtimeHubController {
   func screenshotToolResultTextForCurrentProvider(
     attachment: RealtimeScreenEvidenceAttachment?
   ) -> String {
-    RealtimeHubTools.screenshotToolResult(capturedBytes: attachment?.jpeg.count)
+    RealtimeHubTools.screenshotToolResult(
+      capturedBytes: attachment?.jpeg.count,
+      frontmostApplication: attachment?.descriptor.frontmostApp)
   }
 
   func resetScreenGrounding(for turnID: VoiceTurnID) {

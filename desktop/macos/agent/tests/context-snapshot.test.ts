@@ -831,6 +831,77 @@ describe("kernel ContextSnapshot", () => {
       .not.toBe(parentInput.admittedContextSnapshot.capabilityVersion);
     store.close();
   });
+
+  it("projects only recent bounded terminal child output into coordinator context", () => {
+    const { store, session } = fixture("realtime_voice");
+    const parent = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "realtime",
+      requestId: "parent",
+      status: "running",
+      mode: "act",
+      createdAtMs: 1_000,
+      updatedAtMs: 1_000,
+    });
+    const beforeCompletion = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    const childSession = store.insertSession({
+      ownerId: session.ownerId,
+      surfaceKind: "background_agent",
+      title: "Research agent",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const completed = store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "completed-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: `completed answer ${"x".repeat(1_500)}`,
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      clientId: "realtime",
+      requestId: "unrelated-terminal",
+      status: "succeeded",
+      mode: "act",
+      finalText: "must not leak",
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "expired-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: "expired output",
+      completedAtMs: 1,
+      updatedAtMs: 1,
+    });
+
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    expect(snapshot.recentCompletedRuns).toEqual([
+      expect.objectContaining({
+        runId: completed.runId,
+        parentRunId: parent.runId,
+        status: "succeeded",
+        title: "Research agent",
+        completedAtMs: 999_950,
+      }),
+    ]);
+    expect(snapshot.recentCompletedRuns[0]?.finalText).toHaveLength(1_200);
+    expect(snapshot.renderedContext).toContain(completed.runId);
+    expect(snapshot.renderedContext).not.toContain("must not leak");
+    expect(snapshot.renderedContext).not.toContain("expired output");
+    expect(renderContextSnapshot(snapshot, "delegated_agent", "leaf")).not.toContain(completed.runId);
+    expect(snapshot.rendererFingerprint).not.toBe(beforeCompletion.rendererFingerprint);
+    store.close();
+  });
 });
 
 function journalTurn(

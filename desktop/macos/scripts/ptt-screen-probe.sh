@@ -8,6 +8,8 @@
 # Usage:
 #   OMI_AUTOMATION_PORT=47920 bash scripts/ptt-screen-probe.sh
 #   bash scripts/ptt-screen-probe.sh --port 47920
+#   OMI_PTT_SCREEN_PROMPT='Which app is frontmost? Reply with only its name.' \
+#     OMI_PTT_SCREEN_EXPECT_REPLY_CONTAINS='Codex' bash scripts/ptt-screen-probe.sh
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
@@ -49,7 +51,7 @@ if [[ ! -x "$CTL" ]]; then
   echo "ptt-screen-probe: missing executable $CTL" >&2
   exit 2
 fi
-for command in say ffmpeg python3; do
+for command in say afconvert python3; do
   if ! command -v "$command" >/dev/null 2>&1; then
     echo "ptt-screen-probe: missing required command: $command" >&2
     exit 2
@@ -59,22 +61,46 @@ done
 TEMP_DIR="$(mktemp -d "${TMPDIR:-/tmp}/omi-ptt-screen-probe.XXXXXX")"
 trap 'rm -rf "$TEMP_DIR"' EXIT
 AIFF="$TEMP_DIR/prompt.aiff"
+WAV="$TEMP_DIR/prompt.wav"
 PCM="$TEMP_DIR/prompt.pcm"
 RESULT="$TEMP_DIR/result.json"
+PROMPT="${OMI_PTT_SCREEN_PROMPT:-What is on my screen?}"
+EXPECTED_REPLY_CONTAINS="${OMI_PTT_SCREEN_EXPECT_REPLY_CONTAINS:-}"
 
-say -o "$AIFF" "What is on my screen?"
-ffmpeg -hide_banner -loglevel error -y -i "$AIFF" -ac 1 -ar 16000 -f s16le "$PCM"
+if [[ -z "${PROMPT//[[:space:]]/}" ]]; then
+  echo "ptt-screen-probe: OMI_PTT_SCREEN_PROMPT must not be empty" >&2
+  exit 2
+fi
+
+say -o "$AIFF" "$PROMPT"
+afconvert -f WAVE -d LEI16@16000 -c 1 "$AIFF" "$WAV"
+python3 - "$WAV" "$PCM" <<'PY'
+import sys
+import wave
+
+wav_path, pcm_path = sys.argv[1:]
+with wave.open(wav_path, "rb") as source:
+    if (source.getnchannels(), source.getsampwidth(), source.getframerate()) != (1, 2, 16_000):
+        raise SystemExit("ptt-screen-probe: native converter did not produce PCM16/16k mono")
+    frames = source.readframes(source.getnframes())
+
+if not frames:
+    raise SystemExit("ptt-screen-probe: synthesized PCM prompt was empty")
+
+with open(pcm_path, "wb") as target:
+    target.write(frames)
+PY
 "$CTL" action ptt_test_turn \
   pcm="$PCM" \
   timeout=30 \
-  force_transcript='What is on my screen?' \
+  force_transcript="$PROMPT" \
   text_only=1 >"$RESULT"
 
-python3 - "$RESULT" <<'PY'
+python3 - "$RESULT" "$EXPECTED_REPLY_CONTAINS" <<'PY'
 import json
 import sys
 
-result_path = sys.argv[1]
+result_path, expected_reply_contains = sys.argv[1:]
 with open(result_path, encoding="utf-8") as handle:
     payload = json.load(handle)
 detail = payload.get("result", {}).get("detail", {})
@@ -89,7 +115,13 @@ safe_keys = (
     "screen_evidence_protocol_active",
     "screen_evidence_last_completion",
 )
-print(json.dumps({key: detail.get(key, "") for key in safe_keys}, sort_keys=True))
+safe_detail = {key: detail.get(key, "") for key in safe_keys}
+semantic_answer_matches = not expected_reply_contains or expected_reply_contains.casefold() in str(
+    detail.get("assistant_reply", "")
+).casefold()
+if expected_reply_contains:
+    safe_detail["semantic_answer_matches"] = semantic_answer_matches
+print(json.dumps(safe_detail, sort_keys=True))
 
 failure = (
     not payload.get("ok", False)
@@ -98,6 +130,7 @@ failure = (
     or detail.get("pending_tool_count") != "0"
     or detail.get("screen_evidence_protocol_active") != "false"
     or detail.get("screen_evidence_last_completion") != "completed"
+    or not semantic_answer_matches
 )
 sys.exit(1 if failure else 0)
 PY

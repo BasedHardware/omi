@@ -148,9 +148,13 @@ enum RealtimeScreenGroundingState: Equatable {
 
   var suppressesProviderOutput: Bool {
     switch self {
-    case .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
+    // Before the provider proves it used the one current screenshot, any output can
+    // be speculative or stale. Once the report is accepted, however, the next model
+    // message is precisely the grounded answer we must surface; keeping the gate
+    // closed there turns a successful verification into a silent PTT turn.
+    case .awaitingScreenshot, .awaitingReport, .rejected:
       return true
-    case .inactive:
+    case .inactive, .accepted:
       return false
     }
   }
@@ -339,7 +343,6 @@ enum RealtimeScreenGroundingPolicy {
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
-    knownApplicationNames: [String] = [],
     now _: Date = Date()
   ) -> RealtimeScreenReportDecision {
     guard case .awaitingReport(let receipt) = state else {
@@ -356,8 +359,7 @@ enum RealtimeScreenGroundingPolicy {
     guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
     guard !observationClaimsDifferentApplication(
       observation,
-      frontmostApp: evidence.frontmostApp ?? "",
-      knownApplicationNames: knownApplicationNames)
+      frontmostApp: evidence.frontmostApp ?? "")
     else { return .contradictoryApplication }
     return .accepted
   }
@@ -367,8 +369,7 @@ enum RealtimeScreenGroundingPolicy {
   /// closed before the provider continues to its conversational answer.
   private static func observationClaimsDifferentApplication(
     _ observation: String,
-    frontmostApp: String,
-    knownApplicationNames: [String]
+    frontmostApp: String
   ) -> Bool {
     let normalizedObservation = RealtimeScreenEvidenceDescriptor.normalizedAppName(observation)
     let normalizedFrontmost = RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
@@ -376,7 +377,10 @@ enum RealtimeScreenGroundingPolicy {
       "cursor", "codex", "xcode", "finder", "terminal", "safari", "google chrome",
       "visual studio code", "vs code", "slack", "notion", "figma",
     ]
-    let candidates = Set((knownApplicationNames + commonDesktopApps)
+    // The frozen descriptor is the only app identity that belongs to this receipt.
+    // Sampling the current process list here made a valid capture depend on a later
+    // focus change, which is the same ambient-state leak this protocol exists to avoid.
+    let candidates = Set(commonDesktopApps
       .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
       .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description

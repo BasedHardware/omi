@@ -61,7 +61,12 @@ EXTRACTED_TYPE_NAMES: frozenset[str] = frozenset(
         "VoiceAudioIngressOwnership",
         "RealtimeHubErrorOwnership",
         "RealtimeHubBargeInAction",
+        "RealtimeLocalProfileTurnPlan",
+        "RealtimeAcceptedSpawnPresentationPolicy",
+        "RealtimeProviderOutputPresentationPolicy",
         "RealtimeProviderTurnDoneDisposition",
+        "RealtimePostToolContinuationControllerAction",
+        "RealtimeHeadlessPTTCompletionPolicy",
         "RealtimeHubBargeInContinuity",
         # RealtimeHubInputAdmission.swift
         "RealtimeReconnectAudioBuffer",
