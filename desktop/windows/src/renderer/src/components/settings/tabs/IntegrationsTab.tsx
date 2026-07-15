@@ -1,19 +1,13 @@
 import { useEffect, useState } from 'react'
 import { StickyNote, Mail } from 'lucide-react'
-import { omiApi } from '../../../lib/apiClient'
 import { toast } from '../../../lib/toast'
-import { extractNoteMemories } from '../../../lib/stickyNotesExtract'
+import { readAndExtractStickyNotes, importStickyMemories } from '../../../lib/stickyNotesImport'
+import { toastImportTally } from '../../../lib/importToast'
 import { runGoogleSync } from '../../../lib/googleSync'
+import { GOOGLE_ENABLED } from '../../../lib/googleFeatureFlag'
 import { useMemories } from '../../../hooks/useMemories'
 import { SettingRow } from '../SettingRow'
 import type { GoogleStatus } from '../../../../../shared/types'
-
-const GOOGLE_ENABLED =
-  import.meta.env.VITE_ENABLE_GOOGLE_INTEGRATION === '1' ||
-  (import.meta.env.DEV && localStorage.getItem('omi.google.enabled') === '1')
-
-const STICKY_NOTE_TAG = 'sticky_notes/import/note'
-const STICKY_PROFILE_TAG = 'sticky_notes/import/profile'
 
 export function IntegrationsTab(): React.JSX.Element {
   const { memories, refresh } = useMemories()
@@ -30,25 +24,22 @@ export function IntegrationsTab(): React.JSX.Element {
     setStickyMemories(null)
     setStickyProfile('')
     try {
-      const result = await window.omi.readStickyNotes()
-      if (!result.available) {
+      const outcome = await readAndExtractStickyNotes(memories.map((m) => m.content))
+      if (outcome.status === 'unavailable')
         toast('No Sticky Notes found on this PC', { tone: 'warn' })
-        return
+      else if (outcome.status === 'error')
+        toast('Could not read Sticky Notes', { tone: 'error', body: outcome.error })
+      else if (outcome.status === 'empty')
+        toast(
+          outcome.reason === 'no-notes'
+            ? 'No note text to import'
+            : 'No new memories found in your notes',
+          { tone: 'warn' }
+        )
+      else {
+        setStickyMemories(outcome.memories)
+        setStickyProfile(outcome.profile)
       }
-      if (result.error) {
-        toast('Could not read Sticky Notes', { tone: 'error', body: result.error })
-        return
-      }
-      if (result.notes.length === 0) {
-        toast('No note text to import', { tone: 'warn' })
-        return
-      }
-      const notesText = result.notes.map((n) => n.text).join('\n\n---\n\n')
-      const existing = memories.map((m) => m.content)
-      const { memories: list, profile } = await extractNoteMemories(notesText, existing)
-      setStickyMemories(list)
-      setStickyProfile(profile)
-      if (list.length === 0) toast('No new memories found in your notes', { tone: 'warn' })
     } catch (e) {
       toast('Could not read Sticky Notes', { tone: 'error', body: (e as Error).message })
     } finally {
@@ -59,35 +50,11 @@ export function IntegrationsTab(): React.JSX.Element {
   const importSticky = async (): Promise<void> => {
     if (!stickyMemories || stickyMemories.length === 0 || stickyImporting) return
     setStickyImporting(true)
-    let ok = 0
-    let failed = 0
-    let firstError = ''
-    for (const content of stickyMemories) {
-      try {
-        await omiApi.post('/v3/memories', { content, tags: [STICKY_NOTE_TAG] })
-        ok++
-      } catch (e) {
-        const msg =
-          (e as { response?: { data?: { detail?: string } }; message: string }).response?.data
-            ?.detail ?? (e as Error).message
-        if (!firstError) firstError = msg
-        failed++
-      }
-    }
-    if (stickyProfile.trim()) {
-      try {
-        await omiApi.post('/v3/memories', { content: stickyProfile.trim(), tags: [STICKY_PROFILE_TAG] })
-      } catch {
-        /* profile is best-effort */
-      }
-    }
+    const tally = await importStickyMemories(stickyMemories, stickyProfile)
     setStickyImporting(false)
-    toast(`Imported ${ok} memor${ok === 1 ? 'y' : 'ies'}${failed ? `, ${failed} failed` : ''}`, {
-      tone: failed ? (ok ? 'warn' : 'error') : 'success',
-      body: failed ? firstError : undefined
-    })
-    if (ok > 0) await refresh()
-    if (!failed) {
+    toastImportTally(tally)
+    if (tally.ok > 0) await refresh()
+    if (!tally.failed) {
       setStickyMemories(null)
       setStickyProfile('')
     }
@@ -100,7 +67,10 @@ export function IntegrationsTab(): React.JSX.Element {
 
   useEffect(() => {
     if (!GOOGLE_ENABLED) return
-    window.omi.googleStatus().then(setGoogleStatus).catch(() => {})
+    window.omi
+      .googleStatus()
+      .then(setGoogleStatus)
+      .catch(() => {})
   }, [])
 
   const runSync = async (): Promise<void> => {
@@ -199,7 +169,9 @@ export function IntegrationsTab(): React.JSX.Element {
         {stickyMemories && stickyMemories.length > 0 && (
           <ul className="glass-subtle max-h-40 overflow-y-auto rounded-lg px-4 py-3 text-sm text-text-tertiary">
             {stickyMemories.map((m, i) => (
-              <li key={i} className="py-0.5">• {m}</li>
+              <li key={i} className="py-0.5">
+                • {m}
+              </li>
             ))}
           </ul>
         )}
@@ -230,12 +202,20 @@ export function IntegrationsTab(): React.JSX.Element {
                 >
                   {googleSyncing ? 'Syncing…' : 'Sync now'}
                 </button>
-                <button onClick={disconnectGoogle} disabled={googleBusy} className="btn-ghost disabled:opacity-40">
+                <button
+                  onClick={disconnectGoogle}
+                  disabled={googleBusy}
+                  className="btn-ghost disabled:opacity-40"
+                >
                   Disconnect
                 </button>
               </div>
             ) : (
-              <button onClick={connectGoogle} disabled={googleBusy} className="btn-ghost disabled:opacity-40">
+              <button
+                onClick={connectGoogle}
+                disabled={googleBusy}
+                className="btn-ghost disabled:opacity-40"
+              >
                 {googleBusy ? 'Connecting…' : 'Connect'}
               </button>
             )
