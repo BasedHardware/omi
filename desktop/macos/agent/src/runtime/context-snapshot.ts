@@ -404,8 +404,31 @@ export function inheritContextSnapshotForSession(
     },
     nowMs,
     surfaceKind: String(session.surface_kind),
-    chatFirstCapability: undefined,
+    // The admitted snapshot is the immutable, generation-fenced authority for
+    // this logical run. Re-project its effective main-Chat capability instead
+    // of silently rebuilding the child snapshot with the extension disabled.
+    // projectContextSnapshot still applies the destination surface gate, so a
+    // delegated, PTT, or other non-main session cannot inherit the tools.
+    chatFirstCapability: chatFirstCapabilityFromAdmittedSnapshot(admitted),
   });
+}
+
+function chatFirstCapabilityFromAdmittedSnapshot(
+  admitted: ContextSnapshotProjection,
+): ChatFirstCapabilityProjection | undefined {
+  const { chatFirstUi, chatFirstControlGeneration } = admitted.capabilities;
+  if (
+    chatFirstUi !== true
+    || chatFirstControlGeneration === null
+    || !Number.isSafeInteger(chatFirstControlGeneration)
+    || chatFirstControlGeneration < 0
+  ) {
+    return undefined;
+  }
+  return {
+    chatFirstUi: true,
+    controlGeneration: chatFirstControlGeneration,
+  };
 }
 
 function projectContextSnapshot(
