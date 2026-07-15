@@ -11,8 +11,17 @@ private final class StagedScoreBatchURLProtocol: URLProtocol, @unchecked Sendabl
   private static let lock = NSLock()
   private static var requests: [StagedScoreBatchRequest] = []
 
+  private static var failingRequestNumber: Int?
+
   static func reset() {
-    lock.withLock { requests.removeAll() }
+    lock.withLock {
+      requests.removeAll()
+      failingRequestNumber = nil
+    }
+  }
+
+  static func failRequest(number: Int) {
+    lock.withLock { failingRequestNumber = number }
   }
 
   static var capturedRequests: [StagedScoreBatchRequest] {
@@ -28,17 +37,28 @@ private final class StagedScoreBatchURLProtocol: URLProtocol, @unchecked Sendabl
       method: request.httpMethod ?? "GET",
       body: Self.bodyData(from: request)
     )
-    Self.lock.withLock { Self.requests.append(captured) }
+    let requestNumber = Self.lock.withLock {
+      Self.requests.append(captured)
+      return Self.requests.count
+    }
 
+    let statusCode = Self.lock.withLock {
+      Self.failingRequestNumber == requestNumber ? 500 : 200
+    }
     let response = HTTPURLResponse(
       url: request.url!,
-      statusCode: 200,
+      statusCode: statusCode,
       httpVersion: nil,
       headerFields: nil
     )!
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
-    client?.urlProtocol(self, didLoad: Data(#"{"status":"ok"}"#.utf8))
-    client?.urlProtocolDidFinishLoading(self)
+    if statusCode == 200 {
+      client?.urlProtocol(self, didLoad: Data(#"{"status":"ok"}"#.utf8))
+      client?.urlProtocolDidFinishLoading(self)
+    } else {
+      client?.urlProtocol(self, didLoad: Data(#"{"detail":"batch failed"}"#.utf8))
+      client?.urlProtocolDidFinishLoading(self)
+    }
   }
 
   override func stopLoading() {}
@@ -76,6 +96,31 @@ final class APIClientStagedScoreBatchTests: XCTestCase {
     unsetenv("OMI_PYTHON_API_URL")
     StagedScoreBatchURLProtocol.reset()
     super.tearDown()
+  }
+
+  func testBatchUpdateStagedScoresStopsAfterSecondBatchFailsWhileFirstBatchMayAlreadyBeApplied() async throws {
+    let configuration = URLSessionConfiguration.ephemeral
+    configuration.protocolClasses = [StagedScoreBatchURLProtocol.self]
+    let client = APIClient(session: URLSession(configuration: configuration))
+    await client.setTestAuthHeader("Bearer test-token")
+    StagedScoreBatchURLProtocol.failRequest(number: 2)
+    let scores = (0...1000).map { (id: "task-\($0)", score: $0) }
+
+    do {
+      try await client.batchUpdateStagedScores(scores)
+      XCTFail("Expected the second batch failure to be thrown")
+    } catch {
+      // Requests are intentionally non-atomic: batch one may already have been applied.
+    }
+
+    let requests = StagedScoreBatchURLProtocol.capturedRequests
+    XCTAssertEqual(requests.count, 2, "The third batch must not be sent after batch two fails")
+    let batchSizes = try requests.map { request -> Int in
+      let body = try XCTUnwrap(request.body)
+      let json = try XCTUnwrap(JSONSerialization.jsonObject(with: body) as? [String: Any])
+      return try XCTUnwrap(json["scores"] as? [[String: Any]]).count
+    }
+    XCTAssertEqual(batchSizes, [500, 500])
   }
 
   func testBatchUpdateStagedScoresSplitsMoreThanFiveHundredScoresIntoOrderedRequests() async throws {
