@@ -23,6 +23,7 @@ import { CHAT_INFINITE_ID_KEY } from '../lib/chatStorageKeys'
 import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
+import { withByokHeadersIfActive } from '../lib/byokKeys'
 
 export type ChatMsg = {
   id?: string
@@ -591,13 +592,16 @@ export function useChat(): UseChat {
         : userMsg.content
       const res = await fetch(`${OMI_BASE}/v2/messages`, {
         method: 'POST',
-        headers: {
+        // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
+        // the user's own keys. This lane is a raw fetch, so it can't ride the
+        // axios interceptor — withByokHeadersIfActive covers it directly.
+        headers: withByokHeadersIfActive({
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
           // Same convention as the macOS/Flutter clients — lets the backend give
           // Windows-appropriate answers instead of defaulting to macOS steps.
           'X-App-Platform': 'windows'
-        },
+        }),
         // Only include file_ids when there are uploaded attachments; with none
         // the body stays exactly `{ text }` (no key) — the backend defaults
         // file_ids to [], so this preserves today's request byte-for-byte.
