@@ -68,6 +68,7 @@ import type {
   JournalBackendDeleteResultMessage,
   JournalBackendReconcileResultMessage,
   ChatFirstDeferralDeliveryResultMessage,
+  ChatFirstHarnessExecutorBeginMessage,
   RefreshOwnerMessage,
   RevokeOwnerRuntimeMessage,
   RefreshTokenMessage,
@@ -299,6 +300,41 @@ const pendingExternalToolCalls = new Map<
   }
 >();
 
+/**
+ * This exists solely for the local/offline desktop E2E fixture. Unlike the
+ * external-surface bridge, it cannot accept a user/model-selected tool or
+ * capability: the kernel derives the one permitted capability from an
+ * already-mounted Main Chat session.
+ */
+const pendingChatFirstHarnessExecutors = new Map<
+  string,
+  {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  }
+>();
+
+const CHAT_FIRST_HARNESS_TASK_ID = "chat-first-e2e-task-v1";
+
+function isLocalChatFirstExecutorHarnessEnabled(): boolean {
+  return (process.env.OMI_ENV_STAGE === "local" || process.env.OMI_ENV_STAGE === "offline")
+    && process.env.OMI_AGENT_ALLOW_CONTROL_ONLY === "1";
+}
+
+function isBoundedChatFirstHarnessInput(input: unknown): input is Record<string, unknown> {
+  if (!input || typeof input !== "object" || Array.isArray(input)) return false;
+  const outer = input as Record<string, unknown>;
+  if (Object.keys(outer).length !== 1 || !Array.isArray(outer.blocks) || outer.blocks.length !== 1) return false;
+  const block = outer.blocks[0];
+  if (!block || typeof block !== "object" || Array.isArray(block)) return false;
+  const taskCard = block as Record<string, unknown>;
+  return Object.keys(taskCard).length === 2
+    && taskCard.type === "taskCard"
+    && taskCard.taskId === CHAT_FIRST_HARNESS_TASK_ID;
+}
+
 const TERMINAL_RUN_TOOL_EVENTS = new Set([
   "run.succeeded",
   "run.failed",
@@ -362,6 +398,99 @@ function finalizeRelayResult(
 /** Resolve a pending tool call with a result from Swift */
 function resolveToolCall(msg: AuthorizedToolExecutionResultMessage): void {
   const key = toolCallPendingKey(msg);
+  const chatFirstHarness = pendingChatFirstHarnessExecutors.get(key);
+  if (chatFirstHarness) {
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(chatFirstHarness.timeout);
+    const invocation = chatFirstHarness.invocation;
+    const identityMatches = msg.ownerId === invocation.ownerId
+      && msg.sessionId === invocation.sessionId
+      && msg.runId === invocation.runId
+      && msg.attemptId === invocation.attemptId
+      && msg.profileGeneration === invocation.profileGeneration
+      && msg.manifestVersion === invocation.manifestVersion
+      && msg.manifestDigest === invocation.manifestDigest
+      && msg.daemonBootEpoch === invocation.daemonBootEpoch
+      && msg.executionGeneration === invocation.executionGeneration
+      && msg.inputHash === invocation.inputHash;
+    let validated = false;
+    try {
+      if (!runtimeKernel) throw new Error("Agent runtime kernel is not ready");
+      if (!identityMatches) {
+        runtimeKernel.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_mismatch");
+      } else {
+        runtimeKernel.completeRunToolInvocation({
+          invocationId: invocation.invocationId,
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          profileGeneration: invocation.profileGeneration,
+          manifestVersion: invocation.manifestVersion,
+          manifestDigest: invocation.manifestDigest,
+          daemonBootEpoch: invocation.daemonBootEpoch,
+          executionGeneration: invocation.executionGeneration,
+          inputHash: invocation.inputHash,
+          capabilityRef: invocation.capabilityRef,
+          activeOwnerId: currentOwnerId,
+          outcome: msg.outcome,
+          result: msg.result,
+        });
+        const result = JSON.parse(msg.result) as Record<string, unknown>;
+        validated = msg.outcome === "succeeded" && result.ok === true && result.rendered === 1;
+      }
+      runtimeKernel.completeChatFirstHarnessExecutor({
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        succeeded: validated,
+      });
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: validated,
+        executorInvoked: true,
+        validated,
+        journalBlockRendered: validated,
+        ...(validated ? {} : { error: { code: "chat_first_e2e_executor_failed", message: "The executor did not render the fixture block" } }),
+      });
+    } catch (error) {
+      logErr(`Rejected Chat-first E2E executor result invocation=${msg.invocationId}: ${error}`);
+      try {
+        runtimeKernel?.markRunToolInvocationOutcomeUnknown(invocation, "chat_first_e2e_result_rejected");
+        runtimeKernel?.completeChatFirstHarnessExecutor({
+          ownerId: invocation.ownerId,
+          sessionId: invocation.sessionId,
+          runId: invocation.runId,
+          attemptId: invocation.attemptId,
+          succeeded: false,
+        });
+      } catch (terminalizeError) {
+        logErr(`Failed to terminalize rejected Chat-first E2E executor: ${terminalizeError}`);
+      }
+      send({
+        type: "chat_first_harness_executor_result",
+        requestId: chatFirstHarness.requestId,
+        clientId: chatFirstHarness.clientId,
+        ownerId: invocation.ownerId,
+        sessionId: invocation.sessionId,
+        runId: invocation.runId,
+        attemptId: invocation.attemptId,
+        ok: false,
+        executorInvoked: true,
+        validated: false,
+        journalBlockRendered: false,
+        error: externalAuthorityError(error, "chat_first_e2e_result_rejected"),
+      });
+    }
+    return;
+  }
   const pending = pendingToolCalls.get(key);
   if (pending) {
     try {
@@ -488,6 +617,69 @@ function registerPendingExternalToolCall(
   return pending;
 }
 
+function finishPendingChatFirstHarnessExecutor(
+  pending: {
+    requestId: string;
+    clientId: string;
+    invocation: AuthorizedRunToolInvocation;
+    timeout: ReturnType<typeof setTimeout>;
+  },
+  errorCode: string,
+  message: string,
+): void {
+  try {
+    runtimeKernel?.markRunToolInvocationOutcomeUnknown(pending.invocation, errorCode);
+    runtimeKernel?.completeChatFirstHarnessExecutor({
+      ownerId: pending.invocation.ownerId,
+      sessionId: pending.invocation.sessionId,
+      runId: pending.invocation.runId,
+      attemptId: pending.invocation.attemptId,
+      succeeded: false,
+    });
+  } catch (error) {
+    logErr(`Failed to terminalize Chat-first E2E executor: ${error}`);
+  }
+  send({
+    type: "chat_first_harness_executor_result",
+    requestId: pending.requestId,
+    clientId: pending.clientId,
+    ownerId: pending.invocation.ownerId,
+    sessionId: pending.invocation.sessionId,
+    runId: pending.invocation.runId,
+    attemptId: pending.invocation.attemptId,
+    ok: false,
+    executorInvoked: true,
+    validated: false,
+    journalBlockRendered: false,
+    error: { code: errorCode, message },
+  });
+}
+
+function registerPendingChatFirstHarnessExecutor(input: {
+  requestId: string;
+  clientId: string;
+  invocation: AuthorizedRunToolInvocation;
+}): void {
+  const key = toolCallPendingKey(input.invocation);
+  if (pendingChatFirstHarnessExecutors.has(key) || pendingExternalToolCalls.has(key) || pendingToolCalls.has(key)) {
+    throw Object.assign(new Error("Duplicate tool invocation"), { code: "invocation_replayed" });
+  }
+  const pending = {
+    ...input,
+    timeout: setTimeout(() => {
+      const active = pendingChatFirstHarnessExecutors.get(key);
+      if (!active) return;
+      pendingChatFirstHarnessExecutors.delete(key);
+      finishPendingChatFirstHarnessExecutor(
+        active,
+        "swift_tool_timeout",
+        "Timed out waiting for the authorized Chat-first block executor",
+      );
+    }, 120_000),
+  };
+  pendingChatFirstHarnessExecutors.set(key, pending);
+}
+
 function cancelPendingExternalToolCallsForAttempt(input: {
   ownerId: string;
   runId: string;
@@ -556,6 +748,12 @@ function rejectPendingToolCallsForOwner(
       error: { code: errorCode, message },
     });
   }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (pending.invocation.ownerId !== ownerId) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(pending, errorCode, message);
+  }
 }
 
 /** The broker terminalizes the ledger before subscribers see terminal events. */
@@ -594,6 +792,16 @@ function rejectPendingToolCallsForKernelEvent(event: AgentEvent): void {
       ok: false,
       error: { code: errorCode, message: "Run tool authority ended before Swift returned a result" },
     });
+  }
+  for (const [key, pending] of pendingChatFirstHarnessExecutors) {
+    if (!matches(pending.invocation)) continue;
+    pendingChatFirstHarnessExecutors.delete(key);
+    clearTimeout(pending.timeout);
+    finishPendingChatFirstHarnessExecutor(
+      pending,
+      errorCode,
+      "Run tool authority ended before Swift returned a result",
+    );
   }
 }
 
@@ -1867,6 +2075,80 @@ async function main(): Promise<void> {
           clientId: msg.clientId,
           snapshot: kernel.contextSnapshot(msg.sessionId, ownerId, msg.surfaceKind),
         });
+        break;
+      }
+
+      case "chat_first_harness_executor_begin": {
+        const request = msg as ChatFirstHarnessExecutorBeginMessage;
+        const requestId = request.requestId?.trim();
+        const clientId = request.clientId?.trim();
+        try {
+          if (!isLocalChatFirstExecutorHarnessEnabled()) {
+            throw new Error("Chat-first executor harness is available only to local/offline debug runtime");
+          }
+          if (!requestId || !clientId) {
+            throw new Error("Chat-first executor harness requires requestId and clientId");
+          }
+          if (!isBoundedChatFirstHarnessInput(request.input)) {
+            throw new Error("Chat-first executor harness accepts only the static fixture task card");
+          }
+          const ownerId = resolveActiveOwner(request.ownerId);
+          const authorized = kernel.beginChatFirstHarnessExecutor({
+            ownerId,
+            sessionId: request.sessionId,
+            producingTurnId: request.producingTurnId,
+            controlGeneration: request.controlGeneration,
+            clientId,
+            requestId,
+            toolInput: request.input,
+          });
+          registerPendingChatFirstHarnessExecutor({ requestId, clientId, invocation: authorized });
+          send({
+            type: "authorized_tool_execution",
+            invocationId: authorized.invocationId,
+            ownerId: authorized.ownerId,
+            sessionId: authorized.sessionId,
+            runId: authorized.runId,
+            attemptId: authorized.attemptId,
+            profileGeneration: authorized.profileGeneration,
+            manifestVersion: authorized.manifestVersion,
+            manifestDigest: authorized.manifestDigest,
+            daemonBootEpoch: authorized.daemonBootEpoch,
+            executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
+            toolName: authorized.canonicalToolName,
+            input: request.input,
+            inputHash: authorized.inputHash,
+            effectClass: authorized.effectClass,
+            retryPolicy: authorized.retryPolicy,
+            surfaceKind: authorized.surfaceKind,
+            externalRefKind: authorized.externalRefKind,
+            externalRefId: authorized.externalRefId,
+            originatingUserText: authorized.originatingUserText,
+            precedingAssistantText: authorized.precedingAssistantText,
+            runMode: authorized.runMode,
+            chatMode: authorized.chatMode,
+            ...(authorized.canonicalToolName === "render_chat_blocks"
+              && authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
+          });
+        } catch (error) {
+          send({
+            type: "chat_first_harness_executor_result",
+            requestId: requestId ?? "",
+            clientId: clientId ?? "",
+            ownerId: request.ownerId ?? "",
+            sessionId: request.sessionId ?? "",
+            runId: "",
+            attemptId: "",
+            ok: false,
+            executorInvoked: false,
+            validated: false,
+            journalBlockRendered: false,
+            error: externalAuthorityError(error, "chat_first_e2e_executor_rejected"),
+          });
+        }
         break;
       }
 

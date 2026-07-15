@@ -143,6 +143,8 @@ import {
   type EnsureAgentSpawnJournalInput,
   type EnsureAgentSpawnJournalResult,
 } from "./agent-spawn-journal.js";
+import { conversationIdForSession } from "./conversation-turns.js";
+import type { AuthorizedRunToolInvocation } from "./run-tool-capability.js";
 
 export class KernelSessions extends KernelArtifacts {
   /** Process-local only: never back this with SQLite or a user preference. */
@@ -210,6 +212,124 @@ export class KernelSessions extends KernelArtifacts {
       surfaceKind,
       this.chatFirstCapability(sessionId, ownerId, surfaceKind),
     );
+  }
+
+  /**
+   * Local/offline E2E admission for the real `render_chat_blocks` executor.
+   * Session ownership and the ephemeral rollout projection both belong to this
+   * session layer, so the probe cannot manufacture either one from its input.
+   */
+  beginChatFirstHarnessExecutor(input: {
+    ownerId: string;
+    sessionId: string;
+    producingTurnId: string;
+    controlGeneration: number;
+    clientId: string;
+    requestId: string;
+    toolInput: Record<string, unknown>;
+  }): AuthorizedRunToolInvocation {
+    const session = this.ownedSession(input.sessionId, input.ownerId);
+    if (session.surfaceKind !== "main_chat") {
+      throw new Error("Chat-first E2E executor requires an existing main Chat session");
+    }
+    const admitted = this.contextSnapshot(input.sessionId, input.ownerId, "main_chat");
+    if (
+      admitted.capabilities.chatFirstUi !== true
+      || admitted.capabilities.chatFirstControlGeneration !== input.controlGeneration
+      || !admitted.capabilities.allowedToolNames.includes("render_chat_blocks")
+    ) {
+      throw new Error("Chat-first E2E executor requires the mounted server-derived capability");
+    }
+    const accepted = this.createAcceptedRun({
+      sessionId: input.sessionId,
+      ownerId: input.ownerId,
+      surfaceKind: "main_chat",
+      clientId: input.clientId,
+      requestId: input.requestId,
+      producingTurnId: input.producingTurnId,
+      prompt: "Local Chat-first executor probe",
+      mode: "ask",
+      admittedContextSnapshot: admitted,
+    });
+    const conversationId = conversationIdForSession(this.store, accepted.session.sessionId);
+    if (!conversationId) throw new Error("Chat-first E2E executor requires a canonical Chat conversation");
+    const attempt = this.createAttempt({
+      runId: accepted.run.runId,
+      attemptNo: 1,
+      adapterId: accepted.session.defaultAdapterId,
+      retryReason: null,
+      resumeFromAttemptId: null,
+      producingTurn: {
+        ownerId: accepted.session.ownerId,
+        sessionId: accepted.session.sessionId,
+        conversationId,
+        turnId: input.producingTurnId,
+      },
+    });
+    const capability = this.toolCapabilities.register({
+      ownerId: accepted.session.ownerId,
+      sessionId: accepted.session.sessionId,
+      runId: accepted.run.runId,
+      attemptId: attempt.attemptId,
+    });
+    const invocation = this.toolCapabilities.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: `chat_first_e2e_${accepted.run.runId}`,
+      runId: accepted.run.runId,
+      attemptId: attempt.attemptId,
+      toolName: "render_chat_blocks",
+      toolInput: input.toolInput,
+      activeOwnerId: input.ownerId,
+    });
+    if (
+      invocation.canonicalToolName !== "render_chat_blocks"
+      || invocation.surfaceKind !== "main_chat"
+      || invocation.chatFirstUi !== true
+      || invocation.chatFirstControlGeneration !== input.controlGeneration
+    ) {
+      throw new Error("Chat-first E2E executor did not receive the authorized main-Chat tool");
+    }
+    this.markRunToolInvocationDispatched(invocation);
+    return invocation;
+  }
+
+  completeChatFirstHarnessExecutor(input: {
+    ownerId: string;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    succeeded: boolean;
+  }): void {
+    const session = this.ownedSession(input.sessionId, input.ownerId);
+    const run = this.readRun(input.runId);
+    const attempt = this.readAttempt(input.attemptId);
+    if (
+      session.surfaceKind !== "main_chat"
+      || run.sessionId !== session.sessionId
+      || attempt.runId !== run.runId
+      || this.readLatestAttempt(run.runId).attemptId !== attempt.attemptId
+    ) {
+      throw new Error("Chat-first E2E executor completion does not own the active run");
+    }
+    const pendingInvocations = Number(this.store.getRow(
+      `SELECT COUNT(*) AS count FROM tool_invocation_ledger
+       WHERE run_id = ? AND attempt_id = ? AND status IN ('prepared', 'dispatched')`,
+      [input.runId, input.attemptId],
+    ).count);
+    if (pendingInvocations > 0) {
+      throw new Error("Chat-first E2E executor cannot finish while its tool invocation is pending");
+    }
+    this.withTransaction(() => {
+      this.finishAttemptAndRun({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        status: input.succeeded ? "succeeded" : "failed",
+        finalText: null,
+        errorCode: input.succeeded ? null : "chat_first_e2e_executor_failed",
+        errorMessage: input.succeeded ? null : "Chat-first E2E executor failed",
+      });
+    });
   }
 
   contextSnapshotForExactSurface(

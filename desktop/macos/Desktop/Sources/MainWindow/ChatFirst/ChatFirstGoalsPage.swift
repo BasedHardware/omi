@@ -11,6 +11,7 @@ struct ChatFirstGoalsPage: View {
   @ObservedObject var goalsStore: CanonicalGoalsStore
   @ObservedObject var tasksStore: TasksStore
   let chatProvider: ChatProvider
+  let automationRuntime: ChatFirstAutomationRuntime?
 
   @State private var resolvingTaskIDs = Set<String>()
 
@@ -52,7 +53,9 @@ struct ChatFirstGoalsPage: View {
     .background(OmiColors.backgroundPrimary)
     .onAppear {
       Task { await refreshProjectionAndDetail() }
+      registerAutomationActions()
     }
+    .onDisappear { automationRuntime?.unregisterGoalsPage() }
     .onChange(of: navigation.pendingFocus) { _, _ in
       Task { await loadDetailForCurrentFocus() }
     }
@@ -199,6 +202,21 @@ struct ChatFirstGoalsPage: View {
         _ = await goalsStore.loadDetail(goalID: goalID)
       }
     }
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerGoalsPage(
+      setFocus: { [goalsStore] in
+        guard let goalID = goalsStore.otherActiveGoals.first?.goalId else { return false }
+        guard await goalsStore.setAsFocus(goalID: goalID) else { return false }
+        return await goalsStore.loadDetail(goalID: goalID) != nil
+      },
+      openRelatedTasks: { [navigation, goalsStore] in
+        guard let goalID = goalsStore.selectedGoalDetail?.goal.goalId else { return false }
+        navigation.open(focus: .goal(id: goalID), destination: .tasks)
+        return true
+      }
+    )
   }
 }
 

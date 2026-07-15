@@ -78,6 +78,28 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
+  func testRouteIsNotVisibleUntilTheMountedDestinationAcknowledgesIt() {
+    let suiteName = "ChatFirstShellTests.visible-route.\(UUID().uuidString)"
+    let defaults = UserDefaults(suiteName: suiteName)!
+    defer { defaults.removePersistentDomain(forName: suiteName) }
+
+    let navigation = ChatFirstShellNavigation(defaults: defaults)
+    XCTAssertNil(navigation.visibleRoute)
+
+    navigation.selectPrimary(.goals)
+    XCTAssertEqual(navigation.route, .goals)
+    XCTAssertNil(navigation.visibleRoute)
+
+    navigation.markRouteVisible(.tasks)
+    XCTAssertNil(navigation.visibleRoute)
+    navigation.markRouteVisible(.goals)
+    XCTAssertEqual(navigation.visibleRoute, .goals)
+
+    navigation.open(focus: .task(id: "task-1"))
+    XCTAssertEqual(navigation.route, .tasks)
+    XCTAssertNil(navigation.visibleRoute)
+  }
+
   func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
     let defaults = UserDefaults(suiteName: suiteName)!
@@ -147,6 +169,40 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(ChatFirstRoute.primaryAutomationDestination(named: "GOALS"), .goals)
     XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "dashboard"))
     XCTAssertNil(ChatFirstRoute.primaryAutomationDestination(named: "settings"))
+  }
+
+  func testAutomationNavigationVisibilityAcceptsTheMountedShellForSharedNames() {
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "settings"), .more(.settings))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "help"), .more(.help))
+    XCTAssertEqual(ChatFirstRoute.automationVisibilityDestination(named: "home"), .more(.dashboard))
+
+    XCTAssertTrue(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "chat_first",
+        selectedTab: nil,
+        visibleChatFirstRoute: "tasks",
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
+    XCTAssertTrue(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "legacy",
+        selectedTab: "Tasks",
+        visibleChatFirstRoute: nil,
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
+    XCTAssertFalse(
+      DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+        shellVariant: "loading",
+        selectedTab: "Tasks",
+        visibleChatFirstRoute: nil,
+        expectedChatFirstRoute: "tasks",
+        expectedLegacyTitle: "Tasks"
+      )
+    )
   }
 
   func testProjectionGatePassesOnlyEnabledMainChatForSampledOwner() throws {

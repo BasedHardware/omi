@@ -534,6 +534,20 @@ export interface RefreshOwnerMessage {
   ownerId: string;
 }
 
+/**
+ * Local/offline-only E2E probe for the real Chat-first Swift tool executor.
+ * The kernel derives capability from the already-resolved session; this message
+ * cannot carry or manufacture a rollout projection.
+ */
+export interface ChatFirstHarnessExecutorBeginMessage extends ProtocolEnvelope {
+  type: "chat_first_harness_executor_begin";
+  ownerId: string;
+  sessionId: string;
+  producingTurnId: string;
+  controlGeneration: number;
+  input: Record<string, unknown>;
+}
+
 export type InboundMessage =
   | QueryMessage
   | AuthorizedToolExecutionResultMessage
@@ -570,6 +584,7 @@ export type InboundMessage =
   | JournalBackendDeleteResultMessage
   | JournalBackendReconcileResultMessage
   | ChatFirstDeferralDeliveryResultMessage
+  | ChatFirstHarnessExecutorBeginMessage
   | RefreshTokenMessage
   | RefreshOwnerMessage;
 
@@ -696,6 +711,20 @@ export interface ExternalSurfaceRunCompleteResultMessage extends OutboundEnvelop
   ok: boolean;
   terminalStatus?: "completed" | "failed" | "cancelled";
   duplicate?: boolean;
+  error?: ExternalAuthorityError;
+}
+
+/** Shape-only completion for the local/offline Chat-first executor probe. */
+export interface ChatFirstHarnessExecutorResultMessage extends OutboundEnvelope {
+  type: "chat_first_harness_executor_result";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  ok: boolean;
+  executorInvoked: boolean;
+  validated: boolean;
+  journalBlockRendered: boolean;
   error?: ExternalAuthorityError;
 }
 
@@ -1113,6 +1142,7 @@ export type OutboundMessage =
   | ExternalSurfaceRunBeginResultMessage
   | ExternalSurfaceToolResultMessage
   | ExternalSurfaceRunCompleteResultMessage
+  | ChatFirstHarnessExecutorResultMessage
   | OwnerRuntimeRevokedMessage
   | ControlToolResultMessage
   | DefaultExecutionProfileConfiguredMessage
@@ -1150,6 +1180,7 @@ export type OutboundMessageDraft =
   | DraftEnvelope<ExternalSurfaceRunBeginResultMessage>
   | DraftEnvelope<ExternalSurfaceToolResultMessage>
   | DraftEnvelope<ExternalSurfaceRunCompleteResultMessage>
+  | DraftEnvelope<ChatFirstHarnessExecutorResultMessage>
   | DraftEnvelope<OwnerRuntimeRevokedMessage>
   | DraftEnvelope<ControlToolResultMessage>
   | DraftEnvelope<DefaultExecutionProfileConfiguredMessage>

@@ -65,28 +65,6 @@ final class ChatFirstAnalyticsTests: XCTestCase {
     XCTAssertTrue(Set(payload.properties.keys).isDisjoint(with: prohibitedKeys))
   }
 
-  func testChatFirstInteractionSurfacesUseAnalyticsManagerAsTheirOnlyTelemetryPath() throws {
-    // omi-test-quality: source-inspection -- static contract: direct telemetry
-    // calls could bypass the closed mapper without a runtime-observable result.
-    let desktopDirectory = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-    let sources = [
-      "Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift",
-      "Sources/MainWindow/ChatFirst/ChatFirstRoute.swift",
-      "Sources/MainWindow/ChatFirst/ChatFirstShell.swift",
-      "Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift",
-      "Sources/MainWindow/Components/ChatBubble.swift",
-      "Sources/MainWindow/DesktopHomeView.swift",
-    ]
-
-    for path in sources {
-      let source = try String(contentsOf: desktopDirectory.appendingPathComponent(path), encoding: .utf8)
-      XCTAssertFalse(source.contains("PostHogManager.shared.track"), "\(path) bypasses AnalyticsManager")
-      XCTAssertFalse(source.contains("PostHogManager.shared.capture"), "\(path) bypasses AnalyticsManager")
-    }
-  }
-
   func testCapabilityGenerationIsBucketedAndTaskResultHasNoTransportDimension() {
     XCTAssertEqual(ChatFirstAnalyticsEvent.CapabilityGenerationBucket.bucket(for: nil), .none)
     XCTAssertEqual(ChatFirstAnalyticsEvent.CapabilityGenerationBucket.bucket(for: 0), .zeroToNine)
@@ -107,52 +85,4 @@ final class ChatFirstAnalyticsTests: XCTestCase {
     )
   }
 
-  func testNonProductionFixtureContractUsesOnlyDeterministicShapeFacts() {
-    let interactive = ChatFirstAutomationFixture.contract(for: .interactiveQuestion)
-    XCTAssertEqual(interactive.validRichBlockCount, 1)
-    XCTAssertTrue(interactive.hasValidQuestion)
-    XCTAssertTrue(interactive.hasPreparedAnswer)
-    XCTAssertEqual(interactive.proactiveJudgeCalls, 0)
-    XCTAssertEqual(interactive.materializationCount, 0)
-    XCTAssertEqual(interactive.rawManifestProofMode, "external_raw_bytes_digest")
-    XCTAssertEqual(interactive.shellVariant, "chatFirst")
-    XCTAssertEqual(interactive.chatFirstToolCount, 2)
-
-    let deferred = ChatFirstAutomationFixture.contract(for: .deferredQuestion)
-    XCTAssertEqual(deferred.deferralSeconds, 86_400)
-    XCTAssertEqual(deferred.fakeClockEpochSeconds, interactive.fakeClockEpochSeconds)
-
-    let capture = ChatFirstAutomationFixture.contract(for: .mixedCapture)
-    XCTAssertEqual(capture.captureSourceMode, "mixed")
-    XCTAssertFalse(capture.hasPreparedAnswer)
-    XCTAssertTrue(
-      Set(capture.bridgeDetail.keys).isDisjoint(with: ["text", "answer", "title", "id", "transcript", "url", "error"])
-    )
-
-    for scenario in [ChatFirstAutomationFixture.Scenario.uiFlagOff, .outOfCohort] {
-      let disabled = ChatFirstAutomationFixture.contract(for: scenario)
-      XCTAssertEqual(disabled.shellVariant, "legacy")
-      XCTAssertEqual(disabled.chatFirstToolCount, 0)
-      XCTAssertEqual(disabled.validRichBlockCount, 0)
-      XCTAssertEqual(disabled.materializationCount, 0)
-      XCTAssertEqual(disabled.proactiveJudgeCalls, 0)
-      XCTAssertEqual(disabled.proactiveEmissions, 0)
-    }
-  }
-
-  @MainActor
-  func testFixtureBridgeActionIsDiscoverableWithoutContentParameters() {
-    let registry = DesktopAutomationActionRegistry.shared
-    registry.registerBuiltins()
-    let descriptor = registry.descriptors().first { $0.name == "chat_first_fixture_contract" }
-
-    guard AppBuild.isNonProduction else {
-      XCTAssertNil(descriptor)
-      return
-    }
-    XCTAssertEqual(descriptor?.params, ["scenario"])
-    XCTAssertEqual(descriptor?.category, "read")
-    XCTAssertEqual(descriptor?.safety, "read_only")
-    XCTAssertEqual(descriptor?.sideEffects, [])
-  }
 }

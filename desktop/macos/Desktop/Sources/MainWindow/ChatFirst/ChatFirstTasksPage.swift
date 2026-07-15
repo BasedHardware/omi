@@ -131,6 +131,7 @@ struct ChatFirstTasksPage: View {
   @ObservedObject var navigation: ChatFirstShellNavigation
   @ObservedObject var tasksStore: TasksStore
   let chatProvider: ChatProvider
+  let automationRuntime: ChatFirstAutomationRuntime?
 
   @State private var addDrafts: [ChatFirstTaskScheduleGroup: String] = [:]
   @State private var addingGroups: Set<ChatFirstTaskScheduleGroup> = []
@@ -139,11 +140,13 @@ struct ChatFirstTasksPage: View {
   init(
     navigation: ChatFirstShellNavigation,
     tasksStore: TasksStore,
-    chatProvider: ChatProvider
+    chatProvider: ChatProvider,
+    automationRuntime: ChatFirstAutomationRuntime? = nil
   ) {
     self.navigation = navigation
     self.tasksStore = tasksStore
     self.chatProvider = chatProvider
+    self.automationRuntime = automationRuntime
   }
 
   private var visibleTasks: [TaskActionItem] {
@@ -187,9 +190,11 @@ struct ChatFirstTasksPage: View {
     .onAppear {
       tasksStore.isActive = true
       Task { await tasksStore.loadTasksIfNeeded() }
+      registerAutomationActions()
     }
     .onDisappear {
       tasksStore.isActive = false
+      automationRuntime?.unregisterTasksPage()
     }
     .accessibilityIdentifier("chat-first-tasks-page")
   }
@@ -398,6 +403,25 @@ struct ChatFirstTasksPage: View {
       visibleGoalID: goalID
     ) else { return }
     _ = navigation.acknowledgeFocus(focus)
+  }
+
+  private func registerAutomationActions() {
+    automationRuntime?.registerTasksPage(
+      toggleTask: { [tasksStore] in
+        guard let task = tasksStore.tasks.first(where: { $0.deleted != true && !$0.completed }) else { return false }
+        let intendedCompletion = !task.completed
+        AnalyticsManager.shared.chatFirst(.taskMutation(lifecycle: .attempt, mutation: .completion))
+        await tasksStore.toggleTask(task)
+        let reconciled = tasksStore.tasks.first { $0.id == task.id && $0.deleted != true }
+        AnalyticsManager.shared.chatFirst(
+          .taskMutation(
+            lifecycle: reconciled?.completed == intendedCompletion ? .success : .rollback,
+            mutation: .completion
+          )
+        )
+        return reconciled?.completed == intendedCompletion
+      }
+    )
   }
 }
 

@@ -119,7 +119,7 @@ describe("workstream continuity", () => {
       delivery_status: "blocked",
       status: "rejected",
     });
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(27);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(30);
     store.close();
   });
 

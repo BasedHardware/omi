@@ -21,13 +21,19 @@ describe("SqliteAgentStore", () => {
     store.migrate();
     store.migrate();
 
-    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(27);
+    expect(store.getRow("SELECT COUNT(*) AS count FROM schema_migrations").count).toBe(30);
+    expect(store.allRows("SELECT version FROM schema_migrations ORDER BY version")).toEqual(
+      Array.from({ length: 30 }, (_, index) => ({ version: index + 1 })),
+    );
     expect(tableNames(store)).toEqual([
       "adapter_bindings",
       "artifacts",
       "backend_conversation_delete_outbox",
       "backend_reconcile_state",
       "backend_turn_outbox",
+      "chat_first_cold_start_sequence_receipts",
+      "chat_first_deferral_outbox",
+      "chat_first_materialization_receipts",
       "cleared_backend_turn_claims",
       "completion_delta_checkpoints",
       "context_owner_snapshot_state",
@@ -1203,6 +1209,15 @@ describe("SqliteAgentStore", () => {
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_memory_candidates"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_context_access_log"))).toBe(true);
     expect(execStatements.some((statement) => statement.includes("CREATE TABLE IF NOT EXISTS desktop_attention_overrides"))).toBe(true);
+    expect(execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_deferral_outbox"))).toBe(
+      true,
+    );
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_materialization_receipts")),
+    ).toBe(true);
+    expect(
+      execStatements.some((statement) => statement.includes("CREATE TABLE chat_first_cold_start_sequence_receipts")),
+    ).toBe(true);
   });
 
   it("stores no legacy_default grant rows in a fresh database", () => {

@@ -128,6 +128,10 @@ struct DesktopAutomationSnapshot: Codable, Sendable {
   var shellVariant: String?
   /// Stable typed route for the cohort shell. Nil for the legacy shell.
   var chatFirstRoute: String?
+  /// Set only by the mounted cohort destination after it has appeared. This
+  /// keeps a successful navigation response equivalent to the target being
+  /// visible, rather than merely accepted by the root reducer.
+  var visibleChatFirstRoute: String?
   /// Shape-only focus telemetry for route acknowledgement; entity IDs stay local.
   var pendingFocusKind: String?
   var acknowledgedFocusKind: String?
@@ -445,6 +449,7 @@ final class DesktopAutomationStateStore {
     homeMode: nil,
     shellVariant: nil,
     chatFirstRoute: nil,
+    visibleChatFirstRoute: nil,
     pendingFocusKind: nil,
     acknowledgedFocusKind: nil,
     focusedEntityID: nil,
@@ -535,7 +540,7 @@ func awaitWithTimeout<T: Sendable>(
   }
 }
 
-private func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
+func liveAutomationSnapshot() async -> DesktopAutomationSnapshot {
   // Bound the MainActor hop: if the main thread is wedged (blocking Keychain read
   // during sign-in), fall back to the last cached snapshot so `/state` still
   // answers instead of hanging the whole bridge. See awaitWithTimeout.
@@ -790,28 +795,6 @@ final class DesktopAutomationActionRegistry {
         "window": window.map { $0.title.isEmpty ? "untitled" : $0.title } ?? "none",
       ]
     }
-
-    if AppBuild.isNonProduction {
-      register(
-        name: "chat_first_fixture_contract",
-        summary: "Read one deterministic Chat-first non-production fixture contract without user content",
-        params: ["scenario"],
-        category: "read",
-        surfaces: ["main_chat"],
-      safety: "read_only",
-      sideEffects: []
-    ) { params in
-        guard let scenario = ChatFirstAutomationFixture.Scenario(
-          rawValue: params["scenario"] ?? ""
-        ) else {
-          throw DesktopAutomationActionError.invalidParams(
-            "scenario must be interactive_question, deferred_question, mixed_capture, ui_flag_off, or out_of_cohort"
-          )
-        }
-        return ChatFirstAutomationFixture.contract(for: scenario).bridgeDetail
-      }
-    }
-
     // CHAT-05: read the free-tier monthly chat usage-limiter state so a harness can
     // prove the counter is deterministic without spending LLM calls. Read-only.
     register(
@@ -3784,8 +3767,8 @@ final class DesktopAutomationBridge: @unchecked Sendable {
         let payload = try JSONDecoder().decode(
           DesktopAutomationNavigationRequest.self, from: request.body)
         try await dispatchNavigation(payload)
+        let snapshot = try await waitForNavigationTarget(payload)
         try await sleepForAutomationSettle(payload.settleMs)
-        let snapshot = await cachedAutomationSnapshot()
         return jsonResponse(DesktopAutomationResponse(ok: true, result: snapshot, error: nil))
       } catch {
         return jsonResponse(

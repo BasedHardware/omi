@@ -2,6 +2,7 @@
 
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
+from unittest.mock import patch
 
 import pytest
 
@@ -518,6 +519,94 @@ def test_off_or_stale_control_rejects_intent_before_feature_records_are_read(fir
         )
 
     assert not any(INTENTS_COLLECTION in path or DEFERRALS_COLLECTION in path for path in firestore.rows)
+
+
+def test_malformed_control_or_proactive_state_fails_closed_without_a_fail_open_drop(firestore):
+    question = _question()
+    malformed_control_path = ('users', UID, 'task_intelligence_control', 'state')
+    firestore.rows[malformed_control_path]['unexpected_legacy_field'] = True
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='capability state is malformed'):
+            intents_db.create_intent(
+                UID,
+                source='capture_arrival',
+                continuity_key='malformed-control',
+                subject=question.subject,
+                blocks=[question],
+                account_generation=GENERATION,
+                now=NOW,
+                firestore_client=firestore,
+            )
+
+    fallback.assert_not_called()
+    assert not any(INTENTS_COLLECTION in path or DEFERRALS_COLLECTION in path for path in firestore.rows)
+
+
+def test_malformed_intent_cannot_be_materialized_or_overwritten(firestore):
+    path = ('users', UID, intents_db.INTENTS_COLLECTION, 'malformed-intent')
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='proactive intent is malformed'):
+            intents_db.acknowledge_materialization(
+                UID,
+                intent_id='malformed-intent',
+                receipt_id='kernel-receipt-1',
+                account_generation=GENERATION,
+                now=NOW,
+                firestore_client=firestore,
+            )
+
+    fallback.assert_not_called()
+    assert firestore.rows[path] == original
+
+
+def test_malformed_deferral_cannot_be_accepted_or_overwritten(firestore):
+    question = _question()
+    continuity_key = 'malformed-deferral'
+    deferral_id = intents_db._stable_id('cfd', UID, GENERATION, continuity_key)
+    path = ('users', UID, intents_db.DEFERRALS_COLLECTION, deferral_id)
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='deferral is malformed'):
+            intents_db.record_deferral(
+                UID,
+                continuity_key=continuity_key,
+                subject=question.subject,
+                question=question,
+                account_generation=GENERATION,
+                now=NOW,
+                firestore_client=firestore,
+            )
+
+    fallback.assert_not_called()
+    assert firestore.rows[path] == original
+
+
+def test_malformed_budget_state_cannot_be_reset_to_an_enabled_default(firestore):
+    path = ('users', UID, intents_db.STATE_COLLECTION, intents_db.BUDGET_DOCUMENT)
+    firestore.rows[path] = {
+        'account_generation': GENERATION,
+        'unexpected_legacy_field': True,
+    }
+    original = deepcopy(firestore.rows[path])
+
+    with patch('database.read_boundary.record_fallback') as fallback:
+        with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch, match='proactive budget state is malformed'):
+            intents_db.get_budget_state(UID, account_generation=GENERATION, now=NOW, firestore_client=firestore)
+
+    fallback.assert_not_called()
+    assert firestore.rows[path] == original
 
 
 INTENTS_COLLECTION = intents_db.INTENTS_COLLECTION

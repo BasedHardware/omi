@@ -1,0 +1,86 @@
+version: 2
+name: chat-first-cold-start
+tier: manual
+description: "Manual local/offline flow for the server-owned sparse cold-start materialization and terminal answer path."
+app: non-prod
+# Setup is server-owned and must precede this flow:
+# PROVIDER_MODE=offline make dev-up
+# make seed-memory-scenario SCENARIO=happy_path
+# make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=cold_start
+# make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-chat-first-e2e-enabled
+# Run with --lane ui --bundle-id com.omi.omi-chat-first-e2e for AX steps.
+covers:
+  # This flow reaches the focused facade's receipt listing/materialization and
+  # bounded question-reply operations. It does not claim appendChatFirstBlocks;
+  # that privileged rendered-block contract stays in unit/authorized-tool tests.
+  - desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess+ChatFirstJournal.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstAutomationRuntime.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstPromptMaterializationCoordinator.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ChatFirst/Blocks/ChatFirstContentBlockViews.swift
+  - desktop/macos/Desktop/Sources/Providers/ChatProvider.swift
+preconditions:
+  - automation_bridge_ready
+  - named_non_production_bundle_ui_lane
+  - provider_mode_offline
+  - chat_first_e2e_fixture_case_cold_start_prepared_by_make_helper
+  - desktop_user_omi_chat_first_e2e_enabled
+  - chat_first_prompt_materialized_in_mounted_main_chat
+
+steps:
+  - id: S1
+    name: Navigate to the mounted Chat page after sparse cold-start materialization
+    bridge.navigate:
+      target: chat
+      activateApp: true
+      settleMs: 1000
+
+  - id: S2
+    name: Confirm the current Chat tail is a real actionable non-deferrable cold-start question
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.actionable_question_at_tail: "true"
+      result.detail.actionable_question_available: "true"
+      result.detail.deferrable_question_available: "false"
+
+  - id: S3
+    name: Verify the stable local-only cold-start card and its answer control are exposed through Accessibility
+    ax.expect:
+      identifiers_visible:
+        - chat-first-question-chat-first-e2e-cold-start-question-v1
+        - chat-first-question-chat-first-e2e-cold-start-question-v1-option-start
+
+  - id: S4
+    name: Select the bounded cold-start answer through the normal main-Chat journal
+    bridge.action:
+      name: chat_first_select_question_option
+      params:
+        selection: first
+    expect:
+      result.detail.question_selection_started: "true"
+
+  - id: S5
+    name: Wait for the ordinary main-Chat answer turn to terminalize
+    bridge.action:
+      name: wait_main_chat_idle
+      params:
+        timeoutMs: "120000"
+    expect:
+      result.detail.idle: "true"
+
+  - id: S6
+    name: Confirm the materialized cold-start sequence reached its terminal answered state
+    bridge.action:
+      name: chat_first_runtime_snapshot
+    expect:
+      result.detail.route: chat
+      result.detail.route_visible: "true"
+      result.detail.actionable_question_at_tail: "false"
+      result.detail.actionable_question_available: "false"
+      result.detail.deferrable_question_available: "false"
+
+  - id: S7
+    name: Read only the bounded server-owned fixture counters after the UI terminal state
+    do: "Run `make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=snapshot CHAT_FIRST_E2E_CASE=cold_start` and inspect only fixture case, expected shell, and bounded count fields; do not inspect transcript, question, answer, goal, capture, or entity payloads."

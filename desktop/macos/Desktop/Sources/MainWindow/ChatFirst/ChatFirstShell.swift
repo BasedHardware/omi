@@ -12,6 +12,31 @@ struct ChatFirstShell: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingID: String?
   @StateObject private var promptMaterializationCoordinator = ChatFirstPromptMaterializationCoordinator()
+  @StateObject private var automationRuntime: ChatFirstAutomationRuntime
+
+  init(
+    navigation: ChatFirstShellNavigation,
+    appState: AppState,
+    viewModelContainer: ViewModelContainer,
+    capability: ChatFirstCapabilityProjection,
+    selectedSettingsSection: Binding<SettingsContentView.SettingsSection>,
+    highlightedSettingID: Binding<String?>
+  ) {
+    self.navigation = navigation
+    self.appState = appState
+    self.viewModelContainer = viewModelContainer
+    self.capability = capability
+    _selectedSettingsSection = selectedSettingsSection
+    _highlightedSettingID = highlightedSettingID
+    _automationRuntime = StateObject(
+      wrappedValue: ChatFirstAutomationRuntime(
+        navigation: navigation,
+        goalsStore: viewModelContainer.canonicalGoalsStore,
+        tasksStore: viewModelContainer.tasksStore,
+        chatProvider: viewModelContainer.chatProvider
+      )
+    )
+  }
 
   var body: some View {
     HStack(spacing: 0) {
@@ -35,8 +60,10 @@ struct ChatFirstShell: View {
     .onAppear {
       promptMaterializationCoordinator.activate(using: viewModelContainer.chatProvider)
       viewModelContainer.canonicalGoalsStore.activate(capability: capability)
+      automationRuntime.install()
       AnalyticsManager.shared.chatFirst(.routeEntered(route: .chat, origin: .shellLaunch))
     }
+    .onDisappear { automationRuntime.uninstall() }
     .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       guard let window = NSApp.mainWindow, window.isKeyWindow, window.isVisible else { return }
       promptMaterializationCoordinator.mainWindowDidBecomeForeground()
@@ -72,36 +99,53 @@ struct ChatFirstShell: View {
         )
       )
       .accessibilityIdentifier("chat-first-route-chat")
+      .onAppear {
+        navigation.markRouteVisible(.chat)
+        automationRuntime.registerChatPage(
+          requestPromptMaterialization: {
+            promptMaterializationCoordinator.mainWindowDidBecomeForeground()
+          }
+        )
+      }
+      .onDisappear { automationRuntime.unregisterChatPage() }
     case .conversations:
       CaptureArchivePage(
         navigation: navigation,
-        chatProvider: viewModelContainer.chatProvider
+        chatProvider: viewModelContainer.chatProvider,
+        automationRuntime: automationRuntime
       )
         .accessibilityIdentifier("chat-first-route-conversations")
+        .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
       ChatFirstTasksPage(
         navigation: navigation,
         tasksStore: viewModelContainer.tasksStore,
-        chatProvider: viewModelContainer.chatProvider
+        chatProvider: viewModelContainer.chatProvider,
+        automationRuntime: automationRuntime
       )
       .accessibilityIdentifier("chat-first-route-tasks")
+      .onAppear { navigation.markRouteVisible(.tasks) }
     case .goals:
       ChatFirstGoalsPage(
         navigation: navigation,
         goalsStore: viewModelContainer.canonicalGoalsStore,
         tasksStore: viewModelContainer.tasksStore,
-        chatProvider: viewModelContainer.chatProvider
+        chatProvider: viewModelContainer.chatProvider,
+        automationRuntime: automationRuntime
       )
       .accessibilityIdentifier("chat-first-route-goals")
+      .onAppear { navigation.markRouteVisible(.goals) }
     case .memories:
       MemoriesPage(
         viewModel: viewModelContainer.memoriesViewModel,
         graphViewModel: viewModelContainer.memoryGraphViewModel
       )
       .accessibilityIdentifier("chat-first-route-memories")
+      .onAppear { navigation.markRouteVisible(.memories) }
     case .more(let page):
       moreDestination(page)
         .accessibilityIdentifier("chat-first-route-more-\(page.stableName)")
+        .onAppear { navigation.markRouteVisible(.more(page)) }
     }
   }
 

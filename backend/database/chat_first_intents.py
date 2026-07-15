@@ -3,11 +3,12 @@
 import hashlib
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta, timezone
-from typing import Any, Iterable, cast
+from typing import Any, Iterable
 
 from google.cloud import firestore
 
 from database._client import get_firestore_client
+from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.chat_first import (
     ChatFirstBlockSpec,
     ChatFirstSubject,
@@ -92,15 +93,13 @@ def _stable_id(prefix: str, *parts: object) -> str:
     return f'{prefix}_{hashlib.sha256(raw).hexdigest()[:32]}'
 
 
-def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
-    payload = snapshot.to_dict()
-    return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
-
-
 def _require_control(snapshot: Any, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        try:
+            control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
+        except MalformedDocError as error:
+            raise ChatFirstIntentGenerationMismatch('chat-first capability state is malformed') from error
     if (
         control.workflow_mode != TaskWorkflowMode.read
         or control.account_generation != account_generation
@@ -112,10 +111,31 @@ def _require_control(snapshot: Any, account_generation: int) -> None:
 def _budget_from_snapshot(snapshot: Any, *, account_generation: int, now: datetime) -> ProactiveBudgetState:
     if not snapshot.exists:
         return ProactiveBudgetState(account_generation=account_generation)
-    state = ProactiveBudgetState.model_validate(_snapshot_dict(snapshot))
+    try:
+        state = parse_snapshot_strict(ProactiveBudgetState, snapshot)
+    except MalformedDocError as error:
+        raise ChatFirstIntentGenerationMismatch('chat-first proactive budget state is malformed') from error
     if state.account_generation != account_generation:
         return ProactiveBudgetState(account_generation=account_generation)
     return normalized_budget_state(state, now=now)
+
+
+def _intent_from_snapshot(snapshot: Any) -> ProactiveIntent:
+    """Load correctness-critical proactive state without treating corruption as absent."""
+
+    try:
+        return parse_snapshot_strict(ProactiveIntent, snapshot)
+    except MalformedDocError as error:
+        raise ChatFirstIntentGenerationMismatch('chat-first proactive intent is malformed') from error
+
+
+def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
+    """Load correctness-critical deferred-question state without a fallback."""
+
+    try:
+        return parse_snapshot_strict(ProactiveDeferral, snapshot)
+    except MalformedDocError as error:
+        raise ChatFirstIntentGenerationMismatch('chat-first deferral is malformed') from error
 
 
 def _require_current_control(uid: str, *, account_generation: int, firestore_client: Any) -> None:
@@ -172,7 +192,7 @@ def admit_agent_judgment(
         _require_control(control_snapshot, account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
-            existing = ProactiveIntent.model_validate(_snapshot_dict(existing_snapshot))
+            existing = _intent_from_snapshot(existing_snapshot)
             if (
                 existing.account_generation != account_generation
                 or existing.source != 'agent_judgment'
@@ -275,7 +295,7 @@ def create_intent(
             else None
         )
         if existing_snapshot.exists:
-            existing = ProactiveIntent.model_validate(_snapshot_dict(existing_snapshot))
+            existing = _intent_from_snapshot(existing_snapshot)
             if (
                 existing.account_generation != account_generation
                 or existing.source != source
@@ -344,7 +364,7 @@ def get_or_create_cold_start_intent(
         _require_control(control_snapshot, account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
-            existing = ProactiveIntent.model_validate(_snapshot_dict(existing_snapshot))
+            existing = _intent_from_snapshot(existing_snapshot)
             if (
                 existing.account_generation != account_generation
                 or existing.continuity_key != continuity_key
@@ -371,12 +391,11 @@ def has_cold_start_intent_created_on(
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
     for snapshot in collection.stream():
-        payload = _snapshot_dict(snapshot)
-        if payload.get('account_generation') != account_generation:
+        intent = _intent_from_snapshot(snapshot)
+        if intent.account_generation != account_generation:
             continue
-        if payload.get('source') not in {'cold_start_rich', 'cold_start_sparse'}:
+        if intent.source not in {'cold_start_rich', 'cold_start_sparse'}:
             continue
-        intent = ProactiveIntent.model_validate(payload)
         if intent.created_at.date() == date_value:
             return True
     return False
@@ -416,7 +435,7 @@ def acknowledge_sparse_cold_start_sequence_terminal(
         snapshot = intent_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise ProactiveIntentNotReady('cold-start intent is not ready')
-        intent = ProactiveIntent.model_validate(_snapshot_dict(snapshot))
+        intent = _intent_from_snapshot(snapshot)
         if (
             intent.account_generation != account_generation
             or intent.source != 'cold_start_sparse'
@@ -456,10 +475,9 @@ def has_active_sparse_cold_start_sequence(
     _require_current_control(uid, account_generation=account_generation, firestore_client=client)
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
     for snapshot in collection.stream():
-        payload = _snapshot_dict(snapshot)
-        if payload.get('account_generation') != account_generation or payload.get('source') != 'cold_start_sparse':
+        intent = _intent_from_snapshot(snapshot)
+        if intent.account_generation != account_generation or intent.source != 'cold_start_sparse':
             continue
-        intent = ProactiveIntent.model_validate(payload)
         if intent.cold_start_sequence_terminal_receipt_id is None:
             return True
     return False
@@ -479,13 +497,13 @@ def fetch_ready_intents(
     collection = _user_ref(uid, firestore_client=client).collection(INTENTS_COLLECTION)
     ready: list[ProactiveIntent] = []
     for snapshot in collection.stream():
-        payload = _snapshot_dict(snapshot)
-        if payload.get('account_generation') != account_generation or payload.get('delivery_state') not in {
+        intent = _intent_from_snapshot(snapshot)
+        if intent.account_generation != account_generation or intent.delivery_state not in {
             'ready',
             'pending_kernel_receipt',
         }:
             continue
-        ready.append(ProactiveIntent.model_validate(payload))
+        ready.append(intent)
     ready.sort(key=lambda intent: (intent.created_at, intent.intent_id))
     return ready[:limit]
 
@@ -513,7 +531,7 @@ def acknowledge_materialization(
         intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not intent_snapshot.exists:
             raise ProactiveIntentNotReady('proactive intent is not ready')
-        intent = ProactiveIntent.model_validate(_snapshot_dict(intent_snapshot))
+        intent = _intent_from_snapshot(intent_snapshot)
         budget_snapshot = budget_ref.get(transaction=write_transaction) if intent.consumes_turn_budget else None
         if intent.account_generation != account_generation:
             raise ChatFirstIntentGenerationMismatch('intent account generation changed')
@@ -574,7 +592,7 @@ def record_deferral(
         _require_control(control_snapshot, account_generation)
         existing_snapshot = ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
-            existing = ProactiveDeferral.model_validate(_snapshot_dict(existing_snapshot))
+            existing = _deferral_from_snapshot(existing_snapshot)
             if (
                 existing.account_generation != account_generation
                 or existing.continuity_key != continuity_key
@@ -607,10 +625,9 @@ def release_due_deferrals(
     collection = _user_ref(uid, firestore_client=client).collection(DEFERRALS_COLLECTION)
     candidates: list[ProactiveDeferral] = []
     for snapshot in collection.stream():
-        payload = _snapshot_dict(snapshot)
-        if payload.get('account_generation') != account_generation or payload.get('state') != 'pending':
+        deferred = _deferral_from_snapshot(snapshot)
+        if deferred.account_generation != account_generation or deferred.state != 'pending':
             continue
-        deferred = ProactiveDeferral.model_validate(payload)
         if subject is not None:
             if deferred.subject != subject:
                 continue
@@ -662,11 +679,11 @@ def _release_deferral_transaction(
         intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not deferral_snapshot.exists:
             return None
-        current = ProactiveDeferral.model_validate(_snapshot_dict(deferral_snapshot))
+        current = _deferral_from_snapshot(deferral_snapshot)
         if current.account_generation != account_generation or current.state != 'pending':
             return None
         if intent_snapshot.exists:
-            existing = ProactiveIntent.model_validate(_snapshot_dict(intent_snapshot))
+            existing = _intent_from_snapshot(intent_snapshot)
             if existing.source != 'deferral_reraise' or existing.continuity_key != current.continuity_key:
                 raise ChatFirstIntentConflictError('deferral intent collision')
             released = current.model_copy(update={'state': 'released', 'released_intent_id': existing.intent_id})
