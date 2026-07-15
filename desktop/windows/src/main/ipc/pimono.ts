@@ -9,10 +9,16 @@
 
 import { ipcMain } from 'electron'
 import { configurePiMonoSession } from '../codingAgent/piMonoSession'
+import { ensurePiMonoAdapterRegistered } from '../agentKernel/controlPlane'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
-  ipcMain.handle('pimono:setSession', (_e, session: unknown): void =>
+  ipcMain.handle('pimono:setSession', (_e, session: unknown): void => {
     configurePiMonoSession(session)
-  )
+    // Register the managed-cloud pi-mono adapter into the kernel now that a
+    // session may be present. Idempotent, and a no-op when signed out (returns
+    // false), so the registry stays empty until a real Firebase session exists.
+    // DARK: registration only — nothing routes chat to pi-mono until PR-E.
+    ensurePiMonoAdapterRegistered()
+  })
 }
