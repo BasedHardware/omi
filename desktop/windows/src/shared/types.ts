@@ -435,6 +435,25 @@ export type BarShowPayload = { mode: BarMode; reveal: BarReveal; token: number }
  *  re-showing the popup. */
 export type BarUsageLimitPayload = { message: string; spoken: boolean; popup?: boolean }
 
+/** Low-rate orb-driving projection pushed MAIN → bar during a warm-hub PTT turn
+ *  (A5 PR-6b). The main window owns the turn (capture, hub, playback); the bar is
+ *  a pure viewport whose orb needs the phase + loudness to animate. NO per-frame
+ *  audio is carried — only this coarse state on each reducer transition + a
+ *  throttled `orbLevel`. `active:false` tells the bar to fall back to its own local
+ *  orb state (today's behavior), so the flag-off path never sees this at all. */
+export type VoiceHubBarState = {
+  /** A main-owned warm-hub turn currently owns the bar orb. */
+  active: boolean
+  /** The mic is capturing (the orb's listening/speaking pose). */
+  isListening: boolean
+  /** Awaiting the hub's response (the orb's thinking pose). */
+  isThinking: boolean
+  /** The hub is speaking its reply (the orb's response-active pose). */
+  isResponseActive: boolean
+  /** Latest orb loudness in [0,1] sampled from the main-owned capture. */
+  orbLevel: number
+}
+
 /** Renderer bridge for the top-edge bar window (see main/bar/window.ts). */
 export type OmiBarApi = {
   /** The bar renderer has mounted + measured — flush any deferred first show. */
@@ -479,6 +498,20 @@ export type OmiBarApi = {
   /** Summon-hotkey physical hold state, driven by main's gesture machine.
    *  'down' arms the existing PTT machine; 'up' releases it. */
   onPtt: (cb: (phase: 'down' | 'up') => void) => () => void
+  /** Warm-hub PTT (A5 PR-6b, gated on `pttHubEnabled`): a bar hold delegates the
+   *  turn to the MAIN window's warm-hub driver instead of running the local
+   *  cascade. `backfillMs` is the pre-roll the main-owned capture should include
+   *  (time since the physical key-down). Sent ONLY when the flag is on — flag off,
+   *  the bar never calls these and its local cascade path is byte-for-byte today's. */
+  voiceHubBegin: (payload: { backfillMs: number }) => void
+  /** Hub hold released — the main driver finalizes + commits the turn. */
+  voiceHubEnd: () => void
+  /** Hub hold aborted (Esc / focus loss) — the main driver cancels the turn. */
+  voiceHubCancel: () => void
+  /** Projected warm-hub turn state pushed from the MAIN window, so the bar orb
+   *  animates during a main-owned turn (no per-frame audio crosses — just the low-
+   *  rate orb level + phase). `active:false` ⇒ the bar uses its local orb state. */
+  onVoiceHubState: (cb: (state: VoiceHubBarState) => void) => () => void
   /** Screen-share privacy toggle (persisted in main's app settings). */
   getContentProtection: () => Promise<boolean>
   setContentProtection: (enabled: boolean) => Promise<boolean>
@@ -963,6 +996,16 @@ export type OmiBridgeApi = {
   onBarRequestChatState: (cb: () => void) => () => void
   /** Broadcast the projected chat state to the bar (history + streaming + status). */
   publishChatState: (state: BarChatState) => void
+  // --- Warm-hub PTT driver (main-window side; A5 PR-6b, gated on pttHubEnabled) ---
+  /** A bar hold delegated its turn to the main-window warm-hub driver. Payload is
+   *  the pre-roll backfill ms. Main-window renderer only. */
+  onVoiceHubBegin: (cb: (payload: { backfillMs: number }) => void) => () => void
+  /** The delegated hold was released — finalize + commit the main-owned turn. */
+  onVoiceHubEnd: (cb: () => void) => () => void
+  /** The delegated hold was aborted — cancel the main-owned turn. */
+  onVoiceHubCancel: (cb: () => void) => () => void
+  /** Push the projected warm-hub turn state to the bar orb (main → bar). */
+  publishVoiceHubState: (state: VoiceHubBarState) => void
   // --- Tray + lifecycle (Phase 1) ---
   /** Report the current listening state so main drives the tray icon/menu/tooltip. */
   trayReportState: (state: TrayListeningState) => void
