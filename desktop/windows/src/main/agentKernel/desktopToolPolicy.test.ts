@@ -45,10 +45,12 @@ describe('evaluateDesktopToolPolicy — deny by default', () => {
     expect(result.descriptor.bundles).toEqual([])
   })
 
-  // The product-tool under-declaration attack. `complete_task` is a real macOS
-  // product tool that IMPLIES desktop.tasks.readwrite (see TASK_WRITE_TOOLS /
-  // bundlesForOmiTool). Windows has no product-tool manifest to resolve it, so it
-  // must NOT be waved through on the benign bundles the caller chose to declare.
+  // The product-tool under-declaration attack. `complete_task` is a real product
+  // tool that IMPLIES desktop.tasks.readwrite (see TASK_WRITE_TOOLS /
+  // bundlesForOmiTool). Since PR-C2 wired the product manifest into
+  // descriptorFromToolName, the name now resolves to that required bundle, so the
+  // benign bundles the caller declared no longer cover it — the attack is defeated
+  // as a required-but-not-selected deny (not a bundles-only fall-through allow).
   it('denies a product tool that under-declares its bundles, rather than trusting the declaration', () => {
     const result = evaluateDesktopToolPolicy({
       toolName: 'complete_task',
@@ -59,12 +61,12 @@ describe('evaluateDesktopToolPolicy — deny by default', () => {
     // Requested == selected and both are benign, so a bundles-only fall-through
     // would have said "allow". The tool actually implies desktop.tasks.readwrite.
     expect(result.decision).toBe('deny')
-    expect(result.reason).toMatch(/^Unknown tool "complete_task"/)
+    expect(result.reason).toMatch(/Missing selected bundle\(s\): desktop\.tasks\.readwrite/)
   })
 
-  it('the implied-bundle mapping the fail-closed branch protects is still the macOS one', () => {
-    // When the product-tool manifest lands, complete_task resolves through this
-    // and the deny above becomes a required-but-not-selected deny instead.
+  it('the implied-bundle mapping the resolved descriptor uses is the macOS one', () => {
+    // complete_task now resolves through this mapping (PR-C2 wiring), which is why
+    // the deny above is a required-but-not-selected deny.
     expect(
       bundlesForOmiTool({
         name: 'complete_task',
@@ -371,5 +373,46 @@ describe('product-tool bundle mapping (ported for the track that lands those too
     expect(descriptor.riskTier).toBe('high')
     expect(descriptor.privacyTier).toBe('sensitive')
     expect(descriptor.approvalPolicy).toBe('user_approval')
+  })
+})
+
+// PR-C2 wiring: descriptorFromToolName now resolves product ("omi") tool names
+// through the manifest, and the fail-closed deny fires ONLY for names in neither
+// manifest. Asserted through the REAL evaluate path, not the predicate.
+describe('product-tool names resolve through the policy engine (PR-C2)', () => {
+  it('a read-only product tool resolves to its descriptor and is allowed with its bundle', () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: 'execute_sql',
+      selectedBundles: ['desktop.context.local_read'],
+      nowMs: NOW
+    })
+    expect(result.decision).toBe('allow')
+    expect(result.descriptor.name).toBe('execute_sql')
+    expect(result.requiredBundles).toContain('desktop.context.local_read')
+    expect(result.reason).not.toMatch(/^Unknown tool/)
+  })
+
+  it('a write product tool resolves to its required bundle and routes to dispatch', () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: 'complete_task',
+      selectedBundles: ['desktop.tasks.readwrite'],
+      userExplicitMutation: true,
+      nowMs: NOW
+    })
+    // Resolved (not "Unknown tool"), and its implied write bundle drives dispatch.
+    expect(result.descriptor.name).toBe('complete_task')
+    expect(result.requiredBundles).toContain('desktop.tasks.readwrite')
+    expect(result.decision).toBe('dispatch_required')
+  })
+
+  it('a genuinely-unknown name STILL fails closed', () => {
+    const result = evaluateDesktopToolPolicy({
+      toolName: 'not_a_tool_in_either_manifest',
+      selectedBundles: ['desktop.context.local_read'],
+      nowMs: NOW
+    })
+    expect(result.decision).toBe('deny')
+    expect(result.reason).toMatch(/^Unknown tool "not_a_tool_in_either_manifest"/)
+    expect(result.descriptor.bundles).toEqual([])
   })
 })

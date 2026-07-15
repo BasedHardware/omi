@@ -21,28 +21,27 @@
 // PORT NOTE — product ("omi") tools, and why an unknown tool name FAILS CLOSED.
 // macOS resolves a non-control tool name through omi-tool-manifest.ts (~31
 // product tools: execute_sql, capture_screen, request_permission, …) and derives
-// that tool's IMPLIED bundles from it. That manifest is owned by other tracks and
-// is not ported here, so `descriptorFromToolName` resolves control tools only —
-// which means Windows CANNOT know what an unrecognized name implies.
+// that tool's IMPLIED bundles from it. Windows now ports that manifest
+// (./omiToolManifest), so `descriptorFromToolName` resolves control tools FIRST
+// and product tools SECOND — a name in neither manifest still resolves to nothing.
 //
-// Falling through to `descriptorFromBundles(requestedBundles)` in that case would
-// WEAKEN a deny: a caller could name a write/sensitive product tool while
+// The fail-closed deny in `evaluateDesktopToolPolicy` therefore fires only for a
+// name absent from BOTH manifests. This matters: falling through to
+// `descriptorFromBundles(requestedBundles)` for a resolvable-but-unlisted name
+// would WEAKEN a deny — a caller could name a write/sensitive product tool while
 // declaring only benign bundles, and be judged solely on its own declaration.
 // Concretely, `complete_task` + `[desktop.context.local_read]` implies
-// `desktop.tasks.readwrite` on macOS → required-but-not-selected → deny; through
-// a bundles-only fall-through it would resolve benign → allow. So a SUPPLIED
-// toolName that is not a known control tool is denied outright. (Only a request
-// with no toolName at all is judged on its bundles.)
+// `desktop.tasks.readwrite` → required-but-not-selected → deny; through a
+// bundles-only fall-through it would resolve benign → allow. A genuinely-unknown
+// SUPPLIED toolName is still denied outright. (Only a request with no toolName at
+// all is judged on its bundles.)
 //
-// The product-tool bundle mapping is ported verbatim below and exported
-// (`bundlesForOmiTool` / `descriptorFromOmiTool`) so the track that lands those
-// tools inherits this policy instead of re-deriving it. WHEN THAT MANIFEST LANDS:
-// wire it in `descriptorFromToolName` as
-//   controlDescriptor(name) ?? descriptorFromOmiTool(productManifestEntry(name))
-// and relax the fail-closed branch in `evaluateDesktopToolPolicy` to fire only
-// for names absent from BOTH manifests.
+// The product-tool bundle mapping (`bundlesForOmiTool` / `descriptorFromOmiTool`)
+// is ported verbatim below; `descriptorFromToolName` feeds it the manifest entry
+// for the named tool.
 
 import { agentControlCapabilityManifest } from './controlToolManifest'
+import { productManifestEntry } from './omiToolManifest'
 
 export type DesktopCoordinatorBundle =
   | 'desktop.agent_control.read'
@@ -217,8 +216,12 @@ export function descriptorFromOmiTool(tool: OmiToolPolicyEntry): DesktopToolDesc
 }
 
 function descriptorFromToolName(toolName: string): DesktopToolDescriptor | undefined {
-  // Control tools only — see the product-tool port note in the file header.
-  return controlDescriptor(toolName)
+  // Control tools first, then product ("omi") tools — see the port note in the
+  // file header. A name in neither manifest resolves to undefined and fails closed.
+  const control = controlDescriptor(toolName)
+  if (control) return control
+  const product = productManifestEntry(toolName)
+  return product ? descriptorFromOmiTool(product) : undefined
 }
 
 /**

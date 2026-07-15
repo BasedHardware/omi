@@ -33,6 +33,7 @@ import { AdapterRegistry } from './adapterRegistry'
 import { AgentRuntimeKernel } from './kernel'
 import { SqliteAgentStore } from './store'
 import { AgentControlMcpBridge } from './controlMcpBridge'
+import { AgentToolRelayBridge } from './toolRelayBridge'
 import {
   DEFAULT_LOCAL_OWNER_ID,
   handleAgentControlToolCall,
@@ -42,6 +43,7 @@ import {
 let kernel: AgentRuntimeKernel | null = null
 let registry: AdapterRegistry | null = null
 let mcpBridge: AgentControlMcpBridge | null = null
+let toolRelayBridge: AgentToolRelayBridge | null = null
 let activeOwnerId = DEFAULT_LOCAL_OWNER_ID
 
 /**
@@ -68,6 +70,16 @@ export function getAgentRuntimeKernel(): AgentRuntimeKernel {
     // subprocess. A failure here is non-fatal — models just get no control tools.
     void mcpBridge.start().catch((error) => {
       console.error('[agent-mcp] failed to start the control tool server:', error)
+    })
+    // The pi-mono product/control tool relay. Constructed alongside the kernel and
+    // control bridge (not per-adapter). DARK: nothing spawns pi with its pipe/token
+    // in production yet, so it listens with no live client. A failure is non-fatal.
+    toolRelayBridge = new AgentToolRelayBridge({
+      kernel,
+      log: (message) => console.log(message)
+    })
+    void toolRelayBridge.start().catch((error) => {
+      console.error('[tool-relay] failed to start the pi-mono tool relay server:', error)
     })
   }
   return kernel
@@ -106,6 +118,11 @@ function controlMcpServers(
 /** The model-facing tool server. Present once the kernel has been constructed. */
 export function getAgentControlMcpBridge(): AgentControlMcpBridge | null {
   return mcpBridge
+}
+
+/** The pi-mono product/control tool relay. Present once the kernel is constructed. */
+export function getAgentToolRelayBridge(): AgentToolRelayBridge | null {
+  return toolRelayBridge
 }
 
 /** The live adapter registry, for the chat-routing PR to register adapters into. */
@@ -151,9 +168,11 @@ export async function callAgentControlTool(
 
 /** Test seam: drop the singleton so a test can build a fresh one. */
 export function resetControlPlaneForTests(): void {
-  // Close the socket too, or each reset leaks a listening server.
+  // Close the sockets too, or each reset leaks a listening server.
   void mcpBridge?.close()
+  void toolRelayBridge?.close()
   mcpBridge = null
+  toolRelayBridge = null
   kernel = null
   registry = null
   activeOwnerId = DEFAULT_LOCAL_OWNER_ID
