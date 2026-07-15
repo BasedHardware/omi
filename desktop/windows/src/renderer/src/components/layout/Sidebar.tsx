@@ -1,30 +1,17 @@
 import { useEffect, useState } from 'react'
 import { NavLink, useLocation } from 'react-router-dom'
-import {
-  House,
-  GanttChartSquare,
-  ListChecks,
-  LayoutGrid,
-  History,
-  Monitor,
-  Mic,
-  PanelLeftClose,
-  PanelLeftOpen
-} from 'lucide-react'
+import { Monitor, Mic, PanelLeftClose, PanelLeftOpen } from 'lucide-react'
 import { auth, onAuthStateChanged } from '../../lib/firebase'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../lib/preferences'
 import { cn } from '../../lib/utils'
 import { Orb } from '../orb/Orb'
+import { navRoutes, isNavActive } from '../../routes/manifest'
 import type { User } from 'firebase/auth'
 import type { RewindSettings } from '../../../../shared/types'
 
-const navItems = [
-  { label: 'Home', to: '/home', Icon: House },
-  { label: 'Conversations', to: '/conversations', Icon: GanttChartSquare },
-  { label: 'Tasks', to: '/tasks', Icon: ListChecks },
-  { label: 'Rewind', to: '/rewind', Icon: History },
-  { label: 'Apps', to: '/apps', Icon: LayoutGrid }
-]
+// The nav rail is driven off the shared route manifest (routes/manifest.ts) — the
+// same source MainViews renders from — so adding a page is one manifest entry, not
+// an edit here. isNavActive covers the /goals -> Tasks legacy alias.
 
 const COLLAPSE_KEY = 'omi.sidebar.collapsed'
 
@@ -207,32 +194,37 @@ export function Sidebar(): React.JSX.Element {
       <div className="my-2 h-px w-full bg-white/[0.07]" />
 
       <div className="flex flex-1 flex-col gap-1 overflow-y-auto overflow-x-hidden">
-        {navItems.map(({ label: text, to, Icon }) => (
-          <NavLink
-            key={to}
-            to={to}
-            title={collapsed ? text : undefined}
-            className={({ isActive }) =>
-              linkClass(isActive || (to === '/tasks' && pathname === '/goals'))
-            }
-          >
-            {({ isActive }) => {
-              const active = isActive || (to === '/tasks' && pathname === '/goals')
-              return (
-                <>
-                  <Icon
-                    className={cn(
-                      'h-4 w-4 shrink-0 transition-colors duration-150',
-                      active ? 'text-[color:var(--accent)]' : 'text-white/50'
-                    )}
-                    strokeWidth={1.75}
-                  />
-                  {label(text)}
-                </>
-              )
-            }}
-          </NavLink>
-        ))}
+        {navRoutes().map((entry) => {
+          const nav = entry.nav
+          if (!nav || !entry.path) return null
+          const to = entry.path
+          const text = nav.label
+          const Icon = nav.Icon
+          return (
+            <NavLink
+              key={to}
+              to={to}
+              title={collapsed ? text : undefined}
+              className={({ isActive }) => linkClass(isActive || isNavActive(entry, pathname))}
+            >
+              {({ isActive }) => {
+                const active = isActive || isNavActive(entry, pathname)
+                return (
+                  <>
+                    <Icon
+                      className={cn(
+                        'h-4 w-4 shrink-0 transition-colors duration-150',
+                        active ? 'text-[color:var(--accent)]' : 'text-white/50'
+                      )}
+                      strokeWidth={1.75}
+                    />
+                    {label(text)}
+                  </>
+                )
+              }}
+            </NavLink>
+          )
+        })}
       </div>
 
       <div className="my-2 h-px w-full bg-white/[0.07]" />
