@@ -7,10 +7,11 @@
 // RPC event loop, generation/pending-request correlation, required-control-tool
 // tracking, model mapping, and deferred-restart lifecycle are unchanged.
 //
-// This PR lands the adapter DARK: it is NOT registered in the adapter registry,
-// NOT in ADAPTER_CAPABILITY_MATRIX, and nothing routes to it yet. Only tests
-// consume it. Registration, the auth relay, the tool-manifest/OMI_BRIDGE_PIPE
-// relay, and default-chat routing arrive in later PRs.
+// As of PR-D the adapter IS in ADAPTER_CAPABILITY_MATRIX and IS registered into
+// the kernel registry on session relay (agentKernel/controlPlane.ts), but it
+// stays DARK: nothing ever invokes it (openBinding/executeAttempt) — default chat
+// still routes through /v2/messages, and control-tool spawns explicitly refuse
+// managed-cloud adapters. Deliberate main_chat routing arrives in PR-E.
 //
 // Windows deviations from the macOS source, each load-bearing:
 //   - Subprocess spawn: macOS spawns pi's `dist/cli.js` directly; Windows spawns
@@ -26,9 +27,9 @@
 //     forwards only canonical stream events to the sink; harness `error` still
 //     propagates via the rejected sendPrompt promise (matching the ACP adapter),
 //     and `tool_use` is display-redundant with `tool_activity`.
-//   - Capabilities: pi-mono is not yet in ADAPTER_CAPABILITY_MATRIX (DARK), so
-//     the wrapper uses a local static capability set equal to what the macOS
-//     matrix entry produces. PR-D moves this into the shared matrix.
+//   - Capabilities: the wrapper reads `adapterCapabilitiesFor('pi-mono')` from
+//     the shared ADAPTER_CAPABILITY_MATRIX (PR-D added the entry; it previously
+//     held a local static set equal to what the macOS matrix entry produces).
 //   - The small HarnessConfig / HarnessFeature / HarnessAdapter / SessionOpts /
 //     PromptResult / ToolExecutor / EventCallback / WarmupSessionConfig types
 //     were trimmed from Windows' interface.ts; they are re-declared locally so
