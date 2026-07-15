@@ -344,7 +344,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     // behavioral policy tested above and the shared deterministic-ack lease.
     XCTAssertTrue(source.contains("playCanonicalSpawnAcknowledgement(receipt.assistantText)"))
     XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck"))
-    XCTAssertTrue(source.contains(".canonicalToolReceiptAcceptedScoped("))
+    XCTAssertTrue(source.contains(".authoritativeLocalResultAcceptedScoped("))
     XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
     XCTAssertTrue(source.contains("requiresProviderContinuation("))
   }

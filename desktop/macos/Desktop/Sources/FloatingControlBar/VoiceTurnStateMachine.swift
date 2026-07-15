@@ -86,6 +86,29 @@ struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
   }
 }
 
+/// The screenshot half of a current-screen answer remains an active tool until
+/// native code either accepts the paired report or fails the protocol closed.
+/// Keeping this token in the reducer prevents a provider callback from turning
+/// a locally-authoritative screen answer into another provider wait.
+struct VoiceScreenEvidenceProtocolToken: Equatable, Sendable {
+  let turnID: VoiceTurnID
+  let screenshotCallID: VoiceToolCallID
+  let screenshotIdentity: VoiceEffectIdentity
+}
+
+enum VoiceScreenEvidenceProtocolOutcome: Equatable, Sendable {
+  case verified(reportCallID: VoiceToolCallID, reportIdentity: VoiceEffectIdentity)
+  case failed
+}
+
+/// A local result may be the canonical user-visible answer for a tool-driven
+/// turn. The provider must not hold that answer open for an additional text or
+/// audio continuation.
+enum VoiceAuthoritativeLocalResultKind: Equatable, Sendable {
+  case spawnReceipt
+  case screenEvidence(VoiceScreenEvidenceProtocolOutcome)
+}
+
 // MARK: - State
 
 enum VoiceTurnIntent: String, Equatable, Sendable {
@@ -226,6 +249,7 @@ enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseIterable {
   case transcription = "transcription"
   case providerResponse = "provider_response"
   case pendingTools = "pending_tools"
+  case screenEvidenceProtocol = "screen_evidence_protocol"
   case deferredCommit = "deferred_commit"
   case bargeInReplacement = "barge_in_replacement"
   case playbackDrain = "playback_drain"
@@ -324,6 +348,7 @@ struct VoiceTurn: Equatable, Sendable {
   var responseID: VoiceResponseID?
   var pendingToolCallIDs: Set<VoiceToolCallID>
   var toolEffectIdentities: [VoiceToolCallID: VoiceEffectIdentity]
+  var screenEvidenceProtocol: VoiceScreenEvidenceProtocolToken?
   var activeLease: VoiceOutputLease?
   var providerFinished: Bool
   var postToolContinuationRequired: Bool
@@ -356,6 +381,7 @@ struct VoiceTurn: Equatable, Sendable {
     route = .undecided
     pendingToolCallIDs = []
     toolEffectIdentities = [:]
+    screenEvidenceProtocol = nil
     providerFinished = false
     postToolContinuationRequired = false
     hubCommitPending = false
@@ -471,11 +497,17 @@ enum VoiceTurnEvent: Equatable, Sendable {
     sessionID: VoiceSessionID?, responseID: VoiceResponseID?)
   case toolStartedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
-  /// A kernel-validated spawn receipt is the canonical response for a PTT
-  /// delegation. It replaces, rather than races, the provider's optional
-  /// post-tool narration.
-  case canonicalToolReceiptAcceptedScoped(
-    turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
+  /// A native result is already the complete user-visible answer for a tool.
+  /// It replaces, rather than races, an optional provider continuation.
+  case authoritativeLocalResultAcceptedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID,
+    kind: VoiceAuthoritativeLocalResultKind)
+  case screenEvidenceProtocolStartedScoped(
+    turnID: VoiceTurnID,
+    token: VoiceScreenEvidenceProtocolToken,
+    expiresAfter: TimeInterval)
   case toolFinishedScoped(
     turnID: VoiceTurnID, identity: VoiceEffectIdentity, callID: VoiceToolCallID)
   case playbackStartedScoped(turnID: VoiceTurnID, lease: VoiceOutputLease)
@@ -525,7 +557,8 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .providerResponseStartedScoped(let turnID, _, _, _),
       .providerTurnFinishedScoped(let turnID, _, _, _),
       .toolStartedScoped(let turnID, _, _),
-      .canonicalToolReceiptAcceptedScoped(let turnID, _, _),
+      .authoritativeLocalResultAcceptedScoped(let turnID, _, _, _),
+      .screenEvidenceProtocolStartedScoped(let turnID, _, _),
       .toolFinishedScoped(let turnID, _, _),
       .playbackStartedScoped(let turnID, _), .transcriptChanged(let turnID, _),
       .playbackDrainedScoped(let turnID, _, _),
@@ -577,7 +610,8 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .providerResponseStartedScoped: return "provider_response_started_scoped"
     case .providerTurnFinishedScoped: return "provider_turn_finished_scoped"
     case .toolStartedScoped: return "tool_started_scoped"
-    case .canonicalToolReceiptAcceptedScoped: return "canonical_tool_receipt_accepted_scoped"
+    case .authoritativeLocalResultAcceptedScoped: return "authoritative_local_result_accepted_scoped"
+    case .screenEvidenceProtocolStartedScoped: return "screen_evidence_protocol_started_scoped"
     case .toolFinishedScoped: return "tool_finished_scoped"
     case .playbackStartedScoped: return "playback_started_scoped"
     case .playbackDrainedScoped: return "playback_drained_scoped"
@@ -618,6 +652,7 @@ enum VoiceTurnEffect: Equatable, Sendable {
   case prepareHubInput(turnID: VoiceTurnID, sessionID: VoiceSessionID)
   case transcriptionFinalizationTimedOut(
     turnID: VoiceTurnID, mode: VoiceTranscriptionFinalizationMode)
+  case screenEvidenceProtocolExpired(turnID: VoiceTurnID, token: VoiceScreenEvidenceProtocolToken)
   case finalizeJournal(turnID: VoiceTurnID, identity: VoiceEffectIdentity)
   case cancelHub(turnID: VoiceTurnID, route: VoiceTurnRoute)
   case fallbackToTranscription(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason)
@@ -1095,6 +1130,15 @@ struct VoiceTurnReducer {
       cancel(.providerResponse, in: &model, effects: &effects)
       cancel(.deferredCommit, in: &model, effects: &effects)
       cancel(.bargeInReplacement, in: &model, effects: &effects)
+      if turn.screenEvidenceProtocol != nil {
+        // A screen answer owns a paired screenshot/report protocol. Its native
+        // freshness deadline, not an optional provider continuation, closes it.
+        model.turn?.phase = .awaitingTools
+        model.turn?.projection.isThinking = true
+        model.turn?.projection.isResponseActive = false
+        model.turn?.projection.isResponseWaiting = false
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
       if turn.pendingToolCallIDs.isEmpty, !turn.postToolContinuationRequired {
         model.turn?.providerFinished = true
         startJournalFinalizationIfNeeded(in: &model, effects: &effects)
@@ -1131,24 +1175,50 @@ struct VoiceTurnReducer {
       cancel(.providerResponse, in: &model, effects: &effects)
       schedule(.pendingTools, after: deadlines.pendingTools, in: &model, effects: &effects)
 
-    case .canonicalToolReceiptAcceptedScoped(_, let identity, let callID):
+    case .authoritativeLocalResultAcceptedScoped(_, let identity, let callID, let kind):
       guard turn.toolEffectIdentities[callID] == identity,
         acceptsProviderOutput(turn.phase)
       else {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
-      // The kernel receipt proves that the requested child exists. Treat its
-      // deterministic admission acknowledgement as the logical PTT response;
-      // the provider's best-effort narration must neither alter the wording nor
-      // hold the parent external run open.
-      model.turn?.postToolContinuationRequired = false
-      model.turn?.providerFinished = true
-      cancel(.providerResponse, in: &model, effects: &effects)
-      startJournalFinalizationIfNeeded(in: &model, effects: &effects)
-      if completionFencesSatisfied(model.turn) {
-        terminate(&model, reason: .success, effects: &effects)
+      switch kind {
+      case .spawnReceipt:
+        break
+      case .screenEvidence(let outcome):
+        guard let token = turn.screenEvidenceProtocol,
+          token.screenshotCallID == callID,
+          token.screenshotIdentity == identity
+        else {
+          stale(&model, event: event, effects: &effects)
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
+        if case .verified(let reportCallID, let reportIdentity) = outcome,
+          turn.toolEffectIdentities[reportCallID] != reportIdentity
+        {
+          stale(&model, event: event, effects: &effects)
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
+        model.turn?.screenEvidenceProtocol = nil
+        cancel(.screenEvidenceProtocol, in: &model, effects: &effects)
       }
+      acceptAuthoritativeLocalResult(in: &model, effects: &effects)
+
+    case .screenEvidenceProtocolStartedScoped(_, let token, let expiresAfter):
+      guard token.turnID == turn.id,
+        turn.toolEffectIdentities[token.screenshotCallID] == token.screenshotIdentity,
+        turn.screenEvidenceProtocol == nil,
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      model.turn?.screenEvidenceProtocol = token
+      schedule(
+        .screenEvidenceProtocol,
+        after: max(0, expiresAfter),
+        in: &model,
+        effects: &effects)
 
     case .toolFinishedScoped(_, let identity, let callID):
       guard turn.toolEffectIdentities[callID] == identity else {
@@ -1159,7 +1229,14 @@ struct VoiceTurnReducer {
       model.turn?.toolEffectIdentities.removeValue(forKey: callID)
       if model.turn?.pendingToolCallIDs.isEmpty == true {
         cancel(.pendingTools, in: &model, effects: &effects)
-        if completionFencesSatisfied(model.turn) {
+        if model.turn?.screenEvidenceProtocol != nil {
+          // The controller has a reducer-owned screen protocol deadline. Do not
+          // turn a missing report into the generic provider-response wait.
+          model.turn?.phase = .awaitingTools
+          model.turn?.projection.isThinking = true
+          model.turn?.projection.isResponseActive = false
+          model.turn?.projection.isResponseWaiting = false
+        } else if completionFencesSatisfied(model.turn) {
           terminate(&model, reason: .success, effects: &effects)
         } else if let lease = turn.activeLease {
           model.turn?.phase = .playing(lease.lane)
@@ -1331,6 +1408,10 @@ struct VoiceTurnReducer {
         stale(&model, event: event, effects: &effects)
         return VoiceTurnReduction(model: model, effects: effects)
       }
+      guard deadlineMatchesCurrentState(deadline, turn: turn) else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
       model.turn?.deadlines.remove(deadline)
       switch deadline {
       case .lockDecision:
@@ -1357,6 +1438,12 @@ struct VoiceTurnReducer {
         terminate(&model, reason: .providerNoResponse, effects: &effects)
       case .pendingTools:
         terminate(&model, reason: .toolTimeout, effects: &effects)
+      case .screenEvidenceProtocol:
+        guard let token = turn.screenEvidenceProtocol else {
+          stale(&model, event: event, effects: &effects)
+          return VoiceTurnReduction(model: model, effects: effects)
+        }
+        effects.append(.screenEvidenceProtocolExpired(turnID: turn.id, token: token))
       case .deferredCommit:
         terminate(&model, reason: .deferredCommitTimeout, effects: &effects)
       case .bargeInReplacement:
@@ -1410,6 +1497,40 @@ struct VoiceTurnReducer {
     case .idle, .pendingLockDecision, .recording, .lockedRecording, .finalizing,
       .awaitingJournal, .terminal:
       return false
+    }
+  }
+
+  /// Deadline cancellation is best effort because a scheduled callback may have
+  /// already crossed its scheduler boundary. The reducer is the final admission
+  /// fence: a callback is valid only for the state that originally scheduled it.
+  private func deadlineMatchesCurrentState(_ deadline: VoiceTurnDeadline, turn: VoiceTurn) -> Bool {
+    switch deadline {
+    case .lockDecision:
+      return turn.phase == .pendingLockDecision
+    case .captureStart:
+      return turn.phase.isRecording
+    case .hubWarm:
+      return turn.route == .hubWarmWait
+    case .transcription:
+      return turn.phase == .finalizing
+    case .providerResponse:
+      return turn.phase == .awaitingResponse
+    case .pendingTools, .screenEvidenceProtocol:
+      return turn.phase == .awaitingTools
+    case .deferredCommit, .bargeInReplacement:
+      return turn.phase == .awaitingResponse && turn.hubCommitPending
+    case .playbackDrain:
+      if case .playing = turn.phase { return true }
+      return false
+    case .providerReconnect:
+      if case .reconnecting = turn.providerConnection { return true }
+      return false
+    case .journalFinalization:
+      return turn.phase == .awaitingJournal
+    case .transcriptionFinalization:
+      return turn.transcriptionFinalizationMode != nil
+    case .hintVisibility:
+      return true
     }
   }
 
@@ -1470,6 +1591,22 @@ struct VoiceTurnReducer {
     effects.append(.finalizeJournal(turnID: turn.id, identity: identity))
   }
 
+  /// A native result that has already become the turn's canonical user-visible
+  /// answer must not wait for another provider cycle. Tool and playback fences
+  /// remain intact, and the journal receipt still gates terminal success.
+  private func acceptAuthoritativeLocalResult(
+    in model: inout VoiceTurnModel,
+    effects: inout [VoiceTurnEffect]
+  ) {
+    model.turn?.postToolContinuationRequired = false
+    model.turn?.providerFinished = true
+    cancel(.providerResponse, in: &model, effects: &effects)
+    startJournalFinalizationIfNeeded(in: &model, effects: &effects)
+    if completionFencesSatisfied(model.turn) {
+      terminate(&model, reason: .success, effects: &effects)
+    }
+  }
+
   private func schedule(
     _ deadline: VoiceTurnDeadline,
     after interval: TimeInterval,
@@ -1519,6 +1656,7 @@ struct VoiceTurnReducer {
     effects.append(.terminal(record))
     turn.deadlines.removeAll()
     turn.pendingToolCallIDs.removeAll()
+    turn.screenEvidenceProtocol = nil
     turn.activeLease = nil
     turn.providerOutputSuppressed = false
     turn.terminalReason = reason

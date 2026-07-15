@@ -67,7 +67,11 @@ SwiftUI and floating-bar state are projections.
   JPEG function-response wire for the same session/response/call/epoch receipt.
   That frozen image must be less than five seconds old both when native code
   mints the receipt and when it accepts the report; expiration fails closed into
-  the deterministic screen-verification failure.
+  the deterministic screen-verification failure. The paired screenshot/report is
+  one reducer-owned protocol: it retains the screenshot effect identity until a
+  verified report or deterministic failure closes it. Either local result is
+  authoritative and must close the provider-continuation fence rather than wait
+  for optional provider narration.
   Model-supplied
   evidence IDs and app labels have no authority; native code supplies app identity
   and rejects stale, missing, contradictory, or cross-turn reports without using
@@ -112,6 +116,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`
@@ -133,6 +138,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
+- `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift`

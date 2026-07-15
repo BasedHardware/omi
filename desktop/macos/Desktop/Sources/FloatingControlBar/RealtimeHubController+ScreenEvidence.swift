@@ -75,15 +75,33 @@ extension RealtimeHubController {
     turnID: VoiceTurnID,
     responseID: VoiceResponseID,
     callID: String,
+    screenshotIdentity: VoiceEffectIdentity,
     turnEpoch: Int
   ) {
     guard case .inactive = screenGroundingState else { return }
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: VoiceToolCallID(callID),
+      screenshotIdentity: screenshotIdentity)
+    let expiresAfter = screenEvidence.map {
+      RealtimeScreenEvidenceFreshnessPolicy.remainingLifetime($0.descriptor, now: Date())
+    } ?? 0
+    VoiceTurnCoordinator.shared.send(
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: expiresAfter))
+    guard VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token else {
+      log("RealtimeHub: reducer rejected screen evidence protocol admission")
+      return
+    }
     let request = RealtimeScreenScreenshotRequest(
       descriptor: screenEvidence?.descriptor,
       turnID: turnID,
       responseID: responseID,
       sessionObjectID: ObjectIdentifier(source),
       screenshotCallID: callID,
+      protocolToken: token,
       turnEpoch: turnEpoch)
     screenGroundingState = .awaitingScreenshot(request)
     if let evidence = request.descriptor {
@@ -153,7 +171,8 @@ extension RealtimeHubController {
     reason: String
   ) {
     if case .rejected = screenGroundingState { return }
-    screenGroundingState = .rejected(evidence)
+    guard let token = screenGroundingState.protocolToken else { return }
+    screenGroundingState = .rejected(evidence, token)
     if let evidence {
       logScreenEvidence(stage: "report_rejected_\(reason)", evidence: evidence)
     }
@@ -164,22 +183,20 @@ extension RealtimeHubController {
       reason: "capability_mismatch",
       outcome: .exhausted,
       extra: ["screen_evidence_reason": reason, "user_visible": true])
-    presentScreenEvidenceAnswer(RealtimeScreenGroundingPolicy.failureText)
+    _ = completeScreenEvidenceProtocol(
+      token,
+      outcome: .failed,
+      answer: RealtimeScreenGroundingPolicy.failureText)
   }
 
-  /// The reducer's existing post-tool continuation deadline is the liveness owner. It is the
-  /// right place to close a report gate that cannot otherwise receive a second provider cycle;
-  /// cancellation/barge-in deliberately clears silently instead of narrating an old turn.
-  func rejectPendingScreenEvidenceAtTurnTermination(
+  /// A provider terminal/error may arrive without the report half of the screen
+  /// protocol. Resolve its reducer-owned token while the turn is still live;
+  /// terminal cleanup itself must only revoke late callbacks silently.
+  @discardableResult
+  func resolvePendingScreenEvidenceBeforeProviderTermination(
     turnID: VoiceTurnID,
     reason: VoiceTurnTerminalReason
-  ) {
-    guard reason != .cancelled,
-      reason != .interruptedByBargeIn,
-      reason != .ownerChanged,
-      reason != .silentRejected,
-      reason != .tooShort
-    else { return }
+  ) -> Bool {
     let evidence: RealtimeScreenEvidenceDescriptor?
     switch screenGroundingState {
     case .awaitingScreenshot(let request) where request.turnID == turnID:
@@ -187,17 +204,78 @@ extension RealtimeHubController {
     case .awaitingReport(let receipt) where receipt.turnID == turnID:
       evidence = receipt.descriptor
     case .inactive, .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
-      return
+      return false
     }
     rejectScreenEvidence(evidence, reason: "continuation_\(reason.rawValue)")
+    return VoiceTurnCoordinator.shared.activeTurn?.providerFinished == true
+  }
+
+  /// The five-second freshness boundary is a protocol deadline, not a generic
+  /// provider timeout. Its reducer-issued token makes a stale delayed callback
+  /// unable to affect a replacement turn.
+  func expireScreenEvidenceProtocol(turnID: VoiceTurnID, token: VoiceScreenEvidenceProtocolToken) {
+    guard token.turnID == turnID,
+      VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token,
+      screenGroundingState.protocolToken == token
+    else { return }
+    let evidence: RealtimeScreenEvidenceDescriptor?
+    switch screenGroundingState {
+    case .awaitingScreenshot(let request):
+      evidence = request.descriptor
+    case .awaitingReport(let receipt):
+      evidence = receipt.descriptor
+    case .inactive, .accepted, .rejected:
+      return
+    }
+    rejectScreenEvidence(evidence, reason: "freshness_expired")
+  }
+
+  /// Registers the one canonical journal obligation before changing reducer
+  /// completion state. The reducer then keeps tool/playback/journal fences in
+  /// one place while a native screen answer replaces provider narration.
+  @discardableResult
+  func completeScreenEvidenceProtocol(
+    _ token: VoiceScreenEvidenceProtocolToken,
+    outcome: VoiceScreenEvidenceProtocolOutcome,
+    answer: String
+  ) -> Bool {
+    guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID,
+      VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token,
+      let ownerID = VoiceTurnCoordinator.shared.requireCurrentOwner(for: token.turnID)
+    else { return false }
+    let presentedAnswer = answer.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !presentedAnswer.isEmpty else { return false }
+
+    assistantText = presentedAnswer
+    _ = enqueueAuthoritativeScreenEvidencePersistence(
+      ownerID: ownerID,
+      assistantText: presentedAnswer)
+    VoiceTurnCoordinator.shared.send(
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: token.turnID,
+        identity: token.screenshotIdentity,
+        callID: token.screenshotCallID,
+        kind: .screenEvidence(outcome)))
+    guard VoiceTurnCoordinator.shared.activeTurnID == token.turnID,
+      VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == nil
+    else { return false }
+
+    presentScreenEvidenceAnswer(presentedAnswer)
+    VoiceTurnCoordinator.shared.send(
+      .toolFinishedScoped(
+        turnID: token.turnID,
+        identity: token.screenshotIdentity,
+        callID: token.screenshotCallID))
+    return true
   }
 
   func presentScreenEvidenceAnswer(_ answer: String) {
     guard !screenAnswerPresented else { return }
     screenAnswerPresented = true
     assistantText = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !assistantText.isEmpty,
-      let lease = acquireVoiceOutput(.deterministicScreenEvidence, reason: "screen_evidence_verified")
+    guard !assistantText.isEmpty else { return }
+    takeOverVoiceOutputForAuthoritativeLocalResult()
+    guard let lease = acquireVoiceOutput(.deterministicScreenEvidence, reason: "screen_evidence_verified")
     else { return }
     responseGlowGate.markPlaybackActive(lease: lease)
     FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText, lease: lease)

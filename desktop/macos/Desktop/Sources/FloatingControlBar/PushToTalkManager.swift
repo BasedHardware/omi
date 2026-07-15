@@ -411,6 +411,8 @@ class PushToTalkManager: ObservableObject {
         log("PushToTalkManager: live finalization timeout — sending transcript")
         sendTranscript(turnID: turnID)
       }
+    case .screenEvidenceProtocolExpired(let turnID, let token):
+      RealtimeHubController.shared.expireScreenEvidenceProtocol(turnID: turnID, token: token)
     case .finalizeJournal(let turnID, let identity):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       if Self.isHubRoute(voiceTurnCoordinator.activeTurn?.route ?? .undecided) {

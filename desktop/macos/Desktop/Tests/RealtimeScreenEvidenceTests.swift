@@ -31,12 +31,17 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     callID: String = "screenshot-1",
     epoch: Int = 7
   ) -> RealtimeScreenScreenshotRequest {
-    RealtimeScreenScreenshotRequest(
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: VoiceToolCallID(callID),
+      screenshotIdentity: VoiceEffectIdentity(turnID: turnID, effectID: 1))
+    return RealtimeScreenScreenshotRequest(
       descriptor: descriptor ?? evidence(),
       turnID: turnID,
       responseID: responseID,
       sessionObjectID: sessionObjectID,
       screenshotCallID: callID,
+      protocolToken: token,
       turnEpoch: epoch)
   }
 
@@ -55,6 +60,32 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertFalse(RealtimeScreenGroundingState.inactive.suppressesProviderOutput)
     XCTAssertTrue(
       RealtimeScreenGroundingState.awaitingScreenshot(request()).suppressesProviderOutput)
+  }
+
+  func testProtocolTokenSurvivesTransportReceiptAndLocalRejection() {
+    let request = request()
+    let receipt = RealtimeScreenObservationReceipt(request: request, descriptor: evidence())
+
+    XCTAssertEqual(receipt.protocolToken, request.protocolToken)
+    XCTAssertEqual(
+      RealtimeScreenGroundingState.rejected(receipt.descriptor, receipt.protocolToken).protocolToken,
+      request.protocolToken)
+  }
+
+  func testFreshnessRemainingLifetimeEndsAtTheSameFiveSecondBoundary() {
+    let descriptor = evidence()
+
+    XCTAssertEqual(
+      RealtimeScreenEvidenceFreshnessPolicy.remainingLifetime(
+        descriptor,
+        now: Date(timeIntervalSince1970: 1_004)),
+      1,
+      accuracy: 0.001)
+    XCTAssertEqual(
+      RealtimeScreenEvidenceFreshnessPolicy.remainingLifetime(
+        descriptor,
+        now: Date(timeIntervalSince1970: 1_006)),
+      0)
   }
 
   func testTransportDispatchedReceiptAdmitsScreenReportWithoutInputTranscript() {

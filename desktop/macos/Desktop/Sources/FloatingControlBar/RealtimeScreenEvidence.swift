@@ -84,6 +84,10 @@ enum RealtimeScreenEvidenceFreshnessPolicy {
     let age = now.timeIntervalSince(descriptor.capturedAt)
     return age >= 0 && age < maximumAge
   }
+
+  static func remainingLifetime(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> TimeInterval {
+    max(0, descriptor.capturedAt.addingTimeInterval(maximumAge).timeIntervalSince(now))
+  }
 }
 
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
@@ -130,7 +134,9 @@ enum RealtimeScreenGroundingState: Equatable {
   /// report can now be presented only through this immutable local receipt.
   case awaitingReport(RealtimeScreenObservationReceipt)
   case accepted(RealtimeScreenObservationReceipt)
-  case rejected(RealtimeScreenEvidenceDescriptor?)
+  /// Retain the token only long enough to let a physical screenshot tool result
+  /// finish its already-authorized wire send after native lifecycle completion.
+  case rejected(RealtimeScreenEvidenceDescriptor?, VoiceScreenEvidenceProtocolToken)
 
   var suppressesProviderOutput: Bool {
     switch self {
@@ -138,6 +144,19 @@ enum RealtimeScreenGroundingState: Equatable {
       return true
     case .inactive:
       return false
+    }
+  }
+
+  var protocolToken: VoiceScreenEvidenceProtocolToken? {
+    switch self {
+    case .awaitingScreenshot(let request):
+      return request.protocolToken
+    case .awaitingReport(let receipt), .accepted(let receipt):
+      return receipt.protocolToken
+    case .inactive:
+      return nil
+    case .rejected(_, let token):
+      return token
     }
   }
 }
@@ -151,6 +170,7 @@ struct RealtimeScreenScreenshotRequest: Equatable {
   let responseID: VoiceResponseID
   let sessionObjectID: ObjectIdentifier
   let screenshotCallID: String
+  let protocolToken: VoiceScreenEvidenceProtocolToken
   let turnEpoch: Int
 
   func acceptsTransportDispatch(
@@ -180,6 +200,7 @@ struct RealtimeScreenObservationReceipt: Equatable {
   let responseID: VoiceResponseID
   let sessionObjectID: ObjectIdentifier
   let screenshotCallID: String
+  let protocolToken: VoiceScreenEvidenceProtocolToken
   let turnEpoch: Int
 
   init(request: RealtimeScreenScreenshotRequest, descriptor: RealtimeScreenEvidenceDescriptor) {
@@ -188,6 +209,7 @@ struct RealtimeScreenObservationReceipt: Equatable {
     responseID = request.responseID
     sessionObjectID = request.sessionObjectID
     screenshotCallID = request.screenshotCallID
+    protocolToken = request.protocolToken
     turnEpoch = request.turnEpoch
   }
 
