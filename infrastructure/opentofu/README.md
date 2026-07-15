@@ -27,3 +27,19 @@ It then checks the generated plan is empty. `check_opentofu_foundation.py` allow
 ## State bootstrap and live pilot
 
 The `.backend.hcl.example` files are placeholders, not executable configuration. Follow the staged manual work recorded in [issue #9842](https://github.com/BasedHardware/omi/issues/9842) before initializing a real backend or authenticating a plan. Keep development and production state isolated, and never add secret payloads, secret-version resources, or secret-value data sources to this module.
+
+## Development WIF proof pilot
+
+`pilots/development-wif-plan` is intentionally not a general infrastructure
+module. It defines one development-only bootstrap: a dedicated GitHub WIF pool,
+one plan service account, its WIF impersonation binding, and project-level
+`roles/browser`. Its immutable variables reject any project other than
+`based-hardware-dev`; its provider accepts only `BasedHardware/omi` `main`.
+
+An approved development operator applies that bootstrap only after creating a
+separate versioned state bucket. Then `OpenTofu Development WIF Pilot` can
+exchange its GitHub OIDC token and run the data-only
+`probes/development-project-read` plan. The probe has no resources, remote
+backend, refresh, lock, or apply path. The pilot guard and fixture tests reject
+production scope, broader roles, secret access, release ownership, long-lived
+credentials, and `tofu apply`.
