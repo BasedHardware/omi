@@ -8,13 +8,21 @@ import {
   Loader2,
   Search,
   SlidersHorizontal,
-  X
+  X,
+  AlertTriangle,
+  ChevronDown,
+  ChevronUp
 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
-import { popularityScore, rankSearchResults } from '../lib/appRanking'
-import type { App as AppEntry } from '../lib/omiApi.generated'
+import { rankSearchResults } from '../lib/appRanking'
+import { buildCatalog, sectionPreview, searchCatalog, type CatalogSection } from '../lib/appCatalog'
+import type { AppCatalogItem, AppCatalogResponse, AppSearchResponse } from '../lib/omiApi.generated'
+
+// Cap rendered search results so a broad query (e.g. "a") can't mount the whole
+// catalog at once. Users refine rather than scroll hundreds of cards.
+const SEARCH_LIMIT = 60
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -35,10 +43,10 @@ const AppCard = memo(function AppCard({
   isBusy,
   onToggle
 }: {
-  app: AppEntry
+  app: AppCatalogItem
   isOn: boolean
   isBusy: boolean
-  onToggle: (a: AppEntry) => void
+  onToggle: (a: AppCatalogItem) => void
 }): React.JSX.Element {
   return (
     <div className="surface-card-flat flex flex-col p-5 animate-fade-in">
@@ -102,8 +110,37 @@ const AppCard = memo(function AppCard({
   )
 })
 
+// Shared grid wrapper so every list surface (sections, search, filter) renders
+// cards identically.
+function AppGrid({
+  apps,
+  enabled,
+  busy,
+  onToggle
+}: {
+  apps: AppCatalogItem[]
+  enabled: Set<string>
+  busy: Set<string>
+  onToggle: (a: AppCatalogItem) => void
+}): React.JSX.Element {
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
+      {apps.map((a) => (
+        <AppCard
+          key={a.id}
+          app={a}
+          isOn={enabled.has(a.id)}
+          isBusy={busy.has(a.id)}
+          onToggle={onToggle}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function Apps(): React.JSX.Element {
-  const [apps, setApps] = useState<AppEntry[]>([])
+  const [allApps, setAllApps] = useState<AppCatalogItem[]>([])
+  const [sections, setSections] = useState<CatalogSection[]>([])
   const [enabled, setEnabled] = useState<Set<string>>(new Set())
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
@@ -114,16 +151,27 @@ export function Apps(): React.JSX.Element {
   const [busy, setBusy] = useState<Set<string>>(new Set())
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
+  const [expanded, setExpanded] = useState<Set<string>>(new Set())
+  const [searchResults, setSearchResults] = useState<AppCatalogItem[] | null>(null)
+  const [searchLoading, setSearchLoading] = useState(false)
+  const [searchFallback, setSearchFallback] = useState(false)
   const filterRef = useRef<HTMLDivElement>(null)
 
   const load = async (): Promise<void> => {
     setError(null)
     try {
-      const [appsRes, enabledRes] = await Promise.all([
-        omiApi.get<AppEntry[]>('/v1/apps', { params: { include_reviews: false } }),
+      // v2 catalog is grouped by capability. `enabled` is per-user, but the grouped
+      // catalog is a shared (uid-less) cache, so its per-app `enabled` flag is not
+      // reliable — the /v1/apps/enabled list stays the source of truth for installs.
+      const [catalogRes, enabledRes] = await Promise.all([
+        omiApi.get<AppCatalogResponse>('/v2/apps', {
+          params: { limit: 100, include_reviews: false }
+        }),
         omiApi.get<string[]>('/v1/apps/enabled').catch(() => ({ data: [] as string[] }))
       ])
-      setApps(Array.isArray(appsRes.data) ? appsRes.data : [])
+      const { sections: nextSections, allApps: nextApps } = buildCatalog(catalogRes.data?.groups)
+      setSections(nextSections)
+      setAllApps(nextApps)
       setEnabled(new Set(Array.isArray(enabledRes.data) ? enabledRes.data : []))
     } catch (e) {
       setError((e as Error).message)
@@ -133,15 +181,51 @@ export function Apps(): React.JSX.Element {
   }
 
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount / reset-on-dependency-change; not a self-retriggering loop
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- intentional load-on-mount; not a self-retriggering loop
     void load()
   }, [])
 
-  // Debounce search so filtering doesn't run on every keystroke.
+  // Debounce search so the network/filter doesn't run on every keystroke.
   useEffect(() => {
     const t = setTimeout(() => setDebouncedQuery(query), 500)
     return () => clearTimeout(t)
   }, [query])
+
+  // Run a remote search (with client fallback) whenever the debounced query changes
+  // on the Marketplace tab. The Installed tab searches its small local set inline.
+  // Intentional data-fetching effect: it syncs search state to the debounced query,
+  // so the setState calls here are expected (same pattern as the mount load above).
+  /* eslint-disable react-hooks/set-state-in-effect */
+  useEffect(() => {
+    const q = debouncedQuery.trim()
+    if (tab !== 'all' || !q) {
+      setSearchResults(null)
+      setSearchLoading(false)
+      setSearchFallback(false)
+      return
+    }
+    let stale = false
+    setSearchLoading(true)
+    void searchCatalog(
+      q,
+      async (query) => {
+        const res = await omiApi.get<AppSearchResponse>('/v2/apps/search', {
+          params: { q: query, limit: SEARCH_LIMIT }
+        })
+        return res.data?.data ?? []
+      },
+      allApps
+    ).then(({ apps, usedFallback }) => {
+      if (stale) return
+      setSearchResults(apps)
+      setSearchFallback(usedFallback)
+      setSearchLoading(false)
+    })
+    return () => {
+      stale = true
+    }
+  }, [debouncedQuery, tab, allApps])
+  /* eslint-enable react-hooks/set-state-in-effect */
 
   // Close the filter dropdown when clicking outside of it.
   useEffect(() => {
@@ -178,7 +262,7 @@ export function Apps(): React.JSX.Element {
 
   // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
   // user types in search or toggles another app.
-  const toggle = useCallback(async (a: AppEntry): Promise<void> => {
+  const toggle = useCallback(async (a: AppCatalogItem): Promise<void> => {
     if (busyRef.current.has(a.id)) return
     setBusy((s) => new Set(s).add(a.id))
     const wasEnabled = enabledRef.current.has(a.id)
@@ -213,17 +297,12 @@ export function Apps(): React.JSX.Element {
     }
   }, [])
 
-  const LIMIT_PER_CATEGORY = 7
-  // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
-  // catalog at once. Users refine rather than scroll hundreds of cards.
-  const SEARCH_LIMIT = 60
-
-  // Unique categories present in the catalog, sorted by their display name.
+  // Unique categories present across the catalog, sorted by their display name.
   const allCategories = useMemo(() => {
     const set = new Set<string>()
-    for (const a of apps) set.add(a.category || 'Other')
+    for (const a of allApps) set.add(a.category || 'other')
     return Array.from(set).sort((x, y) => formatCategory(x).localeCompare(formatCategory(y)))
-  }, [apps])
+  }, [allApps])
 
   const toggleCat = (cat: string): void => {
     setSelectedCats((s) => {
@@ -234,39 +313,50 @@ export function Apps(): React.JSX.Element {
     })
   }
 
-  const categorized = useMemo(() => {
-    const installed = apps.filter((a) => enabled.has(a.id))
-    let base = tab === 'installed' ? installed : apps
+  const toggleExpanded = (capabilityId: string): void => {
+    setExpanded((s) => {
+      const next = new Set(s)
+      if (next.has(capabilityId)) next.delete(capabilityId)
+      else next.add(capabilityId)
+      return next
+    })
+  }
+
+  const catFilter = useCallback(
+    (a: AppCatalogItem): boolean => selectedCats.has(a.category || 'other'),
+    [selectedCats]
+  )
+
+  const isSearching = debouncedQuery.trim().length > 0
+
+  // What to render in the content area, derived from tab/search/filter state:
+  //   - 'sections': macOS-style capability sections (Marketplace browse, no search/filter)
+  //   - 'grid': a flat card grid (search results, category filter, or the Installed list)
+  const view = useMemo<{ kind: 'sections' } | { kind: 'grid'; apps: AppCatalogItem[] }>(() => {
+    if (tab === 'installed') {
+      let base = allApps.filter((a) => enabled.has(a.id))
+      if (isSearching) base = rankSearchResults(base, debouncedQuery)
+      else if (selectedCats.size > 0) base = base.filter(catFilter)
+      return { kind: 'grid', apps: base }
+    }
+    if (isSearching) {
+      let base = searchResults ?? []
+      if (selectedCats.size > 0) base = base.filter(catFilter)
+      return { kind: 'grid', apps: base }
+    }
     if (selectedCats.size > 0) {
-      base = base.filter((a) => selectedCats.has(a.category || 'Other'))
+      return { kind: 'grid', apps: allApps.filter(catFilter) }
     }
+    return { kind: 'sections' }
+  }, [tab, allApps, enabled, isSearching, debouncedQuery, selectedCats, catFilter, searchResults])
 
-    if (debouncedQuery.trim()) {
-      // Rank matches by name-relevance then popularity before the render-time
-      // SEARCH_LIMIT cap, so a user's specific app (searched by name) is never
-      // pushed past the cap by more-popular substring matches. See rankSearchResults.
-      return { search: rankSearchResults(base, debouncedQuery) }
-    }
-
-    const categories: Record<string, AppEntry[]> = {}
-    const sortedByPopularity = [...base].sort((a, b) => popularityScore(b) - popularityScore(a))
-
-    for (const app of sortedByPopularity) {
-      const cat = app.category || 'Other'
-      if (!categories[cat]) categories[cat] = []
-      if (categories[cat].length < LIMIT_PER_CATEGORY) {
-        categories[cat].push(app)
-      }
-    }
-
-    return categories
-  }, [apps, enabled, debouncedQuery, tab, selectedCats])
+  const showSearchSpinner = tab === 'all' && isSearching && searchLoading && searchResults === null
 
   return (
     <div className="flex h-full flex-col">
       <PageHeader
         title="Apps"
-        subtitle={loading ? 'Loading…' : `${apps.length} available · ${enabled.size} installed`}
+        subtitle={loading ? 'Loading…' : `${allApps.length} available · ${enabled.size} installed`}
         actions={
           <div className="flex items-center gap-2">
             <div className="flex items-center gap-1 rounded-2xl border border-white/10 bg-black/20 p-1">
@@ -323,7 +413,31 @@ export function Apps(): React.JSX.Element {
             ))}
           </div>
         )}
-        {error && <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
+        {!loading && error && (
+          <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
+            <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
+              <AlertTriangle className="h-5 w-5 text-white/60" />
+            </div>
+            <div className="space-y-1">
+              <div className="font-display font-semibold text-white/90">Couldn’t load apps</div>
+              <p className="text-sm text-white/55">
+                Something went wrong reaching the marketplace. Check your connection and try again.
+              </p>
+            </div>
+            <button
+              onClick={onRefresh}
+              disabled={refreshing}
+              className="btn-secondary flex items-center gap-2 px-4 py-2"
+            >
+              {refreshing ? (
+                <Loader2 className="h-4 w-4 animate-spin" />
+              ) : (
+                <RefreshCw className="h-4 w-4" />
+              )}
+              Retry
+            </button>
+          </div>
+        )}
         {!loading && !error && (
           <div className="mx-auto max-w-5xl space-y-5">
             <div className="flex items-center gap-2">
@@ -424,79 +538,94 @@ export function Apps(): React.JSX.Element {
               </div>
             )}
 
-            {query.trim() && categorized.search && categorized.search.length === 0 && (
-              <EmptyState
-                icon={LayoutGrid}
-                title="No apps match"
-                description="Try a different search."
-              />
-            )}
-
-            {!query.trim() && Object.keys(categorized).length === 0 && (
-              <EmptyState
-                icon={LayoutGrid}
-                title={tab === 'installed' ? 'No apps installed' : 'No apps available'}
-                description={
-                  tab === 'installed'
-                    ? 'Browse the Marketplace tab to find apps to install.'
-                    : 'Try again later.'
-                }
-              />
-            )}
-
-            {query.trim() ? (
+            {showSearchSpinner ? (
+              <div className="flex items-center justify-center gap-2 py-10 text-sm text-white/45">
+                <Loader2 className="h-4 w-4 animate-spin" />
+                Searching…
+              </div>
+            ) : view.kind === 'grid' ? (
               <>
-                <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                  {categorized.search?.slice(0, SEARCH_LIMIT).map((a) => (
-                    <AppCard
-                      key={a.id}
-                      app={a}
-                      isOn={enabled.has(a.id)}
-                      isBusy={busy.has(a.id)}
+                {searchFallback && isSearching && tab === 'all' && (
+                  <div className="glass-subtle px-4 py-2.5 text-xs text-white/55">
+                    Showing local results — search is temporarily unavailable.
+                  </div>
+                )}
+                {view.apps.length === 0 ? (
+                  <EmptyState
+                    icon={LayoutGrid}
+                    title={
+                      isSearching
+                        ? 'No apps match'
+                        : tab === 'installed'
+                          ? 'No apps installed'
+                          : 'No apps available'
+                    }
+                    description={
+                      isSearching
+                        ? 'Try a different search.'
+                        : tab === 'installed'
+                          ? 'Browse the Marketplace tab to find apps to install.'
+                          : 'Try again later.'
+                    }
+                  />
+                ) : (
+                  <>
+                    <AppGrid
+                      apps={view.apps.slice(0, SEARCH_LIMIT)}
+                      enabled={enabled}
+                      busy={busy}
                       onToggle={toggle}
                     />
-                  ))}
-                </div>
-                {categorized.search && categorized.search.length > SEARCH_LIMIT && (
-                  <p className="mt-3 text-center text-xs text-white/45">
-                    Showing the first {SEARCH_LIMIT} of {categorized.search.length} matches. Refine
-                    your search to narrow results.
-                  </p>
+                    {view.apps.length > SEARCH_LIMIT && (
+                      <p className="mt-3 text-center text-xs text-white/45">
+                        Showing the first {SEARCH_LIMIT} of {view.apps.length} matches. Refine your
+                        search to narrow results.
+                      </p>
+                    )}
+                  </>
                 )}
               </>
+            ) : sections.length === 0 ? (
+              <EmptyState
+                icon={LayoutGrid}
+                title="No apps available"
+                description="Try again later."
+              />
             ) : (
-              Object.entries(categorized)
-                .sort(([catA], [catB]) => {
-                  const order = [
-                    'Most Popular',
-                    'Featured',
-                    'Integrations',
-                    'Chat Assistants',
-                    'Summary Apps',
-                    'Notifications'
-                  ]
-                  const aIdx = order.indexOf(formatCategory(catA))
-                  const bIdx = order.indexOf(formatCategory(catB))
-                  return (aIdx === -1 ? Infinity : aIdx) - (bIdx === -1 ? Infinity : bIdx)
-                })
-                .map(([category, categoryApps]) => (
-                  <div key={category} className="space-y-3">
-                    <h2 className="text-sm font-semibold text-white/80">
-                      {formatCategory(category)}
-                    </h2>
-                    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                      {categoryApps.map((a) => (
-                        <AppCard
-                          key={a.id}
-                          app={a}
-                          isOn={enabled.has(a.id)}
-                          isBusy={busy.has(a.id)}
-                          onToggle={toggle}
-                        />
-                      ))}
+              sections.map((section) => {
+                const isExpanded = expanded.has(section.capabilityId)
+                return (
+                  <div key={section.capabilityId} className="space-y-3">
+                    <div className="flex items-center justify-between">
+                      <h2 className="text-sm font-semibold text-white/80">{section.title}</h2>
+                      {section.hasMore && (
+                        <button
+                          onClick={() => toggleExpanded(section.capabilityId)}
+                          className="flex items-center gap-1 text-xs text-white/45 transition-colors duration-150 hover:text-white/80"
+                        >
+                          {isExpanded ? (
+                            <>
+                              Show less
+                              <ChevronUp className="h-3.5 w-3.5" />
+                            </>
+                          ) : (
+                            <>
+                              See more
+                              <ChevronDown className="h-3.5 w-3.5" />
+                            </>
+                          )}
+                        </button>
+                      )}
                     </div>
+                    <AppGrid
+                      apps={sectionPreview(section.apps, isExpanded)}
+                      enabled={enabled}
+                      busy={busy}
+                      onToggle={toggle}
+                    />
                   </div>
-                ))
+                )
+              })
             )}
           </div>
         )}
