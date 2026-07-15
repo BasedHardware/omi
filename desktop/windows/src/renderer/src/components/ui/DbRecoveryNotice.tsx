@@ -41,17 +41,22 @@ function describe(s: DbRecoveryStatus): { title: string; body: string } {
   }
 }
 
-/** Shell for both states, so the two notices look and behave identically. */
+/** An offer of something the user can DO about the state of their database. A list,
+ *  not a single slot: the Rewind index rebuild (macOS has that button in exactly
+ *  this banner) will hang off the same row without reshaping the component. */
+type NoticeAction = { label: string; onClick: () => void }
+
+/** Shell for every state, so the notices look and behave identically. */
 function Notice({
   title,
   body,
   onDismiss,
-  action
+  actions = []
 }: {
   title: string
   body: string
   onDismiss: () => void
-  action?: { label: string; onClick: () => void }
+  actions?: NoticeAction[]
 }): React.JSX.Element {
   return (
     <div
@@ -62,14 +67,19 @@ function Notice({
       <div className="min-w-0 flex-1">
         <div className="text-sm font-medium text-white/95">{title}</div>
         <div className="mt-0.5 break-words text-xs leading-relaxed text-white/65">{body}</div>
-        {action && (
-          <button
-            onClick={action.onClick}
-            className="btn-primary mt-2 px-3 py-1 text-xs"
-            type="button"
-          >
-            {action.label}
-          </button>
+        {actions.length > 0 && (
+          <div className="mt-2 flex flex-wrap gap-2">
+            {actions.map((a) => (
+              <button
+                key={a.label}
+                onClick={a.onClick}
+                className="btn-primary px-3 py-1 text-xs"
+                type="button"
+              >
+                {a.label}
+              </button>
+            ))}
+          </div>
         )}
       </div>
       <button
@@ -119,7 +129,7 @@ export function DbRecoveryNotice(): React.JSX.Element | null {
         // Honest: nothing is lost yet, and the restart is a repair, not a wipe.
         body="Restart Omi and it will repair the database automatically. Your data is still on disk."
         onDismiss={() => setDismissed(true)}
-        action={{ label: 'Restart Omi', onClick: () => window.omi.relaunchApp() }}
+        actions={[{ label: 'Restart Omi', onClick: () => window.omi.relaunchApp() }]}
       />
     )
   }

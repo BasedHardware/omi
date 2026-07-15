@@ -32,8 +32,19 @@
  * `screenshots` table and silently discards everything else, we copy EVERY table
  * (conversations, chat, memories, tasks) with per-table and per-row isolation, so
  * one unreadable table or one bad page never costs more than itself.
+ *
+ * THE DESTRUCTIVE RULES, which every path here obeys:
+ *   - The corrupt database is MOVED aside (archiveCorruptDb), never copied and then
+ *     deleted. If it cannot be moved, the repair is abandoned with the original
+ *     intact — we would rather ship a broken database than a missing one.
+ *   - A swap only happens once the salvaged replacement is a PROVEN improvement on
+ *     what the database serves today (salvageIsAnImprovement).
+ *   - Every destructive path is gated on a POSITIVE corruption verdict from
+ *     isCorruptionError. Busy / locked / read-only / disk-full is never corruption.
+ *   - All of it runs at startup, from db.ts's single-threaded open, before the
+ *     read-only handle or the KG worker's connection exist.
  */
-import { copyFileSync, existsSync, mkdirSync, readdirSync, rmSync, renameSync } from 'fs'
+import { copyFileSync, existsSync, mkdirSync, readdirSync, renameSync, rmSync, statSync } from 'fs'
 import { dirname, join } from 'path'
 import type { DbRecoveryStatus } from '../../shared/types'
 
@@ -147,7 +158,15 @@ export function isAccessError(err: unknown): boolean {
   return ACCESS_ERROR_PATTERNS.some((p) => text.includes(p))
 }
 
-// --- Backups ----------------------------------------------------------------
+// --- Archiving the corrupt file ---------------------------------------------
+//
+// THE CORRUPT DATABASE IS *MOVED* ASIDE, NEVER COPIED-THEN-DELETED. A copy that
+// fails halfway (disk full, a short write, a crash) followed by an unlink of the
+// original loses everything the user had. A rename is atomic: after it, the bytes
+// exist in exactly one place, and if it throws, they are still in the original
+// place and NOTHING destructive has happened. Every destructive path in this file
+// therefore goes through archiveCorruptDb(), and a failure to archive ABORTS the
+// repair rather than proceeding without a backup.
 
 /** macOS keeps the 5 newest `omi_corrupted_*.db` backups; so do we. */
 export const BACKUP_RETENTION = 5
@@ -175,17 +194,62 @@ export function pruneBackups(backupsDir: string, keep = BACKUP_RETENTION): strin
   return doomed
 }
 
-/** Copy the corrupt file to `<backupsDir>/omi_corrupted_<yyyyMMdd_HHmmss>.db`,
- *  then prune to the 5 newest. Returns the backup path. */
-export function backupCorruptDb(dbFile: string, backupsDir: string, now = new Date()): string {
-  mkdirSync(backupsDir, { recursive: true })
+/** rename(), tolerating the same transient Windows EBUSY that forceRemove() does. */
+function forceRename(from: string, to: string, attempts = 10): void {
+  for (let i = 0; ; i++) {
+    try {
+      renameSync(from, to)
+      return
+    } catch (err) {
+      if (i >= attempts - 1) throw err
+      sleep(50)
+    }
+  }
+}
+
+/**
+ * MOVE the corrupt database to `<backupsDir>/omi_corrupted_<yyyyMMdd_HHmmss>.db`
+ * and prune to the 5 newest. Returns the archive path.
+ *
+ * Throws if the file cannot be moved anywhere — and that is the point: the caller
+ * must then abandon the repair with the original still intact. A rename needs the
+ * same rights an unlink does, so a failure here means the destructive path could
+ * not have completed safely either; refusing to continue costs the user a broken
+ * database, while continuing would cost them the data inside it.
+ */
+export function archiveCorruptDb(dbFile: string, backupsDir: string, now = new Date()): string {
   const base = `${BACKUP_PREFIX}${stamp(now)}`
-  // Two corruptions inside one second would otherwise overwrite the older backup.
-  let dest = join(backupsDir, `${base}.db`)
-  for (let i = 1; existsSync(dest); i++) dest = join(backupsDir, `${base}_${i}.db`)
-  copyFileSync(dbFile, dest)
-  pruneBackups(backupsDir)
-  return dest
+  const candidates: string[] = []
+  try {
+    mkdirSync(backupsDir, { recursive: true })
+    // Two corruptions inside one second would otherwise overwrite the older archive.
+    let dest = join(backupsDir, `${base}.db`)
+    for (let i = 1; existsSync(dest); i++) dest = join(backupsDir, `${base}_${i}.db`)
+    candidates.push(dest)
+  } catch {
+    // The backups directory is unusable; the sibling fallback below still works.
+  }
+  // Last resort: right next to omi.db, which is by definition a writable directory
+  // on the same volume (the app has been writing the database there all along).
+  candidates.push(`${dbFile}.corrupt-${stamp(now)}`)
+
+  let lastErr: unknown
+  for (const dest of candidates) {
+    try {
+      forceRename(dbFile, dest)
+      try {
+        pruneBackups(backupsDir)
+      } catch {
+        // Retention is housekeeping; never fail an archive over it.
+      }
+      return dest
+    } catch (err) {
+      lastErr = err
+    }
+  }
+  throw lastErr instanceof Error
+    ? lastErr
+    : new Error(`could not move the corrupt database aside: ${String(lastErr)}`)
 }
 
 // --- Salvage ----------------------------------------------------------------
@@ -234,19 +298,118 @@ function columnsOf(db: RecoveryDb, table: string): string[] {
   return cols.map((c) => c.name)
 }
 
-// A per-row scan of a damaged table walks the rowid space, so cap the work: a
-// pathological max(rowid) must not hang startup. 250k probes is far more than any
-// real omi.db table and completes in seconds.
-const MAX_ROW_PROBES = 250_000
-const ROW_WINDOW = 256
+// --- The resilient table scanner --------------------------------------------
+//
+// Every read of a possibly-damaged table — both the salvage copy and the probe
+// that re-verifies corruption — goes through this. Two properties matter:
+//
+//   1. MEMORY IS BOUNDED. A plain `SELECT * FROM rewind_frames` materialises the
+//      whole table; on a real omi.db that is gigabytes, and it would run at
+//      startup, inside the repair path, on a machine that has just been through a
+//      power loss. It reads in CHUNK-row windows instead and never holds more.
+//   2. THERE IS NO ROW-COUNT CEILING. An earlier cut of this bailed out (returning
+//      ZERO rows) once max(rowid) passed a cap — which on any real machine's
+//      rewind_frames would have thrown away a table it could have salvaged almost
+//      entirely, i.e. exactly the "silently discards the user's data" bug we came
+//      here to avoid. Work is bounded by a single-row PROBE budget instead, which
+//      only ever accrues around actual damage.
+//
+// A corrupt page kills the whole b-tree scan it sits on, so when a window throws,
+// each rowid in that window is fetched individually: one bad page then costs only
+// the rows that live on it. Measured on a real corrupted file: 793 of 800 rows
+// recovered from a table whose full scan threw.
+const CHUNK = 512
+// Only spent walking past damage (a healthy table never fetches a single row on
+// its own). Two million seeks is seconds of work and cannot hang startup.
+const MAX_SINGLE_ROW_PROBES = 2_000_000
+
+type Row = Record<string, unknown>
+type ScanResult = {
+  /** Rows the visitor accepted. */
+  rows: number
+  /** A read raised a corruption error somewhere in this table. */
+  corrupt: boolean
+}
 
 /**
- * Copy every readable row of one table. Fast path is a single `SELECT`; if that
- * throws (a corrupt page anywhere in the table kills the whole scan) we fall back
- * to a rowid-windowed scan and then to single-row reads, so one bad page costs
- * only the rows on it. Measured on a real corrupted file: 793 of 800 rows
- * recovered from a table whose full scan threw.
+ * Walk every readable row of `table`, in bounded chunks, tolerating damaged pages.
+ * `visit` returns how many of the rows it accepted (salvage counts inserts; the
+ * probe counts rows). `colList` is the pre-quoted projection.
  */
+function scanTable(
+  src: RecoveryDb,
+  table: string,
+  colList: string,
+  visit: (rows: Row[]) => number
+): ScanResult {
+  const t = quote(table)
+  let chunk: RecoveryStatement
+  let single: RecoveryStatement
+  try {
+    chunk = src.prepare(
+      `SELECT rowid AS __rid, ${colList} FROM ${t} WHERE rowid > ? ORDER BY rowid LIMIT ${CHUNK}`
+    )
+    single = src.prepare(`SELECT rowid AS __rid, ${colList} FROM ${t} WHERE rowid = ?`)
+  } catch (err) {
+    // No usable rowid (a WITHOUT ROWID table, or a view). omi.db has none today,
+    // but a future schema might: fall back to a plain read rather than skip it.
+    return scanWholeTable(src, t, colList, visit, err)
+  }
+
+  let cursor = 0
+  let rows = 0
+  let corrupt = false
+  let probes = 0
+  for (;;) {
+    let batch: Row[]
+    try {
+      batch = chunk.all(...([cursor] as never[])) as Row[]
+    } catch (err) {
+      if (!isCorruptionError(err)) return scanWholeTable(src, t, colList, visit, err)
+      // A damaged page inside this window. Fetch its rowids one at a time — the
+      // rows that are NOT on the bad page still come back — then step past it.
+      corrupt = true
+      const end = cursor + CHUNK
+      for (let id = cursor + 1; id <= end; id++) {
+        if (++probes > MAX_SINGLE_ROW_PROBES) return { rows, corrupt }
+        try {
+          const row = single.get(...([id] as never[])) as Row | undefined
+          if (row) rows += visit([row])
+        } catch {
+          // This row lives on the corrupt page. Skip it, keep the rest.
+        }
+      }
+      cursor = end
+      continue
+    }
+    if (batch.length === 0) return { rows, corrupt }
+    rows += visit(batch)
+    const last = Number(batch[batch.length - 1].__rid)
+    // Defensive: the cursor MUST advance, or this loops forever.
+    if (!Number.isFinite(last) || last <= cursor) return { rows, corrupt }
+    cursor = last
+  }
+}
+
+/** Fallback for a table with no usable rowid: one unbounded read, all or nothing. */
+function scanWholeTable(
+  src: RecoveryDb,
+  quotedTable: string,
+  colList: string,
+  visit: (rows: Row[]) => number,
+  cause: unknown
+): ScanResult {
+  try {
+    return {
+      rows: visit(src.prepare(`SELECT ${colList} FROM ${quotedTable}`).all() as Row[]),
+      corrupt: false
+    }
+  } catch (err) {
+    return { rows: 0, corrupt: isCorruptionError(err) || isCorruptionError(cause) }
+  }
+}
+
+/** Copy every readable row of one table into the destination. */
 function copyTable(src: RecoveryDb, dest: RecoveryDb, table: string): number {
   const cols = columnsOf(dest, table)
   if (cols.length === 0) return 0
@@ -254,13 +417,11 @@ function copyTable(src: RecoveryDb, dest: RecoveryDb, table: string): number {
   const insert = dest.prepare(
     `INSERT OR IGNORE INTO ${quote(table)} (${colList}) VALUES (${cols.map(() => '?').join(', ')})`
   )
-  const toParams = (row: Record<string, unknown>): unknown[] => cols.map((c) => row[c] ?? null)
-
-  const write = (rows: Record<string, unknown>[]): number => {
+  const write = (rows: Row[]): number => {
     let n = 0
     for (const row of rows) {
       try {
-        insert.run(...(toParams(row) as never[]))
+        insert.run(...(cols.map((c) => row[c] ?? null) as never[]))
         n++
       } catch {
         // A single row that won't bind (bad blob, constraint) must not stop the rest.
@@ -268,52 +429,7 @@ function copyTable(src: RecoveryDb, dest: RecoveryDb, table: string): number {
     }
     return n
   }
-
-  // Fast path — whole table in one read.
-  try {
-    const rows = src.prepare(`SELECT ${colList} FROM ${quote(table)}`).all() as Record<
-      string,
-      unknown
-    >[]
-    return write(rows)
-  } catch {
-    // Damaged page somewhere in this table — fall through to the resilient scan.
-  }
-
-  let max = 0
-  try {
-    const row = src.prepare(`SELECT MAX(rowid) AS m FROM ${quote(table)}`).get() as {
-      m: number | null
-    } | null
-    max = row?.m ?? 0
-  } catch {
-    // Can't even read the rowid range — the table is a total loss.
-    return 0
-  }
-  if (max <= 0 || max > MAX_ROW_PROBES) return 0
-
-  const windowed = src.prepare(
-    `SELECT ${colList} FROM ${quote(table)} WHERE rowid > ? AND rowid <= ?`
-  )
-  const single = src.prepare(`SELECT ${colList} FROM ${quote(table)} WHERE rowid = ?`)
-  let copied = 0
-  for (let lo = 0; lo < max; lo += ROW_WINDOW) {
-    const hi = Math.min(lo + ROW_WINDOW, max)
-    try {
-      copied += write(windowed.all(...([lo, hi] as never[])) as Record<string, unknown>[])
-    } catch {
-      // This window straddles the bad page — recover it row by row.
-      for (let id = lo + 1; id <= hi; id++) {
-        try {
-          const row = single.get(...([id] as never[])) as Record<string, unknown> | undefined
-          if (row) copied += write([row])
-        } catch {
-          // This row lives on the corrupt page. Skip it, keep the rest.
-        }
-      }
-    }
-  }
-  return copied
+  return scanTable(src, table, colList, write).rows
 }
 
 /**
@@ -547,16 +663,19 @@ export function probeTables(db: RecoveryDb): TableProbe {
     return probe
   }
   for (const name of names) {
-    try {
-      const rows = db.prepare(`SELECT * FROM ${quote(name)}`).all()
-      probe.readable[name] = rows.length
-    } catch (err) {
-      if (isCorruptionError(err)) {
-        probe.damaged.push(name)
-        probe.readable[name] = 0 // the app cannot read this table at all
-      }
-      // A non-corrupt error (e.g. a shadow table we may not select from) is not
-      // damage — leave it out of both maps.
+    // Same bounded scanner the salvage uses — a table too big to hold in memory
+    // must not OOM the repair (see scanTable). `corrupt` is set by the classifier,
+    // never by a missing table or a schema quirk.
+    const { rows, corrupt } = scanTable(db, name, '*', (batch) => batch.length)
+    if (corrupt) {
+      probe.damaged.push(name)
+      // The app's own queries are unbounded `SELECT`s, and a corrupt page kills the
+      // whole scan — so from the app's point of view this table currently serves
+      // NOTHING, whatever a page-skipping reader can still scrape out of it. That
+      // zero is what the never-worse guard compares against.
+      probe.readable[name] = 0
+    } else {
+      probe.readable[name] = rows
     }
   }
   return probe
@@ -591,13 +710,21 @@ export type RepairOutcome =
  * The next-launch repair for a database flagged by the runtime trip. Called with
  * an already-open handle at startup, before any other connection exists.
  *
- * Order is the whole safety argument:
- *   1. Boot-loop guard  — give up after MAX_REPAIR_ATTEMPTS rather than rebuild forever.
- *   2. Re-verify        — the flag is a suspicion; prove the damage still reproduces.
- *   3. Count the attempt BEFORE doing anything destructive, so a crash mid-repair
- *      still counts against the budget.
- *   4. Backup -> salvage -> "is this actually better?" -> only then swap.
- * The caller closes `db` when this returns anything other than no_repair_needed/abandoned.
+ * The ORDER is the whole safety argument:
+ *   1. Boot-loop guard — give up after MAX_REPAIR_ATTEMPTS rather than rebuild forever.
+ *   2. Burn an attempt FIRST, before reading a single damaged page. Everything
+ *      below can crash the process (a corrupt page can take the native driver down,
+ *      and a huge table can exhaust memory); if the counter were written later, such
+ *      a crash would cost nothing and the repair would re-run on every launch, for
+ *      ever. It is written to the ORIGINAL database, which is still the live file.
+ *   3. Re-verify — the flag is only a suspicion. Prove the damage still reproduces.
+ *   4. Salvage from a STAGING COPY, and decide whether the result is actually better
+ *      than what the database serves today. Nothing has been touched yet, so
+ *      "no, it isn't" costs a temp file and nothing else.
+ *   5. Only then, ONE destructive step: MOVE the original into the backups directory
+ *      (atomic — never copy-then-delete) and rename the salvaged file into its place.
+ *
+ * The caller closes `db` on every path except no_repair_needed / abandoned.
  */
 export function repairSuspectedCorruption(
   db: RecoveryDb,
@@ -613,12 +740,14 @@ export function repairSuspectedCorruption(
     log(`db: repair abandoned after ${attempts} attempts — leaving the database alone`)
     return { action: 'abandoned', attempts, damaged: probeTables(db).damaged }
   }
+  // (2) Burn the attempt before we read anything damaged. See the doc comment.
+  writeMeta(db, FLAG_ATTEMPTS, String(attempts + 1))
 
   const probe = probeTables(db)
   if (probe.damaged.length === 0) {
     // Transient or misclassified: everything reads clean now. Do NOT rebuild.
     log('db: corruption suspicion did not reproduce — clearing the flag, no repair')
-    clearSuspicion(db)
+    clearSuspicion(db) // also drops the attempt counter we just wrote
     return { action: 'no_repair_needed' }
   }
   log(`db: corruption re-verified in: ${probe.damaged.join(', ')}`)
@@ -626,56 +755,89 @@ export function repairSuspectedCorruption(
     new Error(`database corruption confirmed in: ${probe.damaged.join(', ')}`),
     'sanity'
   )
-
-  // Count this attempt BEFORE touching anything, so a crash mid-repair still burns
-  // an attempt and cannot loop forever.
-  writeMeta(db, FLAG_ATTEMPTS, String(attempts + 1))
   db.close()
 
-  let backupPath: string | null = null
-  try {
-    backupPath = backupCorruptDb(file, opts.backupsDir, now)
-    log(`db: corrupt database backed up to ${backupPath}`)
-  } catch (e) {
-    log(`db: WARNING could not back up the corrupt database: ${(e as Error)?.message}`)
-  }
-
   const tmp = `${file}.salvage-${now.getTime()}`
-  forceRemove(tmp)
-  // Salvage from the BACKUP, not from the live file. Opening the original
-  // read-only re-creates its -wal/-shm, and Windows then refuses to unlink them
-  // during the swap (EBUSY) — which fails the whole repair. Reading the copy
-  // leaves omi.db with no handle on it at all, so the swap below cannot be
-  // blocked. Falls back to the original only if the backup could not be written.
-  const salvageSource = backupPath ?? file
-  const salvaged = salvage(salvageSource, tmp, driver)
-  log(
-    `db: salvage recovered ${salvaged.rows} row(s) from ${Object.keys(salvaged.tables).length} table(s)`
-  )
-
-  if (!salvageIsAnImprovement(probe, salvaged)) {
-    // Rebuilding would cost the user rows a working table still serves. Keep the
-    // original untouched; the damaged table stays broken, but nothing else is lost.
+  const staging = `${file}.recover-src-${now.getTime()}`
+  const cleanup = (): void => {
     forceRemove(tmp)
-    log('db: salvage would not improve on the current database — keeping the original')
-    return { action: 'kept_original', damaged: probe.damaged, backupPath }
+    forceRemove(staging)
+    for (const s of SIDECARS) forceRemove(`${staging}${s}`)
   }
 
-  removeSidecars(file)
-  forceRemove(file)
-  renameSync(tmp, file)
-  removeSidecars(file)
-
-  return {
-    action: 'repaired',
-    damaged: probe.damaged,
-    status: {
-      recovered: true,
-      reset: false,
-      rowsRecovered: salvaged.rows,
-      tablesRecovered: salvaged.tables,
-      backupPath
+  try {
+    // (4) Salvage reads a STAGING COPY, never the live file: opening the original
+    // read-only re-creates its -wal/-shm, and Windows then refuses to unlink those
+    // during the swap (EBUSY), failing the whole repair. The copy carries the
+    // sidecars with it so any content still living in an un-checkpointed WAL is
+    // salvaged too. A copy is safe HERE precisely because it is not a backup —
+    // nothing is deleted on the strength of it.
+    cleanup()
+    if (!stageCopy(file, staging)) {
+      log('db: could not stage a copy of the database — keeping the original untouched')
+      cleanup()
+      return { action: 'kept_original', damaged: probe.damaged, backupPath: null }
     }
+    const salvaged = salvage(staging, tmp, driver)
+    log(
+      `db: salvage recovered ${salvaged.rows} row(s) from ${Object.keys(salvaged.tables).length} table(s)`
+    )
+
+    if (!salvageIsAnImprovement(probe, salvaged)) {
+      // Rebuilding would cost the user rows a working table still serves. Keep the
+      // original untouched; the damaged table stays broken, but nothing else is lost.
+      log('db: salvage would not improve on the current database — keeping the original')
+      cleanup()
+      return { action: 'kept_original', damaged: probe.damaged, backupPath: null }
+    }
+
+    // (5) The single destructive step, and it is a MOVE. If it throws, the original
+    // is still exactly where it was and we have changed nothing.
+    let backupPath: string
+    try {
+      backupPath = archiveCorruptDb(file, opts.backupsDir, now)
+    } catch (e) {
+      log(
+        `db: could not move the corrupt database aside (${(e as Error)?.message}) — ` +
+          'keeping the original untouched'
+      )
+      cleanup()
+      return { action: 'kept_original', damaged: probe.damaged, backupPath: null }
+    }
+    log(`db: corrupt database archived to ${backupPath}`)
+    archiveSidecars(file, backupPath)
+    forceRename(tmp, file)
+
+    return {
+      action: 'repaired',
+      damaged: probe.damaged,
+      status: {
+        recovered: true,
+        reset: false,
+        rowsRecovered: salvaged.rows,
+        tablesRecovered: salvaged.tables,
+        backupPath
+      }
+    }
+  } finally {
+    forceRemove(staging)
+    for (const s of SIDECARS) forceRemove(`${staging}${s}`)
+  }
+}
+
+/** Copy `file` (and any live sidecars) to `staging`, and prove the copy is whole.
+ *  A short copy would under-salvage, so a size mismatch fails it outright. */
+function stageCopy(file: string, staging: string): boolean {
+  try {
+    copyFileSync(file, staging)
+    if (statSync(staging).size !== statSync(file).size) return false
+    for (const s of SIDECARS) {
+      const from = `${file}${s}`
+      if (existsSync(from)) copyFileSync(from, `${staging}${s}`)
+    }
+    return true
+  } catch {
+    return false
   }
 }
 
@@ -712,6 +874,12 @@ function closeQuietly(db: RecoveryDb | null): void {
   }
 }
 
+/** Synchronous backoff. This runs at startup, before any window exists, on a path
+ *  that fires once in a database's lifetime. */
+function sleep(ms: number): void {
+  Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, ms)
+}
+
 /**
  * Delete a file, tolerating Windows's EBUSY.
  *
@@ -721,6 +889,10 @@ function closeQuietly(db: RecoveryDb | null): void {
  * therefore throws EBUSY and takes the whole repair down with it — which is
  * exactly what the e2e caught: the swap failed, get() threw, and the repair
  * re-ran on every call. Retry briefly, then give up loudly.
+ *
+ * Only ever called on files WE created (staging copies, salvage temporaries) or on
+ * sidecars whose database has already been archived. The user's database itself is
+ * never deleted — it is moved (archiveCorruptDb).
  */
 function forceRemove(file: string, attempts = 10): void {
   for (let i = 0; ; i++) {
@@ -729,15 +901,90 @@ function forceRemove(file: string, attempts = 10): void {
       return
     } catch (err) {
       if (i >= attempts - 1) throw err
-      // Synchronous backoff: this runs at startup, before any window exists, and
-      // the whole budget is ~500ms on a path that fires once in a database's life.
-      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 50)
+      sleep(50)
     }
   }
 }
 
-function removeSidecars(file: string): void {
-  for (const suffix of ['-wal', '-shm', '-journal']) forceRemove(`${file}${suffix}`)
+const SIDECARS = ['-wal', '-shm', '-journal'] as const
+
+/**
+ * Move the live database's sidecars out of the way, keeping the bytes.
+ *
+ * A stale `-journal` next to a fresh database is not inert — SQLite treats a hot
+ * journal as something to roll back INTO the database — so the sidecars cannot
+ * simply be left behind. But they can hold committed pages that never made it into
+ * the main file, so they are not thrown away either: they are renamed to a
+ * stash, and the caller decides what becomes of them.
+ */
+function stashSidecars(file: string, tag: string): string[] {
+  const stashed: string[] = []
+  for (const suffix of SIDECARS) {
+    const from = `${file}${suffix}`
+    if (!existsSync(from)) continue
+    const to = `${from}.stash-${tag}`
+    try {
+      forceRemove(to)
+      forceRename(from, to)
+      stashed.push(to)
+    } catch {
+      // Could not move it. Removing it is the only way the database opens at all.
+      try {
+        forceRemove(from)
+      } catch {
+        // Nothing else to try; the open below will fail and report.
+      }
+    }
+  }
+  return stashed
+}
+
+/** Park stashed sidecars next to the archived database, for forensics.
+ *
+ *  Deliberately NOT named `<archive>-wal`: the archive is a corrupt database and
+ *  the salvage opens it read-only, so a file SQLite would auto-attach as its WAL
+ *  would be replayed into the very read we are trying to get data out of. The
+ *  `.orphaned` suffix keeps the bytes without making them live. */
+function parkStash(stashed: string[], archivePath: string): void {
+  for (const from of stashed) {
+    const suffix = SIDECARS.find((s) => from.includes(`${s}.stash-`)) ?? '-sidecar'
+    try {
+      forceRename(from, `${archivePath}${suffix}.orphaned`)
+    } catch {
+      // Best-effort forensics; never fail a recovery over it.
+    }
+  }
+}
+
+/** Move the live sidecars of `file` next to its archive. Used after the database
+ *  itself has been archived, so `<archive>-wal` IS the archive's real WAL here and
+ *  keeping the name makes the archived pair openable. */
+function archiveSidecars(file: string, archivePath: string): void {
+  for (const suffix of SIDECARS) {
+    const from = `${file}${suffix}`
+    if (!existsSync(from)) continue
+    try {
+      forceRename(from, `${archivePath}${suffix}`)
+    } catch {
+      try {
+        forceRemove(from)
+      } catch {
+        // A sidecar we can neither move nor delete would be applied to the
+        // replacement database. Nothing left to try; surface it.
+        throw new Error(`could not clear ${from} — the replacement database is not safe to install`)
+      }
+    }
+  }
+}
+
+function discardStash(stashed: string[]): void {
+  for (const f of stashed) {
+    try {
+      forceRemove(f)
+    } catch {
+      // Leftover junk in userData; harmless (SQLite never looks at `.stash-*`).
+    }
+  }
 }
 
 /** Open + prove the connection can actually read the schema. macOS's real sanity
@@ -774,6 +1021,8 @@ export function openDatabaseWithRecovery(
   const backupsDir = opts.backupsDir ?? join(dirname(file), 'backups')
   const log = hooks.log ?? ((): void => {})
 
+  const now = opts.now?.() ?? new Date()
+
   let firstErr: unknown
   try {
     return { db: openChecked(file, driver), status: NO_RECOVERY }
@@ -783,62 +1032,69 @@ export function openDatabaseWithRecovery(
   }
 
   // macOS's first move: a bad/orphaned WAL is the common cause of an unopenable
-  // database, so drop the sidecars and try once more before concluding anything.
-  log(`db: open failed (${(firstErr as Error)?.message}); removing WAL and retrying once`)
-  removeSidecars(file)
+  // database, so take the sidecars out of the picture and try once more before
+  // concluding anything. They are STASHED, not deleted — if this turns out to be
+  // corruption, they are parked alongside the archived database rather than lost.
+  log(`db: open failed (${(firstErr as Error)?.message}); setting the WAL aside and retrying once`)
+  const stashed = stashSidecars(file, String(now.getTime()))
   try {
     const db = openChecked(file, driver)
     log('db: recovered by removing a stale WAL — no corruption')
+    // The database opened clean without them: SQLite itself rejected those bytes.
+    discardStash(stashed)
     return { db, status: NO_RECOVERY }
   } catch (secondErr) {
-    if (isAccessError(secondErr)) throw secondErr
-    if (!isCorruptionError(secondErr) && !isCorruptionError(firstErr)) throw secondErr
+    if (isAccessError(secondErr)) {
+      discardStash(stashed)
+      throw secondErr
+    }
+    if (!isCorruptionError(secondErr) && !isCorruptionError(firstErr)) {
+      discardStash(stashed)
+      throw secondErr
+    }
 
     const phase: 'open' | 'sanity' = 'open'
     hooks.onCorruption?.(secondErr, phase)
-    return recover(file, driver, backupsDir, log, opts.now?.() ?? new Date())
+    return recover(file, driver, backupsDir, log, now, stashed)
   }
 }
 
-/** Backup → salvage → swap. Only ever called with a positive corruption verdict. */
+/**
+ * Archive → salvage → install. Only ever called with a positive corruption verdict,
+ * on a database that cannot be opened at all: its schema page is unreadable, so the
+ * app can currently read ZERO rows from it and any outcome is an improvement.
+ *
+ * The corrupt file is MOVED into the backups directory, not copied-then-deleted. If
+ * it cannot be moved, the corruption error is rethrown and nothing is destroyed —
+ * the app then boots without a database (initDatabase's throw is non-fatal) rather
+ * than boot with an empty one over the user's shredded data.
+ */
 function recover(
   file: string,
   driver: RecoveryDriver,
   backupsDir: string,
   log: (m: string) => void,
-  now: Date
+  now: Date,
+  stashed: string[]
 ): { db: RecoveryDb; status: RecoveryStatus } {
-  let backupPath: string | null = null
-  try {
-    backupPath = backupCorruptDb(file, backupsDir, now)
-    log(`db: corrupt database backed up to ${backupPath}`)
-  } catch (e) {
-    // Losing the backup (disk full, permissions) must not strand the user with an
-    // app that cannot start — the file is unusable either way. Log loudly, go on.
-    log(`db: WARNING could not back up the corrupt database: ${(e as Error)?.message}`)
-  }
+  const backupPath = archiveCorruptDb(file, backupsDir, now)
+  log(`db: corrupt database archived to ${backupPath}`)
+  parkStash(stashed, backupPath)
 
   const tmp = `${file}.salvage-${now.getTime()}`
   forceRemove(tmp)
-  // Salvage from the BACKUP copy, never the live file: opening the original
-  // read-only re-creates its -wal/-shm, and Windows then refuses to unlink them
-  // during the swap below (EBUSY). Reading the copy leaves omi.db unheld.
-  const salvaged = salvage(backupPath ?? file, tmp, driver)
+  const salvaged = salvage(backupPath, tmp, driver)
   log(
     `db: salvaged ${salvaged.rows} row(s) from ${Object.keys(salvaged.tables).length} table(s)` +
       (salvaged.skipped.length ? `; skipped ${salvaged.skipped.join(', ')}` : '')
   )
 
-  removeSidecars(file)
-  forceRemove(file)
-
   const useSalvaged = salvaged.rows > 0
   if (useSalvaged) {
-    renameSync(tmp, file)
+    forceRename(tmp, file) // `file` no longer exists — it was moved to the archive
   } else {
-    forceRemove(tmp)
+    forceRemove(tmp) // nothing salvageable; openChecked creates a fresh database
   }
-  removeSidecars(file)
 
   const status: RecoveryStatus = {
     recovered: true,
@@ -854,11 +1110,12 @@ function recover(
     return { db: openChecked(file, driver), status }
   } catch (err) {
     if (!useSalvaged) throw err // a brand-new empty DB that won't open: unrecoverable
-    // The salvaged copy is itself unusable — fall back to a clean reset rather
-    // than leaving the user with an app that cannot start.
+    // The salvaged copy is itself unusable. Deleting it is safe — it is OUR file,
+    // and the user's original is already archived — so fall back to a clean reset
+    // rather than leave the user with an app that cannot start.
     log(`db: salvaged database failed to open (${(err as Error)?.message}); resetting instead`)
-    removeSidecars(file)
     forceRemove(file)
+    for (const s of SIDECARS) forceRemove(`${file}${s}`)
     return {
       db: openChecked(file, driver),
       status: { ...status, reset: true, rowsRecovered: 0, tablesRecovered: {} }

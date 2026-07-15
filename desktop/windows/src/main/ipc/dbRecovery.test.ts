@@ -12,6 +12,7 @@ import { randomBytes } from 'node:crypto'
 import {
   closeSync,
   existsSync,
+  mkdirSync,
   mkdtempSync,
   openSync,
   readdirSync,
@@ -26,7 +27,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
-  backupCorruptDb,
+  archiveCorruptDb,
   clearCorruptionFlags,
   isAccessError,
   isCorruptionError,
@@ -158,13 +159,13 @@ describe('isCorruptionError', () => {
   })
 })
 
-describe('backup retention', () => {
+describe('archiving the corrupt database', () => {
   it('keeps only the 5 newest backups', () => {
-    buildDb(dbFile)
     const made: string[] = []
     for (let i = 0; i < 8; i++) {
-      // Distinct timestamps: one per minute, oldest first.
-      made.push(backupCorruptDb(dbFile, backupsDir, new Date(2026, 0, 1, 12, i, 0)))
+      // A fresh database each time (the archive MOVES it), one minute apart.
+      buildDb(dbFile)
+      made.push(archiveCorruptDb(dbFile, backupsDir, new Date(2026, 0, 1, 12, i, 0)))
     }
     const kept = backupNames()
     expect(kept).toHaveLength(5)
@@ -180,15 +181,101 @@ describe('backup retention', () => {
     expect(existsSync(made[7])).toBe(true)
   })
 
-  it('backs up the real bytes of the corrupt file', () => {
+  // THE GUARDRAIL: a copy that fails halfway followed by a delete loses everything.
+  // The archive is a rename, so the bytes are never in flight.
+  it('MOVES the corrupt file — the bytes arrive whole and the original is gone', () => {
     buildDb(dbFile)
     clobber(dbFile, 100, 8)
-    const path = backupCorruptDb(dbFile, backupsDir)
-    expect(readFileSync(path).equals(readFileSync(dbFile))).toBe(true)
+    const before = readFileSync(dbFile)
+
+    const path = archiveCorruptDb(dbFile, backupsDir)
+
+    expect(readFileSync(path).equals(before)).toBe(true) // byte-for-byte
+    expect(existsSync(dbFile)).toBe(false) // moved, not copied
+  })
+
+  it('throws rather than destroy anything when the file cannot be moved anywhere', () => {
+    buildDb(dbFile)
+    const before = readFileSync(dbFile)
+    const now = new Date(2026, 0, 1, 12, 0, 0)
+
+    // Make BOTH destinations unusable: the backups dir cannot be created (a file
+    // sits at its path), and the sibling fallback is blocked by a non-empty
+    // directory squatting on the exact name it would use.
+    writeFileSync(backupsDir, 'not a directory')
+    const fallback = `${dbFile}.corrupt-20260101_120000`
+    mkdirSync(fallback, { recursive: true })
+    writeFileSync(join(fallback, 'squatter'), 'x') // a non-empty dir cannot be renamed onto
+
+    expect(() => archiveCorruptDb(dbFile, backupsDir, now)).toThrow()
+    // The user's database is still exactly where it was, byte for byte.
+    expect(readFileSync(dbFile).equals(before)).toBe(true)
+  })
+
+  it('falls back to a sibling path when the backups directory is unusable', () => {
+    buildDb(dbFile)
+    writeFileSync(backupsDir, 'not a directory')
+    const path = archiveCorruptDb(dbFile, backupsDir, new Date(2026, 0, 1, 12, 0, 0))
+    expect(path).toBe(`${dbFile}.corrupt-20260101_120000`)
+    expect(existsSync(path)).toBe(true)
+    expect(existsSync(dbFile)).toBe(false)
   })
 
   it('prunes nothing when the directory does not exist', () => {
     expect(pruneBackups(join(dir, 'nope'))).toEqual([])
+  })
+})
+
+describe('access errors never trigger a recovery', () => {
+  // The nightmare: mistaking "someone else has it open" or "the disk is full" for
+  // "this file is corrupt", and rebuilding a perfectly healthy database.
+  const failing = (code: string): RecoveryDriver => ({
+    open: () => {
+      throw Object.assign(new Error(`simulated ${code}`), { code })
+    },
+    openReadonly: () => {
+      throw Object.assign(new Error(`simulated ${code}`), { code })
+    }
+  })
+
+  it.each(['SQLITE_BUSY', 'SQLITE_LOCKED', 'SQLITE_FULL', 'SQLITE_READONLY', 'EACCES'])(
+    '%s is rethrown untouched — no backup, no salvage, no swap',
+    (code) => {
+      buildDb(dbFile)
+      const before = readFileSync(dbFile)
+
+      expect(() => openDatabaseWithRecovery(dbFile, failing(code), { backupsDir })).toThrow(
+        `simulated ${code}`
+      )
+
+      expect(readFileSync(dbFile).equals(before)).toBe(true) // byte-identical
+      expect(backupNames()).toEqual([]) // nothing archived
+      expect(readdirSync(dir).filter((f) => f.includes('.salvage-'))).toEqual([])
+      expect(countRows(dbFile, 'local_conversation')).toBe(300)
+    }
+  )
+
+  it('a REAL SQLITE_BUSY from a locked database is not corruption', () => {
+    buildDb(dbFile)
+    const holder = new DatabaseSync(dbFile)
+    holder.exec('BEGIN EXCLUSIVE') // hold the write lock, as the KG worker would
+    try {
+      const other = new DatabaseSync(dbFile)
+      let thrown: unknown
+      try {
+        other.prepare('INSERT INTO insights (headline, advice) VALUES (?, ?)').run('a', 'b')
+      } catch (e) {
+        thrown = e
+      } finally {
+        other.close()
+      }
+      expect(thrown, 'a locked database must actually raise').toBeDefined()
+      expect(isAccessError(thrown)).toBe(true)
+      expect(isCorruptionError(thrown)).toBe(false) // the whole ballgame
+    } finally {
+      holder.exec('ROLLBACK')
+      holder.close()
+    }
   })
 })
 
@@ -502,21 +589,145 @@ describe('runtime corruption trip (option B)', () => {
     expect(countRows(dbFile, 'local_conversation')).toBe(300)
   })
 
-  it('counts the attempt BEFORE repairing, so a crash mid-repair still burns budget', () => {
+  it('counts the attempt BEFORE it reads a damaged page, so any crash burns budget', () => {
     buildDb(dbFile)
     corruptDataPage(dbFile)
     const db = openDb(dbFile)
     markCorruptionSuspected(db)
+
+    // The counter has to be on disk BEFORE the probe runs: probing and salvaging a
+    // corrupt database is exactly where the process can die (a bad page can take the
+    // native driver down; a huge table can exhaust memory). If the write happened
+    // afterwards, such a crash would cost no budget and the repair would run again
+    // on every single launch, for ever. Read it from a SEPARATE connection so this
+    // asserts what is durable on disk, not what is in this handle's cache.
+    const attemptsOnDisk = (): string | undefined => {
+      const d = new DatabaseSync(dbFile, { readOnly: true })
+      try {
+        return (
+          d.prepare("SELECT value FROM app_meta WHERE key = 'db_repair_attempts'").get() as
+            | { value: string }
+            | undefined
+        )?.value
+      } finally {
+        d.close()
+      }
+    }
+    expect(attemptsOnDisk()).toBeUndefined()
+
     repairSuspectedCorruption(db, dbFile, driver, { backupsDir })
 
     // The repaired DB carries the incremented counter across (app_meta is salvaged).
-    const after = openDb(dbFile)
-    const row = after
-      .prepare('SELECT value FROM app_meta WHERE key = ?')
-      .get(...(['db_repair_attempts'] as never[])) as { value: string } | undefined
-    after.close()
-    expect(row?.value).toBe('1')
+    expect(attemptsOnDisk()).toBe('1')
   })
+
+  // The boot-loop proof, end to end: three failed launches, then it stops. Each
+  // "launch" here crashes right after the attempt is recorded — the worst case,
+  // because the repair never gets far enough to clear anything.
+  it('cannot boot-loop: three crashed repairs, then it stops trying', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+    const s0 = openDb(dbFile)
+    markCorruptionSuspected(s0)
+    s0.close()
+
+    // A driver that dies the moment the repair tries to salvage — the crash the
+    // attempt counter exists to survive.
+    const exploding: RecoveryDriver = {
+      open: () => {
+        throw new Error('simulated crash mid-repair')
+      },
+      openReadonly: () => {
+        throw new Error('simulated crash mid-repair')
+      }
+    }
+
+    for (let launch = 1; launch <= MAX_REPAIR_ATTEMPTS; launch++) {
+      const db = openDb(dbFile)
+      const outcome = repairSuspectedCorruption(db, dbFile, exploding, { backupsDir })
+      // Salvage got nothing, so the never-worse guard vetoes the swap every time.
+      // (`db` is closed by the repair itself on every confirmed-damage path.)
+      expect(outcome.action).toBe('kept_original')
+    }
+
+    // The budget is now spent: the next launch refuses to try again.
+    const db = openDb(dbFile)
+    const outcome = repairSuspectedCorruption(db, dbFile, exploding, { backupsDir })
+    expect(outcome.action).toBe('abandoned')
+    db.close()
+
+    // And through it all, not one destructive act.
+    expect(backupNames()).toEqual([])
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+  })
+
+  it('keeps the original when the corrupt file cannot be moved aside', () => {
+    buildDb(dbFile)
+    corruptDataPage(dbFile)
+    const db = openDb(dbFile)
+    markCorruptionSuspected(db)
+
+    // Block every archive destination (see the archive tests) so the ONE destructive
+    // step is impossible. The salvage is a genuine improvement here — this proves we
+    // still refuse to install it rather than delete a database we could not preserve.
+    const now = new Date(2026, 0, 1, 12, 0, 0)
+    writeFileSync(backupsDir, 'not a directory')
+    const fallback = `${dbFile}.corrupt-20260101_120000`
+    mkdirSync(fallback, { recursive: true })
+    writeFileSync(join(fallback, 'squatter'), 'x')
+
+    const outcome = repairSuspectedCorruption(db, dbFile, driver, {
+      backupsDir,
+      now: () => now
+    })
+
+    expect(outcome.action).toBe('kept_original')
+    // Nothing lost: the original database is still in place and still serves the
+    // tables it always served.
+    expect(countRows(dbFile, 'local_conversation')).toBe(300)
+    expect(countRows(dbFile, 'insights')).toBe(200)
+    // And no half-finished temporaries left behind.
+    expect(readdirSync(dir).filter((f) => f.includes('.salvage-'))).toEqual([])
+    expect(readdirSync(dir).filter((f) => f.includes('.recover-src-'))).toEqual([])
+  })
+})
+
+// The regression that made the 250k-row cap a data-loss bug: a REAL rewind_frames
+// on a real machine has far more rows than that, and the old resilient scan bailed
+// out with ZERO rows once max(rowid) passed the cap — silently discarding a table
+// it could have salvaged almost entirely, while the never-worse guard (which sees
+// a damaged table as serving nothing) happily allowed the swap. That is the same
+// "quietly throws the user's data away" failure we ported this feature to avoid.
+describe('salvage has no row-count ceiling', () => {
+  it('salvages a damaged table far larger than any fixed probe cap', () => {
+    const d = new DatabaseSync(dbFile)
+    d.exec(`
+      CREATE TABLE local_conversation (id TEXT PRIMARY KEY, transcript TEXT);
+      CREATE TABLE rewind_frames (id INTEGER PRIMARY KEY AUTOINCREMENT, ocr_text TEXT);
+    `)
+    d.exec('BEGIN')
+    const conv = d.prepare('INSERT INTO local_conversation VALUES (?, ?)')
+    for (let i = 0; i < 50; i++) conv.run(`conv-${i}`, `transcript ${i}`)
+    const frame = d.prepare('INSERT INTO rewind_frames (ocr_text) VALUES (?)')
+    // 300k rows: past the old 250k cap, and a realistic year of Rewind capture.
+    for (let i = 0; i < 300_000; i++) frame.run(`ocr ${i}`)
+    d.exec('COMMIT')
+    d.close()
+
+    const size = statSync(dbFile).size
+    clobber(dbFile, Math.floor(size / 2) & ~4095, 4096) // one bad page in rewind_frames
+
+    const out = join(dir, 'salvaged.db')
+    const result = salvage(dbFile, out, driver)
+
+    const frames = result.tables['rewind_frames'] ?? 0
+    // The old code returned 0 here. Anything short of "nearly all of them" is a
+    // silent loss of the user's Rewind history.
+    expect(frames).toBeGreaterThan(299_000)
+    expect(frames).toBeLessThan(300_000) // the rows on the bad page really are gone
+    expect(result.tables['local_conversation']).toBe(50)
+    expect(countRows(out, 'rewind_frames')).toBe(frames)
+  }, 120_000)
 })
 
 describe('never rebuild into a worse state', () => {

@@ -190,12 +190,12 @@ function armCorruptionTrip(handle: Database.Database): Database.Database {
   const originalPrepare = handle.prepare.bind(handle)
   handle.prepare = ((sql: string) => {
     const stmt = watch(() => originalPrepare(sql))
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver methods are variadic/overloaded
+    const raw = stmt as any
     for (const method of ['all', 'get', 'run', 'iterate', 'pluck'] as const) {
-      const original = stmt[method]
-      if (typeof original !== 'function')
-        continue
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any -- driver methods are variadic/overloaded
-      ;(stmt as any)[method] = (...args: unknown[]) =>
+      const original = raw[method]
+      if (typeof original !== 'function') continue
+      raw[method] = (...args: unknown[]): unknown =>
         watch(() => (original as (...a: unknown[]) => unknown).apply(stmt, args))
     }
     return stmt
