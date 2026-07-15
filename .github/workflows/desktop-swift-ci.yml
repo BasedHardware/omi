@@ -36,6 +36,33 @@ jobs:
             echo "should_run=false" >> "$GITHUB_OUTPUT"
           fi
 
+      - name: Select and assert pinned Xcode 16.4
+        if: steps.changed.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_16.4.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "::error::Pinned Xcode 16.4 not found at $XCODE_APP"
+            echo "Available Xcodes:"; ls -d /Applications/Xcode*.app 2>/dev/null || true
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+          echo "=== xcodebuild -version ==="
+          xcodebuild -version
+          echo "=== xcrun swift --version ==="
+          xcrun swift --version
+          ACTUAL_VERSION="$(xcodebuild -version | head -1)"
+          ACTUAL_BUILD="$(xcodebuild -version | sed -n '2p' | awk '{print $NF}')"
+          if [ "$ACTUAL_VERSION" != "Xcode 16.4" ]; then
+            echo "::error::Expected 'Xcode 16.4', got: '$ACTUAL_VERSION'"
+            exit 1
+          fi
+          if [ "$ACTUAL_BUILD" != "16F6" ]; then
+            echo "::error::Expected build '16F6', got: '$ACTUAL_BUILD'"
+            exit 1
+          fi
+          echo "Pinned toolchain confirmed: $ACTUAL_VERSION ($ACTUAL_BUILD)"
+
       - name: Cache SwiftPM build products
         if: steps.changed.outputs.should_run == 'true'
         uses: actions/cache@v4
@@ -43,9 +70,9 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}
+          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-swift-
+            ${{ runner.os }}-desktop-swift-xcode164-
 
       - name: Install Swift system dependencies
         if: steps.changed.outputs.should_run == 'true'
@@ -99,16 +126,49 @@ jobs:
           if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.swift'; then
             PACKAGE_SWIFT=true
           fi
+          PACKAGE_RESOLVED=false
+          if echo "$FILES" | grep -qx 'desktop/macos/Desktop/Package.resolved'; then
+            PACKAGE_RESOLVED=true
+          fi
           # Clean release compile: every main push that touches desktop Swift,
-          # plus PRs that change the package manifest (highest release-risk).
+          # plus PRs that change the package manifest or lockfile (highest
+          # release-risk: a dependency graph change can break release builds
+          # even when the manifest source is unchanged).
           SHOULD_RUN=false
           if [ "$DESKTOP_SWIFT" = "true" ]; then
-            if [ "${{ github.event_name }}" = "push" ] || [ "$PACKAGE_SWIFT" = "true" ]; then
+            if [ "${{ github.event_name }}" = "push" ] || [ "$PACKAGE_SWIFT" = "true" ] || [ "$PACKAGE_RESOLVED" = "true" ]; then
               SHOULD_RUN=true
             fi
           fi
           echo "should_run=$SHOULD_RUN" >> "$GITHUB_OUTPUT"
-          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT should_run=$SHOULD_RUN"
+          echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN"
+
+      - name: Select and assert pinned Xcode 16.4
+        if: steps.changed.outputs.should_run == 'true'
+        run: |
+          set -euo pipefail
+          XCODE_APP="/Applications/Xcode_16.4.app"
+          if [ ! -d "$XCODE_APP" ]; then
+            echo "::error::Pinned Xcode 16.4 not found at $XCODE_APP"
+            echo "Available Xcodes:"; ls -d /Applications/Xcode*.app 2>/dev/null || true
+            exit 1
+          fi
+          echo "DEVELOPER_DIR=$XCODE_APP/Contents/Developer" >> "$GITHUB_ENV"
+          echo "=== xcodebuild -version ==="
+          xcodebuild -version
+          echo "=== xcrun swift --version ==="
+          xcrun swift --version
+          ACTUAL_VERSION="$(xcodebuild -version | head -1)"
+          ACTUAL_BUILD="$(xcodebuild -version | sed -n '2p' | awk '{print $NF}')"
+          if [ "$ACTUAL_VERSION" != "Xcode 16.4" ]; then
+            echo "::error::Expected 'Xcode 16.4', got: '$ACTUAL_VERSION'"
+            exit 1
+          fi
+          if [ "$ACTUAL_BUILD" != "16F6" ]; then
+            echo "::error::Expected build '16F6', got: '$ACTUAL_BUILD'"
+            exit 1
+          fi
+          echo "Pinned toolchain confirmed: $ACTUAL_VERSION ($ACTUAL_BUILD)"
 
       - name: Install Swift system dependencies
         if: steps.changed.outputs.should_run == 'true'
