@@ -15,7 +15,16 @@ import {
 } from './adapterRegistry'
 import { PRODUCTION_ADAPTER_IDS, type ProductionAdapterId, type RuntimeAdapter } from './interface'
 import { failureFromError, messageFrom } from './failures'
-import type { CodingAgentEvent, CodingAgentResult, CodingAgentRunArgs } from '../../shared/types'
+import { isRecoverableAcpAuthError } from './acp'
+import { claudeAuthStatus } from './claudeOAuth'
+import type {
+  CodingAgentEvent,
+  CodingAgentResult,
+  CodingAgentRunArgs,
+  CodingAgentTestResult
+} from '../../shared/types'
+
+const CLAUDE_SIGN_IN_HINT = 'Sign in to Claude to use Claude Code.'
 
 /** Preference order when no agent is named (or the named one falls over). */
 export const AGENT_FALLBACK_ORDER = PRODUCTION_ADAPTER_IDS
@@ -41,9 +50,15 @@ export async function testAgentConnection(
   agentId: ProductionAdapterId,
   overrides: AdapterCommandOverrides = {},
   log: (message: string) => void = () => {}
-): Promise<{ ok: boolean; error?: string }> {
+): Promise<CodingAgentTestResult> {
   if (!adapterIsActivated(agentId, overrides)) {
     return { ok: false, error: adapterActivationError(agentId) ?? 'Not connected.' }
+  }
+  // Claude Code's ACP handshake succeeds without credentials (auth is only
+  // enforced at session/prompt), so a bare handshake would show a misleading
+  // green check for a signed-out user. Gate on real sign-in first.
+  if (agentId === 'acp' && !claudeAuthStatus().connected) {
+    return { ok: false, needsAuth: true, error: CLAUDE_SIGN_IN_HINT }
   }
   const adapter = ADAPTER_PROFILES[agentId].createAdapter({
     log: (message) => log(`[${agentId}:test] ${message}`),
@@ -66,6 +81,9 @@ export async function testAgentConnection(
     ])
     return { ok: true }
   } catch (error) {
+    if (agentId === 'acp' && isRecoverableAcpAuthError(error)) {
+      return { ok: false, needsAuth: true, error: CLAUDE_SIGN_IN_HINT }
+    }
     return { ok: false, error: messageFrom(error) }
   } finally {
     void adapter.stop().catch(() => {})
@@ -172,6 +190,14 @@ export async function runCodingAgentTask(
               : (result.failure?.userMessage ?? `The agent run ${result.terminalStatus}.`)
         }
       } catch (error) {
+        // Claude Code failed because the user isn't signed in: surface a
+        // needs-auth signal (the UI triggers the sign-in flow — never auto-
+        // opened from here) instead of falling through to a generic error or
+        // retrying another agent for what a login would fix.
+        if (adapterId === 'acp' && isRecoverableAcpAuthError(error)) {
+          emit({ type: 'auth_required', taskId: args.taskId, adapterId })
+          return { taskId: args.taskId, ok: false, adapterId, text: '', error: CLAUDE_SIGN_IN_HINT }
+        }
         const failure = failureFromError(error, {
           code: 'agent_task_failed',
           adapterId,

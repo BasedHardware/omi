@@ -6,6 +6,13 @@
 // both dev and packaged builds (same mechanism as resources/icon.png in
 // main/index.ts); vitest resolves it via the asset-suffix plugin in
 // vitest.config.ts.
+//
+// Sign-in: the spawned bridge (and the SDK it runs) reads OAuth credentials from
+// `<CLAUDE_CONFIG_DIR or ~/.claude>/.credentials.json`. The default-adapter
+// spawn in acp.ts inherits the parent environment (`{...process.env}`), so a
+// user-set CLAUDE_CONFIG_DIR flows through unchanged — and claudeOAuth.ts writes
+// the credentials file to that same resolved dir, so writer and reader always
+// agree. No extra env wiring here; see ../ipc/codingAgent.ts for the flow.
 
 import bundledAcpEntry from './claude-acp-entry.mjs?asset'
 import { AcpRuntimeAdapter } from './acp'
