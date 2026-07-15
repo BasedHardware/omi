@@ -1,0 +1,3 @@
+{
+  "change": "Fixed task prioritization failing to sync when many tasks were staged, by sending score updates in batches within the server limit"
+}

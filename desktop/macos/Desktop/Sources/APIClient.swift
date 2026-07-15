@@ -3208,7 +3208,15 @@ extension APIClient {
     try await delete("v1/staged-tasks/\(id)")
   }
 
-  /// Batch update relevance scores for staged tasks
+  /// Maximum number of staged-task scores accepted per batch request.
+  /// Mirrors the backend `BatchScoreUpdate.scores` cap (`max_length=500`);
+  /// larger payloads are rejected with HTTP 422.
+  static let stagedScoresBatchMaxSize = 500
+
+  /// Batch update relevance scores for staged tasks.
+  /// Splits into ordered requests of at most `stagedScoresBatchMaxSize`
+  /// entries to stay under the backend payload cap, and fails fast if any
+  /// batch is rejected.
   func batchUpdateStagedScores(_ scores: [(id: String, score: Int)]) async throws {
     struct ScoreUpdate: Encodable {
       let id: String
@@ -3220,9 +3228,12 @@ extension APIClient {
     struct StatusResponse: Decodable {
       let status: String
     }
-    let request = BatchRequest(
-      scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-    let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    guard !scores.isEmpty else { return }
+    for chunk in scores.chunked(maxSize: Self.stagedScoresBatchMaxSize) {
+      let request = BatchRequest(
+        scores: chunk.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
+      let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    }
   }
 
   /// Promotes the top-ranked staged task to action_items
