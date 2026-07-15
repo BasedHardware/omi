@@ -57,7 +57,11 @@ actor RewindIndexer {
 
     /// Initialize all Rewind services
     func initialize() async throws {
-        guard !isInitialized, !isInitializing else { return }
+        let databaseIsInitialized = await RewindDatabase.shared.isInitialized
+        guard !(isInitialized && databaseIsInitialized), !isInitializing else { return }
+        // RewindDatabase can close itself after repeated I/O/corruption errors.
+        // Its readiness, not this cached flag, is authoritative.
+        isInitialized = false
         isInitializing = true
         defer { isInitializing = false }
 
