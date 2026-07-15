@@ -137,6 +137,7 @@ import {
   type ContextSourceUpdateResult,
 } from "./context-snapshot.js";
 import type { ContextSnapshotProjection } from "../protocol.js";
+import type { ChatFirstCapabilityProjection } from "./chat-first-capability.js";
 import {
   ensureAgentSpawnJournal,
   type EnsureAgentSpawnJournalInput,
@@ -144,6 +145,13 @@ import {
 } from "./agent-spawn-journal.js";
 
 export class KernelSessions extends KernelArtifacts {
+  /** Process-local only: never back this with SQLite or a user preference. */
+  private readonly chatFirstCapabilities = new Map<string, ChatFirstCapabilityProjection>();
+
+  private chatFirstCapability(sessionId: string, ownerId: string, surfaceKind?: string): ChatFirstCapabilityProjection | undefined {
+    if (surfaceKind !== "main_chat") return undefined;
+    return this.chatFirstCapabilities.get(`${ownerId}:${sessionId}`);
+  }
   ownedSession(sessionId: string, ownerId: string): AgentSession {
     const session = this.readSession(sessionId);
     this.assertSessionOwner(session, ownerId);
@@ -165,7 +173,14 @@ export class KernelSessions extends KernelArtifacts {
   }
 
   contextSnapshot(sessionId: string, ownerId: string, surfaceKind?: string): ContextSnapshotProjection {
-    return buildContextSnapshot(this.store, sessionId, ownerId, Date.now(), surfaceKind);
+    return buildContextSnapshot(
+      this.store,
+      sessionId,
+      ownerId,
+      Date.now(),
+      surfaceKind,
+      this.chatFirstCapability(sessionId, ownerId, surfaceKind),
+    );
   }
 
   contextSnapshotForExactSurface(
@@ -177,17 +192,22 @@ export class KernelSessions extends KernelArtifacts {
        WHERE owner_id = ? AND surface_kind = ? AND external_ref_kind = ? AND external_ref_id = ?`,
       [ownerId, surface.surfaceKind, surface.externalRefKind, surface.externalRefId],
     );
+    const sessionId = String(mapping.agent_session_id);
     return buildContextSnapshot(
       this.store,
-      String(mapping.agent_session_id),
+      sessionId,
       ownerId,
       Date.now(),
       surface.surfaceKind,
+      this.chatFirstCapability(sessionId, ownerId, surface.surfaceKind),
     );
   }
 
   updateContextSource(input: ContextSourceUpdateInput): ContextSourceUpdateResult {
-    return updateContextSource(this.store, input);
+    return updateContextSource(this.store, {
+      ...input,
+      chatFirstCapability: this.chatFirstCapability(input.sessionId, input.ownerId, input.surfaceKind),
+    });
   }
 
   ensureAgentSpawnJournal(input: EnsureAgentSpawnJournalInput): EnsureAgentSpawnJournalResult {
@@ -284,8 +304,28 @@ export class KernelSessions extends KernelArtifacts {
       adapterBindings: this.readBindingsForSession(session.sessionId),
     }));
   }
-  resolveSurfaceSession(input: ResolveSurfaceSessionInput): ResolveSurfaceSessionResult {
-    return resolveSurfaceSession(this.store, input, () => Date.now());
+  resolveSurfaceSession(input: ResolveSurfaceSessionInput & { chatFirstCapability?: ChatFirstCapabilityProjection }): ResolveSurfaceSessionResult {
+    const capability = input.chatFirstCapability;
+    const { chatFirstCapability: _ignored, ...sessionInput } = input;
+    const resolved = resolveSurfaceSession(this.store, sessionInput, () => Date.now());
+    if (input.surfaceRef.surfaceKind !== "main_chat") return resolved;
+    if (capability && (!Number.isSafeInteger(capability.controlGeneration) || capability.controlGeneration < 0)) {
+      throw new Error("chat-first capability requires a non-negative control generation");
+    }
+    const key = `${input.ownerId}:${resolved.agentSessionId}`;
+    const previous = this.chatFirstCapabilities.get(key);
+    const sampled: ChatFirstCapabilityProjection = capability?.chatFirstUi === true
+      ? capability
+      : { chatFirstUi: false, controlGeneration: capability?.controlGeneration ?? 0 };
+    if (
+      previous
+      && previous.chatFirstUi
+      && (previous.chatFirstUi !== sampled.chatFirstUi || previous.controlGeneration !== sampled.controlGeneration)
+    ) {
+      throw new Error("chat-first capability is immutable for the runtime session");
+    }
+    if (!previous) this.chatFirstCapabilities.set(key, Object.freeze({ ...sampled }));
+    return resolved;
   }
 
   importLegacyMainChatSessions(
@@ -295,6 +335,9 @@ export class KernelSessions extends KernelArtifacts {
   }
 
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
+    for (const key of this.chatFirstCapabilities.keys()) {
+      if (key.startsWith(`${ownerId}:`)) this.chatFirstCapabilities.delete(key);
+    }
     return clearOwnerSurfaceState(this.store, ownerId, () => Date.now());
   }
 

@@ -4,7 +4,11 @@
 // === Swift → Bridge (stdin) ===
 
 export const PROTOCOL_VERSION = 2 as const;
-export const RUNTIME_CAPABILITIES = ["journal_import_remote_turn", "runtime_adapter_availability"] as const;
+export const RUNTIME_CAPABILITIES = [
+  "journal_import_remote_turn",
+  "runtime_adapter_availability",
+  "chat_first_capability_projection",
+] as const;
 export type ProtocolVersion = typeof PROTOCOL_VERSION;
 
 export interface ProtocolEnvelope {
@@ -169,6 +173,14 @@ export interface ResolveSurfaceSessionMessage extends ProtocolEnvelope {
     adapterId: string;
     modelProfile: string | null;
     workingDirectory: string;
+  };
+  /**
+   * Ephemeral server-derived capability, accepted only for the main Chat
+   * surface.  It is never persisted to the kernel journal or preferences.
+   */
+  chatFirstCapability?: {
+    chatFirstUi: boolean;
+    controlGeneration: number;
   };
 }
 
@@ -365,6 +377,23 @@ export interface JournalClearTurnsMessage extends ProtocolEnvelope {
   expectedGeneration: number;
 }
 
+/**
+ * Privileged local-only append for server-validated chat-first blocks. The
+ * capability and producing run/attempt bind this mutation to the assistant
+ * turn that invoked `render_chat_blocks`; Swift cannot select an arbitrary
+ * journal turn.
+ */
+export interface AppendChatFirstBlocksMessage extends ProtocolEnvelope {
+  type: "append_chat_first_blocks";
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  capabilityRef: string;
+  controlGeneration: number;
+  blocks: unknown[];
+}
+
 export interface EnsureAgentSpawnJournalMessage extends ProtocolEnvelope {
   type: "ensure_agent_spawn_journal";
   ownerId: string;
@@ -451,6 +480,7 @@ export type InboundMessage =
   | JournalTerminalizeTurnMessage
   | JournalListTurnsMessage
   | JournalClearTurnsMessage
+  | AppendChatFirstBlocksMessage
   | EnsureAgentSpawnJournalMessage
   | JournalBackendSyncResultMessage
   | JournalBackendDeleteResultMessage
@@ -523,6 +553,7 @@ export interface AuthorizedToolExecutionMessage extends OutboundEnvelope {
   manifestDigest: string;
   daemonBootEpoch: string;
   executionGeneration: number;
+  capabilityRef: string;
   toolName: string;
   input: Record<string, unknown>;
   inputHash: string;
@@ -535,6 +566,8 @@ export interface AuthorizedToolExecutionMessage extends OutboundEnvelope {
   precedingAssistantText: string | null;
   runMode: "ask" | "act";
   chatMode: string | null;
+  /** Present only for the server-authorized Main Chat structured-block tool. */
+  chatFirstControlGeneration?: number;
   /** Bounded policy recovery telemetry; absent for ordinary authorized calls. */
   policyRecovery?: "permission_delegation_to_native";
 }
@@ -812,6 +845,8 @@ export interface ContextSnapshotProjection {
     manifestVersion: number;
     manifestDigest: string;
     allowedToolNames: string[];
+    chatFirstUi: boolean;
+    chatFirstControlGeneration: number | null;
   };
 }
 
@@ -874,7 +909,7 @@ export interface AgentSpawnJournalEnsuredMessage extends OutboundEnvelope {
 
 export interface JournalOperationResultMessage extends OutboundEnvelope {
   type: "journal_operation_result";
-  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear";
+  operation: "record" | "record_exchange" | "import_remote" | "update" | "list" | "clear" | "append_chat_first_blocks";
   conversationId: string;
   surfaceKind: string;
   externalRefKind: string;

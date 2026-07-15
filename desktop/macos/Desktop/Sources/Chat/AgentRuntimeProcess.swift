@@ -279,6 +279,7 @@ actor AgentRuntimeProcess {
   nonisolated static let requiredRuntimeCapabilities: Set<String> = [
     "journal_import_remote_turn",
     "runtime_adapter_availability",
+    "chat_first_capability_projection",
   ]
   private static let ownerTransitionClientID = "runtime-owner-transition"
 
@@ -934,6 +935,7 @@ actor AgentRuntimeProcess {
     surface: AgentSurfaceReference,
     title: String?,
     creationProfile: AgentSessionCreationProfile?,
+    chatFirstCapability: ChatFirstCapabilityProjection? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentSurfaceSession {
     try assertAuthorization(authorizationSnapshot)
@@ -943,7 +945,8 @@ actor AgentRuntimeProcess {
       ownerId: authorizationSnapshot.ownerID,
       surface: surface,
       title: title,
-      creationProfile: creationProfile
+      creationProfile: creationProfile,
+      chatFirstCapability: chatFirstCapability
     )
     let result = try await kernelContractRequest(
       payload: payload,
@@ -1443,7 +1446,8 @@ actor AgentRuntimeProcess {
     ownerId: String?,
     surface: AgentSurfaceReference,
     title: String?,
-    creationProfile: AgentSessionCreationProfile? = nil
+    creationProfile: AgentSessionCreationProfile? = nil,
+    chatFirstCapability: ChatFirstCapabilityProjection? = nil
   ) -> [String: Any] {
     var message = protocolEnvelope(
       type: "resolve_surface_session",
@@ -1456,6 +1460,7 @@ actor AgentRuntimeProcess {
     message["externalRefId"] = surface.externalRefId
     if let title { message["title"] = title }
     if let creationProfile { message["creationProfile"] = creationProfile.dictionary }
+    if let chatFirstCapability { message["chatFirstCapability"] = chatFirstCapability.dictionary }
     return message
   }
 
@@ -1961,6 +1966,51 @@ actor AgentRuntimeProcess {
       payload: payload,
       authorizationSnapshot: authorizationSnapshot
     ).clearedCount
+  }
+
+  /// Append server-validated structured blocks to exactly the assistant turn
+  /// produced by this capability's run/attempt. The Node kernel re-checks the
+  /// live capability and performs the sole journal mutation.
+  func appendChatFirstBlocks(
+    clientId: String,
+    surface: AgentSurfaceReference,
+    ownerID: String,
+    sessionID: String,
+    runID: String,
+    attemptID: String,
+    capabilityRef: String,
+    controlGeneration: Int,
+    blocks: [[String: Any]],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+  ) async throws -> KernelJournalTurn {
+    guard surface.surfaceKind == "main_chat",
+      controlGeneration >= 0,
+      !blocks.isEmpty,
+      blocks.count <= 8
+    else {
+      throw BridgeError.agentError("Invalid chat-first journal append")
+    }
+    let result = try await journalOperation(
+      type: "append_chat_first_blocks",
+      operation: "append_chat_first_blocks",
+      clientId: clientId,
+      surface: surface,
+      ownerID: ownerID,
+      payload: [
+        "sessionId": sessionID,
+        "runId": runID,
+        "attemptId": attemptID,
+        "capabilityRef": capabilityRef,
+        "controlGeneration": controlGeneration,
+        "blocks": blocks,
+      ],
+      authorizationSnapshot: authorizationSnapshot
+    )
+    guard let turn = result.turn else {
+      throw BridgeError.agentError("Chat-first journal append returned no turn")
+    }
+    recordLifecycleJournalMutation(turn)
+    return turn
   }
 
   private func journalOperation(
@@ -3357,7 +3407,11 @@ actor AgentRuntimeProcess {
             ? AgentClientScope.floatingPill
             : nil,
           originatingSurfaceRef: surface,
+          originatingSessionID: command.sessionID,
           originatingRunId: command.runID,
+          originatingAttemptId: command.attemptID,
+          toolCapabilityRef: command.capabilityRef,
+          chatFirstControlGeneration: command.chatFirstControlGeneration,
           originatingUserText: command.originatingUserText,
           isOnboardingSurface: command.surfaceKind == "onboarding",
           expectedOwnerID: command.ownerID,

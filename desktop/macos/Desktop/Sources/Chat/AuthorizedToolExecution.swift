@@ -48,6 +48,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     case invalidRetryPolicy
     case invalidPolicyRecovery
     case inputHashMismatch
+    case invalidChatFirstCapability
     case ownerChangedDuringExecution
 
     var code: String {
@@ -59,6 +60,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       case .invalidRetryPolicy: return "invalid_execution_retry_policy"
       case .invalidPolicyRecovery: return "invalid_execution_policy_recovery"
       case .inputHashMismatch: return "authorized_execution_input_hash_mismatch"
+      case .invalidChatFirstCapability: return "authorized_execution_chat_first_capability_mismatch"
       case .ownerChangedDuringExecution: return "authorized_execution_owner_changed"
       }
     }
@@ -74,6 +76,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
   let manifestDigest: String
   let daemonBootEpoch: String
   let executionGeneration: Int
+  let capabilityRef: String
   let canonicalToolName: String
   let input: [String: Any]
   let inputHash: String
@@ -88,6 +91,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
   let precedingAssistantText: String?
   let runMode: String
   let chatMode: String?
+  let chatFirstControlGeneration: Int?
 
   static func parse(
     _ payload: [String: Any],
@@ -107,19 +111,22 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     guard currentOwnerID == ownerID else {
       throw Rejection.wrongOwner
     }
-    let manifestVersion = payload["manifestVersion"] as? Int ?? 0
-    guard manifestVersion == GeneratedToolExecutors.manifestVersion else {
-      throw Rejection.staleManifest
-    }
-    let manifestDigest = try requiredString("manifestDigest")
-    guard manifestDigest == GeneratedToolExecutors.manifestDigest else {
-      throw Rejection.staleManifest
-    }
     let requestedToolName = try requiredString("toolName")
     guard let resolvedTool = GeneratedToolExecutors.resolve(requestedToolName),
       let executor = GeneratedToolExecutors.executorByTool[resolvedTool]
     else {
       throw Rejection.unsupportedExecutor
+    }
+    let manifestVersion = payload["manifestVersion"] as? Int ?? 0
+    guard manifestVersion == GeneratedToolExecutors.manifestVersion else {
+      throw Rejection.staleManifest
+    }
+    let manifestDigest = try requiredString("manifestDigest")
+    let expectedManifestDigest = resolvedTool == .renderChatBlocks
+      ? GeneratedToolExecutors.chatFirstManifestDigest
+      : GeneratedToolExecutors.manifestDigest
+    guard manifestDigest == expectedManifestDigest else {
+      throw Rejection.staleManifest
     }
     guard
       let effectClass = EffectClass(rawValue: try requiredString("effectClass")),
@@ -158,6 +165,18 @@ struct AuthorizedToolExecution: @unchecked Sendable {
     guard try inputHash(for: input) == expectedInputHash else {
       throw Rejection.inputHashMismatch
     }
+    let surfaceKind = try requiredString("surfaceKind")
+    let chatFirstControlGeneration = payload["chatFirstControlGeneration"] as? Int
+    if resolvedTool == .renderChatBlocks {
+      guard surfaceKind == "main_chat",
+        let chatFirstControlGeneration,
+        chatFirstControlGeneration >= 0
+      else {
+        throw Rejection.invalidChatFirstCapability
+      }
+    } else if chatFirstControlGeneration != nil {
+      throw Rejection.invalidChatFirstCapability
+    }
 
     return AuthorizedToolExecution(
       invocationID: try requiredString("invocationId"),
@@ -170,6 +189,7 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       manifestDigest: manifestDigest,
       daemonBootEpoch: try requiredString("daemonBootEpoch"),
       executionGeneration: executionGeneration,
+      capabilityRef: try requiredString("capabilityRef"),
       canonicalToolName: resolvedTool.rawValue,
       input: input,
       inputHash: expectedInputHash,
@@ -177,13 +197,14 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       retryPolicy: retryPolicy,
       policyRecovery: policyRecovery,
       executor: executor,
-      surfaceKind: try requiredString("surfaceKind"),
+      surfaceKind: surfaceKind,
       externalRefKind: payload["externalRefKind"] as? String,
       externalRefID: payload["externalRefId"] as? String,
       originatingUserText: payload["originatingUserText"] as? String ?? "",
       precedingAssistantText: payload["precedingAssistantText"] as? String,
       runMode: runMode,
-      chatMode: payload["chatMode"] as? String)
+      chatMode: payload["chatMode"] as? String,
+      chatFirstControlGeneration: chatFirstControlGeneration)
   }
 
   static func inputHash(for input: [String: Any]) throws -> String {

@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { isChatFirstMainChat } from "./chat-first-capability.js";
 
 import {
   agentControlCapabilityManifest,
@@ -101,6 +102,9 @@ export interface OmiToolProjectionContext {
   onboarding?: boolean;
   screenContext?: boolean;
   executionRole?: "coordinator" | "leaf";
+  surfaceKind?: string;
+  chatFirstUi?: boolean;
+  controlGeneration?: number | null;
 }
 
 export interface OmiToolAvailabilitySnapshot {
@@ -1561,6 +1565,56 @@ export const omiToolManifest: OmiToolManifestEntry[] = [
   ...swiftToolManifest.slice(4),
 ] satisfies OmiToolManifestEntry[];
 
+/**
+ * This is intentionally not part of `omiToolManifest`: capability-off callers
+ * must retain the historical order, digest, and raw tools/list bytes.
+ */
+export const chatFirstToolManifest: OmiToolManifestEntry[] = [
+  {
+    name: "render_chat_blocks",
+    label: "Render Chat Blocks",
+    description: "Render validated question, task, goal, and Omi-capture blocks on the producing main Chat turn.",
+    promptSnippet: "render_chat_blocks - Add validated structured cards to this main Chat response",
+    promptGuidelines: [
+      "Use only for a compact actionable question, task, goal, or Omi-device capture reference.",
+      "Never invent entity identifiers or URLs; the server validates every requested reference.",
+    ],
+    latency: "fast network",
+    inputSchema: schema({
+      blocks: {
+        type: "array",
+        description: "1-8 declarative chat blocks validated by the Omi backend.",
+        items: { type: "object" },
+      },
+    }, ["blocks"]),
+    mcpInputSchema: schema({
+      blocks: {
+        type: "array",
+        description: "1-8 declarative chat blocks validated by the Omi backend.",
+        items: { type: "object" },
+      },
+    }, ["blocks"]),
+    annotations: localWrite,
+    timeoutClass: "normal",
+    executor: { kind: "swiftTool" },
+    surfaces: ["desktop_chat"],
+    capabilityDoc: doc("Render Chat Blocks", "Add validated structured cards to the current main Chat response.", [
+      "Only available to the server-enabled chat-first main Chat cohort.",
+    ]),
+    intendedForAgents: true,
+    runtimePreconditions: [
+      "Requires a server-authoritative chat-first capability on the current main Chat run.",
+      "Every entity reference is revalidated by the backend before journal admission.",
+    ],
+    adapters: stdioOnly(),
+  },
+] satisfies OmiToolManifestEntry[];
+
+export const allOmiToolManifest: OmiToolManifestEntry[] = [
+  ...omiToolManifest,
+  ...chatFirstToolManifest,
+] satisfies OmiToolManifestEntry[];
+
 function canonicalManifestJson(value: unknown): string {
   if (value === null || typeof value !== "object") return JSON.stringify(value);
   if (Array.isArray(value)) return `[${value.map(canonicalManifestJson).join(",")}]`;
@@ -1575,6 +1629,10 @@ function canonicalManifestJson(value: unknown): string {
 /** Content identity paired with the schema version on every physical command. */
 export const OMI_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
   .update(canonicalManifestJson(omiToolManifest))
+  .digest("hex")}` as const;
+
+export const OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST = `sha256:${createHash("sha256")
+  .update(canonicalManifestJson(allOmiToolManifest))
   .digest("hex")}` as const;
 
 export function isToolAvailableForContext(
@@ -1594,7 +1652,12 @@ export function toolsForAdapter(
   adapterId: OmiToolAdapterId,
   context: OmiToolProjectionContext = {},
 ): OmiToolManifestEntry[] {
-  return omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  const base = omiToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context));
+  if (!isChatFirstMainChat(context)) return base;
+  return [
+    ...base,
+    ...chatFirstToolManifest.filter((tool) => isToolAvailableForContext(tool.adapters[adapterId], context)),
+  ];
 }
 
 export function toolNamesForAdapter(
@@ -1616,7 +1679,7 @@ export function mcpToolDefinitionsForAdapter(
 }
 
 export function toolManifestEntry(name: string): OmiToolManifestEntry | undefined {
-  return omiToolManifest.find((tool) => tool.name === name || tool.aliases?.includes(name));
+  return allOmiToolManifest.find((tool) => tool.name === name || tool.aliases?.includes(name));
 }
 
 export function normalizeOmiToolName(
@@ -1627,7 +1690,7 @@ export function normalizeOmiToolName(
   const dotMatch = /^omi-tools\.(.+)$/.exec(name);
   const unprefixed = mcpMatch?.[1] ?? dotMatch?.[1] ?? name;
 
-  for (const tool of omiToolManifest) {
+  for (const tool of allOmiToolManifest) {
     const availability = tool.adapters[adapterId];
     const adapterName = availability?.adapterName ?? tool.name;
     const aliases = new Set([...(tool.aliases ?? []), ...(availability?.aliases ?? [])]);
@@ -1648,8 +1711,10 @@ export function buildToolAvailabilitySnapshot(
   const advertised = toolsForAdapter(adapterId, context);
   const aliases: Record<string, string> = {};
   const disabled: Array<{ name: string; reason: string }> = [];
+  // Keep the legacy availability snapshot byte-for-byte stable while off.
+  const manifestForSnapshot = isChatFirstMainChat(context) ? allOmiToolManifest : omiToolManifest;
 
-  for (const tool of omiToolManifest) {
+  for (const tool of manifestForSnapshot) {
     const availability = tool.adapters[adapterId];
     if (isToolAvailableForContext(availability, context)) {
       for (const alias of [...(tool.aliases ?? []), ...(availability?.aliases ?? [])]) {
@@ -1668,7 +1733,9 @@ export function buildToolAvailabilitySnapshot(
 
   return {
     manifestVersion: OMI_TOOL_MANIFEST_VERSION,
-    manifestDigest: OMI_TOOL_MANIFEST_DIGEST,
+    manifestDigest: isChatFirstMainChat(context)
+      ? OMI_CHAT_FIRST_TOOL_MANIFEST_DIGEST
+      : OMI_TOOL_MANIFEST_DIGEST,
     adapterId,
     context,
     advertisedToolCount: advertised.length,

@@ -77,6 +77,24 @@ enum ChatContentBlockCodec {
         blocks.append(
           .discoveryCard(id: id, title: title, summary: summary, fullText: fullText)
         )
+      case "questionCard":
+        guard let questionId = dict["questionId"] as? String,
+          let text = dict["text"] as? String,
+          let subject = dict["subject"] as? [String: Any],
+          let subjectKind = subject["kind"] as? String,
+          let subjectId = subject["id"] as? String,
+          let options = dict["options"] as? [[String: Any]]
+        else { continue }
+        blocks.append(.questionCard(id: id, questionId: questionId, text: text, subjectKind: subjectKind, subjectId: subjectId, options: options))
+      case "taskCard":
+        guard let taskId = dict["taskId"] as? String else { continue }
+        blocks.append(.taskCard(id: id, taskId: taskId))
+      case "goalLink":
+        guard let goalId = dict["goalId"] as? String, let summary = dict["summary"] as? String else { continue }
+        blocks.append(.goalLink(id: id, goalId: goalId, summary: summary))
+      case "captureLink":
+        guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else { continue }
+        blocks.append(.captureLink(id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int, summary: summary))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -192,6 +210,19 @@ enum ChatContentBlockCodec {
         "summary": summary,
         "fullText": fullText,
       ]
+    case .questionCard(let id, let questionId, let text, let subjectKind, let subjectId, let options):
+      return [
+        "type": "questionCard", "id": id, "questionId": questionId, "text": text,
+        "subject": ["kind": subjectKind, "id": subjectId], "options": options,
+      ]
+    case .taskCard(let id, let taskId):
+      return ["type": "taskCard", "id": id, "taskId": taskId]
+    case .goalLink(let id, let goalId, let summary):
+      return ["type": "goalLink", "id": id, "goalId": goalId, "summary": summary]
+    case .captureLink(let id, let conversationId, let momentTimestampMs, let summary):
+      var dict: [String: Any] = ["type": "captureLink", "id": id, "conversationId": conversationId, "summary": summary]
+      if let momentTimestampMs { dict["momentTimestampMs"] = momentTimestampMs }
+      return dict
     case .agentSpawn(
       let id, let pillId, let sessionId, let runId, let title, let objective, let provider
     ):

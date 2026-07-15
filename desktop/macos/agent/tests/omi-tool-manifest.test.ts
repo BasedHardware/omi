@@ -172,6 +172,36 @@ describe("omi tool manifest", () => {
     expect(executeSql?.inputSchema.required).toEqual(["query"]);
   });
 
+  it("keeps the capability-off stdio manifest byte-stable and never leaks the chat-first tool", () => {
+    const legacyBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio"));
+    const capabilityOffBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: false, controlGeneration: 7,
+    }));
+    const nonMainBytes = JSON.stringify(mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "floating_chat", chatFirstUi: true, controlGeneration: 7,
+    }));
+
+    expect(capabilityOffBytes).toBe(legacyBytes);
+    expect(nonMainBytes).toBe(legacyBytes);
+    expect(capabilityOffBytes).not.toContain("render_chat_blocks");
+  });
+
+  it("exposes render_chat_blocks only to the authorized main-chat stdio projection", () => {
+    const enabled = mcpToolDefinitionsForAdapter("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+    const snapshot = buildToolAvailabilitySnapshot("omi-tools-stdio", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    });
+
+    expect(enabled.map((tool) => tool.name)).toContain("render_chat_blocks");
+    expect(snapshot.advertisedToolNames).toContain("render_chat_blocks");
+    expect(snapshot.manifestDigest).not.toBe(buildToolAvailabilitySnapshot("omi-tools-stdio").manifestDigest);
+    expect(toolNamesForAdapter("pi-mono", {
+      surfaceKind: "main_chat", chatFirstUi: true, controlGeneration: 7,
+    })).not.toContain("render_chat_blocks");
+  });
+
   it("keeps schemas expressive enough for nested onboarding tools", () => {
     const saveKnowledgeGraph = toolsForAdapter("omi-tools-stdio", { onboarding: true }).find(
       (tool) => tool.name === "save_knowledge_graph",

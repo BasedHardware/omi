@@ -922,6 +922,11 @@ enum ContentBlockGroup: Identifiable {
       case .discoveryCard(let id, let title, let summary, let fullText):
         flushToolCalls()
         groups.append(.discoveryCard(id: id, title: title, summary: summary, fullText: fullText))
+      // Chat-first blocks are decoded at the shared journal boundary in T02.
+      // T07 owns their main-chat visual treatment; suppress them on the legacy
+      // grouping projection until that renderer lands.
+      case .questionCard, .taskCard, .goalLink, .captureLink:
+        flushToolCalls()
       case .agentSpawn(
         let id, let pillId, let sessionId, let runId, let title, let objective, let provider
       ):

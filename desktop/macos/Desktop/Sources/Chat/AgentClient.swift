@@ -164,12 +164,14 @@ enum AgentClient {
     func resolveSurfaceSession(
       _ surface: AgentSurfaceReference,
       title: String? = nil,
-      creationProfile: AgentSessionCreationProfile? = nil
+      creationProfile: AgentSessionCreationProfile? = nil,
+      chatFirstCapability: ChatFirstCapabilityProjection? = nil
     ) async throws -> AgentSurfaceSession {
       try await bridge.resolveSurfaceSession(
         surface,
         title: title,
-        creationProfile: creationProfile
+        creationProfile: creationProfile,
+        chatFirstCapability: chatFirstCapability
       )
     }
 

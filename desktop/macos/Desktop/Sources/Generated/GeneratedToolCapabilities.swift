@@ -358,19 +358,6 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
-      toolName: "search_skills",
-      title: "Search Skills",
-      latency: .fastLocal,
-      surfaces: Set([.desktopChat]),
-      summary: "Search installed skill names and compact descriptions before loading a specialized workflow.",
-      bullets: [
-      "Use only when the user's request may benefit from a specialized workflow.",
-      "Load a returned skill only when it is relevant to the user's request.",
-      "Use only when the current user request plausibly needs a specialized workflow.",
-      "Do not browse skills merely to explore options or because a related term appears in conversation context."
-    ]
-    ),
-    Capability(
       toolName: "save_knowledge_graph",
       title: "Save Knowledge Graph",
       latency: .fastLocal,

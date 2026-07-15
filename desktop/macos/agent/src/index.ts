@@ -58,6 +58,7 @@ import type {
   JournalTerminalizeTurnMessage,
   JournalListTurnsMessage,
   JournalClearTurnsMessage,
+  AppendChatFirstBlocksMessage,
   EnsureAgentSpawnJournalMessage,
   JournalBackendSyncResultMessage,
   JournalBackendDeleteResultMessage,
@@ -120,6 +121,7 @@ import { LEGACY_MAIN_CHAT_SESSION_COMPATIBILITY } from "./runtime/surface-sessio
 import {
   ackBackendConversationDeleteOutbox,
   ackBackendTurnOutboxWithWakes,
+  appendChatFirstBlocksToProducingTurn,
   applyBackendReconcilePage,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
@@ -840,6 +842,7 @@ function startOmiToolsRelay(): Promise<string> {
                 manifestDigest: authorized.manifestDigest,
                 daemonBootEpoch: authorized.daemonBootEpoch,
                 executionGeneration: authorized.executionGeneration,
+                capabilityRef: authorized.capabilityRef,
                 toolName: authorized.canonicalToolName,
                 input: routedProposal.toolInput,
                 inputHash: authorized.inputHash,
@@ -852,6 +855,10 @@ function startOmiToolsRelay(): Promise<string> {
                 precedingAssistantText: authorized.precedingAssistantText,
                 runMode: authorized.runMode,
                 chatMode: authorized.chatMode,
+                ...(authorized.canonicalToolName === "render_chat_blocks"
+                  && authorized.chatFirstControlGeneration !== null
+                  ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+                  : {}),
               });
             }
           } catch {
@@ -1080,6 +1087,15 @@ function buildMcpServers(
     }
     if (context?.screenContext === true) {
       omiToolsEnv.push({ name: "OMI_SCREEN_CONTEXT", value: "true" });
+    }
+    // Omit both variables in legacy mode.  This keeps the capability-off child
+    // environment (and therefore its tools/list bytes) exactly unchanged.
+    if (context?.chatFirstUi === true && context.surfaceKind === "main_chat") {
+      omiToolsEnv.push({ name: "OMI_CHAT_FIRST_UI", value: "true" });
+      omiToolsEnv.push({ name: "OMI_SURFACE_KIND", value: "main_chat" });
+      if (context.chatFirstControlGeneration !== undefined && context.chatFirstControlGeneration !== null) {
+        omiToolsEnv.push({ name: "OMI_CHAT_FIRST_CONTROL_GENERATION", value: String(context.chatFirstControlGeneration) });
+      }
     }
     omiToolsEnv.push({
       name: "OMI_EXECUTION_ROLE",
@@ -1637,6 +1653,19 @@ async function main(): Promise<void> {
           }
         }
         const selectedProfile = creationProfile ?? preference;
+        const chatFirstCapability = resolve.chatFirstCapability;
+        if (chatFirstCapability !== undefined) {
+          if (
+            typeof chatFirstCapability.chatFirstUi !== "boolean"
+            || !Number.isSafeInteger(chatFirstCapability.controlGeneration)
+            || chatFirstCapability.controlGeneration < 0
+          ) {
+            throw new Error("Invalid chat-first capability projection");
+          }
+          if (resolve.surfaceKind !== "main_chat" && chatFirstCapability.chatFirstUi) {
+            throw new Error("Chat-first capability may only be projected to main_chat");
+          }
+        }
         const resolved = kernel.resolveSurfaceSession({
           ownerId,
           surfaceRef: {
@@ -1650,6 +1679,7 @@ async function main(): Promise<void> {
           defaultCwd: selectedProfile.workingDirectory,
           executionRole: executionRoleForSurface(resolve),
           title: resolve.title ?? null,
+          chatFirstCapability,
         });
         const profile = kernel.sessionExecutionProfile(resolved.agentSessionId, ownerId);
         send({
@@ -1930,6 +1960,7 @@ async function main(): Promise<void> {
             manifestDigest: authorized.manifestDigest,
             daemonBootEpoch: authorized.daemonBootEpoch,
             executionGeneration: authorized.executionGeneration,
+            capabilityRef: authorized.capabilityRef,
             toolName: authorized.canonicalToolName,
             input: routed.toolInput,
             inputHash: authorized.inputHash,
@@ -1942,6 +1973,10 @@ async function main(): Promise<void> {
             precedingAssistantText: authorized.precedingAssistantText,
             runMode: authorized.runMode,
             chatMode: authorized.chatMode,
+            ...(authorized.canonicalToolName === "render_chat_blocks"
+              && authorized.chatFirstControlGeneration !== null
+              ? { chatFirstControlGeneration: authorized.chatFirstControlGeneration }
+              : {}),
             ...(routed.recoveredFromDelegation
               ? { policyRecovery: "permission_delegation_to_native" as const }
               : {}),
@@ -2306,6 +2341,87 @@ async function main(): Promise<void> {
               turn: journalTurnProjection(turn),
             });
           }
+          pumpJournalOutbox();
+        } catch (error) {
+          const envelope = runtimeErrorEnvelope(error);
+          send({
+            type: "error",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            message: envelope.message,
+            failure: envelope.failure,
+          });
+        }
+        break;
+      }
+
+      case "append_chat_first_blocks": {
+        const request = msg as AppendChatFirstBlocksMessage;
+        try {
+          const ownerId = resolveActiveOwner(request.ownerId);
+          if (!Array.isArray(request.blocks) || request.blocks.length < 1 || request.blocks.length > 8) {
+            throw new Error("Chat-first append requires one to eight blocks");
+          }
+          if (!Number.isSafeInteger(request.controlGeneration) || request.controlGeneration < 0) {
+            throw new Error("Chat-first append requires a valid control generation");
+          }
+          const capability = kernel.assertLiveRunToolCapability({
+            capabilityRef: request.capabilityRef,
+            activeOwnerId: ownerId,
+          });
+          if (
+            capability.ownerId !== ownerId
+            || capability.sessionId !== request.sessionId
+            || capability.runId !== request.runId
+            || capability.attemptId !== request.attemptId
+            || capability.surfaceKind !== "main_chat"
+            || capability.chatFirstUi !== true
+            || capability.chatFirstControlGeneration !== request.controlGeneration
+            || !capability.allowedToolNames.includes("render_chat_blocks")
+          ) {
+            throw new Error("Chat-first append capability does not match the producing run");
+          }
+          const turn = appendChatFirstBlocksToProducingTurn(store, {
+            ownerId,
+            sessionId: request.sessionId,
+            runId: request.runId,
+            attemptId: request.attemptId,
+            blocks: request.blocks as ConversationContentBlock[],
+          });
+          const range = listJournalTurns(store, {
+            ownerId,
+            conversationId: turn.conversationId,
+            afterTurnSeq: Math.max(0, turn.turnSeq - 1),
+            limit: 1,
+          });
+          send({
+            type: "journal_operation_result",
+            protocolVersion: request.protocolVersion,
+            requestId: request.requestId,
+            clientId: request.clientId,
+            operation: "append_chat_first_blocks",
+            conversationId: turn.conversationId,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+            turns: [],
+            clearedCount: 0,
+            highWaterTurnSeq: range.highWaterTurnSeq,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            conversationGeneration: range.generation,
+          });
+          send({
+            type: "journal_turn_changed",
+            ownerId,
+            conversationGeneration: range.generation,
+            generationBaseTurnSeq: range.generationBaseTurnSeq,
+            surfaceKind: "main_chat",
+            externalRefKind: capability.externalRefKind ?? "",
+            externalRefId: capability.externalRefId ?? "",
+            turn: journalTurnProjection(turn),
+          });
           pumpJournalOutbox();
         } catch (error) {
           const envelope = runtimeErrorEnvelope(error);

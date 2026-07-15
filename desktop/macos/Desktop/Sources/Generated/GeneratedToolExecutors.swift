@@ -32,6 +32,7 @@ enum GeneratedSwiftTool: String, CaseIterable {
   case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
   case getWorkContext = "get_work_context"
+  case renderChatBlocks = "render_chat_blocks"
 }
 
 enum GeneratedSwiftToolExecutor: String {
@@ -41,7 +42,8 @@ enum GeneratedSwiftToolExecutor: String {
 
 enum GeneratedToolExecutors {
   static let manifestVersion = 1
-  static let manifestDigest = "sha256:6a1ecf294f385bf6a0a354fe10ab3ac9ef091e863cc73afca899f2dff560efe0"
+  static let manifestDigest = "sha256:4a2748c0abf690749cda792a4ec3a3913cbad953629677063aeefc3333d2f422"
+  static let chatFirstManifestDigest = "sha256:cc25ca264d2000ff35b442f7228da2d1eb5ffc68dbd8b6c07e311ca3f2262b22"
 
   static let aliasToCanonical: [String: GeneratedSwiftTool] = [
     "search_screen_history": .semanticSearch,
@@ -79,7 +81,8 @@ enum GeneratedToolExecutors {
     .screenshot: .realtimeHub,
     .reportScreenObservation: .realtimeHub,
     .pointClick: .realtimeHub,
-    .getWorkContext: .chatToolExecutor
+    .getWorkContext: .chatToolExecutor,
+    .renderChatBlocks: .chatToolExecutor
   ]
 
   static func resolve(_ name: String) -> GeneratedSwiftTool? {
@@ -136,6 +139,7 @@ enum GeneratedToolExecutors {
     case getEmailInsights
     case createCalendarEvent
     case getWorkContext
+    case renderChatBlocks
     case unhandled
   }
 
@@ -169,6 +173,7 @@ enum GeneratedToolExecutors {
     case .getEmailInsights: return .getEmailInsights
     case .createCalendarEvent: return .createCalendarEvent
     case .getWorkContext: return .getWorkContext
+    case .renderChatBlocks: return .renderChatBlocks
     default: return .unhandled
     }
   }

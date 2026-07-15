@@ -41,6 +41,7 @@ from routers import (
     auth,
     action_items,
     candidates,
+    chat_first,
     task_integrations,
     integrations,
     x_connector,
@@ -120,6 +121,7 @@ app.include_router(conversations.router)
 app.include_router(public_shared_conversation_chat.router)
 app.include_router(action_items.router)
 app.include_router(candidates.router)
+app.include_router(chat_first.router)
 app.include_router(task_integrations.router)
 app.include_router(integrations.router)
 app.include_router(x_connector.router)

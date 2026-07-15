@@ -1198,6 +1198,7 @@ actor AgentBridge {
     _ surface: AgentSurfaceReference,
     title: String? = nil,
     creationProfile: AgentSessionCreationProfile? = nil,
+    chatFirstCapability: ChatFirstCapabilityProjection? = nil,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentSurfaceSession {
     let authorization = try resolveAuthorization(authorizationSnapshot)
@@ -1210,6 +1211,7 @@ actor AgentBridge {
       surface: surface,
       title: title,
       creationProfile: creationProfile,
+      chatFirstCapability: chatFirstCapability,
       authorizationSnapshot: authorization
     )
   }

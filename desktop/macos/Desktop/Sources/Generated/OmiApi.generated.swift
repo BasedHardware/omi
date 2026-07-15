@@ -192,7 +192,7 @@ public enum OmiAPI {
       updatedAt = try c.decodeIfPresent(String.self, forKey: .updatedAt)
     }
 
-    public init(candidateAction: String?, captureConfidence: Double?, captureKind: String?, captureOwner: String?, completed: Bool?, completedAt: String?, concreteDeliverable: Bool?, conversationId: String?, createdAt: String?, description_: String, dueAt: String?, ownershipConfidence: Double?, targetTaskId: String?, updatedAt: String?) {
+    public init(candidateAction: String? = nil, captureConfidence: Double? = nil, captureKind: String? = nil, captureOwner: String? = nil, completed: Bool? = nil, completedAt: String? = nil, concreteDeliverable: Bool? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, ownershipConfidence: Double? = nil, targetTaskId: String? = nil, updatedAt: String? = nil) {
       self.candidateAction = candidateAction
       self.captureConfidence = captureConfidence
       self.captureKind = captureKind
@@ -283,7 +283,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(appleReminderId: String?, completed: Bool?, conversationId: String?, description_: String, dueAt: String?, dueConfidence: Double?, exportDate: String?, exportPlatform: String?, exported: Bool?, goalId: String?, indentLevel: Int?, isLocked: Bool?, owner: TaskOwner?, priority: TaskPriority?, provenance: [EvidenceRef]?, recurrenceParentId: String?, recurrenceRule: String?, sortOrder: Int?, source: String?, status: TaskStatus?, workstreamId: String?) {
+    public init(appleReminderId: String? = nil, completed: Bool? = nil, conversationId: String? = nil, description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, workstreamId: String? = nil) {
       self.appleReminderId = appleReminderId
       self.completed = completed
       self.conversationId = conversationId
@@ -399,7 +399,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(appleReminderId: String?, completed: Bool, completedAt: String?, conversationId: String?, createdAt: String?, description_: String, dueAt: String?, dueConfidence: Double?, exportDate: String?, exportPlatform: String?, exported: Bool?, goalId: String?, id: String, indentLevel: Int?, isLocked: Bool?, owner: TaskOwner?, priority: TaskPriority?, provenance: [EvidenceRef]?, recurrenceParentId: String?, recurrenceRule: String?, sortOrder: Int?, source: String?, status: TaskStatus?, supersededBy: String?, taskId: String?, updatedAt: String?, workstreamId: String?) {
+    public init(appleReminderId: String? = nil, completed: Bool, completedAt: String? = nil, conversationId: String? = nil, createdAt: String? = nil, description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, exportDate: String? = nil, exportPlatform: String? = nil, exported: Bool? = nil, goalId: String? = nil, id: String, indentLevel: Int? = nil, isLocked: Bool? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, provenance: [EvidenceRef]? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, sortOrder: Int? = nil, source: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil, taskId: String? = nil, updatedAt: String? = nil, workstreamId: String? = nil) {
       self.appleReminderId = appleReminderId
       self.completed = completed
       self.completedAt = completedAt
@@ -695,7 +695,7 @@ public enum OmiAPI {
       hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore)
     }
 
-    public init(actionItems: [ActionItemResponse], hasMore: Bool?) {
+    public init(actionItems: [ActionItemResponse], hasMore: Bool? = nil) {
       self.actionItems = actionItems
       self.hasMore = hasMore
     }
@@ -717,7 +717,7 @@ public enum OmiAPI {
       content = try c.decode(String.self, forKey: .content)
     }
 
-    public init(appId: String?, content: String) {
+    public init(appId: String? = nil, content: String) {
       self.appId = appId
       self.content = content
     }
@@ -772,7 +772,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(artifactId: String, contentHash: String, createdAt: String, evidenceEventIds: [String]?, evidenceRefs: [EvidenceRef]?, kind: String, logicalKey: String, sourceRunId: String?, status: ArtifactStatus?, supersedesArtifactId: String?, uri: String, version: Int, workstreamId: String) {
+    public init(artifactId: String, contentHash: String, createdAt: String, evidenceEventIds: [String]? = nil, evidenceRefs: [EvidenceRef]? = nil, kind: String, logicalKey: String, sourceRunId: String? = nil, status: ArtifactStatus? = nil, supersedesArtifactId: String? = nil, uri: String, version: Int, workstreamId: String) {
       self.artifactId = artifactId
       self.contentHash = contentHash
       self.createdAt = createdAt
@@ -826,7 +826,7 @@ public enum OmiAPI {
       version = try c.decode(Int.self, forKey: .version)
     }
 
-    public init(contentHash: String, evidenceEventIds: [String]?, evidenceRefs: [EvidenceRef]?, kind: String, logicalKey: String, sourceRunId: String?, supersedesArtifactId: String?, uri: String, version: Int) {
+    public init(contentHash: String, evidenceEventIds: [String]? = nil, evidenceRefs: [EvidenceRef]? = nil, kind: String, logicalKey: String, sourceRunId: String? = nil, supersedesArtifactId: String? = nil, uri: String, version: Int) {
       self.contentHash = contentHash
       self.evidenceEventIds = evidenceEventIds
       self.evidenceRefs = evidenceRefs
@@ -899,7 +899,7 @@ public enum OmiAPI {
       uid = try c.decode(String.self, forKey: .uid)
     }
 
-    public init(chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, provider: String?, startedAt: String?, uid: String) {
+    public init(chunkTimestamps: [Double], conversationId: String, duration: Double, id: String, provider: String? = nil, startedAt: String? = nil, uid: String) {
       self.chunkTimestamps = chunkTimestamps
       self.conversationId = conversationId
       self.duration = duration
@@ -941,7 +941,7 @@ public enum OmiAPI {
       title = try c.decode(String.self, forKey: .title)
     }
 
-    public init(attendeeEmails: [String]?, attendees: [String]?, endTime: String, eventId: String, htmlLink: String?, startTime: String, title: String) {
+    public init(attendeeEmails: [String]? = nil, attendees: [String]? = nil, endTime: String, eventId: String, htmlLink: String? = nil, startTime: String, title: String) {
       self.attendeeEmails = attendeeEmails
       self.attendees = attendees
       self.endTime = endTime
@@ -983,7 +983,7 @@ public enum OmiAPI {
       hasMore = try c.decodeIfPresent(Bool.self, forKey: .hasMore)
     }
 
-    public init(candidates: [CandidateRecord], hasMore: Bool?) {
+    public init(candidates: [CandidateRecord], hasMore: Bool? = nil) {
       self.candidates = candidates
       self.hasMore = hasMore
     }
@@ -1070,7 +1070,7 @@ public enum OmiAPI {
       workstreamProposal = try c.decodeIfPresent(WorkstreamProposalOutput.self, forKey: .workstreamProposal)
     }
 
-    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, createdAt: String, evidenceRefs: [EvidenceRef], goalId: String?, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String?, resolvedAt: String?, resultTaskId: String?, resultWorkstreamId: String?, sourceSurface: String, status: CandidateStatus?, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange?, taskId: String?, workstreamId: String?, workstreamProposal: WorkstreamProposalOutput?) {
+    public init(accountGeneration: Int, candidateId: String, captureConfidence: Double, createdAt: String, evidenceRefs: [EvidenceRef], goalId: String? = nil, idempotencyKey: String, ownershipConfidence: Double, proposedAction: CandidateAction, resolutionReason: String? = nil, resolvedAt: String? = nil, resultTaskId: String? = nil, resultWorkstreamId: String? = nil, sourceSurface: String, status: CandidateStatus? = nil, subjectKind: CandidateSubjectKind, taskChange: CandidateTaskChange? = nil, taskId: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposalOutput? = nil) {
       self.accountGeneration = accountGeneration
       self.candidateId = candidateId
       self.captureConfidence = captureConfidence
@@ -1125,7 +1125,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(candidateId: String, newlyResolved: Bool, receiptId: String, resolvedAt: String, status: CandidateStatus, taskId: String?, workstreamId: String?) {
+    public init(candidateId: String, newlyResolved: Bool, receiptId: String, resolvedAt: String, status: CandidateStatus, taskId: String? = nil, workstreamId: String? = nil) {
       self.candidateId = candidateId
       self.newlyResolved = newlyResolved
       self.receiptId = receiptId
@@ -1145,7 +1145,7 @@ public enum OmiAPI {
       reason = try c.decodeIfPresent(String.self, forKey: .reason)
     }
 
-    public init(reason: String?) {
+    public init(reason: String? = nil) {
       self.reason = reason
     }
   }
@@ -1267,7 +1267,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(checkpointId: String, contextSummary: String, evidenceRefs: [EvidenceRef]?, lastEventSequence: Int, runtimeId: String, updatedAt: String, workstreamId: String) {
+    public init(checkpointId: String, contextSummary: String, evidenceRefs: [EvidenceRef]? = nil, lastEventSequence: Int, runtimeId: String, updatedAt: String, workstreamId: String) {
       self.checkpointId = checkpointId
       self.contextSummary = contextSummary
       self.evidenceRefs = evidenceRefs
@@ -1300,7 +1300,7 @@ public enum OmiAPI {
       runtimeId = try c.decode(String.self, forKey: .runtimeId)
     }
 
-    public init(contextSummary: String, evidenceRefs: [EvidenceRef]?, lastEventSequence: Int, runtimeId: String) {
+    public init(contextSummary: String, evidenceRefs: [EvidenceRef]? = nil, lastEventSequence: Int, runtimeId: String) {
       self.contextSummary = contextSummary
       self.evidenceRefs = evidenceRefs
       self.lastEventSequence = lastEventSequence
@@ -1420,7 +1420,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(ConversationVisibility.self, forKey: .visibility)
     }
 
-    public init(appId: String?, appsResults: [AppResult]?, audioFiles: [AudioFile]?, calendarEvent: CalendarEventLink?, callId: String?, clientDeviceId: String?, clientPlatform: String?, conversationAudio: ConversationAudio?, createdAt: String, dataProtectionLevel: String?, deferred: Bool?, discarded: Bool?, externalData: [String: OmiAnyCodable]?, finishedAt: String?, folderId: String?, geolocation: Geolocation?, id: String, isLocked: Bool?, language: String?, photos: [ConversationPhoto]?, pluginsResults: [PluginResult]?, privateCloudSyncEnabled: Bool?, processingConversationId: String?, processingMemoryId: String?, source: ConversationSource?, starred: Bool?, startedAt: String?, status: ConversationStatus?, structured: Structured, suggestedSummarizationApps: [String]?, transcriptSegments: [TranscriptSegment]?, transcriptSegmentsCompressed: Bool?, updatedAt: String?, visibility: ConversationVisibility?) {
+    public init(appId: String? = nil, appsResults: [AppResult]? = nil, audioFiles: [AudioFile]? = nil, calendarEvent: CalendarEventLink? = nil, callId: String? = nil, clientDeviceId: String? = nil, clientPlatform: String? = nil, conversationAudio: ConversationAudio? = nil, createdAt: String, dataProtectionLevel: String? = nil, deferred: Bool? = nil, discarded: Bool? = nil, externalData: [String: OmiAnyCodable]? = nil, finishedAt: String? = nil, folderId: String? = nil, geolocation: Geolocation? = nil, id: String, isLocked: Bool? = nil, language: String? = nil, photos: [ConversationPhoto]? = nil, pluginsResults: [PluginResult]? = nil, privateCloudSyncEnabled: Bool? = nil, processingConversationId: String? = nil, processingMemoryId: String? = nil, source: ConversationSource? = nil, starred: Bool? = nil, startedAt: String? = nil, status: ConversationStatus? = nil, structured: Structured, suggestedSummarizationApps: [String]? = nil, transcriptSegments: [TranscriptSegment]? = nil, transcriptSegmentsCompressed: Bool? = nil, updatedAt: String? = nil, visibility: ConversationVisibility? = nil) {
       self.appId = appId
       self.appsResults = appsResults
       self.audioFiles = audioFiles
@@ -1486,7 +1486,7 @@ public enum OmiAPI {
       spans = try c.decodeIfPresent([ConversationAudioSpan].self, forKey: .spans)
     }
 
-    public init(audioFilesFingerprint: String, builtAt: String?, capturedDuration: Double, contentType: String?, duration: Double, spans: [ConversationAudioSpan]?) {
+    public init(audioFilesFingerprint: String, builtAt: String? = nil, capturedDuration: Double, contentType: String? = nil, duration: Double, spans: [ConversationAudioSpan]? = nil) {
       self.audioFilesFingerprint = audioFilesFingerprint
       self.builtAt = builtAt
       self.capturedDuration = capturedDuration
@@ -1554,7 +1554,7 @@ public enum OmiAPI {
       id = try c.decodeIfPresent(String.self, forKey: .id)
     }
 
-    public init(base64: String, createdAt: String?, dataProtectionLevel: String?, description_: String?, discarded: Bool?, id: String?) {
+    public init(base64: String, createdAt: String? = nil, dataProtectionLevel: String? = nil, description_: String? = nil, discarded: Bool? = nil, id: String? = nil) {
       self.base64 = base64
       self.createdAt = createdAt
       self.dataProtectionLevel = dataProtectionLevel
@@ -1697,7 +1697,7 @@ public enum OmiAPI {
       subjectKind = try c.decode(RecommendationSubjectKind.self, forKey: .subjectKind)
     }
 
-    public init(decisionSummary: String, eligibility: ShortlistEligibility, evaluatedAt: String, evaluationId: String, evidenceRefs: [EvidenceRef]?, expiresAt: String, factDefinitionVersion: String, factsSnapshot: DeterministicFacts, finalOutputRef: String, modelVersion: String, policyVersion: String, promptVersion: String, reasonCodes: [String], shortlistIds: [String], subjectId: String, subjectKind: RecommendationSubjectKind) {
+    public init(decisionSummary: String, eligibility: ShortlistEligibility, evaluatedAt: String, evaluationId: String, evidenceRefs: [EvidenceRef]? = nil, expiresAt: String, factDefinitionVersion: String, factsSnapshot: DeterministicFacts, finalOutputRef: String, modelVersion: String, policyVersion: String, promptVersion: String, reasonCodes: [String], shortlistIds: [String], subjectId: String, subjectKind: RecommendationSubjectKind) {
       self.decisionSummary = decisionSummary
       self.eligibility = eligibility
       self.evaluatedAt = evaluatedAt
@@ -1745,7 +1745,7 @@ public enum OmiAPI {
       someoneBlocked = try c.decodeIfPresent(Bool.self, forKey: .someoneBlocked)
     }
 
-    public init(captureConfidence: Double, contextMatchSignals: [ContextMatchSignal]?, daysToDue: Double?, focusedGoalLinked: Bool?, hasConcreteNextAction: Bool, someoneBlocked: Bool?) {
+    public init(captureConfidence: Double, contextMatchSignals: [ContextMatchSignal]? = nil, daysToDue: Double? = nil, focusedGoalLinked: Bool? = nil, hasConcreteNextAction: Bool, someoneBlocked: Bool? = nil) {
       self.captureConfidence = captureConfidence
       self.contextMatchSignals = contextMatchSignals
       self.daysToDue = daysToDue
@@ -1771,7 +1771,7 @@ public enum OmiAPI {
       materialHint = try c.decodeIfPresent(String.self, forKey: .materialHint)
     }
 
-    public init(deviceId: String?, materialHint: String?) {
+    public init(deviceId: String? = nil, materialHint: String? = nil) {
       self.deviceId = deviceId
       self.materialHint = materialHint
     }
@@ -1802,7 +1802,7 @@ public enum OmiAPI {
       title = try c.decode(String.self, forKey: .title)
     }
 
-    public init(created: Bool?, description_: String?, duration: Int?, start: String, title: String) {
+    public init(created: Bool? = nil, description_: String? = nil, duration: Int? = nil, start: String, title: String) {
       self.created = created
       self.description_ = description_
       self.duration = duration
@@ -1857,7 +1857,7 @@ public enum OmiAPI {
       sourceType = try c.decodeIfPresent(String.self, forKey: .sourceType)
     }
 
-    public init(artifactRef: [String: OmiAnyCodable]?, captureConfidence: Double?, clientDeviceId: String?, createdAt: String?, evidenceId: String, extractorId: String?, extractorVersion: String?, independenceGroup: String, redactionStatus: String?, sourceId: String?, sourceSignal: String?, sourceType: String?) {
+    public init(artifactRef: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, clientDeviceId: String? = nil, createdAt: String? = nil, evidenceId: String, extractorId: String? = nil, extractorVersion: String? = nil, independenceGroup: String, redactionStatus: String? = nil, sourceId: String? = nil, sourceSignal: String? = nil, sourceType: String? = nil) {
       self.artifactRef = artifactRef
       self.captureConfidence = captureConfidence
       self.clientDeviceId = clientDeviceId
@@ -1918,7 +1918,7 @@ public enum OmiAPI {
       version = try c.decodeIfPresent(String.self, forKey: .version)
     }
 
-    public init(deviceId: String?, excerptHash: String?, id: String, kind: EvidenceKind, scope: EvidenceScope, version: String?) {
+    public init(deviceId: String? = nil, excerptHash: String? = nil, id: String, kind: EvidenceKind, scope: EvidenceScope, version: String? = nil) {
       self.deviceId = deviceId
       self.excerptHash = excerptHash
       self.id = id
@@ -1971,7 +1971,7 @@ public enum OmiAPI {
       subjectKind = try c.decode(FeedbackSubjectKind.self, forKey: .subjectKind)
     }
 
-    public init(action: TaskIntelligenceFeedbackAction, contextSnapshotHash: String?, interventionId: String?, laterUntil: String?, reason: TaskIntelligenceFeedbackReason?, subjectId: String, subjectKind: FeedbackSubjectKind) {
+    public init(action: TaskIntelligenceFeedbackAction, contextSnapshotHash: String? = nil, interventionId: String? = nil, laterUntil: String? = nil, reason: TaskIntelligenceFeedbackReason? = nil, subjectId: String, subjectKind: FeedbackSubjectKind) {
       self.action = action
       self.contextSnapshotHash = contextSnapshotHash
       self.interventionId = interventionId
@@ -2031,7 +2031,7 @@ public enum OmiAPI {
       subjectKind = try c.decode(FeedbackSubjectKind.self, forKey: .subjectKind)
     }
 
-    public init(action: TaskIntelligenceFeedbackAction, attributionChainId: String, contextSnapshotHash: String?, createdAt: String, dedupeKey: String?, feedbackId: String, interventionId: String?, laterUntil: String?, proposedCompletion: Bool?, proposedCompletionCandidateId: String?, reason: TaskIntelligenceFeedbackReason?, subjectId: String, subjectKind: FeedbackSubjectKind) {
+    public init(action: TaskIntelligenceFeedbackAction, attributionChainId: String, contextSnapshotHash: String? = nil, createdAt: String, dedupeKey: String? = nil, feedbackId: String, interventionId: String? = nil, laterUntil: String? = nil, proposedCompletion: Bool? = nil, proposedCompletionCandidateId: String? = nil, reason: TaskIntelligenceFeedbackReason? = nil, subjectId: String, subjectKind: FeedbackSubjectKind) {
       self.action = action
       self.attributionChainId = attributionChainId
       self.contextSnapshotHash = contextSnapshotHash
@@ -2088,7 +2088,7 @@ public enum OmiAPI {
       longitude = try c.decode(Double.self, forKey: .longitude)
     }
 
-    public init(address: String?, googlePlaceId: String?, latitude: Double, locationType: String?, longitude: Double) {
+    public init(address: String? = nil, googlePlaceId: String? = nil, latitude: Double, locationType: String? = nil, longitude: Double) {
       self.address = address
       self.googlePlaceId = googlePlaceId
       self.latitude = latitude
@@ -2146,7 +2146,7 @@ public enum OmiAPI {
       unit = try c.decodeIfPresent(String.self, forKey: .unit)
     }
 
-    public init(current: Double, max: Double?, min: Double?, target: Double, type: GoalType, unit: String?) {
+    public init(current: Double, max: Double? = nil, min: Double? = nil, target: Double, type: GoalType, unit: String? = nil) {
       self.current = current
       self.max = max
       self.min = min
@@ -2181,7 +2181,7 @@ public enum OmiAPI {
       title = try c.decode(String.self, forKey: .title)
     }
 
-    public init(anchorTaskDescription: String, goalId: String, objective: String, origin: String?, title: String) {
+    public init(anchorTaskDescription: String, goalId: String, objective: String, origin: String? = nil, title: String) {
       self.anchorTaskDescription = anchorTaskDescription
       self.goalId = goalId
       self.objective = objective
@@ -2224,7 +2224,7 @@ public enum OmiAPI {
       summary = try c.decode(String.self, forKey: .summary)
     }
 
-    public init(createdAt: String, eventId: String, evidenceRefs: [EvidenceRef]?, goalId: String, kind: GoalProgressEventKind, metric: GoalMetric?, sequence: Int, summary: String) {
+    public init(createdAt: String, eventId: String, evidenceRefs: [EvidenceRef]? = nil, goalId: String, kind: GoalProgressEventKind, metric: GoalMetric? = nil, sequence: Int, summary: String) {
       self.createdAt = createdAt
       self.eventId = eventId
       self.evidenceRefs = evidenceRefs
@@ -2329,7 +2329,7 @@ public enum OmiAPI {
       whyItMatters = try c.decodeIfPresent(String.self, forKey: .whyItMatters)
     }
 
-    public init(advice: String?, createdAt: String, currentValue: Double, desiredOutcome: String, endedAt: String?, focusRank: Int?, goalId: String, goalType: String, horizonAt: String?, id: String, isActive: Bool, latestProgressSequence: Int?, maxValue: Double, metric: GoalMetric?, minValue: Double, source: GoalSource, status: GoalStatus, successCriteria: [String]?, targetValue: Double, title: String, unit: String?, updatedAt: String, whyItMatters: String?) {
+    public init(advice: String? = nil, createdAt: String, currentValue: Double, desiredOutcome: String, endedAt: String? = nil, focusRank: Int? = nil, goalId: String, goalType: String, horizonAt: String? = nil, id: String, isActive: Bool, latestProgressSequence: Int? = nil, maxValue: Double, metric: GoalMetric? = nil, minValue: Double, source: GoalSource, status: GoalStatus, successCriteria: [String]? = nil, targetValue: Double, title: String, unit: String? = nil, updatedAt: String, whyItMatters: String? = nil) {
       self.advice = advice
       self.createdAt = createdAt
       self.currentValue = currentValue
@@ -2575,7 +2575,7 @@ public enum OmiAPI {
       surface = try c.decode(InterventionSurface.self, forKey: .surface)
     }
 
-    public init(dedupeKey: String, evidenceRefs: [EvidenceRef]?, expiresAt: String, subjectId: String, subjectKind: FeedbackSubjectKind, surface: InterventionSurface) {
+    public init(dedupeKey: String, evidenceRefs: [EvidenceRef]? = nil, expiresAt: String, subjectId: String, subjectKind: FeedbackSubjectKind, surface: InterventionSurface) {
       self.dedupeKey = dedupeKey
       self.evidenceRefs = evidenceRefs
       self.expiresAt = expiresAt
@@ -2622,7 +2622,7 @@ public enum OmiAPI {
       surface = try c.decode(InterventionSurface.self, forKey: .surface)
     }
 
-    public init(attributionChainId: String, createdAt: String, dedupeKey: String, evidenceRefs: [EvidenceRef]?, expiresAt: String, interventionId: String, subjectId: String, subjectKind: FeedbackSubjectKind, surface: InterventionSurface) {
+    public init(attributionChainId: String, createdAt: String, dedupeKey: String, evidenceRefs: [EvidenceRef]? = nil, expiresAt: String, interventionId: String, subjectId: String, subjectKind: FeedbackSubjectKind, surface: InterventionSurface) {
       self.attributionChainId = attributionChainId
       self.createdAt = createdAt
       self.dedupeKey = dedupeKey
@@ -2795,7 +2795,7 @@ public enum OmiAPI {
       visibility = try c.decodeIfPresent(String.self, forKey: .visibility)
     }
 
-    public init(appId: String?, arguments: [String: OmiAnyCodable]?, captureConfidence: Double?, captureDeviceIds: [String]?, category: MemoryCategory?, content: String, conversationId: String?, createdAt: String, dataProtectionLevel: String?, durability: String?, edited: Bool?, evidence: [Evidence]?, headline: String?, id: String, invalidAt: String?, isLocked: Bool?, kgExtracted: Bool?, layer: String?, manuallyAdded: Bool?, memoryId: String?, memoryTier: MemoryLayer?, objectEntityIds: [String]?, predicate: String?, primaryCaptureDevice: String?, qualifiers: [String: OmiAnyCodable]?, reviewed: Bool?, scoring: String?, subjectAttribution: SubjectAttribution?, subjectEntityId: String?, supersededBy: String?, tags: [String]?, uid: String, uncertaintyReasons: [String]?, updatedAt: String, userReview: Bool?, validAt: String?, veracity: Double?, visibility: String?) {
+    public init(appId: String? = nil, arguments: [String: OmiAnyCodable]? = nil, captureConfidence: Double? = nil, captureDeviceIds: [String]? = nil, category: MemoryCategory? = nil, content: String, conversationId: String? = nil, createdAt: String, dataProtectionLevel: String? = nil, durability: String? = nil, edited: Bool? = nil, evidence: [Evidence]? = nil, headline: String? = nil, id: String, invalidAt: String? = nil, isLocked: Bool? = nil, kgExtracted: Bool? = nil, layer: String? = nil, manuallyAdded: Bool? = nil, memoryId: String? = nil, memoryTier: MemoryLayer? = nil, objectEntityIds: [String]? = nil, predicate: String? = nil, primaryCaptureDevice: String? = nil, qualifiers: [String: OmiAnyCodable]? = nil, reviewed: Bool? = nil, scoring: String? = nil, subjectAttribution: SubjectAttribution? = nil, subjectEntityId: String? = nil, supersededBy: String? = nil, tags: [String]? = nil, uid: String, uncertaintyReasons: [String]? = nil, updatedAt: String, userReview: Bool? = nil, validAt: String? = nil, veracity: Double? = nil, visibility: String? = nil) {
       self.appId = appId
       self.arguments = arguments
       self.captureConfidence = captureConfidence
@@ -2904,7 +2904,7 @@ public enum OmiAPI {
       snapshotId = try c.decode(String.self, forKey: .snapshotId)
     }
 
-    public init(deviceId: String, expiresAt: String, generatedAt: String, matches: [NormalizedContextMatch]?, schemaVersion: Int?, snapshotId: String) {
+    public init(deviceId: String, expiresAt: String, generatedAt: String, matches: [NormalizedContextMatch]? = nil, schemaVersion: Int? = nil, snapshotId: String) {
       self.deviceId = deviceId
       self.expiresAt = expiresAt
       self.generatedAt = generatedAt
@@ -2945,7 +2945,7 @@ public enum OmiAPI {
       updatedAt = try c.decode(String.self, forKey: .updatedAt)
     }
 
-    public init(blockingOnId: String?, kind: OpenLoopKind, loopId: String, nextActionCode: String, status: OpenLoopStatus, subjectId: String, updatedAt: String) {
+    public init(blockingOnId: String? = nil, kind: OpenLoopKind, loopId: String, nextActionCode: String, status: OpenLoopStatus, subjectId: String, updatedAt: String) {
       self.blockingOnId = blockingOnId
       self.kind = kind
       self.loopId = loopId
@@ -3014,7 +3014,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(checkpointRef: String?, contextPacketVersion: String, conversationId: String, deviceId: String, expiresAt: String, generatedAt: String, openLoopSnapshot: [OpenLoopDescriptor]?, owner: String, runtimeId: String, schemaVersion: Int?, workstreamId: String) {
+    public init(checkpointRef: String? = nil, contextPacketVersion: String, conversationId: String, deviceId: String, expiresAt: String, generatedAt: String, openLoopSnapshot: [OpenLoopDescriptor]? = nil, owner: String, runtimeId: String, schemaVersion: Int? = nil, workstreamId: String) {
       self.checkpointRef = checkpointRef
       self.contextPacketVersion = contextPacketVersion
       self.conversationId = conversationId
@@ -3127,7 +3127,7 @@ public enum OmiAPI {
       pluginId = try c.decodeIfPresent(String.self, forKey: .pluginId)
     }
 
-    public init(content: String, pluginId: String?) {
+    public init(content: String, pluginId: String? = nil) {
       self.content = content
       self.pluginId = pluginId
     }
@@ -3194,7 +3194,7 @@ public enum OmiAPI {
       whyNow = try c.decode(String.self, forKey: .whyNow)
     }
 
-    public init(alternativeAction: String?, dedupeKey: String, destinationTaskId: String?, destinationWorkstreamId: String?, evidencePreview: String, evidenceRefs: [EvidenceRef], expiresAt: String, feedbackSubjectId: String, feedbackSubjectKind: FeedbackSubjectKind, goalOrWorkstreamLabel: String?, headline: String, interventionId: String, outputVersion: String, recommendedAction: String, subjectId: String, subjectKind: RecommendationSubjectKind, whyNow: String) {
+    public init(alternativeAction: String? = nil, dedupeKey: String, destinationTaskId: String? = nil, destinationWorkstreamId: String? = nil, evidencePreview: String, evidenceRefs: [EvidenceRef], expiresAt: String, feedbackSubjectId: String, feedbackSubjectKind: FeedbackSubjectKind, goalOrWorkstreamLabel: String? = nil, headline: String, interventionId: String, outputVersion: String, recommendedAction: String, subjectId: String, subjectKind: RecommendationSubjectKind, whyNow: String) {
       self.alternativeAction = alternativeAction
       self.dedupeKey = dedupeKey
       self.destinationTaskId = destinationTaskId
@@ -3319,7 +3319,7 @@ public enum OmiAPI {
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(actionItems: [ActionItem]?, category: CategoryEnum?, emoji: String?, events: [Event]?, overview: String?, title: String?) {
+    public init(actionItems: [ActionItem]? = nil, category: CategoryEnum? = nil, emoji: String? = nil, events: [Event]? = nil, overview: String? = nil, title: String? = nil) {
       self.actionItems = actionItems
       self.category = category
       self.emoji = emoji
@@ -3383,7 +3383,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, taskChange: TaskChangePayload, taskId: String, workstreamId: String?) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3434,7 +3434,7 @@ public enum OmiAPI {
       supersededBy = try c.decodeIfPresent(String.self, forKey: .supersededBy)
     }
 
-    public init(description_: String?, dueAt: String?, dueConfidence: Double?, owner: TaskOwner?, priority: TaskPriority?, recurrenceParentId: String?, recurrenceRule: String?, status: TaskStatus?, supersededBy: String?) {
+    public init(description_: String? = nil, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil, status: TaskStatus? = nil, supersededBy: String? = nil) {
       self.description_ = description_
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
@@ -3487,7 +3487,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, taskChange: TaskChangePayload, taskId: String, workstreamId: String?) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3538,7 +3538,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, taskChange: TaskCreatePayload, workstreamId: String?) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskCreatePayload, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3582,7 +3582,7 @@ public enum OmiAPI {
       recurrenceRule = try c.decodeIfPresent(String.self, forKey: .recurrenceRule)
     }
 
-    public init(description_: String, dueAt: String?, dueConfidence: Double?, owner: TaskOwner?, priority: TaskPriority?, recurrenceParentId: String?, recurrenceRule: String?) {
+    public init(description_: String, dueAt: String? = nil, dueConfidence: Double? = nil, owner: TaskOwner? = nil, priority: TaskPriority? = nil, recurrenceParentId: String? = nil, recurrenceRule: String? = nil) {
       self.description_ = description_
       self.dueAt = dueAt
       self.dueConfidence = dueConfidence
@@ -3660,7 +3660,7 @@ public enum OmiAPI {
       title = try c.decodeIfPresent(String.self, forKey: .title)
     }
 
-    public init(objective: String?, origin: String?, taskId: String, title: String?) {
+    public init(objective: String? = nil, origin: String? = nil, taskId: String, title: String? = nil) {
       self.objective = objective
       self.origin = origin
       self.taskId = taskId
@@ -3748,7 +3748,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, taskChange: TaskChangePayload, taskId: String, workstreamId: String?) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3802,7 +3802,7 @@ public enum OmiAPI {
       workstreamId = try c.decodeIfPresent(String.self, forKey: .workstreamId)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, taskChange: TaskChangePayload, taskId: String, workstreamId: String?) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, taskChange: TaskChangePayload, taskId: String, workstreamId: String? = nil) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -3835,7 +3835,7 @@ public enum OmiAPI {
       workflowMode = try c.decodeIfPresent(TaskWorkflowMode.self, forKey: .workflowMode)
     }
 
-    public init(accountGeneration: Int?, chatFirstUi: Bool?, workflowMode: TaskWorkflowMode?) {
+    public init(accountGeneration: Int? = nil, chatFirstUi: Bool? = nil, workflowMode: TaskWorkflowMode? = nil) {
       self.accountGeneration = accountGeneration
       self.chatFirstUi = chatFirstUi
       self.workflowMode = workflowMode
@@ -3899,7 +3899,7 @@ public enum OmiAPI {
       translations = try c.decodeIfPresent([Translation].self, forKey: .translations)
     }
 
-    public init(end: Double, id: String?, isUser: Bool, personId: String?, speaker: String?, speakerId: Int?, speechProfileProcessed: Bool?, start: Double, sttProvider: String?, text: String, translations: [Translation]?) {
+    public init(end: Double, id: String? = nil, isUser: Bool, personId: String? = nil, speaker: String? = nil, speakerId: Int? = nil, speechProfileProcessed: Bool? = nil, start: Double, sttProvider: String? = nil, text: String, translations: [Translation]? = nil) {
       self.end = end
       self.id = id
       self.isUser = isUser
@@ -3962,7 +3962,7 @@ public enum OmiAPI {
       schemaVersion = try c.decodeIfPresent(Int.self, forKey: .schemaVersion)
     }
 
-    public init(evaluationId: String, expiresAt: String, generatedAt: String, materialVersion: String, outputVersion: String, recommendations: [Recommendation], schemaVersion: Int?) {
+    public init(evaluationId: String, expiresAt: String, generatedAt: String, materialVersion: String, outputVersion: String, recommendations: [Recommendation], schemaVersion: Int? = nil) {
       self.evaluationId = evaluationId
       self.expiresAt = expiresAt
       self.generatedAt = generatedAt
@@ -4001,7 +4001,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(createdAt: String, goalId: String?, newlyCreated: Bool, receiptId: String, taskId: String, workstreamId: String) {
+    public init(createdAt: String, goalId: String? = nil, newlyCreated: Bool, receiptId: String, taskId: String, workstreamId: String) {
       self.createdAt = createdAt
       self.goalId = goalId
       self.newlyCreated = newlyCreated
@@ -4054,7 +4054,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(createdAt: String, currentStateSummary: String?, goalId: String?, lastMeaningfulProgressAt: String?, latestEventSequence: Int?, nextReviewAt: String?, objective: String, status: WorkstreamStatus, title: String, updatedAt: String, workstreamId: String) {
+    public init(createdAt: String, currentStateSummary: String? = nil, goalId: String? = nil, lastMeaningfulProgressAt: String? = nil, latestEventSequence: Int? = nil, nextReviewAt: String? = nil, objective: String, status: WorkstreamStatus, title: String, updatedAt: String, workstreamId: String) {
       self.createdAt = createdAt
       self.currentStateSummary = currentStateSummary
       self.goalId = goalId
@@ -4106,7 +4106,7 @@ public enum OmiAPI {
       workstreamProposal = try c.decode(WorkstreamProposal.self, forKey: .workstreamProposal)
     }
 
-    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String?, ownershipConfidence: Double, proposedAction: String?, sourceSurface: String, subjectKind: String?, workstreamId: String?, workstreamProposal: WorkstreamProposal) {
+    public init(captureConfidence: Double, evidenceRefs: [EvidenceRef], goalId: String? = nil, ownershipConfidence: Double, proposedAction: String? = nil, sourceSurface: String, subjectKind: String? = nil, workstreamId: String? = nil, workstreamProposal: WorkstreamProposal) {
       self.captureConfidence = captureConfidence
       self.evidenceRefs = evidenceRefs
       self.goalId = goalId
@@ -4187,7 +4187,7 @@ public enum OmiAPI {
       workstreamId = try c.decode(String.self, forKey: .workstreamId)
     }
 
-    public init(createdAt: String, eventId: String, evidenceRefs: [EvidenceRef]?, kind: WorkstreamEventKind, sensitivity: WorkstreamSensitivity, sequence: Int, summary: String, workstreamId: String) {
+    public init(createdAt: String, eventId: String, evidenceRefs: [EvidenceRef]? = nil, kind: WorkstreamEventKind, sensitivity: WorkstreamSensitivity, sequence: Int, summary: String, workstreamId: String) {
       self.createdAt = createdAt
       self.eventId = eventId
       self.evidenceRefs = evidenceRefs
@@ -4221,7 +4221,7 @@ public enum OmiAPI {
       summary = try c.decode(String.self, forKey: .summary)
     }
 
-    public init(evidenceRefs: [EvidenceRef]?, kind: WorkstreamEventKind, sensitivity: WorkstreamSensitivity?, summary: String) {
+    public init(evidenceRefs: [EvidenceRef]? = nil, kind: WorkstreamEventKind, sensitivity: WorkstreamSensitivity? = nil, summary: String) {
       self.evidenceRefs = evidenceRefs
       self.kind = kind
       self.sensitivity = sensitivity

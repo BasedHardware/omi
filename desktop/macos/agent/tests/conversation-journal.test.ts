@@ -8,6 +8,7 @@ import {
   ackBackendTurnOutbox,
   ackBackendTurnOutboxWithWakes,
   applyBackendReconcilePage,
+  appendChatFirstBlocksToProducingTurn,
   beginBackendReconcile,
   beginBackendReconcilesForOwner,
   clearJournalConversation,
@@ -40,6 +41,115 @@ afterEach(() => {
 });
 
 describe("kernel conversation journal", () => {
+  it("atomically binds the one current main-chat placeholder and replays validated chat-first blocks", () => {
+    const fixture = newSurface("main_chat", "chat", "chat-first-append");
+    const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-append");
+    recordStreamingAssistantPlaceholder(fixture, "turn-chat-first-placeholder");
+    const blocks: ConversationContentBlock[] = [{
+      type: "taskCard",
+      id: "cfb-task-1",
+      taskId: "task-1",
+    }];
+
+    const appended = appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks,
+    });
+    const replayed = appendChatFirstBlocksToProducingTurn(fixture.store, {
+      ownerId: fixture.ownerId,
+      sessionId: fixture.sessionId,
+      runId: run.runId,
+      attemptId: attempt.attemptId,
+      blocks,
+    });
+
+    expect(appended).toMatchObject({
+      turnId: "turn-chat-first-placeholder",
+      producingRunId: run.runId,
+      producingAttemptId: attempt.attemptId,
+      contentBlocks: blocks,
+    });
+    expect(replayed).toEqual(appended);
+    expect(listJournalTurns(fixture.store, {
+      ownerId: fixture.ownerId,
+      conversationId: fixture.conversationId,
+    }).turns.at(-1)).toMatchObject({ contentBlocks: blocks });
+    fixture.store.close();
+  });
+
+  it("rejects wrong, non-main, stale, multiple, and missing chat-first targets without mutating journal rows", () => {
+    const block: ConversationContentBlock = { type: "taskCard", id: "cfb-rejected", taskId: "task-1" };
+    const cases: Array<{
+      name: string;
+      arrange: () => { fixture: SurfaceFixture; input: { ownerId: string; sessionId: string; runId: string; attemptId: string } };
+      error: RegExp;
+    }> = [
+      {
+        name: "wrong owner",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-wrong");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-wrong");
+          recordStreamingAssistantPlaceholder(fixture, "turn-wrong-owner");
+          return { fixture, input: { ownerId: "other-owner", sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /current owner-bound run attempt/i,
+      },
+      {
+        name: "non-main surface",
+        arrange: () => {
+          const fixture = newSurface("realtime_voice", "chat", "chat-first-non-main");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-non-main");
+          recordStreamingAssistantPlaceholder(fixture, "turn-non-main");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+      {
+        name: "superseded attempt",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-stale");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-stale");
+          fixture.store.execute("UPDATE run_attempts SET status = 'succeeded' WHERE attempt_id = ?", [attempt.attemptId]);
+          recordStreamingAssistantPlaceholder(fixture, "turn-stale-attempt");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /current owner-bound run attempt/i,
+      },
+      {
+        name: "multiple placeholders",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-multiple");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-multiple");
+          recordStreamingAssistantPlaceholder(fixture, "turn-multiple-one");
+          recordStreamingAssistantPlaceholder(fixture, "turn-multiple-two");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+      {
+        name: "missing placeholder",
+        arrange: () => {
+          const fixture = newSurface("main_chat", "chat", "chat-first-missing");
+          const { run, attempt } = insertActiveRunAttempt(fixture, "chat-first-missing");
+          return { fixture, input: { ownerId: fixture.ownerId, sessionId: fixture.sessionId, runId: run.runId, attemptId: attempt.attemptId } };
+        },
+        error: /exactly one live producing assistant/i,
+      },
+    ];
+
+    for (const testCase of cases) {
+      const { fixture, input } = testCase.arrange();
+      const before = journalStorageSnapshot(fixture.store);
+      expect(() => appendChatFirstBlocksToProducingTurn(fixture.store, { ...input, blocks: [block] }))
+        .toThrow(testCase.error);
+      expect(journalStorageSnapshot(fixture.store)).toEqual(before);
+      fixture.store.close();
+    }
+  });
+
   it("projects shared chat revisions through the requesting binding with owner-fenced wakes", () => {
     const fixture = newSurface("main_chat", "chat", "default");
     const realtimeSession = fixture.store.insertSession({
@@ -2625,6 +2735,7 @@ interface SurfaceFixture {
   ownerId: string;
   sessionId: string;
   conversationId: string;
+  surfaceKind: string;
 }
 
 function newSurface(surfaceKind: string, externalRefKind: string, externalRefId: string): SurfaceFixture {
@@ -2651,7 +2762,7 @@ function insertSurface(
     createdAtMs: 1,
     lastActiveAtMs: 1,
   });
-  return { store, ownerId, sessionId: session.sessionId, conversationId };
+  return { store, ownerId, sessionId: session.sessionId, conversationId, surfaceKind };
 }
 
 function recordCompletedTextTurn(
@@ -2671,6 +2782,41 @@ function recordCompletedTextTurn(
     content,
     contentBlocks: [{ type: "text", id: `${turnId}:text`, text: content }],
     createdAtMs,
+  });
+}
+
+function insertActiveRunAttempt(fixture: SurfaceFixture, suffix: string) {
+  const run = fixture.store.insertRun({
+    sessionId: fixture.sessionId,
+    runId: `run-${suffix}`,
+    clientId: "chat-first-test",
+    requestId: suffix,
+    status: "running",
+    mode: "act",
+  });
+  const attempt = fixture.store.insertAttempt({
+    attemptId: `att-${suffix}`,
+    runId: run.runId,
+    attemptNo: 1,
+    status: "running",
+    adapterId: "fake",
+    adapterInstanceId: `fake:${suffix}`,
+  });
+  return { run, attempt };
+}
+
+function recordStreamingAssistantPlaceholder(fixture: SurfaceFixture, turnId: string): void {
+  recordJournalTurn(fixture.store, {
+    ownerId: fixture.ownerId,
+    conversationId: fixture.conversationId,
+    turnId,
+    role: "assistant",
+    surfaceKind: fixture.surfaceKind,
+    origin: "typed_chat",
+    status: "streaming",
+    content: "",
+    contentBlocks: [],
+    createdAtMs: 10,
   });
 }
 
