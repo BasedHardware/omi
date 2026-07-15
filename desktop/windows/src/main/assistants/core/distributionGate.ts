@@ -20,7 +20,12 @@ export const FALLBACK_MS = 60_000
  *  a whole conversation. */
 export const MESSAGING_FALLBACK_MS = 15_000
 
-const MESSAGING_APPS = [
+/** Apps where new content (a reply landing) arrives without any context change.
+ *  Shared: the distribution gate uses it for the shorter messaging fallback, and
+ *  the TaskAssistant reuses the SAME set for its ~15s messaging fast-path
+ *  (`tasks/appLists.ts` re-exports it — never duplicate it). Exactly Mac's 8
+ *  `messagingFastPathApps`. */
+export const MESSAGING_APPS = [
   'telegram',
   'messages',
   'imessage',
