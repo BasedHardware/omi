@@ -6,6 +6,9 @@ struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
   @ObservedObject var chatProvider: ChatProvider
   let onHome: () -> Void
+  /// Present only for the cohort-gated main-window Chat. Every other caller
+  /// intentionally keeps journaled chat-first blocks inert.
+  var chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   @State private var showAppPicker = false
   @State private var showHistoryPopover = false
   @State private var selectedCitation: Citation?
@@ -16,11 +19,13 @@ struct ChatPage: View {
   init(
     appProvider: AppProvider,
     chatProvider: ChatProvider,
-    onHome: @escaping () -> Void = {}
+    onHome: @escaping () -> Void = {},
+    chatFirstRichBlockContext: ChatFirstRichBlockContext? = nil
   ) {
     self.appProvider = appProvider
     self.chatProvider = chatProvider
     self.onHome = onHome
+    self.chatFirstRichBlockContext = chatFirstRichBlockContext
   }
 
   var selectedApp: OmiApp? {
@@ -413,6 +418,7 @@ struct ChatPage: View {
       onOpenAgentRef: { ref, completion in
         FloatingControlBarManager.shared.openAgentChatFromTimeline(ref: ref, completion: completion)
       },
+      chatFirstRichBlockContext: chatFirstRichBlockContext,
       welcomeContent: { welcomeMessage }
     )
     .overlay(alignment: .bottom) {

@@ -10,8 +10,6 @@ struct ChatFirstShell: View {
   @Binding var selectedSettingsSection: SettingsContentView.SettingsSection
   @Binding var highlightedSettingID: String?
 
-  @State private var selectedConversation: ServerConversation?
-
   var body: some View {
     HStack(spacing: 0) {
       ChatFirstSidebar(navigation: navigation)
@@ -45,11 +43,18 @@ struct ChatFirstShell: View {
     case .chat:
       ChatPage(
         appProvider: viewModelContainer.appProvider,
-        chatProvider: viewModelContainer.chatProvider
+        chatProvider: viewModelContainer.chatProvider,
+        chatFirstRichBlockContext: ChatFirstRichBlockContext(
+          navigation: navigation,
+          tasksStore: viewModelContainer.tasksStore
+        )
       )
       .accessibilityIdentifier("chat-first-route-chat")
     case .conversations:
-      ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+      CaptureArchivePage(
+        navigation: navigation,
+        chatProvider: viewModelContainer.chatProvider
+      )
         .accessibilityIdentifier("chat-first-route-conversations")
     case .tasks:
       TasksPage(

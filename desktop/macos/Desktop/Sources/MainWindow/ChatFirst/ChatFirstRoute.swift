@@ -125,6 +125,29 @@ enum ChatFirstPendingFocus: Equatable, Sendable {
   }
 }
 
+/// A route-safe, strongly typed origin for the one normal user turn created
+/// by a page's "Discuss in Chat" affordance. Pages never construct model
+/// prompts from display strings or pass raw URLs into Chat.
+enum ChatFirstDiscussionContext: Equatable, Sendable {
+  case tasks
+  case goal(id: String)
+  case capture(id: String, momentTimestamp: TimeInterval?)
+
+  var userMessage: String {
+    switch self {
+    case .tasks:
+      return "Help me review my current tasks."
+    case .goal(let id):
+      return "Help me continue working on goal \(id)."
+    case .capture(let id, let momentTimestamp):
+      if let momentTimestamp {
+        return "Discuss Omi capture \(id) at \(Int(momentTimestamp)) seconds."
+      }
+      return "Discuss Omi capture \(id)."
+    }
+  }
+}
+
 private struct ChatFirstPersistedNavigation: Codable, Equatable {
   var route: ChatFirstRoute
   var isSidebarCollapsed: Bool
@@ -179,6 +202,16 @@ final class ChatFirstShellNavigation: ObservableObject {
     route = focus.route
     pendingFocus = focus
     persistNavigation()
+  }
+
+  /// Routes first, then records exactly one ordinary main-Chat user turn.
+  /// `ChatProvider` remains the single journal owner; navigation stores no
+  /// transcript copy or separate session identity.
+  func discuss(_ context: ChatFirstDiscussionContext, using chatProvider: ChatProvider) {
+    selectPrimary(.chat)
+    Task {
+      _ = await chatProvider.sendMessage(context.userMessage)
+    }
   }
 
   @discardableResult
