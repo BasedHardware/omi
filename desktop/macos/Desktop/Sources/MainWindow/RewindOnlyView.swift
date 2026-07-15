@@ -224,15 +224,13 @@ struct RewindSettingsView: View {
                     title: "Keep Screenshots For",
                     subtitle: "Older screenshots will be automatically deleted"
                 ) {
-                    Picker("", selection: $retentionDays) {
+                    SettingsMenuPicker(selection: $retentionDays) {
                         Text("1 day").tag(1)
                         Text("3 days").tag(3)
                         Text("7 days").tag(7)
                         Text("14 days").tag(14)
                         Text("30 days").tag(30)
                     }
-                    .pickerStyle(.menu)
-                    .frame(width: 120)
                 }
 
                 // Storage Info

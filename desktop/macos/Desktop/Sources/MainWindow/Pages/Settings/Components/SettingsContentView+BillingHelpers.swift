@@ -391,8 +391,7 @@ extension SettingsContentView {
             if isPromoCodeExpanded {
               VStack(alignment: .leading, spacing: OmiSpacing.xs) {
                 TextField("Enter promo code", text: $upgradePromotionCode)
-                  .textFieldStyle(.roundedBorder)
-                  .scaledFont(size: OmiType.body)
+                  .settingsTextInputStyle()
                   .disabled(activeCheckoutPriceId != nil)
                   .onChange(of: upgradePromotionCode) {
                     subscriptionError = nil

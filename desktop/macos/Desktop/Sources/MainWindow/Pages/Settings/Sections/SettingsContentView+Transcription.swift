@@ -67,6 +67,7 @@ extension SettingsContentView {
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
           }
           .buttonStyle(.plain)
 
@@ -109,10 +110,7 @@ extension SettingsContentView {
                     ) { option in
                       transcriptionLanguage = option.id
                       AssistantSettings.shared.transcriptionLanguage = option.id
-                      let supportsMulti = AssistantSettings.supportsAutoDetect(option.id)
-                      transcriptionAutoDetect = supportsMulti
-                      AssistantSettings.shared.transcriptionAutoDetect = supportsMulti
-                      updateTranscriptionPreferences(singleLanguageMode: !supportsMulti)
+                      updateTranscriptionPreferences(singleLanguageMode: true)
                       updateLanguage(option.id)
                       restartTranscriptionIfNeeded()
                     }
@@ -135,6 +133,7 @@ extension SettingsContentView {
                       lineWidth: 1)
                 )
             )
+            .contentShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
           }
           .buttonStyle(.plain)
 
@@ -219,7 +218,7 @@ extension SettingsContentView {
           // Add new word input
           HStack(spacing: OmiSpacing.sm) {
             TextField("Add a word...", text: $newVocabularyWord)
-              .textFieldStyle(.roundedBorder)
+              .settingsTextInputStyle()
               .onSubmit {
                 addVocabularyWord()
               }

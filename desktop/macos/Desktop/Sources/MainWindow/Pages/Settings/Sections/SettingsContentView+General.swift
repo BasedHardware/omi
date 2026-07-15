@@ -265,6 +265,9 @@ extension SettingsContentView {
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
               .tint(OmiColors.info)
+              .onChange(of: fontScaleSettings.scale) { _, _ in
+                performStepHaptic()
+              }
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)
