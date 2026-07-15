@@ -5,16 +5,21 @@ import { BackgroundConsentControls } from './BackgroundConsentControls'
 
 /**
  * One-time modal shown to existing users on the first launch after Omi becomes a
- * tray-resident, launch-at-login companion. Nothing is silently switched on:
- * launch-at-login starts unchecked (explicit opt-in), and the user's existing
- * continuous-listening choice is preserved and shown. Acknowledging stamps
- * backgroundConsentAt so it never reappears. New users don't see this — they
- * consent inline during onboarding (see shouldShowBackgroundConsent).
+ * tray-resident, launch-at-login companion. Launch-at-login is pre-checked so
+ * existing users match the new-user onboarding default (BackgroundPrivacyStep also
+ * pre-checks it) — but the user sees the box and can uncheck it before confirming,
+ * so nothing is applied silently. (This replaced a silent OS-state migration, which
+ * could not distinguish an explicit prior OFF from a plain default OFF on Windows.)
+ * The user's existing continuous-listening choice is preserved and shown.
+ * Acknowledging stamps backgroundConsentAt so it never reappears. New users don't
+ * see this — they consent inline during onboarding (see shouldShowBackgroundConsent).
  */
 export function BackgroundConsentInterstitial(): React.JSX.Element | null {
   const [open, setOpen] = useState(() => shouldShowBackgroundConsent(getPreferences()))
   const [listening, setListening] = useState(() => !!getPreferences().continuousRecording)
-  const [launchAtLogin, setLaunchAtLogin] = useState(false)
+  // Pre-checked (Mac-parity default) — but visible and user-overridable; unchecking
+  // then confirming persists launchAtLogin:false and that explicit choice wins.
+  const [launchAtLogin, setLaunchAtLogin] = useState(true)
 
   if (!open) return null
 
