@@ -81,6 +81,7 @@ import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerByokHandlers } from './ipc/byok'
+import { registerPiMonoHandlers } from './ipc/pimono'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
 import { registerAgentControlIpc } from './ipc/agentControl'
 import { registerAudioMuteHandlers } from './ipc/audioMute'
@@ -805,6 +806,10 @@ app.whenReady().then(async () => {
   registerCodingAgentHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
+  // pi-mono managed-cloud chat session relay (cheap handler registration). The
+  // renderer pushes the Firebase session (token lives renderer-side); the store
+  // is inert until then and nothing spawns pi-mono until PR-D registers it.
+  registerPiMonoHandlers()
   // Track 3 (AI user profile): once-daily synthesized "about the user" doc that
   // grounds other AI pipelines. Cheap handler registration; the renderer pushes
   // a session (Firebase token + base URLs) and drives generation. The background

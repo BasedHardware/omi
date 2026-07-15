@@ -252,6 +252,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
   },
+  // pi-mono managed-cloud chat session relay: the Firebase token lives only in
+  // the renderer, so push it (and re-push on ~hourly refresh) to the main-side
+  // pi-mono session store; null on sign-out. Inert until PR-D spawns pi-mono.
+  pimonoSetSession: (session: { desktopApiBase: string; token: string } | null) =>
+    ipcRenderer.invoke('pimono:setSession', session),
   byokGetAll: () => ipcRenderer.invoke('byok:getAll'),
   byokSet: (provider: ByokProvider, key: string) => ipcRenderer.invoke('byok:set', provider, key),
   byokClear: (provider: ByokProvider) => ipcRenderer.invoke('byok:clear', provider),

@@ -2,7 +2,9 @@ import { describe, it, expect } from 'vitest'
 import {
   BYOK_PROVIDERS,
   BYOK_HEADER_NAMES,
+  BYOK_ENV_NAMES,
   withByokHeaders,
+  byokEnvVars,
   isByokActive,
   byokFingerprint,
   type ByokKeys
@@ -79,6 +81,39 @@ describe('isByokActive', () => {
   it('covers exactly the four canonical providers', () => {
     expect(BYOK_PROVIDERS).toEqual(['openai', 'anthropic', 'gemini', 'deepgram'])
     expect(Object.keys(BYOK_HEADER_NAMES).sort()).toEqual([...BYOK_PROVIDERS].sort())
+  })
+})
+
+describe('byokEnvVars', () => {
+  it('returns the complete OMI_BYOK_* set when all four keys are present', () => {
+    expect(byokEnvVars(fullKeys)).toEqual({
+      OMI_BYOK_OPENAI: 'sk-openai',
+      OMI_BYOK_ANTHROPIC: 'sk-ant',
+      OMI_BYOK_GEMINI: 'gm-key',
+      OMI_BYOK_DEEPGRAM: 'dg-key'
+    })
+  })
+
+  it('returns {} for a partial set (all-or-nothing — never a partial injection)', () => {
+    const partial: ByokKeys = { ...fullKeys }
+    delete partial.deepgram
+    expect(byokEnvVars(partial)).toEqual({})
+  })
+
+  it('returns {} when a provider key is only whitespace', () => {
+    expect(byokEnvVars({ ...fullKeys, gemini: '   ' })).toEqual({})
+  })
+
+  it('returns {} for an empty map', () => {
+    expect(byokEnvVars({})).toEqual({})
+  })
+
+  it('trims key values before injecting', () => {
+    expect(byokEnvVars({ ...fullKeys, openai: '  sk-openai  ' }).OMI_BYOK_OPENAI).toBe('sk-openai')
+  })
+
+  it('names cover exactly the four canonical providers', () => {
+    expect(Object.keys(BYOK_ENV_NAMES).sort()).toEqual([...BYOK_PROVIDERS].sort())
   })
 })
 

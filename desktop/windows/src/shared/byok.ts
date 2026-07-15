@@ -26,6 +26,20 @@ export const BYOK_HEADER_NAMES: Record<ByokProvider, string> = {
   deepgram: 'X-BYOK-Deepgram'
 }
 
+/**
+ * Env-var names the pi-mono subprocess reads for BYOK. The bundled
+ * omi-provider extension reads exactly these `OMI_BYOK_*` names and re-emits
+ * them as `X-BYOK-*` headers (see `desktop/macos/pi-mono-extension/index.ts`),
+ * so the casing here — `OMI_BYOK_<PROVIDER-UPPERCASE>` — must match the macOS
+ * source (`AgentRuntimeProcess.byokEnvironmentKey`).
+ */
+export const BYOK_ENV_NAMES: Record<ByokProvider, string> = {
+  openai: 'OMI_BYOK_OPENAI',
+  anthropic: 'OMI_BYOK_ANTHROPIC',
+  gemini: 'OMI_BYOK_GEMINI',
+  deepgram: 'OMI_BYOK_DEEPGRAM'
+}
+
 /** A (possibly partial) map of provider → raw provider key. */
 export type ByokKeys = Partial<Record<ByokProvider, string>>
 
@@ -55,6 +69,24 @@ export function withByokHeaders(
  */
 export function isByokActive(keys: ByokKeys): boolean {
   return BYOK_PROVIDERS.every((provider) => Boolean(keys[provider]?.trim()))
+}
+
+/**
+ * The `OMI_BYOK_*` env set to inject into the pi-mono subprocess, or `{}` when
+ * BYOK is not active. All-or-nothing, exactly like `withByokHeaders`'s consumer:
+ * a partial set is never injected (the backend's `has_all_byok_keys()` requires
+ * all four), so a 3/4 configuration falls through to Omi-managed billing rather
+ * than silently sending an incomplete BYOK set. Values are trimmed to match the
+ * wire value the backend fingerprints.
+ */
+export function byokEnvVars(keys: ByokKeys): Record<string, string> {
+  if (!isByokActive(keys)) return {}
+  const out: Record<string, string> = {}
+  for (const provider of BYOK_PROVIDERS) {
+    // isByokActive guarantees a non-empty trimmed value for every provider.
+    out[BYOK_ENV_NAMES[provider]] = (keys[provider] as string).trim()
+  }
+  return out
 }
 
 /**
