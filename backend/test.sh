@@ -102,6 +102,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   fi
 
   active_pids=()
+  active_status_files=()
   failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
@@ -115,26 +116,30 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
   }
 
   reap_finished_children() {
-    local running_pids
+    local index
     local pid
+    local status_file
     local still_active=()
-    local current_pids=()
+    local still_status_files=()
 
-    running_pids="$(jobs -pr || true)"
+    # Each file-isolated child writes its status atomically before it exits.
+    # Waiting for the oldest PID leaves a worker idle when a newer short test
+    # finishes first; use that completion signal so the next file starts as
+    # soon as *any* worker is available. This is portable to macOS's Bash 3,
+    # which lacks `wait -n`.
     set +u
-    current_pids=("${active_pids[@]}")
-    for pid in "${current_pids[@]}"; do
-      if [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
-        still_active+=("$pid")
+    for index in "${!active_pids[@]}"; do
+      pid="${active_pids[$index]}"
+      status_file="${active_status_files[$index]}"
+      if [[ -f "$status_file" ]]; then
+        wait "$pid" || true
       else
-        if ! wait "$pid"; then
-          failed=1
-        fi
+        still_active+=("$pid")
+        still_status_files+=("$status_file")
       fi
     done
-    set -u
-    set +u
     active_pids=("${still_active[@]}")
+    active_status_files=("${still_status_files[@]}")
     set -u
   }
 
@@ -156,31 +161,30 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         echo "::error title=Backend unit file failed::$test_path exited with status $status"
       fi
       echo "::endgroup::"
+      # Rename after writing so the scheduler never observes a partial status.
+      status_temp="$status_file.pending"
+      printf '%s\t%s\n' "$status" "$test_path" > "$status_temp"
+      mv "$status_temp" "$status_file"
       exit 0
     ) &
     active_pids+=("$!")
+    active_status_files+=("$status_file")
 
     while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
       reap_finished_children
       if [[ "$(active_pid_count)" -lt "$worker_count" ]]; then
         break
       fi
-      oldest_pid="${active_pids[0]}"
-      active_pids=("${active_pids[@]:1}")
-      if ! wait "$oldest_pid"; then
-        failed=1
-      fi
+      sleep 0.02
     done
   done
 
-  reap_finished_children
-  set +u
-  for pid in "${active_pids[@]}"; do
-    if ! wait "$pid"; then
-      failed=1
+  while [[ "$(active_pid_count)" -gt 0 ]]; do
+    reap_finished_children
+    if [[ "$(active_pid_count)" -gt 0 ]]; then
+      sleep 0.02
     fi
   done
-  set -u
 
   for status_file in "$status_dir"/*.status; do
     [[ -e "$status_file" ]] || continue
