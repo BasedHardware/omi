@@ -756,10 +756,10 @@ export class SqliteAgentStore implements AgentStore {
       if (requeuedChatFirstDeferralIds.length > 0) {
         this.db.prepare(
           `UPDATE chat_first_deferral_outbox
-           SET status = 'retrying', available_at_ms = ?, lease_expires_at_ms = NULL,
+           SET status = 'retrying', available_at_ms = 0, lease_expires_at_ms = NULL,
                last_error_code = 'daemon_restart', updated_at_ms = ?
            WHERE status = 'delivering'`,
-        ).run(now, now);
+        ).run(now);
       }
       this.db.prepare(
         `UPDATE backend_reconcile_state

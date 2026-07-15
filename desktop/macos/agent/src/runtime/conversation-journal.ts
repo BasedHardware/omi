@@ -1193,9 +1193,12 @@ export function drainChatFirstDeferralOutbox(
       `SELECT continuity_key, owner_id, conversation_id, control_generation, subject_kind, subject_id,
               question_json, payload_hash, attempt_count, delivery_generation
        FROM chat_first_deferral_outbox
-       WHERE owner_id = ? AND status IN ('pending', 'retrying') AND available_at_ms <= ?
+       WHERE owner_id = ? AND (
+         (status IN ('pending', 'retrying') AND available_at_ms <= ?)
+         OR (status = 'delivering' AND lease_expires_at_ms IS NOT NULL AND lease_expires_at_ms <= ?)
+       )
        ORDER BY created_at_ms ASC LIMIT ?`,
-      [input.ownerId, now, limit],
+      [input.ownerId, now, now, limit],
     );
     return rows.map((row) => {
       const continuityKey = String(row.continuity_key);
@@ -3334,7 +3337,7 @@ function assertIdempotentRecord(
   },
 ): void {
   if (existing.conversationId !== input.conversationId) {
-    throw new Error("Canonical turn ID belongs to a different conversation");
+    throw new Error("Canonical turn identity collision has different journal content or belongs to another conversation");
   }
   const equivalent = existing.role === input.role
     && existing.surfaceKind === input.surfaceKind
