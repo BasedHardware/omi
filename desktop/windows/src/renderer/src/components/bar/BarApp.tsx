@@ -22,6 +22,7 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
+import { createBarSender } from './barSend'
 import {
   deriveOrbState,
   isBarBusy,
@@ -72,6 +73,12 @@ export function BarApp(): React.JSX.Element {
   const [sliding, setSliding] = useState<'in' | 'out'>('out')
   const [genesisNonce, setGenesisNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
+  // Speak replies to TYPED bar questions too (macOS
+  // floatingBarTypedQuestionVoiceAnswersEnabled, default off). PTT/voice replies
+  // are always spoken regardless; this only governs typed submits below.
+  const [typedVoice, setTypedVoice] = useState(
+    () => !!getPreferences().floatingBarTypedVoiceEnabled
+  )
   const [chat, setChat] = useState<BarChatState>(EMPTY_CHAT)
   // Connected coding agents (shared fetch with Settings → Agents).
   const { agents } = useCodingAgents()
@@ -102,6 +109,7 @@ export function BarApp(): React.JSX.Element {
   }, [])
 
   useEffect(() => onPreferencesChange((p) => setContinuous(!!p.continuousRecording)), [])
+  useEffect(() => onPreferencesChange((p) => setTypedVoice(!!p.floatingBarTypedVoiceEnabled)), [])
   useEffect(() => {
     let active = true
     void auth.authStateReady().then(() => {
@@ -113,12 +121,28 @@ export function BarApp(): React.JSX.Element {
   }, [])
 
   // --- chat viewport (projected from the main window) -------------------------
-  const sendFromBar = useCallback((text: string, fromVoice: boolean): void => {
-    if (!text.trim()) return
-    // Onboarding: the user asked something in the bar.
-    window.omiOverlay.notifyAsked()
-    window.omiBar.sendChat(text, fromVoice)
-  }, [])
+  // Every bar send — typed submit AND PTT commit — goes through the usage-limit
+  // gate (barSend.ts). A refused send never reaches the engine; it returns the
+  // limit line, which the bar shows inline while the main window raises the
+  // shared popup (and speaks it back for a voice turn). The quota is a cached
+  // snapshot, refreshed on mount + each reveal, so the send path stays off the
+  // network.
+  const [sender] = useState(() => createBarSender())
+  const [limitNotice, setLimitNotice] = useState<string | null>(null)
+  // Resolves to the blocked-limit notice (null when the send went out) so the
+  // typed surface can put the user's words back in the input instead of eating
+  // them — a refused send never lands in the transcript.
+  const sendFromBar = useCallback(
+    async (text: string, fromVoice: boolean): Promise<string | null> => {
+      const notice = await sender.send(text, fromVoice)
+      setLimitNotice(notice)
+      return notice
+    },
+    [sender]
+  )
+  useEffect(() => {
+    void sender.sync()
+  }, [sender])
   useEffect(() => window.omiBar.onChatState((s) => setChat(s)), [])
   // Pull the current thread on mount (in case we missed prior broadcasts).
   useEffect(() => window.omiBar.requestChatState(), [])
@@ -136,7 +160,12 @@ export function BarApp(): React.JSX.Element {
 
   // --- push-to-talk (always mounted; drives the orb + voice sends) ------------
   const ptt = usePushToTalk({
-    onCommit: (text) => sendFromBar(text, true),
+    // A blocked voice turn involves no draft — the main window speaks the line.
+    onCommit: (text) => void sendFromBar(text, true),
+    // Barge-in: a new PTT hold cuts off Omi's still-playing spoken reply. The
+    // reply plays in the MAIN window (useChat → voiceController), so hop over the
+    // bar→main bridge; ChatBridgeHost calls interruptCurrentResponse there.
+    onHoldStart: () => window.omiBar.interruptTts(),
     // No transcript text in the bar — the orb is the sole status indicator.
     onTranscript: () => {},
     // Fires on every completed hold capture (drives the onboarding voice step).
@@ -174,10 +203,17 @@ export function BarApp(): React.JSX.Element {
   }, [ready])
 
   // --- main → renderer lifecycle ---------------------------------------------
+  const senderRef = useRef(sender)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-registered IPC listener
+  senderRef.current = sender
   useEffect(() => {
     return window.omiBar.onShow((p: BarShowPayload) => {
       setMode(p.mode)
       setSliding('in')
+      // A fresh reveal drops a stale limit notice and re-reads the quota, so the
+      // next send checks a current snapshot without touching the network itself.
+      setLimitNotice(null)
+      void senderRef.current.sync()
       // Each fresh reveal starts at the list (a summon is a pill; expanding lands
       // on the list, not a stale conversation) with no agent target carried over.
       setView('list')
@@ -374,7 +410,8 @@ export function BarApp(): React.JSX.Element {
                     onClose={() => window.omiOverlay.hide()}
                     draft={draft}
                     setDraft={setDraft}
-                    onSubmit={(text) => sendFromBar(text, false)}
+                    onSubmit={(text) => sendFromBar(text, typedVoice)}
+                    limitNotice={limitNotice}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}

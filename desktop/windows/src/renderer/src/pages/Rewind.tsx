@@ -18,6 +18,9 @@ export function Rewind(): React.JSX.Element {
   // Gate the results filmstrip until a query actually runs, so the "No matches."
   // empty state doesn't flash the moment search opens.
   const [hasSearched, setHasSearched] = useState(false)
+  // Last query run — kept after jumping back to the timeline so the frame viewer
+  // keeps boxing the matching OCR lines on the jumped-to frame.
+  const [highlightQuery, setHighlightQuery] = useState('')
 
   const openSearch = (): void => {
     setHasSearched(false)
@@ -74,6 +77,7 @@ export function Rewind(): React.JSX.Element {
           <RewindSearchBar
             onSearch={(q) => {
               setHasSearched(true)
+              setHighlightQuery(q)
               void r.search(q)
             }}
           />
@@ -95,7 +99,7 @@ export function Rewind(): React.JSX.Element {
         </div>
       ) : (
         <>
-          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} />
+          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} highlightQuery={highlightQuery} />
           <RewindThumbnailStrip frames={r.frames} cursorTs={r.cursorTs} onSeek={r.setCursorTs} />
           <RewindTimelineBar
             frames={r.frames}

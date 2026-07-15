@@ -3,12 +3,45 @@ import { app } from 'electron'
 import { basename, join } from 'path'
 import { categorize } from '../usage/category'
 import { isNewLocalDay } from '../usage/usageDay'
-import { buildRewindSearchQuery } from '../rewind/rewindSearchQuery'
+import { buildRewindFtsMatch } from '../rewind/rewindSearchQuery'
 import { addColumnIfMissing as ensureColumn, runMigrations } from './dbMigrations'
+import { applyRewindEmbeddingSchema } from './rewindEmbeddingSchema'
 import { wipeUserDataOn } from './dbWipe'
+import {
+  insertVoiceTurnOn,
+  listPendingVoiceTurnsOn,
+  markVoiceTurnAckedOn,
+  recordVoiceTurnFailureOn,
+  type VoiceTurnOutboxDb
+} from './voiceTurnOutbox'
+import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
+import {
+  listConversationFoldersOn,
+  replaceConversationFoldersOn,
+  upsertConversationFolderOn,
+  deleteConversationFolderOn,
+  type ConversationFoldersDb
+} from './conversationFolders'
+import { scanTopKBySimilarity } from '../rewind/embedVector'
+// The privacy/backfill/scan SQL lives in one importable module so production and
+// the SQL tests run byte-identical statements — a re-declared test copy drifts
+// (it did, twice). See rewindEmbeddingSql.ts.
+import {
+  DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL,
+  DROP_ORPHANED_EMBEDDING_VECTORS_SQL,
+  REWIND_COLUMNS_QUALIFIED,
+  rewindFramesNeedingEmbeddingSql,
+  searchEmbeddingPageSql
+} from './rewindEmbeddingSql'
 import type {
+  AiUserProfileInput,
+  AiUserProfileRecord,
+  FocusSessionInput,
+  FocusSessionRecord,
+  TaskEmbeddingRecord,
   AppUsageRecord,
   ChatMessage,
+  ConversationFolder,
   ConversationSyncPatch,
   ConversationSyncState,
   FileIndexDigest,
@@ -23,9 +56,12 @@ import type {
   LocalKnowledgeGraph,
   OnboardingGraphNode,
   OnboardingGraphEdge,
+  OcrLine,
   RewindFrame,
   SyncSegment,
-  UsageCategory
+  UsageCategory,
+  VoiceTurnOutboxEntry,
+  VoiceTurnOutboxInput
 } from '../../shared/types'
 import { perfMark } from '../../shared/perf'
 
@@ -75,6 +111,11 @@ function get(): Database.Database {
   // Migrate away the incompatible local_kg_* schema from the parked KG experiment.
   dropIfMissingColumn(db, 'local_kg_nodes', 'summary')
   dropIfMissingColumn(db, 'local_kg_edges', 'id')
+  // Track 4 (Rewind semantic search): drop-then-create, as one ordered unit, in a
+  // module the schema tests can actually load. See rewindEmbeddingSchema.ts — a
+  // PR0-era rewind_embeddings has no `hash` column, and indexing it would throw
+  // out of this bootstrap and take every db-backed IPC handler down with it.
+  applyRewindEmbeddingSchema(db)
   db.exec(`
     CREATE TABLE IF NOT EXISTS caption_event (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -183,6 +224,156 @@ function get(): Database.Database {
       dismissed INTEGER NOT NULL DEFAULT 0
     );
     CREATE INDEX IF NOT EXISTS idx_insights_ts ON insights(ts);
+
+    -- --- Track 4: Rewind FTS5 (full-text search over rewind_frames) ---
+    -- External-content FTS index mirroring rewind_frames(id): the triggers below
+    -- keep it in sync on every write, so search reads BM25-ranked matches without
+    -- a full-table LIKE scan. Existing rows are backfilled once by dbMigrations v2
+    -- (which runs AFTER this block — see runMigrations call in get()).
+    CREATE VIRTUAL TABLE IF NOT EXISTS rewind_frames_fts USING fts5(
+      ocr_text, window_title, app,
+      content='rewind_frames', content_rowid='id', tokenize='unicode61'
+    );
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_ai AFTER INSERT ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rowid, ocr_text, window_title, app)
+      VALUES (new.id, new.ocr_text, new.window_title, new.app);
+    END;
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_ad AFTER DELETE ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rewind_frames_fts, rowid, ocr_text, window_title, app)
+      VALUES ('delete', old.id, old.ocr_text, old.window_title, old.app);
+    END;
+    CREATE TRIGGER IF NOT EXISTS rewind_frames_au AFTER UPDATE ON rewind_frames BEGIN
+      INSERT INTO rewind_frames_fts(rewind_frames_fts, rowid, ocr_text, window_title, app)
+      VALUES ('delete', old.id, old.ocr_text, old.window_title, old.app);
+      INSERT INTO rewind_frames_fts(rowid, ocr_text, window_title, app)
+      VALUES (new.id, new.ocr_text, new.window_title, new.app);
+    END;
+
+    -- (Track 4's rewind_embeddings / rewind_embedding_vectors are created by
+    -- applyRewindEmbeddingSchema() above, not here — they need a drop-first
+    -- migration that must not be interleaved with this block.)
+
+    -- --- Track 4: Conversation folders ---
+    CREATE TABLE IF NOT EXISTS conversation_folders (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      color TEXT,
+      icon TEXT,
+      order_idx INTEGER NOT NULL DEFAULT 0,
+      is_system INTEGER NOT NULL DEFAULT 0,
+      conversation_count INTEGER NOT NULL DEFAULT 0,
+      updated_at INTEGER
+    );
+
+    -- --- Track 4: Per-conversation speaker names ---
+    CREATE TABLE IF NOT EXISTS conversation_speaker_names (
+      conversation_id TEXT NOT NULL,
+      speaker_id INTEGER NOT NULL,
+      name TEXT,
+      person_id TEXT,
+      is_user INTEGER NOT NULL DEFAULT 0,
+      PRIMARY KEY (conversation_id, speaker_id)
+    );
+
+    -- --- Track 4: Live notes (meeting minutes; AI-generated or manual) ---
+    CREATE TABLE IF NOT EXISTS live_notes (
+      id TEXT PRIMARY KEY,
+      session_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      is_ai INTEGER NOT NULL DEFAULT 0,
+      seg_start INTEGER,
+      seg_end INTEGER,
+      created_at INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_live_notes_session ON live_notes(session_id);
+
+    -- --- Track 4: Crash-rescue live-segment buffer ---
+    CREATE TABLE IF NOT EXISTS rescue_segments (
+      session_id TEXT NOT NULL,
+      seq INTEGER NOT NULL,
+      segment_json TEXT NOT NULL,
+      ts INTEGER NOT NULL,
+      PRIMARY KEY (session_id, seq)
+    );
+
+    -- --- Track 4: File-index scan state (last_scan_at per root, etc.) ---
+    CREATE TABLE IF NOT EXISTS file_index_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    -- --- Track 4: App-level flags (clean-exit, launch-at-login migrated). NOT
+    -- user-scoped — deliberately excluded from USER_DATA_TABLES so it survives
+    -- sign-out. ---
+    CREATE TABLE IF NOT EXISTS app_meta (
+      key TEXT PRIMARY KEY,
+      value TEXT
+    );
+
+    -- Track 2: Voice & PTT depth (voice turn outbox)
+    -- Durable outbox for a voice turn (PTT or realtime-session utterance) that
+    -- must survive an app restart mid-flight. Mirrors the macOS
+    -- RealtimeVoiceTurnOutbox 1:1: idempotency_key is the natural per-turn dedup
+    -- key (one UUID reused across the turn's completed / interrupted / optimistic
+    -- variants), a positive kernel ack deletes the row, and the drain scans
+    -- pending rows oldest-first. Unconsumed until Phase B / Track 1 wire the
+    -- kernel-write path — the table lands early to claim the shared additive file.
+    CREATE TABLE IF NOT EXISTS voice_turn_outbox (
+      idempotency_key TEXT PRIMARY KEY,
+      owner_id TEXT NOT NULL,
+      surface TEXT,
+      app_id TEXT,
+      session_id TEXT,
+      user_text TEXT,
+      assistant_text TEXT,
+      interrupted INTEGER NOT NULL DEFAULT 0,
+      created_at_ms INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      last_error TEXT,
+      updated_at_ms INTEGER NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_voice_turn_outbox_pending
+      ON voice_turn_outbox(status, created_at_ms);
+  `)
+  /* ---- Track 3 (proactive intelligence & memory) ---- */
+  // Net-new tables — CREATE TABLE IF NOT EXISTS only, no numbered migration, so
+  // sibling tracks never collide on a user_version bump. See shared/types.ts for
+  // the record shapes and the readers/writers at the end of this file.
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS ai_user_profiles (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      profile_text TEXT NOT NULL,
+      data_sources_used TEXT,
+      generated_at INTEGER NOT NULL,
+      backend_synced INTEGER NOT NULL DEFAULT 0
+    );
+    CREATE INDEX IF NOT EXISTS idx_ai_user_profiles_generated_at ON ai_user_profiles(generated_at);
+
+    CREATE TABLE IF NOT EXISTS focus_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      screenshot_id TEXT,
+      status TEXT NOT NULL,
+      app_or_site TEXT,
+      description TEXT,
+      message TEXT,
+      duration_seconds INTEGER NOT NULL DEFAULT 0,
+      backend_id TEXT,
+      backend_synced INTEGER NOT NULL DEFAULT 0,
+      created_at INTEGER NOT NULL,
+      window_title TEXT
+    );
+    CREATE INDEX IF NOT EXISTS idx_focus_sessions_created_at ON focus_sessions(created_at);
+
+    CREATE TABLE IF NOT EXISTS task_embeddings (
+      source TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      vector BLOB NOT NULL,
+      text TEXT NOT NULL,
+      model TEXT NOT NULL,
+      updated_at INTEGER NOT NULL,
+      PRIMARY KEY (source, item_id)
+    );
   `)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
@@ -193,6 +384,14 @@ function get(): Database.Database {
   ensureColumn(db, 'local_kg_nodes', 'source_refs', 'TEXT')
   // Resolved .lnk target exe, for joining indexed apps to app_usage (additive).
   ensureColumn(db, 'indexed_files', 'target_path', 'TEXT')
+  // --- Track 4: additive columns on existing tables ---
+  // Per-line OCR bounding boxes (JSON) for a future on-image highlight overlay.
+  ensureColumn(db, 'rewind_frames', 'ocr_lines_json', 'TEXT')
+  // Conversation starring + folder assignment (local mirror of the cloud fields).
+  ensureColumn(db, 'local_conversation', 'starred', 'INTEGER NOT NULL DEFAULT 0')
+  ensureColumn(db, 'local_conversation', 'folder_id', 'TEXT')
+  // (rewind_embeddings is migrated by migrateRewindEmbeddingSchema, BEFORE the
+  // exec above — an ensureColumn here would run far too late to save it.)
   // Versioned migrations (PRAGMA user_version) — everything beyond the additive
   // baseline above. Ordered + exactly-once; see dbMigrations.ts.
   runMigrations(db)
@@ -326,6 +525,32 @@ export function claimConversationForPosting(id: string, resetAttempts = false): 
   return r.changes > 0
 }
 
+// --- Track 4: conversation folders / starred ---
+// Thin wrappers over the driver-agnostic CRUD in conversationFolders.ts (extracted
+// so the SQL is unit-testable under plain-node vitest with node:sqlite; see that
+// file + its test). get() returns a better-sqlite3 Database whose prepared
+// statements satisfy the ConversationFoldersDb shape structurally — cast to bridge
+// the driver duck-typing, same idiom the voice-turn-outbox wrappers use.
+function foldersDb(): ConversationFoldersDb {
+  return get() as unknown as ConversationFoldersDb
+}
+
+export function listConversationFolders(): ConversationFolder[] {
+  return listConversationFoldersOn(foldersDb())
+}
+
+export function replaceConversationFolders(folders: ConversationFolder[]): void {
+  replaceConversationFoldersOn(foldersDb(), folders)
+}
+
+export function upsertConversationFolder(folder: ConversationFolder): void {
+  upsertConversationFolderOn(foldersDb(), folder)
+}
+
+export function deleteConversationFolder(id: string): void {
+  deleteConversationFolderOn(foldersDb(), id)
+}
+
 export function updateLocalConversationTitle(id: string, title: string): void {
   get()
     .prepare('UPDATE local_conversation SET title = ? WHERE id = ?')
@@ -363,25 +588,51 @@ export function remapConversationId(fromId: string, toId: string): number {
   return r.changes
 }
 
-// Replace the whole index in batches of 500 (matches macOS commit cadence),
-// wrapped per batch in a transaction for speed.
-export function replaceIndexedFiles(records: IndexedFileRecord[]): void {
+// Load path → modified_at (ms) for the whole index. Drives both the retention
+// diff (which existing paths still exist on disk) and the incremental mtime-skip.
+export function loadIndexedFileMtimes(): Map<string, number> {
+  const rows = get()
+    .prepare('SELECT path, modified_at AS modifiedAt FROM indexed_files')
+    .all() as { path: string; modifiedAt: number }[]
+  const map = new Map<string, number>()
+  for (const r of rows) map.set(r.path, r.modifiedAt)
+  return map
+}
+
+// Apply an incremental file-index diff ATOMICALLY: delete the gone paths and
+// upsert the new/changed records inside ONE transaction. This is the core
+// data-loss guard — a crash mid-apply can never leave a partially-wiped index,
+// and (unlike the old clear-then-insert) a transient unreadable root only means
+// its rows are absent from `toDelete`, so they survive untouched.
+export function applyFileIndexDiff(toUpsert: IndexedFileRecord[], toDelete: string[]): void {
   const d = get()
   const insert = d.prepare(
     `INSERT OR REPLACE INTO indexed_files
        (path, filename, extension, file_type, size_bytes, folder, depth, created_at, modified_at, target_path, indexed_at)
      VALUES (@path, @filename, @extension, @fileType, @sizeBytes, @folder, @depth, @createdAt, @modifiedAt, @targetPath, @indexedAt)`
   )
+  const del = d.prepare('DELETE FROM indexed_files WHERE path = ?')
   const indexedAt = Date.now()
-  const writeBatch = d.transaction((rows: IndexedFileRecord[]) => {
+  const apply = d.transaction(() => {
+    for (const path of toDelete) del.run(path)
     // Default the optional field so better-sqlite3 never sees `undefined`.
-    for (const r of rows) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
+    for (const r of toUpsert) insert.run({ ...r, targetPath: r.targetPath ?? null, indexedAt })
   })
-  for (let i = 0; i < records.length; i += 500) writeBatch(records.slice(i, i + 500))
+  apply()
 }
 
-export function clearIndexedFiles(): void {
-  get().prepare('DELETE FROM indexed_files').run()
+// --- app_meta: durable app-level key/value flags (survives sign-out) ---------
+// Kept out of USER_DATA_TABLES so values like the file-index last-run timestamp
+// persist across restarts (see the app_meta DDL + dbWipe rationale).
+export function getAppMeta(key: string): string | null {
+  const row = get().prepare('SELECT value FROM app_meta WHERE key = ?').get(key) as
+    | { value: string | null }
+    | undefined
+  return row?.value ?? null
+}
+
+export function setAppMeta(key: string, value: string): void {
+  get().prepare('INSERT OR REPLACE INTO app_meta (key, value) VALUES (?, ?)').run(key, value)
 }
 
 // Clear every user-scoped table on sign-out (see dbWipe.ts for scope + rationale).
@@ -824,17 +1075,23 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
   )
 }
 
+// --- Track 4: Rewind FTS5 search ---
+// REWIND_COLUMNS_QUALIFIED (columns qualified to `rewind_frames.`, so the FTS
+// join's identically named ocr_text/window_title/app aren't ambiguous) is shared
+// with the backfill work-query and now lives in rewindEmbeddingSql.ts.
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
-    const search = buildRewindSearchQuery(query)
-    if (!search) return []
+    const match = buildRewindFtsMatch(query)
+    if (!match) return []
     return get()
       .prepare(
-        `SELECT ${REWIND_COLUMNS} FROM rewind_frames
-       WHERE ${search.where}
-       ORDER BY ts DESC LIMIT ?`
+        `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
+           JOIN rewind_frames_fts ON rewind_frames.id = rewind_frames_fts.rowid
+          WHERE rewind_frames_fts MATCH ?
+          ORDER BY bm25(rewind_frames_fts) ASC, rewind_frames.ts DESC
+          LIMIT ?`
       )
-      .all(...search.params, limit) as RewindFrame[]
+      .all(match, limit) as RewindFrame[]
   })
 }
 
@@ -869,8 +1126,37 @@ export function unindexedRewindFrames(limit = 20): RewindFrame[] {
     .all(limit) as RewindFrame[]
 }
 
-export function setRewindFrameOcr(id: number, ocrText: string): void {
-  get().prepare('UPDATE rewind_frames SET ocr_text = ?, indexed = 1 WHERE id = ?').run(ocrText, id)
+// `ocrLinesJson` (Track 4) is the JSON-serialized per-line bounding boxes for the
+// on-image highlight overlay. Optional + additive: existing 2-arg callers keep
+// working (lines stored as NULL). The AFTER UPDATE trigger re-syncs the FTS index.
+export function setRewindFrameOcr(id: number, ocrText: string, ocrLinesJson?: string | null): void {
+  get()
+    .prepare('UPDATE rewind_frames SET ocr_text = ?, ocr_lines_json = ?, indexed = 1 WHERE id = ?')
+    .run(ocrText, ocrLinesJson ?? null, id)
+}
+
+/** Per-line OCR bounding boxes for a frame (empty when none stored or malformed). */
+export function getRewindFrameOcrLines(id: number): OcrLine[] {
+  const row = get().prepare('SELECT ocr_lines_json FROM rewind_frames WHERE id = ?').get(id) as
+    | { ocr_lines_json: string | null }
+    | undefined
+  if (!row?.ocr_lines_json) return []
+  try {
+    const parsed = JSON.parse(row.ocr_lines_json)
+    return Array.isArray(parsed) ? (parsed as OcrLine[]) : []
+  } catch {
+    return []
+  }
+}
+
+/** Image paths of frames captured in [fromMs, toMs) — used by the orphaned-JPEG
+ *  sweep to tell a crash-orphaned file apart from one with a live DB row. */
+export function rewindImagePathsBetween(fromMs: number, toMs: number): string[] {
+  return (
+    get()
+      .prepare('SELECT image_path FROM rewind_frames WHERE ts >= ? AND ts < ?')
+      .all(fromMs, toMs) as { image_path: string }[]
+  ).map((r) => r.image_path)
 }
 
 export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
@@ -880,9 +1166,184 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
   const pruneOlderThan = d.transaction((cutoff: number) => {
     const doomed = select.all(cutoff) as RewindFrame[]
     del.run(cutoff)
+    // Embeddings are DERIVED FROM THE USER'S SCREEN CONTENT, so retention has to
+    // reach them too — there is no FK/CASCADE here (foreign_keys is off), and a
+    // vector that outlives its frame is exactly the data the user asked us to
+    // forget. Same transaction as the frame delete: retention is all-or-nothing.
+    dropOrphanedEmbeddingsOn(d)
     return doomed // caller deletes the image files
   })
   return pruneOlderThan(cutoffTs)
+}
+
+// --- Track 4: Rewind semantic search ---
+// Frame -> content hash -> ONE L2-normalized Float32 vector per unique hash.
+// Because the vectors are stored normalized, a dot product IS the cosine
+// similarity — see rewind/embedVector.ts.
+
+/** Delete embedding rows whose frame is gone, then any vector no frame references.
+ *  Ordered: the mapping is cleared first so the vector GC sees the truth. The two
+ *  statements live in rewindEmbeddingSql.ts so the privacy test runs exactly them. */
+function dropOrphanedEmbeddingsOn(d: Database.Database): void {
+  d.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run()
+  d.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
+}
+
+/**
+ * One-time sweep for embeddings left behind by a frame delete that did not clean
+ * them up — i.e. anything an earlier build of this feature already accumulated,
+ * plus the (rare) frames dropped outside `deleteRewindFramesOlderThan`. Runs at
+ * startup; a no-op on a healthy database.
+ */
+export function pruneOrphanedRewindEmbeddings(): number {
+  const d = get()
+  // Count BOTH tables: the vectors dropped by the second DELETE are the ones that
+  // actually held screen-derived content, and counting only the mapping rows made
+  // the startup log understate what had been cleaned.
+  const count = (): number =>
+    (
+      d
+        .prepare(
+          `SELECT (SELECT COUNT(*) FROM rewind_embeddings)
+                + (SELECT COUNT(*) FROM rewind_embedding_vectors) AS n`
+        )
+        .get() as { n: number }
+    ).n
+  const before = count()
+  d.transaction(() => dropOrphanedEmbeddingsOn(d))()
+  return before - count()
+}
+
+/** Frames that have OCR text but no embedding yet, newest first (the frames a
+ *  user is most likely to search for). `excludeIds` drops frames the caller has
+ *  already given up on this launch — without it, a batch that failed would be
+ *  handed back forever and the sweep could never advance past it.
+ *
+ *  The length floor MUST match the queue's `MIN_EMBED_TEXT_LEN`. When it didn't,
+ *  every too-short frame (lock screen, video, blank desktop) was returned here,
+ *  refused by the queue, never given an embedding row — and so returned again,
+ *  forever, monopolising the newest-first page until the backfill stalled outright.
+ *  Whitespace-only text is caught by TRIM here and by `.trim()` there. */
+export function rewindFramesNeedingEmbedding(
+  limit: number,
+  excludeIds: number[] = []
+): RewindFrame[] {
+  return timed('rewindFramesNeedingEmbedding', () => {
+    return get()
+      .prepare(rewindFramesNeedingEmbeddingSql(excludeIds.length))
+      .all(...excludeIds, limit) as RewindFrame[]
+  })
+}
+
+/**
+ * Point a frame at its content's vector, storing that vector only if this is the
+ * first frame to carry the content. Duplicate frames therefore cost one small
+ * mapping row instead of another 12KB copy, while staying just as findable.
+ */
+export function upsertRewindEmbedding(
+  frameId: number,
+  hash: string,
+  vec: Float32Array,
+  model: string
+): void {
+  const d = get()
+  d.transaction(() => {
+    d.prepare(
+      `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
+       VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(hash) DO UPDATE SET
+         dim = excluded.dim, model = excluded.model, vec = excluded.vec, created_at = excluded.created_at`
+    ).run(hash, vec.length, model, vectorToBuffer(vec), Date.now())
+    d.prepare(
+      `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+       ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+    ).run(frameId, hash)
+  })()
+}
+
+/** Map a frame to the content's vector WITHOUT re-storing the vector — the
+ *  cache-hit path, when an identical screen was embedded earlier. Returns false
+ *  when that vector is gone (retention pruned it), so the caller re-embeds. */
+export function linkRewindEmbedding(frameId: number, hash: string): boolean {
+  const d = get()
+  const exists = d
+    .prepare('SELECT 1 AS ok FROM rewind_embedding_vectors WHERE hash = ?')
+    .get(hash) as { ok: number } | undefined
+  if (!exists) return false
+  d.prepare(
+    `INSERT INTO rewind_embeddings (frame_id, hash) VALUES (?, ?)
+     ON CONFLICT(frame_id) DO UPDATE SET hash = excluded.hash`
+  ).run(frameId, hash)
+  return true
+}
+
+/**
+ * Rank stored content against `query` and return the matching frames, strongest
+ * first — WITHOUT blocking the main process.
+ *
+ * better-sqlite3 is synchronous, so scanning every vector in one statement would
+ * hold the main thread (and thus IPC, capture ingestion and the UI) for the whole
+ * scan. The scan is therefore paged and yields between pages; see
+ * `scanTopKBySimilarity`. The candidate set is bounded by retention: only content
+ * some live frame still references is scanned, and retention deletes the rest.
+ */
+export async function searchRewindEmbeddings(
+  query: Float32Array,
+  limit: number
+): Promise<{ frameId: number; similarity: number }[]> {
+  const d = get()
+  // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
+  // at, so an orphan that slipped through can't cost us a similarity computation.
+  //
+  // The vec guard is IN THE SQL (searchEmbeddingPageSql), not a .filter() on the
+  // page. `vec` is nullable, and scanTopKBySimilarity treats a short page as
+  // end-of-store — so filtering after the fact meant one partially-written row
+  // anywhere in the table silently truncated the scan there, and every vector past
+  // it went unranked. Filtering in the query keeps LIMIT and "rows returned"
+  // describing the same set.
+  const page = d.prepare(searchEmbeddingPageSql())
+
+  const scored = await scanTopKBySimilarity(
+    (offset, size) =>
+      (page.all(size, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
+        hash: r.hash,
+        vec: bufferToVector(r.vec)
+      })),
+    query,
+    limit,
+    () => new Promise<void>((resolve) => setImmediate(resolve))
+  )
+  if (scored.length === 0) return []
+
+  // Expand each winning hash back to the frames that carry that content. One
+  // hash can name many frames (that is the whole point of the dedup), so the
+  // result is capped at `limit` frames, strongest first then newest first.
+  const placeholders = scored.map(() => '?').join(',')
+  const rows = d
+    .prepare(
+      `SELECT e.frame_id AS frameId, e.hash AS hash, f.ts AS ts FROM rewind_embeddings e
+         JOIN rewind_frames f ON f.id = e.frame_id
+        WHERE e.hash IN (${placeholders})`
+    )
+    .all(...scored.map((s) => s.hash)) as { frameId: number; hash: string; ts: number }[]
+
+  const similarityByHash = new Map(scored.map((s) => [s.hash, s.similarity]))
+  return rows
+    .map((r) => ({ frameId: r.frameId, similarity: similarityByHash.get(r.hash) ?? 0, ts: r.ts }))
+    .sort((a, b) => b.similarity - a.similarity || b.ts - a.ts)
+    .slice(0, limit)
+    .map(({ frameId, similarity }) => ({ frameId, similarity }))
+}
+
+/** Hydrate frames by id, in the given order (ids with no row are skipped). */
+export function rewindFramesByIds(ids: number[]): RewindFrame[] {
+  if (ids.length === 0) return []
+  const placeholders = ids.map(() => '?').join(',')
+  const frames = get()
+    .prepare(`SELECT ${REWIND_COLUMNS} FROM rewind_frames WHERE id IN (${placeholders})`)
+    .all(...ids) as RewindFrame[]
+  const byId = new Map(frames.map((f) => [f.id, f]))
+  return ids.map((id) => byId.get(id)).filter((f): f is RewindFrame => f !== undefined)
 }
 
 // --- Proactive Insights ---
@@ -904,4 +1365,261 @@ export function recentInsights(limit = 30): InsightRecord[] {
   return get()
     .prepare(`SELECT ${INSIGHT_COLUMNS} FROM insights ORDER BY ts DESC LIMIT ?`)
     .all(limit) as InsightRecord[]
+}
+
+// --- Track 2: Voice & PTT depth (voice turn outbox) ---
+// Thin wrappers over the driver-agnostic CRUD in voiceTurnOutbox.ts (extracted so
+// the SQL is unit-testable under plain-node vitest; see that file + its test).
+// get() returns a better-sqlite3 Database whose prepared statements satisfy the
+// VoiceTurnOutboxDb shape structurally — cast to bridge the driver duck-typing,
+// same idiom the migration/wipe tests use for node:sqlite.
+function voiceTurnDb(): VoiceTurnOutboxDb {
+  return get() as unknown as VoiceTurnOutboxDb
+}
+
+export function insertVoiceTurn(entry: VoiceTurnOutboxInput): void {
+  insertVoiceTurnOn(voiceTurnDb(), entry, Date.now())
+}
+
+export function listPendingVoiceTurns(limit?: number): VoiceTurnOutboxEntry[] {
+  return listPendingVoiceTurnsOn(voiceTurnDb(), limit)
+}
+
+export function markVoiceTurnAcked(idempotencyKey: string): void {
+  markVoiceTurnAckedOn(voiceTurnDb(), idempotencyKey)
+}
+
+export function recordVoiceTurnFailure(idempotencyKey: string, error: string): void {
+  recordVoiceTurnFailureOn(voiceTurnDb(), idempotencyKey, error, Date.now())
+}
+
+/* ---- Track 3 (proactive intelligence & memory) ---- */
+
+// --- AI User Profile history ---
+// Local history of the daily-synthesized AI User Profile. Backend is the source
+// of truth; these rows feed the stage-2 consolidation (reads up to 5 past ones).
+
+const AI_USER_PROFILE_COLUMNS =
+  'id, profile_text AS profileText, data_sources_used AS dataSourcesUsed, generated_at AS generatedAt, backend_synced AS backendSynced'
+
+type AiUserProfileRow = {
+  id: number
+  profileText: string
+  dataSourcesUsed: string | null
+  generatedAt: number
+  backendSynced: number
+}
+
+function mapAiUserProfile(row: AiUserProfileRow): AiUserProfileRecord {
+  return {
+    id: row.id,
+    profileText: row.profileText,
+    dataSourcesUsed: parseJsonArray(row.dataSourcesUsed) ?? [],
+    generatedAt: row.generatedAt,
+    backendSynced: row.backendSynced !== 0
+  }
+}
+
+export function insertAiUserProfile(rec: AiUserProfileInput): number {
+  const info = get()
+    .prepare(
+      `INSERT INTO ai_user_profiles (profile_text, data_sources_used, generated_at, backend_synced)
+       VALUES (?, ?, ?, ?)`
+    )
+    .run(
+      rec.profileText,
+      rec.dataSourcesUsed && rec.dataSourcesUsed.length
+        ? JSON.stringify(rec.dataSourcesUsed)
+        : null,
+      rec.generatedAt,
+      rec.backendSynced ? 1 : 0
+    )
+  return info.lastInsertRowid as number
+}
+
+// Newest first, for the consolidation read (default 5).
+export function listAiUserProfiles(limit = 5): AiUserProfileRecord[] {
+  const rows = get()
+    .prepare(
+      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT ?`
+    )
+    .all(limit) as AiUserProfileRow[]
+  return rows.map(mapAiUserProfile)
+}
+
+export function latestAiUserProfile(): AiUserProfileRecord | null {
+  const row = get()
+    .prepare(
+      `SELECT ${AI_USER_PROFILE_COLUMNS} FROM ai_user_profiles ORDER BY generated_at DESC, id DESC LIMIT 1`
+    )
+    .get() as AiUserProfileRow | undefined
+  return row ? mapAiUserProfile(row) : null
+}
+
+export function updateAiUserProfileText(id: number, text: string): void {
+  get().prepare('UPDATE ai_user_profiles SET profile_text = ? WHERE id = ?').run(text, id)
+}
+
+export function markAiUserProfileSynced(id: number): void {
+  get().prepare('UPDATE ai_user_profiles SET backend_synced = 1 WHERE id = ?').run(id)
+}
+
+export function deleteAiUserProfile(id: number): void {
+  get().prepare('DELETE FROM ai_user_profiles WHERE id = ?').run(id)
+}
+
+export function deleteAllAiUserProfiles(): void {
+  get().prepare('DELETE FROM ai_user_profiles').run()
+}
+
+// --- Focus sessions ---
+// One row per Focus-assistant analysis. No backend focus API on Mac; sessions
+// live locally (and are dual-written as memories elsewhere).
+
+const FOCUS_SESSION_COLUMNS =
+  'id, screenshot_id AS screenshotId, status, app_or_site AS appOrSite, description, message, ' +
+  'duration_seconds AS durationSeconds, backend_id AS backendId, backend_synced AS backendSynced, ' +
+  'created_at AS createdAt, window_title AS windowTitle'
+
+type FocusSessionRow = {
+  id: number
+  screenshotId: string | null
+  status: string
+  appOrSite: string | null
+  description: string | null
+  message: string | null
+  durationSeconds: number
+  backendId: string | null
+  backendSynced: number
+  createdAt: number
+  windowTitle: string | null
+}
+
+function mapFocusSession(row: FocusSessionRow): FocusSessionRecord {
+  return {
+    id: row.id,
+    screenshotId: row.screenshotId,
+    status: row.status === 'distracted' ? 'distracted' : 'focused',
+    appOrSite: row.appOrSite,
+    description: row.description,
+    message: row.message,
+    durationSeconds: row.durationSeconds,
+    backendId: row.backendId,
+    backendSynced: row.backendSynced !== 0,
+    createdAt: row.createdAt,
+    windowTitle: row.windowTitle
+  }
+}
+
+export function insertFocusSession(rec: FocusSessionInput): number {
+  const info = get()
+    .prepare(
+      `INSERT INTO focus_sessions
+         (screenshot_id, status, app_or_site, description, message, duration_seconds, backend_id, backend_synced, created_at, window_title)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`
+    )
+    .run(
+      rec.screenshotId ?? null,
+      rec.status,
+      rec.appOrSite ?? null,
+      rec.description ?? null,
+      rec.message ?? null,
+      rec.durationSeconds ?? 0,
+      rec.backendId ?? null,
+      rec.backendSynced ? 1 : 0,
+      rec.createdAt,
+      rec.windowTitle ?? null
+    )
+  return info.lastInsertRowid as number
+}
+
+// Newest first; optionally filtered to created_at >= sinceEpochMs and capped.
+export function listFocusSessions(sinceEpochMs?: number, limit?: number): FocusSessionRecord[] {
+  const params: unknown[] = []
+  let sql = `SELECT ${FOCUS_SESSION_COLUMNS} FROM focus_sessions`
+  if (sinceEpochMs !== undefined) {
+    sql += ' WHERE created_at >= ?'
+    params.push(sinceEpochMs)
+  }
+  sql += ' ORDER BY created_at DESC, id DESC'
+  if (limit !== undefined) {
+    sql += ' LIMIT ?'
+    params.push(limit)
+  }
+  const rows = get()
+    .prepare(sql)
+    .all(...params) as FocusSessionRow[]
+  return rows.map(mapFocusSession)
+}
+
+export function markFocusSessionSynced(id: number, backendId: string): void {
+  get()
+    .prepare('UPDATE focus_sessions SET backend_synced = 1, backend_id = ? WHERE id = ?')
+    .run(backendId, id)
+}
+
+// --- Task embeddings (semantic ranking) ---
+// 3072-dim Gemini vectors keyed by (source, item_id) so ids from different
+// source tables can't collide. Vectors stored as a Float32 little-endian BLOB
+// (see taskEmbeddingVector.ts), exposed as Float32Array.
+
+const TASK_EMBEDDING_COLUMNS =
+  'source, item_id AS itemId, vector, text, model, updated_at AS updatedAt'
+
+type TaskEmbeddingRow = {
+  source: string
+  itemId: string
+  vector: Buffer | Uint8Array
+  text: string
+  model: string
+  updatedAt: number
+}
+
+function mapTaskEmbedding(row: TaskEmbeddingRow): TaskEmbeddingRecord {
+  return {
+    source: row.source === 'staged_task' ? 'staged_task' : 'action_item',
+    itemId: row.itemId,
+    vector: bufferToVector(row.vector),
+    text: row.text,
+    model: row.model,
+    updatedAt: row.updatedAt
+  }
+}
+
+export function upsertTaskEmbedding(rec: TaskEmbeddingRecord): void {
+  get()
+    .prepare(
+      `INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at)
+       VALUES (@source, @itemId, @vector, @text, @model, @updatedAt)
+       ON CONFLICT(source, item_id) DO UPDATE SET
+         vector = excluded.vector, text = excluded.text, model = excluded.model, updated_at = excluded.updated_at`
+    )
+    .run({
+      source: rec.source,
+      itemId: rec.itemId,
+      vector: vectorToBuffer(rec.vector),
+      text: rec.text,
+      model: rec.model,
+      updatedAt: rec.updatedAt
+    })
+}
+
+export function getTaskEmbedding(source: string, itemId: string): TaskEmbeddingRecord | null {
+  const row = get()
+    .prepare(
+      `SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings WHERE source = ? AND item_id = ?`
+    )
+    .get(source, itemId) as TaskEmbeddingRow | undefined
+  return row ? mapTaskEmbedding(row) : null
+}
+
+export function allTaskEmbeddings(): TaskEmbeddingRecord[] {
+  const rows = get()
+    .prepare(`SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings`)
+    .all() as TaskEmbeddingRow[]
+  return rows.map(mapTaskEmbedding)
+}
+
+export function deleteTaskEmbedding(source: string, itemId: string): void {
+  get().prepare('DELETE FROM task_embeddings WHERE source = ? AND item_id = ?').run(source, itemId)
 }

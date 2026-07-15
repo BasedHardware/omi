@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react'
-import { LayoutDashboard, MessagesSquare, Power, Presentation } from 'lucide-react'
-import type { MeetingMode } from '../../../../../shared/types'
-import { getPreferences, setPreferences } from '../../../lib/preferences'
+import { LayoutDashboard, MessagesSquare, Mic, Monitor, Power, Presentation } from 'lucide-react'
+import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
+import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { Toggle } from '../Toggle'
+import { FontSizeCard } from '../FontSizeCard'
 
 export function GeneralTab(): React.JSX.Element {
   const [chatHistoryMode, setChatHistoryMode] = useState(getPreferences().chatHistoryMode)
 
   return (
     <>
+      {/* macOS General leads with the capture-status cards (spec §3.1). */}
+      <ScreenCaptureRow />
+      <AudioRecordingRow />
       <SettingRow
         icon={MessagesSquare}
         title="Chat history"
@@ -37,7 +41,67 @@ export function GeneralTab(): React.JSX.Element {
       <LegacyHomeRow />
       <MeetingDetectionRow />
       <LaunchAtLoginRow />
+      <FontSizeCard />
     </>
+  )
+}
+
+// Screen Capture status card (macOS General §3.1). Mirrors the Sidebar's "Screen
+// recording" toggle: both bind to the persistent Rewind `captureEnabled` setting.
+// We subscribe to the `rewind:settings` broadcast so flipping the switch in the
+// Sidebar (or another window) live-updates this card without a refetch.
+function ScreenCaptureRow(): React.JSX.Element {
+  const [rewind, setRewind] = useState<RewindSettings | null>(null)
+
+  useEffect(() => {
+    void window.omi?.rewindGetSettings?.().then(setRewind)
+    return window.omi?.onRewindSettings?.(setRewind)
+  }, [])
+
+  const on = !!rewind?.captureEnabled
+  const change = (next: boolean): void => {
+    if (!rewind) return
+    const updated = { ...rewind, captureEnabled: next }
+    setRewind(updated) // optimistic
+    void window.omi?.rewindSetSettings?.(updated).then(setRewind)
+  }
+
+  return (
+    <SettingRow
+      icon={Monitor}
+      dot={on ? 'on' : 'off'}
+      title="Screen Capture"
+      subtitle={on ? 'Capturing your screen for Rewind' : 'Screen capture is paused'}
+      keywords="screen capture rewind record monitor recording"
+      control={
+        <Toggle on={on} onChange={change} disabled={rewind === null} label="Screen Capture" />
+      }
+    />
+  )
+}
+
+// Audio Recording status card (macOS General §3.1). Bound to the `continuousRecording`
+// preference — the same state the Sidebar's "Microphone" toggle drives — and live-syncs
+// through the preferences listener when flipped elsewhere.
+function AudioRecordingRow(): React.JSX.Element {
+  const [on, setOn] = useState<boolean>(() => !!getPreferences().continuousRecording)
+
+  useEffect(() => onPreferencesChange((p) => setOn(!!p.continuousRecording)), [])
+
+  const change = (next: boolean): void => {
+    setOn(next) // optimistic; setPreferences notifies subscribers to reconcile
+    setPreferences({ continuousRecording: next })
+  }
+
+  return (
+    <SettingRow
+      icon={Mic}
+      dot={on ? 'on' : 'off'}
+      title="Audio Recording"
+      subtitle={on ? 'Recording and transcribing audio' : 'Audio recording is paused'}
+      keywords="audio recording microphone transcribe listening voice"
+      control={<Toggle on={on} onChange={change} label="Audio Recording" />}
+    />
   )
 }
 
@@ -64,7 +128,6 @@ function LegacyHomeRow(): React.JSX.Element {
     />
   )
 }
-
 // Meeting detection (Phase 5): off / ask (default) / auto. Per-app overrides
 // live in the same settings object (userData/app-settings.json → meeting.perApp,
 // keyed by pattern id) — editable as JSON; no dedicated UI yet.

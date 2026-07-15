@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest'
-import { reduce, initialState, assembleTranscript, type PttEvent, type PttState, type PttEffect } from './machine'
+import {
+  reduce,
+  initialState,
+  assembleTranscript,
+  type PttEvent,
+  type PttState,
+  type PttEffect
+} from './machine'
 
 // Gate-passing stats (total ≥ 0.35s, voiced ≥ 0.2s) and the failing shapes.
 const OK_STATS = { totalSec: 2.0, voicedSec: 1.5, peak: 8000 }
@@ -8,7 +15,10 @@ const SILENT_STATS = { totalSec: 2.0, voicedSec: 0.05, peak: 200 } // quiet room
 const DEAD_MIC_STATS = { totalSec: 2.0, voicedSec: 0, peak: 0 } // flat-line input
 
 /** Fold events from idle, returning the final state and ALL effects in order. */
-function run(events: PttEvent[], from: PttState = initialState): { state: PttState; effects: PttEffect[] } {
+function run(
+  events: PttEvent[],
+  from: PttState = initialState
+): { state: PttState; effects: PttEffect[] } {
   let state = from
   const effects: PttEffect[] = []
   for (const e of events) {
@@ -66,7 +76,9 @@ describe('happy paths', () => {
       { type: 'DRAINED', stats: OK_STATS },
       { type: 'STREAM_FINAL', text: 'world' }
     ])
-    const liveTexts = effects.filter((e) => e.kind === 'setLiveText').map((e) => (e as { text: string }).text)
+    const liveTexts = effects
+      .filter((e) => e.kind === 'setLiveText')
+      .map((e) => (e as { text: string }).text)
     expect(liveTexts).toEqual(['', 'hello', 'hello world'])
     expect(commitOf(effects)).toBe('hello world')
   })
@@ -104,9 +116,21 @@ describe('fallback paths — the stream is never load-bearing', () => {
   })
 
   it('stream death mid-hold is invisible (no effects) and release batches', () => {
-    const midHold = run([{ type: 'HOLD_START' }, { type: 'STREAM_CONNECTED' }, { type: 'STREAM_DEAD' }])
+    const midHold = run([
+      { type: 'HOLD_START' },
+      { type: 'STREAM_CONNECTED' },
+      { type: 'STREAM_DEAD' }
+    ])
     expect(midHold.state.streamConnected).toBe(false)
-    expect(kinds(midHold.effects).filter((k) => k !== 'startCapture' && k !== 'startStream' && k !== 'setLiveText')).toEqual([])
+    expect(
+      kinds(midHold.effects).filter(
+        (k) =>
+          k !== 'startCapture' &&
+          k !== 'startStream' &&
+          k !== 'startVocabulary' &&
+          k !== 'setLiveText'
+      )
+    ).toEqual([])
     const done = run([{ type: 'RELEASE' }, { type: 'DRAINED', stats: OK_STATS }], midHold.state)
     expect(done.state.phase).toBe('batching')
   })
@@ -201,7 +225,9 @@ describe('cancel and watchdog — no path can hang or leak', () => {
       const setup = run(events)
       const { state, effects } = run([{ type: 'CANCEL' }], setup.state)
       expect(state.phase).toBe('idle')
-      expect(kinds(effects)).toEqual(expect.arrayContaining(['stopCapture', 'stopStream', 'abortBatch']))
+      expect(kinds(effects)).toEqual(
+        expect.arrayContaining(['stopCapture', 'stopStream', 'abortBatch'])
+      )
       expect(commitOf(effects)).toBeNull()
       expect(kinds(effects)).not.toContain('captureEnded')
     })
@@ -233,6 +259,19 @@ describe('cancel and watchdog — no path can hang or leak', () => {
 })
 
 describe('guards', () => {
+  it('HOLD_START kicks off capture, stream, and vocabulary collection', () => {
+    // Vocabulary collection is a hold-start effect (like capture/stream) so its
+    // bounded OCR overlaps the hold and is free by key-up — not taxed onto the
+    // release/transcribe path.
+    const { effects } = run([{ type: 'HOLD_START' }])
+    expect(kinds(effects)).toEqual([
+      'startCapture',
+      'startStream',
+      'startVocabulary',
+      'setLiveText'
+    ])
+  })
+
   it('HOLD_START is only honored from idle', () => {
     const holding = run([{ type: 'HOLD_START' }])
     const again = reduce(holding.state, { type: 'HOLD_START' })
