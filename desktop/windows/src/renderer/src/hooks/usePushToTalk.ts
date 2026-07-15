@@ -722,14 +722,22 @@ export function usePushToTalk(opts: Options): PushToTalk {
 
   // Privacy backstop: the moment the overlay hides or loses focus, any lingering
   // warm mic is released (the hook is the single owner of mic lifecycle policy).
-  // Guarded — the bridge doesn't exist under jsdom tests.
+  // A tap-to-lock hands-free capture must additionally be CANCELLED — releasing
+  // only the warm mic would strand the latch 'locked' over a dead mic (stuck
+  // locked-UI) or, worse, leave the locked capture running while the bar is
+  // hidden. cancel() drops the latch AND CANCELs the capture job (its stopCapture
+  // teardown restores system audio too). Guarded — no bridge under jsdom tests.
   useEffect(() => {
     const bridge = (window as { omiOverlay?: typeof window.omiOverlay }).omiOverlay
     if (!bridge) return
+    const onHiddenOrBlurred = (): void => {
+      if (lockStateRef.current.phase !== 'idle') cancel()
+      releasePttMic()
+    }
     const unActive = bridge.onActiveChange((active) => {
-      if (!active) releasePttMic()
+      if (!active) onHiddenOrBlurred()
     })
-    const unHide = bridge.onWillHide(() => releasePttMic())
+    const unHide = bridge.onWillHide(() => onHiddenOrBlurred())
     return () => {
       unActive()
       unHide()

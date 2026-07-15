@@ -581,6 +581,72 @@ describe('warm-hub delegation', () => {
   })
 })
 
+// Privacy backstop for the tap-to-lock latch: a hands-free locked capture must NOT
+// survive the bar hiding or losing focus. Releasing only the warm mic would strand
+// the latch 'locked' over a dead mic (or leave the capture running while hidden),
+// so hide/blur while locked must CANCEL (drop the latch + discard the capture).
+describe('tap-to-lock privacy backstop (hide/blur while locked)', () => {
+  const installBridge = (): { active: Array<(a: boolean) => void>; hide: Array<() => void> } => {
+    const cbs = { active: [] as Array<(a: boolean) => void>, hide: [] as Array<() => void> }
+    ;(window as unknown as { omiOverlay: unknown }).omiOverlay = {
+      onActiveChange: (cb: (a: boolean) => void) => {
+        cbs.active.push(cb)
+        return () => {}
+      },
+      onWillHide: (cb: () => void) => {
+        cbs.hide.push(cb)
+        return () => {}
+      }
+    }
+    return cbs
+  }
+  afterEach(() => {
+    delete (window as unknown as { omiOverlay?: unknown }).omiOverlay
+  })
+
+  const latchLocked = async (result: {
+    current: ReturnType<typeof usePushToTalk>
+  }): Promise<void> => {
+    act(() => result.current.beginHold())
+    await advance(120)
+    act(() => result.current.endHold())
+    await advance(150)
+    act(() => result.current.beginHold())
+    await advance(0) // flush the capture promise so job.capture is assigned
+  }
+
+  it('onWillHide while locked cancels the capture and clears the latch', async () => {
+    const bridge = installBridge()
+    const { result } = setup()
+    await latchLocked(result)
+    expect(result.current.locked).toBe(true)
+    expect(h.state.captures).toHaveLength(1)
+
+    act(() => bridge.hide.forEach((cb) => cb()))
+    expect(result.current.locked).toBe(false)
+    expect(result.current.recording).toBe(false)
+    expect(h.state.captures[0].dispose).toHaveBeenCalled()
+  })
+
+  it('onActiveChange(false) while locked also cancels', async () => {
+    const bridge = installBridge()
+    const { result } = setup()
+    await latchLocked(result)
+    expect(result.current.locked).toBe(true)
+
+    act(() => bridge.active.forEach((cb) => cb(false)))
+    expect(result.current.locked).toBe(false)
+    expect(h.state.captures[0].dispose).toHaveBeenCalled()
+  })
+
+  it('hide while idle (no locked capture) starts nothing and cancels nothing', async () => {
+    const bridge = installBridge()
+    setup()
+    act(() => bridge.hide.forEach((cb) => cb()))
+    expect(h.startPttCapture).not.toHaveBeenCalled()
+  })
+})
+
 // Tap-to-lock is on the HOTKEY path (beginHold/endHold) only — the textarea Space
 // keeps typing. A quick double-tap latches hands-free listening; a tap finalizes;
 // a long hold is a normal PTT turn.
