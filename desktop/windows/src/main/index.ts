@@ -108,6 +108,7 @@ import { perfMark, flushPerfMarks } from '../shared/perf'
 import * as devBench from './dev/bench'
 import { initSentry } from './sentry'
 import { registerMicPermissionHandlers } from './ipc/micPermission'
+import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
 import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
@@ -308,6 +309,15 @@ if (import.meta.env.DEV && gotSingleInstanceLock) devBench.clearStaleGpuCaches()
 // process doesn't pay SDK setup; no-op unless a DSN is configured, and only
 // enabled for packaged builds (see sentry.ts).
 if (gotSingleInstanceLock) initSentry()
+
+// Clean-shutdown sentinel: detect a crash on the PREVIOUS launch (a hard crash /
+// OS kill / main-process death that bypassed uncaughtException leaves no trace
+// otherwise) and report it to Sentry as a message — developer-facing telemetry
+// only, no user banner (macOS lastSessionCleanExit + detectAndReportCrash parity).
+// After Sentry init so a detected crash can report, and gated on the lock so a
+// losing duplicate process (same userData → same sentinel file) never reads or
+// rewrites the live instance's flag. The clean-exit write is in will-quit below.
+if (gotSingleInstanceLock) initCrashSentinel()
 
 const icon = nativeImage.createFromPath(iconPath)
 import {
@@ -867,7 +877,10 @@ app.whenReady().then(async () => {
       },
       // Meeting detection: inject fake Tier1/Tier2 signals + read the machine
       // phase, so the toast + capture wiring is drivable without real Zoom.
-      meeting: meetingDebug()
+      meeting: meetingDebug(),
+      // Crash sentinel: whether THIS boot detected the previous session as a crash
+      // (the sentinel file itself is asserted directly from userDataDir).
+      crashDetectedOnBoot: () => crashDetectedOnBoot()
     }
   }
 
@@ -1150,6 +1163,12 @@ app.on('window-all-closed', () => {
 // flush perf marks, release the overlay shortcut, and dispose the automation
 // helper + foreground-window hook.
 app.on('will-quit', () => {
+  // Mark this session as a clean exit FIRST (cheap synchronous write) so the next
+  // launch's crash sentinel doesn't false-report. Gated on the lock: a losing
+  // duplicate process shares this profile's sentinel file and must never overwrite
+  // the live instance's dirty flag with "clean". A crash never reaches here → the
+  // flag stays dirty → correctly detected next launch.
+  if (gotSingleInstanceLock) markCleanExit()
   cancelStartupRescan()
   stopMeetingMonitor()
   destroyTray()
