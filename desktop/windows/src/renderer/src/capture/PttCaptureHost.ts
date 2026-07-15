@@ -1,5 +1,11 @@
 import { useEffect } from 'react'
-import { warmPttMic, releasePttMic, startPttCapture, type PttCapture } from './pttGraph'
+import {
+  warmPttMic,
+  releasePttMic,
+  startPttCapture,
+  rebuildWarmGraph,
+  type PttCapture
+} from './pttGraph'
 import type { CaptureEvent } from '../../../shared/types'
 
 // The capture window's push-to-talk command server. Drives the warm mic graph
@@ -136,6 +142,11 @@ export function PttCaptureHost(): null {
           break
         case 'ptt-release':
           releasePttMic()
+          break
+        case 'ptt-rebuild':
+          // Silent-mic recovery (A7b): the hook owns the silent_mic telemetry, so
+          // rebuild without emitting the device-change ptt_capture events.
+          rebuildWarmGraph('silent_mic', false)
           break
         case 'ptt-start':
           startCapture(cmd.captureId, cmd.backfillMs, ownerId)

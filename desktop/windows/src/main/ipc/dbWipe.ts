@@ -20,7 +20,29 @@ export const USER_DATA_TABLES = [
   'onboarding_kg_edges',
   'app_usage',
   'rewind_frames',
-  'insights'
+  'insights',
+  // --- Track 4: user-scoped tables added for Rewind/Conversations/capture ---
+  // rewind_frames_fts is deliberately absent: its rows are derived from
+  // rewind_frames via AFTER-DELETE triggers, so `DELETE FROM rewind_frames`
+  // above already empties the FTS index. app_meta is also absent — it holds
+  // app-level flags (clean-exit, launch-at-login migrated) that must survive
+  // sign-out.
+  'conversation_folders',
+  'conversation_speaker_names',
+  'live_notes',
+  'rescue_segments',
+  'rewind_embeddings',
+  // The vectors themselves — derived from the user's screen content, so they must
+  // go on an account switch just like the frame->content mapping above.
+  'rewind_embedding_vectors',
+  'file_index_meta',
+  // Track 2's voice-turn outbox holds queued user voice-message data; it must be
+  // cleared on account switch (drift-guard caught it missing — see dbWipe.test.ts).
+  'voice_turn_outbox',
+  // --- Track 3 (proactive) ---
+  'ai_user_profiles',
+  'focus_sessions',
+  'task_embeddings'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

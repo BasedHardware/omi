@@ -4,6 +4,8 @@ import { AxiosError, AxiosHeaders } from 'axios'
 const h = vi.hoisted(() => ({
   post: vi.fn(),
   getIdToken: vi.fn(async (_force?: boolean) => 'test-token'),
+  // Mutable so feed-forward tests can vary voiceLanguages between turns.
+  prefs: { language: 'en' } as { language: string; voiceLanguages?: string[] },
   listen: {
     start: vi.fn(async (_args: Record<string, unknown>) => {}),
     feed: vi.fn(),
@@ -15,9 +17,15 @@ const h = vi.hoisted(() => ({
 
 vi.mock('../apiClient', () => ({ omiApi: { post: h.post } }))
 vi.mock('../firebase', () => ({ auth: { currentUser: { getIdToken: h.getIdToken } } }))
-vi.mock('../preferences', () => ({ getPreferences: () => ({ language: 'en' }) }))
+vi.mock('../preferences', () => ({ getPreferences: () => h.prefs }))
 
-import { startPttStream, batchTranscribe, batchErrorMessage } from './transport'
+import {
+  startPttStream,
+  batchTranscribe,
+  batchErrorMessage,
+  __resetPttLanguageMemoryForTests
+} from './transport'
+import { startPttKeywordCollection, __resetPttKeywordsForTests } from './vocabulary'
 
 function axiosErrorWithStatus(status: number): AxiosError {
   return new AxiosError('boom', 'ERR_BAD_REQUEST', undefined, undefined, {
@@ -37,6 +45,9 @@ beforeEach(() => {
   vi.clearAllMocks()
   h.listen.handlers = []
   h.getIdToken.mockResolvedValue('test-token')
+  h.prefs = { language: 'en' }
+  __resetPttLanguageMemoryForTests()
+  __resetPttKeywordsForTests()
   // Minimal window.omi bridge fake.
   ;(globalThis as Record<string, unknown>).window = {
     omi: {
@@ -69,7 +80,11 @@ describe('startPttStream', () => {
     emit({ sessionId: sid, kind: 'connected' })
     expect(cb.onConnected).toHaveBeenCalledOnce()
 
-    emit({ sessionId: sid, kind: 'segments', segments: [{ text: ' hello ' }, { text: '' }, { text: 'world' }] })
+    emit({
+      sessionId: sid,
+      kind: 'segments',
+      segments: [{ text: ' hello ' }, { text: '' }, { text: 'world' }]
+    })
     expect(cb.onFinal.mock.calls.map((c) => c[0])).toEqual(['hello', 'world'])
     stream.stop()
   })
@@ -135,9 +150,34 @@ describe('batchTranscribe', () => {
     const [url, body, config] = h.post.mock.calls[0]
     expect(url).toBe('/v2/voice-message/transcribe')
     expect(body).toBe(pcm.buffer)
-    expect(config.params).toEqual({ language: 'en', sample_rate: 16000, encoding: 'linear16', channels: 1 })
+    // The context bridge (screenReadText/rewindFrames) is absent in this fake, so
+    // keyword collection yields nothing but the always-on "Omi,OMI" brand prepend.
+    expect(config.params).toEqual({
+      language: 'en',
+      sample_rate: 16000,
+      encoding: 'linear16',
+      channels: 1,
+      keywords: 'Omi,OMI'
+    })
     expect(config.headers['Content-Type']).toBe('application/octet-stream')
     expect(config.__noRetry).toBe(true)
+  })
+
+  it('ships the hold-start-collected keywords after the brand prepend', async () => {
+    // Collection is kicked off at hold-start; batchTranscribe consumes the cache
+    // instead of running OCR on the release/transcribe path.
+    ;(globalThis as Record<string, unknown>).window = {
+      omi: { screenReadText: async () => 'Photoshop Illustrator' }
+    }
+    startPttKeywordCollection(1000)
+    h.post.mockResolvedValueOnce({ data: { transcript: 'x' } })
+    await batchTranscribe(new Int16Array(4), new AbortController().signal)
+    const kw = String(
+      (h.post.mock.calls[0][2] as { params: Record<string, unknown> }).params.keywords
+    ).split(',')
+    expect(kw.slice(0, 2)).toEqual(['Omi', 'OMI'])
+    expect(kw).toContain('Photoshop')
+    expect(kw).toContain('Illustrator')
   })
 
   it('returns "" when the backend heard nothing', async () => {
@@ -146,7 +186,9 @@ describe('batchTranscribe', () => {
   })
 
   it('retries exactly once on 401 with a force-refreshed token', async () => {
-    h.post.mockRejectedValueOnce(axiosErrorWithStatus(401)).mockResolvedValueOnce({ data: { transcript: 'ok' } })
+    h.post
+      .mockRejectedValueOnce(axiosErrorWithStatus(401))
+      .mockResolvedValueOnce({ data: { transcript: 'ok' } })
     expect(await batchTranscribe(new Int16Array(4), new AbortController().signal)).toBe('ok')
     expect(h.getIdToken).toHaveBeenCalledWith(true)
     expect(h.post).toHaveBeenCalledTimes(2)
@@ -156,6 +198,44 @@ describe('batchTranscribe', () => {
     h.post.mockRejectedValueOnce(axiosErrorWithStatus(429))
     await expect(batchTranscribe(new Int16Array(4), new AbortController().signal)).rejects.toThrow()
     expect(h.post).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe('spoken-language feed-forward (A3)', () => {
+  const sig = (): AbortSignal => new AbortController().signal
+  const paramsOf = (call: number): Record<string, unknown> =>
+    (h.post.mock.calls[call][2] as { params: Record<string, unknown> }).params
+
+  it('is inert when voiceLanguages is empty — the language param never changes', async () => {
+    h.prefs = { language: 'en' } // no voiceLanguages
+    h.post.mockResolvedValue({ data: { transcript: 'привет', language: 'ru' } })
+    await batchTranscribe(new Int16Array(4), sig())
+    await batchTranscribe(new Int16Array(4), sig())
+    expect(paramsOf(0).language).toBe('en')
+    expect(paramsOf(1).language).toBe('en') // detected 'ru' is NOT fed forward
+  })
+
+  it('feeds the last detected language into the next turn when it is a candidate', async () => {
+    h.prefs = { language: 'en', voiceLanguages: ['ru', 'en'] }
+    h.post.mockResolvedValueOnce({ data: { transcript: 'привет', language: 'ru' } })
+    h.post.mockResolvedValueOnce({ data: { transcript: 'ok', language: 'en' } })
+    await batchTranscribe(new Int16Array(4), sig()) // turn 1: static 'en', detects 'ru'
+    await batchTranscribe(new Int16Array(4), sig()) // turn 2: uses fed-forward 'ru'
+    expect(paramsOf(0).language).toBe('en')
+    expect(paramsOf(1).language).toBe('ru')
+  })
+
+  it('ignores a detected language outside the candidate set', async () => {
+    h.prefs = { language: 'en', voiceLanguages: ['ru', 'en'] }
+    h.post.mockResolvedValueOnce({ data: { transcript: 'привет', language: 'ru' } }) // in set → remembered
+    h.post.mockResolvedValueOnce({ data: { transcript: 'ciao', language: 'it' } }) // out of set → ignored
+    h.post.mockResolvedValueOnce({ data: { transcript: 'ok', language: 'en' } })
+    await batchTranscribe(new Int16Array(4), sig())
+    await batchTranscribe(new Int16Array(4), sig())
+    await batchTranscribe(new Int16Array(4), sig())
+    expect(paramsOf(0).language).toBe('en') // no prior detection
+    expect(paramsOf(1).language).toBe('ru') // fed forward from turn 1
+    expect(paramsOf(2).language).toBe('ru') // turn 2's 'it' was out-of-set, so 'ru' persists
   })
 })
 

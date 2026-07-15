@@ -359,6 +359,36 @@
     background: rgba(0, 0, 0, 0.24);
   }
 
+  /* Native <input type="date"> themed to match .input-field. The UA ships a
+     black-on-white calendar glyph and a low-contrast `yyyy-mm-dd` placeholder,
+     both of which looked foreign on the dark canvas. color-scheme: dark gives us
+     the dark picker panel; the rest tints the glyph and the empty-field text. */
+  .date-input {
+    @apply input-field;
+    color-scheme: dark;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator {
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 4px;
+    opacity: 0.45;
+    filter: invert(1);
+    transition: opacity 150ms ease-out;
+  }
+
+  .date-input::-webkit-calendar-picker-indicator:hover {
+    opacity: 0.9;
+    background: rgba(255, 255, 255, 0.1);
+  }
+
+  /* An empty date field renders its yyyy-mm-dd mask at full body contrast; dim it
+     so it reads as a placeholder. `data-empty` is set by the component (an empty
+     controlled input has no `value` *attribute* to select on). */
+  .date-input[data-empty='true']::-webkit-datetime-edit {
+    color: rgba(255, 255, 255, 0.4);
+  }
+
   .skeleton {
     @apply animate-shimmer rounded-2xl bg-gradient-to-r from-white/5 via-white/10 to-white/5 bg-[length:200%_100%];
   }

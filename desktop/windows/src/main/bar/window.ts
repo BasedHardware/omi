@@ -58,6 +58,7 @@ import {
 } from './watchdog'
 import { makeKeySampler, makePrimaryMouseButtonSampler } from './keyState'
 import { getAppSettings, setAppSettings } from '../appSettings'
+import type { BarUsageLimitPayload } from '../../shared/types'
 
 export type BarMode = 'peek' | 'expanded' | 'ptt'
 export type BarReveal = 'summon' | 'ptt'
@@ -891,6 +892,19 @@ export function registerBarIpc(sendToMain: (channel: string, ...args: unknown[])
   // window broadcasts projected state back via chat:publishState → chat:state.
   ipcMain.on('bar:sendChat', (_e, payload: { text: string; fromVoice: boolean }) => {
     sendToMain('chat:barSend', payload)
+  })
+  // Barge-in: a bar PTT hold started — tell the main window (which owns the
+  // spoken-reply playback via useChat → voiceController) to interrupt it. Same
+  // bar→main hop as sendChat; ChatBridgeHost calls interruptCurrentResponse().
+  ipcMain.on('bar:interruptTts', () => {
+    sendToMain('chat:barInterrupt')
+  })
+  // A bar send was refused by the chat usage limit. The shared usage-limit modal
+  // and the TTS voice both live in the main window, so hop there: ChatBridgeHost
+  // raises the popup (Mac shows it on the main window even when the block came
+  // from the floating bar) and speaks the line back for a voice turn.
+  ipcMain.on('bar:usageLimit', (_e, payload: BarUsageLimitPayload) => {
+    sendToMain('chat:barUsageLimit', payload)
   })
   // The bar (re)requests the current chat state — e.g. on first mount / each
   // reveal — so it renders the ongoing thread even if it missed prior broadcasts.
