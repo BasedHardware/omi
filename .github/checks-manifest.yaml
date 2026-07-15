@@ -201,6 +201,16 @@ checks:
     triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: desktop-manifest-routes
+    command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: desktop-swift-format-wrapper
+    command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 02: pinned swift-format bootstrap wrapper provenance contract"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
