@@ -1,23 +1,39 @@
 // Proof that the embedding store's SQL does what the indexer assumes, in a REAL
-// SQLite database. db.ts's better-sqlite3 can't load under plain-node vitest
-// (Electron ABI), so — same pattern as rewindFtsSearch.test.ts — the DDL and the
-// query shapes are replicated verbatim from db.ts and driven via node:sqlite,
-// while the REAL vector codec + ranking (taskEmbeddingVector, scanTopKBySimilarity)
-// are exercised.
+// SQLite database.
+//
+// The statements under test are IMPORTED from ipc/rewindEmbeddingSql.ts, not
+// re-declared here. That is the point: db.ts's better-sqlite3 can't load under
+// plain-node vitest (Electron ABI), and the old version of this file coped by
+// pasting a "verbatim" copy of each statement — which then drifted from
+// production without a single test turning red (the work-query copy filtered
+// `ocr_text != ''` long after production moved to `LENGTH(TRIM(ocr_text)) >= 10`;
+// the paged-scan copy never grew the `LENGTH(v.vec)=…` guard). Importing the real
+// statements makes that class of divergence impossible.
 //
 // Two things here are load-bearing enough to pin:
 //   * RETENTION MUST REACH THE VECTORS. They are derived from the user's screen
 //     content, there is no FK/CASCADE (foreign_keys is off), and a vector that
 //     outlives its frame is exactly the data the user asked us to forget.
 //   * The backfill predicate. If it returned frames that already have an
-//     embedding, the launch backfill would re-embed the same frames forever.
+//     embedding, or frames too short to embed, the launch backfill would spin.
 import { DatabaseSync } from 'node:sqlite'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { contentHash, l2Normalize, scanTopKBySimilarity } from './embedVector'
+import { MIN_EMBED_TEXT_LEN } from './embedQueue'
 import { bufferToVector, vectorToBuffer } from '../ipc/taskEmbeddingVector'
+import { applyRewindEmbeddingSchema } from '../ipc/rewindEmbeddingSchema'
+import {
+  DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL,
+  DROP_ORPHANED_EMBEDDING_VECTORS_SQL,
+  rewindFramesNeedingEmbeddingSql,
+  searchEmbeddingPageSql
+} from '../ipc/rewindEmbeddingSql'
 
-// Verbatim from db.ts get() (rewind_frames trimmed to the columns these queries touch).
-const SCHEMA = `
+// rewind_frames is db.ts's, trimmed to the columns these queries project/touch —
+// it is not part of the extracted embedding SQL, so it stays inline. The two
+// embedding tables ARE extracted (rewindEmbeddingSchema), so they are created by
+// the real DDL, not a copy.
+const REWIND_FRAMES_DDL = `
   CREATE TABLE rewind_frames (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     ts INTEGER NOT NULL,
@@ -31,38 +47,12 @@ const SCHEMA = `
     indexed INTEGER NOT NULL DEFAULT 0,
     ocr_lines_json TEXT
   );
-  CREATE TABLE rewind_embeddings (
-    frame_id INTEGER PRIMARY KEY,
-    hash TEXT
-  );
-  CREATE INDEX idx_rewind_embeddings_hash ON rewind_embeddings(hash);
-  CREATE TABLE rewind_embedding_vectors (
-    hash TEXT PRIMARY KEY,
-    dim INTEGER,
-    model TEXT,
-    vec BLOB,
-    created_at INTEGER
-  );
 `
 
-// The backfill's work list, verbatim from db.ts rewindFramesNeedingEmbedding().
-const NEEDS_EMBEDDING = `
-  SELECT rewind_frames.id FROM rewind_frames
-    LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
-   WHERE rewind_frames.indexed = 1
-     AND rewind_frames.ocr_text IS NOT NULL AND rewind_frames.ocr_text != ''
-     AND rewind_embeddings.frame_id IS NULL
-   ORDER BY rewind_frames.ts DESC
-   LIMIT ?
-`
-
-// The orphan GC, verbatim from db.ts dropOrphanedEmbeddingsOn().
-const DROP_ORPHAN_MAPPINGS =
-  'DELETE FROM rewind_embeddings WHERE frame_id NOT IN (SELECT id FROM rewind_frames)'
-const DROP_ORPHAN_VECTORS = `
-  DELETE FROM rewind_embedding_vectors
-   WHERE hash NOT IN (SELECT hash FROM rewind_embeddings WHERE hash IS NOT NULL)
-`
+// The real 2-dim toy vectors are 8 bytes (Float32 x 2). Production's guard expects
+// a full 3072-dim / 12288-byte blob; the page SQL takes the size as a parameter
+// precisely so this test can drive the identical guard with small vectors.
+const TOY_BLOB_BYTES = 2 * Float32Array.BYTES_PER_ELEMENT
 
 let db: DatabaseSync
 
@@ -88,8 +78,8 @@ const embedFrame = (frameId: number, text: string, values: number[]): void => {
 
 const pruneOlderThan = (cutoff: number): void => {
   db.prepare('DELETE FROM rewind_frames WHERE ts < ?').run(cutoff)
-  db.prepare(DROP_ORPHAN_MAPPINGS).run()
-  db.prepare(DROP_ORPHAN_VECTORS).run()
+  db.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run()
+  db.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
 }
 
 const counts = (): { frames: number; mappings: number; vectors: number } => ({
@@ -100,11 +90,12 @@ const counts = (): { frames: number; mappings: number; vectors: number } => ({
 })
 
 const needsEmbedding = (limit = 100): number[] =>
-  (db.prepare(NEEDS_EMBEDDING).all(limit) as { id: number }[]).map((r) => r.id)
+  (db.prepare(rewindFramesNeedingEmbeddingSql(0)).all(limit) as { id: number }[]).map((r) => r.id)
 
 beforeEach(() => {
   db = new DatabaseSync(':memory:')
-  db.exec(SCHEMA)
+  db.exec(REWIND_FRAMES_DDL)
+  applyRewindEmbeddingSchema(db) // the REAL embedding-table DDL
 })
 
 describe('retention (privacy)', () => {
@@ -147,10 +138,42 @@ describe('retention (privacy)', () => {
     db.prepare('DELETE FROM rewind_frames WHERE id = 1').run()
     expect(counts()).toEqual({ frames: 0, mappings: 1, vectors: 1 })
 
-    db.prepare(DROP_ORPHAN_MAPPINGS).run()
-    db.prepare(DROP_ORPHAN_VECTORS).run()
+    db.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run()
+    db.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
 
     expect(counts()).toEqual({ frames: 0, mappings: 0, vectors: 0 })
+  })
+
+  // Mutation guard for the `WHERE hash IS NOT NULL` in the vector GC. `hash` is
+  // nullable; SQLite's `x NOT IN (<set with NULL>)` is NULL (never true) for every
+  // row, so a single NULL-hash mapping would make the vector DELETE match NOTHING
+  // and every retired vector would orphan and survive "delete my history". Drop
+  // that guard from DROP_ORPHANED_EMBEDDING_VECTORS_SQL and this test goes red.
+  it('GCs an orphan vector even when a NULL-hash mapping is present', () => {
+    // A live, real-hash frame + its vector.
+    addFrame(1, 1000, 'live content')
+    embedFrame(1, 'live content', [1, 0])
+    // A second live frame whose mapping hash is NULL (the defensive edge the guard
+    // exists for), plus an orphan vector no mapping references.
+    addFrame(2, 2000, 'frame with null-hash mapping')
+    db.prepare('INSERT INTO rewind_embeddings (frame_id, hash) VALUES (2, NULL)').run()
+    db.prepare(
+      `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
+       VALUES ('orphan-hash', 2, 'm', ?, 1)`
+    ).run(vectorToBuffer(l2Normalize(Float32Array.from([1, 0]))))
+    expect(counts()).toEqual({ frames: 2, mappings: 2, vectors: 2 })
+
+    db.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run() // both frames live: no-op
+    db.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
+
+    // The orphan is gone; the live vector survives. Without the NULL guard the
+    // orphan would still be here (the DELETE would have matched nothing).
+    const hashes = (
+      db.prepare('SELECT hash FROM rewind_embedding_vectors ORDER BY hash').all() as {
+        hash: string
+      }[]
+    ).map((r) => r.hash)
+    expect(hashes).toEqual([contentHash('live content')])
   })
 })
 
@@ -185,13 +208,19 @@ describe('the backfill work list', () => {
     expect(needsEmbedding()).toEqual([2]) // and NOT 1, 3, or 4
   })
 
-  it('drops a frame out of the list once its embedding is stored', () => {
-    addFrame(1, 1000, 'text content')
-    expect(needsEmbedding()).toEqual([1])
-    embedFrame(1, 'text content', [1, 0])
-    // This is what makes the backfill resumable across launches with no cursor:
-    // persisted work simply stops being returned.
-    expect(needsEmbedding()).toEqual([])
+  // The min-length floor, now that the test runs the REAL query. A frame whose OCR
+  // is one char short of MIN_EMBED_TEXT_LEN must NOT be handed to the backfill —
+  // the queue would refuse it, it would never earn an embedding row, and it would
+  // be returned forever, stalling the sweep at the head of the newest-first page.
+  // The old re-declared copy filtered `ocr_text != ''` and never checked this.
+  it('excludes frames whose OCR text is below the min-length floor', () => {
+    const belowLen = MIN_EMBED_TEXT_LEN - 1
+    addFrame(1, 1000, 'x'.repeat(belowLen)) // 9 chars — too short
+    addFrame(2, 2000, 'x'.repeat(MIN_EMBED_TEXT_LEN)) // 10 chars — exactly the floor
+    addFrame(3, 3000, `   ${'x'.repeat(belowLen)}   `) // 9 non-space chars, padded — TRIM catches it
+
+    // Only the ≥10-char frame qualifies; the short and whitespace-padded ones don't.
+    expect(needsEmbedding()).toEqual([2])
   })
 
   // C3: a frame that failed this launch is excluded IN SQL, so the sweep can move
@@ -200,18 +229,8 @@ describe('the backfill work list', () => {
   it('excludes the caller-supplied failed ids, so the sweep can advance past them', () => {
     addFrame(1, 3000, 'failed frame text')
     addFrame(2, 2000, 'good frame text')
-    const rows = db
-      .prepare(
-        `SELECT rewind_frames.id FROM rewind_frames
-           LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
-          WHERE rewind_frames.indexed = 1
-            AND rewind_frames.ocr_text != ''
-            AND rewind_embeddings.frame_id IS NULL
-            AND rewind_frames.id NOT IN (?)
-          ORDER BY rewind_frames.ts DESC
-          LIMIT ?`
-      )
-      .all(1, 10) as { id: number }[]
+    // The REAL query with one exclusion placeholder; bind the excluded id, then limit.
+    const rows = db.prepare(rewindFramesNeedingEmbeddingSql(1)).all(1, 10) as { id: number }[]
     // Frame 1 (the newest, and the one that failed) is skipped — frame 2 is reached.
     expect(rows.map((r) => r.id)).toEqual([2])
   })
@@ -226,13 +245,9 @@ describe('similarity search over stored rows', () => {
     embedFrame(2, 'exact match content', [1, 0])
     embedFrame(3, 'diagonal content', [1, 1])
 
-    // The real paged query from db.ts searchRewindEmbeddings, incl. the EXISTS
-    // guard that skips vectors no live frame references.
-    const page = db.prepare(
-      `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
-        WHERE EXISTS (SELECT 1 FROM rewind_embeddings e WHERE e.hash = v.hash)
-        ORDER BY v.hash LIMIT ? OFFSET ?`
-    )
+    // The REAL paged query, incl. the EXISTS guard that skips vectors no live frame
+    // references and the vec-size guard (driven with the toy blob size).
+    const page = db.prepare(searchEmbeddingPageSql(TOY_BLOB_BYTES))
     const top = await scanTopKBySimilarity(
       (offset, limit) =>
         (page.all(limit, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
@@ -261,11 +276,7 @@ describe('similarity search over stored rows', () => {
        VALUES ('orphan', 2, 'm', ?, 1)`
     ).run(vectorToBuffer(l2Normalize(Float32Array.from([1, 0]))))
 
-    const page = db.prepare(
-      `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
-        WHERE EXISTS (SELECT 1 FROM rewind_embeddings e WHERE e.hash = v.hash)
-        ORDER BY v.hash LIMIT ? OFFSET ?`
-    )
+    const page = db.prepare(searchEmbeddingPageSql(TOY_BLOB_BYTES))
     const top = await scanTopKBySimilarity(
       (offset, limit) =>
         (page.all(limit, offset) as { hash: string; vec: Uint8Array }[]).map((r) => ({
@@ -277,5 +288,25 @@ describe('similarity search over stored rows', () => {
       async () => {}
     )
     expect(top.map((t) => t.hash)).toEqual([contentHash('live content')])
+  })
+
+  // The vec-size guard (m-1 fix) pinned: a live-referenced but wrong-size vector
+  // (a partial write) must be skipped, not fed to the ranker — a short page there
+  // used to truncate the whole scan. Drop `LENGTH(v.vec) = …` and this goes red.
+  it('skips a live vector whose blob is the wrong size', async () => {
+    addFrame(1, 1000, 'good vector')
+    embedFrame(1, 'good vector', [1, 0]) // 8-byte blob, matches TOY_BLOB_BYTES
+    // A referenced vector with a truncated (4-byte) blob — a partial write.
+    db.prepare('INSERT INTO rewind_embeddings (frame_id, hash) VALUES (2, ?)').run('short-hash')
+    addFrame(2, 2000, 'short vector frame')
+    db.prepare(
+      `INSERT INTO rewind_embedding_vectors (hash, dim, model, vec, created_at)
+       VALUES ('short-hash', 1, 'm', ?, 1)`
+    ).run(Buffer.from([1, 2, 3, 4]))
+
+    const page = db.prepare(searchEmbeddingPageSql(TOY_BLOB_BYTES))
+    const rows = page.all(100, 0) as { hash: string }[]
+    // Only the correctly-sized vector is returned to the scan.
+    expect(rows.map((r) => r.hash)).toEqual([contentHash('good vector')])
   })
 })

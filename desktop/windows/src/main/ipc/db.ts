@@ -22,11 +22,17 @@ import {
   deleteConversationFolderOn,
   type ConversationFoldersDb
 } from './conversationFolders'
-import { EMBED_BLOB_BYTES, scanTopKBySimilarity } from '../rewind/embedVector'
-// The backfill's work query and the queue's accept guard MUST agree on what is
-// embeddable, or the query hands back rows the queue refuses — forever. Same
-// constant, one definition.
-import { MIN_EMBED_TEXT_LEN } from '../rewind/embedQueue'
+import { scanTopKBySimilarity } from '../rewind/embedVector'
+// The privacy/backfill/scan SQL lives in one importable module so production and
+// the SQL tests run byte-identical statements — a re-declared test copy drifts
+// (it did, twice). See rewindEmbeddingSql.ts.
+import {
+  DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL,
+  DROP_ORPHANED_EMBEDDING_VECTORS_SQL,
+  REWIND_COLUMNS_QUALIFIED,
+  rewindFramesNeedingEmbeddingSql,
+  searchEmbeddingPageSql
+} from './rewindEmbeddingSql'
 import type {
   AiUserProfileInput,
   AiUserProfileRecord,
@@ -1044,13 +1050,9 @@ export function listRewindFrames(from: number, to: number): RewindFrame[] {
 }
 
 // --- Track 4: Rewind FTS5 search ---
-// Columns qualified to `rewind_frames.` — the FTS join exposes an identically
-// named ocr_text/window_title/app that would otherwise be ambiguous.
-const REWIND_COLUMNS_QUALIFIED =
-  'rewind_frames.id, rewind_frames.ts, rewind_frames.app, rewind_frames.window_title AS windowTitle, ' +
-  'rewind_frames.process_name AS processName, rewind_frames.ocr_text AS ocrText, ' +
-  'rewind_frames.image_path AS imagePath, rewind_frames.width, rewind_frames.height, rewind_frames.indexed'
-
+// REWIND_COLUMNS_QUALIFIED (columns qualified to `rewind_frames.`, so the FTS
+// join's identically named ocr_text/window_title/app aren't ambiguous) is shared
+// with the backfill work-query and now lives in rewindEmbeddingSql.ts.
 export function searchRewindFrames(query: string, limit = 500): RewindFrame[] {
   return timed('searchRewindFrames', () => {
     const match = buildRewindFtsMatch(query)
@@ -1146,15 +1148,11 @@ export function deleteRewindFramesOlderThan(cutoffTs: number): RewindFrame[] {
 // similarity — see rewind/embedVector.ts.
 
 /** Delete embedding rows whose frame is gone, then any vector no frame references.
- *  Ordered: the mapping is cleared first so the vector GC sees the truth. */
+ *  Ordered: the mapping is cleared first so the vector GC sees the truth. The two
+ *  statements live in rewindEmbeddingSql.ts so the privacy test runs exactly them. */
 function dropOrphanedEmbeddingsOn(d: Database.Database): void {
-  d.prepare(
-    'DELETE FROM rewind_embeddings WHERE frame_id NOT IN (SELECT id FROM rewind_frames)'
-  ).run()
-  d.prepare(
-    `DELETE FROM rewind_embedding_vectors
-      WHERE hash NOT IN (SELECT hash FROM rewind_embeddings WHERE hash IS NOT NULL)`
-  ).run()
+  d.prepare(DROP_ORPHANED_EMBEDDING_MAPPINGS_SQL).run()
+  d.prepare(DROP_ORPHANED_EMBEDDING_VECTORS_SQL).run()
 }
 
 /**
@@ -1197,21 +1195,8 @@ export function rewindFramesNeedingEmbedding(
   excludeIds: number[] = []
 ): RewindFrame[] {
   return timed('rewindFramesNeedingEmbedding', () => {
-    const notIn = excludeIds.length
-      ? `AND rewind_frames.id NOT IN (${excludeIds.map(() => '?').join(',')})`
-      : ''
     return get()
-      .prepare(
-        `SELECT ${REWIND_COLUMNS_QUALIFIED} FROM rewind_frames
-           LEFT JOIN rewind_embeddings ON rewind_embeddings.frame_id = rewind_frames.id
-          WHERE rewind_frames.indexed = 1
-            AND rewind_frames.ocr_text IS NOT NULL
-            AND LENGTH(TRIM(rewind_frames.ocr_text)) >= ${MIN_EMBED_TEXT_LEN}
-            AND rewind_embeddings.frame_id IS NULL
-            ${notIn}
-          ORDER BY rewind_frames.ts DESC
-          LIMIT ?`
-      )
+      .prepare(rewindFramesNeedingEmbeddingSql(excludeIds.length))
       .all(...excludeIds, limit) as RewindFrame[]
   })
 }
@@ -1276,18 +1261,13 @@ export async function searchRewindEmbeddings(
   // EXISTS against idx_rewind_embeddings_hash: skips vectors no live frame points
   // at, so an orphan that slipped through can't cost us a similarity computation.
   //
-  // The vec guard is IN THE SQL, not a .filter() on the page. `vec` is nullable,
-  // and scanTopKBySimilarity treats a short page as end-of-store — so filtering
-  // after the fact meant one partially-written row anywhere in the table silently
-  // truncated the scan there, and every vector past it went unranked. Filtering in
-  // the query keeps LIMIT and "rows returned" describing the same set.
-  const page = d.prepare(
-    `SELECT v.hash AS hash, v.vec AS vec FROM rewind_embedding_vectors v
-      WHERE EXISTS (SELECT 1 FROM rewind_embeddings e WHERE e.hash = v.hash)
-        AND v.vec IS NOT NULL AND LENGTH(v.vec) = ${EMBED_BLOB_BYTES}
-      ORDER BY v.hash
-      LIMIT ? OFFSET ?`
-  )
+  // The vec guard is IN THE SQL (searchEmbeddingPageSql), not a .filter() on the
+  // page. `vec` is nullable, and scanTopKBySimilarity treats a short page as
+  // end-of-store — so filtering after the fact meant one partially-written row
+  // anywhere in the table silently truncated the scan there, and every vector past
+  // it went unranked. Filtering in the query keeps LIMIT and "rows returned"
+  // describing the same set.
+  const page = d.prepare(searchEmbeddingPageSql())
 
   const scored = await scanTopKBySimilarity(
     (offset, size) =>
