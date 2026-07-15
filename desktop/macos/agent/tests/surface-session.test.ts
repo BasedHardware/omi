@@ -446,4 +446,43 @@ describe("surface_conversations", () => {
     expect(store.allRows("SELECT * FROM surface_conversations")).toHaveLength(1);
   });
 
+  it("samples chat-first capability once for main Chat and keeps every other surface off", () => {
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+    const mainSurface = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "chat-first" };
+    const main = kernel.resolveSurfaceSession({
+      ownerId: "owner-a",
+      surfaceRef: mainSurface,
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
+    });
+    const mainSnapshot = kernel.contextSnapshot(main.agentSessionId, "owner-a", "main_chat");
+
+    expect(mainSnapshot.capabilities.chatFirstUi).toBe(true);
+    expect(mainSnapshot.capabilities.chatFirstControlGeneration).toBe(7);
+
+    const floating = kernel.resolveSurfaceSession({
+      ownerId: "owner-a",
+      surfaceRef: { surfaceKind: "floating_chat", externalRefKind: "chat", externalRefId: "chat-first" },
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
+    });
+    const floatingSnapshot = kernel.contextSnapshot(floating.agentSessionId, "owner-a", "floating_chat");
+    expect(floatingSnapshot.capabilities.chatFirstUi).toBe(false);
+    expect(floatingSnapshot.capabilities.chatFirstControlGeneration).toBeNull();
+  });
+
+  it("cannot turn chat-first on after the main-chat session was sampled off", () => {
+    const kernel = new AgentRuntimeKernel({ store, registry: new AdapterRegistry() });
+    const surfaceRef = { surfaceKind: "main_chat", externalRefKind: "chat", externalRefId: "sampled-off" };
+    const resolved = kernel.resolveSurfaceSession({ ownerId: "owner-a", surfaceRef, defaultAdapterId: "acp" });
+    kernel.resolveSurfaceSession({
+      ownerId: "owner-a",
+      surfaceRef,
+      defaultAdapterId: "acp",
+      chatFirstCapability: { chatFirstUi: true, controlGeneration: 7 },
+    });
+
+    expect(kernel.contextSnapshot(resolved.agentSessionId, "owner-a", "main_chat").capabilities.chatFirstUi).toBe(false);
+  });
+
 });

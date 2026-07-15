@@ -241,6 +241,10 @@ export class KernelCore {
     return decision;
   }
 
+  assertLiveRunToolCapability(input: { capabilityRef: string; activeOwnerId: string }) {
+    return this.toolCapabilities.assertLiveCapability(input.capabilityRef, input.activeOwnerId);
+  }
+
   markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
     this.toolCapabilities.markInvocationDispatched(invocation);
   }

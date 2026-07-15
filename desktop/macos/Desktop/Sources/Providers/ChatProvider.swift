@@ -324,6 +324,10 @@ enum ChatContentBlock: Identifiable {
   case thinking(id: String, text: String)
   /// Collapsible card showing a summary with expandable full text (used for AI profile/discovery)
   case discoveryCard(id: String, title: String, summary: String, fullText: String)
+  case questionCard(id: String, questionId: String, text: String, subjectKind: String, subjectId: String, options: [[String: Any]])
+  case taskCard(id: String, taskId: String)
+  case goalLink(id: String, goalId: String, summary: String)
+  case captureLink(id: String, conversationId: String, momentTimestampMs: Int?, summary: String)
   case agentSpawn(
     id: String,
     pillId: UUID?,
@@ -350,6 +354,10 @@ enum ChatContentBlock: Identifiable {
     case .toolCall(let id, _, _, _, _, _): return id
     case .thinking(let id, _): return id
     case .discoveryCard(let id, _, _, _): return id
+    case .questionCard(let id, _, _, _, _, _): return id
+    case .taskCard(let id, _): return id
+    case .goalLink(let id, _, _): return id
+    case .captureLink(let id, _, _, _): return id
     case .agentSpawn(let id, _, _, _, _, _, _): return id
     case .agentCompletion(let id, _, _, _, _, _, _, _): return id
     }
@@ -891,6 +899,14 @@ extension ChatContentBlock {
     case .discoveryCard(_, let title, _, let fullText):
       let trimmed = fullText.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"
+    case .questionCard(_, _, let text, _, _, _):
+      let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
+    case .taskCard:
+      return nil
+    case .goalLink(_, _, let summary), .captureLink(_, _, _, let summary):
+      let trimmed = summary.trimmingCharacters(in: .whitespacesAndNewlines)
+      return trimmed.isEmpty ? nil : trimmed
     case .agentSpawn(_, _, _, _, let title, let objective, _):
       let trimmed = objective.trimmingCharacters(in: .whitespacesAndNewlines)
       return trimmed.isEmpty ? title : "\(title)\n\(trimmed)"

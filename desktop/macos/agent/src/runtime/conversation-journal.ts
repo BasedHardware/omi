@@ -94,6 +94,20 @@ export interface UpdateJournalTurnInput {
   nowMs?: number;
 }
 
+/**
+ * Kernel-only admission for server-validated chat-first blocks. The caller has
+ * already checked the live run capability; this helper binds that exact
+ * main-Chat run/attempt to its one streaming assistant placeholder and appends
+ * the canonical blocks in the same SQLite transaction.
+ */
+export interface AppendChatFirstBlocksInput {
+  ownerId: string;
+  sessionId: string;
+  runId: string;
+  attemptId: string;
+  blocks: readonly ConversationContentBlock[];
+}
+
 export interface TerminalizeJournalTurnInput {
   ownerId: string;
   conversationId: string;
@@ -564,6 +578,80 @@ export function updateJournalTurn(store: AgentStore, input: UpdateJournalTurnInp
       [backendHash, tombstoneCode, now, tombstoneCode, now, input.turnId, backendHash],
     );
     return updated;
+  });
+}
+
+export function appendChatFirstBlocksToProducingTurn(
+  store: AgentStore,
+  input: AppendChatFirstBlocksInput,
+): ConversationTurn {
+  if (input.blocks.length < 1 || input.blocks.length > 8) {
+    throw new Error("Chat-first append requires one to eight blocks");
+  }
+  return store.withTransaction(() => {
+    const activeAttempt = store.getOptionalRow(
+      `SELECT 1
+       FROM run_attempts a
+       JOIN runs r ON r.run_id = a.run_id
+       JOIN sessions s ON s.session_id = r.session_id
+       WHERE a.attempt_id = ?
+         AND a.run_id = ?
+         AND s.owner_id = ?
+         AND s.session_id = ?
+         AND r.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval')
+         AND a.status IN ('queued', 'starting', 'running', 'waiting_input', 'waiting_approval')
+         AND a.attempt_no = (
+           SELECT MAX(latest.attempt_no) FROM run_attempts latest WHERE latest.run_id = r.run_id
+         )`,
+      [input.attemptId, input.runId, input.ownerId, input.sessionId],
+    );
+    if (!activeAttempt) {
+      throw new Error("Chat-first append requires the current owner-bound run attempt");
+    }
+    const bound = store.allRows(
+      `SELECT conversation_id, turn_id
+       FROM conversation_turns
+       WHERE producing_run_id = ?
+         AND producing_attempt_id = ?
+         AND role = 'assistant'
+         AND surface_kind = 'main_chat'
+         AND status = 'streaming'`,
+      [input.runId, input.attemptId],
+    );
+    if (bound.length > 1) {
+      throw new Error("Chat-first append found multiple producing assistant journal turns");
+    }
+    const producing = bound[0] ?? (() => {
+      // The placeholder is journaled before the runtime supplies a run/attempt.
+      // Pin it only when the current owner/session has exactly one live main
+      // Chat assistant target; user text and display order are never selectors.
+      const pending = store.allRows(
+        `SELECT DISTINCT ct.conversation_id, ct.turn_id
+         FROM surface_conversations sc
+         JOIN conversation_turns ct ON ct.conversation_id = sc.conversation_id
+         WHERE sc.owner_id = ?
+           AND sc.agent_session_id = ?
+           AND sc.surface_kind = 'main_chat'
+           AND ct.role = 'assistant'
+           AND ct.surface_kind = 'main_chat'
+           AND ct.status = 'streaming'
+           AND ct.producing_run_id IS NULL
+           AND ct.producing_attempt_id IS NULL`,
+        [input.ownerId, input.sessionId],
+      );
+      if (pending.length !== 1) {
+        throw new Error("Chat-first append requires exactly one live producing assistant journal turn");
+      }
+      return pending[0]!;
+    })();
+    return updateJournalTurn(store, {
+      ownerId: input.ownerId,
+      conversationId: String(producing.conversation_id),
+      turnId: String(producing.turn_id),
+      producingRunId: input.runId,
+      producingAttemptId: input.attemptId,
+      appendContentBlocks: input.blocks,
+    });
   });
 }
 
@@ -2390,6 +2478,37 @@ function validateContentBlocks(blocks: readonly ConversationContentBlock[]): Con
     nonEmpty(block.type, "content block type");
     if (ids.has(id)) throw new Error(`Duplicate content block ID ${id}`);
     ids.add(id);
+    if (block.type === "questionCard") {
+      nonEmpty(block.questionId, "question ID");
+      if (block.text.length === 0 || block.text.length > 300) throw new Error("Question card text is out of bounds");
+      nonEmpty(block.subject.id, "question subject ID");
+      if (!["task", "goal", "capture"].includes(block.subject.kind)) throw new Error("Question subject kind is invalid");
+      if (block.options.length < 1 || block.options.length > 4) throw new Error("Question card option count is out of bounds");
+      const optionIds = new Set<string>();
+      let defers = 0;
+      for (const option of block.options) {
+        nonEmpty(option.optionId, "question option ID");
+        if (optionIds.has(option.optionId)) throw new Error("Question option IDs must be unique");
+        optionIds.add(option.optionId);
+        if (option.label.length === 0 || option.label.length > 80) throw new Error("Question option label is out of bounds");
+        if (option.preparedAnswer.length === 0 || option.preparedAnswer.length > 500) {
+          throw new Error("Question option prepared answer is out of bounds");
+        }
+        if (option.defer === true) defers += 1;
+      }
+      if (defers > 1) throw new Error("Question card may contain at most one defer option");
+    } else if (block.type === "taskCard") {
+      nonEmpty(block.taskId, "task ID");
+    } else if (block.type === "goalLink") {
+      nonEmpty(block.goalId, "goal ID");
+      if (block.summary.length === 0 || block.summary.length > 200) throw new Error("Goal summary is out of bounds");
+    } else if (block.type === "captureLink") {
+      nonEmpty(block.conversationId, "conversation ID");
+      if (block.summary.length === 0 || block.summary.length > 200) throw new Error("Capture summary is out of bounds");
+      if (block.momentTimestampMs !== undefined && (!Number.isSafeInteger(block.momentTimestampMs) || block.momentTimestampMs < 0)) {
+        throw new Error("Capture moment timestamp is invalid");
+      }
+    }
     return structuredClone(block);
   });
 }
