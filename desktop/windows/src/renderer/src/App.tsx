@@ -39,6 +39,7 @@ import { RecordHotkeyHost } from './components/hotkeys/RecordHotkeyHost'
 import { BackgroundConsentInterstitial } from './components/consent/BackgroundConsentInterstitial'
 import { isSecondaryWindow } from './lib/windowRole'
 import { attachVoiceE2eHook } from './lib/voice/e2eHook'
+import { attachLiveNotesE2eHook } from './lib/liveNotes/e2eHook'
 import { PrimitivesGallery } from './components/ui/__gallery/PrimitivesGallery'
 import { refreshIfStale } from './lib/voice/autoModelSelector'
 import { refreshAboutUserCard, resetAboutUserCard } from './lib/voice/aboutUser'
@@ -206,7 +207,10 @@ function App(): React.JSX.Element {
   // smoke harness can drive the voice controller even on the signed-out screen
   // (its error-path assertion starts a session with no auth). Main window only.
   useEffect(() => {
-    if (!IS_SECONDARY_WINDOW) attachVoiceE2eHook()
+    if (!IS_SECONDARY_WINDOW) {
+      attachVoiceE2eHook()
+      attachLiveNotesE2eHook()
+    }
   }, [])
 
   // Warm the daily "Auto" realtime-voice model pick, so the user's FIRST voice

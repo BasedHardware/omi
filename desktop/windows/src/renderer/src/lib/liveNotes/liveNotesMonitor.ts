@@ -101,10 +101,16 @@ export class LiveNotesMonitor {
   private startCount = 0
 
   constructor(
-    private readonly generator: LiveNoteGenerator = defaultGenerator,
+    private generator: LiveNoteGenerator = defaultGenerator,
     private readonly storage: LiveNoteStorage = defaultStorage,
     private readonly live: LiveTranscriptSource = liveConversation
   ) {}
+
+  /** Swap the note generator. Used ONLY by the E2E hook (gated on OMI_E2E) to stub
+   *  the LLM boundary so the harness never hits the real Gemini proxy. */
+  setGeneratorForTest(gen: LiveNoteGenerator): void {
+    this.generator = gen
+  }
 
   // --- Public read surface (the panel subscribes like it does to liveConversation) ---
 
