@@ -3,6 +3,14 @@ import { readStickyNotes } from '../integrations/stickyNotes'
 import { connect, disconnect, isConnected, connectedEmail } from '../integrations/oauth'
 import { fetchGmail, fetchCalendar } from '../integrations/google'
 import {
+  xConnect,
+  xStatus,
+  xSync,
+  xDisconnect,
+  xRunStateSnapshot,
+  type XSession
+} from '../integrations/xConnector'
+import {
   getSourceState,
   markProcessed,
   lastSyncAt,
@@ -76,4 +84,19 @@ export function registerIntegrationsHandlers(): void {
       markProcessed(source, ids)
     }
   )
+
+  // --- X (Twitter) connector. The renderer relays { apiBase, token } per call; the
+  // connect run lives in main so it outlives the Connect panel and streams progress
+  // over integrations:x:progress. ---
+  ipcMain.handle('integrations:x:status', async (_e, session: XSession) => xStatus(session))
+  ipcMain.handle('integrations:x:connect', async (_e, session: XSession) => {
+    xConnect(session)
+    return xRunStateSnapshot()
+  })
+  ipcMain.handle('integrations:x:runState', async () => xRunStateSnapshot())
+  ipcMain.handle('integrations:x:sync', async (_e, session: XSession) => xSync(session))
+  ipcMain.handle('integrations:x:disconnect', async (_e, session: XSession) => {
+    await xDisconnect(session)
+    return { success: true }
+  })
 }
