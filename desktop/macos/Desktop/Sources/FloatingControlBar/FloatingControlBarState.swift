@@ -100,6 +100,22 @@ enum FloatingConversationSurface: Equatable {
     }
 }
 
+/// Closing a visible surface is usually a user cancellation. A voice handoff is
+/// different: it only collapses the typed surface before routing the already
+/// admitted voice turn, so it must leave that turn's physical drivers and
+/// reducer-owned lifecycle intact.
+enum FloatingConversationCloseIntent: Equatable {
+    case userDismissal
+    case voiceHandoff
+
+    var cancelsInFlightWork: Bool {
+        switch self {
+        case .userDismissal: return true
+        case .voiceHandoff: return false
+        }
+    }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {

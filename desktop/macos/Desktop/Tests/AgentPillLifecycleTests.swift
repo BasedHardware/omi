@@ -1009,9 +1009,20 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(playerSource.contains("@discardableResult\n  func enqueue(_ data: Data) -> Bool"))
     XCTAssertTrue(hubSource.contains("guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else"))
     XCTAssertTrue(hubSource.contains("keeping text fallback armed"))
-    XCTAssertTrue(hubSource.contains("audioReceivedThisTurn = true\n    realtimePlaybackEpoch = pcmPlayer.playbackEpoch\n    responseGlowGate.markPlaybackActive(lease: lease)"))
+    XCTAssertTrue(hubSource.contains("RealtimeNativeAudioScheduleFailureAction.decide("))
+    XCTAssertTrue(hubSource.contains("VoiceTurnCoordinator.shared.noteOutputProgress(lease)"))
+    XCTAssertTrue(hubSource.contains("responseGlowGate.markPlaybackActive(lease: lease)"))
     XCTAssertFalse(hubSource.contains("pcmPlayer?.playbackEpoch ??"))
     XCTAssertFalse(hubSource.contains("audioReceivedThisTurn = true\n    // If PTT muted music/system output"))
+  }
+
+  func testVoiceHandoffCloseDoesNotCancelAnAdmittedPTTTurn() throws {
+    XCTAssertTrue(FloatingConversationCloseIntent.userDismissal.cancelsInFlightWork)
+    XCTAssertFalse(FloatingConversationCloseIntent.voiceHandoff.cancelsInFlightWork)
+
+    // omi-test-quality: source-inspection -- static contract: the AppKit voice handoff passes the non-cancelling intent.
+    let source = try floatingControlBarWindowSource()
+    XCTAssertTrue(source.contains("window.closeAIConversation(intent: .voiceHandoff)"))
   }
 
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
@@ -1719,6 +1730,7 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    // omi-test-quality: source-inspection -- static contract: runtime bridge wiring stays owned by the process boundary.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

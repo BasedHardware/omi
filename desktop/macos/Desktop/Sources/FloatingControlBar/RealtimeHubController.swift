@@ -2065,12 +2065,23 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
 
   private func updateRegisteredDirectedProviders(_ providers: [String]) {
     let normalized = providers.filter { ["hermes", "openclaw"].contains($0) }.sorted()
+    let refreshPlan = RealtimeHubSchemaRefreshPolicy.plan(
+      currentDirectedProviderIDs: registeredDirectedProviderIDs,
+      nextDirectedProviderIDs: normalized,
+      hasLiveSession: session != nil,
+      hasPendingReconnectInput: reconnectAudioBuffer != nil)
     guard registeredDirectedProviderIDs != normalized else { return }
     registeredDirectedProviderIDs = normalized
     // A realtime provider's tool schema is immutable for the physical session.
-    // Replace a warm session so it cannot advertise a stale local adapter.
-    if session != nil {
-      teardownSession()
+    // Replace a warm session so it cannot advertise a stale local adapter. If
+    // this refresh was discovered while the current PTT turn was preparing its
+    // canonical context, keep the reducer-owned buffer for hubDidConnect() to
+    // replay onto the new schema-compatible socket.
+    if case .replaceSession(let preservingReconnectInput) = refreshPlan {
+      if preservingReconnectInput {
+        log("RealtimeHub: replacing directed-provider schema while preserving active PTT input")
+      }
+      teardownSession(preservingReconnectAudio: preservingReconnectInput)
       ensureWarm()
     }
   }
