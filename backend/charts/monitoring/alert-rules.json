@@ -6838,5 +6838,79 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "product_health_capture_finalization_outage",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Product health",
+    "title": "Product health — capture finalization outage",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 900, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m])) > 5) and ((sum(increase(omi_product_journey_terminal_total{journey=\"capture_finalization\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m])), 1)) < ((sum(increase(omi_product_journey_terminal_total{journey=\"capture_finalization\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m] offset 24h)), 1)) - 0.20))",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "refId": "B", "type": "threshold", "conditions": [{"type": "query", "evaluator": {"type": "gt", "params": [0]}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"type": "last", "params": []}}]}
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {"__dashboardUid__": "omi-product-health-real-traffic", "__panelId__": "3", "runbook": "backend/docs/runbooks/resilience-dashboards.md"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "record": null,
+    "labels": {"severity": "critical", "instatus_component": "capture-finalization"}
+  },
+  {
+    "uid": "product_health_pusher_regression",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Product health",
+    "title": "Product health — pusher session regression",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 900, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {"type": "prometheus", "uid": "prometheus"},
+          "expr": "(sum(increase(omi_product_journey_accepted_total{journey=\"realtime_pusher_session\"}[15m])) > 10) and ((sum(increase(omi_product_journey_terminal_total{journey=\"realtime_pusher_session\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"realtime_pusher_session\"}[15m])), 1)) < ((sum(increase(omi_product_journey_terminal_total{journey=\"realtime_pusher_session\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"realtime_pusher_session\"}[15m] offset 24h)), 1)) - 0.10))",
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {"datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "refId": "B", "type": "threshold", "conditions": [{"type": "query", "evaluator": {"type": "gt", "params": [0]}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"type": "last", "params": []}}]}
+      }
+    ],
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "15m",
+    "keep_firing_for": "0s",
+    "annotations": {"__dashboardUid__": "omi-product-health-real-traffic", "__panelId__": "2", "runbook": "backend/docs/runbooks/pusher-degraded.md"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "record": null,
+    "labels": {"severity": "critical", "instatus_component": "live-transcription"}
   }
 ]

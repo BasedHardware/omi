@@ -26,6 +26,12 @@ from utils.conversations.finalizer import (
     finalize_persisted_conversation,
 )
 from utils.executors import db_executor, storage_executor, run_blocking
+from utils.observability.product_health import (
+    ProductJourney,
+    ProductJourneyAttempt,
+    ProductJourneyOutcome,
+    record_durable_journey_terminal,
+)
 from utils.async_tasks import (
     supervise_tasks,
     drain_tasks,
@@ -78,6 +84,18 @@ WS_RECEIVE_TIMEOUT = 300.0  # seconds
 # before being force-cancelled.  Prevents hung GCS uploads or webhook calls from
 # blocking cleanup indefinitely.
 BG_DRAIN_TIMEOUT = 30.0  # seconds
+
+
+def _record_capture_finalization_terminal(
+    outcome: ProductJourneyOutcome, accepted_at_epoch_seconds: float | None
+) -> None:
+    if accepted_at_epoch_seconds is None:
+        return
+    record_durable_journey_terminal(
+        ProductJourney.capture_finalization,
+        outcome,
+        accepted_at_epoch_seconds=accepted_at_epoch_seconds,
+    )
 
 
 class _SpeakerSampleRequest(TypedDict):
@@ -134,6 +152,7 @@ async def _process_conversation_task(
     generation: Optional[int] = None
     lease_epoch: Optional[int] = None
     attempt_count: int = 0
+    accepted_at_epoch_seconds: float | None = None
 
     async def record_failure(failure_code: str) -> bool:
         """Release the lease. Returns whether this was the terminal attempt.
@@ -158,6 +177,7 @@ async def _process_conversation_task(
                 )
                 if not marked_dead_letter:
                     return False
+                _record_capture_finalization_terminal(ProductJourneyOutcome.failed, accepted_at_epoch_seconds)
                 return await run_blocking(
                     db_executor, lifecycle_service.fail_and_discard_processing, uid, conversation_id
                 )
@@ -220,6 +240,7 @@ async def _process_conversation_task(
             return
         attempt_count = claim['attempt_count']
         lease_epoch = claim['lease_epoch']
+        accepted_at_epoch_seconds = claim.get('accepted_at_epoch_seconds')
         if lease_epoch is None:
             logger.error(
                 'pusher finalization claim returned no lease epoch uid=%s conversation=%s', uid, conversation_id
@@ -255,6 +276,7 @@ async def _process_conversation_task(
         if not completed:
             await send_result({'conversation_id': conversation_id, 'error': 'job_completion_conflict'})
             return
+        _record_capture_finalization_terminal(ProductJourneyOutcome.succeeded, accepted_at_epoch_seconds)
         if disposition == ConversationFinalizationDisposition.fenced:
             await send_result({'conversation_id': conversation_id, 'fenced': True})
             return
@@ -302,6 +324,7 @@ async def _websocket_util_trigger(
     websocket_active = True
     shutdown_event = asyncio.Event()
     websocket_close_code = 1000
+    journey_attempt: ProductJourneyAttempt | None = None
 
     # audio bytes
     audio_bytes_webhook_delay_seconds = get_audio_bytes_webhook_seconds(uid)
@@ -782,6 +805,7 @@ async def _websocket_util_trigger(
     bg_main_tasks: List[asyncio.Task[Any]] = []
     try:
         PUSHER_ACTIVE_WS_CONNECTIONS.inc()
+        journey_attempt = ProductJourneyAttempt.accepted(ProductJourney.realtime_pusher_session)
         receive_task = create_named_task(receive_tasks(), name=f"ws:{uid}:receive")
         bg_main_tasks = [
             create_named_task(process_speaker_sample_queue(), name=f"ws:{uid}:speaker_samples"),
@@ -816,6 +840,7 @@ async def _websocket_util_trigger(
 
     except Exception as e:
         logger.error(f"Error during WebSocket operation: {e}")
+        websocket_close_code = 1011
     finally:
         shutdown_event.set()
         websocket_active = False
@@ -825,6 +850,9 @@ async def _websocket_util_trigger(
         bg_tasks.clear()
 
         PUSHER_ACTIVE_WS_CONNECTIONS.dec()
+        if journey_attempt is not None:
+            outcome = ProductJourneyOutcome.succeeded if websocket_close_code == 1000 else ProductJourneyOutcome.failed
+            journey_attempt.finish(outcome)
 
         if websocket.client_state == WebSocketState.CONNECTED:
             try:

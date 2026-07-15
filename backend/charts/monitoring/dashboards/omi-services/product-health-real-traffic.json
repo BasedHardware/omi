@@ -1,0 +1,67 @@
+{
+  "uid": "omi-product-health-real-traffic",
+  "title": "Product health — real traffic",
+  "tags": ["product-health", "real-traffic"],
+  "timezone": "browser",
+  "schemaVersion": 41,
+  "version": 1,
+  "refresh": "1m",
+  "panels": [
+    {
+      "id": 1,
+      "type": "text",
+      "title": "Scope and interpretation",
+      "gridPos": {"h": 4, "w": 24, "x": 0, "y": 0},
+      "options": {
+        "mode": "markdown",
+        "content": "**No synthetic canaries.** These are accepted user journeys only. Compare a current rate with the same environment's own 24-hour baseline; do not compare dev and production. A Cloud Run scrape gap can make a quiet service look healthy, so check scrape targets before treating no data as recovery."
+      }
+    },
+    {
+      "id": 2,
+      "type": "timeseries",
+      "title": "Accepted and terminal journeys",
+      "gridPos": {"h": 9, "w": 12, "x": 0, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by (journey) (rate(omi_product_journey_accepted_total[5m]))",
+          "legendFormat": "{{journey}} accepted/s",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum by (journey, outcome) (rate(omi_product_journey_terminal_total[5m]))",
+          "legendFormat": "{{journey}} {{outcome}}/s",
+          "range": true
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "ops"}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}}
+    },
+    {
+      "id": 3,
+      "type": "timeseries",
+      "title": "Capture finalization success rate vs. own baseline",
+      "gridPos": {"h": 9, "w": 12, "x": 12, "y": 4},
+      "datasource": {"type": "prometheus", "uid": "prometheus"},
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum(increase(omi_product_journey_terminal_total{journey=\"capture_finalization\",outcome=\"succeeded\"}[15m])) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m])), 1)",
+          "legendFormat": "current",
+          "range": true
+        },
+        {
+          "refId": "B",
+          "expr": "sum(increase(omi_product_journey_terminal_total{journey=\"capture_finalization\",outcome=\"succeeded\"}[15m] offset 24h)) / clamp_min(sum(increase(omi_product_journey_accepted_total{journey=\"capture_finalization\"}[15m] offset 24h)), 1)",
+          "legendFormat": "24h baseline",
+          "range": true
+        }
+      ],
+      "fieldConfig": {"defaults": {"unit": "percentunit", "min": 0, "max": 1}, "overrides": []},
+      "options": {"legend": {"displayMode": "table", "placement": "bottom", "showLegend": true}, "tooltip": {"mode": "multi"}}
+    }
+  ]
+}

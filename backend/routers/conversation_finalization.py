@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from datetime import datetime
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request
@@ -24,10 +25,28 @@ from utils.conversations.finalizer import (
 )
 from utils.executors import db_executor, run_blocking
 from utils.metrics import LISTEN_FINALIZATION_RETRIES_TOTAL
+from utils.observability.product_health import ProductJourney, ProductJourneyOutcome, record_durable_journey_terminal
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
+
+
+def _accepted_at_epoch_seconds(job: dict[str, Any] | None) -> float | None:
+    created_at = job.get('created_at') if job else None
+    return created_at.timestamp() if isinstance(created_at, datetime) else None
+
+
+def _record_capture_finalization_terminal(
+    outcome: ProductJourneyOutcome, accepted_at_epoch_seconds: float | None
+) -> None:
+    if accepted_at_epoch_seconds is None:
+        return
+    record_durable_journey_terminal(
+        ProductJourney.capture_finalization,
+        outcome,
+        accepted_at_epoch_seconds=accepted_at_epoch_seconds,
+    )
 
 
 def _parse_task_payload(payload: Any) -> tuple[str, int] | None:
@@ -52,6 +71,7 @@ async def _retry_or_dead_letter(
     *,
     uid: str | None = None,
     conversation_id: str | None = None,
+    accepted_at_epoch_seconds: float | None = None,
 ) -> bool:
     """Record a task failure; return whether this was the terminal delivery."""
     max_attempts = get_listen_finalization_tasks_max_attempts_for_worker()
@@ -66,6 +86,7 @@ async def _retry_or_dead_letter(
         )
         if not marked_dead_letter:
             return False
+        _record_capture_finalization_terminal(ProductJourneyOutcome.failed, accepted_at_epoch_seconds)
         if uid is not None and conversation_id is not None:
             await run_blocking(
                 db_executor,
@@ -109,6 +130,7 @@ async def run_listen_finalization_job(
     release_lock = True
     claimed_lease_epoch: int | None = None
     job: dict[str, Any] | None = None
+    accepted_at_epoch_seconds: float | None = None
     try:
         claim = await run_blocking(
             db_executor,
@@ -129,9 +151,15 @@ async def run_listen_finalization_job(
             return JSONResponse(status_code=500, content={'status': 'retry'})
 
         job = await run_blocking(db_executor, jobs_db.get_finalization_job, job_id)
+        accepted_at_epoch_seconds = _accepted_at_epoch_seconds(job)
         if not job or not isinstance(job.get('uid'), str) or not isinstance(job.get('conversation_id'), str):
             terminal = await _retry_or_dead_letter(
-                job_id, dispatch_generation, claimed_lease_epoch, task_retry_count, 'invalid_job'
+                job_id,
+                dispatch_generation,
+                claimed_lease_epoch,
+                task_retry_count,
+                'invalid_job',
+                accepted_at_epoch_seconds=accepted_at_epoch_seconds,
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s error=invalid_job', job_id)
@@ -155,6 +183,7 @@ async def run_listen_finalization_job(
                 'processing_failed',
                 uid=job['uid'],
                 conversation_id=job['conversation_id'],
+                accepted_at_epoch_seconds=accepted_at_epoch_seconds,
             )
             if terminal:
                 logger.error('listen finalization final attempt failed job=%s failure=processing_failed', job_id)
@@ -179,6 +208,7 @@ async def run_listen_finalization_job(
             )
         if not completed:
             return JSONResponse(status_code=409, content={'status': 'completion_conflict'})
+        _record_capture_finalization_terminal(ProductJourneyOutcome.succeeded, accepted_at_epoch_seconds)
         return JSONResponse(status_code=200, content={'status': 'done'})
     except asyncio.CancelledError:
         release_lock = False
@@ -195,6 +225,7 @@ async def run_listen_finalization_job(
                     'worker_failed',
                     uid=job.get('uid') if job else None,
                     conversation_id=job.get('conversation_id') if job else None,
+                    accepted_at_epoch_seconds=accepted_at_epoch_seconds,
                 )
             except Exception:
                 logger.error('listen finalization recovery update failed job=%s failure=worker_failed', job_id)

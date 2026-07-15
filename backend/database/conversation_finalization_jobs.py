@@ -55,6 +55,7 @@ class FinalizationClaim(TypedDict):
     status: str
     lease_epoch: int | None
     attempt_count: int
+    accepted_at_epoch_seconds: float | None
 
 
 def _now() -> datetime:
@@ -70,8 +71,18 @@ def get_finalization_reconcile_stale_after() -> timedelta:
     return timedelta(seconds=max(30, seconds))
 
 
-def _claim_result(status: str, lease_epoch: int | None = None, attempt_count: int = 0) -> FinalizationClaim:
-    return {'status': status, 'lease_epoch': lease_epoch, 'attempt_count': attempt_count}
+def _claim_result(
+    status: str,
+    lease_epoch: int | None = None,
+    attempt_count: int = 0,
+    accepted_at_epoch_seconds: float | None = None,
+) -> FinalizationClaim:
+    return {
+        'status': status,
+        'lease_epoch': lease_epoch,
+        'attempt_count': attempt_count,
+        'accepted_at_epoch_seconds': accepted_at_epoch_seconds,
+    }
 
 
 def _is_current_lease(job: dict[str, Any], dispatch_generation: int, lease_epoch: int) -> bool:
@@ -216,7 +227,7 @@ def _create_or_get_finalization_intent_txn(
             'finalization_status': status,
         },
     )
-    return _intent_from_job(job_id, job)
+    return _intent_from_job(job_id, job) | {'newly_created': True}
 
 
 def create_or_get_finalization_intent(
@@ -333,7 +344,9 @@ def _claim_finalization_job_txn(
             'attempt_count': attempt_count,
         },
     )
-    return _claim_result('claimed', lease_epoch, attempt_count)
+    created_at = job.get('created_at')
+    accepted_at_epoch_seconds = created_at.timestamp() if isinstance(created_at, datetime) else None
+    return _claim_result('claimed', lease_epoch, attempt_count, accepted_at_epoch_seconds)
 
 
 def claim_finalization_job(

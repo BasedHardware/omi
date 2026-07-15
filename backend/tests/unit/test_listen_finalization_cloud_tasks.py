@@ -16,6 +16,7 @@ import routers.pusher as pusher_router
 from utils.conversations import lifecycle as lifecycle_service
 from utils import cloud_tasks
 from utils.conversations.finalizer import ConversationFinalizationDisposition, ConversationFinalizationError
+from utils.observability.product_health import ProductJourney, ProductJourneyOutcome
 import utils.conversations.finalizer as persisted_finalizer
 
 
@@ -58,6 +59,26 @@ def test_platform_key_job_dispatches_to_cloud_tasks(monkeypatch):
 
     assert result['route'] == 'cloud_tasks'
     enqueue.assert_called_once_with('job-1', 2)
+
+
+def test_lifecycle_records_capture_acceptance_only_for_a_new_durable_job(monkeypatch):
+    intent = {
+        'job_id': 'job-1',
+        'status': 'queued',
+        'dispatch_generation': 1,
+        'requires_byok': False,
+        'newly_created': True,
+    }
+    accepted = MagicMock()
+    _mock_lifecycle_conversation(monkeypatch)
+    monkeypatch.setattr(lifecycle_service.jobs_db, 'create_or_get_finalization_intent', MagicMock(return_value=intent))
+    monkeypatch.setattr(lifecycle_service, 'is_listen_finalization_dispatch_enabled', lambda: False)
+    monkeypatch.setattr(lifecycle_service.ProductJourneyAttempt, 'accepted', accepted)
+
+    result = lifecycle_service.request_finalization('uid-1', 'conversation-1', has_byok_keys=False)
+
+    assert result['route'] == 'pusher'
+    accepted.assert_called_once_with(ProductJourney.capture_finalization)
 
 
 def test_enqueue_failure_leaves_job_queued_for_reconciler(monkeypatch):
@@ -356,13 +377,17 @@ async def test_pusher_rejects_legacy_finalization_without_a_durable_job():
 @pytest.mark.anyio
 async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
     websocket = _PusherWebSocket()
-    claim = MagicMock(return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1})
+    claim = MagicMock(
+        return_value={'status': 'claimed', 'lease_epoch': 7, 'attempt_count': 1, 'accepted_at_epoch_seconds': 123.0}
+    )
     completed = MagicMock(return_value=True)
     finalizer = AsyncMock()
+    terminal = MagicMock()
     monkeypatch.setattr(pusher_router, 'run_blocking', _inline_run_blocking)
     monkeypatch.setattr(jobs_db, 'claim_finalization_job', claim)
     monkeypatch.setattr(jobs_db, 'mark_finalization_completed', completed)
     monkeypatch.setattr(pusher_router, 'finalize_persisted_conversation', finalizer)
+    monkeypatch.setattr(pusher_router, 'record_durable_journey_terminal', terminal)
 
     await pusher_router._process_conversation_task(
         'uid-1', 'conversation-1', 'en', websocket, finalization_job_id='job-1', dispatch_generation=3
@@ -384,6 +409,11 @@ async def test_pusher_claims_the_durable_job_before_finalizing(monkeypatch):
         lease_epoch=7,
     )
     completed.assert_called_once_with('job-1', 3, 7)
+    terminal.assert_called_once_with(
+        ProductJourney.capture_finalization,
+        ProductJourneyOutcome.succeeded,
+        accepted_at_epoch_seconds=123.0,
+    )
     assert json.loads(websocket.sent[0][4:]) == {'conversation_id': 'conversation-1', 'success': True}
 
 

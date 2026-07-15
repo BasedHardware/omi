@@ -24,6 +24,7 @@ from utils.conversations.finalization_decision import (
     decide_finalization,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.product_health import ProductJourney, ProductJourneyAttempt
 
 logger = logging.getLogger(__name__)
 
@@ -525,6 +526,8 @@ def request_finalization(
         finalization_admission=lambda conversation: _finalization_admission(conversation, conversation_id),
         firestore_client=firestore_client,
     )
+    if intent.get('newly_created'):
+        ProductJourneyAttempt.accepted(ProductJourney.capture_finalization)
     status = intent['status']
     if intent['job_id'] is None or status in {'missing', 'no_content', 'deferred', 'completed', 'dead_letter'}:
         return dict(intent) | {'route': 'noop'}
