@@ -105,6 +105,13 @@ export type AppSettings = {
    *  end. INERT in PR-D1: no consumer reads it yet — PR-E's main_chat routing
    *  does. */
   chatEngine: 'legacy_sse' | 'pi_mono'
+  /** "Screen Sharing in Chat" (Mac's `chatScreenshotSharingEnabled`). Default ON.
+   *  The consent gate for the model-invoked `capture_screen` tool: when on, the
+   *  chat model MAY capture the screen if it calls the tool; when off, the tool is
+   *  refused at dispatch (see captureScreenExecutor.ts). It does NOT itself cause
+   *  any capture — it only makes the (currently DARK) tool available. Mirrors Mac's
+   *  ChatToolExecutor gate; only its Settings location differs (Windows: Privacy). */
+  chatScreenshotSharingEnabled: boolean
 }
 
 const MEETING_MODES: MeetingMode[] = ['off', 'ask', 'auto']
@@ -213,7 +220,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     memoryExcludedApps: sanitizeExcludedApps(r.memoryExcludedApps),
     // Only the explicit 'pi_mono' opt-in flips this; anything else (junk, unset)
     // is the safe legacy path.
-    chatEngine: r.chatEngine === 'pi_mono' ? 'pi_mono' : 'legacy_sse'
+    chatEngine: r.chatEngine === 'pi_mono' ? 'pi_mono' : 'legacy_sse',
+    // Default ON (opt-out): only an explicit false turns Screen Sharing in Chat
+    // off. Matches Mac's absent-key-means-enabled default.
+    chatScreenshotSharingEnabled: r.chatScreenshotSharingEnabled !== false
   }
 }
 
