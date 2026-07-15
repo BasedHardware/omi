@@ -155,10 +155,13 @@ if (import.meta.env.DEV) devBench.applyDevPerfLogDefault()
 // After a few GPU crashes Chromium domain-blocks 3D APIs for the origin "until
 // restart", so every subsequent context request returns null and the WebGL
 // surfaces (brain map, orb) are dead for the rest of the session — no remount can
-// recover them. Real field evidence: crash.log shows GPU crash LOOPS on hybrid-GPU
-// laptops (five `child-process-gone type=GPU` in 30s). Disabling the block costs a
-// healthy machine nothing and is what makes the renderer's recovery remounts able
-// to actually get a fresh context. Must run before app ready.
+// recover them. Field evidence: crash.log carries genuine `child-process-gone
+// type=GPU reason=crashed` entries across Jul 10-14, under hardware GL AND under
+// SwiftShader (which runs INSIDE the GPU process, so it can crash too). Note the
+// `reason=killed` entries in that same log are NOT crashes — they are clean quits
+// (see childProcessGone.ts); don't read them as evidence of anything. Disabling the
+// block costs a healthy machine nothing and is what lets the renderer's recovery
+// remounts actually get a fresh context. Must run before app ready.
 app.disableDomainBlockingFor3DAPIs()
 // Dev GPU stability: render in software + keep WebGL on SwiftShader, so the orb /
 // brain map / blur / effects stay reliable on flaky dev GPUs (hybrid laptop,
@@ -652,6 +655,18 @@ app.whenReady().then(async () => {
   // (push-during-load race), and opens the release notes in the system browser.
   ipcMain.handle('whatsnew:getPending', async () => getCurrentWhatsNew())
   ipcMain.on('whatsnew:openNotes', () => void shell.openExternal(releaseNotesUrl()))
+  // Onboarding mic-permission recovery: deep-link straight to Windows Settings →
+  // Privacy & security → Microphone. The target is a fixed literal (never a
+  // renderer-supplied URL), so no scheme allow-list is needed — unlike
+  // billing:openExternal, this cannot be steered at an arbitrary protocol handler.
+  ipcMain.on(
+    'settings:openMicPrivacy',
+    () => void shell.openExternal('ms-settings:privacy-microphone')
+  )
+  // Real Windows mic consent (Capability Access Manager registry). Chromium's
+  // permission layer knows nothing about the per-app privacy toggle and answers
+  // `granted` unconditionally, so onboarding must ask the OS, not the browser.
+  registerMicPermissionHandlers()
   perfMark('main:handlers-registered')
   // One-time cold-start seed: rank the first brain map by real historical app
   // usage from the Windows UserAssist registry. No-op when disabled/off-Windows/
