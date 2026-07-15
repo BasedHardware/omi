@@ -125,7 +125,7 @@ describe('buildAboutUserCard — data sources', () => {
     expect(card).toContain('Right now: nothing overdue or due today.')
   })
 
-  it('fetches memories newest-first and the task counts from the live endpoints', async () => {
+  it('fetches memories newest-first (backend) and task counts from the local store', async () => {
     get.mockImplementation((url: string) => {
       if (url === '/v3/memories') {
         return Promise.resolve({
@@ -135,16 +135,15 @@ describe('buildAboutUserCard — data sources', () => {
           ]
         })
       }
-      return Promise.resolve({
-        data: {
-          action_items: [
-            { id: '1', description: 'late', completed: false, due_at: '2000-01-01T00:00:00Z' },
-            { id: '2', description: 'done', completed: true, due_at: '2000-01-01T00:00:00Z' }
-          ],
-          has_more: false
-        }
-      })
+      throw new Error(`unexpected GET ${url}`)
     })
+    // Task counts now come from the local-first store over IPC, not the backend
+    // action-items endpoint: one overdue incomplete row.
+    ;(window as unknown as { omi: unknown }).omi = {
+      tasksListIncomplete: vi.fn(() =>
+        Promise.resolve([{ completed: false, dueAt: new Date('2000-01-01T00:00:00Z').getTime() }])
+      )
+    }
     const card = await buildAboutUserCard()
     expect(card).toContain('Name: Ada')
     expect(card.indexOf('- newer')).toBeLessThan(card.indexOf('- older'))

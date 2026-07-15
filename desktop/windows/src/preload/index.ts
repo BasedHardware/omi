@@ -42,6 +42,10 @@ import type {
   MainChatSendArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
+  ActionItemRecord,
+  TaskCreateFields,
+  TaskUpdateFields,
+  TaskDashboardSlices,
   LiveNote
 } from '../shared/types'
 import type { ByokProvider } from '../shared/byok'
@@ -177,6 +181,30 @@ const omi: OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
   aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
   aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
+  // --- Track 3 (task sync engine) ---
+  // Local-first tasks: reads return local rows instantly + kick a background sync;
+  // subscribe to onTasksChanged to re-fetch when the store updates.
+  tasksListIncomplete: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listIncomplete', opts) as Promise<ActionItemRecord[]>,
+  tasksListCompleted: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listCompleted', opts) as Promise<ActionItemRecord[]>,
+  tasksListDeleted: (opts?: { limit?: number; offset?: number }) =>
+    ipcRenderer.invoke('tasks:listDeleted', opts) as Promise<ActionItemRecord[]>,
+  tasksDashboardSlices: () =>
+    ipcRenderer.invoke('tasks:dashboardSlices') as Promise<TaskDashboardSlices>,
+  tasksCreate: (fields: TaskCreateFields) =>
+    ipcRenderer.invoke('tasks:create', fields) as Promise<ActionItemRecord>,
+  tasksToggle: (args: { backendId: string; completed: boolean }) =>
+    ipcRenderer.invoke('tasks:toggle', args) as Promise<void>,
+  tasksUpdate: (args: { backendId: string; fields: TaskUpdateFields }) =>
+    ipcRenderer.invoke('tasks:update', args) as Promise<void>,
+  tasksDelete: (args: { backendId: string }) => ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
+  tasksReconcile: () => ipcRenderer.invoke('tasks:reconcile') as Promise<void>,
+  onTasksChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('tasks:changed', listener)
+    return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
   // Dev/QA only (handler registered on dev builds): force one Focus analysis of
   // the latest captured frame, so the pipeline + halo can be exercised without
   // waiting for a natural context switch.

@@ -44,10 +44,15 @@ export const USER_DATA_TABLES = [
   // --- Track 3 (proactive) ---
   'ai_user_profiles',
   'focus_sessions',
-  'task_embeddings',
   // Screen-extracted memories — user data derived from the user's screen; must be
   // cleared on account switch just like focus_sessions / the rewind frames above.
-  'memories'
+  'memories',
+  // Local task storage (Track 3). Both are user content; their FTS shadow tables
+  // (action_items_fts / staged_tasks_fts) are derived via triggers and emptied by
+  // these DELETEs, so they are deliberately absent (like rewind_frames_fts). DDL
+  // lives in taskStore.ts, which dbWipe.test.ts's drift guard also scans.
+  'action_items',
+  'staged_tasks'
 ] as const
 
 // Minimal DB surface the wipe needs — satisfied by both better-sqlite3 (prod)

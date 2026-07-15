@@ -1,4 +1,5 @@
-// Float32 (L2-normalized) ⇄ SQLite BLOB conversion for task_embeddings vectors.
+// Float32 (L2-normalized) ⇄ SQLite BLOB conversion for task embedding vectors,
+// stored as a row BLOB on action_items / staged_tasks.
 //
 // Kept in a better-sqlite3-free module (like dbWipe.ts) so the byte-level
 // conversion — the one bit of non-SQL logic in the Track 3 embedding store — is

@@ -29,6 +29,42 @@ import {
 } from './voiceTurnOutbox'
 import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
 import {
+  TASK_TABLES_SCHEMA,
+  insertLocalActionItemOn,
+  getLocalActionItemsOn,
+  getFilteredActionItemsOn,
+  updateCompletionStatusOn,
+  updateActionItemFieldsOn,
+  deleteActionItemByBackendIdOn,
+  markSyncedActionItemOn,
+  syncTaskActionItemsOn,
+  hardDeleteAbsentTasksOn,
+  getUnsyncedActionItemsOn,
+  getAllActionItemEmbeddingsOn,
+  updateActionItemEmbeddingOn,
+  getActionItemsMissingEmbeddingsOn,
+  insertActionItemWithScoreShiftOn,
+  applyActionItemRerankingOn,
+  getTopRelevanceActionItemsOn,
+  searchActionItemsFTSOn,
+  insertLocalStagedTaskOn,
+  insertStagedTaskWithScoreShiftOn,
+  markSyncedStagedTaskOn,
+  deleteStagedTaskByIdOn,
+  deleteStagedTaskByBackendIdOn,
+  getUnsyncedStagedTasksOn,
+  getAllStagedTasksOn,
+  getAllScoredStagedTasksOn,
+  getStagedTaskOn,
+  getAllStagedTaskEmbeddingsOn,
+  updateStagedTaskEmbeddingOn,
+  getStagedTasksMissingEmbeddingsOn,
+  applyStagedTaskRerankingOn,
+  countActiveStagedTasksOn,
+  searchStagedTasksFTSOn,
+  type TaskStoreDb
+} from './taskStore'
+import {
   LIVE_NOTES_SCHEMA,
   createTranscriptionSessionOn,
   endTranscriptionSessionOn,
@@ -68,7 +104,13 @@ import type {
   FocusSessionInput,
   FocusSessionRecord,
   MemoryInput,
-  TaskEmbeddingRecord,
+  ActionItemInput,
+  ActionItemRecord,
+  StagedTaskInput,
+  StagedTaskRecord,
+  SyncActionItem,
+  MarkSyncedResult,
+  TaskRerank,
   AppUsageRecord,
   ChatMessage,
   ConversationFolder,
@@ -589,16 +631,6 @@ function get(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_focus_sessions_created_at ON focus_sessions(created_at);
 
-    CREATE TABLE IF NOT EXISTS task_embeddings (
-      source TEXT NOT NULL,
-      item_id TEXT NOT NULL,
-      vector BLOB NOT NULL,
-      text TEXT NOT NULL,
-      model TEXT NOT NULL,
-      updated_at INTEGER NOT NULL,
-      PRIMARY KEY (source, item_id)
-    );
-
     CREATE TABLE IF NOT EXISTS memories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       content TEXT NOT NULL,
@@ -614,6 +646,10 @@ function get(): Database.Database {
     );
     CREATE INDEX IF NOT EXISTS idx_memories_created_at ON memories(created_at);
   `)
+  // Track 3 local task storage (action_items + staged_tasks + their FTS indexes).
+  // DDL lives in taskStore.ts so prod and the node:sqlite CRUD tests run the same
+  // SQL; both tables are user-scoped (see USER_DATA_TABLES in dbWipe.ts).
+  db.exec(TASK_TABLES_SCHEMA)
   // PR8 LiveNotes: transcription_sessions + live_notes (with the cascading FK).
   // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
   // the drop-if-old above recreated any FK-less PR0 table before this runs.
@@ -645,10 +681,15 @@ function get(): Database.Database {
   // recovered rewind_frames rows — same 'rebuild' idiom as migration v2. Never let
   // this block startup.
   if (recoveryStatus.recovered && !recoveryStatus.reset) {
-    try {
-      db.exec("INSERT INTO rewind_frames_fts(rewind_frames_fts) VALUES('rebuild')")
-    } catch (e) {
-      console.error('db: FTS rebuild after recovery failed (search may be stale)', e)
+    // Rebuild every external-content FTS index from its recovered base rows (salvage
+    // skips virtual tables, leaving the shadow tables empty). Same 'rebuild' idiom as
+    // migration v2. Each is independent — one failing must not skip the others.
+    for (const fts of ['rewind_frames_fts', 'action_items_fts', 'staged_tasks_fts']) {
+      try {
+        db.exec(`INSERT INTO ${fts}(${fts}) VALUES('rebuild')`)
+      } catch (e) {
+        console.error(`db: FTS rebuild after recovery failed for ${fts} (search may be stale)`, e)
+      }
     }
   }
   return db
@@ -1984,68 +2025,211 @@ export function recentMemories(limit = 20): { content: string; category: string 
     .all(limit) as { content: string; category: string }[]
 }
 
-// --- Task embeddings (semantic ranking) ---
-// 3072-dim Gemini vectors keyed by (source, item_id) so ids from different
-// source tables can't collide. Vectors stored as a Float32 little-endian BLOB
-// (see taskEmbeddingVector.ts), exposed as Float32Array.
-
-const TASK_EMBEDDING_COLUMNS =
-  'source, item_id AS itemId, vector, text, model, updated_at AS updatedAt'
-
-type TaskEmbeddingRow = {
-  source: string
-  itemId: string
-  vector: Buffer | Uint8Array
-  text: string
-  model: string
-  updatedAt: number
+// --- Track 3: Local task storage (action_items + staged_tasks) ---
+// Thin wrappers over the driver-agnostic CRUD in taskStore.ts (extracted so the
+// DDL + SQL are unit-testable under plain-node vitest with node:sqlite). get()
+// returns a better-sqlite3 Database whose prepared statements satisfy the
+// TaskStoreDb shape structurally — same cast idiom as the LiveNotes / folder
+// wrappers. `now` is threaded in (not read inside taskStore) so the sync/conflict
+// logic is deterministically testable; production passes Date.now().
+function taskStoreDb(): TaskStoreDb {
+  return get() as unknown as TaskStoreDb
 }
 
-function mapTaskEmbedding(row: TaskEmbeddingRow): TaskEmbeddingRecord {
-  return {
-    source: row.source === 'staged_task' ? 'staged_task' : 'action_item',
-    itemId: row.itemId,
-    vector: bufferToVector(row.vector),
-    text: row.text,
-    model: row.model,
-    updatedAt: row.updatedAt
-  }
+// action_items
+export function insertLocalActionItem(input: ActionItemInput): ActionItemRecord {
+  return insertLocalActionItemOn(taskStoreDb(), input)
 }
 
-export function upsertTaskEmbedding(rec: TaskEmbeddingRecord): void {
-  get()
-    .prepare(
-      `INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at)
-       VALUES (@source, @itemId, @vector, @text, @model, @updatedAt)
-       ON CONFLICT(source, item_id) DO UPDATE SET
-         vector = excluded.vector, text = excluded.text, model = excluded.model, updated_at = excluded.updated_at`
-    )
-    .run({
-      source: rec.source,
-      itemId: rec.itemId,
-      vector: vectorToBuffer(rec.vector),
-      text: rec.text,
-      model: rec.model,
-      updatedAt: rec.updatedAt
-    })
+export function getLocalActionItems(opts?: {
+  limit?: number
+  offset?: number
+  completed?: boolean
+}): ActionItemRecord[] {
+  return getLocalActionItemsOn(taskStoreDb(), opts)
 }
 
-export function getTaskEmbedding(source: string, itemId: string): TaskEmbeddingRecord | null {
-  const row = get()
-    .prepare(
-      `SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings WHERE source = ? AND item_id = ?`
-    )
-    .get(source, itemId) as TaskEmbeddingRow | undefined
-  return row ? mapTaskEmbedding(row) : null
+export function getFilteredActionItems(opts?: {
+  dueAfter?: number | null
+  dueBefore?: number | null
+  dueIsNull?: boolean
+  limit?: number
+  offset?: number
+}): ActionItemRecord[] {
+  return getFilteredActionItemsOn(taskStoreDb(), opts)
 }
 
-export function allTaskEmbeddings(): TaskEmbeddingRecord[] {
-  const rows = get()
-    .prepare(`SELECT ${TASK_EMBEDDING_COLUMNS} FROM task_embeddings`)
-    .all() as TaskEmbeddingRow[]
-  return rows.map(mapTaskEmbedding)
+export function updateCompletionStatus(
+  backendId: string,
+  completed: boolean,
+  now: number = Date.now()
+): void {
+  updateCompletionStatusOn(taskStoreDb(), backendId, completed, now)
 }
 
-export function deleteTaskEmbedding(source: string, itemId: string): void {
-  get().prepare('DELETE FROM task_embeddings WHERE source = ? AND item_id = ?').run(source, itemId)
+export function updateActionItemFields(
+  backendId: string,
+  fields: {
+    description?: string
+    priority?: string
+    category?: string
+    tags?: string[]
+    dueAt?: number | null
+    clearDueAt?: boolean
+  },
+  now: number = Date.now()
+): void {
+  updateActionItemFieldsOn(taskStoreDb(), backendId, fields, now)
+}
+
+export function deleteActionItemByBackendId(
+  backendId: string,
+  deletedBy?: string | null
+): number[] {
+  return deleteActionItemByBackendIdOn(taskStoreDb(), backendId, deletedBy)
+}
+
+export function markSyncedActionItem(
+  localId: number,
+  backendId: string,
+  now: number = Date.now()
+): MarkSyncedResult {
+  return markSyncedActionItemOn(taskStoreDb(), localId, backendId, now)
+}
+
+export function syncTaskActionItems(
+  items: SyncActionItem[],
+  opts?: { overrideStagedDeletions?: boolean; now?: number }
+): { skipped: number; adopted: number; inserted: number; updated: number } {
+  return syncTaskActionItemsOn(taskStoreDb(), items, {
+    overrideStagedDeletions: opts?.overrideStagedDeletions,
+    now: opts?.now ?? Date.now()
+  })
+}
+
+export function hardDeleteAbsentTasks(apiIds: string[]): number[] {
+  return hardDeleteAbsentTasksOn(taskStoreDb(), apiIds)
+}
+
+export function getUnsyncedActionItems(opts?: {
+  includeRecent?: boolean
+  now?: number
+}): ActionItemRecord[] {
+  return getUnsyncedActionItemsOn(taskStoreDb(), {
+    includeRecent: opts?.includeRecent,
+    now: opts?.now ?? Date.now()
+  })
+}
+
+export function getAllActionItemEmbeddings(): { id: number; embedding: Float32Array }[] {
+  return getAllActionItemEmbeddingsOn(taskStoreDb())
+}
+
+export function updateActionItemEmbedding(id: number, vector: Float32Array): void {
+  updateActionItemEmbeddingOn(taskStoreDb(), id, vector)
+}
+
+export function getActionItemsMissingEmbeddings(
+  limit?: number
+): { id: number; description: string }[] {
+  return getActionItemsMissingEmbeddingsOn(taskStoreDb(), limit)
+}
+
+export function insertActionItemWithScoreShift(input: ActionItemInput): ActionItemRecord {
+  return insertActionItemWithScoreShiftOn(taskStoreDb(), input)
+}
+
+export function applyActionItemReranking(reranks: TaskRerank[], now: number = Date.now()): void {
+  applyActionItemRerankingOn(taskStoreDb(), reranks, now)
+}
+
+export function getTopRelevanceActionItems(
+  limit?: number
+): { id: number; description: string; priority: string | null; relevanceScore: number | null }[] {
+  return getTopRelevanceActionItemsOn(taskStoreDb(), limit)
+}
+
+export function searchActionItemsFTS(
+  query: string,
+  limit?: number
+): {
+  id: number
+  description: string
+  completed: boolean
+  deleted: boolean
+  deletedBy: string | null
+  relevanceScore: number | null
+}[] {
+  return searchActionItemsFTSOn(taskStoreDb(), query, limit)
+}
+
+// staged_tasks
+export function insertLocalStagedTask(input: StagedTaskInput): StagedTaskRecord {
+  return insertLocalStagedTaskOn(taskStoreDb(), input)
+}
+
+export function insertStagedTaskWithScoreShift(input: StagedTaskInput): StagedTaskRecord {
+  return insertStagedTaskWithScoreShiftOn(taskStoreDb(), input)
+}
+
+export function markSyncedStagedTask(
+  localId: number,
+  backendId: string,
+  now: number = Date.now(),
+  source?: string | null
+): MarkSyncedResult {
+  return markSyncedStagedTaskOn(taskStoreDb(), localId, backendId, now, source)
+}
+
+export function deleteStagedTaskById(id: number): number[] {
+  return deleteStagedTaskByIdOn(taskStoreDb(), id)
+}
+
+export function deleteStagedTaskByBackendId(backendId: string): number[] {
+  return deleteStagedTaskByBackendIdOn(taskStoreDb(), backendId)
+}
+
+export function getUnsyncedStagedTasks(limit?: number): StagedTaskRecord[] {
+  return getUnsyncedStagedTasksOn(taskStoreDb(), limit)
+}
+
+export function getAllStagedTasks(limit?: number): StagedTaskRecord[] {
+  return getAllStagedTasksOn(taskStoreDb(), limit)
+}
+
+export function getAllScoredStagedTasks(): { backendId: string; relevanceScore: number }[] {
+  return getAllScoredStagedTasksOn(taskStoreDb())
+}
+
+export function getStagedTask(id: number): StagedTaskRecord | null {
+  return getStagedTaskOn(taskStoreDb(), id)
+}
+
+export function getAllStagedTaskEmbeddings(): { id: number; embedding: Float32Array }[] {
+  return getAllStagedTaskEmbeddingsOn(taskStoreDb())
+}
+
+export function updateStagedTaskEmbedding(id: number, vector: Float32Array): void {
+  updateStagedTaskEmbeddingOn(taskStoreDb(), id, vector)
+}
+
+export function getStagedTasksMissingEmbeddings(
+  limit?: number
+): { id: number; description: string }[] {
+  return getStagedTasksMissingEmbeddingsOn(taskStoreDb(), limit)
+}
+
+export function applyStagedTaskReranking(reranks: TaskRerank[], now: number = Date.now()): void {
+  applyStagedTaskRerankingOn(taskStoreDb(), reranks, now)
+}
+
+export function countActiveStagedTasks(): number {
+  return countActiveStagedTasksOn(taskStoreDb())
+}
+
+export function searchStagedTasksFTS(
+  query: string,
+  limit?: number
+): { id: number; description: string; relevanceScore: number | null }[] {
+  return searchStagedTasksFTSOn(taskStoreDb(), query, limit)
 }

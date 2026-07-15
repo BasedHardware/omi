@@ -3,12 +3,9 @@
 // is built for Electron's ABI and won't load under plain-node vitest (same
 // reason dbMigrations.test.ts / dbWipe.test.ts use node:sqlite). The DDL and SQL
 // below are a hand-maintained copy of db.ts's Track 3 block and readers/writers,
-// tested here for semantics (not diffed against db.ts); the pure Float32⇄BLOB
-// conversion is exercised as the real db.ts code via the imported
-// taskEmbeddingVector helpers.
+// tested here for semantics (not diffed against db.ts).
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it } from 'vitest'
-import { bufferToVector, vectorToBuffer } from './taskEmbeddingVector'
 
 // Verbatim from db.ts's `/* ---- Track 3 ---- */` CREATE block.
 const TRACK3_SCHEMA = `
@@ -35,16 +32,6 @@ const TRACK3_SCHEMA = `
     window_title TEXT
   );
   CREATE INDEX IF NOT EXISTS idx_focus_sessions_created_at ON focus_sessions(created_at);
-
-  CREATE TABLE IF NOT EXISTS task_embeddings (
-    source TEXT NOT NULL,
-    item_id TEXT NOT NULL,
-    vector BLOB NOT NULL,
-    text TEXT NOT NULL,
-    model TEXT NOT NULL,
-    updated_at INTEGER NOT NULL,
-    PRIMARY KEY (source, item_id)
-  );
 
   CREATE TABLE IF NOT EXISTS memories (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -79,20 +66,9 @@ function tableNames(db: DatabaseSync): string[] {
 describe('Track 3 schema', () => {
   it('creates the three net-new tables', () => {
     const names = tableNames(makeDb())
-    for (const t of ['ai_user_profiles', 'focus_sessions', 'task_embeddings', 'memories']) {
+    for (const t of ['ai_user_profiles', 'focus_sessions', 'memories']) {
       expect(names, `table ${t}`).toContain(t)
     }
-  })
-
-  it('task_embeddings uses a composite (source, item_id) primary key', () => {
-    const db = makeDb()
-    const pk = (
-      db.prepare('PRAGMA table_info(task_embeddings)').all() as { name: string; pk: number }[]
-    )
-      .filter((c) => c.pk > 0)
-      .sort((a, b) => a.pk - b.pk)
-      .map((c) => c.name)
-    expect(pk).toEqual(['source', 'item_id'])
   })
 })
 
@@ -285,137 +261,5 @@ describe('memories round-trip', () => {
     db.prepare(INSERT).run('no conf', 'system', 'App', 't', 'c', null, null, null, 0, 1000)
     const row = db.prepare('SELECT confidence FROM memories').get() as { confidence: number | null }
     expect(row.confidence).toBeNull()
-  })
-})
-
-describe('task_embeddings round-trip', () => {
-  const UPSERT = `INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at)
-     VALUES (?, ?, ?, ?, ?, ?)
-     ON CONFLICT(source, item_id) DO UPDATE SET
-       vector = excluded.vector, text = excluded.text, model = excluded.model, updated_at = excluded.updated_at`
-  const SELECT_ONE =
-    'SELECT source, item_id AS itemId, vector, text, model, updated_at AS updatedAt FROM task_embeddings WHERE source = ? AND item_id = ?'
-
-  it('round-trips a Float32 vector through the BLOB column (real db.ts helpers)', () => {
-    const db = makeDb()
-    const vec = new Float32Array([0.5, -0.25, 1.0, 0.0, 3.14159])
-    db.prepare(UPSERT).run(
-      'action_item',
-      'a1',
-      vectorToBuffer(vec),
-      'buy milk',
-      'gemini-embedding-001',
-      1000
-    )
-
-    const row = db.prepare(SELECT_ONE).get('action_item', 'a1') as {
-      vector: Uint8Array
-      text: string
-    }
-    const back = bufferToVector(row.vector)
-    expect(Array.from(back)).toEqual(Array.from(vec))
-    expect(row.text).toBe('buy milk')
-  })
-
-  it('bufferToVector(vectorToBuffer(v)) is identity (pure helper)', () => {
-    const v = new Float32Array([1.5, 2.5, -7.0, 0.001])
-    expect(Array.from(bufferToVector(vectorToBuffer(v)))).toEqual(Array.from(v))
-  })
-
-  it('upsert on the same (source, item_id) updates in place, never duplicates', () => {
-    const db = makeDb()
-    const v1 = new Float32Array([1, 0, 0])
-    const v2 = new Float32Array([0, 1, 0])
-    db.prepare(UPSERT).run('action_item', 'a1', vectorToBuffer(v1), 'first', 'm1', 1000)
-    db.prepare(UPSERT).run('action_item', 'a1', vectorToBuffer(v2), 'second', 'm2', 2000)
-
-    expect((db.prepare('SELECT COUNT(*) AS n FROM task_embeddings').get() as { n: number }).n).toBe(
-      1
-    )
-    const row = db.prepare(SELECT_ONE).get('action_item', 'a1') as {
-      vector: Uint8Array
-      text: string
-      model: string
-      updatedAt: number
-    }
-    expect(row.text).toBe('second')
-    expect(row.model).toBe('m2')
-    expect(row.updatedAt).toBe(2000)
-    expect(Array.from(bufferToVector(row.vector))).toEqual([0, 1, 0])
-  })
-
-  it('same item_id under a different source does NOT collide (composite-PK fix)', () => {
-    const db = makeDb()
-    db.prepare(UPSERT).run(
-      'action_item',
-      'shared-id',
-      vectorToBuffer(new Float32Array([1, 1])),
-      'ai',
-      'm',
-      1
-    )
-    db.prepare(UPSERT).run(
-      'staged_task',
-      'shared-id',
-      vectorToBuffer(new Float32Array([2, 2])),
-      'st',
-      'm',
-      1
-    )
-
-    expect((db.prepare('SELECT COUNT(*) AS n FROM task_embeddings').get() as { n: number }).n).toBe(
-      2
-    )
-    const ai = db.prepare(SELECT_ONE).get('action_item', 'shared-id') as { vector: Uint8Array }
-    const st = db.prepare(SELECT_ONE).get('staged_task', 'shared-id') as { vector: Uint8Array }
-    expect(Array.from(bufferToVector(ai.vector))).toEqual([1, 1])
-    expect(Array.from(bufferToVector(st.vector))).toEqual([2, 2])
-  })
-
-  it('deletes a single embedding by (source, item_id)', () => {
-    const db = makeDb()
-    db.prepare(UPSERT).run('action_item', 'a1', vectorToBuffer(new Float32Array([1])), 't', 'm', 1)
-    db.prepare(UPSERT).run('staged_task', 's1', vectorToBuffer(new Float32Array([2])), 't', 'm', 1)
-    db.prepare('DELETE FROM task_embeddings WHERE source = ? AND item_id = ?').run(
-      'action_item',
-      'a1'
-    )
-    const rows = db.prepare('SELECT source FROM task_embeddings').all() as { source: string }[]
-    expect(rows.map((r) => r.source)).toEqual(['staged_task'])
-  })
-
-  it('round-trips an empty vector and reads a zero-length blob back as an empty vector', () => {
-    // Pure conversion holds for the empty case.
-    expect(bufferToVector(vectorToBuffer(new Float32Array(0)))).toEqual(new Float32Array(0))
-
-    // A stored zero-length BLOB reads back through bufferToVector as an empty
-    // vector. Inserted via the X'' literal because node:sqlite binds a 0-length
-    // Buffer as NULL (unlike better-sqlite3 in prod), which the NOT NULL column
-    // rejects — a test-harness quirk, not a code path we ship.
-    const db = makeDb()
-    db.prepare(
-      "INSERT INTO task_embeddings (source, item_id, vector, text, model, updated_at) VALUES ('action_item', 'empty', X'', 'no vec', 'm', 1)"
-    ).run()
-    const row = db.prepare(SELECT_ONE).get('action_item', 'empty') as { vector: Uint8Array }
-    expect(row.vector.byteLength).toBe(0)
-    expect(bufferToVector(row.vector)).toEqual(new Float32Array(0))
-  })
-
-  it('round-trips a 3072-dim vector byte-exact (real Gemini embedding size)', () => {
-    const vec = new Float32Array(3072)
-    for (let i = 0; i < vec.length; i++) vec[i] = Math.sin(i) // arbitrary, distinct float32s
-    const db = makeDb()
-    db.prepare(UPSERT).run(
-      'action_item',
-      'big',
-      vectorToBuffer(vec),
-      'big',
-      'gemini-embedding-001',
-      1
-    )
-    const row = db.prepare(SELECT_ONE).get('action_item', 'big') as { vector: Uint8Array }
-    const back = bufferToVector(row.vector)
-    expect(back.length).toBe(3072)
-    expect(Array.from(back)).toEqual(Array.from(vec))
   })
 })

@@ -23,19 +23,25 @@ const CLOUD_PAGE_SIZE = 100
 export function useHubStats(): HubStatCounts {
   const { memories, loading: memoriesLoading, error: memoriesError } = useMemories()
 
-  // Tasks: the SAME paginating fetch the Tasks page uses — it follows `has_more` to
-  // completion, so this is a true total, not a first page.
+  // Tasks: the SAME local-first read the Tasks page uses (incomplete + completed
+  // rows from the store), so this is a true total, not a first page. Subscribe to
+  // `onTasksChanged` so the count re-reads when a task is added/completed anywhere.
   const [tasks, setTasks] = useState<number | null>(null)
   useEffect(() => {
     let live = true
-    fetchAllActionItems()
-      .then((items) => {
-        if (live) setTasks(items.length)
-      })
-      // Leave the cell unknown (em-dash) rather than assert a wrong number.
-      .catch(() => {})
+    const read = (): void => {
+      fetchAllActionItems()
+        .then((items) => {
+          if (live) setTasks(items.length)
+        })
+        // Leave the cell unknown (em-dash) rather than assert a wrong number.
+        .catch(() => {})
+    }
+    read()
+    const unsub = window.omi?.onTasksChanged?.(read)
     return () => {
       live = false
+      unsub?.()
     }
   }, [])
 

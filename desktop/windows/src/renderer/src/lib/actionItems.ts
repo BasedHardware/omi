@@ -1,28 +1,22 @@
-import { omiApi } from './apiClient'
-import type { ActionItemResponse as ActionItem, ActionItemsResponse } from './omiApi.generated'
+import type { ActionItemRecord } from '../../../shared/types'
 
-// Page through /v1/action-items following `has_more` (Mac pages at 100) instead
-// of relying on a single request with a hard cap — a hard `limit` alone silently
-// truncates users with more items than the cap. `pageCap` bounds a runaway loop
-// if the server ever reports `has_more: true` forever.
+// Local-first read of "all the user's tasks": the main-process task store owns a
+// local SQLite mirror with optimistic write-through + background sync, so this
+// returns the LOCAL rows instantly (no network round-trip) and main kicks a
+// background hydrate. Concatenates the incomplete + completed slices into one
+// list — the same shape the Tasks page buckets over and the Hub ribbon counts.
 //
-// Lives here rather than in pages/Tasks.tsx because the Hub's stat ribbon counts
-// tasks off the SAME fetch: two callers, one definition of "all the user's tasks".
-const TASKS_PAGE_SIZE = 100
+// Lives here rather than in pages/Tasks.tsx because two callers share it: the
+// Tasks page and the Hub's stat ribbon — one definition of "all the user's tasks".
+//
+// The list IPC defaults to a 50-row page; pass a high ceiling so a user with many
+// tasks isn't silently truncated (mirrors the old paginating fetch's 100×100 cap).
+const TASKS_LIST_LIMIT = 10_000
 
-export async function fetchAllActionItems(pageCap = 100): Promise<ActionItem[]> {
-  const all: ActionItem[] = []
-  let offset = 0
-  for (let page = 0; page < pageCap; page++) {
-    const res = await omiApi.get('/v1/action-items', {
-      params: { limit: TASKS_PAGE_SIZE, offset }
-    })
-    const data = res.data as ActionItem[] | ActionItemsResponse
-    const batch = Array.isArray(data) ? data : (data.action_items ?? [])
-    all.push(...batch)
-    const hasMore = Array.isArray(data) ? batch.length === TASKS_PAGE_SIZE : Boolean(data.has_more)
-    if (!hasMore || batch.length === 0) break
-    offset += TASKS_PAGE_SIZE
-  }
-  return all
+export async function fetchAllActionItems(): Promise<ActionItemRecord[]> {
+  const [incomplete, completed] = await Promise.all([
+    window.omi.tasksListIncomplete({ limit: TASKS_LIST_LIMIT }),
+    window.omi.tasksListCompleted({ limit: TASKS_LIST_LIMIT })
+  ])
+  return [...incomplete, ...completed]
 }

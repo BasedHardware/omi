@@ -1,17 +1,18 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { render, cleanup, waitFor } from '@testing-library/react'
+import { render, cleanup, waitFor, fireEvent, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+import type { ActionItemRecord } from '../../../shared/types'
 
-// Tasks Major #1 (pagination): the page fetched with a hard `limit: 300` and
-// never looked at `has_more`, so a user with more than 300 action items lost
-// everything past the cap. Fix: page at 100 following `has_more` until it's
-// false (backend/routers/action_items.py get_action_items returns has_more).
-//
-// Tasks Major #2 (staleness): the page cached items at module scope and only
-// ever fetched once per app session (a `cache.loaded` guard skipped every
-// later mount), with no window-focus refresh — unlike the Home task widget.
-// Fix: refetch on every mount (stale-while-revalidate) and on window focus.
+// The Tasks page is now local-first: it reads the task store over IPC
+// (window.omi.tasksListIncomplete + tasksListCompleted) instead of paging the
+// backend /v1/action-items endpoint, and every mutation is a thin IPC call that
+// lets MAIN own optimism + revert. This suite pins that contract:
+//  - reads come from the store IPC, not the backend action-items endpoint
+//  - the open/completed buckets render from the store rows
+//  - create/toggle/delete call the matching IPC with the row's backendId
+//  - a freshly-created row (backendId:null) is id-gated — no mutation may fire
+//  - onTasksChanged triggers a re-read (replaces the old mount/focus refetch)
 
 const getMock = vi.fn()
 vi.mock('../lib/apiClient', () => ({
@@ -19,17 +20,73 @@ vi.mock('../lib/apiClient', () => ({
 }))
 vi.mock('../lib/toast', () => ({ toast: vi.fn() }))
 
-function actionItemsPage(ids: string[], hasMore: boolean): { data: unknown } {
-  return {
-    data: {
-      action_items: ids.map((id) => ({ id, description: id, completed: false })),
-      has_more: hasMore
-    }
-  }
+const rec = (over: Partial<ActionItemRecord>): ActionItemRecord =>
+  ({
+    id: 1,
+    backendId: 'b1',
+    backendSynced: true,
+    description: 'task',
+    completed: false,
+    deleted: false,
+    source: null,
+    conversationId: null,
+    priority: null,
+    category: null,
+    tags: [],
+    dueAt: null,
+    confidence: null,
+    sourceApp: null,
+    windowTitle: null,
+    relevanceScore: null,
+    fromStaged: false,
+    sortOrder: null,
+    indentLevel: null,
+    createdAt: 1_000,
+    updatedAt: 1_000,
+    ...over
+  }) as ActionItemRecord
+
+let incomplete: ActionItemRecord[]
+let completed: ActionItemRecord[]
+let changedCb: (() => void) | null
+let tasks: {
+  tasksListIncomplete: ReturnType<typeof vi.fn>
+  tasksListCompleted: ReturnType<typeof vi.fn>
+  tasksCreate: ReturnType<typeof vi.fn>
+  tasksToggle: ReturnType<typeof vi.fn>
+  tasksUpdate: ReturnType<typeof vi.fn>
+  tasksDelete: ReturnType<typeof vi.fn>
+  tasksReconcile: ReturnType<typeof vi.fn>
+  onTasksChanged: ReturnType<typeof vi.fn>
 }
 
 beforeEach(() => {
+  incomplete = []
+  completed = []
+  changedCb = null
   getMock.mockReset()
+  // The page fetches a conversation title map for the source links (still a
+  // backend call — out of scope for the local store).
+  getMock.mockImplementation((url: string) => {
+    if (url === '/v1/conversations') return Promise.resolve({ data: [] })
+    throw new Error(`unexpected GET ${url}`)
+  })
+  tasks = {
+    tasksListIncomplete: vi.fn(() => Promise.resolve(incomplete)),
+    tasksListCompleted: vi.fn(() => Promise.resolve(completed)),
+    tasksCreate: vi.fn(() => Promise.resolve(rec({}))),
+    tasksToggle: vi.fn(() => Promise.resolve()),
+    tasksUpdate: vi.fn(() => Promise.resolve()),
+    tasksDelete: vi.fn(() => Promise.resolve()),
+    tasksReconcile: vi.fn(() => Promise.resolve()),
+    onTasksChanged: vi.fn((cb: () => void) => {
+      changedCb = cb
+      return () => {
+        changedCb = null
+      }
+    })
+  }
+  ;(window as unknown as { omi: unknown }).omi = tasks
 })
 
 afterEach(() => {
@@ -37,99 +94,121 @@ afterEach(() => {
   vi.resetModules()
 })
 
-describe('Tasks — pagination (has_more, page size 100)', () => {
-  it('follows has_more across pages instead of stopping at one 300-cap request', async () => {
-    const page1 = Array.from({ length: 100 }, (_, i) => `a${i}`)
-    const page2 = Array.from({ length: 100 }, (_, i) => `b${i}`)
-    const page3 = Array.from({ length: 50 }, (_, i) => `c${i}`)
-    getMock.mockImplementation((url: string, config?: { params?: Record<string, unknown> }) => {
-      if (url === '/v1/conversations') return Promise.resolve({ data: [] })
-      const offset = (config?.params?.offset as number) ?? 0
-      if (offset === 0) return Promise.resolve(actionItemsPage(page1, true))
-      if (offset === 100) return Promise.resolve(actionItemsPage(page2, true))
-      if (offset === 200) return Promise.resolve(actionItemsPage(page3, false))
-      throw new Error(`unexpected offset ${offset}`)
-    })
+async function renderTasks(): Promise<void> {
+  const { Tasks } = await import('./Tasks')
+  render(
+    <MemoryRouter>
+      <Tasks />
+    </MemoryRouter>
+  )
+}
 
-    const { Tasks } = await import('./Tasks')
-    render(
-      <MemoryRouter>
-        <Tasks />
-      </MemoryRouter>
-    )
+describe('Tasks — local-first reads from the store', () => {
+  it('reads via the task-store IPC, never the backend action-items endpoint', async () => {
+    incomplete = [rec({ id: 1, backendId: 'b1', description: 'open one' })]
+    await renderTasks()
 
-    await waitFor(() =>
-      expect(getMock.mock.calls.filter((c) => c[0] === '/v1/action-items')).toHaveLength(3)
-    )
+    await waitFor(() => expect(tasks.tasksListIncomplete).toHaveBeenCalled())
+    expect(tasks.tasksListCompleted).toHaveBeenCalled()
+    // The old page paged /v1/action-items; that endpoint must no longer be hit.
+    expect(getMock.mock.calls.some((c) => c[0] === '/v1/action-items')).toBe(false)
+  })
 
-    // Every page-1 request must ask for 100, never the old hard 300.
-    const actionItemCalls = getMock.mock.calls.filter((c) => c[0] === '/v1/action-items')
-    for (const call of actionItemCalls) {
-      expect((call[1] as { params: { limit: number } }).params.limit).toBe(100)
-    }
+  it('renders open and completed rows from the store buckets', async () => {
+    incomplete = [
+      rec({ id: 1, backendId: 'b1', description: 'write spec' }),
+      rec({ id: 2, backendId: 'b2', description: 'ship it' })
+    ]
+    completed = [rec({ id: 3, backendId: 'b3', description: 'done thing', completed: true })]
+    await renderTasks()
 
-    // All 250 items across 3 pages surfaced, not just the first page.
-    await waitFor(() => expect(document.body.textContent).toContain('250 open'))
+    await waitFor(() => expect(document.body.textContent).toContain('2 open · 1 done'))
+    expect(screen.getByText('write spec')).not.toBeNull()
+    expect(screen.getByText('ship it')).not.toBeNull()
+  })
+
+  it('sorts the completed list by updatedAt desc (newest done first)', async () => {
+    completed = [
+      rec({ id: 1, backendId: 'b1', description: 'older done', completed: true, updatedAt: 100 }),
+      rec({ id: 2, backendId: 'b2', description: 'newer done', completed: true, updatedAt: 200 })
+    ]
+    await renderTasks()
+    // With only completed rows the default 'open' view says "All caught up"; wait
+    // for the load, then switch to the completed view to assert order.
+    await waitFor(() => expect(document.body.textContent).toContain('2 done'))
+    fireEvent.click(screen.getByRole('button', { name: 'done' }))
+    const rows = screen.getAllByRole('listitem').map((li) => li.textContent)
+    const newerIdx = rows.findIndex((t) => t?.includes('newer done'))
+    const olderIdx = rows.findIndex((t) => t?.includes('older done'))
+    expect(newerIdx).toBeLessThan(olderIdx)
   })
 })
 
-describe('Tasks — freshness on mount + window focus', () => {
-  it('refetches on every mount, not only once per session', async () => {
-    getMock.mockImplementation((url: string) => {
-      if (url === '/v1/conversations') return Promise.resolve({ data: [] })
-      return Promise.resolve(actionItemsPage([], false))
-    })
+describe('Tasks — mutations are thin IPC calls', () => {
+  it('creates through tasksCreate and closes the composer', async () => {
+    await renderTasks()
+    await waitFor(() => expect(tasks.tasksListIncomplete).toHaveBeenCalled())
 
-    const { Tasks } = await import('./Tasks')
-    const first = render(
-      <MemoryRouter>
-        <Tasks />
-      </MemoryRouter>
-    )
-    await waitFor(() => expect(getMock).toHaveBeenCalled())
-    const callsAfterFirstMount = getMock.mock.calls.filter(
-      (c) => c[0] === '/v1/action-items'
-    ).length
-    expect(callsAfterFirstMount).toBeGreaterThan(0)
-    first.unmount()
+    fireEvent.click(screen.getByRole('button', { name: 'New' }))
+    const input = screen.getByPlaceholderText('What needs to get done?')
+    fireEvent.change(input, { target: { value: 'new task' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Add task' }))
 
-    getMock.mockClear()
-    render(
-      <MemoryRouter>
-        <Tasks />
-      </MemoryRouter>
-    )
-    // A second, later mount (simulating a revisit) must issue its own fetch —
-    // the old module-level `cache.loaded` guard made this a no-op after the
-    // first-ever mount of the session.
     await waitFor(() =>
-      expect(getMock.mock.calls.filter((c) => c[0] === '/v1/action-items').length).toBeGreaterThan(
-        0
+      expect(tasks.tasksCreate).toHaveBeenCalledWith(
+        expect.objectContaining({ description: 'new task' })
       )
     )
+    // Composer closed — the create is surfaced by onTasksChanged, not a reload.
+    await waitFor(() => expect(screen.queryByPlaceholderText('What needs to get done?')).toBeNull())
   })
 
-  it('refetches when the window regains focus', async () => {
-    getMock.mockImplementation((url: string) => {
-      if (url === '/v1/conversations') return Promise.resolve({ data: [] })
-      return Promise.resolve(actionItemsPage([], false))
-    })
+  it('toggles through tasksToggle with the row backendId', async () => {
+    incomplete = [rec({ id: 7, backendId: 'srv-7', description: 'toggle me' })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('toggle me')).not.toBeNull())
 
-    const { Tasks } = await import('./Tasks')
-    render(
-      <MemoryRouter>
-        <Tasks />
-      </MemoryRouter>
-    )
-    await waitFor(() => expect(getMock).toHaveBeenCalled())
-    getMock.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Mark as done' }))
+    expect(tasks.tasksToggle).toHaveBeenCalledWith({ backendId: 'srv-7', completed: true })
+  })
 
-    window.dispatchEvent(new Event('focus'))
+  it('deletes through tasksDelete with the row backendId', async () => {
+    incomplete = [rec({ id: 9, backendId: 'srv-9', description: 'delete me' })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('delete me')).not.toBeNull())
 
-    await waitFor(() =>
-      expect(getMock.mock.calls.filter((c) => c[0] === '/v1/action-items').length).toBeGreaterThan(
-        0
-      )
-    )
+    fireEvent.click(screen.getByRole('button', { name: 'Delete task' }))
+    expect(tasks.tasksDelete).toHaveBeenCalledWith({ backendId: 'srv-9' })
+  })
+})
+
+describe('Tasks — a freshly-created row is id-gated until synced', () => {
+  it('disables the controls and fires no mutation while backendId is null', async () => {
+    incomplete = [rec({ id: 5, backendId: null, description: 'just created' })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('just created')).not.toBeNull())
+
+    const row = screen.getByText('just created').closest('li') as HTMLElement
+    const toggle = within(row).getByRole('button', { name: 'Mark as done' }) as HTMLButtonElement
+    expect(toggle.disabled).toBe(true)
+
+    fireEvent.click(toggle)
+    expect(tasks.tasksToggle).not.toHaveBeenCalled()
+  })
+})
+
+describe('Tasks — freshness via onTasksChanged', () => {
+  it('subscribes once and re-reads the store when the change event fires', async () => {
+    incomplete = [rec({ id: 1, backendId: 'b1', description: 'first' })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+    expect(tasks.onTasksChanged).toHaveBeenCalledTimes(1)
+
+    const before = tasks.tasksListIncomplete.mock.calls.length
+    incomplete = [rec({ id: 2, backendId: 'b2', description: 'second' })]
+    changedCb?.()
+
+    await waitFor(() => expect(tasks.tasksListIncomplete.mock.calls.length).toBeGreaterThan(before))
+    await waitFor(() => expect(screen.queryByText('second')).not.toBeNull())
   })
 })

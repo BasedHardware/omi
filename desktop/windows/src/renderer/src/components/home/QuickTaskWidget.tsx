@@ -1,18 +1,15 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useLocation } from 'react-router-dom'
+import { useEffect, useRef, useState } from 'react'
+import { Link } from 'react-router-dom'
 import { ListChecks, ChevronRight } from 'lucide-react'
-import { omiApi } from '../../lib/apiClient'
-import { auth, onAuthStateChanged } from '../../lib/firebase'
+import type { ActionItemRecord } from '../../../../shared/types'
 
 // Compact dashboard surface for the idle Home screen: a preview of the next
-// couple of open tasks (soonest due first), mirroring the Goals widget. Reads
-// the same /v1/action-items feed the Tasks page uses; tapping opens that page.
-type ActionItem = {
-  id: string
-  description: string
-  completed: boolean
-  due_at?: string | null
-}
+// couple of open tasks (soonest due first), mirroring the Goals widget. Reads the
+// same local-first task store the Tasks page uses (incomplete rows, instant); the
+// store re-fires `onTasksChanged` so the preview stays current. Tapping opens Tasks.
+
+// Match the old preview cap so the "Tasks N" count stays a faithful open-task total.
+const OPEN_TASKS_LIMIT = 300
 
 function startOfDay(ms: number): number {
   const d = new Date(ms)
@@ -22,32 +19,31 @@ function startOfDay(ms: number): number {
 
 // Right-side due chip, mirroring the Goals widget's progress label. Returns null
 // for tasks with no due date (no chip shown). Overdue gets a rose tint.
-function dueChip(t: ActionItem): { label: string; overdue: boolean } | null {
-  if (!t.due_at) return null
-  const due = startOfDay(new Date(t.due_at).getTime())
+function dueChip(t: ActionItemRecord): { label: string; overdue: boolean } | null {
+  if (t.dueAt == null) return null
+  const due = startOfDay(t.dueAt)
   const today = startOfDay(Date.now())
   const days = Math.round((due - today) / 86_400_000)
   if (days < 0) return { label: 'Overdue', overdue: true }
   if (days === 0) return { label: 'Today', overdue: false }
   if (days === 1) return { label: 'Tomorrow', overdue: false }
   return {
-    label: new Date(t.due_at).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
+    label: new Date(t.dueAt).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }),
     overdue: false
   }
 }
 
 // Sort by soonest due date; tasks with no due date sink to the bottom.
-function byDueDate(a: ActionItem, b: ActionItem): number {
-  const av = a.due_at ? new Date(a.due_at).getTime() : Infinity
-  const bv = b.due_at ? new Date(b.due_at).getTime() : Infinity
+function byDueDate(a: ActionItemRecord, b: ActionItemRecord): number {
+  const av = a.dueAt ?? Infinity
+  const bv = b.dueAt ?? Infinity
   return av - bv
 }
 
 const MAX_SHOWN = 2
 
 export function QuickTaskWidget({ onReady }: { onReady?: () => void }): React.JSX.Element | null {
-  const [items, setItems] = useState<ActionItem[] | null>(null)
-  const { pathname } = useLocation()
+  const [items, setItems] = useState<ActionItemRecord[] | null>(null)
   // Tell the parent once our data has loaded (whether or not we have tasks), so
   // it can reveal both widgets together instead of letting them pop in / reshuffle.
   const readyFired = useRef(false)
@@ -57,56 +53,32 @@ export function QuickTaskWidget({ onReady }: { onReady?: () => void }): React.JS
       onReady?.()
     }
   }, [items, onReady])
-  // Track auth so the fetch waits for (and re-runs on) a restored user. On a
-  // cold start the Home panel mounts already at /home and fetches before
-  // Firebase restores the user; without this the request goes out
-  // unauthenticated, fails, and never retries (pathname doesn't change), so the
-  // widget stays hidden even though there are tasks.
-  const [userId, setUserId] = useState<string | null>(auth.currentUser?.uid ?? null)
-  useEffect(() => onAuthStateChanged(auth, (u) => setUserId(u?.uid ?? null)), [])
 
-  const fetchItems = useCallback((): (() => void) => {
+  // Local-first read: the store returns incomplete rows instantly (no auth / network
+  // gate needed) and kicks a background hydrate. `onTasksChanged` re-reads on every
+  // optimistic write and when a background sync lands — this replaces the old
+  // mount/pathname/focus refetch trio the backend fetch needed.
+  useEffect(() => {
     let cancelled = false
-    omiApi
-      .get('/v1/action-items', { params: { limit: 300, offset: 0 } })
-      .then((res) => {
-        const data = res.data as ActionItem[] | { action_items?: ActionItem[] }
-        const list = Array.isArray(data) ? data : (data.action_items ?? [])
-        if (!cancelled) setItems(list.filter((t) => !t.completed))
-      })
-      .catch(() => {
-        // Keep previously-loaded items on a transient failure rather than
-        // hiding the widget; only show empty if we have never loaded.
-        if (!cancelled) setItems((prev) => prev ?? [])
-      })
+    const read = (): void => {
+      window.omi
+        .tasksListIncomplete({ limit: OPEN_TASKS_LIMIT })
+        .then((list) => {
+          if (!cancelled) setItems(list)
+        })
+        .catch(() => {
+          // Keep previously-loaded items on a transient failure rather than hiding
+          // the widget; only show empty if we have never loaded.
+          if (!cancelled) setItems((prev) => prev ?? [])
+        })
+    }
+    read()
+    const unsub = window.omi.onTasksChanged(read)
     return () => {
       cancelled = true
+      unsub()
     }
   }, [])
-
-  // Primary fetch: as soon as auth is ready (and again if the user changes).
-  // The Home panel is always mounted, so this preloads independent of the
-  // current route — gating the only fetch on a pathname *change* to /home was
-  // what left the widget hidden after a failed/early initial load.
-  useEffect(() => {
-    if (!userId) return
-    return fetchItems()
-  }, [userId, fetchItems])
-
-  // Refetch when returning to Home (pick up tasks changed on the Tasks page).
-  useEffect(() => {
-    if (pathname !== '/home') return
-    return fetchItems()
-  }, [pathname, fetchItems])
-
-  // Refetch on window focus so tasks changed elsewhere show up.
-  useEffect(() => {
-    const onFocus = (): void => {
-      if (auth.currentUser) fetchItems()
-    }
-    window.addEventListener('focus', onFocus)
-    return () => window.removeEventListener('focus', onFocus)
-  }, [fetchItems])
 
   // Hide entirely until loaded or when there's nothing actionable — the idle
   // screen stays clean for new users.
@@ -133,7 +105,9 @@ export function QuickTaskWidget({ onReady }: { onReady?: () => void }): React.JS
             <div key={t.id} className="flex items-center justify-between gap-2 text-[11px]">
               <span className="truncate text-white/65">{t.description}</span>
               {chip && (
-                <span className={chip.overdue ? 'shrink-0 text-rose-300/80' : 'shrink-0 text-white/35'}>
+                <span
+                  className={chip.overdue ? 'shrink-0 text-rose-300/80' : 'shrink-0 text-white/35'}
+                >
                   {chip.label}
                 </span>
               )}

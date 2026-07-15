@@ -69,6 +69,8 @@ beforeEach(() => {
     // out of sync with the sidebar's copy of the same toggle.
     onRewindSettings: vi.fn().mockReturnValue(() => {}),
     rewindFrameCount: vi.fn().mockResolvedValue(1234),
+    // useHubStats subscribes to the task store so the Tasks count stays live.
+    onTasksChanged: vi.fn().mockReturnValue(() => {}),
     openExternalUrl: vi.fn()
   }
 })
