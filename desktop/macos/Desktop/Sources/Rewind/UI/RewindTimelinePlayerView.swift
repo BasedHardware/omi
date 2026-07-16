@@ -1,3 +1,4 @@
+@preconcurrency import AppKit
 import OmiTheme
 import SwiftUI
 

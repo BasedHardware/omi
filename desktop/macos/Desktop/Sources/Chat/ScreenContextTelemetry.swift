@@ -476,6 +476,10 @@ enum ScreenContextWorkContextBuilder {
     await payload(arguments: arguments.value)
   }
 
+  static func payloadBox(arguments: RuntimeJSONPayloadBox) async -> RuntimeJSONPayloadBox {
+    RuntimeJSONPayloadBox(await payload(arguments: arguments.value))
+  }
+
   static func payload(arguments: [String: Any]) async -> [String: Any] {
     let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
     let staleThresholdSeconds = max(

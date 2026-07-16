@@ -904,7 +904,8 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   nonisolated(unsafe) var outcomeKeys: [String] = []
   nonisolated(unsafe) var failOutcome = false
   nonisolated(unsafe) var lastDeviceID: String?
-  nonisolated(unsafe) var createdGoal: (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
+  nonisolated(unsafe) var createdGoal:
+    (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
   nonisolated(unsafe) var exactCandidate: OmiAPI.CandidateRecord?
   nonisolated(unsafe) var exactTask: TaskActionItem?
 

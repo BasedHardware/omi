@@ -1,5 +1,5 @@
 @preconcurrency import AVFoundation
-import AppKit
+@preconcurrency import AppKit
 import Foundation
 
 /// Coordinates the capture → storage → database → OCR pipeline for Rewind

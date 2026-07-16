@@ -1,6 +1,10 @@
 import Foundation
 @preconcurrency import GRDB
 
+private struct ScreenActivityRowsPayload: @unchecked Sendable {
+  let rows: [[String: Any]]
+}
+
 /// Syncs screenshot metadata + embeddings from the local GRDB database
 /// to the backend API (`POST /v1/screen-activity/sync`), which stores them
 /// in Firestore + Pinecone so the normal Flutter chat can answer screen
@@ -81,7 +85,7 @@ actor ScreenActivitySyncService {
 
     do {
       // Query screenshots that have embeddings and are newer than our cursor
-      let rows: [[String: Any]] = try await dbPool.read { [lastSyncedId, batchSize] db in
+      let rowsPayload: ScreenActivityRowsPayload = try await dbPool.read { [lastSyncedId, batchSize] db in
         let sql = """
           SELECT id, timestamp, appName, windowTitle, ocrText, embedding
           FROM screenshots
@@ -91,7 +95,7 @@ actor ScreenActivitySyncService {
           """
         let dbRows = try Row.fetchAll(db, sql: sql, arguments: [lastSyncedId, batchSize])
 
-        return dbRows.compactMap { row -> [String: Any]? in
+        let rows = dbRows.compactMap { row -> [String: Any]? in
           guard let id = row["id"] as? Int64 else { return nil }
 
           var dict: [String: Any] = ["id": id]
@@ -123,7 +127,9 @@ actor ScreenActivitySyncService {
 
           return dict
         }
+        return ScreenActivityRowsPayload(rows: rows)
       }
+      let rows = rowsPayload.rows
 
       guard !rows.isEmpty else { return }
 

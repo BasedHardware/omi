@@ -1,5 +1,5 @@
 @preconcurrency import AVFoundation
-import AppKit
+@preconcurrency import AppKit
 import CoreImage
 import Foundation
 import OmiSupport
