@@ -31,6 +31,7 @@ import type {
   AppSearchResponse
 } from '../lib/omiApi.generated'
 import { getCacheUid, readPersistedValue, writePersistedValue } from '../lib/persistentCache'
+import { toast } from '../lib/toast'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -48,6 +49,20 @@ type AppsSnapshot = {
   enabled: string[]
 }
 const APPS_SURFACE = 'apps'
+
+// Surfaces the backend `detail` on an enable/disable failure ONLY when it is
+// user-appropriate and actionable — currently just the disabled-app "…currently
+// unavailable…" 400. The other backend details are deliberately omitted: the
+// private/paid 403 "You are not authorized…" is non-actionable (and ambiguous —
+// same message for both cases) and the external-app 400 "App setup is not completed"
+// is handled by the dedicated setup flow, not this quick toggle. macOS swallows ALL
+// of these (its bound `errorMessage` has zero read sites); Windows surfaces the
+// failure via a toast, and shows the raw detail only where it helps the user.
+function userSafeDetail(e: unknown): string | undefined {
+  const detail = (e as { response?: { data?: { detail?: string } } }).response?.data?.detail
+  if (typeof detail === 'string' && /unavailable/i.test(detail)) return detail
+  return undefined
+}
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -376,12 +391,20 @@ export function Apps(): React.JSX.Element {
       }
     } catch (e) {
       console.error('Toggle app failed:', e)
-      // Revert
+      // Revert the optimistic flip so the row reflects the real (unchanged) state.
       setEnabled((s) => {
         const next = new Set(s)
         if (wasEnabled) next.add(a.id)
         else next.delete(a.id)
         return next
+      })
+      // Surface what macOS swallows: an enable/disable that failed now raises a real
+      // error toast instead of only a console.error + silent revert. The user sees a
+      // paid-gate 403, a private-app 403, a "currently unavailable" 400, or a network
+      // failure — no more phantom "Installed" that quietly snaps back.
+      toast(`Couldn’t ${wasEnabled ? 'uninstall' : 'install'} ${a.name}`, {
+        tone: 'error',
+        body: userSafeDetail(e)
       })
     } finally {
       setBusy((s) => {
