@@ -91,6 +91,9 @@
             "workdir": "/app",
             "entrypoints": ["memory_maintenance_job"],
             "image_import_smoke": true,
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+            },
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
             "dependency_probe_exclusions": {
