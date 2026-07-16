@@ -37,7 +37,7 @@ export function SettingsTabRail(props: {
           value={query}
           onChange={(e) => onQuery(e.target.value)}
           placeholder="Search settings…"
-          className="glass-subtle w-full rounded-lg py-2 pl-9 pr-3 text-sm text-text-secondary placeholder:text-white/35 focus:outline-none"
+          className="glass-subtle focus-ring w-full rounded-lg py-2 pl-9 pr-3 text-sm text-text-secondary placeholder:text-white/35"
         />
       </div>
       {SETTINGS_TABS.map(({ id, label, Icon }) => {
