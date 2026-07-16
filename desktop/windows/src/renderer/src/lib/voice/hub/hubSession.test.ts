@@ -44,10 +44,15 @@ describe('defaultSocketFactory — binary frame decoding', () => {
         public url: string,
         public protocols?: string | string[]
       ) {
+        // eslint-disable-next-line @typescript-eslint/no-this-alias -- the mock captures its own instance so the test can drive onmessage/binaryType
         created = this
       }
-      send(): void {}
-      close(): void {}
+      send(): void {
+        /* no-op mock */
+      }
+      close(): void {
+        /* no-op mock */
+      }
     }
     const orig = globalThis.WebSocket
     globalThis.WebSocket = FakeWS as unknown as typeof WebSocket
