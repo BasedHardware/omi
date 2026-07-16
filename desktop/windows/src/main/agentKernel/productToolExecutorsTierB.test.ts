@@ -89,7 +89,7 @@ describe('execute_sql', () => {
     expect(runQuery).not.toHaveBeenCalled()
   })
 
-  it('runs a valid SELECT over an allowlisted table and auto-appends LIMIT 200', async () => {
+  it('runs a valid SELECT over an allowlisted table and wraps it in an unsuppressible outer LIMIT', async () => {
     const runQuery = vi.fn((_sql: string) => ({ columns: ['app', 'n'], rows: [['Chrome', 12]] }))
     const exec = createExecuteSqlExecutor({ runQuery })
     const out = await exec(
@@ -97,19 +97,19 @@ describe('execute_sql', () => {
       ctx()
     )
     expect(runQuery).toHaveBeenCalledTimes(1)
-    expect(runQuery.mock.calls[0][0]).toMatch(/LIMIT 200\s*$/)
+    expect(runQuery.mock.calls[0][0]).toMatch(/^SELECT \* FROM \(.*\) LIMIT 201\s*$/s)
     expect(out).toContain('app | n')
     expect(out).toContain('Chrome | 12')
     expect(out).toContain('1 row(s)')
   })
 
-  it('preserves an explicit LIMIT and caps rendered rows at 200', async () => {
+  it('keeps an inner explicit LIMIT AND applies the outer cap, caps rendered rows at 200', async () => {
     const rows = Array.from({ length: 250 }, (_, i) => [i])
     const runQuery = vi.fn((_sql: string) => ({ columns: ['id'], rows }))
     const exec = createExecuteSqlExecutor({ runQuery })
     const out = await exec({ query: 'SELECT id FROM memories LIMIT 500' }, ctx())
-    expect(runQuery.mock.calls[0][0]).toContain('LIMIT 500')
-    expect(runQuery.mock.calls[0][0]).not.toMatch(/LIMIT 200/)
+    expect(runQuery.mock.calls[0][0]).toContain('LIMIT 500') // inner preserved
+    expect(runQuery.mock.calls[0][0]).toMatch(/\) LIMIT 201\s*$/) // outer cap unsuppressed
     expect(out).toContain('200 row(s)')
   })
 

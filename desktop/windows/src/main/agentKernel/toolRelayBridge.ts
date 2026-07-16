@@ -32,9 +32,10 @@
 // handleAgentControlToolCall unchanged — there is deliberately no second copy of
 // any of those checks here.
 //
-// DARK / additive: nothing spawns pi with this pipe/token in production yet (that
-// env wiring is a later PR). The bridge is constructed and listens in the control
-// plane singleton, but no live client connects. Tests drive it with a mock socket.
+// LIVE: pi-mono is the default chat path (see piMono.ts / controlPlane.ts), and
+// executeAttempt hands each turn this bridge's pipe/token via the per-turn context
+// file, so the pi extension connects here for real. Tests also drive it with a mock
+// socket.
 
 import { createServer, type Server, type Socket } from 'node:net'
 import { randomBytes } from 'node:crypto'
@@ -235,6 +236,21 @@ export class AgentToolRelayBridge {
     this.tokensByBinding.set(key, token)
     this.authorities.set(token, { sessionId, adapterId })
     return { pipePath: this.pipePath, token }
+  }
+
+  /**
+   * Evict a single binding's token + authority when its session/adapter ends. Both
+   * maps otherwise only clear on `close()` (full shutdown), so over a long-lived
+   * process they would grow one entry per distinct binding ever registered. Idempotent
+   * — a no-op for an unknown binding. (Call this from the session/adapter teardown in
+   * controlPlane.ts; the bridge itself has no lifecycle signal for it.)
+   */
+  closeBinding(sessionId: string, adapterId: string): void {
+    const key = bindingKey(sessionId, adapterId)
+    const token = this.tokensByBinding.get(key)
+    if (token === undefined) return
+    this.tokensByBinding.delete(key)
+    this.authorities.delete(token)
   }
 
   async close(): Promise<void> {
