@@ -761,7 +761,9 @@ def generate_swift_client_methods(spec: dict[str, Any]) -> str:
             body_lines = [
                 f'public static func {fn_name}({sig}) async throws -> {return_type} {{',
                 f'  let _path = {path_literal}',
-                '  guard var components = URLComponents(string: client.baseURL + _path) else {',
+                '  guard '
+                + ('var' if query_params else 'let')
+                + ' components = URLComponents(string: client.baseURL + _path) else {',
                 '    throw OmiApiError.invalidURL',
                 '  }',
             ]

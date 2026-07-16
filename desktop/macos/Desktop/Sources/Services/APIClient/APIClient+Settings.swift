@@ -80,7 +80,9 @@ extension APIClient {
 
   /// Sets recording permission
   func setRecordingPermission(enabled: Bool) async throws {
-    let url = URL(string: baseURL + "v1/users/store-recording-permission?value=\(enabled)")!
+    guard let url = URL(string: baseURL + "v1/users/store-recording-permission?value=\(enabled)") else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -95,7 +97,9 @@ extension APIClient {
 
   /// Sets private cloud sync
   func setPrivateCloudSync(enabled: Bool) async throws {
-    let url = URL(string: baseURL + "v1/users/private-cloud-sync?value=\(enabled)")!
+    guard let url = URL(string: baseURL + "v1/users/private-cloud-sync?value=\(enabled)") else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "POST"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -393,11 +397,11 @@ struct NotificationSettingsResponse: Codable {
 }
 
 enum SubscriptionPlanType: String, Codable {
-  case basic      // display "Free"
+  case basic  // display "Free"
   case unlimited  // legacy — display "Unlimited (legacy)"
   case architect  // display "Architect" ($400/mo, cost_usd quota)
-  case pro        // backward compat: old Firestore docs may still say "pro"
-  case `operator` // new — display "Operator"
+  case pro  // backward compat: old Firestore docs may still say "pro"
+  case `operator`  // new — display "Operator"
 }
 
 enum SubscriptionStatusType: String, Codable {
@@ -462,7 +466,10 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let features: [String]
   let prices: [SubscriptionPriceOption]
 
-  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+  init(
+    id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,
+    features: [String] = [], prices: [SubscriptionPriceOption] = []
+  ) {
     self.id = id
     self.title = title
     self.subtitle = subtitle
@@ -725,13 +732,15 @@ struct DesktopUpdatePolicyResponse: Decodable, Equatable, Sendable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let id = Self.nonEmptyString(try? container.decode(String.self, forKey: .id)) ?? "current"
     let active = (try? container.decode(Bool.self, forKey: .active)) ?? false
-    let severity = (try? container.decode(String.self, forKey: .severity))
+    let severity =
+      (try? container.decode(String.self, forKey: .severity))
       .flatMap(Severity.init(rawValue:)) ?? .none
     let maximumBuildNumber = try? container.decode(Int.self, forKey: .maximumBuildNumber)
     let latestBuildNumber = try? container.decode(Int.self, forKey: .latestBuildNumber)
     let title = Self.nonEmptyString(try? container.decode(String.self, forKey: .title))
     let message = Self.nonEmptyString(try? container.decode(String.self, forKey: .message))
-    let ctaText = Self.nonEmptyString(try? container.decode(String.self, forKey: .ctaText))
+    let ctaText =
+      Self.nonEmptyString(try? container.decode(String.self, forKey: .ctaText))
       ?? "Download latest"
     let downloadURL = (try? container.decode(String.self, forKey: .downloadURL)) ?? ""
     let canDismiss = (try? container.decode(Bool.self, forKey: .canDismiss)) ?? true

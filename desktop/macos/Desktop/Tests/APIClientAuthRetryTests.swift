@@ -4,12 +4,12 @@ import XCTest
 
 private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var deleteAttempts = 0
-  private static var alwaysUnauthorized = false
-  private static var forcedStatus: Int?
-  private static var forcedBody = Data()
-  private static var successfulStatus = 204
-  private static var successfulBody = Data()
+  private nonisolated(unsafe) static var deleteAttempts = 0
+  private nonisolated(unsafe) static var alwaysUnauthorized = false
+  private nonisolated(unsafe) static var forcedStatus: Int?
+  private nonisolated(unsafe) static var forcedBody = Data()
+  private nonisolated(unsafe) static var successfulStatus = 204
+  private nonisolated(unsafe) static var successfulBody = Data()
 
   static func reset() {
     lock.lock()
@@ -57,7 +57,8 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
     Self.deleteAttempts += 1
     let attempt = Self.deleteAttempts
     let status = Self.forcedStatus ?? (Self.alwaysUnauthorized || attempt == 1 ? 401 : Self.successfulStatus)
-    let body = Self.forcedStatus == nil && !Self.alwaysUnauthorized && attempt > 1
+    let body =
+      Self.forcedStatus == nil && !Self.alwaysUnauthorized && attempt > 1
       ? Self.successfulBody
       : Self.forcedBody
     Self.lock.unlock()
@@ -78,8 +79,8 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
 
 private final class SuspendedOwnerBoundURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var pending: SuspendedOwnerBoundURLStub?
-  private static var started = false
+  private nonisolated(unsafe) static var pending: SuspendedOwnerBoundURLStub?
+  private nonisolated(unsafe) static var started = false
 
   static func reset() {
     lock.withLock {
@@ -247,11 +248,12 @@ final class APIClientAuthRetryTests: XCTestCase {
     await client.setTestAuthHeader("Bearer id-token")
     let request = Task { () -> Result<Response, Error> in
       do {
-        return .success(try await client.get(
-          "v1/owner-bound",
-          expectedOwnerId: "same-owner",
-          authorizationSnapshot: snapshot
-        ))
+        return .success(
+          try await client.get(
+            "v1/owner-bound",
+            expectedOwnerId: "same-owner",
+            authorizationSnapshot: snapshot
+          ))
       } catch {
         return .failure(error)
       }

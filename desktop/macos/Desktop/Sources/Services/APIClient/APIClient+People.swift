@@ -168,7 +168,9 @@ extension APIClient {
       segmentIds: segmentIds
     )
 
-    let url = URL(string: baseURL + "v1/conversations/\(conversationId)/segments/assign-bulk")!
+    guard let url = URL(string: baseURL + "v1/conversations/\(conversationId)/segments/assign-bulk") else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "PATCH"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)
@@ -234,14 +236,14 @@ extension APIClient {
   /// Current-month chat usage + the plan's cap. Backed by Python backend
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
   struct ChatUsageQuota: Decodable {
-    let plan: String       // display name: "Free" | "Plus" | "Pro"
-    let planType: String   // internal id: "basic" | "unlimited" | "architect"
-    let unit: String       // "questions" | "cost_usd"
+    let plan: String  // display name: "Free" | "Plus" | "Pro"
+    let planType: String  // internal id: "basic" | "unlimited" | "architect"
+    let unit: String  // "questions" | "cost_usd"
     let used: Double
-    let limit: Double?     // nil means unlimited
+    let limit: Double?  // nil means unlimited
     let percent: Double
     let allowed: Bool
-    let resetAt: Int?      // unix seconds — start of next UTC month
+    let resetAt: Int?  // unix seconds — start of next UTC month
 
     enum CodingKeys: String, CodingKey {
       case plan

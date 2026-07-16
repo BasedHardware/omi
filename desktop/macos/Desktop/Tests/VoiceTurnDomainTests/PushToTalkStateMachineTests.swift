@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 private actor OwnerBoundaryExternalRunProbe {
   private var entered = false
@@ -34,9 +35,10 @@ private actor OwnerBoundaryExternalRunProbe {
         releaseWaiters.append(continuation)
       }
     }
-    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
-      capability,
-      previousOwnerID: binding.ownerID)
+    guard
+      RuntimeOwnerIdentity.authorizesTransitionCleanup(
+        capability,
+        previousOwnerID: binding.ownerID)
     else {
       throw ExternalSurfaceAuthorityError(code: "test_cleanup_capability_expired")
     }
@@ -97,10 +99,11 @@ final class PushToTalkStateMachineTests: XCTestCase {
 
     XCTAssertEqual(cancelled.model.turn?.phase, .terminal(.cancelled))
     XCTAssertTrue(cancelled.effects.contains(.stopCapture(turnID: turnID, captureID: captureID)))
-    XCTAssertEqual(cancelled.effects.filter { effect in
-      if case .terminal = effect { return true }
-      return false
-    }.count, 1)
+    XCTAssertEqual(
+      cancelled.effects.filter { effect in
+        if case .terminal = effect { return true }
+        return false
+      }.count, 1)
   }
 
   @MainActor
@@ -149,10 +152,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
     _ = manager.beginPushToTalkForAutomation()
     manager.cleanup()
     let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .selectRoute(turnID: turnID, route: .deepgramLive))
     let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .captureStarted(turnID: turnID, captureID: captureID))
     let generationBeforeTransition = manager.ownerBoundarySnapshot.captureGeneration
 
@@ -212,10 +215,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
     manager.cleanup()
     hub.installOwnerBoundaryFixture(ownerID: "owner-a")
     let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
     let captureID = VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .captureStarted(turnID: turnID, captureID: captureID))
 
     await transitionOwner(defaults: defaults, to: "owner-b")
@@ -242,9 +245,9 @@ final class PushToTalkStateMachineTests: XCTestCase {
     manager.cleanup()
     hub.installOwnerBoundaryFixture(ownerID: "owner-a")
     let turnID = VoiceTurnCoordinator.shared.begin(intent: .hold, ownerID: "owner-a")
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .captureStarted(
         turnID: turnID,
         captureID: VoiceCaptureID(manager.ownerBoundarySnapshot.captureGeneration)))
@@ -264,9 +267,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
     await probe.waitUntilEntered()
 
     XCTAssertEqual(defaults.string(forKey: .authUserId), "owner-a")
-    XCTAssertNil(RuntimeOwnerIdentity.currentOwnerId(
-      defaults: defaults,
-      allowAutomationOverride: false))
+    XCTAssertNil(
+      RuntimeOwnerIdentity.currentOwnerId(
+        defaults: defaults,
+        allowAutomationOverride: false))
     let suspendedTerminal = await probe.snapshot()
     XCTAssertFalse(suspendedTerminal.closed)
 
@@ -302,7 +306,7 @@ final class PushToTalkStateMachineTests: XCTestCase {
       ownerID: "owner-a",
       turnID: turnID)
 
-    VoiceTurnCoordinator.shared.send(.cancel(turnID: turnID, reason: .cancelled))
+    VoiceTurnCoordinator.shared.publish(.cancel(turnID: turnID, reason: .cancelled))
     await hub.settleOwnerBoundaryExternalRunTerminalizations()
 
     XCTAssertTrue(
@@ -320,8 +324,20 @@ final class PushToTalkStateMachineTests: XCTestCase {
 
   @MainActor
   private func transitionOwner(defaults: UserDefaults, to ownerID: String) async {
+    // `UserDefaults` is non-Sendable and cannot cross from the main actor into
+    // the nonisolated `performEffectiveOwnerTransition` boundary under Swift 6.
+    // Box it (mirroring the production `RuntimeOwnerDefaultsReference`) and run
+    // the transition from a nonisolated static helper so neither `defaults` nor
+    // `self` crosses an isolation boundary.
+    let boxed = OwnerDefaultsBox(value: defaults)
+    await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+  }
+
+  private static nonisolated func runOwnerTransition(
+    boxed: OwnerDefaultsBox, ownerID: String
+  ) async {
     await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: defaults,
+      defaults: boxed.value,
       allowAutomationOverride: false,
       plannedNextOwner: { _, _ in ownerID },
       retargetLocalStorage: { _, _ in },
@@ -355,4 +371,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertFalse(snapshot.hubConnected, file: file, line: line)
     XCTAssertEqual(snapshot.turnAudioByteCount, 0, file: file, line: line)
   }
+}
+
+/// Sendable carrier for a non-Sendable `UserDefaults` so it can cross the
+/// nonisolated owner-transition boundary under Swift 6 strict concurrency.
+private struct OwnerDefaultsBox: @unchecked Sendable {
+  let value: UserDefaults
 }

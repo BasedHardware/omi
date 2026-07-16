@@ -115,7 +115,7 @@ struct Persona: Codable, Identifiable {
 
   /// Whether the persona has a generated prompt
   var hasPrompt: Bool {
-    personaPrompt != nil && !personaPrompt!.isEmpty
+    personaPrompt?.isEmpty == false
   }
 
   /// Status display text

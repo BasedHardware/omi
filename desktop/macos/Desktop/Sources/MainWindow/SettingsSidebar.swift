@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Search Data Model
 
@@ -687,12 +687,12 @@ struct SettingHighlightModifier: ViewModifier {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  SettingsSidebar(
-    selectedSection: .constant(.advanced),
-    highlightedSettingId: .constant(nil),
-    onBack: {}
-  )
-  .preferredColorScheme(.dark)
-}
+  #Preview {
+    SettingsSidebar(
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil),
+      onBack: {}
+    )
+    .preferredColorScheme(.dark)
+  }
 #endif

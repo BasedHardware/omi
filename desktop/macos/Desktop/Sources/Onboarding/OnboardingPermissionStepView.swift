@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingPermissionStepView: View {
   @Environment(\.scenePhase) private var scenePhase
@@ -78,10 +78,12 @@ struct OnboardingPermissionStepView: View {
             .lineSpacing(4)
 
           if permissionType == "screen_recording", appState.isScreenRecordingStale {
-            Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app.")
-              .font(.system(size: 13, weight: .medium))
-              .foregroundColor(OmiColors.warning)
-              .fixedSize(horizontal: false, vertical: true)
+            Text(
+              "macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app."
+            )
+            .font(.system(size: 13, weight: .medium))
+            .foregroundColor(OmiColors.warning)
+            .fixedSize(horizontal: false, vertical: true)
           }
 
           if permissionType == "full_disk_access", let email = coordinator.userEmail() {
@@ -89,7 +91,6 @@ struct OnboardingPermissionStepView: View {
               .font(.system(size: 13, weight: .medium))
               .foregroundColor(OmiColors.textTertiary)
           }
-
 
           if let error = coordinator.lastActionError, !isGranted {
             Text(error)

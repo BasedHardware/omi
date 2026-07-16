@@ -161,8 +161,7 @@ struct AIUserProfileResponse: Codable {
 extension APIClient {
 
   /// Sync AI-generated user profile to backend
-  func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws
-  {
+  func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws {
     struct SyncRequest: Encodable {
       let profile_text: String
       let generated_at: String

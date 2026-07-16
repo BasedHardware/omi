@@ -26,10 +26,15 @@ LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR = 'OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL
 LLM_GATEWAY_CALLER = 'backend'
 CHAT_EXTRACTION_TIMEOUT_SECONDS = 10.0
 BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS = 35.0
+GATEWAY_TRANSPORT_STATUS_CODES = frozenset({502, 504})
 
 StructuredOutput = TypeVar('StructuredOutput', bound=BaseModel)
 JsonDict = dict[str, Any]
 JsonList = list[Any]
+
+
+def is_gateway_transport_status_code(status_code: object) -> bool:
+    return isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
 
 def _as_json_dict(value: object) -> JsonDict | None:
@@ -142,8 +147,11 @@ def invoke_chat_structured_gateway(
         return result
     except httpx.HTTPStatusError as exc:
         reason = f'http_{exc.response.status_code}'
-        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
-        return None
+        if is_gateway_transport_status_code(exc.response.status_code):
+            record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
+            return None
+        record_chat_extraction_gateway_result(feature=feature, outcome='error', reason=reason)
+        raise
     except httpx.TimeoutException:
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='timeout')
         return None

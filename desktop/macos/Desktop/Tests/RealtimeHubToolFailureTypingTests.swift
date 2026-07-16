@@ -26,7 +26,8 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertEqual(
       failure.userFacingOutput(base: "Could not read your memories right now."),
       "Could not read your memories right now. The provider credential needs attention.")
-    XCTAssertFalse(failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
+    XCTAssertFalse(
+      failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
   }
 
   func testClassifiesTransportAndDecodeFailures() {

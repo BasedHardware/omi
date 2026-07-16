@@ -1199,8 +1199,7 @@ enum CloudConnectorFormAutomation {
     return nil
   }
 
-  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState
-  {
+  private static func claudeConnectorPageState(nodes: [AccessibleNode]) -> ClaudeConnectorPageState {
     let text = nodes.map(\.searchableText).joined(separator: " ")
     return classifyClaudeConnectorPageText(text)
   }
@@ -1259,8 +1258,7 @@ enum CloudConnectorFormAutomation {
   }
 
   private static func setField(_ element: AXUIElement, to value: String) -> Bool {
-    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success
-    {
+    if AXUIElementSetAttributeValue(element, "AXValue" as CFString, value as CFTypeRef) == .success {
       return true
     }
     _ = AXUIElementSetAttributeValue(element, "AXFocused" as CFString, kCFBooleanTrue)
@@ -1625,8 +1623,7 @@ enum CloudConnectorFormAutomation {
     return ""
   }
 
-  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement?
-  {
+  private static func elementAttribute(_ element: AXUIElement, _ attribute: String) -> AXUIElement? {
     var raw: CFTypeRef?
     guard AXUIElementCopyAttributeValue(element, attribute as CFString, &raw) == .success else {
       return nil

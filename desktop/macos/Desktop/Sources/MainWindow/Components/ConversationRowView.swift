@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Row view for a conversation in the list
 struct ConversationRowView: View {
@@ -262,7 +262,8 @@ struct ConversationRowView: View {
         .scaledFont(size: OmiType.subheading)
         .frame(width: 36, height: 36)
         .background(
-          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(OmiColors.backgroundRaised))
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous).fill(
+            OmiColors.backgroundRaised))
 
       // Title + metadata below
       VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
@@ -538,13 +539,13 @@ struct ConversationRowView: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  VStack(spacing: OmiSpacing.md) {
-    // Preview would require mock ServerConversation
-    Text("ConversationRowView Preview")
-      .foregroundColor(.white)
+  #Preview {
+    VStack(spacing: OmiSpacing.md) {
+      // Preview would require mock ServerConversation
+      Text("ConversationRowView Preview")
+        .foregroundColor(.white)
+    }
+    .padding()
+    .background(OmiColors.backgroundPrimary)
   }
-  .padding()
-  .background(OmiColors.backgroundPrimary)
-}
 #endif

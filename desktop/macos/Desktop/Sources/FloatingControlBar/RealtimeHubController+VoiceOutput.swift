@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 extension RealtimeHubController {
   func makePCMPlayer() -> StreamingPCMPlayer {
@@ -82,7 +83,8 @@ extension RealtimeHubController {
   func stopNativePlayback(lease: VoiceOutputLease) -> Bool {
     guard lease.lane == .nativeRealtime else { return false }
     let ownsActiveLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease == lease
-    let ownsTerminalTurn = VoiceTurnCoordinator.shared.activeTurnID == nil
+    let ownsTerminalTurn =
+      VoiceTurnCoordinator.shared.activeTurnID == nil
       && VoiceTurnCoordinator.shared.model.lastTerminal?.turnID == lease.turnID
     guard ownsActiveLease || ownsTerminalTurn else {
       log("RealtimeHub: ignored stale native playback stop lease=\(lease.id)")

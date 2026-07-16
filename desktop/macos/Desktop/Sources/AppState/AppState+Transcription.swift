@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -138,42 +138,42 @@ extension AppState {
           await self?.startAudioCapture(source: effectiveSource)
         }
       } else {
-      transcriptionService?.start(
-        onSegments: { [weak self] segments in
-          Task { @MainActor in
-            self?.handleBackendSegments(segments)
+        transcriptionService?.start(
+          onSegments: { [weak self] segments in
+            Task { @MainActor in
+              self?.handleBackendSegments(segments)
+            }
+          },
+          onEvent: { [weak self] event in
+            Task { @MainActor in
+              self?.handleListenEvent(event)
+            }
+          },
+          onError: { [weak self] error in
+            Task { @MainActor in
+              logError("Transcription error", error: error)
+              AnalyticsManager.shared.recordingError(
+                error: error.localizedDescription,
+                reason: "cloud_stt_error",
+                source: self?.currentConversationSource.rawValue,
+                stage: "streaming"
+              )
+              // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
+              // instead of dropping it. Falls through to stopTranscription if not possible.
+              self?.handleCloudSTTReconnectFailure()
+            }
+          },
+          onConnected: { [weak self] in
+            Task { @MainActor in
+              log("Transcription: Connected to Python backend")
+              // Start audio capture once connected
+              await self?.startAudioCapture(source: effectiveSource)
+            }
+          },
+          onDisconnected: {
+            log("Transcription: Disconnected from Python backend")
           }
-        },
-        onEvent: { [weak self] event in
-          Task { @MainActor in
-            self?.handleListenEvent(event)
-          }
-        },
-        onError: { [weak self] error in
-          Task { @MainActor in
-            logError("Transcription error", error: error)
-            AnalyticsManager.shared.recordingError(
-              error: error.localizedDescription,
-              reason: "cloud_stt_error",
-              source: self?.currentConversationSource.rawValue,
-              stage: "streaming"
-            )
-            // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
-            // instead of dropping it. Falls through to stopTranscription if not possible.
-            self?.handleCloudSTTReconnectFailure()
-          }
-        },
-        onConnected: { [weak self] in
-          Task { @MainActor in
-            log("Transcription: Connected to Python backend")
-            // Start audio capture once connected
-            await self?.startAudioCapture(source: effectiveSource)
-          }
-        },
-        onDisconnected: {
-          log("Transcription: Disconnected from Python backend")
-        }
-      )
+        )
       }
 
       isTranscribing = true
@@ -360,18 +360,22 @@ extension AppState {
     guard let mic = audioCaptureService else { return false }
     guard !mic.capturing else { return true }
     do {
+      let useLocalSTT = sttSession.useLocalSTT
+      let localService = localMicService
+      let mixer = audioMixer
       try await mic.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if self.sttSession.useLocalSTT {
-            self.localMicService?.appendAudio(audioData)
+        onAudioChunk: { audioData in
+          if useLocalSTT {
+            localService?.appendAudio(audioData)
           } else {
-            self.audioMixer?.setMicAudio(audioData)
+            mixer?.setMicAudio(audioData)
           }
         },
         onAudioLevel: { level in
           // Use dedicated monitor to avoid triggering AppState re-renders
-          AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          Task { @MainActor in
+            AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          }
         }
       )
       // The HAL setup above is async and can be slow. If recording stopped — or the service was
@@ -398,17 +402,21 @@ extension AppState {
     guard let systemService = systemAudioCaptureService as? SystemAudioCaptureService else { return }
     guard !systemService.capturing else { return }
     do {
+      let useLocalSTT = sttSession.useLocalSTT
+      let localSystem = localSystemService
+      let mixer = audioMixer
       try await systemService.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if self.sttSession.useLocalSTT {
-            self.localSystemService?.appendAudio(audioData)
+        onAudioChunk: { audioData in
+          if useLocalSTT {
+            localSystem?.appendAudio(audioData)
           } else {
-            self.audioMixer?.setSystemAudio(audioData)
+            mixer?.setSystemAudio(audioData)
           }
         },
         onAudioLevel: { level in
-          AudioLevelMonitor.shared.updateSystemLevel(level)
+          Task { @MainActor in
+            AudioLevelMonitor.shared.updateSystemLevel(level)
+          }
         }
       )
       // The HAL setup above is async and can be slow. If recording stopped — or the service was
@@ -554,13 +562,15 @@ extension AppState {
       log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
       Task { @MainActor in
         defer { self.meetingEndFinalizationInProgress = false }
-        guard MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: self.effectiveSystemAudioMode,
-          meetingStateReady: self.meetingDetector?.hasObservedState == true,
-          shouldCapture: self.meetingDetector?.isMeetingActive == true,
-          segmentCount: self.totalSegmentCount,
-          hasSpeakerSegments: !self.speakerSegments.isEmpty
-        ) else {
+        guard
+          MeetingConversationBoundaryPolicy.shouldFinishConversation(
+            mode: self.effectiveSystemAudioMode,
+            meetingStateReady: self.meetingDetector?.hasObservedState == true,
+            shouldCapture: self.meetingDetector?.isMeetingActive == true,
+            segmentCount: self.totalSegmentCount,
+            hasSpeakerSegments: !self.speakerSegments.isEmpty
+          )
+        else {
           log("Transcription: skipped meeting-ended finalization because meeting state changed")
           return
         }
@@ -839,11 +849,13 @@ extension AppState {
   /// or we've already tried this once this session.
   @MainActor
   func handleCloudSTTReconnectFailure() {
-    guard sttSession.canBeginCloudToLocalFallback(
-      isTranscribing: isTranscribing,
-      audioSource: audioSource,
-      isAppleSilicon: Self.isAppleSilicon
-    ) else {
+    guard
+      sttSession.canBeginCloudToLocalFallback(
+        isTranscribing: isTranscribing,
+        audioSource: audioSource,
+        isAppleSilicon: Self.isAppleSilicon
+      )
+    else {
       stopTranscription()
       return
     }
@@ -952,8 +964,7 @@ extension AppState {
 
     // Restart the 4-hour max recording timer
     maxRecordingTimer?.invalidate()
-    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false)
-    { [weak self] _ in
+    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
       Task { @MainActor in
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")

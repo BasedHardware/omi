@@ -419,7 +419,8 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
     automationOverrideID: String?
   ) async {
     let finalOwner = normalizedOwner(automationOverrideID) ?? normalizedOwner(authOwnerID)
-    let bootstrap = finalOwner == "empty-cloud-bootstrap-a"
+    let bootstrap =
+      finalOwner == "empty-cloud-bootstrap-a"
       ? "empty-cloud-bootstrap-b"
       : "empty-cloud-bootstrap-a"
     if RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true) == bootstrap {
@@ -432,6 +433,7 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       automationOverrideID: automationOverrideID)
   }
 
+  @MainActor
   private func transitionEffectiveOwner(
     authOwnerID: String?,
     automationOverrideID: String?

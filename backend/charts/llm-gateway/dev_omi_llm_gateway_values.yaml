@@ -73,11 +73,6 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ANTHROPIC_API_KEY
-  - name: GEMINI_API_KEY
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: GEMINI_API_KEY
   - name: OPENROUTER_API_KEY
     valueFrom:
       secretKeyRef:
@@ -88,6 +83,10 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: METRICS_SECRET
+  - name: GOOGLE_CLOUD_PROJECT
+    value: "based-hardware-dev"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: DD_SERVICE
     value: "llm-gateway"
   - name: DD_ENV

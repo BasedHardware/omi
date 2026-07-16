@@ -144,7 +144,7 @@ enum DesktopBackendEnvironment {
   }
 
   private static func currentEnvironmentValue(_ key: String) -> String? {
-    guard let value = getenv(key), let string = String(validatingUTF8: value) else {
+    guard let value = getenv(key), let string = String(validatingCString: value) else {
       return nil
     }
     return string

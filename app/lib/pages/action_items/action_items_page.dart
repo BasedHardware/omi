@@ -80,7 +80,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
-        provider.fetchActionItems(showShimmer: true);
+        provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
       if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
@@ -570,8 +570,8 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
-                          : _buildTasksList(categorizedItems, provider),
+                      ? _buildEmptyTasksList()
+                      : _buildTasksList(categorizedItems, provider),
                 ),
               ),
               // Hide the purple corner FAB when the empty-state already

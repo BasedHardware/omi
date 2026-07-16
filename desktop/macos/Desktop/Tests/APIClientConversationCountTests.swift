@@ -1,9 +1,10 @@
 import XCTest
+
 @testable import Omi_Computer
 
 private final class ConversationCountURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _requests: [(method: String, path: String)] = []
+  private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
 
   static var requests: [(method: String, path: String)] {
     lock.lock()
@@ -27,16 +28,19 @@ private final class ConversationCountURLStub: URLProtocol, @unchecked Sendable {
     Self._requests.append((method: method, path: path))
     Self.lock.unlock()
 
-    let (status, body): (Int, Data) = switch (method, path) {
-    case ("GET", "/v1/conversations/count"):
-      (200, Data(#"{"count":4}"#.utf8))
-    case ("POST", "/v1/conversations/merge"):
-      (200, Data(#"{"status":"ok","message":"merged","conversation_ids":[]}"#.utf8))
-    default:
-      (204, Data())
-    }
-    let response = HTTPURLResponse(
-      url: request.url!, statusCode: status, httpVersion: nil, headerFields: nil)!
+    let (status, body): (Int, Data) =
+      switch (method, path) {
+      case ("GET", "/v1/conversations/count"):
+        (200, Data(#"{"count":4}"#.utf8))
+      case ("POST", "/v1/conversations/merge"):
+        (200, Data(#"{"status":"ok","message":"merged","conversation_ids":[]}"#.utf8))
+      default:
+        (204, Data())
+      }
+    guard
+      let url = request.url,
+      let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: nil, headerFields: nil)
+    else { return }
     client?.urlProtocol(self, didReceive: response, cacheStoragePolicy: .notAllowed)
     client?.urlProtocol(self, didLoad: body)
     client?.urlProtocolDidFinishLoading(self)
@@ -120,13 +124,15 @@ final class APIClientConversationCountTests: XCTestCase {
       starred: false
     )
 
-    XCTAssertEqual(queryItems, [
-      "include_discarded=true",
-      "statuses=completed",
-      "start_date=2026-06-01T00:00:00Z",
-      "folder_id=folder-a",
-      "starred=false",
-    ])
+    XCTAssertEqual(
+      queryItems,
+      [
+        "include_discarded=true",
+        "statuses=completed",
+        "start_date=2026-06-01T00:00:00Z",
+        "folder_id=folder-a",
+        "starred=false",
+      ])
   }
 
   func testConversationMutationsInvalidateCountCache() async throws {

@@ -1,7 +1,7 @@
 import AppKit
 import ObjCExceptionCatcher
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - View Exporter
 // Run with: --export-views /path/to/output/dir
@@ -290,7 +290,10 @@ enum ViewExporter {
         "full-ai-chat", 2,
         { AnyView(ChatPage(appProvider: AppProvider(), chatProvider: previewChatProvider())) }
       ),
-      ("full-memories", 3, { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }),
+      (
+        "full-memories", 3,
+        { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }
+      ),
       (
         "full-tasks", 4,
         {

@@ -19,7 +19,9 @@ extension APIClient {
       endpoint += "?app_id=\(appId)"
     }
 
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "DELETE"
     request.allHTTPHeaderFields = try await buildHeaders(
@@ -68,7 +70,9 @@ extension APIClient {
     if let appId = appId, !appId.isEmpty, appId != "no_selected" {
       endpoint += "?app_id=\(appId)"
     }
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
 
     let boundary = "Boundary-\(UUID().uuidString)"
     var request = URLRequest(url: url)
@@ -79,15 +83,16 @@ extension APIClient {
     var body = Data()
     let lineBreak = "\r\n"
     for upload in uploads {
-      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
       body.append(
-        "Content-Disposition: form-data; name=\"files\"; filename=\"\(upload.fileName)\"\(lineBreak)"
-          .data(using: .utf8)!)
-      body.append("Content-Type: \(upload.mimeType)\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+        Data(
+          "Content-Disposition: form-data; name=\"files\"; filename=\"\(upload.fileName)\"\(lineBreak)"
+            .utf8))
+      body.append(Data("Content-Type: \(upload.mimeType)\(lineBreak)\(lineBreak)".utf8))
       body.append(upload.data)
-      body.append(lineBreak.data(using: .utf8)!)
+      body.append(Data(lineBreak.utf8))
     }
-    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    body.append(Data("--\(boundary)--\(lineBreak)".utf8))
     request.httpBody = body
 
     return try await performRequest(request)
@@ -100,7 +105,9 @@ extension APIClient {
     fileURLs: [URL],
     conversationId: String? = nil
   ) async throws -> UploadLocalFilesResult {
-    var components = URLComponents(string: baseURL + "v2/sync-local-files")!
+    guard var components = URLComponents(string: baseURL + "v2/sync-local-files") else {
+      throw APIError.invalidResponse
+    }
     if let conversationId, !conversationId.isEmpty {
       components.queryItems = [URLQueryItem(name: "conversation_id", value: conversationId)]
     }
@@ -114,13 +121,16 @@ extension APIClient {
   /// Single GET of a sync job's status — no polling loop.
   func fetchSyncJobStatus(jobId: String) async -> SyncJobFetch {
     let endpoint = "v2/sync-local-files/\(jobId)"
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      return SyncJobFetch(outcome: .transient)
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
 
     guard let (data, response) = try? await session.data(for: request),
-          let http = response as? HTTPURLResponse else {
+      let http = response as? HTTPURLResponse
+    else {
       return SyncJobFetch(outcome: .transient)
     }
 
@@ -164,20 +174,23 @@ extension APIClient {
       // normalize at upload time so the backend Opus decoder gets sample-frame size.
       let fileName = WALSyncUploadFileName.normalizedForUpload(fileURL.lastPathComponent)
       let fileData = try Data(contentsOf: fileURL)
-      body.append("--\(boundary)\(lineBreak)".data(using: .utf8)!)
+      body.append(Data("--\(boundary)\(lineBreak)".utf8))
       body.append(
-        "Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\(lineBreak)"
-          .data(using: .utf8)!)
-      body.append("Content-Type: application/octet-stream\(lineBreak)\(lineBreak)".data(using: .utf8)!)
+        Data(
+          "Content-Disposition: form-data; name=\"files\"; filename=\"\(fileName)\"\(lineBreak)"
+            .utf8))
+      body.append(Data("Content-Type: application/octet-stream\(lineBreak)\(lineBreak)".utf8))
       body.append(fileData)
-      body.append(lineBreak.data(using: .utf8)!)
+      body.append(Data(lineBreak.utf8))
     }
-    body.append("--\(boundary)--\(lineBreak)".data(using: .utf8)!)
+    body.append(Data("--\(boundary)--\(lineBreak)".utf8))
     request.httpBody = body
     return request
   }
 
-  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
+  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws
+    -> UploadLocalFilesResult
+  {
     let (data, http) = try await performAuthenticatedData(for: request, retriedAuth: retriedAuth)
 
     if http.statusCode == 200 {

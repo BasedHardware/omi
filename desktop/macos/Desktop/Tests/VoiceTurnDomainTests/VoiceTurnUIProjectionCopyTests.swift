@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// Hermetic projection tests: reducer state / terminal reason → user-facing string.
 /// No sleeps, no UI harness.
@@ -90,7 +91,7 @@ final class VoiceTurnUIProjectionCopyTests: XCTestCase {
     let reducer = VoiceTurnReducer()
     let oldID = VoiceTurnID()
     let newID = VoiceTurnID()
-    var model = reducer.reduce(.idle, .start(turnID: oldID, ownerID: nil, intent: .hold)).model
+    let model = reducer.reduce(.idle, .start(turnID: oldID, ownerID: nil, intent: .hold)).model
     let replaced = reducer.reduce(
       model,
       .start(turnID: newID, ownerID: nil, intent: .hold))

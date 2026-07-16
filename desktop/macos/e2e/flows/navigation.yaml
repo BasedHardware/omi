@@ -12,8 +12,10 @@ covers:
   - desktop/macos/Desktop/Sources/Theme/OmiButtonStyle.swift
   - desktop/macos/Desktop/Sources/Theme/OmiChrome.swift
   - desktop/macos/Desktop/Sources/Theme/OmiColors.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiFont.swift
   - desktop/macos/Desktop/Sources/Theme/OmiMotion.swift
   - desktop/macos/Desktop/Sources/Theme/OmiSpacing.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiTextEditor.swift
   - desktop/macos/Desktop/Sources/Theme/OmiToggleStyle.swift
   - desktop/macos/Desktop/Sources/Theme/OmiType.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/FocusPage.swift

@@ -1,6 +1,24 @@
 import Foundation
 import XCTest
+
 @testable import Omi_Computer
+
+private final class LockedCounter: @unchecked Sendable {
+  private let lock = NSLock()
+  private var value = 0
+
+  func increment() {
+    lock.lock()
+    value += 1
+    lock.unlock()
+  }
+
+  var currentValue: Int {
+    lock.lock()
+    defer { lock.unlock() }
+    return value
+  }
+}
 
 final class RealtimeHubResumeOnceGateTests: XCTestCase {
   func testOnlyTheFirstContinuationCanResume() {
@@ -12,24 +30,21 @@ final class RealtimeHubResumeOnceGateTests: XCTestCase {
 
   func testConcurrentContinuationRacersHaveOneWinner() {
     let gate = RealtimeHubResumeOnceGate()
-    let winners = NSLock()
+    let winnerCount = LockedCounter()
     let group = DispatchGroup()
     let queue = DispatchQueue(label: "resume-once-racers", attributes: .concurrent)
-    var winnerCount = 0
 
     for _ in 0..<32 {
       group.enter()
       queue.async {
         if gate.first() {
-          winners.lock()
-          winnerCount += 1
-          winners.unlock()
+          winnerCount.increment()
         }
         group.leave()
       }
     }
 
     group.wait()
-    XCTAssertEqual(winnerCount, 1)
+    XCTAssertEqual(winnerCount.currentValue, 1)
   }
 }

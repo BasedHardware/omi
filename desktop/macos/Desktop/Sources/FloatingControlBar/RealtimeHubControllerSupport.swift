@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 // MARK: - Realtime Hub Controller (Phase 1)
 //

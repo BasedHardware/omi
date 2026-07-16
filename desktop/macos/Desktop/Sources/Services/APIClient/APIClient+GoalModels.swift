@@ -60,7 +60,9 @@ struct Goal: Codable, Identifiable {
     id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
     title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType = GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "") ?? .boolean
+    goalType =
+      GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "")
+      ?? .boolean
     targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
     currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
     minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0

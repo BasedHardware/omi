@@ -42,7 +42,8 @@ enum SpatialOverlayGeometry {
     // display (the one carrying the menu bar), never the containing display. Using
     // each screen's own maxY here would mis-place targets on secondary monitors.
     let convertedFrame = globalAppKitFrame(topLeftFrame: frame)
-    return screens
+    return
+      screens
       .map { screen -> (SpatialOverlayScreen, CGFloat) in
         (screen, screen.frame.intersection(convertedFrame).spatialOverlayArea)
       }

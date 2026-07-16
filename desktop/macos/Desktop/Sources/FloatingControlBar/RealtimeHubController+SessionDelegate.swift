@@ -2,6 +2,12 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
+
+private struct RealtimeToolArgumentsBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
 
 extension RealtimeHubController {
   // MARK: - RealtimeHubSessionDelegate
@@ -71,7 +77,8 @@ extension RealtimeHubController {
     }
     toolEffectIdentityByTransportKey.removeValue(forKey: key)
     let turnID = VoiceTurnID(identity.generation)
-    let deferredScreenProtocol = name == HubTool.screenshot.rawValue
+    let deferredScreenProtocol =
+      name == HubTool.screenshot.rawValue
       && screenGroundingState.protocolToken?.screenshotCallID == VoiceToolCallID(callId)
       && screenGroundingState.protocolToken?.screenshotIdentity == identity
     let toolIsActive = VoiceTurnCoordinator.shared.isToolEffectActive(
@@ -83,7 +90,7 @@ extension RealtimeHubController {
       return
     }
     if !deferredScreenProtocol {
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .toolFinishedScoped(
           turnID: turnID,
           identity: identity,
@@ -238,11 +245,12 @@ extension RealtimeHubController {
     case .execute:
       break
     }
-    guard let promptSelection = RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
-      transcript: transcript,
-      isFinal: providerTranscriptFinalized,
-      toolName: name,
-      arguments: arguments)
+    guard
+      let promptSelection = RealtimeExternalRunPromptPolicy.promptForAuthorizedTool(
+        transcript: transcript,
+        isFinal: providerTranscriptFinalized,
+        toolName: name,
+        arguments: arguments)
     else {
       log("RealtimeHub[\(providerTag)]: rejecting permission tool without voice transcript context")
       sendToolResultIfCurrent(
@@ -284,7 +292,8 @@ extension RealtimeHubController {
     expectedTurnEpoch: Int,
     runPrompt: String
   ) {
-    guard isCurrentToolTurn(
+    guard
+      isCurrentToolTurn(
         source: source,
         callId: callId,
         name: name,
@@ -295,15 +304,18 @@ extension RealtimeHubController {
       providerCallID: callId,
       toolName: name)
     let runTask = beginExternalRunAuthorityIfNeeded(turnID: turnID, prompt: runPrompt)
-    Task { [weak self, source] in
+    let argumentsBox = RealtimeToolArgumentsBox(arguments)
+    Task { [weak self, source, argumentsBox] in
       guard let self else { return }
       do {
+        let arguments = argumentsBox.value
         let binding = try await runTask.value
-        guard self.isCurrentToolTurn(
-          source: source,
-          callId: callId,
-          name: name,
-          expectedTurnEpoch: expectedTurnEpoch)
+        guard
+          self.isCurrentToolTurn(
+            source: source,
+            callId: callId,
+            name: name,
+            expectedTurnEpoch: expectedTurnEpoch)
         else { return }
         let inputHash = try AuthorizedToolExecution.inputHash(for: arguments)
         let invocation = RealtimeAuthorizedToolInvocation(
@@ -331,11 +343,12 @@ extension RealtimeHubController {
         // The tool may complete after a barge-in or owner/session replacement.
         // Never let that stale completion mutate either journal ownership or the
         // visible pill projection.
-        guard self.isCurrentToolTurn(
-          source: source,
-          callId: callId,
-          name: name,
-          expectedTurnEpoch: expectedTurnEpoch)
+        guard
+          self.isCurrentToolTurn(
+            source: source,
+            callId: callId,
+            name: name,
+            expectedTurnEpoch: expectedTurnEpoch)
         else { return }
         self.lastExternalToolName = name
         self.lastExternalToolErrorCode = ""
@@ -392,7 +405,7 @@ extension RealtimeHubController {
                 message: provider.setupNeededStatus,
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
             return
           case .accepted, .rejected:
             log("RealtimeHub[\(self.providerTag)]: spawn_agent rejected without a canonical child receipt")
@@ -405,7 +418,7 @@ extension RealtimeHubController {
                 message: "The background agent could not start. Please try again.",
                 preservingCanonicalEnvelopeFrom: output),
               expectedTurnEpoch: expectedTurnEpoch)
-            VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+            VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
             return
           }
         }
@@ -419,13 +432,15 @@ extension RealtimeHubController {
           screenEvidence: screenshotImage,
           expectedTurnEpoch: expectedTurnEpoch)
       } catch {
-        let code = (error as? ExternalSurfaceAuthorityError)?.code
+        let code =
+          (error as? ExternalSurfaceAuthorityError)?.code
           ?? "external_surface_tool_failed"
-        guard self.isCurrentToolTurn(
-          source: source,
-          callId: callId,
-          name: name,
-          expectedTurnEpoch: expectedTurnEpoch)
+        guard
+          self.isCurrentToolTurn(
+            source: source,
+            callId: callId,
+            name: name,
+            expectedTurnEpoch: expectedTurnEpoch)
         else { return }
         self.lastExternalToolName = name
         self.lastExternalToolErrorCode = code
@@ -451,13 +466,14 @@ extension RealtimeHubController {
     let activeSourceObjectID = session.map(ObjectIdentifier.init)
     let activeToolIdentity = VoiceTurnCoordinator.shared.activeTurn?
       .toolEffectIdentities[invocation.callID]
-    guard RealtimeAuthorizedToolOwnership.accepts(
-      command: command,
-      invocation: invocation,
-      activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-      activeToolIdentity: activeToolIdentity,
-      activeSourceObjectID: activeSourceObjectID,
-      currentTurnEpoch: realtimeToolTurnEpoch)
+    guard
+      RealtimeAuthorizedToolOwnership.accepts(
+        command: command,
+        invocation: invocation,
+        activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+        activeToolIdentity: activeToolIdentity,
+        activeSourceObjectID: activeSourceObjectID,
+        currentTurnEpoch: realtimeToolTurnEpoch)
     else {
       log("RealtimeHub: rejected stale/mismatched authorized realtime tool command")
       return .failed(
@@ -466,9 +482,10 @@ extension RealtimeHubController {
     guard AuthorizedToolExecution.isOwnerCurrent(command.ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }
-    guard RealtimeAuthorizedInvocationReplayGate.shouldExecute(
-      invocationID: command.invocationID,
-      completedInvocationIDs: completedAuthorizedRealtimeInvocationIDs)
+    guard
+      RealtimeAuthorizedInvocationReplayGate.shouldExecute(
+        invocationID: command.invocationID,
+        completedInvocationIDs: completedAuthorizedRealtimeInvocationIDs)
     else {
       log("RealtimeHub: rejected replayed authorized realtime tool command")
       return .failed(
@@ -521,9 +538,10 @@ extension RealtimeHubController {
       guard invocationIsCurrent else {
         return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
       }
-      guard let captureResult = Self.performOwnerBoundPhysicalEffect(
-        expectedOwnerID: command.ownerID,
-        effect: { [currentEvidence] in [currentEvidence] })
+      guard
+        let captureResult = Self.performOwnerBoundPhysicalEffect(
+          expectedOwnerID: command.ownerID,
+          effect: { [currentEvidence] in [currentEvidence] })
       else {
         return .failed(Self.authorizedRealtimeOwnerChangedError())
       }
@@ -533,11 +551,12 @@ extension RealtimeHubController {
         let jpeg = evidence.jpeg,
         evidence.descriptor.canVerifyCurrentScreen
       else {
-        guard let failureEvidence = RealtimeScreenEvidenceToolExecutionPolicy.failureEvidence(
-          capturedEvidence: capturedEvidence,
-          commandTurnID: invocation.turnID,
-          activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
-          invocationIsCurrent: invocationIsCurrent)
+        guard
+          let failureEvidence = RealtimeScreenEvidenceToolExecutionPolicy.failureEvidence(
+            capturedEvidence: capturedEvidence,
+            commandTurnID: invocation.turnID,
+            activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
+            invocationIsCurrent: invocationIsCurrent)
         else {
           return .failed(Self.authorizedRealtimeToolError(code: "stale_realtime_tool_authorization"))
         }
@@ -558,9 +577,10 @@ extension RealtimeHubController {
         return .succeeded(
           "Could not click: point_click requires finite numeric x and y coordinates.")
       }
-      guard Self.click(
-        at: CGPoint(x: x, y: y),
-        expectedOwnerID: command.ownerID)
+      guard
+        Self.click(
+          at: CGPoint(x: x, y: y),
+          expectedOwnerID: command.ownerID)
       else {
         return AuthorizedToolExecution.isOwnerCurrent(command.ownerID)
           ? .succeeded("Could not click.")
@@ -596,7 +616,7 @@ extension RealtimeHubController {
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID, let voiceSessionID,
       VoiceTurnCoordinator.shared.activeTurn?.route == .hubWarmWait
     {
-      VoiceTurnCoordinator.shared.send(.hubReady(turnID: turnID, sessionID: voiceSessionID))
+      VoiceTurnCoordinator.shared.publish(.hubReady(turnID: turnID, sessionID: voiceSessionID))
     }
     log("RealtimeHub: connected (\(sessionProvider?.displayName ?? "?"))")
     if let fallback = fallbackProvider, let reason = pendingFailoverReason,
@@ -638,7 +658,8 @@ extension RealtimeHubController {
     if isFinal {
       if !text.isEmpty { turnTranscript = text }
       providerTranscriptFinalized = !turnTranscript.trimmingCharacters(
-        in: .whitespacesAndNewlines).isEmpty
+        in: .whitespacesAndNewlines
+      ).isEmpty
     } else {
       turnTranscript += text
     }
@@ -656,15 +677,17 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard RealtimeProviderOutputPresentationPolicy.decide(
-      screenGroundingState: screenGroundingState,
-      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    ) == .present else { return }
+    guard
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: screenGroundingState,
+        reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+      ) == .present
+    else { return }
     guard let lease = acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") else { return }
     if let voiceSessionID {
       guard let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       else { return }
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerResponseStartedScoped(
           turnID: lease.turnID,
           identity: providerIdentity,
@@ -692,7 +715,7 @@ extension RealtimeHubController {
           reason: "enqueue_failed",
           outcome: .degraded,
           extra: ["user_visible": false])
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .playbackDrainedScoped(
             turnID: lease.turnID,
             identity: lease.identity,
@@ -701,7 +724,7 @@ extension RealtimeHubController {
         log(
           "RealtimeHub[\(providerTag)]: native audio stream failed after playback started; refusing duplicate full-text fallback"
         )
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .playbackFailedScoped(
             turnID: lease.turnID,
             identity: lease.identity,
@@ -727,16 +750,18 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard RealtimeProviderOutputPresentationPolicy.decide(
-      screenGroundingState: screenGroundingState,
-      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    ) == .present else { return }
+    guard
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: screenGroundingState,
+        reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+      ) == .present
+    else { return }
     if !text.isEmpty {
       assistantText += text
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .providerResponseStartedScoped(
             turnID: turnID,
             identity: providerIdentity,
@@ -772,7 +797,7 @@ extension RealtimeHubController {
       }
       if !reply.isEmpty { log("RealtimeHub: reply received chars=\(reply.count)") }
     }
-}
+  }
   func hubDidRequestTool(
     name: String,
     callId: String,
@@ -791,15 +816,16 @@ extension RealtimeHubController {
     }
     guard let toolIdentity = VoiceTurnCoordinator.shared.reserveEffectIdentity() else { return }
     toolEffectIdentityByTransportKey[transportKey] = toolIdentity
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .toolStartedScoped(
         turnID: turnID,
         identity: toolIdentity,
         callID: VoiceToolCallID(callId)))
-    guard VoiceTurnCoordinator.shared.isToolEffectActive(
-      turnID: turnID,
-      callID: VoiceToolCallID(callId),
-      identity: toolIdentity)
+    guard
+      VoiceTurnCoordinator.shared.isToolEffectActive(
+        turnID: turnID,
+        callID: VoiceToolCallID(callId),
+        identity: toolIdentity)
     else {
       toolEffectIdentityByTransportKey.removeValue(forKey: transportKey)
       log("RealtimeHub[\(providerTag)]: reducer rejected tool call \(name) id=\(callId)")
@@ -930,7 +956,7 @@ extension RealtimeHubController {
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .providerTurnFinishedScoped(
             turnID: turnID,
             identity: providerIdentity,
@@ -946,7 +972,7 @@ extension RealtimeHubController {
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
       {
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .providerTurnFinishedScoped(
             turnID: turnID,
             identity: providerIdentity,
@@ -980,7 +1006,8 @@ extension RealtimeHubController {
     }
     let providerReply = assistantText.trimmingCharacters(in: .whitespacesAndNewlines)
     let acceptedSpawnOwnerID = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.ownerID
-    let reply = acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.receipt.assistantText
+    let reply =
+      acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey]?.receipt.assistantText
       ?? providerReply
     log(
       "RealtimeHub[\(providerTag)]: turn done — transcript_chars=\(heard.count) audio=\(audioReceivedThisTurn)"
@@ -993,7 +1020,7 @@ extension RealtimeHubController {
       let completedTurnIdempotencyKey = turnIdempotencyKey
       guard let completedTurnOwnerID = VoiceTurnCoordinator.shared.activeTurn?.ownerID else {
         if let activeTurnID = VoiceTurnCoordinator.shared.activeTurnID {
-          VoiceTurnCoordinator.shared.send(.cancel(turnID: activeTurnID, reason: .cancelled))
+          VoiceTurnCoordinator.shared.publish(.cancel(turnID: activeTurnID, reason: .cancelled))
         }
         return
       }
@@ -1013,13 +1040,14 @@ extension RealtimeHubController {
             "RealtimeHub: provider transcript language did not match the configured voice languages; using bounded local decode for continuity"
           )
         }
-        let accepted = await self?.persistTurnDirectlyToKernel(
-          ownerID: completedTurnOwnerID,
-          userText: resolution.userText,
-          assistantText: reply,
-          interrupted: false,
-          idempotencyKey: completedTurnIdempotencyKey,
-          acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
+        let accepted =
+          await self?.persistTurnDirectlyToKernel(
+            ownerID: completedTurnOwnerID,
+            userText: resolution.userText,
+            assistantText: reply,
+            interrupted: false,
+            idempotencyKey: completedTurnIdempotencyKey,
+            acceptedSpawnOwnerID: acceptedSpawnOwnerID) ?? false
         self?.lastTurnDiagnostics = [
           "provider": provider,
           "provider_transcript": heard,
@@ -1040,7 +1068,7 @@ extension RealtimeHubController {
       VoiceTurnCoordinator.shared.activeTurn?.providerFinished != true,
       let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
     {
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerTurnFinishedScoped(
           turnID: turnID,
           identity: providerIdentity,
@@ -1090,7 +1118,7 @@ extension RealtimeHubController {
       guard controllerAction == .finishProviderNoResponse else { return }
       log("RealtimeHub[\(sessionProviderTag)]: post-tool continuation unavailable result=\(result)")
       guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else { return }
-      VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerNoResponse))
+      VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerNoResponse))
       if VoiceTurnCoordinator.shared.outputSnapshot.activeLease == nil {
         exitVoiceUI()
         applyPendingSessionRefreshIfIdle()
@@ -1161,7 +1189,7 @@ extension RealtimeHubController {
       // established transcription fallback; a late socket callback can no
       // longer replay audio into that fallback turn.
       reconnectAudioBuffer = nil
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReconnectFailed(
           turnID: pending.turnID,
           identity: pending.identity,
@@ -1205,7 +1233,7 @@ extension RealtimeHubController {
     // released, so its death-rattle never reaches us — only the live session's errors
     // land here.
     if let reconnect = reconnectAudioBuffer {
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReconnectFailed(
           turnID: reconnect.turnID,
           identity: reconnect.identity,
@@ -1332,8 +1360,9 @@ extension RealtimeHubController {
     hubReconnectStrikes += 1
     reconnectPending = true
     let reconnectOwnerBoundaryGeneration = ownerBoundaryGeneration
-    DispatchQueue.main.asyncAfter(deadline: .now() + 1.5) { [weak self] in
-      guard let self else { return }
+    Task { @MainActor [weak self] in
+      try? await Task.sleep(nanoseconds: 1_500_000_000)
+      guard !Task.isCancelled, let self else { return }
       guard self.ownerBoundaryGeneration == reconnectOwnerBoundaryGeneration else { return }
       self.reconnectPending = false
       if self.session == nil { self.ensureWarm() }
@@ -1364,7 +1393,7 @@ extension RealtimeHubController {
     realtimePlaybackEpoch += 1
     FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()
     if let turnID = activeTurn?.id {
-      VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+      VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
     }
     exitVoiceUI(clearResponseGlow: true)
   }
@@ -1382,6 +1411,5 @@ extension RealtimeHubController {
   func clearResponseGlowIfRealtimeAudioIdle() {
     responseGlowGate.scheduleIdleClear()
   }
-
 
 }

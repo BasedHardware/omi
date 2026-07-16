@@ -7,7 +7,6 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
   private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
   override func setUp() async throws {
-    try await super.setUp()
     ownerFixture = RuntimeOwnerAuthorityTestFixture()
     await ownerFixture.establish(authOwnerID: "spawn-test-owner")
   }
@@ -15,7 +14,6 @@ final class ChatToolExecutorSpawnAgentTests: XCTestCase {
   override func tearDown() async throws {
     await ownerFixture.restore()
     ownerFixture = nil
-    try await super.tearDown()
   }
 
   func testDirectPermissionToolsRemainCanonicalPhysicalExecutors() {

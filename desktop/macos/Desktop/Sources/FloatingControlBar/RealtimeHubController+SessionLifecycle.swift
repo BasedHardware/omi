@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 extension RealtimeHubController {
   // MARK: - Warm session lifecycle (kept open between turns)
@@ -10,12 +11,12 @@ extension RealtimeHubController {
   /// client-direct with the user's key. Otherwise, if signed in → mint a server-side
   /// ephemeral token and connect with it.
   func ensureWarm() {
-#if DEBUG
-    // The local-profile action owns an already-installed hermetic transport.
-    // Re-entering normal warm-up here would replace it and mint a real provider
-    // token while the offline gauntlet is exercising the production reducer.
-    if isAuthorizedLocalProfileTransport() { return }
-#endif
+    #if DEBUG
+      // The local-profile action owns an already-installed hermetic transport.
+      // Re-entering normal warm-up here would replace it and mint a real provider
+      // token while the offline gauntlet is exercising the production reducer.
+      if isAuthorizedLocalProfileTransport() { return }
+    #endif
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: warm start denied during effective-owner transition")
       return
@@ -96,7 +97,8 @@ extension RealtimeHubController {
         do {
           return .bound(try await state.task.value)
         } catch {
-          let code = (error as? ExternalSurfaceAuthorityError)?.code
+          let code =
+            (error as? ExternalSurfaceAuthorityError)?.code
             ?? "external_surface_begin_failed"
           return .failed(code)
         }
@@ -145,18 +147,28 @@ extension RealtimeHubController {
     errorCode: String?,
     cleanupCapability: RuntimeOwnerTransitionCleanupCapability? = nil
   ) async -> ExternalRunTerminalizationResult {
-    let effectiveCleanupCapability = cleanupCapability
+    let effectiveCleanupCapability =
+      cleanupCapability
       ?? RuntimeOwnerIdentity.transitionCleanupCapability(
         forPreviousOwnerID: binding.ownerID)
     do {
-#if DEBUG
-      if let ownerBoundaryExternalRunCompletion {
-        try await ownerBoundaryExternalRunCompletion(
-          binding,
-          terminalStatus,
-          errorCode,
-          effectiveCleanupCapability)
-      } else {
+      #if DEBUG
+        if let ownerBoundaryExternalRunCompletion {
+          try await ownerBoundaryExternalRunCompletion(
+            binding,
+            terminalStatus,
+            errorCode,
+            effectiveCleanupCapability)
+        } else {
+          _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
+            clientId: Self.externalRunClientID,
+            harnessMode: Self.externalRunHarnessMode,
+            binding: binding,
+            terminalStatus: terminalStatus,
+            errorCode: errorCode,
+            transitionCleanupCapability: effectiveCleanupCapability)
+        }
+      #else
         _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
           clientId: Self.externalRunClientID,
           harnessMode: Self.externalRunHarnessMode,
@@ -164,23 +176,15 @@ extension RealtimeHubController {
           terminalStatus: terminalStatus,
           errorCode: errorCode,
           transitionCleanupCapability: effectiveCleanupCapability)
-      }
-#else
-      _ = try await AgentRuntimeProcess.shared.completeExternalSurfaceRun(
-        clientId: Self.externalRunClientID,
-        harnessMode: Self.externalRunHarnessMode,
-        binding: binding,
-        terminalStatus: terminalStatus,
-        errorCode: errorCode,
-        transitionCleanupCapability: effectiveCleanupCapability)
-#endif
+      #endif
       return ExternalRunTerminalizationResult(
         binding: binding,
         cleanupCapability: effectiveCleanupCapability,
         closed: true,
         failureCode: nil)
     } catch {
-      let code = (error as? ExternalSurfaceAuthorityError)?.code
+      let code =
+        (error as? ExternalSurfaceAuthorityError)?.code
         ?? "external_surface_complete_failed"
       log("RealtimeHub: external run completion failed code=\(code)")
       return ExternalRunTerminalizationResult(
@@ -263,9 +267,10 @@ extension RealtimeHubController {
           provider: providerParam,
           expectedOwnerID: ownerID)
       } catch let error as RealtimeTokenMintError {
-        guard self.acceptMintCompletionOrRewarm(
-          generation: mintGeneration,
-          ownerScope: ownerScope)
+        guard
+          self.acceptMintCompletionOrRewarm(
+            generation: mintGeneration,
+            ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         self.recordRealtimeMintFailure(
@@ -279,9 +284,10 @@ extension RealtimeHubController {
         }
         return
       } catch let error as CredentialHealthError {
-        guard self.acceptMintCompletionOrRewarm(
-          generation: mintGeneration,
-          ownerScope: ownerScope)
+        guard
+          self.acceptMintCompletionOrRewarm(
+            generation: mintGeneration,
+            ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         CredentialHealthManager.shared.record(error, context: "realtime_mint")
@@ -299,9 +305,10 @@ extension RealtimeHubController {
         }
         return
       } catch {
-        guard self.acceptMintCompletionOrRewarm(
-          generation: mintGeneration,
-          ownerScope: ownerScope)
+        guard
+          self.acceptMintCompletionOrRewarm(
+            generation: mintGeneration,
+            ownerScope: ownerScope)
         else { return }
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         let typed = CredentialHealthError.backendTransient(
@@ -316,9 +323,10 @@ extension RealtimeHubController {
         }
         return
       }
-      guard self.acceptMintCompletionOrRewarm(
-        generation: mintGeneration,
-        ownerScope: ownerScope)
+      guard
+        self.acceptMintCompletionOrRewarm(
+          generation: mintGeneration,
+          ownerScope: ownerScope)
       else { return }
       _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
       // Provider may have changed (picker/failover) while minting; only connect if still wanted.
@@ -536,9 +544,10 @@ extension RealtimeHubController {
       ensureWarm()
       return
     }
-    guard RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
-      sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity)
+    guard
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
+        sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity)
     else { return }
     requestSessionHandoff(
       reason: .voiceContextFreshness,
@@ -570,7 +579,7 @@ extension RealtimeHubController {
     _ = pending.appendAudio(turnAudio16k)
     reconnectAudioBuffer = pending
     admittedInputTurnID = nil
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReconnectStarted(
         turnID: active.id,
         identity: identity,
@@ -600,7 +609,7 @@ extension RealtimeHubController {
       responseID: responseID,
       identity: identity,
       interrupting: interrupting)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReconnectStarted(
         turnID: turnID,
         identity: identity,
@@ -621,8 +630,9 @@ extension RealtimeHubController {
       sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
     if admission == .rejectStaleProviderContext {
       var updated = pending
-      guard updated.replaceRequiredContextFreshnessIdentity(
-        voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
+      guard
+        updated.replaceRequiredContextFreshnessIdentity(
+          voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
       else {
         failContextFreshInputPreparation(
           turnID: pending.turnID,
@@ -640,7 +650,7 @@ extension RealtimeHubController {
     guard admission == .admit else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReconnectFailed(
           turnID: pending.turnID,
           identity: pending.identity,
@@ -648,14 +658,15 @@ extension RealtimeHubController {
       log("RealtimeHub: rejected context-preparation audio before provider admission: \(admission)")
       return
     }
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReconnected(
         turnID: pending.turnID,
         identity: pending.identity,
         sessionID: voiceSessionID))
-    guard VoiceTurnCoordinator.shared.isProviderConnectionReady(
-      turnID: pending.turnID,
-      sessionID: voiceSessionID)
+    guard
+      VoiceTurnCoordinator.shared.isProviderConnectionReady(
+        turnID: pending.turnID,
+        sessionID: voiceSessionID)
     else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
@@ -677,7 +688,7 @@ extension RealtimeHubController {
     }
     if VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true {
       live.commitInputTurn()
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .hubCommitAccepted(
           turnID: pending.turnID,
           sessionID: voiceSessionID,
@@ -714,7 +725,7 @@ extension RealtimeHubController {
     if admittedInputTurnID == turnID { admittedInputTurnID = nil }
     guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
     session?.abandonInputTurn()
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReconnectFailed(
         turnID: turnID,
         identity: pending.identity,
@@ -876,7 +887,7 @@ extension RealtimeHubController {
       let accepted = receipt?.accepted == true
       guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
       if accepted {
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .journalAccepted(turnID: turnID, identity: identity))
         // The provider only receives kernel context when its socket starts.
         // Re-warm after the durable journal acknowledgement so the usual next
@@ -884,7 +895,7 @@ extension RealtimeHubController {
         // bounded buffer instead of being failed or sent to generic warm wait.
         self.requestSessionHandoff(reason: .persistedVoiceContext)
       } else {
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .journalFailed(
             turnID: turnID,
             identity: identity,
@@ -911,9 +922,9 @@ extension RealtimeHubController {
     sessionProvider = nil
     sessionAuth = nil
     sessionOwnerBinding = nil
-#if DEBUG
-    localProfileTransportAuthority = nil
-#endif
+    #if DEBUG
+      localProfileTransportAuthority = nil
+    #endif
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceContextFreshnessIdentity = ""
     admittedInputTurnID = nil
@@ -927,9 +938,11 @@ extension RealtimeHubController {
   }
 
   func teardownSession(preservingReconnectAudio: Bool = false) {
-    guard let detachedSession = detachPhysicalSessionForTeardown(
-      preservingReconnectAudio: preservingReconnectAudio
-    ) else { return }
+    guard
+      let detachedSession = detachPhysicalSessionForTeardown(
+        preservingReconnectAudio: preservingReconnectAudio
+      )
+    else { return }
     schedulePhysicalSessionTeardown(detachedSession)
   }
 
@@ -982,7 +995,7 @@ extension RealtimeHubController {
       turnID: turnID,
       responseID: responseID,
       identity: identity)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReplacementStarted(
         turnID: turnID,
         identity: identity,
@@ -1115,7 +1128,9 @@ extension RealtimeHubController {
         replacementGeneration: replacementGeneration,
         mintGeneration: mintGeneration,
         ownerScope: ownerScope)
-      { return }
+      {
+        return
+      }
       guard self.replacementAudioBuffer != nil else {
         _ = self.releaseMint(generation: mintGeneration, ownerScope: ownerScope)
         return
@@ -1136,7 +1151,9 @@ extension RealtimeHubController {
           replacementGeneration: replacementGeneration,
           mintGeneration: mintGeneration,
           ownerScope: ownerScope)
-        { return }
+        {
+          return
+        }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         self.recordRealtimeMintFailure(
           error,
@@ -1160,7 +1177,9 @@ extension RealtimeHubController {
           replacementGeneration: replacementGeneration,
           mintGeneration: mintGeneration,
           ownerScope: ownerScope)
-        { return }
+        {
+          return
+        }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         CredentialHealthManager.shared.record(error, context: "realtime_barge_in_mint")
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
@@ -1185,7 +1204,9 @@ extension RealtimeHubController {
           replacementGeneration: replacementGeneration,
           mintGeneration: mintGeneration,
           ownerScope: ownerScope)
-        { return }
+        {
+          return
+        }
         guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
         DesktopDiagnosticsManager.shared.recordRealtimeTokenMintFailed(
           provider: providerParam,
@@ -1202,7 +1223,9 @@ extension RealtimeHubController {
         replacementGeneration: replacementGeneration,
         mintGeneration: mintGeneration,
         ownerScope: ownerScope)
-      { return }
+      {
+        return
+      }
       guard self.releaseMint(generation: mintGeneration, ownerScope: ownerScope) else { return }
       self.startReplacementSessionForBargeIn(
         provider: provider,
@@ -1222,7 +1245,8 @@ extension RealtimeHubController {
   ) -> Bool {
     guard self.mintGeneration == mintGeneration, mintOwnerScope == ownerScope else { return true }
     let generationChanged = replacementGeneration != bargeInReplacementGeneration
-    let ownerChanged = !isOwnerScopeCurrent(ownerScope)
+    let ownerChanged =
+      !isOwnerScopeCurrent(ownerScope)
       || pendingBargeInOwnerScope != ownerScope
     guard generationChanged || ownerChanged else { return false }
     _ = releaseMint(generation: mintGeneration, ownerScope: ownerScope)
@@ -1261,16 +1285,17 @@ extension RealtimeHubController {
     pendingBargeInAuth = nil
     pendingBargeInOwnerScope = nil
     guard let voiceSessionID else { return }
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReplacementReady(
         turnID: pending.turnID,
         identity: pending.identity,
         sessionID: voiceSessionID,
         responseID: pending.responseID))
-    guard VoiceTurnCoordinator.shared.isProviderConnectionReady(
-      turnID: pending.turnID,
-      sessionID: voiceSessionID,
-      responseID: pending.responseID)
+    guard
+      VoiceTurnCoordinator.shared.isProviderConnectionReady(
+        turnID: pending.turnID,
+        sessionID: voiceSessionID,
+        responseID: pending.responseID)
     else {
       session?.abandonInputTurn()
       log("RealtimeHub: discarded stale barge-in replacement before audio replay")
@@ -1285,7 +1310,7 @@ extension RealtimeHubController {
     flushBargeInReplacementAudioBuffer(pending.audioBuffer)
     if VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true {
       session?.commitInputTurn()
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .hubCommitAccepted(
           turnID: pending.turnID,
           sessionID: voiceSessionID,
@@ -1305,8 +1330,9 @@ extension RealtimeHubController {
       sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
     if admission == .rejectStaleProviderContext {
       var updated = pending
-      guard updated.replaceRequiredContextFreshnessIdentity(
-        voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
+      guard
+        updated.replaceRequiredContextFreshnessIdentity(
+          voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
       else {
         failContextFreshInputPreparation(
           turnID: pending.turnID,
@@ -1324,7 +1350,7 @@ extension RealtimeHubController {
     guard admission == .admit else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReconnectFailed(
           turnID: pending.turnID,
           identity: pending.identity,
@@ -1333,14 +1359,15 @@ extension RealtimeHubController {
       return
     }
     reconnectAudioBuffer = nil
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .providerReconnected(
         turnID: pending.turnID,
         identity: pending.identity,
         sessionID: voiceSessionID))
-    guard VoiceTurnCoordinator.shared.isProviderConnectionReady(
-      turnID: pending.turnID,
-      sessionID: voiceSessionID)
+    guard
+      VoiceTurnCoordinator.shared.isProviderConnectionReady(
+        turnID: pending.turnID,
+        sessionID: voiceSessionID)
     else {
       live.abandonInputTurn()
       log("RealtimeHub: reducer rejected reconnect before audio replay")
@@ -1360,7 +1387,7 @@ extension RealtimeHubController {
     }
     if VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true {
       live.commitInputTurn()
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .hubCommitAccepted(
           turnID: pending.turnID,
           sessionID: voiceSessionID,
@@ -1370,10 +1397,11 @@ extension RealtimeHubController {
 
   func failBargeInReplacement(provider: RealtimeHubProvider, reason: String) {
     let failedBuffer = replacementAudioBuffer
-    let hadCommittedTurn = failedBuffer.map {
-      VoiceTurnCoordinator.shared.activeTurn?.id == $0.turnID
-        && VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true
-    } ?? false
+    let hadCommittedTurn =
+      failedBuffer.map {
+        VoiceTurnCoordinator.shared.activeTurn?.id == $0.turnID
+          && VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true
+      } ?? false
     clearBargeInReplacementState()
     log(
       "RealtimeHub[\(provider.displayName)]: barge-in replacement failed "
@@ -1383,7 +1411,7 @@ extension RealtimeHubController {
     responseGlowGate.clearImmediately()
     exitVoiceUI(clearResponseGlow: true)
     if let failedBuffer {
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReplacementFailed(
           turnID: failedBuffer.turnID,
           identity: failedBuffer.identity,

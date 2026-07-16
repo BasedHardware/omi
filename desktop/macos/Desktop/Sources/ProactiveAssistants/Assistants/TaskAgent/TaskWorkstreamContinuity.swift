@@ -145,7 +145,8 @@ enum TaskWorkstreamContinuity {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
     control: Control? = nil
   ) async throws -> TaskKernelContinuityReceipt {
-    let artifacts = (queryResult.completionDeltaArtifacts.isEmpty
+    let artifacts =
+      (queryResult.completionDeltaArtifacts.isEmpty
       ? queryResult.artifacts
       : queryResult.completionDeltaArtifacts)
       .filter(\.isUserFacingResult)
@@ -319,7 +320,8 @@ enum TaskWorkstreamContinuity {
     let canonical = projection.recentEvents
       .filter { $0.sensitivity == .normal }
       .flatMap { $0.evidenceRefs ?? [] }
-    let task = projection.scopedTasks
+    let task =
+      projection.scopedTasks
       .first(where: { $0.id == projection.activeTaskID })?
       .provenance ?? []
     let localTurn = OmiAPI.EvidenceRef(
@@ -344,7 +346,8 @@ enum TaskWorkstreamContinuity {
     {
       return sanitizeLogicalKey(String(metadataKey))
     }
-    let candidate = artifact.displayName?.isEmpty == false
+    let candidate =
+      artifact.displayName?.isEmpty == false
       ? artifact.displayName!
       : URL(string: artifact.uri)?.lastPathComponent ?? artifact.kind
     return sanitizeLogicalKey(candidate)

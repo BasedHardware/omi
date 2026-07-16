@@ -131,7 +131,8 @@ private enum ServerMemoryAliasDecodeError {
     DecodingError.dataCorrupted(
       DecodingError.Context(
         codingPath: codingPath,
-        debugDescription: "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
+        debugDescription:
+          "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
       )
     )
   }
@@ -215,11 +216,11 @@ struct ServerMemory: Decodable, Identifiable {
     let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
     let memoryIdValue = try wire?.memoryId ?? container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
-    case let (.some(id), .some(memoryId)) where id != memoryId:
+    case (.some(let id), .some(let memoryId)) where id != memoryId:
       self.id = id
-    case let (.some(id), _):
+    case (.some(let id), _):
       self.id = id
-    case let (_, .some(memoryId)):
+    case (_, .some(let memoryId)):
       self.id = memoryId
     case (.none, .none):
       throw DecodingError.keyNotFound(
@@ -246,10 +247,12 @@ struct ServerMemory: Decodable, Identifiable {
     // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
-    let layerValue = try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+    let layerValue =
+      try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
     let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
-    let memoryTierValue = try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
+    let memoryTierValue =
+      try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
     tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
 
@@ -267,11 +270,11 @@ struct ServerMemory: Decodable, Identifiable {
     }
 
     switch (layerValue, tierValue, memoryTierValue) {
-    case let (.some(layer), _, _):
+    case (.some(let layer), _, _):
       self.tier = layer
-    case let (_, .some(tier), _):
+    case (_, .some(let tier), _):
       self.tier = tier
-    case let (_, _, .some(memoryTier)):
+    case (_, _, .some(let memoryTier)):
       self.tier = memoryTier
     case (.none, .none, .none):
       self.tier = .longTerm
@@ -537,7 +540,9 @@ extension APIClient {
       endpoint += "&device_scope=\(deviceScope)"
     }
 
-    let url = URL(string: baseURL + endpoint)!
+    guard let url = URL(string: baseURL + endpoint) else {
+      throw APIError.invalidResponse
+    }
     var request = URLRequest(url: url)
     request.httpMethod = "GET"
     request.allHTTPHeaderFields = try await buildHeaders(requireAuth: true)

@@ -23,7 +23,8 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
     // Every silent-turn record must carry an explicit recovery decision — no site
     // may fall back to the `recoveryAction: "none"` default silently.
     let silentTurnCalls = source.components(separatedBy: "recordPTTSilentTurn(").count - 1
-    let recoveryDecisions = source.components(separatedBy: "recoveryResult: recoveryDecision.shouldRebuildCapture").count - 1
+    let recoveryDecisions =
+      source.components(separatedBy: "recoveryResult: recoveryDecision.shouldRebuildCapture").count - 1
     XCTAssertEqual(
       silentTurnCalls, recoveryDecisions,
       "Every recordPTTSilentTurn site must pass the production recovery decision")
@@ -35,17 +36,22 @@ final class PTTSilentTurnRecoveryWiringTests: XCTestCase {
       silentTurnCalls,
       "Every silent-turn discard must call recordDiscardedTurn")
     XCTAssertEqual(
-      source.components(separatedBy: "requestCoreAudioCaptureRecovery(reason: \"repeated dead-mic PTT turns\"").count - 1,
+      source.components(separatedBy: "requestCoreAudioCaptureRecovery(reason: \"repeated dead-mic PTT turns\"").count
+        - 1,
       silentTurnCalls,
       "Every silent-turn discard must guard a capture rebuild")
 
     // A rebuild is not proven by being invoked: each silent discard and each
     // accepted audible turn must resolve the pending recovery through the shared
     // diagnostics surface on its next judgeable result.
-    let recoveryOutcomeRecords = source.components(
-      separatedBy: "recordSilentMicRecoveryOutcome(").count - 2
-    let successfulTurns = source.components(
-      separatedBy: "silentMicRecoveryPolicy.recordSuccessfulTurn()").count - 1
+    let recoveryOutcomeRecords =
+      source.components(
+        separatedBy: "recordSilentMicRecoveryOutcome("
+      ).count - 2
+    let successfulTurns =
+      source.components(
+        separatedBy: "silentMicRecoveryPolicy.recordSuccessfulTurn()"
+      ).count - 1
     XCTAssertEqual(
       recoveryOutcomeRecords,
       silentTurnCalls + successfulTurns,

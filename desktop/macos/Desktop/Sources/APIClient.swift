@@ -227,15 +227,18 @@ actor APIClient {
     let (data, response) = try await session.data(for: request)
     try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
-      throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
+      throw CredentialHealthError.backendTransient(
+        statusCode: nil, message: APIError.invalidResponse.localizedDescription)
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      guard let retry = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: false,
-        authPolicy: authPolicy
-      ) else {
+      guard
+        let retry = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: false,
+          authPolicy: authPolicy
+        )
+      else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
       }
       do {
@@ -273,7 +276,8 @@ actor APIClient {
 
     let resp = try decoder.decode(Resp.self, from: data)
     guard !resp.token.isEmpty else {
-      throw CredentialHealthError.backendTransient(statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
+      throw CredentialHealthError.backendTransient(
+        statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
     }
     return resp.token
   }
@@ -444,11 +448,13 @@ actor APIClient {
       if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       }
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: retriedAuth,
-        authPolicy: authPolicy
-      ) else {
+      guard
+        let retryRequest = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: retriedAuth,
+          authPolicy: authPolicy
+        )
+      else {
         if authPolicy.recordsAuthRetryTelemetry {
           DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
         }
@@ -890,7 +896,6 @@ extension APIClient {
   }
 
 }
-
 
 // MARK: - Goals API
 

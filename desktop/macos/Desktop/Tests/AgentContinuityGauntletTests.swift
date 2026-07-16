@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class AgentContinuityGauntletTests: XCTestCase {
@@ -19,7 +20,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
     let bridgeSource = try String(
-      contentsOf: desktopDir
+      contentsOf:
+        desktopDir
         .appendingPathComponent("Desktop/Sources/DesktopAutomationBridge.swift"),
       encoding: .utf8
     )
@@ -48,7 +50,8 @@ final class AgentContinuityGauntletTests: XCTestCase {
     }
     let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let providerSource = try String(
-      contentsOf: desktopDir
+      contentsOf:
+        desktopDir
         .appendingPathComponent("Desktop/Sources/Providers/ChatProvider.swift"),
       encoding: .utf8
     )
@@ -75,13 +78,16 @@ final class AgentContinuityGauntletTests: XCTestCase {
       encoding: .utf8
     )
     let bridgeSource = try String(
-      contentsOf: desktopDir
+      contentsOf:
+        desktopDir
         .appendingPathComponent("Desktop/Sources/DesktopAutomationBridge.swift"),
       encoding: .utf8
     )
     XCTAssertTrue(driverSource.contains("\"resilience\""))
-    XCTAssertTrue(driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
-    XCTAssertTrue(driverSource.contains("SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
+    XCTAssertTrue(
+      driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
+    XCTAssertTrue(
+      driverSource.contains("SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
     XCTAssertTrue(driverSource.contains("def run_resilience_suite(self) -> None"))
     XCTAssertTrue(driverSource.contains("if \"resilience\" in self.suites"))
     XCTAssertTrue(driverSource.contains("self.run_resilience_suite()"))

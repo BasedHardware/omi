@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 extension RealtimeHubController {
   // MARK: - PTT integration
@@ -120,11 +121,13 @@ extension RealtimeHubController {
       }
     }
     if !deferredFreshSessionContextPrefetch {
-      guard beginContextFreshInputPreparation(
-        turnID: turnID,
-        responseID: responseID,
-        interrupting: providerResponseInFlight
-      ) else {
+      guard
+        beginContextFreshInputPreparation(
+          turnID: turnID,
+          responseID: responseID,
+          interrupting: providerResponseInFlight
+        )
+      else {
         log("RealtimeHub: unable to establish a context-fresh PTT input boundary")
         return .rejected
       }
@@ -302,7 +305,7 @@ extension RealtimeHubController {
       }
       _ = pending.appendAudio(pcm16k)
       reconnectAudioBuffer = pending
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerReconnectStarted(
           turnID: activeTurnID,
           identity: identity,
@@ -374,7 +377,7 @@ extension RealtimeHubController {
     }
 
     if let pending = replacementAudioBuffer {
-      VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement(turnID: turnID))
+      VoiceTurnCoordinator.shared.publish(.hubCommitDeferredForReplacement(turnID: turnID))
       prepareAcceptedCommit()
       log(
         "RealtimeHub[\(providerTag)]: barge-in replacement not ready at commit — "
@@ -383,7 +386,7 @@ extension RealtimeHubController {
       return .deferredForReplacement
     }
     if let pending = reconnectAudioBuffer {
-      VoiceTurnCoordinator.shared.send(.hubCommitDeferred(turnID: turnID))
+      VoiceTurnCoordinator.shared.publish(.hubCommitDeferred(turnID: turnID))
       prepareAcceptedCommit(preservingContextPreparation: true)
       log(
         "RealtimeHub[\(providerTag)]: session reconnect not ready at commit — "
@@ -405,7 +408,7 @@ extension RealtimeHubController {
     // rejects a valid physical PTT release.  The reducer emits the provider
     // effect after it has applied this claim, and `commitClaimedHubInput` below
     // is the sole driver for the actual provider commit.
-    VoiceTurnCoordinator.shared.send(.hubCommitClaimed(turnID: turnID))
+    VoiceTurnCoordinator.shared.publish(.hubCommitClaimed(turnID: turnID))
     return .accepted
   }
 
@@ -428,7 +431,7 @@ extension RealtimeHubController {
       log("RealtimeHub: claimed physical commit lost its session before provider side effects")
       turnPreparationTask?.cancel()
       turnPreparationTask = nil
-      VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+      VoiceTurnCoordinator.shared.publish(.finish(turnID: turnID, reason: .providerFailed))
       exitVoiceUI(clearResponseGlow: true)
       return
     }
@@ -452,7 +455,7 @@ extension RealtimeHubController {
         interrupting: reducerInterruptsPreviousTurn)
     }
     s.commitInputTurn()
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .hubCommitAccepted(
         turnID: turnID,
         sessionID: voiceSessionID,
@@ -509,9 +512,12 @@ extension RealtimeHubController {
       trimmedProvider.isEmpty
       || (!preferredLanguages.isEmpty
         && (providerLanguage.map { !preferredLanguages.contains($0) } ?? false))
-    let verdict =
-      needsLocal && localTask != nil
-      ? await value(of: localTask!, timeoutMs: 20_000) : nil
+    let verdict: PTTLanguageIdentifier.Verdict?
+    if needsLocal, let localTask {
+      verdict = await value(of: localTask, timeoutMs: 20_000)
+    } else {
+      verdict = nil
+    }
     return RealtimeHubTranscriptPolicy.resolve(
       providerText: trimmedProvider,
       preferredLanguages: preferredLanguages,
@@ -524,7 +530,8 @@ extension RealtimeHubController {
   @discardableResult
   func cancelTurn(turnID requestedTurnID: VoiceTurnID) -> Bool {
     let activeOwner = VoiceTurnCoordinator.shared.activeTurnID == requestedTurnID
-    let terminalOwner = VoiceTurnCoordinator.shared.activeTurnID == nil
+    let terminalOwner =
+      VoiceTurnCoordinator.shared.activeTurnID == nil
       && VoiceTurnCoordinator.shared.model.lastTerminal?.turnID == requestedTurnID
     guard activeOwner || terminalOwner else {
       log("RealtimeHub: ignored stale cancelTurn id=\(requestedTurnID)")
@@ -593,5 +600,5 @@ extension RealtimeHubController {
       applyPendingSessionRefreshIfIdle()
     }
     return true
-}
+  }
 }

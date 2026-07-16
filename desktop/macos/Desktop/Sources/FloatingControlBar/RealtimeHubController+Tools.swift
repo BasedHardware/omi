@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 extension RealtimeHubController {
   // MARK: - Tools
@@ -17,8 +18,7 @@ extension RealtimeHubController {
     contextPlanID: String,
     toolContext: String,
     ownerID: String
-  ) async -> AuthorizedRealtimeToolExecutionResult
-  {
+  ) async -> AuthorizedRealtimeToolExecutionResult {
     guard AuthorizedToolExecution.isOwnerCurrent(ownerID) else {
       return .failed(Self.authorizedRealtimeOwnerChangedError())
     }

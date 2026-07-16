@@ -719,7 +719,7 @@ private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting
   }
 }
 
-private final class FakeSuggestedTasksClient: SuggestedTasksClient {
+private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked Sendable {
   var records: [OmiAPI.CandidateRecord] = []
   var listError: Error?
   var registeredInterventionCandidateIDs: Set<String> = []
@@ -761,8 +761,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
     return result
   }
 
-  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord]
-  {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
     if let listError { throw listError }
     return Array(records.prefix(limit))
   }
@@ -770,7 +769,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
-    onRegisterIntervention?()
+    await MainActor.run { onRegisterIntervention?() }
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
     registeredInterventionDedupeKeys.append(request.dedupeKey)
@@ -830,7 +829,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onAccept?()
+    await MainActor.run { onAccept?() }
     if failAccept { throw FakeError.failed }
     acceptedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .accepted, taskID: acceptedTaskID)
@@ -839,14 +838,14 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
   func rejectCanonicalCandidate(
     candidateID: String, reason: String?, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onReject?()
+    await MainActor.run { onReject?() }
     if failReject { throw FakeError.failed }
     rejectedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .rejected, taskID: nil)
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
-    onUpdate?()
+    await MainActor.run { onUpdate?() }
     updatedTaskDescriptions[id] = description
   }
 

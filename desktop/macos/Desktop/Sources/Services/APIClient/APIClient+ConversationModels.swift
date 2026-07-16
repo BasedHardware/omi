@@ -146,19 +146,20 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   // Date helpers shared with Event/Structured adapters.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
     if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
-    throw DecodingError.dataCorrupted(.init(
-      codingPath: decoder.codingPath,
-      debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
-    ))
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: decoder.codingPath,
+        debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
+      ))
   }
 
   private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
@@ -311,7 +312,10 @@ struct Structured: Codable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
-      OmiAPI.ActionItem(candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed, completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
+      OmiAPI.ActionItem(
+        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed,
+        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
+        dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -433,11 +437,14 @@ struct Event: Codable, Identifiable, Equatable {
     }
 
     enum LegacyKeys: String, CodingKey {
-      case title, start, startsAt = "starts_at", duration, description, created
+      case title, start
+      case startsAt = "starts_at"
+      case duration, description, created
     }
     let container = try decoder.container(keyedBy: LegacyKeys.self)
     self.title = try container.decode(String.self, forKey: .title)
-    let startString = try container.decodeIfPresent(String.self, forKey: .start)
+    let startString =
+      try container.decodeIfPresent(String.self, forKey: .start)
       ?? container.decodeIfPresent(String.self, forKey: .startsAt)
     self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
     self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
@@ -458,12 +465,12 @@ struct Event: Codable, Identifiable, Equatable {
   }
 
   // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String) -> Date? {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)

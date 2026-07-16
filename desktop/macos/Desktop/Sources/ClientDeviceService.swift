@@ -11,7 +11,7 @@ enum ClientDeviceKeychainReadResult {
 
 /// Stable per-installation device identity for capture provenance (mirrors Flutter `deviceIdHash`).
 final class ClientDeviceService {
-  static let shared = ClientDeviceService()
+  nonisolated(unsafe) static let shared = ClientDeviceService()
 
   private let keychainAccount = "install-uuid"
   private let devInstallIdDefaultsKey = "dev-client-device-install-uuid"
