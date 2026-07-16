@@ -815,7 +815,9 @@ actor AgentRuntimeProcess {
   private func finishStopFlight(id: UUID) {
     guard let flight = stopFlight, flight.id == id else { return }
     stopFlight = nil
-    flight.waiters.forEach { $0.resume() }
+    for waiter in flight.waiters {
+      waiter.resume()
+    }
   }
 
   private func assertClientRegistration(
@@ -2721,10 +2723,11 @@ actor AgentRuntimeProcess {
     // Codex is bridged by the standalone `codex-acp` binary, which speaks ACP
     // directly on stdio (no `acp` subcommand).
     if env["OMI_CODEX_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      case let .available(command: codexAcp) = LocalAgentProviderDetector.availability(
+      case .available(command: let codexAcp) = LocalAgentProviderDetector.availability(
         for: .codex,
         environment: env,
-        homeDirectory: home).status
+        homeDirectory: home
+      ).status
     {
       env["OMI_CODEX_ADAPTER_COMMAND"] = Self.shellQuote(codexAcp)
     }
@@ -3343,7 +3346,9 @@ actor AgentRuntimeProcess {
   }
 
   private func cancelAuthorizedToolExecutionTasks() {
-    activeAuthorizedToolExecutionTasks.values.forEach { $0.cancel() }
+    for task in activeAuthorizedToolExecutionTasks.values {
+      task.cancel()
+    }
   }
 
   private func cancelAndDrainAuthorizedToolExecutionTasks() async {
@@ -3357,7 +3362,9 @@ actor AgentRuntimeProcess {
   nonisolated static func cancelAndAwaitPhysicalExecutionTasks(
     _ tasks: [Task<Void, Never>]
   ) async {
-    tasks.forEach { $0.cancel() }
+    for task in tasks {
+      task.cancel()
+    }
     for task in tasks { await task.value }
   }
 

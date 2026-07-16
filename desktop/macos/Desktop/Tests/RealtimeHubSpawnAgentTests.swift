@@ -184,7 +184,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testDirectedCodexSetupNeededIsTypedAndCannotCreateAPill() {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009520"
-    let setupNeeded = #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"codex","message":"Codex needs setup"}}"#
+    let setupNeeded =
+      #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"codex","message":"Codex needs setup"}}"#
 
     XCTAssertEqual(
       RealtimeSpawnAgentToolOutcome.classify(

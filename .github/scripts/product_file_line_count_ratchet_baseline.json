@@ -17,7 +17,7 @@
     "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2741,
     "desktop/macos/Desktop/Sources/AuthService.swift": 3281,
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2109,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4253,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4260,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4183,
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2491,
@@ -48,7 +48,7 @@
   "raise_justifications": {
     "desktop/macos/Desktop/Sources/AuthService.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Codex ACP command discovery lets the shared runtime route local Codex sessions.",
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Codex ACP command discovery and required loop-style cleanup let the shared runtime route local Codex sessions.",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Codex adds provider identity, availability detection, and explicit voice directive parsing.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",

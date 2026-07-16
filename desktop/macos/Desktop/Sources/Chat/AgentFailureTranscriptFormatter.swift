@@ -95,7 +95,11 @@ enum AgentFailureTranscriptFormatter {
   private static func looksLikeSetupNeeded(_ text: String) -> Bool {
     let lower = text.lowercased()
     if lower.contains("needs setup") { return true }
-    if lower.contains("omi_openclaw_adapter") || lower.contains("omi_hermes_adapter") || lower.contains("omi_codex_adapter") { return true }
+    if lower.contains("omi_openclaw_adapter") || lower.contains("omi_hermes_adapter")
+      || lower.contains("omi_codex_adapter")
+    {
+      return true
+    }
     if lower.contains("adapter")
       && (lower.contains("missing") || lower.contains("unavailable") || lower.contains("not found")
         || lower.contains("not configured") || lower.contains("no such file"))

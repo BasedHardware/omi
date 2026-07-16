@@ -102,10 +102,12 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertFalse(availability.isAvailable)
     XCTAssertEqual(
       availability.setupPrompt,
-      "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again.")
+      "I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+    )
     XCTAssertEqual(
       availability.toolError,
-      "Error: I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again.")
+      "Error: I don't see OpenClaw installed. Install it by running: curl -fsSL https://openclaw.ai/install.sh | bash — then try again."
+    )
   }
 
   func testLocalAgentProviderDetectorFindsCodexAcpBridge() throws {
@@ -309,7 +311,8 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testProviderDirectiveMapsCodexSttMishears() {
-    let directive = AgentPillsManager.providerDirective(from: "Tell codes to create the home.txt file on my desktop folder.")
+    let directive = AgentPillsManager.providerDirective(
+      from: "Tell codes to create the home.txt file on my desktop folder.")
 
     XCTAssertEqual(directive?.provider, .codex)
     XCTAssertEqual(directive?.rewrittenQuery, "to create the home.txt file on my desktop folder.")
