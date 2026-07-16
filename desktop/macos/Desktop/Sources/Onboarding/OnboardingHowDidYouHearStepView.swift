@@ -16,7 +16,7 @@ struct OnboardingHowDidYouHearStepView: View {
   @State private var hadSelectionOnAppear = false
   @State private var advanceTask: Task<Void, Never>?
 
-  private static let sources = [
+  static let sources = [
     "Social media",
     "YouTube",
     "Newsletter",
@@ -30,6 +30,11 @@ struct OnboardingHowDidYouHearStepView: View {
     "Product Hunt",
     "Other",
   ]
+
+  /// Chips shown in random order, except "Other" always stays last.
+  static func displaySources() -> [String] {
+    sources.filter { $0 != "Other" }.shuffled() + ["Other"]
+  }
 
   var body: some View {
     OnboardingStepScaffold(
@@ -79,7 +84,7 @@ struct OnboardingHowDidYouHearStepView: View {
       .onAppear {
         hadSelectionOnAppear = !selectedSource.isEmpty
         if shuffledSources.isEmpty {
-          shuffledSources = Self.sources.shuffled()
+          shuffledSources = Self.displaySources()
         }
       }
       .onDisappear {

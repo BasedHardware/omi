@@ -350,6 +350,14 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  func testHowDidYouHearKeepsOtherLastAfterShuffle() {
+    for _ in 0..<20 {
+      let sources = OnboardingHowDidYouHearStepView.displaySources()
+      XCTAssertEqual(sources.last, "Other")
+      XCTAssertEqual(sources.sorted(), OnboardingHowDidYouHearStepView.sources.sorted())
+    }
+  }
+
   private func onboardingSourceFile(_ name: String) throws -> String {
     let sourceURL = URL(fileURLWithPath: #filePath)
       .deletingLastPathComponent()
