@@ -485,7 +485,6 @@ enum GeneratedToolCapabilities {
       "Ask the user to choose when their request is generic or names multiple permissions.",
       "The user must still complete the native macOS prompt or Settings toggle.",
       "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
-      "Realtime voice exception: when PTT screen-context metadata says Screen Recording is unavailable, a user request that clearly depends on seeing the current screen authorizes screen_recording immediately.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
       "After requesting, explain any returned requires_restart or pending status."

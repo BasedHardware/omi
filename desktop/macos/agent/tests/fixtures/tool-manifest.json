@@ -2792,7 +2792,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Start canonical Omi background work. Visible runs appear as floating-bar pills. When the current user explicitly asks OpenClaw or Hermes to do work, call this tool in the same turn with that provider; this starts the requested local provider, not another chat surface. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
+      "realtimeDescription": "Start canonical Omi background work. Visible runs appear as floating-bar pills. Use for multi-step work in the user's apps/browser/files that you cannot do directly.",
       "schemaOverride": {
         "type": "object",
         "properties": {
@@ -4113,11 +4113,10 @@
   {
     "name": "request_permission",
     "label": "Request Permission",
-    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. For realtime PTT only, a current-screen request paired with screen-context metadata that Screen Recording is unavailable is explicit enough to request screen_recording. Screen share, screen sharing, and screen-share mean screen_recording.",
+    "description": "Open the native macOS permission prompt or Settings pane for one required permission after the user explicitly asks for it. Screen share, screen sharing, and screen-share mean screen_recording.",
     "promptSnippet": "request_permission - Request a macOS permission",
     "promptGuidelines": [
       "Call only when the current user message explicitly requests one named permission, clearly affirms your immediately preceding one-permission request, or directly says to request it/that permission.",
-      "Realtime voice exception: when PTT screen-context metadata says Screen Recording is unavailable, a user request that clearly depends on seeing the current screen authorizes screen_recording immediately.",
       "Treat screen share, screen sharing, and screen-share as the screen_recording permission type.",
       "For generic or multi-permission requests, ask the user which permission they want to grant.",
       "Use strict permission types only. Do not invent permission names.",
@@ -4183,7 +4182,7 @@
       ]
     },
     "voice": {
-      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. When this PTT turn contains screen-context metadata saying no snapshot was supplied because Screen Recording is unavailable, a user request that clearly depends on seeing their current screen authorizes requesting screen_recording immediately. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
+      "realtimeDescription": "Request Omi's macOS permission through the kernel-authorized native executor by opening the native prompt or relevant System Settings pane. Screen share, screen sharing, and screen-share mean Screen Recording. Supports Screen Recording, microphone, notifications, Accessibility, Automation, and Full Disk Access."
     }
   },
   {
@@ -4655,8 +4654,8 @@
   {
     "name": "screenshot",
     "label": "Screenshot",
-    "description": "Return the PTT-start screen image for realtime vision only when no direct PTT image is attached or the separately authorized screenshot tool protocol is necessary.",
-    "promptSnippet": "screenshot - Capture the PTT-start screen image when direct PTT input is unavailable",
+    "description": "Capture the user's current screen for realtime vision.",
+    "promptSnippet": "screenshot - Capture the user's current screen",
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
@@ -4700,8 +4699,8 @@
   {
     "name": "report_screen_observation",
     "label": "Report Screen Observation",
-    "description": "Verify one current-screen observation only after screenshot succeeds; do not report an already attached direct PTT image.",
-    "promptSnippet": "report_screen_observation - Verify grounding after a screenshot tool result",
+    "description": "Verify one current-screen observation after screenshot succeeds.",
+    "promptSnippet": "report_screen_observation - Verify grounding before answering a current-screen request",
     "latency": "fast local",
     "inputSchema": {
       "type": "object",
