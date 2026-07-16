@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { ListChecks, Check, RefreshCw, Plus, Trash2, Calendar, X, Loader2 } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
@@ -125,6 +125,21 @@ const BUCKET_LABEL: Record<Bucket, string> = {
   nodate: 'No due date'
 }
 
+// Move the keyboard selection across the flat, rendered task order. Clamps at the
+// ends (no wrap) and, when nothing is selected yet, Down picks the first row and Up
+// the last — mirroring Mac's `moveSelection` (TasksPage.swift).
+function moveSelection(
+  nav: ActionItemRecord[],
+  currentId: number | null,
+  direction: 1 | -1
+): number | null {
+  if (nav.length === 0) return currentId
+  const idx = currentId == null ? -1 : nav.findIndex((t) => t.id === currentId)
+  if (idx === -1) return direction > 0 ? nav[0].id : nav[nav.length - 1].id
+  const next = Math.min(Math.max(idx + direction, 0), nav.length - 1)
+  return nav[next].id
+}
+
 export function Tasks(): React.JSX.Element {
   const [items, setItems] = useState<ActionItemRecord[]>(cache.items ?? [])
   const [convs, setConvs] = useState<Record<string, ConvMeta>>(cache.convs)
@@ -142,6 +157,11 @@ export function Tasks(): React.JSX.Element {
   const [editDraft, setEditDraft] = useState('')
   const [dueEditingId, setDueEditingId] = useState<number | null>(null)
   const [busy, setBusy] = useState<Set<number>>(new Set())
+
+  // Keyboard-navigation selection (mac parity). The highlighted row a keyboard
+  // user is driving; independent of the mouse hover/edit state above.
+  const [keyboardSelectedTaskId, setKeyboardSelectedTaskId] = useState<number | null>(null)
+  const scrollRef = useRef<HTMLDivElement | null>(null)
 
   // Re-read the local task store. Called on mount, on every `onTasksChanged`
   // (optimistic write OR a background sync landing), and on manual refresh.
@@ -268,6 +288,13 @@ export function Tasks(): React.JSX.Element {
     }
   }
 
+  // Open the inline description editor for a row. Shared by the row's click-to-edit
+  // and the keyboard Enter binding so both use the one edit-open path.
+  const startEdit = (t: ActionItemRecord): void => {
+    setEditDraft(t.description)
+    setEditingId(t.id)
+  }
+
   const openCount = useMemo(() => items.filter((t) => !t.completed).length, [items])
   const doneCount = items.length - openCount
 
@@ -314,6 +341,133 @@ export function Tasks(): React.JSX.Element {
     return items.filter((t) => t.completed).sort((a, c) => c.updatedAt - a.updatedAt)
   }, [items, filter])
 
+  // The flat keyboard-navigation order: exactly what renders, top to bottom — the
+  // open buckets (in BUCKET_ORDER) followed by the completed list. Mirrors Mac's
+  // `navigationOrder` (all categories concatenated).
+  const navOrder = useMemo<ActionItemRecord[]>(
+    () => [...openGroups.flatMap((g) => g.items), ...doneItems],
+    [openGroups, doneItems]
+  )
+
+  // Scroll the keyboard-selected row into view. Runs after render, so the row for a
+  // just-set id (e.g. the neighbour picked on delete) exists when we query for it.
+  useEffect(() => {
+    if (keyboardSelectedTaskId == null) return
+    const el = scrollRef.current?.querySelector(`[data-task-id="${keyboardSelectedTaskId}"]`)
+    el?.scrollIntoView({ block: 'nearest' })
+  }, [keyboardSelectedTaskId])
+
+  // Latest values the document keydown handler reads. Kept in a ref so the listener
+  // registers once (no add/remove churn) yet never sees a stale closure.
+  const kbd = useRef({
+    navOrder,
+    selectedId: keyboardSelectedTaskId,
+    items,
+    composing,
+    toggleItem,
+    deleteItem,
+    startEdit
+  })
+  useEffect(() => {
+    kbd.current = {
+      navOrder,
+      selectedId: keyboardSelectedTaskId,
+      items,
+      composing,
+      toggleItem,
+      deleteItem,
+      startEdit
+    }
+  })
+
+  // List-level keyboard navigation (mac parity, flat-list subset — no indent/outdent
+  // since Windows has no subtask hierarchy). Guards on the same `isTyping` check
+  // useKeyboardNav uses so it never hijacks typing in the edit/compose inputs, and
+  // leaves plain Ctrl+digit/comma/Escape-to-home to the global handler.
+  useEffect(() => {
+    const isTyping = (e: KeyboardEvent): boolean => {
+      const t = e.target as HTMLElement | null
+      return !!t && (t.tagName === 'INPUT' || t.tagName === 'TEXTAREA' || t.isContentEditable)
+    }
+
+    const handler = (e: KeyboardEvent): void => {
+      if (isTyping(e)) return
+      const s = kbd.current
+      // The composer owns the keyboard while open (its input autofocuses); don't run
+      // list nav underneath it.
+      if (s.composing) return
+
+      const ctrl = e.ctrlKey || e.metaKey
+
+      // Ctrl+N — open the new-task composer (Windows equivalent of Mac's inline create).
+      if (ctrl && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault()
+        setComposing(true)
+        return
+      }
+
+      // Ctrl+D — delete the selected task, then select a sensible neighbour.
+      if (ctrl && (e.key === 'd' || e.key === 'D')) {
+        if (s.selectedId == null) return
+        const task = s.items.find((x) => x.id === s.selectedId)
+        if (!task) return
+        e.preventDefault()
+        const idx = s.navOrder.findIndex((x) => x.id === s.selectedId)
+        let neighbour: number | null = null
+        if (idx !== -1 && s.navOrder.length > 1) {
+          const nextIdx = idx + 1 < s.navOrder.length ? idx + 1 : Math.max(0, idx - 1)
+          neighbour = s.navOrder[nextIdx].id
+        }
+        setKeyboardSelectedTaskId(neighbour)
+        void s.deleteItem(task)
+        return
+      }
+
+      // Leave any other Ctrl/Cmd combo (page-jump shortcuts) to the global handler.
+      if (ctrl) return
+
+      if (e.key === 'ArrowDown') {
+        e.preventDefault()
+        setKeyboardSelectedTaskId(moveSelection(s.navOrder, s.selectedId, 1))
+        return
+      }
+      if (e.key === 'ArrowUp') {
+        e.preventDefault()
+        setKeyboardSelectedTaskId(moveSelection(s.navOrder, s.selectedId, -1))
+        return
+      }
+      if (e.key === ' ' || e.code === 'Space') {
+        if (s.selectedId == null) return
+        const task = s.items.find((x) => x.id === s.selectedId)
+        if (!task) return
+        e.preventDefault()
+        void s.toggleItem(task)
+        return
+      }
+      if (e.key === 'Enter') {
+        if (s.selectedId == null) return
+        const task = s.items.find((x) => x.id === s.selectedId)
+        // Only editable once synced — matches the row's own click-to-edit gate.
+        if (!task || !task.backendId) return
+        e.preventDefault()
+        s.startEdit(task)
+        return
+      }
+      if (e.key === 'Escape') {
+        // Only consume Esc when we actually deselect; otherwise let the global
+        // handler take it (Esc→Home). preventDefault tells it we handled it.
+        if (s.selectedId != null) {
+          e.preventDefault()
+          setKeyboardSelectedTaskId(null)
+        }
+        return
+      }
+    }
+
+    document.addEventListener('keydown', handler)
+    return () => document.removeEventListener('keydown', handler)
+  }, [])
+
   const renderRow = (t: ActionItemRecord): React.JSX.Element => {
     // A freshly-created row has backendId:null for a sub-second window until its
     // background POST + markSynced lands; treat that like the in-flight busy state
@@ -321,8 +475,16 @@ export function Tasks(): React.JSX.Element {
     const isBusy = busy.has(t.id) || !t.backendId
     const conv = t.conversationId ? convs[t.conversationId] : undefined
     const overdue = isOverdue(t)
+    const isSelected = keyboardSelectedTaskId === t.id
     return (
-      <li key={t.id} className="surface-card group flex items-start gap-3 p-4 animate-fade-in">
+      <li
+        key={t.id}
+        data-task-id={t.id}
+        data-selected={isSelected ? 'true' : undefined}
+        className={`surface-card group flex items-start gap-3 p-4 animate-fade-in ${
+          isSelected ? 'ring-1 ring-white/40' : ''
+        }`}
+      >
         <button
           onClick={() => void toggleItem(t)}
           disabled={isBusy}
@@ -353,8 +515,7 @@ export function Tasks(): React.JSX.Element {
             <button
               onClick={() => {
                 if (isBusy) return
-                setEditDraft(t.description)
-                setEditingId(t.id)
+                startEdit(t)
               }}
               title="Click to edit"
               className={`block w-full text-left text-sm leading-relaxed ${
@@ -480,7 +641,7 @@ export function Tasks(): React.JSX.Element {
           </div>
         }
       />
-      <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
+      <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
         {composing && (
           <div className="mx-auto mb-5 max-w-3xl">
             <div className="surface-card animate-fade-in p-4">

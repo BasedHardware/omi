@@ -65,6 +65,9 @@ beforeEach(() => {
   completed = []
   changedCb = null
   getMock.mockReset()
+  // jsdom has no layout, so scrollIntoView is unimplemented; the keyboard-nav
+  // scroll effect calls it whenever the selection moves.
+  Element.prototype.scrollIntoView = vi.fn()
   // The page fetches a conversation title map for the source links (still a
   // backend call — out of scope for the local store).
   getMock.mockImplementation((url: string) => {
@@ -292,6 +295,132 @@ describe('Tasks — error vs empty (PR-D)', () => {
 
     await waitFor(() => expect(screen.queryByText('recovered task')).not.toBeNull())
     expect(screen.queryByText('Couldn’t load your tasks.')).toBeNull()
+  })
+})
+
+describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
+  // Two no-due-date rows keep a deterministic flat order (bucket order = insertion
+  // order for equal createdAt), so navOrder is [first, second].
+  const twoRows = (): ActionItemRecord[] => [
+    rec({ id: 1, backendId: 'b1', description: 'first' }),
+    rec({ id: 2, backendId: 'b2', description: 'second' })
+  ]
+  const selectedText = (): string | null =>
+    document.querySelector('[data-selected="true"]')?.textContent ?? null
+
+  it('Down selects the first row, Down again moves to the second; Up moves back', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('second'))
+
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+  })
+
+  it('Down clamps at the last row (no wrap)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' }) // first
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' }) // second
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' }) // clamp — stays on second
+    await waitFor(() => expect(selectedText()).toContain('second'))
+  })
+
+  it('Up with no selection selects the last row', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' })
+    await waitFor(() => expect(selectedText()).toContain('second'))
+  })
+
+  it('Space toggles the selected row via tasksToggle', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+    fireEvent.keyDown(document.body, { key: ' ' })
+
+    expect(tasks.tasksToggle).toHaveBeenCalledWith({ backendId: 'b1', completed: true })
+  })
+
+  it('Ctrl+N opens the new-task composer', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    expect(screen.queryByPlaceholderText('What needs to get done?')).toBeNull()
+    fireEvent.keyDown(document.body, { key: 'n', ctrlKey: true })
+    await waitFor(() =>
+      expect(screen.queryByPlaceholderText('What needs to get done?')).not.toBeNull()
+    )
+  })
+
+  it('Ctrl+D deletes the selected row and moves selection to the neighbour', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' }) // select first
+    await waitFor(() => expect(selectedText()).toContain('first'))
+    fireEvent.keyDown(document.body, { key: 'd', ctrlKey: true })
+
+    expect(tasks.tasksDelete).toHaveBeenCalledWith({ backendId: 'b1' })
+    // Selection advances to the next row (second) before the delete lands.
+    await waitFor(() => expect(selectedText()).toContain('second'))
+  })
+
+  it('Enter opens inline edit on the selected row', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+    fireEvent.keyDown(document.body, { key: 'Enter' })
+
+    // The row's description button is replaced by an editable input seeded with it.
+    await waitFor(() => expect(screen.queryByDisplayValue('first')).not.toBeNull())
+  })
+
+  it('Escape clears the selection', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+    fireEvent.keyDown(document.body, { key: 'Escape' })
+
+    await waitFor(() => expect(selectedText()).toBeNull())
+  })
+
+  it('does not run list keys while a text input is focused', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    // Open the first row's inline editor so a text input exists and is the target.
+    fireEvent.click(screen.getByText('first'))
+    const editInput = screen.getByDisplayValue('first')
+
+    // Arrow/Space aimed at the input must not drive the list.
+    fireEvent.keyDown(editInput, { key: 'ArrowDown' })
+    fireEvent.keyDown(editInput, { key: ' ' })
+
+    expect(selectedText()).toBeNull()
+    expect(tasks.tasksToggle).not.toHaveBeenCalled()
   })
 })
 
