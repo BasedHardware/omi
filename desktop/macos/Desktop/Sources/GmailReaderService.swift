@@ -135,10 +135,85 @@ enum GmailOutcomeParser {
   }
 }
 
+struct GmailAtomBatchResponse {
+  let requestID: String
+  let browser: String
+  let source: String
+  let emails: [[String: Any]]
+}
+
+enum GmailAtomBatchOutcome {
+  case success([GmailAtomBatchResponse])
+  case failure(GmailFailureClass, summary: String, attempts: [GmailAttempt])
+}
+
+enum GmailAtomBatchParser {
+  static func parse(_ json: [String: Any]) -> GmailAtomBatchOutcome {
+    if json["ok"] as? Bool == true {
+      // The helper always emits a `responses` array on success (possibly empty).
+      // Its absence means the payload didn't come from this script's contract.
+      guard let responses = json["responses"] as? [[String: Any]] else {
+        return .failure(.unknown, summary: "Gmail batch response missing responses", attempts: [])
+      }
+      let fallbackBrowser = json["browser"] as? String ?? "unknown"
+      let fallbackSource = json["source"] as? String ?? "unknown"
+      return .success(
+        responses.map { response in
+          GmailAtomBatchResponse(
+            requestID: response["id"] as? String ?? "unknown",
+            browser: response["browser"] as? String ?? fallbackBrowser,
+            source: response["source"] as? String ?? fallbackSource,
+            emails: response["emails"] as? [[String: Any]] ?? []
+          )
+        }
+      )
+    }
+
+    if case let .failure(cls, summary, attempts) = GmailOutcomeParser.parse(json) {
+      return .failure(cls, summary: summary, attempts: attempts)
+    }
+
+    return .failure(.unknown, summary: "unexpected Gmail batch response", attempts: [])
+  }
+}
+
+private struct GmailAtomBatchRequest {
+  let id: String
+  let maxResults: Int
+  let query: String
+  let feedPath: String?
+  let useBootstrap: Bool
+
+  var jsonObject: [String: Any] {
+    [
+      "id": id,
+      "max_results": maxResults,
+      "query": query,
+      "feed_path": feedPath ?? "",
+      "use_bootstrap": useBootstrap,
+    ]
+  }
+}
+
 // MARK: - GmailReaderService
 
 actor GmailReaderService {
   static let shared = GmailReaderService()
+  private static let labelFeedPaths = [
+    "atom/all",
+    "atom/inbox",
+    "atom/sent",
+    "atom/starred",
+    "atom/important",
+    "atom/trash",
+    "atom/spam",
+    "atom/unread",
+    "atom/social",
+    "atom/promotions",
+    "atom/updates",
+    "atom/forums",
+    "atom/personal",
+  ]
 
   /// Read emails using browser cookies + Gmail Atom feed.
   /// - Parameters:
@@ -149,15 +224,12 @@ actor GmailReaderService {
   {
     let emails: [GmailEmail]
     if let days = Self.parseNewerThanDays(query), days > 20 {
-      let queryEmails = try fetchGmailViaAtomFeedSingle(
+      let fetched = try fetchGmailViaCombinedAtomFeeds(
         maxResults: maxResults,
-        query: query,
-        feedPath: nil,
-        allowBootstrap: false
+        query: query
       )
-      let labelEmails = try fetchGmailViaLabelFeeds(maxResults: maxResults, query: query)
       var merged: [String: GmailEmail] = [:]
-      for email in queryEmails + labelEmails {
+      for email in fetched.queryEmails + fetched.labelEmails {
         let existing = merged[email.id]
         if existing == nil || existing!.date < email.date {
           merged[email.id] = email
@@ -409,31 +481,144 @@ actor GmailReaderService {
     let shouldUseBootstrapPage =
       allowBootstrap ?? (feedPath == nil && Self.parseNewerThanDays(query) != nil)
 
-    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService")
+    let request = GmailAtomBatchRequest(
+      id: "single",
+      maxResults: maxResults,
+      query: query,
+      feedPath: feedPath,
+      useBootstrap: shouldUseBootstrapPage
+    )
+    let responses = try fetchGmailViaAtomFeedBatch(
+      requests: [request],
+      maxConcurrentRequests: 1
+    )
+    guard let response = responses[request.id] else {
+      throw GmailReaderError.networkError("Gmail helper did not return response")
+    }
+    log(
+      "GmailReaderService: Got \(response.emails.count) emails from \(response.browser) via \(response.source)"
+    )
+    return response.emails
+  }
 
+  private func fetchGmailViaCombinedAtomFeeds(maxResults: Int, query: String) throws -> (
+    queryEmails: [GmailEmail], labelEmails: [GmailEmail]
+  ) {
+    guard maxResults > 0 else { return ([], []) }
+
+    var requests = [
+      GmailAtomBatchRequest(
+        id: "query",
+        maxResults: maxResults,
+        query: query,
+        feedPath: nil,
+        useBootstrap: false
+      )
+    ]
+    requests.append(
+      contentsOf: Self.labelFeedPaths.map { feedPath in
+        GmailAtomBatchRequest(
+          id: "label:\(feedPath)",
+          maxResults: min(20, maxResults),
+          query: query,
+          feedPath: feedPath,
+          useBootstrap: false
+        )
+      }
+    )
+
+    let responses = try fetchGmailViaAtomFeedBatch(
+      requests: requests,
+      maxConcurrentRequests: 4
+    )
+    guard let queryResponse = responses["query"] else {
+      throw GmailReaderError.networkError("Gmail batch helper did not return query response")
+    }
+
+    log(
+      "GmailReaderService: Got \(queryResponse.emails.count) emails from \(queryResponse.browser) via \(queryResponse.source)"
+    )
+
+    var labelMerged: [String: GmailEmail] = [:]
+    for feedPath in Self.labelFeedPaths {
+      guard let response = responses["label:\(feedPath)"] else {
+        throw GmailReaderError.networkError("Gmail batch helper did not return \(feedPath) response")
+      }
+      for email in response.emails {
+        let existing = labelMerged[email.id]
+        if existing == nil || existing!.date < email.date {
+          labelMerged[email.id] = email
+        }
+      }
+    }
+
+    log(
+      "GmailReaderService: Collected \(labelMerged.count) unique emails across \(Self.labelFeedPaths.count) label feeds"
+    )
+
+    let labelEmails = Array(labelMerged.values)
+      .sorted { $0.date > $1.date }
+      .prefix(maxResults)
+      .map(\.self)
+
+    return (queryResponse.emails, labelEmails)
+  }
+
+  /// Overall fetch budget: one serial probe wave plus however many parallel
+  /// waves the remaining requests need at the given width. Keeps worst-case
+  /// time-to-error a designed number instead of `requests.count * 60`.
+  static func batchBudgetSeconds(requestCount: Int, maxConcurrentRequests: Int) -> Int {
+    guard requestCount > 1 else { return 60 }
+    let workers = max(1, maxConcurrentRequests)
+    let remaining = requestCount - 1
+    let parallelWaves = (remaining + workers - 1) / workers
+    return 60 * (1 + parallelWaves)
+  }
+
+  private func fetchGmailViaAtomFeedBatch(
+    requests: [GmailAtomBatchRequest],
+    maxConcurrentRequests: Int
+  ) throws -> [String: (emails: [GmailEmail], browser: String, source: String)] {
+    guard !requests.isEmpty else { return [:] }
+
+    let browserConfigs = BrowserGoogleSession.configsForPython(logPrefix: "GmailReaderService")
     guard !browserConfigs.isEmpty else {
       throw GmailReaderError.noBrowserFound
     }
 
-    let configJSON: String
+    let budgetSeconds = Self.batchBudgetSeconds(
+      requestCount: requests.count,
+      maxConcurrentRequests: maxConcurrentRequests
+    )
+
+    let payloadJSON: String
     do {
-      let data = try JSONSerialization.data(withJSONObject: browserConfigs)
-      configJSON = String(data: data, encoding: .utf8) ?? "[]"
+      let payload: [String: Any] = [
+        "browsers": browserConfigs,
+        "requests": requests.map(\.jsonObject),
+        "max_workers": max(1, maxConcurrentRequests),
+        "deadline_seconds": budgetSeconds,
+      ]
+      let data = try JSONSerialization.data(withJSONObject: payload)
+      payloadJSON = String(data: data, encoding: .utf8) ?? "{}"
     } catch {
       throw GmailReaderError.networkError("Failed to serialize browser configs")
     }
 
     let pythonScript = """
       \(BrowserGoogleSession.chromiumCookiePythonSupport)
+      import shutil
+      import tempfile
       import xml.etree.ElementTree as ET
+      from concurrent.futures import ThreadPoolExecutor, as_completed
       from urllib.parse import quote
       from urllib.request import Request, build_opener, HTTPCookieProcessor
 
-      browsers = json.loads(sys.stdin.read())
-      max_results = int(sys.argv[1]) if len(sys.argv) > 1 else 50
-      query = sys.argv[2] if len(sys.argv) > 2 else 'newer_than:1d'
-      use_bootstrap = (sys.argv[3] if len(sys.argv) > 3 else '1') == '1'
-      feed_path = sys.argv[4] if len(sys.argv) > 4 else ''
+      payload = json.loads(sys.stdin.read())
+      browsers = payload.get('browsers', [])
+      requests = payload.get('requests', [])
+      max_workers = max(1, int(payload.get('max_workers', 4)))
+      deadline = time.monotonic() + float(payload.get('deadline_seconds', 300))
 
       def fetch_home_page(jar):
           opener = build_opener(HTTPCookieProcessor(jar))
@@ -552,8 +737,10 @@ actor GmailReaderService {
 
           return emails[:max_results], None
 
-      def fetch_atom_feed(jar):
+      def fetch_atom_feed(jar, request):
           opener = build_opener(HTTPCookieProcessor(jar))
+          query = request.get('query') or ''
+          feed_path = request.get('feed_path') or ''
           if feed_path:
               url = f'https://mail.google.com/mail/feed/{feed_path.lstrip("/")}'
               if query:
@@ -627,8 +814,6 @@ actor GmailReaderService {
               })
           return emails, None
 
-      attempts = []
-
       def classify(attempts):
           if not attempts:
               return 'no_browser', 'No supported browser with a readable Gmail session was found.'
@@ -641,47 +826,217 @@ actor GmailReaderService {
               return 'not_signed_in', 'No browser is signed into Gmail. Sign into mail.google.com and try again.'
           return 'decrypt_failed', 'Your browser session could not be read.'
 
-      # Try each browser/profile and keep every non-sensitive attempt.
-      for browser in browsers:
-          cookies, err = decrypt_google_cookies(browser['db_path'], browser['password'], include_gmail_hosts=True)
-          if err or not cookies:
-              attempts.append({'browser': browser['name'], 'stage': 'decrypt',
-                               'reason': (err or 'no cookies'), 'had_auth': False})
-              continue
+      def decrypt_cookies_from_copy(db_path, password):
+          # Copy the live browser DB into a private temp dir before reading it.
+          # This avoids contending on the locks the browser holds while writing.
+          # Chromium's Cookies DB uses a rollback journal (journal_mode=delete),
+          # so we copy any -journal/-wal/-shm sidecars alongside the main file
+          # under the same basename; if the copy caught a write mid-flight,
+          # SQLite recovers a consistent view from the copied journal.
+          copy_dir = None
+          try:
+              copy_dir = tempfile.mkdtemp(prefix='omi_gmail_cookies_')
+              base = os.path.basename(db_path)
+              copy_path = os.path.join(copy_dir, base)
+              shutil.copyfile(db_path, copy_path)
+              # Sidecars are best-effort: the browser deletes -journal on every
+              # commit, so it can vanish between a check and the copy. A missing
+              # sidecar just means we proceed without it (no worse than the
+              # main-file-only copy), so never fail the browser over one.
+              for suffix in ('-journal', '-wal', '-shm'):
+                  try:
+                      shutil.copyfile(db_path + suffix, copy_path + suffix)
+                  except OSError:
+                      pass
+          except Exception as e:
+              if copy_dir is not None:
+                  shutil.rmtree(copy_dir, ignore_errors=True)
+              return None, f'cookie db copy failed: {e}'
+          try:
+              return decrypt_google_cookies(copy_path, password, include_gmail_hosts=True)
+          finally:
+              shutil.rmtree(copy_dir, ignore_errors=True)
 
-          found_auth = [c for c in cookies if c['name'] in GOOGLE_AUTH_COOKIE_NAMES]
-          if not found_auth:
-              attempts.append({'browser': browser['name'], 'stage': 'auth',
-                               'reason': 'no Google auth cookies', 'had_auth': False})
-              continue
+      def load_sessions():
+          # Decrypt each browser's cookies exactly once, up front, on the main
+          # thread. Workers only ever read the resulting session list.
+          sessions = []
+          attempts = []
+          for browser in browsers:
+              cookies, err = decrypt_cookies_from_copy(browser['db_path'], browser['password'])
+              if err or not cookies:
+                  attempts.append({'browser': browser['name'], 'stage': 'decrypt',
+                                   'reason': (err or 'no cookies'), 'had_auth': False})
+                  continue
+              if not any(c['name'] in GOOGLE_AUTH_COOKIE_NAMES for c in cookies):
+                  attempts.append({'browser': browser['name'], 'stage': 'auth',
+                                   'reason': 'no Google auth cookies', 'had_auth': False})
+                  continue
+              sessions.append({'name': browser['name'], 'cookies': cookies})
+          return sessions, attempts
 
-          jar = make_cookie_jar(cookies)
-          status, body = fetch_home_page(jar)
-          if use_bootstrap and status == 200:
-              emails, parse_err = parse_bootstrap_page(body, max_results)
-              if not parse_err and emails:
-                  attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
-                  write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'bootstrap',
-                                                   'emails': emails, 'count': len(emails), 'attempts': attempts})
-                  sys.exit(0)
+      def jar_cookie_list(jar):
+          return [{'domain': c.domain, 'name': c.name, 'value': c.value,
+                   'path': c.path, 'secure': bool(c.secure)} for c in jar]
 
-          status, body = fetch_atom_feed(jar)
-          if status == 200:
-              emails, parse_err = parse_atom(body, max_results)
-              if not parse_err and emails is not None:
-                  attempts.append({'browser': browser['name'], 'stage': 'ok', 'reason': 'ok', 'had_auth': True})
-                  write_json_result('omi_gmail_', {'ok': True, 'browser': browser['name'], 'source': 'atom',
-                                                   'emails': emails, 'count': len(emails), 'attempts': attempts})
-                  sys.exit(0)
+      def request_limits(request):
+          request_id = request.get('id') or 'unknown'
+          max_results_value = request.get('max_results')
+          max_results = int(max_results_value) if max_results_value is not None else 50
+          return request_id, max_results
 
-          reason = f'HTTP {status}' if status else str(body)
-          attempts.append({'browser': browser['name'], 'stage': 'fetch',
-                           'reason': reason or 'unknown fetch error',
-                           'had_auth': True, 'http': status})
+      def failure_result(request_id, attempts):
+          error_class, summary = classify(attempts)
+          return {'ok': False, 'id': request_id, 'error_class': error_class, 'summary': summary,
+                  'attempts': attempts}
 
-      error_class, summary = classify(attempts)
-      write_json_result('omi_gmail_', {'ok': False, 'error_class': error_class, 'summary': summary,
-                                       'attempts': attempts})
+      def run_probe(request, sessions, session_attempts):
+          # Serial first request: the only place the Gmail home page is fetched.
+          # It doubles as session warm-up — any Set-Cookie refreshes are folded
+          # back into the winning session so workers reuse the warmed cookies.
+          attempts = list(session_attempts)
+          request_id, max_results = request_limits(request)
+          use_bootstrap = bool(request.get('use_bootstrap'))
+          try:
+              for session in sessions:
+                  if time.monotonic() > deadline:
+                      attempts.append({'browser': session['name'], 'stage': 'fetch',
+                                       'reason': 'deadline exceeded', 'had_auth': True})
+                      break
+                  jar = make_cookie_jar(session['cookies'])
+                  status, body = fetch_home_page(jar)
+                  if use_bootstrap and status == 200:
+                      emails, parse_err = parse_bootstrap_page(body, max_results)
+                      if not parse_err and emails:
+                          session['cookies'] = jar_cookie_list(jar)
+                          return ({'ok': True, 'id': request_id, 'browser': session['name'], 'source': 'bootstrap',
+                                   'emails': emails, 'count': len(emails), 'attempts': attempts}, session)
+
+                  status, body = fetch_atom_feed(jar, request)
+                  if status == 200:
+                      emails, parse_err = parse_atom(body, max_results)
+                      if not parse_err and emails is not None:
+                          session['cookies'] = jar_cookie_list(jar)
+                          return ({'ok': True, 'id': request_id, 'browser': session['name'], 'source': 'atom',
+                                   'emails': emails, 'count': len(emails), 'attempts': attempts}, session)
+
+                  reason = f'HTTP {status}' if status else str(body)
+                  attempts.append({'browser': session['name'], 'stage': 'fetch',
+                                   'reason': reason or 'unknown fetch error',
+                                   'had_auth': True, 'http': status})
+          except Exception as e:
+              attempts.append({'browser': 'helper', 'stage': 'fetch', 'reason': str(e), 'had_auth': False})
+          return (failure_result(request_id, attempts), None)
+
+      def run_worker(request, sessions):
+          # Parallel label-feed request: atom fetch only, no home page, no
+          # decryption — sessions were prepared once before the pool started.
+          attempts = []
+          request_id, max_results = request_limits(request)
+          try:
+              for session in sessions:
+                  if time.monotonic() > deadline:
+                      attempts.append({'browser': session['name'], 'stage': 'fetch',
+                                       'reason': 'deadline exceeded', 'had_auth': True})
+                      break
+                  jar = make_cookie_jar(session['cookies'])
+                  status, body = fetch_atom_feed(jar, request)
+                  if status == 200:
+                      emails, parse_err = parse_atom(body, max_results)
+                      if not parse_err and emails is not None:
+                          return {'ok': True, 'id': request_id, 'browser': session['name'], 'source': 'atom',
+                                  'emails': emails, 'count': len(emails), 'attempts': attempts}
+                  reason = f'HTTP {status}' if status else str(body)
+                  attempts.append({'browser': session['name'], 'stage': 'fetch',
+                                   'reason': reason or 'unknown fetch error',
+                                   'had_auth': True, 'http': status})
+          except Exception as e:
+              attempts.append({'browser': 'helper', 'stage': 'fetch', 'reason': str(e), 'had_auth': False})
+          return failure_result(request_id, attempts)
+
+      if not requests:
+          write_json_result('omi_gmail_', {'ok': True, 'browser': 'none', 'source': 'batch',
+                                           'responses': []})
+          sys.exit(0)
+
+      sessions, session_attempts = load_sessions()
+      if not sessions:
+          first_id, _ = request_limits(requests[0])
+          write_json_result('omi_gmail_', failure_result(first_id, session_attempts))
+          sys.exit(0)
+
+      first_result, working_session = run_probe(requests[0], sessions, session_attempts)
+      if not first_result.get('ok'):
+          write_json_result('omi_gmail_', first_result)
+          sys.exit(0)
+
+      # Workers try the probe-validated session first, then the rest in order.
+      worker_sessions = [working_session] + [s for s in sessions if s is not working_session]
+
+      ordered_results = [first_result]
+      remaining = requests[1:]
+      if remaining:
+          parallel_results = [None] * len(remaining)
+          first_failure = None
+          workers = min(max_workers, len(remaining))
+          executor = ThreadPoolExecutor(max_workers=workers)
+          try:
+              future_to_index = {
+                  executor.submit(run_worker, request, worker_sessions): index
+                  for index, request in enumerate(remaining)
+              }
+              for future in as_completed(future_to_index):
+                  index = future_to_index[future]
+                  try:
+                      result = future.result()
+                  except Exception as e:
+                      request_id = remaining[index].get('id') or 'unknown'
+                      result = {
+                          'ok': False,
+                          'id': request_id,
+                          'error_class': 'unknown',
+                          'summary': str(e),
+                          'attempts': [{'browser': 'helper', 'stage': 'fetch', 'reason': str(e), 'had_auth': False}],
+                      }
+                  parallel_results[index] = result
+                  if not result.get('ok'):
+                      first_failure = result
+                      break
+          finally:
+              # Drop queued work now; never block on in-flight fetches.
+              # cancel_futures is Python 3.9+, and the runner may pick an older
+              # interpreter, so fall back gracefully. The os._exit below still
+              # tears down any queued/in-flight work on the fail path regardless.
+              if sys.version_info >= (3, 9):
+                  executor.shutdown(wait=False, cancel_futures=True)
+              else:
+                  executor.shutdown(wait=False)
+
+          if first_failure is not None:
+              # Surface the first failure immediately. os._exit skips the
+              # concurrent.futures atexit hook (and sys.exit's own join) that
+              # would otherwise wait for in-flight worker threads to drain.
+              write_json_result('omi_gmail_', first_failure)
+              sys.stdout.flush()
+              os._exit(0)
+          ordered_results.extend(parallel_results)
+
+      responses = [
+          {
+              'id': result.get('id') or 'unknown',
+              'browser': result.get('browser') or 'unknown',
+              'source': result.get('source') or 'unknown',
+              'emails': result.get('emails') or [],
+              'count': result.get('count') or 0,
+          }
+          for result in ordered_results
+      ]
+      write_json_result('omi_gmail_', {
+          'ok': True,
+          'browser': responses[0]['browser'] if responses else 'unknown',
+          'source': 'batch',
+          'responses': responses,
+      })
       sys.exit(0)
       """
 
@@ -689,12 +1044,11 @@ actor GmailReaderService {
     do {
       result = try BrowserPythonRunner.run(
         script: pythonScript,
-        arguments: [
-          String(maxResults), query,
-          shouldUseBootstrapPage ? "1" : "0",
-          feedPath ?? "",
-        ],
-        stdinData: Data(configJSON.utf8)
+        arguments: [],
+        stdinData: Data(payloadJSON.utf8),
+        // Margin past the in-script deadline so one last in-flight fetch can
+        // time out (30s) and the classified failure still gets written.
+        timeoutSeconds: budgetSeconds + 30
       )
     } catch BrowserPythonRunnerError.pythonNotFound {
       throw GmailReaderError.pythonNotFound
@@ -722,20 +1076,27 @@ actor GmailReaderService {
       throw GmailReaderError.networkError("Python returned invalid JSON: \(raw.prefix(200))")
     }
 
-    let outcome = GmailOutcomeParser.parse(json)
-    let emailDicts: [[String: Any]]
-    switch outcome {
+    switch GmailAtomBatchParser.parse(json) {
     case let .failure(cls, summary, attempts):
       log(
         "GmailReaderService: fetch failed [\(cls.rawValue)] — \(summary) | "
           + "attempts: \(GmailOutcomeParser.diagnosticsLine(attempts))")
       throw cls.asError(summary: summary)
-    case let .success(emails, browserName, sourceName):
-      log("GmailReaderService: Got \(emails.count) emails from \(browserName) via \(sourceName)")
-      emailDicts = emails
+    case let .success(responses):
+      var parsed: [String: (emails: [GmailEmail], browser: String, source: String)] = [:]
+      for response in responses {
+        parsed[response.requestID] = (
+          emails: gmailEmails(from: response.emails),
+          browser: response.browser,
+          source: response.source
+        )
+      }
+      return parsed
     }
+  }
 
-    return emailDicts.compactMap { dict -> GmailEmail? in
+  private func gmailEmails(from emailDicts: [[String: Any]]) -> [GmailEmail] {
+    emailDicts.compactMap { dict -> GmailEmail? in
       guard let id = dict["id"] as? String,
         let from = dict["from"] as? String,
         let subject = dict["subject"] as? String
@@ -754,51 +1115,6 @@ actor GmailReaderService {
         isUnread: isUnread
       )
     }
-  }
-
-  private func fetchGmailViaLabelFeeds(maxResults: Int, query: String) throws -> [GmailEmail] {
-    guard maxResults > 0 else { return [] }
-
-    let feedPaths = [
-      "atom/all",
-      "atom/inbox",
-      "atom/sent",
-      "atom/starred",
-      "atom/important",
-      "atom/trash",
-      "atom/spam",
-      "atom/unread",
-      "atom/social",
-      "atom/promotions",
-      "atom/updates",
-      "atom/forums",
-      "atom/personal",
-    ]
-
-    var merged: [String: GmailEmail] = [:]
-    for feedPath in feedPaths {
-      let feedEmails = try fetchGmailViaAtomFeedSingle(
-        maxResults: min(20, maxResults),
-        query: query,
-        feedPath: feedPath,
-        allowBootstrap: false
-      )
-      for email in feedEmails {
-        let existing = merged[email.id]
-        if existing == nil || existing!.date < email.date {
-          merged[email.id] = email
-        }
-      }
-    }
-
-    log(
-      "GmailReaderService: Collected \(merged.count) unique emails across \(feedPaths.count) label feeds"
-    )
-
-    return Array(merged.values)
-      .sorted { $0.date > $1.date }
-      .prefix(maxResults)
-      .map(\.self)
   }
 
   private func fetchGmailViaDateWindows(daysBack: Int, maxResults: Int) throws -> [GmailEmail] {

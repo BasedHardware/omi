@@ -1,0 +1,5 @@
+{
+    "changes": [
+        "Made Gmail history import faster and more reliable by fetching its feeds in one batched pass that shares a single browser session and stops early on failure"
+    ]
+}
