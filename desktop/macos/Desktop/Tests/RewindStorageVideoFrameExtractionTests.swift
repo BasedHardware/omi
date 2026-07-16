@@ -4,12 +4,12 @@ import XCTest
 
 @testable import Omi_Computer
 
+@MainActor
 final class RewindStorageVideoFrameExtractionTests: XCTestCase {
   private var testUserId: String!
   private var userDir: URL!
 
   override func setUp() async throws {
-    try await super.setUp()
 
     testUserId = "video-frame-test-\(UUID().uuidString)"
     RewindDatabase.currentUserId = testUserId
@@ -28,7 +28,6 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     if let userDir { try? FileManager.default.removeItem(at: userDir) }
     RewindDatabase.currentUserId = nil
     await RewindStorage.shared.reset()
-    try await super.tearDown()
   }
 
   func testLoadVideoFrameExtractsRequestedFrameOffsetFromMP4Chunk() async throws {

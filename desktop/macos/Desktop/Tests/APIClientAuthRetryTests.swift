@@ -117,7 +117,6 @@ private final class SuspendedOwnerBoundURLStub: URLProtocol, @unchecked Sendable
 @MainActor
 final class APIClientAuthRetryTests: XCTestCase {
   override func setUp() async throws {
-    try await super.setUp()
     // Prior test bundles may leave the process-wide authorization authority
     // bootstrapped at another owner (or deliberately revoked after a raw
     // mismatch). Establish this test's signed-out baseline through the same
@@ -136,7 +135,6 @@ final class APIClientAuthRetryTests: XCTestCase {
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     await establishOwnerForAuthTest(nil)
-    try await super.tearDown()
   }
 
   func testDeleteRetriesOnceAfter401() async throws {

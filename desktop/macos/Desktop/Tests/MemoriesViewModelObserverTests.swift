@@ -18,7 +18,6 @@ final class MemoriesViewModelObserverTests: XCTestCase {
   private var authSnapshot: RewindStorageTestIsolation.AuthSnapshot!
 
   override func setUp() async throws {
-    try await super.setUp()
     authSnapshot = RewindStorageTestIsolation.captureAuthSnapshot()
     let fixture = try await RewindStorageTestIsolation.setUp(userIdPrefix: "memories-vm-observer")
     testUserId = fixture.testUserId
@@ -29,7 +28,6 @@ final class MemoriesViewModelObserverTests: XCTestCase {
   override func tearDown() async throws {
     RewindStorageTestIsolation.restoreAuthSnapshot(authSnapshot)
     await RewindStorageTestIsolation.tearDown(userDir: userDir)
-    try await super.tearDown()
   }
 
   func testDidBecomeActiveNotificationTriggersRefresh() async {

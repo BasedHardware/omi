@@ -7,7 +7,6 @@ final class AuthRefreshResilienceTests: XCTestCase {
   private var priorFirebaseApiKey: String?
 
   override func setUp() async throws {
-    try await super.setUp()
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
     priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingCString: $0) }
@@ -22,7 +21,6 @@ final class AuthRefreshResilienceTests: XCTestCase {
     }
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    try await super.tearDown()
   }
 
   func testRefresh400WithNonAuthBodyPreservesTokens() async {

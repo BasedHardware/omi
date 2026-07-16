@@ -27,7 +27,9 @@ def _workflow_text() -> str:
 
 
 def _job_text(workflow_text: str, job_id: str) -> str:
-    match = re.search(rf"^  {re.escape(job_id)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", workflow_text, re.MULTILINE | re.DOTALL)
+    match = re.search(
+        rf"^  {re.escape(job_id)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", workflow_text, re.MULTILINE | re.DOTALL
+    )
     if not match:
         raise AssertionError(f"missing workflow job: {job_id}")
     return match.group("body")
@@ -184,6 +186,15 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         )
         self.assertIn("~/.cache/omi-swift-format", job)
         self.assertIn("~/.cache/omi-swiftlint", job)
+
+    def test_cache_saves_completed_build_state_after_a_test_failure(self):
+        """A retry should reuse SwiftPM's validated incremental build state."""
+        job = self.jobs["desktop-swift"]
+        self.assertIn("id: swiftpm-cache", job)
+        self.assertIn("uses: actions/cache/restore@v4", job)
+        self.assertIn("uses: actions/cache/save@v4", job)
+        self.assertIn("always()", job)
+        self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
 
     # --- changed-file gate assertions --------------------------------------
 

@@ -283,14 +283,12 @@ final class TaskThreadProjectionTests: XCTestCase {
   private var previousOwnerID: String?
 
   override func setUp() async throws {
-    try await super.setUp()
     previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
     await transitionOwner(to: "owner-a")
   }
 
   override func tearDown() async throws {
     await transitionOwner(to: previousOwnerID)
-    try await super.tearDown()
   }
 
   func testTwoTaskScopesKeepOneWorkstreamAndArtifactIdentity() {

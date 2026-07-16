@@ -54,7 +54,6 @@ final class KernelJournalOwnerBoundAuthTests: XCTestCase {
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     UserDefaults.standard.removeObject(forKey: .authUserId)
-    try await super.tearDown()
   }
 
   func testTokenOwnerExtractionAcceptsFirebaseUserIDAndSubject() throws {

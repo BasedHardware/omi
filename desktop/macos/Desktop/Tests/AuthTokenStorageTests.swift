@@ -5,13 +5,11 @@ import XCTest
 @MainActor
 final class AuthTokenStorageTests: XCTestCase {
   override func setUp() async throws {
-    try await super.setUp()
     clearAuthDefaults()
   }
 
   override func tearDown() async throws {
     clearAuthDefaults()
-    try await super.tearDown()
   }
 
   func testProductionTokenSaveFallsBackToUserDefaultsWhenKeychainWriteFails() async throws {

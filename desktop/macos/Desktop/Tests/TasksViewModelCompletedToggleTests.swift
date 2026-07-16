@@ -11,7 +11,6 @@ final class TasksViewModelCompletedToggleTests: XCTestCase {
 
   override func tearDown() async throws {
     TasksStore.shared.resetSessionState()
-    try await super.tearDown()
   }
 
   func testToggleFlipsBetweenTodoAndDoneViews() {

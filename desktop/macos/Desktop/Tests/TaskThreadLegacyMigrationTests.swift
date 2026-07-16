@@ -9,7 +9,6 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
   private var userDirectory: URL!
 
   override func setUp() async throws {
-    try await super.setUp()
     testUserID = "task-thread-migration-\(UUID().uuidString)"
     await RewindDatabase.shared.close()
     await TaskChatMessageStorage.shared.invalidateCache()
@@ -32,7 +31,6 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
     await TaskChatMessageStorage.shared.invalidateCache()
     RewindDatabase.currentUserId = nil
     if let userDirectory { try? FileManager.default.removeItem(at: userDirectory) }
-    try await super.tearDown()
   }
 
   func testLegacyImportPagesAllImmutableRowsAndRemainsReadOnly() async throws {

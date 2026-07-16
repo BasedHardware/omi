@@ -24,7 +24,6 @@ import XCTest
     CredentialHealthManager.shared.reset()
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
-    try await super.tearDown()
   }
 
   func testByokActiveRequiresAllFourKeys() {

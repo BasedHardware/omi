@@ -64,9 +64,10 @@ jobs:
           fi
           echo "Pinned toolchain confirmed: $ACTUAL_VERSION ($ACTUAL_BUILD)"
 
-      - name: Cache SwiftPM build products
+      - name: Restore SwiftPM build products
         if: steps.changed.outputs.should_run == 'true'
-        uses: actions/cache@v4
+        id: swiftpm-cache
+        uses: actions/cache/restore@v4
         with:
           path: |
             ~/Library/Caches/org.swift.swiftpm
@@ -110,6 +111,20 @@ jobs:
         env:
           OMI_SWIFT_TEST_SUITE_WORKERS: "4"
         run: ./scripts/swift-test-suites.sh
+
+      # SwiftPM validates cached incremental state before using it. Saving after
+      # a failed test command makes the next diagnostic run reuse completed
+      # dependency and module work instead of recompiling the same test bundle.
+      - name: Save SwiftPM build products after test attempt
+        if: ${{ always() && steps.changed.outputs.should_run == 'true' && steps.swiftpm-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@v4
+        with:
+          path: |
+            ~/Library/Caches/org.swift.swiftpm
+            desktop/macos/Desktop/.build
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved', 'desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
 
   desktop-swift-release-compile:
     name: Desktop Swift Release Compile

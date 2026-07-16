@@ -18,7 +18,6 @@ final class DeviceProviderTests: XCTestCase {
       removeDefaults(defaults)
     }
     defaultsToRemove = []
-    try await super.tearDown()
   }
 
   func testLoadsPersistedPairedDeviceFromInjectedDefaults() {

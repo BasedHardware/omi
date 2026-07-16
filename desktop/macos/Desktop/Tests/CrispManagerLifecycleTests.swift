@@ -18,7 +18,6 @@ final class CrispManagerLifecycleTests: XCTestCase {
   private var savedLatestOperator: Double = 0
 
   override func setUp() async throws {
-    try await super.setUp()
     savedLastSeen = UserDefaults.standard.double(forKey: "crisp_lastSeenTimestamp")
     savedLatestOperator = UserDefaults.standard.double(forKey: "crisp_latestOperatorTimestamp")
     // Reset the singleton to a clean state — previous tests may have called start()
@@ -29,7 +28,6 @@ final class CrispManagerLifecycleTests: XCTestCase {
     CrispManager.shared.stop()
     UserDefaults.standard.set(savedLastSeen, forKey: "crisp_lastSeenTimestamp")
     UserDefaults.standard.set(savedLatestOperator, forKey: "crisp_latestOperatorTimestamp")
-    try await super.tearDown()
   }
 
   func testStartIsIdempotent() {

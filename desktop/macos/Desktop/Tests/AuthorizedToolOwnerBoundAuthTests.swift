@@ -170,7 +170,6 @@ private actor PermissionCallbackBox<Value: Sendable> {
   private var originalOwnerBackup: String?
 
   override func setUp() async throws {
-    try await super.setUp()
     originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
     originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
@@ -179,7 +178,6 @@ private actor PermissionCallbackBox<Value: Sendable> {
   override func tearDown() async throws {
     await restoreOriginalOwnerDefaults()
     await AuthorizedToolOwnerURLProtocol.gate.reset()
-    try await super.tearDown()
   }
 
   func testMemoryReadRejectsPrivateResponseAfterMidFlightAccountSwitch() async {
