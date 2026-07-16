@@ -1,41 +1,39 @@
 import XCTest
 
-/// Sentinel: proves `-strict-concurrency=complete` is active by exercising
-/// a pattern that produces a diagnostic under complete checking — a non-Sendable
-/// reference captured in a `Task` dettachment.  Under minimal/minimal-threaded
-/// checking, this compiles without warning.  Under complete, it is an error.
+/// Sentinel: proves `-strict-concurrency=complete` is active on this target.
 ///
-/// We use `unsafeFlags(["-strict-concurrency=complete"])` on this target
-/// (not `enableUpcomingFeature("StrictConcurrency")` — that API arrived with
-/// Swift 6 tooling).  If the flag is removed or misspelled, the sentinel
-/// still compiles but no longer protects against the race it exists to catch.
+/// Unlike BareSlashRegexLiterals (which enables new syntax), strict concurrency
+/// only adds restrictions — there is no code that "only compiles" under it.
+/// So we verify the flag two ways:
+///
+/// 1. This file captures a non-Sendable type across a Task.detached boundary.
+///    Under complete checking, the compiler emits a "non-Sendable" / "data race"
+///    warning. Under minimal checking, no warning is produced.
+///
+/// 2. The companion shell test (test-feature-sentinel-negative-control.sh)
+///    rebuilds this target and greps the output for the non-Sendable warning.
+///    If the flag is removed from Package.swift, the warning disappears and
+///    the test fails — catching the "fake strictness" trap.
 final class StrictConcurrencySentinelTests: XCTestCase {
-  /// A type that is NOT Sendable by default.
-  final class MutableBox: @unchecked Sendable {
+  /// A type that is NOT Sendable (no @unchecked Sendable).
+  final class NonSendableBox {
     var value: Int = 0
   }
 
-  func testNonSendableCaptureProducesDiagnosticUnderCompleteChecking() {
-    // This test exists to prove the target has -strict-concurrency=complete.
-    // Under complete checking, capturing a mutable reference in a Task
-    // produces a warning/error.  We compile-cleanly here because the box
-    // is marked @unchecked Sendable — but the point is that the TARGET
-    // BUILD has the flag active, verified by a separate build-verbose check.
-    let box = MutableBox()
+  func testNonSendableCaptureIsFlaggedUnderCompleteChecking() {
+    // Under -strict-concurrency=complete, capturing NonSendableBox in a
+    // detached Task produces a warning about non-Sendable capture.
+    // The code still compiles (we do NOT use -warnings-as-errors on this
+    // target), but the warning is visible in the build output and proves
+    // the flag is active.
+    let box = NonSendableBox()
     box.value = 42
-    XCTAssertEqual(box.value, 42)
-  }
 
-  func testSendableConformanceIsRequired() {
-    // Under -strict-concurrency=complete, the compiler checks Sendable
-    // conformance at the usage site.  MutableBox uses @unchecked Sendable
-    // which is the minimal escape hatch.  This test documents that the
-    // target has the flag enabled — removing it would silently disable
-    // the compiler's race detection.
-    let box = MutableBox()
-    Task { @Sendable in
+    // The capture below is intentional — it triggers the sentinel warning.
+    Task.detached {
       _ = box.value
     }
-    XCTAssertTrue(true, "compiled under strict concurrency")
+
+    XCTAssertEqual(box.value, 42)
   }
 }

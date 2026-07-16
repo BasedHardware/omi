@@ -1,12 +1,13 @@
 #!/usr/bin/env bash
-# Negative control: proves SwiftPM silently accepts unknown upcoming-feature
-# names (#9843 Ticket 09). This is the critical trap — "fake strictness is
-# worse than none." A misspelled feature name compiles cleanly, giving false
-# confidence that a safety feature is active when it is silently ignored.
+# Feature sentinel tests (#9843 Ticket 09).
 #
-# This test creates a minimal temp SwiftPM package with a deliberately fake
-# feature name, builds it, and asserts the build succeeds — proving the
-# compiler does not reject unknown features.
+# Two controls:
+# 1. POSITIVE: the SemanticFeatureSentinels target build produces a non-Sendable
+#    capture warning, proving -strict-concurrency=complete is active. If the
+#    flag is removed from Package.swift, the warning disappears and this test
+#    fails — catching the "fake strictness" trap.
+# 2. NEGATIVE: SwiftPM silently accepts a fake upcoming-feature name, proving
+#    why feature verification is needed.
 set -euo pipefail
 
 if ! command -v xcrun >/dev/null 2>&1; then
@@ -19,14 +20,35 @@ FAIL=0
 ok() { echo "  ok: $1"; PASS=$((PASS + 1)); }
 nok() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
-echo "== semantic feature sentinel negative control"
+echo "== feature sentinel tests"
 
-TMPDIR=$(mktemp -d)
-trap 'rm -rf "$TMPDIR"' EXIT
+# --- POSITIVE: strict-concurrency=complete produces a non-Sendable warning ---
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+SENTINEL="$MACOS_DIR/Desktop/Tests/SemanticFeatureSentinels/StrictConcurrencySentinelTests.swift"
 
-# Create a minimal SwiftPM package with a FAKE feature name
-mkdir -p "$TMPDIR/Sources/MyLib"
-cat > "$TMPDIR/Package.swift" << 'SWIFT'
+# Force recompilation to surface the warning
+touch "$SENTINEL"
+BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --target SemanticFeatureSentinels 2>&1)
+
+if echo "$BUILD_OUTPUT" | grep -qi "non-Sendable\|non-sendable\|data race"; then
+  ok "strict-concurrency=complete is active (non-Sendable warning produced)"
+else
+  nok "strict-concurrency=complete flag appears inactive (no non-Sendable warning in build output)"
+fi
+
+if echo "$BUILD_OUTPUT" | grep -qi "Build of target.*complete\|Build complete"; then
+  ok "BareSlashRegexLiterals is active (sentinel target compiles)"
+else
+  nok "sentinel target build failed"
+fi
+
+# --- NEGATIVE: SwiftPM silently accepts unknown feature names ---
+TMPDIR_FEAT=$(mktemp -d)
+trap 'rm -rf "$TMPDIR_FEAT"' EXIT
+
+mkdir -p "$TMPDIR_FEAT/Sources/MyLib"
+cat > "$TMPDIR_FEAT/Package.swift" << 'SWIFT'
 // swift-tools-version: 5.9
 import PackageDescription
 let package = Package(
@@ -38,19 +60,13 @@ let package = Package(
   ]
 )
 SWIFT
+echo 'public func hello() {}' > "$TMPDIR_FEAT/Sources/MyLib/hello.swift"
 
-echo 'public func hello() {}' > "$TMPDIR/Sources/MyLib/hello.swift"
-
-# Build — SwiftPM should ACCEPT the fake feature name without error
-if xcrun swift build --package-path "$TMPDIR" 2>/dev/null; then
-  ok "SwiftPM accepts unknown upcoming-feature name without error"
+if xcrun swift build --package-path "$TMPDIR_FEAT" 2>/dev/null; then
+  ok "SwiftPM accepts unknown upcoming-feature name without error (the silent-acceptance trap)"
 else
-  nok "SwiftPM rejected unknown feature (unexpected — this means the trap is closed)"
+  nok "SwiftPM rejected unknown feature (unexpected)"
 fi
-
-# Contrast: the REAL features used by the sentinel target DO take effect
-# (verified by the SemanticFeatureSentinels target compiling with
-# BareSlashRegexLiterals and -strict-concurrency=complete active).
 
 echo "== ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1

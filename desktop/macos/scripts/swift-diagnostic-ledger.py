@@ -149,6 +149,21 @@ def main() -> int:
   for cat, count in categories.most_common():
     print(f"  {cat}: {count}", file=sys.stderr)
 
+  # Fail-closed: if the build output contains diagnostic-looking lines that
+  # were NOT parsed by DIAG_RE, the format may have changed.  Report this
+  # rather than silently claiming zero diagnostics.
+  raw_diag_lines = sum(
+    1 for line in output.splitlines()
+    if re.search(r":\d+:\d+:\s+(warning|error):", line)
+  )
+  if raw_diag_lines > 0 and len(all_diags) == 0:
+    print(
+      f"FAIL: build output has {raw_diag_lines} diagnostic-looking line(s) "
+      f"but parser captured 0 — diagnostic format may have changed.",
+      file=sys.stderr,
+    )
+    return 1
+
   return 0
 
 
