@@ -1,0 +1,6 @@
+{
+  "changes": [
+    "Improved macOS developer feedback loops with faster targeted test reruns and app relaunches",
+    "Fixed macOS preferring a machine-wide OpenClaw install over the version managed in your home directory"
+  ]
+}

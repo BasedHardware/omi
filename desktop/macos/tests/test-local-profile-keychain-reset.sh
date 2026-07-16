@@ -47,12 +47,18 @@ fi
 
 RUN_SRC="$(cat "$RUN")"
 RESET_CALL='./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"'
-if ! grep -Fq -- 'if [ "${OMI_DESKTOP_LOCAL_PROFILE:-0}" = "1" ]; then' <<<"$RUN_SRC"; then
-  echo "run.sh must scope the reset to local-profile launches" >&2
+RESET_HELPER='reset_local_profile_keychain_state()'
+if ! grep -Fq -- "$RESET_HELPER" <<<"$RUN_SRC"; then
+  echo "run.sh must define the local-profile reset helper" >&2
   exit 1
 fi
-if ! grep -Fq -- "$RESET_CALL" <<<"$RUN_SRC"; then
-  echo "run.sh must reset the installed local-profile bundle before launch" >&2
+RESET_HELPER_BODY="$(sed -n "/$RESET_HELPER/,/^}/p" "$RUN")"
+if ! grep -Fq -- 'if [ "$LOCAL_PROFILE" = true ]; then' <<<"$RESET_HELPER_BODY"; then
+  echo "run.sh must scope the reset helper to local-profile launches" >&2
+  exit 1
+fi
+if ! grep -Fq -- "$RESET_CALL" <<<"$RESET_HELPER_BODY"; then
+  echo "run.sh must reset the installed local-profile bundle through the helper" >&2
   exit 1
 fi
 
@@ -61,9 +67,19 @@ from pathlib import Path
 import sys
 
 source = Path(sys.argv[1]).read_text(encoding="utf-8")
-reset = source.index('./scripts/omi-local-profile-keychain-reset.sh "$BUNDLE_ID" "$APP_PATH"')
+helper = "reset_local_profile_keychain_state"
+if source.count(helper) != 3:
+    raise SystemExit("local-profile reset helper must be called by both fast and full bundle paths")
+fast = source.index('if [ "$FAST_BUNDLE" = "1" ]; then')
+full = source.index('else\nstep "Preparing agent runtime..."', fast)
+fast_call = source.index(helper, fast + len(helper))
+full_call = source.index(helper, full + len(helper))
 launch = source.index('step "Starting app..."')
-if reset >= launch:
+if not fast < fast_call < full:
+    raise SystemExit("fast bundle path must reset local-profile Keychain state")
+if not full < full_call < launch:
+    raise SystemExit("full bundle path must reset local-profile Keychain state before launch")
+if fast_call >= launch or full_call >= launch:
     raise SystemExit("local-profile Keychain reset must run before app launch")
 PY
 

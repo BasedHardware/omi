@@ -8,7 +8,11 @@ MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
 PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
-WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-1}}"
+# Each suite runs in an independent SwiftPM process because of process-global
+# test state. CI has proven four-way execution safe; make that the local
+# default too, while preserving an explicit one-worker escape hatch for a
+# diagnosis (`OMI_SWIFT_TEST_SUITE_WORKERS=1`).
+WORKERS="${OMI_SWIFT_TEST_SUITE_WORKERS:-${SWIFT_TEST_SUITE_WORKERS:-4}}"
 PREBUILD="${OMI_SWIFT_TEST_PREBUILD:-1}"
 
 fail() {
