@@ -25,6 +25,7 @@ import { AdapterRegistry } from './adapterRegistry'
 import { SqliteAgentStore, type DatabaseFactory } from './store'
 import {
   AgentToolRelayBridge,
+  executeHostTool,
   type ProductToolExecutor,
   type ToolRelayBridgeOptions
 } from './toolRelayBridge'
@@ -570,5 +571,113 @@ describe('hostile input is handled without crashing the bridge', () => {
     const good = await connect(pipePath, token)
     const envelope = JSON.parse(await good.call('list_agent_sessions', {}))
     expect(envelope.ok).toBe(true)
+  })
+})
+
+// === executeHostTool: the in-process dispatcher (voice-kernel reuse) ===========
+//
+// The shared, socket-free entry the hub dispatcher will reuse (macOS parity: one
+// executor code path for voice + chat). It must enforce the IDENTICAL host-side
+// posture as the relay — control tools through handleAgentControlToolCall with
+// role/owner resolved fresh from the session, product tools through the registry,
+// and errors returned as strings, never thrown.
+
+describe('executeHostTool (in-process dispatch)', () => {
+  it('dispatches a control tool in-process with host-derived authority', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'coordinator')
+
+    const result = JSON.parse(
+      await executeHostTool('list_agent_sessions', {}, { kernel, sessionId, adapterId: 'pi-mono' })
+    )
+    expect(result.ok).toBe(true)
+    expect(Array.isArray(result.sessions)).toBe(true)
+  })
+
+  it('holds the leaf-role guard (spawn_agent refused for a leaf session)', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'leaf')
+
+    const result = JSON.parse(
+      await executeHostTool(
+        'spawn_agent',
+        { objective: 'research this' },
+        { kernel, sessionId, adapterId: 'pi-mono' }
+      )
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(
+      /Background agents are leaf workers and cannot start additional agents\./
+    )
+  })
+
+  it('ignores an input-supplied ownerId — authority is the session owner', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'coordinator')
+
+    const result = JSON.parse(
+      await executeHostTool(
+        'list_agent_sessions',
+        { ownerId: 'someone-else' },
+        { kernel, sessionId, adapterId: 'pi-mono' }
+      )
+    )
+    expect(result.ok).toBe(false)
+    expect(result.error?.message).toMatch(/does not match the active control owner/)
+  })
+
+  it('invokes a product executor with the caller-supplied host session id', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'coordinator')
+    let seenSessionId = ''
+    const executor: ProductToolExecutor = async (input, ctx) => {
+      seenSessionId = ctx.sessionId
+      return `rows: ${String((input as { query?: string }).query)}`
+    }
+
+    const result = await executeHostTool(
+      'execute_sql',
+      { query: 'X' },
+      {
+        kernel,
+        sessionId,
+        adapterId: 'pi-mono',
+        productExecutors: new Map([['execute_sql', executor]])
+      }
+    )
+    expect(result).toBe('rows: X')
+    expect(seenSessionId).toBe(sessionId)
+  })
+
+  it('degrades cleanly for an unserviceable product tool (empty registry)', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'coordinator')
+
+    const result = await executeHostTool(
+      'execute_sql',
+      { query: 'X' },
+      { kernel, sessionId, adapterId: 'pi-mono', productExecutors: new Map() }
+    )
+    expect(result).toBe('Error: execute_sql is not available on Windows yet')
+  })
+
+  it('returns a throwing executor as an "Error:" string (never throws)', async () => {
+    const { kernel, store } = newKernel()
+    const sessionId = insertSession(store, 'coordinator')
+    const boom: ProductToolExecutor = async () => {
+      throw new Error('executor exploded')
+    }
+
+    const result = await executeHostTool(
+      'execute_sql',
+      {},
+      {
+        kernel,
+        sessionId,
+        adapterId: 'pi-mono',
+        productExecutors: new Map([['execute_sql', boom]])
+      }
+    )
+    expect(result).toBe('Error: executor exploded')
   })
 })
