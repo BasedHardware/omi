@@ -3,18 +3,21 @@
 #
 # The SwiftPM build-tool plugin cannot run in release builds because SwiftPM
 # rejects prebuild commands whose executable is itself source-built. This
-# wrapper makes the same exact SwiftLint source available as an explicit macOS
-# manifest check, with provenance and cache identity verified before linting.
+# wrapper instead fetches the upstream universal macOS release binary and
+# verifies its exact SHA-256 before it can run. That preserves a pinned,
+# reproducible lint input without compiling SwiftLint's dependency graph on
+# every cache miss.
 set -euo pipefail
 
 SWIFTLINT_VERSION="0.65.0"
-SWIFTLINT_COMMIT="fd768ba9a0e8a4f96d550d98de6c4cf2af565cf1"
-SWIFTLINT_REPO="https://github.com/realm/SwiftLint.git"
+SWIFTLINT_RELEASE_URL="https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"
+SWIFTLINT_RELEASE_SHA256="d6cb0aa7a2f5f1ef306fc9e37bcb54dc9a26facc8f7784ac0c3dd3eccf5c6ba6"
+SWIFTLINT_BINARY_SHA256="06bdd57b59087dde8680ba6a62452defd71babd0513023f19ddfc6773708ba34"
 
 CACHE_DIR="${SWIFTLINT_CACHE_DIR:-${HOME}/.cache/omi-swiftlint}"
-COMMIT12="${SWIFTLINT_COMMIT:0:12}"
-BUILD_DIR="${CACHE_DIR}/${SWIFTLINT_VERSION}-${COMMIT12}"
-BINARY="${BUILD_DIR}/.build/release/swiftlint"
+SHA12="${SWIFTLINT_RELEASE_SHA256:0:12}"
+INSTALL_DIR="${CACHE_DIR}/${SWIFTLINT_VERSION}-${SHA12}"
+BINARY="${INSTALL_DIR}/swiftlint"
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
@@ -23,40 +26,78 @@ CONFIG_FILE="$DESKTOP_DIR/.swiftlint.yml"
 
 die() { echo "FATAL(swiftlint-wrapper): $*" >&2; exit 1; }
 
+verified_cached_binary() {
+  [ -f "$BINARY" ] && [ ! -L "$BINARY" ] || return 1
+
+  local binary_sha cached_version
+  binary_sha="$(shasum -a 256 "$BINARY" | awk '{print $1}')"
+  [ "$binary_sha" = "$SWIFTLINT_BINARY_SHA256" ] || return 1
+
+  cached_version="$("$BINARY" version 2>&1 | sed -n '1p')"
+  [ "$cached_version" = "$SWIFTLINT_VERSION" ]
+}
+
 bootstrap() {
-  if [ -x "$BINARY" ]; then
-    local cached_version
-    cached_version="$("$BINARY" version 2>&1 | sed -n '1p')"
-    if [ "$cached_version" = "$SWIFTLINT_VERSION" ]; then
-      echo "swiftlint cache HIT: ${SWIFTLINT_VERSION} (${COMMIT12})" >&2
+  command -v shasum >/dev/null 2>&1 || die "shasum not found"
+
+  if [ -e "$BINARY" ] || [ -L "$BINARY" ]; then
+    if verified_cached_binary; then
+      echo "swiftlint cache HIT: ${SWIFTLINT_VERSION} (${SHA12})" >&2
       return 0
     fi
-    echo "swiftlint cache stale (got '${cached_version}'), rebuilding..." >&2
+    echo "swiftlint cache integrity check failed; rebuilding..." >&2
   fi
 
-  command -v xcrun >/dev/null 2>&1 || die "xcrun not found — run on macOS with Xcode installed"
-  rm -rf "$BUILD_DIR"
-  mkdir -p "$(dirname "$BUILD_DIR")"
-  echo "Bootstrapping SwiftLint ${SWIFTLINT_VERSION} from source..." >&2
-  git clone --quiet --depth 1 --branch "$SWIFTLINT_VERSION" "$SWIFTLINT_REPO" "$BUILD_DIR"
+  command -v curl >/dev/null 2>&1 || die "curl not found"
+  command -v unzip >/dev/null 2>&1 || die "unzip not found"
 
-  local actual_commit
-  actual_commit="$(cd "$BUILD_DIR" && git rev-parse HEAD)"
-  if [ "$actual_commit" != "$SWIFTLINT_COMMIT" ]; then
-    die "commit mismatch: expected ${SWIFTLINT_COMMIT}, got ${actual_commit}"
+  mkdir -p "$CACHE_DIR"
+  local temp_dir archive actual_sha archive_entries
+  temp_dir="$(mktemp -d "${CACHE_DIR}/.swiftlint-download.XXXXXX")"
+  archive="${temp_dir}/portable_swiftlint.zip"
+
+  echo "Fetching verified SwiftLint ${SWIFTLINT_VERSION} release binary..." >&2
+  if ! curl --fail --location --proto '=https' --tlsv1.2 --retry 3 --silent --show-error \
+    --output "$archive" "$SWIFTLINT_RELEASE_URL"; then
+    rm -rf "$temp_dir"
+    die "failed to download ${SWIFTLINT_RELEASE_URL}"
   fi
 
-  (
-    cd "$BUILD_DIR"
-    xcrun swift build -c release --product swiftlint
-  )
-  [ -x "$BINARY" ] || die "build completed but binary not found at ${BINARY}"
+  actual_sha="$(shasum -a 256 "$archive" | awk '{print $1}')"
+  if [ "$actual_sha" != "$SWIFTLINT_RELEASE_SHA256" ]; then
+    rm -rf "$temp_dir"
+    die "SHA-256 mismatch: expected ${SWIFTLINT_RELEASE_SHA256}, got ${actual_sha}"
+  fi
 
-  local built_version
-  built_version="$("$BINARY" version 2>&1 | sed -n '1p')"
+  archive_entries="$(unzip -Z -1 "$archive" | sort)"
+  if [ "$archive_entries" != $'LICENSE\nswiftlint' ]; then
+    rm -rf "$temp_dir"
+    die "unexpected release archive layout"
+  fi
+
+  unzip -q "$archive" -d "$temp_dir/extract"
+  [ -f "$temp_dir/extract/swiftlint" ] && [ ! -L "$temp_dir/extract/swiftlint" ] || {
+    rm -rf "$temp_dir"
+    die "release archive does not contain a regular swiftlint binary"
+  }
+  chmod 755 "$temp_dir/extract/swiftlint"
+
+  local binary_sha built_version
+  binary_sha="$(shasum -a 256 "$temp_dir/extract/swiftlint" | awk '{print $1}')"
+  if [ "$binary_sha" != "$SWIFTLINT_BINARY_SHA256" ]; then
+    rm -rf "$temp_dir"
+    die "binary SHA-256 mismatch: expected ${SWIFTLINT_BINARY_SHA256}, got ${binary_sha}"
+  fi
+
+  built_version="$("$temp_dir/extract/swiftlint" version 2>&1 | sed -n '1p')"
   if [ "$built_version" != "$SWIFTLINT_VERSION" ]; then
+    rm -rf "$temp_dir"
     die "version mismatch: expected '${SWIFTLINT_VERSION}', got '${built_version}'"
   fi
+
+  rm -rf "$INSTALL_DIR"
+  mv "$temp_dir/extract" "$INSTALL_DIR"
+  rm -rf "$temp_dir"
 }
 
 case "${1:-}" in
@@ -68,7 +109,7 @@ case "${1:-}" in
     "$BINARY" version
     ;;
   digest)
-    echo "$SWIFTLINT_COMMIT"
+    echo "$SWIFTLINT_RELEASE_SHA256"
     ;;
   lint)
     shift

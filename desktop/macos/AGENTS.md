@@ -135,11 +135,12 @@ Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swif
 ### SwiftLint
 
 SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
-build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins
-SwiftLint 0.65.0 from source and caches the verified build under
-`~/.cache/omi-swiftlint`; use `./scripts/swiftlint-wrapper.sh lint` to run the
-full configured scope. Generated sources and test fixtures remain excluded and
-the committed baseline is down-only.
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
+upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
+verified binary under `~/.cache/omi-swiftlint`; use
+`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
+Generated sources and test fixtures remain excluded and the committed baseline
+is down-only.
 
 ### Synchronous state-machine callbacks
 
