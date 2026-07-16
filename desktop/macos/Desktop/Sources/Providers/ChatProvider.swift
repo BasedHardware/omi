@@ -3999,12 +3999,23 @@ private var activeBridgeSendGeneration: Int?
             if effectiveImageData == nil, let screenContextReason = ScreenContextAutoIncludePolicy.reason(
                 userText: trimmedText,
                 systemPromptStyle: systemPromptStyle,
-                turnOwner: turnOwner
+                turnOwner: turnOwner,
+                onboardingActive: !UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
             ) {
                 let screenRecordingGranted = CGPreflightScreenCaptureAccess()
                 if !screenRecordingGranted && !screenContextReason.isExplicitScreenRequest {
                     // Ambient floating/task-agent turns are allowed to use screen context when already granted,
                     // but they must not manufacture a screen-permission request for generic utterances.
+                    // Still tell the model WHY there is no screen context, so a
+                    // screen-dependent question gets an honest "enable Screen
+                    // Recording" lead-in instead of a silently blind answer.
+                    screenPayload = [
+                        "permission": [
+                            "screen_recording": "not_granted"
+                        ],
+                        "reason": "ambient_surface_context",
+                        "context": ScreenContextWorkContextBuilder.ambientPermissionUnavailablePayload(),
+                    ]
                 } else {
                     screenContextEligibleForTurn = true
                     let screenContextPayload: [String: Any]

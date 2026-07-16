@@ -379,4 +379,53 @@ final class ScreenContextTelemetryTests: XCTestCase {
         turnOwner: .mainChat
       ))
   }
+
+  func testOnboardingFloatingTurnsAreExplicitScreenRequests() {
+    // The demo's suggested query has no screen-cue words; during onboarding a
+    // floating turn must still attempt a real capture so failures surface.
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "Which computer should I buy?",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault,
+        onboardingActive: true
+      ),
+      .explicitScreenRequest
+    )
+    XCTAssertEqual(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "Which computer should I buy?",
+        systemPromptStyle: .floating,
+        turnOwner: .floatingDefault,
+        onboardingActive: false
+      ),
+      .ambientSurfaceContext
+    )
+    // Onboarding must not change non-floating owners.
+    XCTAssertNil(
+      ScreenContextAutoIncludePolicy.reason(
+        userText: "hello",
+        systemPromptStyle: .main,
+        turnOwner: .mainChat,
+        onboardingActive: true
+      ))
+  }
+
+  func testCaptureFailureGuidanceTellsUserToRelaunch() {
+    let payload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+      screenRecordingGranted: true,
+      imageAttached: false
+    )
+    let guidance = payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("quit and reopen Omi"))
+  }
+
+  func testAmbientPermissionUnavailablePayloadIsConditionalOnScreenDependence() {
+    let payload = ScreenContextWorkContextBuilder.ambientPermissionUnavailablePayload()
+    let guidance = payload["guidance"] as? String ?? ""
+    XCTAssertTrue(guidance.contains("enable Screen Recording"))
+    XCTAssertTrue(guidance.contains("ONLY if"))
+    let permission = payload["permission"] as? [String: String]
+    XCTAssertEqual(permission?["screen_recording"], "not_granted")
+  }
 }
