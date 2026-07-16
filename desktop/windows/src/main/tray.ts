@@ -7,7 +7,7 @@ import { Tray, Menu, nativeImage, type NativeImage } from 'electron'
 import idleIconPath from '../../resources/tray/idle.ico?asset'
 import listeningIconPath from '../../resources/tray/listening.ico?asset'
 import pausedIconPath from '../../resources/tray/paused.ico?asset'
-import { describeTray, isTrayState, type TrayState } from './trayState'
+import { buildTrayMenuTemplate, describeTray, isTrayState, type TrayState } from './trayState'
 
 export interface TrayDeps {
   /** Surface + focus the main window (used by Open Omi / Settings / left-click). */
@@ -20,6 +20,12 @@ export interface TrayDeps {
   toggleListening: () => void
   /** Settings menu item — show the window and route to Settings. */
   openSettings: () => void
+  /** "Check for Updates" — run a manual update check (see updater.ts). */
+  checkForUpdates: () => void
+  /** "Screen Analysis" checkbox — flip the screenAnalysisEnabled master. The tray
+   *  checkbox is refreshed from the persisted value via setTrayScreenCapture, so
+   *  this only writes the setting (the coordinator re-syncs off that write). */
+  toggleScreenCapture: () => void
   /** Quit for real. */
   quit: () => void
 }
@@ -28,6 +34,11 @@ let tray: Tray | null = null
 let deps: TrayDeps | null = null
 let currentState: TrayState = 'idle'
 let updateReady = false
+// Reflects screenAnalysisEnabled for the "Screen Analysis" checkbox. Pushed in via
+// setTrayScreenCapture (mirroring updateReady/setTrayUpdateReady) so the tray
+// tracks the setting wherever it changes from — the menu toggle, a backend sync,
+// or a future Settings switch. Seeded at createTray.
+let screenCaptureEnabled = false
 
 const iconPaths: Record<TrayState, string> = {
   idle: idleIconPath,
@@ -63,15 +74,12 @@ function render(): void {
   const p = describeTray(currentState, { updateReady })
   tray.setImage(iconFor(currentState))
   tray.setToolTip(p.tooltip)
+  // TrayDeps is a superset of TrayMenuActions, so it satisfies the pure builder's
+  // action interface directly.
   tray.setContextMenu(
-    Menu.buildFromTemplate([
-      { label: 'Open Omi', click: () => d.showMainWindow() },
-      { label: p.toggleLabel, click: () => d.toggleListening() },
-      { type: 'separator' },
-      { label: 'Settings', click: () => d.openSettings() },
-      { type: 'separator' },
-      { label: 'Quit Omi', click: () => d.quit() }
-    ])
+    Menu.buildFromTemplate(
+      buildTrayMenuTemplate({ toggleLabel: p.toggleLabel, screenCaptureEnabled }, d)
+    )
   )
 }
 
@@ -86,6 +94,15 @@ export function updateTrayState(state: unknown): void {
 export function setTrayUpdateReady(ready: boolean): void {
   if (updateReady === ready) return
   updateReady = ready
+  render()
+}
+
+/** Reflect the current screenAnalysisEnabled value in the "Screen Analysis"
+ *  checkbox. Called on startup (seed) and on every settings write, so the tray
+ *  stays in sync no matter where the setting changes from. */
+export function setTrayScreenCapture(enabled: boolean): void {
+  if (screenCaptureEnabled === enabled) return
+  screenCaptureEnabled = enabled
   render()
 }
 

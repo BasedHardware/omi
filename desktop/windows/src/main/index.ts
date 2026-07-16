@@ -126,7 +126,13 @@ import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
 import { isHideWindowShortcut } from './windowShortcuts'
 import { shouldBlockNavigation } from './navigationGuard'
-import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
+import {
+  createTray,
+  updateTrayState,
+  setTrayScreenCapture,
+  destroyTray,
+  isTrayCreated
+} from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
   registerRecordShortcut,
@@ -135,7 +141,7 @@ import {
   suspendRecordShortcut,
   resumeRecordShortcut
 } from './shortcuts'
-import { getAppSettings, setAppSettings } from './appSettings'
+import { getAppSettings, setAppSettings, onAppSettingsChanged } from './appSettings'
 import { showBestEffortNotification } from './notify'
 import { buildHotkeyConflictNotice } from './hotkeyNotice'
 
@@ -336,7 +342,9 @@ app.on('web-contents-created', (_e, wc) => {
     if (shouldBlockNavigation(url, urlOf())) {
       event.preventDefault()
       // Never log the raw URL — a dropped-file path can contain personal data.
-      console.warn(`[main] blocked stray in-window navigation to a local file (webContents ${wc.id})`)
+      console.warn(
+        `[main] blocked stray in-window navigation to a local file (webContents ${wc.id})`
+      )
     }
   })
 })
@@ -912,8 +920,25 @@ app.whenReady().then(async () => {
       surfaceMainWindow()
       withMainWindow((win) => win.webContents.send('tray:open-settings'))
     },
+    // Manual update check (mirrors Settings → About and Mac's "Check for Updates").
+    // checkForUpdatesNow never throws; log the outcome for a manual tester.
+    checkForUpdates: () => {
+      void checkForUpdatesNow().then((r) => console.log('[tray] update check:', r.status))
+    },
+    // "Screen Analysis" toggle → flip the screenAnalysisEnabled master. Writing the
+    // setting is the whole action: the proactive coordinator subscribes to
+    // onAppSettingsChanged and starts/stops its screen-analysis loop off that write
+    // (assistants/core/coordinator.ts), and the onAppSettingsChanged hook below
+    // refreshes the checkbox. No separate start/stop call here.
+    toggleScreenCapture: () =>
+      setAppSettings({ screenAnalysisEnabled: !getAppSettings().screenAnalysisEnabled }),
     quit: quitApp
   })
+  // Seed the checkbox from the persisted value, then keep it in sync with any
+  // writer (the tray toggle itself, a backend settings sync, a future Settings
+  // switch). setTrayScreenCapture is a no-op when the value is unchanged.
+  setTrayScreenCapture(getAppSettings().screenAnalysisEnabled)
+  onAppSettingsChanged((s) => setTrayScreenCapture(s.screenAnalysisEnabled))
 
   // Auto-update (packaged builds only; see updater.ts). Never crashes the app.
   initAutoUpdater(() => mainWindow)
