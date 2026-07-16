@@ -1,4 +1,4 @@
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 import Foundation
 
 /// Narrow CoreBluetooth side-effect seam used by `BleTransport`.

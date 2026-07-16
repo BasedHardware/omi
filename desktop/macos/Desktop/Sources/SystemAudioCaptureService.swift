@@ -1,5 +1,5 @@
-import AVFoundation
-import CoreAudio
+@preconcurrency import AVFoundation
+@preconcurrency import CoreAudio
 import Foundation
 
 /// Service for capturing system audio using Core Audio Taps (macOS 14.4+)

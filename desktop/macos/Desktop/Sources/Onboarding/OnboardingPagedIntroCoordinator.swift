@@ -1,7 +1,7 @@
 import AppKit
 import CoreServices
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 import SwiftUI
 
 @MainActor

@@ -1,4 +1,4 @@
-import CoreAudio
+@preconcurrency import CoreAudio
 import CoreGraphics
 import Foundation
 

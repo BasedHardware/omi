@@ -1,7 +1,7 @@
 import Foundation
 
 enum MemoryExportConnectionDetector {
-  static var homeOverrideForTesting: URL?
+  nonisolated(unsafe) static var homeOverrideForTesting: URL?
 
   private static var home: URL {
     homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser

@@ -120,7 +120,7 @@ struct TaskLegacyEffectGate {
     return try await operation()
   }
 
-  static let live = TaskLegacyEffectGate {
+  nonisolated(unsafe) static let live = TaskLegacyEffectGate {
     let control = try? await APIClient.shared.getCandidateWorkflowControl()
     return control?.workflowMode
   }

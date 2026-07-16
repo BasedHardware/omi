@@ -4,7 +4,7 @@ import Cocoa
 // MARK: - Global Shortcut Manager
 
 /// Manages global keyboard shortcuts using Carbon APIs for the floating control bar.
-class GlobalShortcutManager {
+class GlobalShortcutManager: @unchecked Sendable {
   static let shared = GlobalShortcutManager()
 
   static let askAINotification = Notification.Name("com.omi.desktop.askAI")

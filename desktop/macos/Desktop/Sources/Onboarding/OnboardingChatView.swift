@@ -1,4 +1,4 @@
-import GRDB
+@preconcurrency import GRDB
 import MarkdownUI
 import OmiTheme
 import SwiftUI

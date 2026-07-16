@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Unified storage manager for all proactive assistant data (memories, tasks, advice, focus sessions)
 /// Uses SQLite for local persistence with backend sync

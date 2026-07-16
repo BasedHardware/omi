@@ -1,9 +1,9 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 @preconcurrency import ObjectiveC
 import OmiSupport
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum SystemAudioPermissionStatus: String {
   case unknown

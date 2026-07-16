@@ -115,7 +115,7 @@ struct DesktopStressRunSummary: Codable, Equatable {
 }
 
 extension ISO8601DateFormatter {
-  fileprivate static let desktopStressDiagnostics: ISO8601DateFormatter = {
+  fileprivate nonisolated(unsafe) static let desktopStressDiagnostics: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter

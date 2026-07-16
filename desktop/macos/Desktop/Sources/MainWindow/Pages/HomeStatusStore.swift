@@ -10,10 +10,10 @@ struct HomeKnowledgeCounts: Equatable, Sendable {
 
 @MainActor
 struct HomeStatusLoader {
-  let refreshConnectorStatuses: () async -> Void
-  let loadScreenshotCount: () async -> Int?
-  let loadKnowledgeCounts: (_ includeOmiDeviceHistory: Bool) async -> HomeKnowledgeCounts
-  let loadMemoryExportStatuses: () async -> [MemoryExportDestination: MemoryExportStatus]
+  let refreshConnectorStatuses: @MainActor () async -> Void
+  let loadScreenshotCount: @MainActor () async -> Int?
+  let loadKnowledgeCounts: @MainActor (_ includeOmiDeviceHistory: Bool) async -> HomeKnowledgeCounts
+  let loadMemoryExportStatuses: @MainActor () async -> [MemoryExportDestination: MemoryExportStatus]
 
   static func live(connectorStatusStore: ImportConnectorStatusStore) -> HomeStatusLoader {
     HomeStatusLoader(

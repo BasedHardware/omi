@@ -68,7 +68,7 @@ struct ConversationRepositorySnapshot: Equatable {
   let source: ConversationSnapshotSource
 }
 
-protocol ConversationRemoteDataSource {
+protocol ConversationRemoteDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation

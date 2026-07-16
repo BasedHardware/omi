@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Actor for local knowledge graph CRUD operations
 actor KnowledgeGraphStorage {

@@ -148,7 +148,7 @@ struct RewindOnlyView: View {
 // MARK: - Rewind Settings Window
 
 /// Standalone settings window for Rewind-only mode
-class RewindSettingsWindow {
+@MainActor class RewindSettingsWindow {
   static var window: NSWindow?
 
   static func show() {

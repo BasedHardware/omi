@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Connector-specific import work, extracted from the connector sheet so runs
 /// can be owned by `ConnectorImportRunner` and outlive the sheet. Operations

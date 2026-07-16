@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 struct AppleNoteRecord: Identifiable, Sendable {
   let id: Int64

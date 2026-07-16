@@ -1,12 +1,12 @@
 import Cocoa
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum NotificationRegistrationRepair {
   static let repairedVersionKey = "notificationRegistrationRepairedAppVersion"
   static let startupRepairAttemptedVersionKey = "notificationStartupRepairAttemptedAppVersion"
 
-  private static var isRepairing = false
-  private static var pendingCompletions: [(Bool) -> Void] = []
+  private nonisolated(unsafe) static var isRepairing = false
+  private nonisolated(unsafe) static var pendingCompletions: [(Bool) -> Void] = []
 
   static func currentVersionIdentifier(bundle: Bundle = .main) -> String {
     let version =

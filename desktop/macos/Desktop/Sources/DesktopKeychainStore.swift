@@ -36,7 +36,7 @@ enum DesktopKeychainStore {
     return resolved
   }
 
-  private static var _cachedSigningTeamID: String?
+  private nonisolated(unsafe) static var _cachedSigningTeamID: String?
 
   /// Team + bundle scoped service name.
   ///

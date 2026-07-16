@@ -115,7 +115,7 @@ func ensureLogDirectoryOwnerOnly(atPath path: String) -> Bool {
 
 /// Guards the one-time permission normalization. Mutated only on the serial
 /// `logQueue` (every writer hops through it), so it needs no extra locking.
-private var didEnsureLogFilePermissions = false
+private nonisolated(unsafe) var didEnsureLogFilePermissions = false
 
 private func ensureLogParentDirectories() -> Bool {
   // Non-production logs live as owner-only files directly under private tmp.
@@ -338,7 +338,7 @@ func isNonActionableTransient(_ error: Error?) -> Bool {
 /// emit the same error thousands of times. We collapse them by a digit-normalized
 /// key so a single root cause produces ~one Sentry event per window, not thousands.
 private let sentryDedupLock = NSLock()
-private var sentryLastCaptured: [String: Date] = [:]
+private nonisolated(unsafe) var sentryLastCaptured: [String: Date] = [:]
 private let sentryDedupWindow: TimeInterval = 300  // 5 minutes per unique error
 
 private func shouldCaptureToSentry(_ message: String) -> Bool {

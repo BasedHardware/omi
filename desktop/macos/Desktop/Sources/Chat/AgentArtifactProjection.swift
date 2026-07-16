@@ -193,7 +193,7 @@ enum AgentArtifactProjectionError: LocalizedError, Equatable {
   }
 }
 
-protocol AgentArtifactProjectionLoading {
+@preconcurrency protocol AgentArtifactProjectionLoading {
   func controlTool(name: String, input: [String: Any]) async throws -> String
 }
 

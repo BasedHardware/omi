@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Database record for screen observations captured during task extraction.
 /// Every screenshot analysis produces an observation — whether or not a task was found.

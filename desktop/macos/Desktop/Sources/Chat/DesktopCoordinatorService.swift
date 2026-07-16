@@ -1,6 +1,6 @@
 import Foundation
 
-protocol DesktopCoordinatorRuntimeControlling {
+@preconcurrency protocol DesktopCoordinatorRuntimeControlling {
   func directControlTool(
     clientId: String,
     harnessMode: String,

@@ -286,7 +286,7 @@ final class VADGateService {
   // Shared wall-clock timestamp of the most recent frame classified as speech.
   // Used by the Sparkle updater gate to defer restarts during active conversations.
   private static let lastSpeechLock = NSLock()
-  private static var _lastSpeechAt: Date?
+  private nonisolated(unsafe) static var _lastSpeechAt: Date?
   static var lastSpeechAt: Date? {
     lastSpeechLock.lock()
     defer { lastSpeechLock.unlock() }

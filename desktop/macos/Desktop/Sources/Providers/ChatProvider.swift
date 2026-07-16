@@ -1,6 +1,6 @@
 import Combine
 import CoreGraphics
-import GRDB
+@preconcurrency import GRDB
 import OmiSupport
 import SwiftUI
 import UniformTypeIdentifiers

@@ -40,7 +40,7 @@ struct DesktopHealthSnapshot {
 }
 
 extension ISO8601DateFormatter {
-  fileprivate static let desktopDiagnostics: ISO8601DateFormatter = {
+  fileprivate nonisolated(unsafe) static let desktopDiagnostics: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
@@ -54,7 +54,7 @@ extension ISO8601DateFormatter {
 /// - **Sentry** (`logError` / `SentrySDK.capture`): only when a domain classifier marks the failure actionable.
 /// Do not call `AnalyticsManager.desktopHealthEvent` directly — it bypasses the ring buffer.
 final class DesktopDiagnosticsManager {
-  static let shared = DesktopDiagnosticsManager()
+  nonisolated(unsafe) static let shared = DesktopDiagnosticsManager()
 
   private let lock = NSLock()
   private var snapshots: [DesktopHealthSnapshot] = []

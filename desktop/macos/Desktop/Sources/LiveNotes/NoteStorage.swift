@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Actor-based storage manager for live notes during recording sessions
 /// Provides crash-safe persistence for notes generated during transcription

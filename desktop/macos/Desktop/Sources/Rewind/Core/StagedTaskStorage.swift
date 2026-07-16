@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 struct CanonicalCaptureReceipt: Equatable {
   let candidateID: String

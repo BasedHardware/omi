@@ -1,5 +1,5 @@
-import AVFoundation
-import CoreAudio
+@preconcurrency import AVFoundation
+@preconcurrency import CoreAudio
 import Foundation
 
 /// Service for capturing microphone audio as 16-bit PCM at 16kHz

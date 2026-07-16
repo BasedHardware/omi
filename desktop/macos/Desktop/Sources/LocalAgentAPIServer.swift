@@ -130,7 +130,7 @@ enum LoopbackHTTPParsing {
   }
 }
 
-final class LocalAgentAPIServer {
+final class LocalAgentAPIServer: @unchecked Sendable {
   static let shared = LocalAgentAPIServer()
   private static let maxRequestBytes = 1024 * 1024
 
@@ -559,7 +559,7 @@ final class LocalAgentAPIServer {
     ]
   }
 
-  private static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
+  private nonisolated(unsafe) static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
 
   private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
     [

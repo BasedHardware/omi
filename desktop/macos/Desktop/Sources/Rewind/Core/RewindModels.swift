@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 // MARK: - Screenshot Model
 
@@ -355,7 +355,7 @@ struct VideoChunkInfo {
 
 /// Settings for the Rewind feature
 class RewindSettings: ObservableObject {
-  static let shared = RewindSettings()
+  nonisolated(unsafe) static let shared = RewindSettings()
 
   private let defaults = UserDefaults.standard
   static let batteryCaptureIntervalMultiplier = 3.0

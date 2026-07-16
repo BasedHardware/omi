@@ -417,7 +417,7 @@ private struct DesktopAutomationResponse<T: Codable>: Codable {
 }
 
 final class DesktopAutomationStateStore {
-  static let shared = DesktopAutomationStateStore()
+  nonisolated(unsafe) static let shared = DesktopAutomationStateStore()
   private let lock = NSLock()
 
   private var snapshot = DesktopAutomationSnapshot(
@@ -3419,7 +3419,7 @@ private func intParam(_ raw: String?, default fallback: Int) -> Int {
   return Int(raw) ?? fallback
 }
 
-final class DesktopAutomationBridge {
+final class DesktopAutomationBridge: @unchecked Sendable {
   static let shared = DesktopAutomationBridge()
 
   private let queue = DispatchQueue(label: "com.omi.desktop.automation-bridge")

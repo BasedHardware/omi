@@ -2,7 +2,7 @@ import Foundation
 
 /// Background service for retrying failed transcription uploads
 /// Runs a periodic timer to check for pending/failed sessions and attempt upload
-class TranscriptionRetryService {
+class TranscriptionRetryService: @unchecked Sendable {
   static let shared = TranscriptionRetryService()
 
   private var retryTimer: Timer?

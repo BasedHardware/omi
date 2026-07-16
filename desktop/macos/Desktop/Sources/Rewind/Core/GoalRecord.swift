@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 struct GoalRecord: Codable, FetchableRecord, PersistableRecord, Identifiable {
   var id: Int64?

@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Actor-based storage manager for action items/tasks with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend

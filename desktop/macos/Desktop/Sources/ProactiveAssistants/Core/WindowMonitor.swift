@@ -2,7 +2,7 @@ import AppKit
 import Foundation
 
 /// Observer for NSWorkspace app activation notifications
-class WindowMonitor {
+class WindowMonitor: @unchecked Sendable {
   private var observer: NSObjectProtocol?
   private let callback: (String) -> Void
 

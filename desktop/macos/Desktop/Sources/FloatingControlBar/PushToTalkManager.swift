@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Cocoa
 import Combine
-import CoreAudio
+@preconcurrency import CoreAudio
 import OmiSupport
 import VoiceTurnDomain
 

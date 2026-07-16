@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 import OmiSupport
 
 /// Actor-based database manager for Rewind screenshots

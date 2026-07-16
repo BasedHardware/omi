@@ -1,8 +1,8 @@
 import Combine
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 import Foundation
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 import os.log
 
 // MARK: - Notification Names

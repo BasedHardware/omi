@@ -1,5 +1,5 @@
-import AVFoundation
-import AudioToolbox
+@preconcurrency import AVFoundation
+@preconcurrency import AudioToolbox
 import Foundation
 import os.log
 

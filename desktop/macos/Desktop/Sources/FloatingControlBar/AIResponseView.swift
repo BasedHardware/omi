@@ -849,7 +849,7 @@ struct MessageMetadataPopover: View {
 // MARK: - Model Menu Helper
 
 class ModelMenuTarget: NSObject {
-  static let shared = ModelMenuTarget()
+  nonisolated(unsafe) static let shared = ModelMenuTarget()
   var onSelect: ((String) -> Void)?
 
   @objc func selectModel(_ sender: NSMenuItem) {

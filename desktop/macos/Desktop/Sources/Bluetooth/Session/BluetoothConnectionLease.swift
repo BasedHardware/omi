@@ -1,4 +1,4 @@
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 import Foundation
 
 /// Manager-owned identity for one CoreBluetooth connection attempt.

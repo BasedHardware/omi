@@ -34,7 +34,7 @@ protocol RealtimeOmniServiceDelegate: AnyObject {
   func omniDidError(_ message: String)
 }
 
-final class RealtimeOmniService: NSObject {
+final class RealtimeOmniService: NSObject, @unchecked Sendable {
   private let provider: RealtimeOmniProvider  // always concrete (never .auto)
   private let model: String
   /// omi backend base URL (https) — we connect to its /v1/omni/relay WS, which

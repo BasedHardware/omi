@@ -1,4 +1,4 @@
-import CoreBluetooth
+@preconcurrency import CoreBluetooth
 
 /// BLE Service and Characteristic UUIDs for all supported devices
 /// Ported from: omi/app/lib/services/devices/models.dart

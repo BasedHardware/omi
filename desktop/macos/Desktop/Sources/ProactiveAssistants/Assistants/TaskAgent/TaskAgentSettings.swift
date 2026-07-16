@@ -4,7 +4,7 @@ import SwiftUI
 
 /// Settings for the Task Agent feature
 class TaskAgentSettings: ObservableObject {
-  static let shared = TaskAgentSettings()
+  nonisolated(unsafe) static let shared = TaskAgentSettings()
 
   /// Whether the terminal task agent feature is enabled (Run Agent / terminal icon)
   @Published var isEnabled: Bool {

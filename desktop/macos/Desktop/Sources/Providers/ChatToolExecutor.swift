@@ -1,8 +1,8 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 import Foundation
-import GRDB
-import UserNotifications
+@preconcurrency import GRDB
+@preconcurrency import UserNotifications
 
 private enum ChatToolOwnerAuthorization {
   @TaskLocal static var snapshot: RuntimeOwnerAuthorizationSnapshot?

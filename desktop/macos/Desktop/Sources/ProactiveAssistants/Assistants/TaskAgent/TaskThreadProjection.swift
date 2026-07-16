@@ -1,6 +1,6 @@
 import Foundation
 
-protocol TaskWorkstreamAPI {
+protocol TaskWorkstreamAPI: Sendable {
   func workflowControl(
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> OmiAPI.TaskWorkflowControl

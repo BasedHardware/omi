@@ -126,7 +126,7 @@ extension ContinuousClock.Instant.Duration {
 final class QueryTracer: @unchecked Sendable {
 
   static let gapThresholdMs: Int64 = 50
-  private static let isoFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let isoFormatter = ISO8601DateFormatter()
 
   private struct OpenSpan {
     let name: String

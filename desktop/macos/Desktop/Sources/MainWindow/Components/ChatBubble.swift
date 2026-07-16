@@ -1618,7 +1618,7 @@ extension ChatContentBlock {
 /// Single source of truth for how each `ToolCallStatus` value renders
 /// as a small inline icon. Used in both the group header and individual
 /// tool rows so the visual language is consistent.
-@ViewBuilder
+@MainActor @ViewBuilder
 private func statusIcon(for status: ToolCallStatus, size: CGFloat) -> some View {
   switch status {
   case .running:
@@ -1809,7 +1809,7 @@ struct DiscoveryCard: View {
 // MARK: - Markdown Themes
 
 extension Theme {
-  static func userMessage(scale: CGFloat = 1.0) -> Theme {
+  @MainActor static func userMessage(scale: CGFloat = 1.0) -> Theme {
     Theme()
       .text {
         ForegroundColor(.white)
@@ -1849,7 +1849,7 @@ extension Theme {
       }
   }
 
-  static func aiMessage(scale: CGFloat = 1.0) -> Theme {
+  @MainActor static func aiMessage(scale: CGFloat = 1.0) -> Theme {
     Theme()
       .text {
         ForegroundColor(OmiColors.textPrimary)

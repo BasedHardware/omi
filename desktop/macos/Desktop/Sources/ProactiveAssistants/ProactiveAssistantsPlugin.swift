@@ -1,5 +1,5 @@
 import Cocoa
-import UserNotifications
+@preconcurrency import UserNotifications
 
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
 @MainActor

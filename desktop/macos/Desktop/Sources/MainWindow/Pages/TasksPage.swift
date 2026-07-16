@@ -349,7 +349,7 @@ class TasksViewModel: ObservableObject {
         _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
       ) async throws -> Void
 
-    static let live = SortOrderSyncOperations(
+    nonisolated(unsafe) static let live = SortOrderSyncOperations(
       updateStorage: { updates, authorization in
         try await ActionItemStorage.shared.updateSortOrders(
           updates.map {

@@ -482,17 +482,21 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
       center.addObserver(
         forName: NSMenu.didBeginTrackingNotification, object: nil, queue: .main
       ) { [weak self] _ in
-        guard let self else { return }
-        self.menuTrackingDepth += 1
-        self.applySurfaceLevel()
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.menuTrackingDepth += 1
+          self.applySurfaceLevel()
+        }
       })
     menuTrackingObservers.append(
       center.addObserver(
         forName: NSMenu.didEndTrackingNotification, object: nil, queue: .main
       ) { [weak self] _ in
-        guard let self else { return }
-        self.menuTrackingDepth = max(0, self.menuTrackingDepth - 1)
-        self.applySurfaceLevel()
+        MainActor.assumeIsolated {
+          guard let self else { return }
+          self.menuTrackingDepth = max(0, self.menuTrackingDepth - 1)
+          self.applySurfaceLevel()
+        }
       })
   }
 
@@ -1719,16 +1723,20 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     // animation from its current frame instead of jumping.
     NSAnimationContext.runAnimationGroup(
       { context in
-        context.duration = duration
-        context.timingFunction = CAMediaTimingFunction(name: .easeOut)
-        context.allowsImplicitAnimation = true
-        self.animator().setFrame(frame, display: true)
+        MainActor.assumeIsolated {
+          context.duration = duration
+          context.timingFunction = CAMediaTimingFunction(name: .easeOut)
+          context.allowsImplicitAnimation = true
+          self.animator().setFrame(frame, display: true)
+        }
       },
       completionHandler: { [weak self] in
-        guard let self, self.frameAnimationToken == token else { return }
-        self.setFrame(frame, display: true, animate: false)
-        self.pendingFrameAnimationTarget = nil
-        completion?()
+        MainActor.assumeIsolated {
+          guard let self, self.frameAnimationToken == token else { return }
+          self.setFrame(frame, display: true, animate: false)
+          self.pendingFrameAnimationTarget = nil
+          completion?()
+        }
       })
   }
 

@@ -518,7 +518,7 @@ class AuthService {
     // sign-ins. The read path remains only for transactional migration of older
     // installs: keep that already-existing copy until Keychain read-back plus a
     // forced refresh commit the new store.
-    static let live = TokenStorageHooks(
+    nonisolated(unsafe) static let live = TokenStorageHooks(
       usesKeychainTokenStorage: { true },
       allowsUserDefaultsFallback: { false },
       readKeychainString: { service, account in
@@ -545,7 +545,7 @@ class AuthService {
   struct TokenRefreshHooks {
     var dataForRequest: ((URLRequest) async throws -> (Data, URLResponse))?
 
-    static let live = TokenRefreshHooks(dataForRequest: nil)
+    nonisolated(unsafe) static let live = TokenRefreshHooks(dataForRequest: nil)
   }
 
   var tokenRefreshHooks = TokenRefreshHooks.live

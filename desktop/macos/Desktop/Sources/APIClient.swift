@@ -1047,12 +1047,12 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   // Date helpers shared with Event/Structured adapters.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
     if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
@@ -1366,12 +1366,12 @@ struct Event: Codable, Identifiable, Equatable {
   }
 
   // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String) -> Date? {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)

@@ -5,7 +5,7 @@ import Foundation
 /// PTT live streaming: Python backend `/v2/voice-message/transcribe-stream` WebSocket (transcription only).
 /// PTT batch: Python backend `/v2/voice-message/transcribe` REST API.
 /// Full stereo batch: removed (formerly Rust proxy Deepgram, now dead code).
-class TranscriptionService {
+class TranscriptionService: @unchecked Sendable {
 
   // MARK: - Types
 
@@ -666,7 +666,7 @@ class TranscriptionService {
   }
 }
 
-final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate {
+final class WebSocketConnectionDelegate: NSObject, URLSessionWebSocketDelegate, @unchecked Sendable {
   var onOpen: (() -> Void)?
   var onClose: ((URLSessionWebSocketTask.CloseCode) -> Void)?
 

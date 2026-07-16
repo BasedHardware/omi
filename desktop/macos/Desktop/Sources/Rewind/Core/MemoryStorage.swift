@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Selects which provenance class may participate in a local-memory read.
 ///

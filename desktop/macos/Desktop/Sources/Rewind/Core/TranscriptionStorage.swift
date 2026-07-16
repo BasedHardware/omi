@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 private func withConversationCacheScope<T>(
   _ scope: ConversationCacheWriteScope?,

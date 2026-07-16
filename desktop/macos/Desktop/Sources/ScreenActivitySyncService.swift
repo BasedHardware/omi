@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Syncs screenshot metadata + embeddings from the local GRDB database
 /// to the backend API (`POST /v1/screen-activity/sync`), which stores them

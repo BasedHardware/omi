@@ -16,7 +16,7 @@ import Network
 // JSON in binary frames). Continuation (0x0) frames are reassembled; pings are
 // answered with pongs.
 
-final class RawWebSocket {
+final class RawWebSocket: @unchecked Sendable {
   var onOpen: (() -> Void)?
   var onMessage: ((Data) -> Void)?
   var onClose: ((Int, String) -> Void)?

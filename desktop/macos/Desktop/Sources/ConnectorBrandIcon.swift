@@ -104,8 +104,8 @@ enum ConnectorBrand: String, Sendable {
 }
 
 private enum ConnectorBrandImageLoader {
-  private static var cache: [ConnectorBrand: NSImage] = [:]
-  private static var resourceBundle: Bundle? = {
+  private nonisolated(unsafe) static var cache: [ConnectorBrand: NSImage] = [:]
+  private nonisolated(unsafe) static var resourceBundle: Bundle? = {
     let candidates = Bundle.allBundles + Bundle.allFrameworks + [Bundle.main]
 
     for bundle in candidates {

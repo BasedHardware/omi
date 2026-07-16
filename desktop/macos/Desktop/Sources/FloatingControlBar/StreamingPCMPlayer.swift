@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Foundation
 
 /// Tracks buffers that AVAudioPlayerNode owns but has not reported as played yet.
@@ -50,7 +50,7 @@ final class StreamingPCMPlaybackQueue<Buffer: AnyObject> {
 ///
 /// Ported from the `feature/gpt-realtime` worktree's `LiveVoiceSession` audio
 /// path (path adapted to the `desktop/macos/…` layout).
-final class StreamingPCMPlayer {
+final class StreamingPCMPlayer: @unchecked Sendable {
   private let engine = AVAudioEngine()
   private let player = AVAudioPlayerNode()
   private let format: AVAudioFormat

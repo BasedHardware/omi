@@ -509,14 +509,16 @@ struct DesktopHomeView: View {
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
     ) { note in
-      guard let window = note.object as? NSWindow,
-        window.title.lowercased().hasPrefix("omi")
-      else { return }
-      let frameMin = window.frameRect(
-        forContentRect: NSRect(origin: .zero, size: minimumContentSize)
-      ).size
-      if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
-      if window.minSize != frameMin { window.minSize = frameMin }
+      MainActor.assumeIsolated {
+        guard let window = note.object as? NSWindow,
+          window.title.lowercased().hasPrefix("omi")
+        else { return }
+        let frameMin = window.frameRect(
+          forContentRect: NSRect(origin: .zero, size: minimumContentSize)
+        ).size
+        if window.contentMinSize != minimumContentSize { window.contentMinSize = minimumContentSize }
+        if window.minSize != frameMin { window.minSize = frameMin }
+      }
     }
   }
 

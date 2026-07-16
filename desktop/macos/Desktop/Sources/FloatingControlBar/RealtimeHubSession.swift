@@ -120,7 +120,7 @@ enum RealtimeHubBargeInStrategy: Equatable {
   }
 #endif
 
-final class RealtimeHubSession: NSObject {
+final class RealtimeHubSession: NSObject, @unchecked Sendable {
   private let provider: RealtimeHubProvider
   private let auth: HubAuth
   private let instructions: String

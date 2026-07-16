@@ -1,4 +1,4 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import AppKit
 import OmiTheme
 import SwiftUI
@@ -1133,7 +1133,7 @@ struct NotificationPermissionSection: View {
 
 // MARK: - Helper Views
 
-private func statusBadge(isGranted: Bool) -> some View {
+@MainActor private func statusBadge(isGranted: Bool) -> some View {
   HStack(spacing: OmiSpacing.xxs) {
     Image(systemName: isGranted ? "checkmark.circle.fill" : "xmark.circle.fill")
       .scaledFont(size: OmiType.caption)
@@ -1151,7 +1151,7 @@ private func statusBadge(isGranted: Bool) -> some View {
 
 /// Numbered how-to row. Neutral styling by default — purple is off-brand
 /// (repo UI rule: never use purple anywhere).
-private func instructionStep(
+@MainActor private func instructionStep(
   number: Int, text: String,
   numberColor: Color = OmiColors.textPrimary,
   circleFill: Color = OmiColors.backgroundTertiary

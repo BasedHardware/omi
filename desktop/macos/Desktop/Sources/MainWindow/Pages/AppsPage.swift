@@ -1,8 +1,8 @@
 import AppKit
 import Combine
-import GRDB
-import SwiftUI
+@preconcurrency import GRDB
 import OmiTheme
+import SwiftUI
 
 // MARK: - Safe Dismiss Button
 /// A dismiss button that prevents click-through to underlying views on macOS.

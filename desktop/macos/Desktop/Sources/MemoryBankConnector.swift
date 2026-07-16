@@ -42,11 +42,11 @@ enum MemoryBankConnector {
     }
   }
 
-  static var homeOverrideForTesting: URL?
-  static var claudeCLIPathOverrideForTesting: String?
-  static var codexCLIPathOverrideForTesting: String?
-  static var openClawCLIPathOverrideForTesting: String?
-  static var processTimeoutSecondsForTesting: TimeInterval?
+  nonisolated(unsafe) static var homeOverrideForTesting: URL?
+  nonisolated(unsafe) static var claudeCLIPathOverrideForTesting: String?
+  nonisolated(unsafe) static var codexCLIPathOverrideForTesting: String?
+  nonisolated(unsafe) static var openClawCLIPathOverrideForTesting: String?
+  nonisolated(unsafe) static var processTimeoutSecondsForTesting: TimeInterval?
   private static var home: URL { homeOverrideForTesting ?? FileManager.default.homeDirectoryForCurrentUser }
   private static var processTimeoutSeconds: TimeInterval { processTimeoutSecondsForTesting ?? 20 }
 

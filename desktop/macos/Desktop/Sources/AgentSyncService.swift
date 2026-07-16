@@ -1,5 +1,5 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// A bound query parameter for the sync batch query. Kept as a small typed enum
 /// (rather than `any DatabaseValueConvertible`) so `buildBatchQuery` is pure and

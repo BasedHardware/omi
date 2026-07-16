@@ -1,6 +1,6 @@
 import AppKit
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// Proactive insight assistant that provides contextual suggestions based on screen content
 actor InsightAssistant: ProactiveAssistant {

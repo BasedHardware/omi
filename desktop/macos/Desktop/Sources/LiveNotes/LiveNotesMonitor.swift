@@ -1,6 +1,6 @@
 import Combine
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 protocol LiveNoteGenerating {
   func generateNote(prompt: String, systemPrompt: String) async throws -> String
