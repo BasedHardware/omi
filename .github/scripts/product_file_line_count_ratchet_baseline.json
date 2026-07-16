@@ -5,7 +5,7 @@
     "backend/routers/chat.py": 1548,
     "backend/routers/developer.py": 2186,
     "backend/routers/mcp_sse.py": 1857,
-    "backend/routers/sync.py": 1983,
+    "backend/routers/sync.py": 1981,
     "backend/routers/transcribe.py": 3110,
     "backend/routers/users.py": 2040,
     "backend/scripts/validate-backend-runtime-env.py": 1694,
