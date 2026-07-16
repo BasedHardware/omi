@@ -37,6 +37,20 @@ final class RealtimeHubSessionHandoffPolicyTests: XCTestCase {
       .keepActive)
   }
 
+  func testGeminiPostTurnRefreshUsesOnlyItsPersistenceFencedBoundary() {
+    XCTAssertFalse(
+      RealtimePersistedVoiceContextRefreshPolicy.shouldHandoffImmediately(provider: .gemini))
+    XCTAssertTrue(
+      RealtimePersistedVoiceContextRefreshPolicy.shouldHandoffImmediately(provider: .openai))
+    XCTAssertTrue(
+      RealtimePersistedVoiceContextRefreshPolicy.shouldHandoffImmediately(provider: nil))
+  }
+
+  func testWarmSessionWaitsForOwnerBoundVoiceContext() {
+    XCTAssertFalse(RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: false))
+    XCTAssertTrue(RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: true))
+  }
+
   func testIdleMaintenanceDefersWhileAnotherLogicalTurnOwnsTheSession() {
     XCTAssertEqual(
       RealtimeHubSessionHandoffPolicy.decide(
