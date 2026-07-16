@@ -17,6 +17,13 @@ fi
 
 PASS=0
 FAIL=0
+TMPDIRS=()
+cleanup() {
+  for dir in "${TMPDIRS[@]}"; do
+    rm -rf "$dir"
+  done
+}
+trap cleanup EXIT
 ok() { echo "  ok: $1"; PASS=$((PASS + 1)); }
 nok() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
@@ -27,9 +34,17 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SENTINEL="$MACOS_DIR/Desktop/Tests/SemanticFeatureSentinels/StrictConcurrencySentinelTests.swift"
 
-# Force recompilation to surface the warning
+# Force recompilation to surface the warning even when the caller has already
+# warmed the package build cache.
 touch "$SENTINEL"
-BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --target SemanticFeatureSentinels 2>&1)
+rm -rf \
+  "$MACOS_DIR/Desktop/.build/debug/SemanticFeatureSentinels.build" \
+  "$MACOS_DIR/Desktop/.build/arm64-apple-macosx/debug/SemanticFeatureSentinels.build"
+if BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --target SemanticFeatureSentinels 2>&1); then
+  BUILD_STATUS=0
+else
+  BUILD_STATUS=$?
+fi
 
 if echo "$BUILD_OUTPUT" | grep -qi "non-Sendable\|non-sendable\|data race"; then
   ok "strict-concurrency=complete is active (non-Sendable warning produced)"
@@ -37,15 +52,16 @@ else
   nok "strict-concurrency=complete flag appears inactive (no non-Sendable warning in build output)"
 fi
 
-if echo "$BUILD_OUTPUT" | grep -qi "Build of target.*complete\|Build complete"; then
+if [[ "$BUILD_STATUS" -eq 0 ]] && echo "$BUILD_OUTPUT" | grep -qi "Build of target.*complete\|Build complete"; then
   ok "BareSlashRegexLiterals is active (sentinel target compiles)"
 else
   nok "sentinel target build failed"
+  echo "$BUILD_OUTPUT" | tail -80
 fi
 
 # --- NEGATIVE: SwiftPM silently accepts unknown feature names ---
 TMPDIR_FEAT=$(mktemp -d)
-trap 'rm -rf "$TMPDIR_FEAT"' EXIT
+TMPDIRS+=("$TMPDIR_FEAT")
 
 mkdir -p "$TMPDIR_FEAT/Sources/MyLib"
 cat > "$TMPDIR_FEAT/Package.swift" << 'SWIFT'

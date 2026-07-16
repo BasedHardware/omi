@@ -100,8 +100,7 @@ let package = Package(
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
         .process("Resources"),
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .testTarget(
       name: "Omi ComputerTests",
@@ -119,8 +118,7 @@ let package = Package(
         "OmiSupportTests",
         "OmiWALTests",
         "VoiceTurnDomainTests",
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .testTarget(
       name: "OmiSupportTests",
@@ -146,8 +144,7 @@ let package = Package(
         .target(name: "Omi Computer"),
         "VoiceTurnDomain",
       ],
-      path: "Tests/VoiceTurnDomainTests",
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      path: "Tests/VoiceTurnDomainTests"
     ),
     .testTarget(
       name: "SemanticFeatureSentinels",
@@ -156,8 +153,7 @@ let package = Package(
       swiftSettings: [
         .enableUpcomingFeature("BareSlashRegexLiterals"),
         .unsafeFlags(["-strict-concurrency=complete"]),
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
   ]
 )
