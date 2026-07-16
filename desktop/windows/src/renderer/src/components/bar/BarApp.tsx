@@ -84,6 +84,7 @@ export function BarApp(): React.JSX.Element {
   const [mode, setMode] = useState<BarMode | null>(null)
   const [sliding, setSliding] = useState<'in' | 'out'>('out')
   const [genesisNonce, setGenesisNonce] = useState(0)
+  const [failNonce, setFailNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
   // Speak replies to TYPED bar questions too (macOS
   // floatingBarTypedQuestionVoiceAnswersEnabled, default off). PTT/voice replies
@@ -226,6 +227,22 @@ export function BarApp(): React.JSX.Element {
       }),
     []
   )
+  // Any NON-SUCCESS turn end surfaces as the reducer projection's `hint` going
+  // '' → non-empty — the provider-failure family (provider dies post-commit /
+  // providerNoResponse / timeout), a capture/transcription/playback failure, AND
+  // benign guidance like `tooShort` ("hold longer to record"). We deliberately
+  // fire the tremor on ALL of them (reviewed with Chris): the collapsed pill shows
+  // no text, so the shake is the only "that didn't produce a reply" feedback for
+  // any of these — otherwise the orb drops silently to idle (indistinguishable
+  // from success). `hint` is the ONLY reader today; edge-detect the rising
+  // transition and bump failNonce. Tracks the previous hint in a ref so a hint that
+  // merely persists (or auto-dismisses back to '') never re-fires.
+  const prevHintRef = useRef('')
+  useEffect(() => {
+    const rising = prevHintRef.current === '' && hubOrb.hint !== ''
+    prevHintRef.current = hubOrb.hint
+    if (rising) setFailNonce((n) => n + 1)
+  }, [hubOrb.hint])
   // A WaveformSource fed by the projected orb level (no per-frame audio crosses
   // windows — just the coarse loudness). Stable ref so the Orb reads the latest.
   const hubWaveRef = useRef<WaveformSource>({
@@ -511,6 +528,7 @@ export function BarApp(): React.JSX.Element {
                 state={orbState}
                 amplitudeSource={amplitudeSource}
                 genesisNonce={genesisNonce}
+                failNonce={failNonce}
                 visible={mode !== null}
               />
             </div>

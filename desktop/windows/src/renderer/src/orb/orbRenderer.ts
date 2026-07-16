@@ -79,6 +79,7 @@ export class OrbRenderer {
       'u_rectHalf',
       'u_rectCorner',
       'u_genesis',
+      'u_poseOffset',
       'u_noiseTime',
       'u_noiseAmp',
       'u_noiseFreq',
@@ -123,6 +124,7 @@ export class OrbRenderer {
     gl.uniform2f(this.u.u_rectHalf, rect.halfW, rect.halfH)
     gl.uniform1f(this.u.u_rectCorner, rect.corner)
     gl.uniform1f(this.u.u_genesis, frame.genesis)
+    gl.uniform1f(this.u.u_poseOffset, frame.poseOffsetX)
     gl.uniform1f(this.u.u_noiseTime, frame.noiseTime)
     // waveAmp is the amplitude-coupled, BOUNDED wobble (choreography shapes
     // the raw level through a soft-knee into a fixed range).

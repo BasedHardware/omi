@@ -56,6 +56,8 @@ export type OrbProps = {
   amplitudeSource?: WaveformSource | (() => WaveformSource | null) | null
   /** Bump to replay the genesis spring (materialize from scale 0). */
   genesisNonce?: number
+  /** Bump to play the "failed voice turn" gesture (a brief horizontal tremor). */
+  failNonce?: number
   /** 0fps hard-off (e.g. the bar window is hidden). */
   visible?: boolean
   preset?: keyof typeof ORB_PRESETS
@@ -84,6 +86,7 @@ export function Orb({
   speechActive = false,
   amplitudeSource = null,
   genesisNonce = 0,
+  failNonce = 0,
   visible = true,
   preset = 'default',
   className
@@ -188,6 +191,10 @@ export function Orb({
   useEffect(() => {
     if (genesisNonce > 0) animatorRef.current?.summon()
   }, [genesisNonce, ready])
+
+  useEffect(() => {
+    if (failNonce > 0) animatorRef.current?.failGesture()
+  }, [failNonce, ready])
 
   // Live amplitude: sample the source ~30Hz while speech is active.
   const speechLive = speechActive || state === 'speaking'
