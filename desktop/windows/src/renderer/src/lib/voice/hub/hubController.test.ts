@@ -440,6 +440,58 @@ describe('HubController — A7c reconnect policy (B: strike-bounded re-warm)', (
     expect(h.pendingReconnect()).toBe(false)
   })
 
+  it('surfaces the silent post-commit death: a fallback event fires exactly when the re-warm budget runs out', async () => {
+    const h = harness()
+    await warmed(h) // socket connected at now=1000
+
+    // A completed turn proves this is POST-COMMIT (and resets the strike budget to 0),
+    // then the warm socket dies and the re-warm keeps rebuilding and losing FAST (each
+    // attempt alive < the idle window), so nothing resets the budget — the exact repeated
+    // post-commit provider death that used to drop every later turn to a silent cascade.
+    h.getSession().events.onTurnDone?.(null)
+    expect(trackEvent).not.toHaveBeenCalled()
+
+    // The first death is of the connected socket; each subsequent re-warm fails fast.
+    let reWarms = 0
+    h.getSession().fail('websocket closed (1006)', true, 1006) // aliveForMs 0 → a fast strike
+    for (let i = 0; i < 12; i++) {
+      if (!h.pendingReconnect()) break // budget exhausted → re-warm stopped
+      h.fireReconnect()
+      await tick() // next session connecting
+      reWarms++
+      await failBeforeConnect(h, 1006) // …and it dies before connecting → another strike
+    }
+
+    // 5 re-warms, then the circuit trips. The death is no longer silent: exactly one
+    // shared fallback event (closed enums, no new counter), distinct from the warm-wait
+    // `degraded` handoff and the host's per-turn `exhausted` terminal.
+    expect(reWarms).toBe(5)
+    expect(h.pendingReconnect()).toBe(false)
+    expect(trackEvent).toHaveBeenCalledExactlyOnceWith('fallback_triggered', {
+      component: 'ptt_cascade',
+      from: 'hub',
+      to: 'none',
+      reason: 'circuit_open',
+      outcome: 'exhausted'
+    })
+  })
+
+  it('does NOT emit a fallback event while the hub self-heals below the strike budget', async () => {
+    const h = harness()
+    await warmed(h)
+    h.now.value = 5_000 // alive 4 s (< idle window) → a real, strike-consuming failure
+
+    // A single post-commit death that re-warms successfully is silent UX healing — it
+    // must NOT emit the `exhausted` fallback (that is reserved for a dead endpoint).
+    h.getSession().fail('websocket closed (1011)', true, 1011)
+    h.fireReconnect()
+    await tick()
+    h.getSession().connect()
+
+    expect(h.controller.isWarm()).toBe(true)
+    expect(trackEvent).not.toHaveBeenCalled()
+  })
+
   it('a completed turn resets the strike budget (a bare connect does NOT)', async () => {
     const h = harness()
     const p = h.controller.ensureWarm()
