@@ -180,6 +180,33 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
 
 
+def test_rendered_dev_pusher_canonical_memory_literals_match_source_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("dev")
+    expected = {
+        "MEMORY_MODE": "read",
+        "MEMORY_ENABLED_USERS": "vi7SA9ckQCe4ccobWNxlbdcNdC23",
+        "MEMORY_V3_GET_ENABLED": "true",
+        "MEMORY_CANONICAL_PROMOTION_CRON_ENABLED": "false",
+        "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED": "true",
+        "MEMORY_TYPESENSE_COLLECTION": "canonical_memory_atoms",
+    }
+
+    assert preflight.dev_pusher_literal_env_contract() == expected
+    assert {name: preflight.direct_pusher_literals(deployment)[name] for name in expected} == expected
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == []
+
+
+def test_dev_pusher_contract_rejects_canonical_memory_literal_drift(preflight: SimpleNamespace):
+    deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    memory_mode = next(item for item in env if item["name"] == "MEMORY_MODE")
+    memory_mode["value"] = "off"
+
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == [
+        "dev pusher literal contract mismatch for MEMORY_MODE: expected 'read', got 'off'"
+    ]
+
+
 def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: SimpleNamespace):
     deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]

@@ -159,12 +159,33 @@ environments:
           MEMORY_TYPESENSE_COLLECTION:
             value: canonical_memory_atoms
             category: memory_rollout
-      # Direct pusher bindings are kept here as the dev source contract. The
-      # deploy preflight compares this inventory to the rendered chart and
-      # queries only live object/key metadata before a Helm upgrade.
+      # Direct pusher bindings and literal rollout flags are kept here as the
+      # dev source contract. The deploy preflight compares this inventory to
+      # the rendered chart and queries only live object/key metadata before a
+      # Helm upgrade.
       pusher:
         values_file: backend/charts/pusher/dev_omi_pusher_values.yaml
         env:
+          # Pusher owns inline finalization in dev and must not default an
+          # enrolled canonical user back to MEMORY_MODE=off.
+          MEMORY_MODE:
+            value: read
+            category: memory_rollout
+          MEMORY_ENABLED_USERS:
+            value: vi7SA9ckQCe4ccobWNxlbdcNdC23
+            category: memory_rollout
+          MEMORY_V3_GET_ENABLED:
+            value: 'true'
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_CRON_ENABLED:
+            value: 'false'
+            category: memory_rollout
+          MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED:
+            value: 'true'
+            category: memory_rollout
+          MEMORY_TYPESENSE_COLLECTION:
+            value: canonical_memory_atoms
+            category: memory_rollout
           GITHUB_TOKEN:
             secret:
               name: dev-omi-backend-secrets
