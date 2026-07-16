@@ -591,7 +591,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(managerSource.contains("var sharedFloatingProvider: ChatProvider? { historyChatProvider }"))
     XCTAssertTrue(
       managerSource.contains(
-        "private func activeFloatingProvider() -> ChatProvider? {\n        historyChatProvider\n    }"))
+        "private func activeFloatingProvider() -> ChatProvider? {\n    historyChatProvider\n  }"))
     XCTAssertTrue(managerSource.contains("provider.canInterruptActiveTurn(owner: turnOwner)"))
     XCTAssertTrue(managerSource.contains("turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice))"))
     XCTAssertTrue(managerSource.contains("$0.clientTurnId == clientTurnId && $0.sender == .ai"))

@@ -92,7 +92,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("guard let runId = canonicalString(entry[\"runId\"]) else"))
     XCTAssertTrue(source.contains("canonical projection source="))
     XCTAssertTrue(source.contains("pill.canonicalSessionId = sessionId"))
-    XCTAssertTrue(source.contains("updateCanonicalRun(\n                for: pill,\n                runId: runId,"))
+    XCTAssertTrue(source.contains("    updateCanonicalRun(\n      for: pill,\n      runId: runId,"))
     XCTAssertTrue(source.contains("attemptId: canonicalString(entry[\"attemptId\"]),"))
     XCTAssertTrue(source.contains("reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)"))
     XCTAssertTrue(source.contains("removeRenderedProjection(pillID: pill.id)"))
@@ -120,7 +120,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("private func ensureTerminalJournalMaterialization(for pill: AgentPill)"))
     XCTAssertTrue(
       source.contains(
-        "if isCurrentRunAttempt(pillID: pill.id, generation: generation) {\n                runTasksByPill[pill.id] = nil"
+        "      if isCurrentRunAttempt(pillID: pill.id, generation: generation) {\n        runTasksByPill[pill.id] = nil"
       ))
     XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(status)"))
     XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(inspection.status)"))
@@ -309,7 +309,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     )
     XCTAssertFalse(windowSource.contains("window.state.chatHistory.append"))
     XCTAssertTrue(responseSource.contains("} else if isLoading {"))
-    XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty {"))
+    XCTAssertTrue(responseSource.contains("&& message.displayResources.isEmpty\n            {"))
   }
 
   func testTypingIndicatorUsesSharedNotchThinkingMarkInsteadOfBounce() throws {
@@ -445,7 +445,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("geometry.size.height - notchSurfaceBottomInset"))
     XCTAssertTrue(source.contains(".padding(.horizontal, notchSurfaceHorizontalInset)"))
     XCTAssertTrue(source.contains(".padding(.bottom, notchSurfaceBottomInset)"))
-    XCTAssertTrue(windowSource.contains("if usesNotchIsland {\n            return NSSize("))
+    XCTAssertTrue(windowSource.contains("    if usesNotchIsland {\n      return NSSize("))
     XCTAssertFalse(
       windowSource.contains(
         "let targetSize = self.currentSurfaceSizeForCurrentScreen(frameIncludesVoiceGlow: wasActive)"))
@@ -477,7 +477,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(view.contains("private var notchAgentLobe: some View"))
     XCTAssertTrue(view.contains("private var voiceListeningView: some View"))
     XCTAssertTrue(
-      view.contains("if state.usesNotchIsland || state.showingAIConversation {\n                notchChrome"))
+      view.contains("      if state.usesNotchIsland || state.showingAIConversation {\n        notchChrome"))
     XCTAssertFalse(response.contains("VoiceWaveformBars("))
     XCTAssertFalse(view.contains("voiceFollowUpView"))
     XCTAssertFalse(view.contains("toggleFollowUpVoice"))
@@ -508,7 +508,7 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(
       source.contains(
-        "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
+        "            notchAgentLogoHitTarget\n              .frame(width: notchChromeLayoutWidth, height: notchChromeHeight)"
       ))
     XCTAssertFalse(
       source.contains(
@@ -551,12 +551,12 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("responseStreamingResizeStep"))
     XCTAssertTrue(
       windowSource.contains(
-        "let steppedHeight = (targetHeight / Self.responseStreamingResizeStep).rounded(.up) * Self.responseStreamingResizeStep"
+        "let steppedHeight =\n          (targetHeight / Self.responseStreamingResizeStep).rounded(.up) * Self.responseStreamingResizeStep"
       ))
     XCTAssertTrue(
       windowSource.contains(
         "to: NSSize(width: max(self.expandedContentWidth, self.currentResponseSurfaceWidth()), height: clampedHeight)"))
-    XCTAssertTrue(windowSource.contains("animated: false,\n                    anchorTop: true"))
+    XCTAssertTrue(windowSource.contains("      animated: false,\n      anchorTop: true"))
     XCTAssertTrue(viewSource.contains(".transition(.opacity)"))
     XCTAssertFalse(
       viewSource.contains(
@@ -610,17 +610,17 @@ final class AgentPillLifecycleTests: XCTestCase {
     // separate static header mark.
     XCTAssertFalse(source.contains("AgentProviderLogoMark(provider: provider, statusColor: statusColor, size: 16)"))
     XCTAssertTrue(
-      source.contains("Color.clear\n                .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)")
+      source.contains("      Color.clear\n        .frame(width: NotchAgentStackMetrics.listOrbSlotWidth, height: 18)")
     )
     XCTAssertEqual(
       source.components(separatedBy: "AgentProviderLogoMark(provider: provider").count - 1,
       1,
       "Notch row path must construct the provider logo mark exactly once (only in notchAgentIdentityMark)"
     )
-    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n                        provider: pill.providerIdentity"))
+    XCTAssertTrue(source.contains("notchAgentIdentityMark(\n            provider: pill.providerIdentity,"))
     XCTAssertTrue(
       source.contains(
-        "let rowWidth = max(0, min(width - NotchAgentStackMetrics.listHorizontalInset * 2, FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"
+        "let rowWidth = max(\n        0,\n        min(\n          width - NotchAgentStackMetrics.listHorizontalInset * 2,\n          FloatingControlBarWindow.notchExpandedWidth - NotchAgentStackMetrics.listHorizontalInset * 2))"
       ))
     XCTAssertTrue(source.contains("static let listHorizontalInset: CGFloat = 12"))
     XCTAssertTrue(source.contains("static let listRowLeadingPadding: CGFloat = 12"))
@@ -647,13 +647,13 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains(".transition(.identity)"))
     XCTAssertTrue(
       source.contains(
-        "notchOmiChatRow\n                            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
+        "            notchOmiChatRow\n              .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
       ))
     XCTAssertTrue(
       source.contains(".allowsHitTesting(!shouldUseOmiChatOverlayHitTarget && notchSwitcherProgress > 0.6)"))
     XCTAssertTrue(
       source.contains(
-        "notchOmiChatOverlayHitTarget\n                        .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
+        "          notchOmiChatOverlayHitTarget\n            .frame(width: notchHoverRowWidth, height: FloatingControlBarWindow.notchAgentListRowHeight)"
       ))
     XCTAssertTrue(source.contains(".offset(y: notchChromeHeight)"))
     XCTAssertTrue(source.contains(".zIndex(2)"))
@@ -669,7 +669,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("static let logoFrameSize: CGFloat = 21"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(
-      source.contains(".onTapGesture {\n                    openAgentChatsFromNotchLogo()\n                }"))
+      source.contains("        .onTapGesture {\n          openAgentChatsFromNotchLogo()\n        }"))
     XCTAssertTrue(source.contains("Image(systemName: \"gearshape.fill\")"))
     XCTAssertTrue(source.contains("private func openAgentChatsFromNotchLogo()"))
     XCTAssertTrue(source.contains("showAgentListFromConversation()"))
@@ -688,7 +688,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("private var showingNotchWaveform: Bool"))
     XCTAssertTrue(source.contains("private var escToClearHint: some View"))
     XCTAssertTrue(
-      source.contains("if state.hasVisibleConversation {\n                    escToClearHint\n                }"))
+      source.contains("        if state.hasVisibleConversation {\n          escToClearHint\n        }"))
     XCTAssertTrue(source.contains("canClearVisibleConversation: false"))
     XCTAssertTrue(source.contains("showsHeader: false"))
     XCTAssertTrue(responseSource.contains("var showsHeader: Bool = true"))
@@ -719,7 +719,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(windowSource.contains("static let notchActiveSideWidth: CGFloat = 42"))
     XCTAssertTrue(windowSource.contains("func resizeForAgentSwitcher(visible: Bool)"))
     XCTAssertTrue(windowSource.contains("max(collapsedBarSize.width, Self.notchExpandedWidth)"))
-    XCTAssertTrue(windowSource.contains("if state.showingAIConversation {\n                return\n            }"))
+    XCTAssertTrue(windowSource.contains("      if state.showingAIConversation {\n        return\n      }"))
   }
 
   func testSpacesTransitionDoesNotReplayNotchRevealPop() throws {
@@ -820,16 +820,16 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(
       responseSource.contains("var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil"))
     XCTAssertTrue(
-      responseSource.contains("onOpenAgent: onOpenAgent,\n                        onOpenAgentRef: onOpenAgentRef"))
+      responseSource.contains("            onOpenAgent: onOpenAgent,\n            onOpenAgentRef: onOpenAgentRef"))
     XCTAssertFalse(responseSource.contains("openNewlySpawnedAgentIfNeeded()"))
     XCTAssertFalse(responseSource.contains("autoOpenedSpawnedAgentIDs"))
     XCTAssertTrue(
       viewSource.contains(
-        "onOpenAgent: { agentID, completion in\n                openAgentInChat(agentID: agentID, completion: completion)"
+        "      onOpenAgent: { agentID, completion in\n        openAgentInChat(agentID: agentID, completion: completion)"
       ))
     XCTAssertTrue(
       viewSource.contains(
-        "onOpenAgentRef: { ref, completion in\n                openAgentInChat(ref: ref, completion: completion)"))
+        "      onOpenAgentRef: { ref, completion in\n        openAgentInChat(ref: ref, completion: completion)"))
     XCTAssertTrue(chatBubbleSource.contains("var onOpenAgent: ((UUID, @escaping (Bool) -> Void) -> Void)? = nil"))
     XCTAssertTrue(
       chatBubbleSource.contains("var onOpenAgentRef: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? = nil"))
@@ -842,7 +842,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(chatBubbleSource.contains("AgentTimelineOpenFeedback.shouldShowUnavailable(succeeded:"))
     XCTAssertTrue(
       viewSource.contains(
-        "openAgentInChat(\n            ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),\n            completion: completion"
+        "    openAgentInChat(\n      ref: AgentTimelineRef(pillId: agentID, sessionId: nil, runId: nil),\n      completion: completion"
       ))
   }
 
@@ -965,14 +965,14 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(source.contains("On the first load of a saved conversation, follow the latest message."))
     XCTAssertTrue(
-      source.contains("scrollToBottom(proxy: proxy)\n        scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
+      source.contains("    scrollToBottom(proxy: proxy)\n    scheduleInitialScroll(proxy: proxy, delay: 0.05)"))
     XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.18)"))
     XCTAssertTrue(source.contains("scheduleInitialScroll(proxy: proxy, delay: 0.45)"))
     XCTAssertTrue(source.contains("private func handleViewportSizeChange(_ size: CGSize, proxy: ScrollViewProxy)"))
     XCTAssertTrue(source.contains(".background(viewportResizeDetector(proxy: proxy))"))
     XCTAssertTrue(
       source.contains(
-        "scrollMode = .followingBottom\n        hasActivityBelow = false\n        userIsScrolling = false"))
+        "    scrollMode = .followingBottom\n    hasActivityBelow = false\n    userIsScrolling = false"))
     XCTAssertFalse(source.contains("Find the last user message"))
   }
 
@@ -1344,14 +1344,14 @@ final class AgentPillLifecycleTests: XCTestCase {
     // Both the Omi Chat header and subagent header should enter one shared
     // window transition. Back from a subagent goes to the row list on every
     // display mode when pills exist; otherwise main-input/main-response.
-    XCTAssertTrue(viewSource.contains("onBackToAgentRows: {\n                        showAgentListFromConversation()"))
+    XCTAssertTrue(viewSource.contains("          onBackToAgentRows: {\n            showAgentListFromConversation()"))
     XCTAssertTrue(
       viewSource.contains(
-        "private func showAgentListFromConversation() {\n        (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()\n    }"
+        "  private func showAgentListFromConversation() {\n    (window as? FloatingControlBarWindow)?.leaveAgentConversation() ?? onCloseAI()\n  }"
       ))
     XCTAssertTrue(windowSource.contains("func leaveAgentConversation()"))
     XCTAssertTrue(
-      windowSource.contains("if !AgentPillsManager.shared.pills.isEmpty {\n            showAgentRowsFromConversation()")
+      windowSource.contains("    if !AgentPillsManager.shared.pills.isEmpty {\n      showAgentRowsFromConversation()")
     )
     XCTAssertTrue(windowSource.contains("private func showAgentRowsFromConversation()"))
     XCTAssertTrue(windowSource.contains("private func showMainConversationFromAgent()"))
@@ -1376,10 +1376,10 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(
       bodySource.contains(
-        "if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {\n                unifiedFloatingSurface"
+        "if state.usesNotchIsland || state.showingAIConversation || state.isNotchHoverMenuVisible {\n        unifiedFloatingSurface"
       ))
     XCTAssertTrue(viewSource.contains("private var unifiedFloatingSurface: some View"))
-    XCTAssertTrue(viewSource.contains("if state.showingAIConversation {\n                conversationView"))
+    XCTAssertTrue(viewSource.contains("      if state.showingAIConversation {\n        conversationView"))
     XCTAssertFalse(bodySource.contains("conversationView"))
     XCTAssertFalse(bodySource.contains("AskAIInputView("))
     XCTAssertFalse(bodySource.contains("AIResponseView("))
@@ -1436,7 +1436,7 @@ final class AgentPillLifecycleTests: XCTestCase {
         """))
     XCTAssertTrue(
       source.contains(
-        "pill.status = .failed(\"Agent ended before reporting a final result\")\n            pill.completedAt = Date()")
+        "      pill.status = .failed(\"Agent ended before reporting a final result\")\n      pill.completedAt = Date()")
     )
     XCTAssertTrue(source.contains("Self.ensureFailureMessage(errorText, for: pill)"))
     XCTAssertTrue(
@@ -1451,7 +1451,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try agentPillSource()
     let statusStoreSource = try agentRuntimeStatusStoreSource()
 
-    XCTAssertTrue(source.contains("if pill.status.isFinished {\n            return\n        }"))
+    XCTAssertTrue(source.contains("    if pill.status.isFinished {\n      return\n    }"))
     XCTAssertTrue(source.contains("if pill.status.isFinished, pill.viewedAt != nil"))
     XCTAssertTrue(source.contains("let activity = Self.describeActivity(for: aiMessage)"))
     XCTAssertFalse(source.contains("AgentRuntimeStatusStore.shared.recordPresentationCompletion("))
@@ -1475,7 +1475,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     let logoMarkSource = try agentProviderLogoMarkSource()
     let viewSource = try floatingControlBarViewSource()
 
-    XCTAssertTrue(source.contains("let modelForSpawn = bridgeHarnessOverride == nil"))
+    XCTAssertTrue(source.contains("let modelForSpawn =\n      bridgeHarnessOverride == nil"))
     XCTAssertTrue(source.contains("model: modelForSpawn"))
     XCTAssertTrue(source.contains("model: pill.bridgeHarnessOverride == nil ? pill.model : nil"))
     XCTAssertTrue(source.contains("harnessMode: bridgeHarnessOverride"))
@@ -1494,7 +1494,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     // the dot via the `provider != nil` guard.
     XCTAssertTrue(logoMarkSource.contains("} else if provider != nil {"))
     XCTAssertTrue(logoMarkSource.contains("Text(\"🤖\")"))
-    XCTAssertTrue(logoMarkSource.contains("statusColor\n                    .mask("))
+    XCTAssertTrue(logoMarkSource.contains("        statusColor\n          .mask("))
   }
 
   func testCanonicalPillLifecycleQueuesFollowUpsAndCancelsActiveDismissals() throws {
@@ -1517,11 +1517,11 @@ final class AgentPillLifecycleTests: XCTestCase {
         "switch await self.cancelActiveRunBeforeFollowUp(runId: activeRunId, pill: pill, generation: generation)"))
     XCTAssertTrue(
       source.contains(
-        "case .cancelled:\n                        completion?(.providerFailed)\n                        return"))
+        "          case .cancelled:\n            completion?(.providerFailed)\n            return"))
     XCTAssertTrue(source.contains("private enum ActiveRunCancellationResult"))
     XCTAssertTrue(
       source.contains(
-        "private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill, generation: Int) async -> ActiveRunCancellationResult"
+        "private func cancelActiveRunBeforeFollowUp(runId: String, pill: AgentPill, generation: Int) async\n    -> ActiveRunCancellationResult"
       ))
     XCTAssertTrue(source.contains("let shouldCancelRun = pill?.status.isFinished == false"))
     XCTAssertTrue(source.contains("pendingFollowUpsByPill[pillID] = nil"))
@@ -1649,7 +1649,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("private static let frameNoopEpsilon: CGFloat = 0.5"))
     XCTAssertTrue(source.contains("private var pendingFrameAnimationTarget: NSRect?"))
     XCTAssertTrue(source.contains("let wasResizable = styleMask.contains(.resizable)"))
-    XCTAssertTrue(source.contains("let alreadyAnimatingToTarget = pendingFrameAnimationTarget.map"))
+    XCTAssertTrue(source.contains("let alreadyAnimatingToTarget =\n      pendingFrameAnimationTarget.map"))
     XCTAssertTrue(source.contains("if alreadyAtTarget, wasResizable == makeResizable"))
     XCTAssertTrue(source.contains("if alreadyAnimatingToTarget, wasResizable == makeResizable"))
     XCTAssertTrue(source.contains("frameAnimationToken += 1"))

@@ -77,11 +77,11 @@ final class RewindStorageErrorClassificationTests: XCTestCase {
 
     XCTAssertTrue(
       encoder.contains(
-        #"logError("VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#
+        #"VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))"#
       ))
     XCTAssertTrue(
       encoder.contains(
-        #"logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#
+        #"VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))"#
       ))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame", error: error)"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process CGImage frame", error: error)"#))

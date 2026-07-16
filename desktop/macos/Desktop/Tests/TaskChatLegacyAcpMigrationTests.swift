@@ -122,7 +122,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatUserStopDoesNotAppendFailureText() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("if !failedByUserStop {\n                        Self.applyFailureTextIfNeeded"))
+    XCTAssertTrue(source.contains("if !failedByUserStop {\n            Self.applyFailureTextIfNeeded"))
     XCTAssertTrue(source.contains("terminalStatus: .failed"))
     XCTAssertFalse(source.contains("failedByUserStop ? .completed : .failed"))
   }
@@ -202,7 +202,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       return XCTFail("surfaceRuntimeFailure function missing")
     }
     let rest = source[functionRange.lowerBound...]
-    let nextFunction = rest.range(of: "\n    private func observeRuntimeProjectionFailures()")
+    let nextFunction = rest.range(of: "\n  private func observeRuntimeProjectionFailures()")
     let body = nextFunction.map { String(rest[..<$0.lowerBound]) } ?? String(rest)
 
     XCTAssertFalse(body.contains("TaskAgentStatusRegistry.shared.markFailed"))
@@ -220,7 +220,7 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       return XCTFail("terminal failure branch missing")
     }
     let rest = source[branchRange.lowerBound...]
-    guard let elseRange = rest.range(of: "\n                } else {") else {
+    guard let elseRange = rest.range(of: "\n        } else {") else {
       return XCTFail("terminal failure branch end missing")
     }
     let branch = String(rest[..<elseRange.lowerBound])

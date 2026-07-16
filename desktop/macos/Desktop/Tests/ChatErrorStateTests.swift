@@ -253,7 +253,7 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
     XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
-    XCTAssertTrue(source.contains("self.draftText == text else { return }"))
+    XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
 

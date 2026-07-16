@@ -9,7 +9,7 @@ final class DashboardCaptureStateTests: XCTestCase {
       "DashboardPage should centralize live capture state so the header reflects the running monitor"
     )
     XCTAssertTrue(
-      source.contains("if isCaptureLive {\n            return .active\n        }"),
+      source.contains("if isCaptureLive {\n      return .active\n    }"),
       "Capture status should light up when monitoring is live, even if persisted intent is stale"
     )
     XCTAssertFalse(
@@ -22,7 +22,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     let source = try dashboardSource()
 
     XCTAssertTrue(
-      source.contains("syncCaptureState()\n        let enabled = !isCaptureLive"),
+      source.contains("syncCaptureState()\n    let enabled = !isCaptureLive"),
       "Capture toggles should reconcile the live monitor before deciding whether the click starts or stops capture"
     )
     XCTAssertFalse(
@@ -131,11 +131,11 @@ final class DashboardCaptureStateTests: XCTestCase {
       normalizedSource.contains("OverlayModalEscapeCatcher { dismissAppsPopup()"))
     XCTAssertTrue(
       source.contains(
-        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .imports)"
+        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n        openAppsPopup(initialSection: .imports)"
       ))
     XCTAssertTrue(
       source.contains(
-        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n                openAppsPopup(initialSection: .exports)"
+        "HomeAIChoiceButton(title: \"More\", systemImage: \"plus\") {\n        openAppsPopup(initialSection: .exports)"
       ))
     XCTAssertFalse(source.contains("@State private var dashboardContentSize"))
     XCTAssertFalse(source.contains(".dismissableSheet(isPresented: $isShowingAppsPopup)"))
@@ -166,7 +166,7 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("private var legacySelectedCatalogApp: Binding<OmiApp?>"))
     XCTAssertTrue(source.contains("private var legacySelectedImportConnector: Binding<ImportConnector?>"))
     XCTAssertTrue(source.contains("private var legacySelectedExportDestination: Binding<MemoryExportDestination?>"))
-    XCTAssertTrue(source.contains("homeConnectSheetOverlay(\n                    contentWidth: proxy.size.width"))
+    XCTAssertTrue(source.contains("homeConnectSheetOverlay(\n          contentWidth: proxy.size.width"))
     XCTAssertTrue(
       source.contains("let sheetSize = homeConnectSheetSize(panelWidth: panelWidth, panelHeight: panelHeight)"))
     XCTAssertTrue(source.contains(".position(x: contentWidth / 2, y: panelTop + panelHeight / 2)"))
@@ -228,9 +228,9 @@ final class DashboardCaptureStateTests: XCTestCase {
     XCTAssertTrue(source.contains("DismissButton(action: onDismiss)"))
     XCTAssertTrue(
       source.contains(
-        "case .imports:\n                                ImportsSection(statusStore: connectorStatusStore)"))
+        "case .imports:\n                ImportsSection(statusStore: connectorStatusStore)"))
     XCTAssertTrue(
-      source.contains("case .exports:\n                                ExportsSection(statuses: exportStatuses)"))
+      source.contains("case .exports:\n                ExportsSection(statuses: exportStatuses)"))
     XCTAssertTrue(source.contains("private func selectApp(_ app: OmiApp)"))
     XCTAssertTrue(source.contains("private func selectConnector(_ connector: ImportConnector)"))
     XCTAssertTrue(source.contains("private func selectDestination(_ destination: MemoryExportDestination)"))
@@ -289,7 +289,7 @@ final class DashboardCaptureStateTests: XCTestCase {
       "Home overlays must not rely on onExitCommand — it requires focus the overlays never receive"
     )
     XCTAssertTrue(
-      apps.contains("OverlayModalEscapeCatcher {\n                            log(\"DISMISSABLE_SHEET: Escape pressed"))
+      apps.contains("OverlayModalEscapeCatcher {\n              log(\"DISMISSABLE_SHEET: Escape pressed"))
 
     // While an overlay is up, the content underneath must be hidden from
     // VoiceOver / Full Keyboard Access and the panel marked as modal.
