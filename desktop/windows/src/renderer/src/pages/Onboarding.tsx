@@ -22,6 +22,7 @@ import { AutomationPermissionStep } from '../components/onboarding/AutomationPer
 import { ShortcutSetupStep } from '../components/onboarding/ShortcutSetupStep'
 import { VoiceIntroStep } from '../components/onboarding/VoiceIntroStep'
 import { AskDemoStep } from '../components/onboarding/AskDemoStep'
+import { DataSourcesStep } from '../components/onboarding/DataSourcesStep'
 import { GoalStep } from '../components/onboarding/GoalStep'
 import { AutoCreatedTasksStep } from '../components/onboarding/AutoCreatedTasksStep'
 import { createGoal } from '../lib/goals'
@@ -38,7 +39,7 @@ import {
   useOnboardingGraph
 } from '../lib/onboardingGraph'
 
-const TOTAL_STEPS = 14
+const TOTAL_STEPS = 15
 
 export function Onboarding(): React.JSX.Element {
   // Resume where the user left off if they quit mid-onboarding. Clamped in case
@@ -242,6 +243,19 @@ export function Onboarding(): React.JSX.Element {
       )
     }
     if (step === 12) {
+      // Data sources: curated OAuth-connector + memory-log import list to seed the
+      // second brain with more context. Nothing required — Continue and Skip both
+      // advance to the Goal step.
+      return (
+        <DataSourcesStep
+          stepIndex={step}
+          totalSteps={TOTAL_STEPS}
+          onContinue={next}
+          onSkip={next}
+        />
+      )
+    }
+    if (step === 13) {
       return (
         <GoalStep
           stepIndex={step}
@@ -265,8 +279,9 @@ export function Onboarding(): React.JSX.Element {
   // map: the name screen (0), the "I'm going to ask you for a few permissions"
   // screen (3, TrustStep), the background/privacy consent screen (4), the
   // floating-bar steps (9 shortcut, 10 voice, 11 ask demo), and the final
-  // auto-created-tasks screen (13). The Goal step (12) keeps the map (it
-  // personalizes its suggestion from the revealed app nodes). The map is only
+  // auto-created-tasks screen (14). The Data Sources (12) and Goal (13) steps keep
+  // the map — Data Sources reinforces "your 2nd brain is live" and Goal
+  // personalizes its suggestion from the revealed app nodes. The map is only
   // hidden (display:none), never unmounted, so it persists and returns smoothly
   // on the next steps.
   const hideBrainMap =
@@ -276,7 +291,7 @@ export function Onboarding(): React.JSX.Element {
     step === 9 ||
     step === 10 ||
     step === 11 ||
-    step === 13
+    step === 14
 
   return (
     <div className="app-canvas relative flex h-full">
