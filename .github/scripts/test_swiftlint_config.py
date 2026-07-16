@@ -3,13 +3,16 @@
 
 Checks that .swiftlint.yml has exactly the safety-only rules and generated-code
 policy, that the baseline exists and is valid JSON, and that the explicit macOS
-CI runner has pinned SwiftLint provenance and fails on warnings.
+CI runner verifies an exact SwiftLint release artifact and fails on warnings.
 """
 
 from __future__ import annotations
 
 import json
+import os
 import re
+import subprocess
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -133,15 +136,83 @@ class SwiftLintConfigTests(unittest.TestCase):
   def test_pinned_runner_is_the_macos_manifest_producer(self):
     wrapper = WRAPPER_PATH.read_text(encoding="utf-8")
     self.assertIn('SWIFTLINT_VERSION="0.65.0"', wrapper)
-    self.assertIn('SWIFTLINT_COMMIT="fd768ba9a0e8a4f96d550d98de6c4cf2af565cf1"', wrapper)
-    self.assertIn("github.com/realm/SwiftLint.git", wrapper)
+    self.assertIn(
+      'SWIFTLINT_RELEASE_URL="https://github.com/realm/SwiftLint/releases/download/${SWIFTLINT_VERSION}/portable_swiftlint.zip"',
+      wrapper,
+    )
+    self.assertIn(
+      'SWIFTLINT_RELEASE_SHA256="d6cb0aa7a2f5f1ef306fc9e37bcb54dc9a26facc8f7784ac0c3dd3eccf5c6ba6"',
+      wrapper,
+    )
+    self.assertIn(
+      'SWIFTLINT_BINARY_SHA256="06bdd57b59087dde8680ba6a62452defd71babd0513023f19ddfc6773708ba34"',
+      wrapper,
+    )
+    self.assertIn("curl --fail --location --proto '=https' --tlsv1.2 --retry 3", wrapper)
+    self.assertIn("shasum -a 256", wrapper)
+    self.assertIn('unzip -Z -1 "$archive" | sort', wrapper)
+    self.assertIn('[ -f "$BINARY" ] && [ ! -L "$BINARY" ]', wrapper)
+    self.assertIn('[ "$binary_sha" = "$SWIFTLINT_BINARY_SHA256" ]', wrapper)
+    self.assertNotIn("swift build -c release --product swiftlint", wrapper)
     self.assertIn("--strict --config", wrapper)
-    self.assertIn("--depth 1 --branch", wrapper)
 
     manifest = MANIFEST_PATH.read_text(encoding="utf-8")
     self.assertIn("- id: desktop-swiftlint\n", manifest)
     self.assertIn('command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]', manifest)
     self.assertIn('platforms: ["macos"]', manifest[manifest.index("- id: desktop-swiftlint\n"):])
+
+  def test_runner_exposes_only_the_pinned_artifact_digest_without_bootstrapping(self):
+    result = subprocess.run(
+      ["bash", str(WRAPPER_PATH), "digest"],
+      check=True,
+      capture_output=True,
+      text=True,
+    )
+    self.assertEqual(
+      result.stdout.strip(),
+      "d6cb0aa7a2f5f1ef306fc9e37bcb54dc9a26facc8f7784ac0c3dd3eccf5c6ba6",
+    )
+
+  def test_runner_rejects_unknown_subcommands_without_bootstrapping(self):
+    result = subprocess.run(
+      ["bash", str(WRAPPER_PATH), "not-a-command"],
+      capture_output=True,
+      text=True,
+    )
+    self.assertNotEqual(result.returncode, 0)
+    self.assertIn("usage:", result.stderr)
+
+  def test_runner_does_not_execute_a_tampered_cache_entry(self):
+    """A cache hit must verify the binary digest before executing it."""
+    with tempfile.TemporaryDirectory() as temp_dir:
+      root = Path(temp_dir)
+      marker = root / "fake-executed"
+      cache_binary = root / "0.65.0-d6cb0aa7a2f5" / "swiftlint"
+      cache_binary.parent.mkdir()
+      cache_binary.write_text(f"#!/bin/sh\ntouch {marker}\necho 0.65.0\n", encoding="utf-8")
+      cache_binary.chmod(0o755)
+
+      # The wrapper should reject the fake binary, then fail at the deliberately
+      # unavailable downloader; it must never execute the fake cache entry.
+      blocked_curl = root / "bin"
+      blocked_curl.mkdir()
+      curl = blocked_curl / "curl"
+      curl.write_text("#!/bin/sh\nexit 97\n", encoding="utf-8")
+      curl.chmod(0o755)
+      env = os.environ | {
+        "SWIFTLINT_CACHE_DIR": str(root),
+        "PATH": f"{blocked_curl}{os.pathsep}{os.environ['PATH']}",
+      }
+      result = subprocess.run(
+        ["bash", str(WRAPPER_PATH), "version"],
+        env=env,
+        capture_output=True,
+        text=True,
+      )
+
+      self.assertNotEqual(result.returncode, 0)
+      self.assertFalse(marker.exists(), "must not execute an unverified cached binary")
+      self.assertIn("cache integrity check failed", result.stderr)
 
 
 if __name__ == "__main__":
