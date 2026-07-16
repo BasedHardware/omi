@@ -18,7 +18,7 @@
     "desktop/macos/Backend-Rust/src/routes/chat_completions.rs": 3309,
     "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2741,
     "desktop/macos/Desktop/Sources/APIClient.swift": 6502,
-    "desktop/macos/Desktop/Sources/AuthService.swift": 3246,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 3241,
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2072,
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4207,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1681,
