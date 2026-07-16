@@ -42,7 +42,7 @@
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1691,
     "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1560,
     "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1580,
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6056,
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": 6067,
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": 2799,
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1506,
     "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3364,
@@ -58,7 +58,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Controller growth predates this ratchet; new pure policies are extracted and separately guarded by the hub ratchet.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Provider completion now exposes typed bounded continuation outcomes instead of inferred callback state.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": "Turn reducers now encode terminal provenance needed to distinguish completion, continuation, and recovery.",
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Explicit current-screen chat questions attach one turn-scoped live image rather than historical metadata.",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Ambient turns without Screen Recording now carry an honest screen-unavailable payload instead of silence.",
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple sign-in name capture now signals observers and persists the first-auth name that Apple sends only once.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Onboarding bar glow and the actionable reach-error card (Retry/Skip) render on the shared bar surface.",
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding now adopts the async-arriving auth name instead of freezing the 'there' placeholder; deinit now cancels the local file memory import task alongside its siblings."
