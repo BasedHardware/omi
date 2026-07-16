@@ -96,6 +96,9 @@
             },
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
+            "smoke_environment": {
+                "OPENAI_API_KEY": "fake-memory-maintenance-image-smoke-only"
+            },
             "dependency_probe_exclusions": {
                 "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
             }

@@ -8,6 +8,7 @@ import sys
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 RUNNER_SOURCE = REPO_ROOT / 'backend' / 'scripts' / 'run-unit-ci.sh'
+TYPECHECK_PREDICATE_SOURCE = REPO_ROOT / 'backend' / 'scripts' / 'needs-typecheck.sh'
 
 
 def _write_executable(path: Path, content: str) -> None:
@@ -23,6 +24,9 @@ def test_runner_executes_the_same_selected_contract_as_ci(tmp_path):
     runner = scripts / 'run-unit-ci.sh'
     shutil.copy2(RUNNER_SOURCE, runner)
     runner.chmod(0o755)
+    predicate = scripts / 'needs-typecheck.sh'
+    shutil.copy2(TYPECHECK_PREDICATE_SOURCE, predicate)
+    predicate.chmod(0o755)
 
     log_path = tmp_path / 'runner.log'
     changed_files = tmp_path / 'changed-files.txt'

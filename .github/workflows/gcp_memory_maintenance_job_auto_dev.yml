@@ -25,16 +25,25 @@ jobs:
 
     runs-on: ubuntu-latest
     steps:
-      # To workaround "no space left on device" issue of GitHub-hosted runner
-      - name: Delete huge unnecessary tools folder
-        run: rm -rf /opt/hostedtoolcache
+      # Retain this until the summary shows it no longer buys enough headroom.
+      - name: Measure runner disk cleanup
+        run: |
+          started_at=$SECONDS
+          free_before=$(df -h / | awk 'NR == 2 { print $4 }')
+          rm -rf /opt/hostedtoolcache
+          free_after=$(df -h / | awk 'NR == 2 { print $4 }')
+          {
+            echo "### Runner disk cleanup"
+            echo "- Duration: $((SECONDS - started_at))s"
+            echo "- Free space: ${free_before} → ${free_after}"
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -42,7 +51,7 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Compute short SHA
         id: image-tag
@@ -65,7 +74,7 @@ jobs:
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows
 
       - name: Build runtime image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: .
           file: ./backend/modal/Dockerfile.memory_maintenance_job
@@ -91,7 +100,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           job: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

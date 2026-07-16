@@ -173,6 +173,23 @@ def test_image_smoke_uses_registered_python_executable(contracts_module, monkeyp
     assert calls[0][:6] == ['docker', 'run', '--rm', '--network=none', '--entrypoint', 'python3']
 
 
+def test_memory_maintenance_smoke_uses_a_non_production_openai_key(contracts_module, monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 0
+
+    memory_job = _contract(contracts_module, 'memory-maintenance-job')
+    assert memory_job.smoke_environment == (('OPENAI_API_KEY', 'fake-memory-maintenance-image-smoke-only'),)
+
+    monkeypatch.setattr(contracts_module, 'third_party_dependency_modules', lambda _: ())
+    monkeypatch.setattr(contracts_module.subprocess, 'run', lambda command, check: calls.append(command) or Result())
+
+    assert contracts_module.smoke_image('omi-memory-maintenance:test', [memory_job]) == 0
+    assert all('--network=none' in call for call in calls)
+    assert all('OPENAI_API_KEY=fake-memory-maintenance-image-smoke-only' in call for call in calls)
+
+
 def test_build_smoke_uses_the_registered_dockerfile_and_context(contracts_module, monkeypatch):
     calls = []
 
