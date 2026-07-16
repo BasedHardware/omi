@@ -192,7 +192,11 @@ def process_in_progress_conversation(
         nonlocal persisted
         persisted = current
 
-    try:
+    # This synchronous path has no durable job for the reconciler to replay, so
+    # a processing failure must return the admission to in_progress — otherwise
+    # the conversation is stranded on "processing" forever and the client shows
+    # a stuck Processing card it can never resolve.
+    with lifecycle_service.processing_admission_guard(uid, conversation.id):
         conversation = process_conversation(
             uid,
             conversation.language,
@@ -200,35 +204,12 @@ def process_in_progress_conversation(
             force_process=True,
             persistence_observer=record_persistence,
         )
-    except Exception:
-        # This synchronous path has no durable job for the reconciler to replay,
-        # so a processing failure must return the admission to in_progress —
-        # otherwise the conversation is stranded on "processing" forever and the
-        # client shows a stuck Processing card it can never resolve.
-        rolled_back = _rollback_processing_admission_safely(uid, conversation.id)
-        logger.exception(
-            'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
-            uid,
-            conversation.id,
-            rolled_back,
-        )
-        raise
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
-
-
-def _rollback_processing_admission_safely(uid: str, conversation_id: str) -> bool:
-    """Roll back without letting a rollback error (e.g. the conversation was
-    deleted mid-processing) replace the original processing exception."""
-    try:
-        return lifecycle_service.rollback_processing_admission(uid, conversation_id)
-    except Exception:
-        logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
-        return False
 
 
 @router.post(
@@ -284,7 +265,9 @@ def finalize_conversation(
         nonlocal persisted
         persisted = current
 
-    try:
+    # Same recovery as POST /v1/conversations: undo the just-claimed admission
+    # if processing raises, so a failure cannot strand the conversation.
+    with lifecycle_service.processing_admission_guard(uid, conversation_id):
         conversation = process_conversation(
             uid,
             conversation.language,
@@ -292,17 +275,6 @@ def finalize_conversation(
             force_process=True,
             persistence_observer=record_persistence,
         )
-    except Exception:
-        # Same recovery as POST /v1/conversations: undo the just-claimed
-        # admission so a processing failure cannot strand the conversation.
-        rolled_back = _rollback_processing_admission_safely(uid, conversation_id)
-        logger.exception(
-            'synchronous conversation finalization failed uid=%s conversation=%s rolled_back=%s',
-            uid,
-            conversation_id,
-            rolled_back,
-        )
-        raise
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation_id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
