@@ -61,9 +61,10 @@ export type AppSettings = {
   focusExcludedApps: string[]
   /** Track 3 (focus halo): whether the Focus assistant may draw its glowing ring
    *  around the active window (red when it judges the user distracted, green when
-   *  they refocus). Default ON — it only ever appears in response to a Focus
-   *  verdict, which is itself gated, and it is click-through, so it costs nothing
-   *  when Focus is idle. Mirrors Mac's `assistantsGlowOverlayEnabled`. */
+   *  they refocus). Default OFF, matching Mac's `assistantsGlowOverlayEnabled`
+   *  (AssistantSettings.swift:35). Re-enable it from Settings → Notifications
+   *  ("Focus glow"). It is click-through and only ever appears in response to a
+   *  Focus verdict, which is itself gated, so it costs nothing when off or idle. */
   glowOverlayEnabled: boolean
   /** Track 3 (proactive framework): master switch for the whole screen-analysis
    *  loop. Default ON, mirroring Mac's `screenAnalysisEnabled`. It is not a
@@ -269,7 +270,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     focusNotificationsEnabled: r.focusNotificationsEnabled !== false,
     focusCooldownMinutes: sanitizeCooldownMinutes(r.focusCooldownMinutes),
     focusExcludedApps: sanitizeExcludedApps(r.focusExcludedApps),
-    glowOverlayEnabled: r.glowOverlayEnabled !== false,
+    // Default OFF (opt-IN, === true), matching Mac's `assistantsGlowOverlayEnabled`
+    // (AssistantSettings.swift:35). Re-enabled via Settings → Notifications.
+    glowOverlayEnabled: r.glowOverlayEnabled === true,
     screenAnalysisEnabled: r.screenAnalysisEnabled !== false,
     notificationsEnabled: r.notificationsEnabled !== false,
     notificationFrequency: sanitizeFrequency(r.notificationFrequency),
