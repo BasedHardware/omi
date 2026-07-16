@@ -14,6 +14,26 @@ Future<ActionItemsResponse> getActionItems({
   DateTime? startDate,
   DateTime? endDate,
 }) async {
+  return await tryGetActionItems(
+        limit: limit,
+        offset: offset,
+        completed: completed,
+        conversationId: conversationId,
+        startDate: startDate,
+        endDate: endDate,
+      ) ??
+      const ActionItemsResponse(actionItems: [], hasMore: false);
+}
+
+/// Returns null when the action-items request fails instead of conflating a failure with an empty list.
+Future<ActionItemsResponse?> tryGetActionItems({
+  int limit = 50,
+  int offset = 0,
+  bool? completed,
+  String? conversationId,
+  DateTime? startDate,
+  DateTime? endDate,
+}) async {
   String url = '${Env.apiBaseUrl}v1/action-items?limit=$limit&offset=$offset';
 
   if (completed != null) {
@@ -31,14 +51,14 @@ Future<ActionItemsResponse> getActionItems({
 
   var response = await makeApiCall(url: url, headers: {}, method: 'GET', body: '');
 
-  if (response == null) return const ActionItemsResponse(actionItems: [], hasMore: false);
+  if (response == null) return null;
 
   if (response.statusCode == 200) {
     var body = utf8.decode(response.bodyBytes);
     return wire.GeneratedActionItemsResponse.fromJson(jsonDecode(body) as Map<String, dynamic>);
   } else {
     Logger.debug('getActionItems error ${response.statusCode}');
-    return const ActionItemsResponse(actionItems: [], hasMore: false);
+    return null;
   }
 }
 

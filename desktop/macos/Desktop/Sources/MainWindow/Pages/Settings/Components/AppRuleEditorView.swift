@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import OmiTheme
+import SwiftUI
 
 struct ExcludedAppRow: View {
   let appName: String
@@ -37,8 +37,6 @@ struct ExcludedAppRow: View {
   }
 }
 
-
-
 struct AppRuleEditorView: View {
   let title: String
   let placeholder: String
@@ -58,7 +56,7 @@ struct AppRuleEditorView: View {
 
       HStack(spacing: OmiSpacing.sm) {
         TextField(placeholder, text: $newAppName)
-          .textFieldStyle(.roundedBorder)
+          .settingsTextInputStyle()
           .onSubmit { addApp() }
 
         Button(addButtonTitle) { addApp() }
@@ -189,8 +187,7 @@ struct BrowserKeywordListView: View {
       // Add new keyword
       HStack(spacing: OmiSpacing.sm) {
         TextField("Add keyword...", text: $newKeyword)
-          .textFieldStyle(.roundedBorder)
-          .scaledFont(size: OmiType.caption)
+          .settingsTextInputStyle()
           .onSubmit { addKeyword() }
 
         Button("Add") { addKeyword() }
@@ -249,11 +246,11 @@ struct RunningAppChip: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  SettingsPage(
-    appState: AppState(),
-    selectedSection: .constant(.advanced),
-    highlightedSettingId: .constant(nil)
-  )
-}
+  #Preview {
+    SettingsPage(
+      appState: AppState(),
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil)
+    )
+  }
 #endif

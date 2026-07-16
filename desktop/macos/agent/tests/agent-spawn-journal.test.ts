@@ -83,6 +83,33 @@ describe("realtime spawn semantic receipt", () => {
     expect(started.providerResult.semanticDigest).toBe(started.semanticDigest);
   });
 
+  it("makes realtime acknowledgement text an admission fact, not provider completion text", () => {
+    const descriptor = {
+      ...producerDescriptor("10000000-0000-0000-0000-00000000000a"),
+      surface: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-1",
+      },
+      continuityKey: "realtime_spawn:voice-turn-1",
+      assistantText: "OpenClaw and the subagent both finished.",
+    } as const;
+
+    for (const lifecycle of [
+      { state: "running", attemptState: "running", updatedAtMs: 210 },
+      { state: "succeeded", attemptState: "succeeded", updatedAtMs: 220 },
+    ]) {
+      const compact = JSON.parse(compactRealtimeSpawnToolResult(
+        realtimeSpawnResult(lifecycle),
+        descriptor,
+      ));
+      expect(compact.journalReceipt.assistantText).toBe(
+        "Launch Risk Research started and is working in the background.",
+      );
+      expect(compact.journalReceipt.assistantText).not.toContain("finished");
+    }
+  });
+
   it("returns a durable admitted child receipt when the first attempt fails immediately", () => {
     const compact = JSON.parse(compactRealtimeSpawnToolResult(realtimeSpawnResult({
       state: "failed",
@@ -290,6 +317,62 @@ describe("durable agent-spawn producer journal", () => {
     })).rejects.toThrow(/Leaf workers cannot create/);
     expect(store.getRow("SELECT COUNT(*) AS count FROM conversation_turns").count).toBe(0);
     expect(store.allRows("SELECT run_id FROM runs")).toEqual([]);
+    store.close();
+  });
+
+  it("persists the canonical realtime admission acknowledgement through terminal repair", async () => {
+    const root = newRoot();
+    const { store, kernel } = createKernelHarness(join(root, "realtime-admission.sqlite"), "acp");
+    const parent = resolveSurfaceSession(store, {
+      ownerId: "owner",
+      surfaceRef: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-1",
+      },
+      defaultAdapterId: "acp",
+    }, () => 1);
+    const pillId = "10000000-0000-0000-0000-00000000000b";
+    const descriptor = {
+      ...producerDescriptor(pillId),
+      surface: {
+        surfaceKind: "realtime_voice",
+        externalRefKind: "voice_turn",
+        externalRefId: "voice-turn-1",
+      },
+      continuityKey: "realtime_spawn:voice-turn-1",
+      assistantText: "The child is already complete.",
+    };
+    const accepted = await kernel.spawnBackgroundAgent({
+      ownerId: "owner",
+      callerSessionId: parent.agentSessionId,
+      clientId: "realtime",
+      requestId: "voice-spawn",
+      prompt: descriptor.objective,
+      title: descriptor.title,
+      surfaceKind: "floating_bar",
+      externalRefKind: "pill",
+      externalRefId: pillId,
+      mode: "act",
+      metadata: { pillId, producerJournal: descriptor },
+    });
+    await waitUntil(() => String(store.getRow(
+      "SELECT status FROM runs WHERE run_id = ?",
+      [accepted.run.runId],
+    ).status) === "succeeded");
+
+    const ensured = kernel.ensureAgentSpawnJournal({
+      ownerId: "owner",
+      sessionId: accepted.session.sessionId,
+      runId: accepted.run.runId,
+    });
+
+    expect(ensured.assistantTurn.content).toBe(
+      "Launch Risk Research started and is working in the background.",
+    );
+    expect(ensured.assistantTurn.contentBlocks).toEqual(expect.arrayContaining([
+      expect.objectContaining({ type: "agentCompletion", status: "completed" }),
+    ]));
     store.close();
   });
 

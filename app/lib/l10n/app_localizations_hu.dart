@@ -9383,7 +9383,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+      'A telefon mikrofonjával, valamint Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9635,4 +9635,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.';
 }

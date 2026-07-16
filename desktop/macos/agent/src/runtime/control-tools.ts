@@ -41,6 +41,7 @@ import {
 } from "./execution-policy.js";
 
 const sessionStatusSchema = z.enum(["open", "archived", "closed"]);
+const terminalRunStatuses = new Set(["succeeded", "failed", "cancelled", "timed_out", "orphaned"]);
 const agentSurfaceKindSchema = z.enum([
   "main_chat",
   "task_chat",
@@ -829,12 +830,26 @@ export async function handleAgentControlToolCall(
         // newer coordinator session cannot win a small result limit.
         const isChildDiscovery = parsed.surfaceKind === "background_agent"
           || parsed.surfaceKind === "delegated_agent";
-        const sessions = context.kernel.listSessions({
+        // `closed` is an archival session state, not a child-run completion
+        // state. Older realtime tool schemas exposed that enum, and models
+        // naturally chose `closed` while asking for a finished background
+        // agent's output. Preserve that intent only for the semantic child
+        // discovery aliases; concrete session-management callers keep the
+        // literal archival filter.
+        const legacyClosedChildDiscovery = isChildDiscovery && parsed.status === "closed";
+        const discoveredSessions = context.kernel.listSessions({
           ...parsed,
           ownerId,
+          status: legacyClosedChildDiscovery ? undefined : parsed.status,
           surfaceKind: isChildDiscovery ? undefined : parsed.surfaceKind,
           executionRole: isChildDiscovery ? "leaf" : undefined,
+          limit: legacyClosedChildDiscovery ? 200 : parsed.limit,
         });
+        const sessions = legacyClosedChildDiscovery
+          ? discoveredSessions
+            .filter((summary) => terminalRunStatuses.has((summary.activeRun ?? summary.latestRun)?.status ?? ""))
+            .slice(0, parsed.limit)
+          : discoveredSessions;
         const overrides = context.kernel.listDesktopAttentionOverrides(ownerId);
         const projected = serializeAgentSessionsList(sessions, overrides);
         return stringifyToolResult(withToolResultEnvelope(
@@ -865,13 +880,28 @@ export async function handleAgentControlToolCall(
       }
       case "build_desktop_awareness_snapshot": {
         const parsed = agentControlToolSchemas.build_desktop_awareness_snapshot.parse(input);
+        const ownerId = effectiveControlToolOwnerId(context, parsed.ownerId);
         const snapshot = context.kernel.buildDesktopAwarenessSnapshot({
           ...parsed,
-          ownerId: effectiveControlToolOwnerId(context, parsed.ownerId),
+          ownerId,
         });
-        return stringifyToolResult({
-          snapshot: serializeAwarenessSnapshot(snapshot),
-        });
+        const serializedSnapshot = serializeAwarenessSnapshot(snapshot);
+        const full = { snapshot: serializedSnapshot };
+        // The realtime provider needs an artifact-backed preview, while the
+        // local Swift coordinator needs owner/session/run roots it can use to
+        // reconcile visible pills. A generic depth-limited preview can omit
+        // `ownerId` and turn a valid read into a false lifecycle failure.
+        const providerProjection = projectProviderPayload(full, "build_desktop_awareness_snapshot");
+        return stringifyToolResult(withToolResultEnvelope(
+          context,
+          "build_desktop_awareness_snapshot",
+          full,
+          providerProjection,
+          ownerId,
+          context.callerSessionId ?? snapshot.sessions[0]?.session.sessionId,
+          undefined,
+          projectDirectControlAwarenessSnapshot(snapshot),
+        ));
       }
       case "list_desktop_action_queue": {
         const parsed = agentControlToolSchemas.list_desktop_action_queue.parse(input);
@@ -1231,7 +1261,7 @@ export async function handleAgentControlToolCall(
             effect: "spawn_agent",
             syntaxFacts: {
               parentRunId,
-              explicitProvider: adapterId,
+              explicitProvider: parsed.provider ?? null,
               requestedAgentCount: parsed.requestedAgentCount,
             },
           },
@@ -1914,6 +1944,21 @@ function rejectSynchronousNestedRun(context: AgentControlToolContext, adapterId:
 }
 
 const MAX_REALTIME_TOOL_RESULT_BYTES = 8 * 1024;
+// Direct desktop control is authenticated local IPC, not a provider tool
+// response. It still has a bounded payload so UI reconciliation cannot be held
+// hostage by historical state, but it must not inherit the provider budget and
+// lose structural roots such as the active owner.
+const MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES = 128 * 1024;
+
+function isDirectControlOutput(context: AgentControlToolContext | undefined): boolean {
+  return context?.trustedUserControl === true && context.callerSessionId === undefined;
+}
+
+function controlToolResultByteBudget(context: AgentControlToolContext | undefined): number {
+  return isDirectControlOutput(context)
+    ? MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES
+    : MAX_REALTIME_TOOL_RESULT_BYTES;
+}
 
 function controlToolResultProvenance(
   context: AgentControlToolContext | undefined,
@@ -1951,16 +1996,26 @@ function withToolResultEnvelope(
   ownerId: string,
   sessionId: string | undefined,
   existingFullOutputRef?: string,
+  directProjectedPayload?: Record<string, unknown>,
 ): Record<string, unknown> {
+  const byteBudget = controlToolResultByteBudget(context);
   const fullJson = JSON.stringify(fullPayload);
   const originalBytes = Buffer.byteLength(fullJson, "utf8");
-  const projectedBytes = Buffer.byteLength(JSON.stringify(projectedPayload), "utf8");
+  // A trusted desktop-control caller is a local UI/control-plane consumer, not
+  // a model-visible realtime response. Preserve its typed schema whenever the
+  // result fits the local bridge, and compact structurally (never into a JSON
+  // string preview) only when it does not. This is the shared boundary used by
+  // every coordinator action, including `get_agent_run`.
+  const responsePayload = isDirectControlOutput(context)
+    ? (directProjectedPayload ?? projectDirectControlPayload(fullPayload))
+    : projectedPayload;
+  const projectedBytes = Buffer.byteLength(JSON.stringify(responsePayload), "utf8");
   // Small structural projections are normal response shaping, not an
   // artifact-backed truncation. Once the full payload cannot cross the
   // provider boundary (or the caller supplied an existing canonical ref),
   // it must be recoverable or become a typed failure.
   const needsArtifactBackedProjection = originalBytes > projectedBytes
-    && (existingFullOutputRef !== undefined || originalBytes > MAX_REALTIME_TOOL_RESULT_BYTES);
+    && (existingFullOutputRef !== undefined || originalBytes > byteBudget);
   const fullOutputRef = needsArtifactBackedProjection
     ? existingFullOutputRef
       ?? (sessionId
@@ -1975,7 +2030,7 @@ function withToolResultEnvelope(
   }
   const isRecoverableProjection = needsArtifactBackedProjection && fullOutputRef !== null;
   const result = {
-    ...projectedPayload,
+    ...responsePayload,
     toolResultEnvelope: makeToolResultEnvelope({
       status: "succeeded",
       truncated: isRecoverableProjection,
@@ -1985,7 +2040,7 @@ function withToolResultEnvelope(
       provenance: controlToolResultProvenance(context, toolName),
     }),
   };
-  if (Buffer.byteLength(JSON.stringify({ ok: true, ...result }), "utf8") > MAX_REALTIME_TOOL_RESULT_BYTES) {
+  if (Buffer.byteLength(JSON.stringify({ ok: true, ...result }), "utf8") > byteBudget) {
     const recoveredRef = fullOutputRef ?? (sessionId
       ? persistToolOutputArtifact(context, ownerId, sessionId, toolName, fullJson)
       : null);
@@ -2092,7 +2147,7 @@ function stringifyToolResult(
         provenance: controlToolResultProvenance(scope?.context, toolName),
       });
       const result = JSON.stringify({ ok: status === "succeeded", ...payload, toolResultEnvelope: envelope });
-      if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+      if (Buffer.byteLength(result, "utf8") <= controlToolResultByteBudget(scope?.context)) return result;
       return stringifyProviderBudgetFailure(toolName, envelope.originalBytes, envelope.fullOutputRef, scope?.context);
     } catch {
       // An invalid envelope is itself an untrusted transport value. Continue
@@ -2140,7 +2195,7 @@ function stringifyToolResult(
       ...projectedPayload,
       toolResultEnvelope,
     });
-    if (Buffer.byteLength(result, "utf8") <= MAX_REALTIME_TOOL_RESULT_BYTES) return result;
+    if (Buffer.byteLength(result, "utf8") <= controlToolResultByteBudget(scope?.context)) return result;
   }
 
   return stringifyProviderBudgetFailure(toolName, undefined, null, scope?.context);
@@ -2245,6 +2300,23 @@ function projectProviderPayload(fullPayload: Record<string, unknown>, toolName: 
     originalBytes,
     preview,
   };
+}
+
+/**
+ * Desktop automation and the Swift coordinator parse these values as JSON.
+ * Their contract must remain structurally usable even when one historical run
+ * contains a large stored context or event ledger. Keep a small reserve for
+ * the typed envelope and artifact reference, then progressively compact the
+ * same object shape rather than returning a provider-only string preview.
+ */
+function projectDirectControlPayload(fullPayload: Record<string, unknown>): Record<string, unknown> {
+  const maximumProjectedBytes = MAX_DIRECT_CONTROL_TOOL_RESULT_BYTES - 8 * 1024;
+  if (Buffer.byteLength(JSON.stringify(fullPayload), "utf8") <= maximumProjectedBytes) return fullPayload;
+  for (const limits of [[4096, 200, 128], [2048, 128, 96], [1024, 64, 64], [512, 32, 40]] as const) {
+    const compact = compactProviderPayload(fullPayload, ...limits);
+    if (Buffer.byteLength(JSON.stringify(compact), "utf8") <= maximumProjectedBytes) return compact;
+  }
+  return compactProviderPayload(fullPayload, 256, 16, 24);
 }
 
 const OMITTED_PROVIDER_VALUE = Symbol("omitted_provider_value");
@@ -2437,6 +2509,7 @@ function serializeFullSessionListing(
 }
 
 const CONTROL_LIST_TEXT_LIMIT = 512;
+const CONTROL_LIST_BINDING_LIMIT = 4;
 
 function boundedControlListText(value: unknown, limit = CONTROL_LIST_TEXT_LIMIT): string | null {
   if (typeof value !== "string" || value.length === 0) return null;
@@ -2468,7 +2541,10 @@ function serializeSessionListSummary(summary: {
     },
     latestRun: summary.latestRun ? serializeRunListSummary(summary.latestRun) : null,
     activeRun: summary.activeRun ? serializeRunListSummary(summary.activeRun) : null,
-    adapterBindings: summary.adapterBindings.map((binding) => ({
+    // Binding history grows as a long-lived session is refreshed. It is not a
+    // second source of agent identity, so never let it evict the session/run
+    // roots from a bounded status response.
+    adapterBindings: summary.adapterBindings.slice(0, CONTROL_LIST_BINDING_LIMIT).map((binding) => ({
       bindingId: binding.bindingId,
       sessionId: binding.sessionId,
       adapterId: binding.adapterId,
@@ -2478,6 +2554,7 @@ function serializeSessionListSummary(summary: {
       modelId: binding.modelId,
       updatedAtMs: binding.updatedAtMs,
     })),
+    adapterBindingsTruncated: summary.adapterBindings.length > CONTROL_LIST_BINDING_LIMIT,
   };
 }
 
@@ -2503,6 +2580,31 @@ function serializeRunListSummary(run: AgentRun): Record<string, unknown> {
     run.errorCode,
     boundedControlListText(run.errorMessage),
   );
+}
+
+function serializeDirectControlRunSummary(run: AgentRun): Record<string, unknown> {
+  const input = parseJsonObject(run.inputJson) as Record<string, unknown>;
+  const metadata = input.metadata;
+  const externalSurface = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+    ? (metadata as Record<string, unknown>).externalSurface
+    : undefined;
+  const externalAuthority = externalSurface && typeof externalSurface === "object" && !Array.isArray(externalSurface)
+    ? boundedControlListText((externalSurface as Record<string, unknown>).authority, 96)
+    : null;
+  const summary = serializeRunListSummary(run);
+  if (!externalAuthority) return summary;
+  const inputSummary = summary.input as Record<string, unknown>;
+  return {
+    ...summary,
+    input: {
+      ...inputSummary,
+      metadata: {
+        externalSurface: {
+          authority: externalAuthority,
+        },
+      },
+    },
+  };
 }
 
 function serializeFloatingPillSnapshot(summary: {
@@ -2626,6 +2728,31 @@ function serializeAwarenessSnapshot(snapshot: DesktopAwarenessSnapshot): Record<
     taskCandidates: snapshot.taskCandidates,
     actionQueue: snapshot.actionQueue,
     runtime: snapshot.runtime,
+  };
+}
+
+/**
+ * Direct UI reconciliation needs the canonical owner/session/run identity, not
+ * every historical run input. Reuse the safe status-list fields, preserve
+ * newest-first ordering, and leave the complete snapshot recoverable through
+ * the envelope when it is larger than this local bridge view.
+ */
+function projectDirectControlAwarenessSnapshot(snapshot: DesktopAwarenessSnapshot): Record<string, unknown> {
+  const sessionListing = serializeAgentSessionsList(snapshot.sessions, []);
+  const sessions = Array.isArray(sessionListing.sessions) ? sessionListing.sessions : [];
+  const runs = snapshot.runs.slice(0, 50).map(serializeDirectControlRunSummary);
+  return {
+    snapshot: {
+      ownerId: snapshot.ownerId,
+      generatedAtMs: snapshot.generatedAtMs,
+      sessions,
+      runs,
+      runtime: snapshot.runtime,
+      sessionCount: snapshot.sessions.length,
+      runCount: snapshot.runs.length,
+      sessionsTruncated: sessionListing.truncated === true,
+      runsTruncated: snapshot.runs.length > runs.length,
+    },
   };
 }
 

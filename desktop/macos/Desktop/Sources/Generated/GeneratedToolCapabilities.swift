@@ -287,7 +287,7 @@ enum GeneratedToolCapabilities {
       "Creates a canonical kernel session/run; visible runs project into floating-bar pills.",
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw or Hermes, pass provider='openclaw' or provider='hermes'.",
+      "Pass provider='openclaw' or provider='hermes' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run."
     ]
     ),
@@ -449,12 +449,12 @@ enum GeneratedToolCapabilities {
       title: "Capture Screen",
       latency: .fastLocal,
       surfaces: Set([.desktopChat]),
-      summary: "Capture raw screenshot pixels after screen summary context is not enough.",
+      summary: "Capture a live current-screen image after the user asks about what is visible now.",
       bullets: [
-      "For screen-awareness questions, call get_work_context first.",
+      "For a direct current-screen question, use this live capture instead of treating screen history as current evidence.",
       "Use capture_screen only when raw pixels are necessary; it requires explicit approval before image bytes are shared.",
       "The result lists the full-screen image path plus native-resolution detail tiles on large screens; use Read to view them.",
-      "Call get_work_context first when the user asks about what's on their screen or what they're looking at.",
+      "For a direct current-screen question, capture a live image instead of using get_work_context as current visual evidence.",
       "After capture_screen returns, use Read to view the full-screen image.",
       "The full screenshot is downscaled before you see it — before quoting small on-screen text (titles, prices, sizes, labels) or choosing between similar-looking items, Read the detail tile covering that item and take the exact text from the tile.",
       "Keep every detail you cite (title, price, badge, position) bound to one on-screen item; if text is not legible even in a tile, say so instead of inferring.",
@@ -583,6 +583,17 @@ enum GeneratedToolCapabilities {
     ]
     ),
     Capability(
+      toolName: "report_screen_observation",
+      title: "Report Screen Observation",
+      latency: .fastLocal,
+      surfaces: Set([.realtimeHub]),
+      summary: "Verify grounding from the current-screen image.",
+      bullets: [
+      "Only call after screenshot returns the current image.",
+      "Submit a concise visual observation, then answer the user's original request naturally."
+    ]
+    ),
+    Capability(
       toolName: "point_click",
       title: "Point Click",
       latency: .fastLocal,
@@ -622,9 +633,9 @@ enum GeneratedToolCapabilities {
       "Call this first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
       "Returns availability, a screenshot_id for follow-up, OCR preview, and recent timeline without raw image bytes.",
       "If raw pixels are needed after this, request get_screenshot/capture_screen approval.",
-      "Call get_work_context first for \"what is on my screen\", \"do you see my screen\", and current-work questions.",
-      "Use its screen_now and timeline fields to answer directly when possible.",
-      "Only request get_screenshot or capture_screen approval if raw image pixels are necessary after get_work_context."
+      "Use this for recent work/activity history, not for direct current-screen questions.",
+      "Its screen_now and timeline fields are historical unless this turn separately attached a live image.",
+      "For current visual detail, use capture_screen when approval is available rather than answering from this tool."
     ]
     )
   ]
@@ -638,6 +649,6 @@ enum GeneratedToolCapabilities {
   }
 
   static var realtimeToolNames: [String] {
-    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
+    ["ask_higher_model","cancel_agent_run","check_permission_status","create_action_item","create_calendar_event","get_action_items","get_agent_run","get_conversations","get_daily_recap","get_memories","get_tasks","inspect_agent_artifacts","list_agent_sessions","point_click","report_screen_observation","request_permission","screenshot","search_conversations","search_memories","search_screen_history","set_desktop_attention_override","spawn_agent","update_action_item","update_agent_artifact_lifecycle"]
   }
 }

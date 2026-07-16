@@ -1,5 +1,5 @@
 import AppKit
-import ApplicationServices
+@preconcurrency import ApplicationServices
 import Foundation
 
 /// Shared "Execute" logic for connector setup. Used by both the Execute button in

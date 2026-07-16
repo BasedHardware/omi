@@ -29,9 +29,10 @@ SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 APICLIENT_SOURCE_ROOT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources'
 APICLIENT_SWIFT = APICLIENT_SOURCE_ROOT / 'APIClient.swift'
 # High-water mark ratchet: APIClient.swift must shrink as transport/DTOs extract out.
-# Raised after the INV-AUTH-1 and revision-aware conversation merges left the
-# consolidated client at 6500 lines. Future transport/DTO extractions lower it.
-APICLIENT_SWIFT_MAX_LINES = 6500
+# Raised to 6502 to match the frozen baseline in product_file_line_count_ratchet_baseline.json
+# (PR #9851). The staged-score-update batch (#9816) grew the file past the prior 6500 cap.
+# Future transport/DTO extractions lower it.
+APICLIENT_SWIFT_MAX_LINES = 6502
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
 CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 

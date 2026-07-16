@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 /// Settings page that wraps SettingsView with proper dark theme styling for the main window
 struct SettingsPage: View {
@@ -213,6 +213,10 @@ struct SettingsContentView: View {
   // Notification settings (from backend)
   @State var dailySummaryEnabled: Bool = true
   @State var dailySummaryHour: Int = 22
+  // UI-only date for the Summary Time stepper field; the backend stores whole hours,
+  // so this glides freely while only the hour component is persisted.
+  @State var dailySummaryTime: Date = SettingsControlMetrics.dailySummaryDate(
+    forHour: 22, referenceDate: Date())
   @State var notificationsEnabled: Bool = true
   @State var notificationFrequency: Int = 3
 
@@ -303,8 +307,7 @@ struct SettingsContentView: View {
   @State var aiChatProjectClaudeMdPath: String?
   @State var aiChatDiscoveredSkills: [(name: String, description: String, path: String)] =
     []
-  @State var aiChatProjectDiscoveredSkills:
-    [(name: String, description: String, path: String)] = []
+  @State var aiChatProjectDiscoveredSkills: [(name: String, description: String, path: String)] = []
   @State var aiChatDisabledSkills: Set<String> = []
   @State var showFileViewer = false
   @State var fileViewerContent = ""
@@ -615,8 +618,7 @@ struct SettingsContentView: View {
     .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
       selectedSection = .floatingBar
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh notification permission when app becomes active (user may have changed it in System Settings)
       appState.checkNotificationPermission()
     }
@@ -643,7 +645,6 @@ struct SettingsContentView: View {
       .fixedSize()
     }
   }
-
 
   @ObservedObject var fontScaleSettings = FontScaleSettings.shared
   @ObservedObject var rewindSettings = RewindSettings.shared

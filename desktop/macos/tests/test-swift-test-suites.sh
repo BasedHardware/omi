@@ -129,4 +129,15 @@ if ! grep -q -- "--skip ChatDiscoverabilityTests/testAgentControlCapabilitiesMat
   fail "runner did not pass ratcheted skips to SwiftPM"
 fi
 
+# Local runs should get the same proven suite-level parallelism as CI unless a
+# diagnosis explicitly asks for fewer workers.
+unset OMI_SWIFT_TEST_SUITE_WORKERS SWIFT_TEST_SUITE_WORKERS
+: >"$FAKE_XCRUN_LOG"
+if "$RUNNER" >"$TMPDIR/default-runner.out" 2>"$TMPDIR/default-runner.err"; then
+  fail "default runner unexpectedly succeeded despite AlphaTests failure"
+fi
+if ! grep -q "Ran 6 Swift suites in isolation with 4 worker(s)." "$TMPDIR/default-runner.out"; then
+  fail "runner did not default local suite execution to four workers"
+fi
+
 echo "swift-test-suites tests passed"

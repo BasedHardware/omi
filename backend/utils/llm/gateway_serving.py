@@ -54,13 +54,14 @@ except ImportError:  # pragma: no cover - stubbed test environments
         return {}
 
 
-from utils.llm.gateway_client import feature_auto_lane_id
+from utils.llm.gateway_client import GATEWAY_TRANSPORT_STATUS_CODES, feature_auto_lane_id
 from utils.llm.gateway_observability import record_gateway_request_result
 from utils.observability.fallback import record_fallback
 
 logger = logging.getLogger(__name__)
 
-_TRANSPORT_STATUS_CODES = frozenset({502, 503, 504})
+# A gateway configuration or credential failure is a controlled 503 and must
+# remain visible. Only hard proxy failures may use the temporary legacy path.
 _REQUEST_ID_HEADER = 'X-Omi-Request-ID'
 _T = TypeVar('_T')
 
@@ -86,15 +87,15 @@ def is_gateway_transport_failure(exc: BaseException) -> bool:
         if isinstance(exc, (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)):
             return True
         if isinstance(exc, httpx.HTTPStatusError):
-            return exc.response is not None and exc.response.status_code in _TRANSPORT_STATUS_CODES
+            return exc.response is not None and exc.response.status_code in GATEWAY_TRANSPORT_STATUS_CODES
 
     status_code = getattr(exc, 'status_code', None)
-    if isinstance(status_code, int) and status_code in _TRANSPORT_STATUS_CODES:
+    if isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES:
         return True
 
     response = getattr(exc, 'response', None)
     response_status = getattr(response, 'status_code', None)
-    if isinstance(response_status, int) and response_status in _TRANSPORT_STATUS_CODES:
+    if isinstance(response_status, int) and response_status in GATEWAY_TRANSPORT_STATUS_CODES:
         return True
 
     message = str(exc).casefold()
@@ -106,10 +107,8 @@ def is_gateway_transport_failure(exc: BaseException) -> bool:
         'connecterror',
         'network error',
         'bad gateway',
-        'service unavailable',
         'gateway timeout',
         '502',
-        '503',
         '504',
     )
     return any(marker in message for marker in transport_markers)
@@ -126,7 +125,7 @@ def _fallback_reason(exc: BaseException) -> str:
     if not isinstance(status_code, int):
         response = getattr(exc, 'response', None)
         status_code = getattr(response, 'status_code', None)
-    if isinstance(status_code, int) and status_code in _TRANSPORT_STATUS_CODES:
+    if isinstance(status_code, int) and status_code in GATEWAY_TRANSPORT_STATUS_CODES:
         return 'request_error'
     return 'unexpected_error'
 

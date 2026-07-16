@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Components/GoalsWidget.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/GoalsHistoryPage.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalGenerationService.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/AssistantProtocol.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Goals/GoalsAIService.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/GoalStorage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/GoalCelebrationView.swift

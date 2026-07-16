@@ -15,6 +15,7 @@ import 'package:omi/pages/phone_calls/phone_calls_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/device_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/device.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -53,13 +54,24 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
     final captureProvider = context.read<CaptureProvider>();
     if (captureProvider.recordingState == RecordingState.initialising) return;
     if (captureProvider.recordingState == RecordingState.record) {
+      // Batch reports RecordingState.record too, but has no in-progress conversation
+      // to force-process — stopStreamRecording finalizes the local .bin on its own.
+      final wasBatch = captureProvider.isPhoneMicBatchRecording;
       await captureProvider.stopStreamRecording();
-      captureProvider.forceProcessingCurrentConversation();
+      if (!wasBatch) captureProvider.forceProcessingCurrentConversation();
       PlatformManager.instance.analytics.phoneMicRecordingStopped();
       return;
     }
     await captureProvider.streamRecording();
     PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    // Phone-mic Transcribe Later (batch) has no live transcript — its surface is the
+    // conversations-list batch card, so skip the capturing page (same as BLE batch).
+    if (captureProvider.isPhoneMicBatchRecording) {
+      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
+        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+      }
+      return;
+    }
     if (context.mounted) {
       Navigator.push(
         context,
@@ -127,8 +139,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                               color: batteryLevel > 75
                                   ? const Color.fromARGB(255, 0, 255, 8)
                                   : batteryLevel > 20
-                                      ? Colors.yellow.shade700
-                                      : Colors.red,
+                                  ? Colors.yellow.shade700
+                                  : Colors.red,
                               shape: BoxShape.circle,
                             ),
                           ),
@@ -234,9 +246,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                   ).textTheme.bodyMedium!.copyWith(color: Colors.white, fontSize: 12),
                                 )
                               : isMemoriesPage
-                                  ? Text(context.l10n.connect,
-                                      style: const TextStyle(color: Colors.white, fontSize: 12))
-                                  : const SizedBox.shrink(),
+                              ? Text(context.l10n.connect, style: const TextStyle(color: Colors.white, fontSize: 12))
+                              : const SizedBox.shrink(),
                         ],
                       ),
                     ),
@@ -286,8 +297,8 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
                                           isRecording
                                               ? context.l10n.stop
                                               : isInitialising
-                                                  ? '...'
-                                                  : context.l10n.record,
+                                              ? '...'
+                                              : context.l10n.record,
                                           style: const TextStyle(
                                             color: Colors.white,
                                             fontSize: 12,

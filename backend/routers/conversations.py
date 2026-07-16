@@ -47,7 +47,6 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -193,13 +192,18 @@ def process_in_progress_conversation(
         nonlocal persisted
         persisted = current
 
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
+    # This synchronous path has no durable job for the reconciler to replay, so
+    # a processing failure must return the admission to in_progress — otherwise
+    # the conversation is stranded on "processing" forever and the client shows
+    # a stuck Processing card it can never resolve.
+    with lifecycle_service.processing_admission_guard(uid, conversation.id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
@@ -261,13 +265,16 @@ def finalize_conversation(
         nonlocal persisted
         persisted = current
 
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
+    # Same recovery as POST /v1/conversations: undo the just-claimed admission
+    # if processing raises, so a failure cannot strand the conversation.
+    with lifecycle_service.processing_admission_guard(uid, conversation_id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation_id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
@@ -645,7 +652,7 @@ def delete_conversation(
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
         else:
             deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)

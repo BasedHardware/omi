@@ -12,6 +12,7 @@ from google.cloud.firestore_v1 import FieldFilter
 from pydantic import ValidationError
 
 from database import _client
+from database.read_boundary import parse_snapshot_strict, parse_snapshots
 from models.goal import (
     GoalMetric,
     GoalProgressEvent,
@@ -86,7 +87,7 @@ def _goal_control_ref(uid: str, *, firestore_client: Any):
 def _validate_canonical_write(snapshot: Any, *, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise GoalConflictError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
@@ -371,7 +372,7 @@ def create_goal(
             .get(transaction=write_transaction)
         )
         account_generation = (
-            TaskWorkflowControl.model_validate(_snapshot_dict(control_snapshot)).account_generation
+            parse_snapshot_strict(TaskWorkflowControl, control_snapshot).account_generation
             if control_snapshot.exists
             else 0
         )
@@ -750,8 +751,7 @@ def _append_goal_progress_event(
             raise GoalNotFoundError(goal_id)
         existing = event_ref.get(transaction=write_transaction)
         if existing.exists:
-            stored = _snapshot_dict(existing)
-            record = GoalProgressEvent.model_validate(stored)
+            record = parse_snapshot_strict(GoalProgressEvent, existing)
             stored_proposal = GoalProgressEventCreate(
                 kind=record.kind,
                 summary=record.summary,
@@ -816,14 +816,7 @@ def list_goal_progress_events(
         .order_by('sequence', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    events: list[GoalProgressEvent] = []
-    for snapshot in query.stream():
-        try:
-            events.append(GoalProgressEvent.model_validate(_snapshot_dict(snapshot)))
-        except ValidationError as e:
-            # Skip a malformed/legacy progress event rather than 500 the whole detail page.
-            logger.warning('Skipping malformed goal progress event %s: %s', getattr(snapshot, 'id', None), e)
-    return events
+    return parse_snapshots(GoalProgressEvent, query.stream())
 
 
 def update_goal_progress(

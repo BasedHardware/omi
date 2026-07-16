@@ -6,7 +6,9 @@ OMI Desktop App for macOS (Swift)
 ## Logs & Debugging
 
 ### Local App Logs
-- **App log file**: `/private/tmp/omi.log` (production) or `/private/tmp/omi-dev.log` (dev builds)
+- **App log file**: `/private/tmp/omi.log` (production). Each non-production
+  launch writes to its own owner-only log; ask the running named bundle for its
+  exact path with `./scripts/omi-ctl log-path` rather than reading a shared dev log.
 
 ### Release Health (Sentry)
 Check errors in the latest (or specific) release using the **sentry-release skill**:
@@ -121,6 +123,27 @@ enforces this via `scripts/check-sources-root-layout.py`.
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
 
+### Swift Formatting
+
+Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
+`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
+config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
+Generated sources under `Desktop/Sources/Generated/` are excluded from the
+formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
+Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
+
+### SwiftLint
+
+SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
+upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
+verified binary under `~/.cache/omi-swiftlint`; use
+`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
+Generated sources and test fixtures remain excluded and the committed baseline
+is down-only. SwiftLint baseline locations are absolute, so the wrapper
+materializes a temporary baseline rooted at the current checkout before linting;
+do not hand-edit those paths to match a specific machine.
+
 ### Synchronous state-machine callbacks
 
 - A reducer transition is atomic through model assignment, effect delivery, UI
@@ -219,7 +242,10 @@ See `.claude/settings.json` for connection details.
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
-- **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Package metadata, resources, agent/runtime inputs, entitlements, persistent launch configuration, and local-profile launches automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
+- **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, and persistent launch configuration automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
+- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
+- **Swift suite throughput**: `scripts/swift-test-suites.sh` isolates suite processes but now defaults to four workers (matching CI). Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` only when diagnosing an order/concurrency-sensitive failure.
+- **Local Rust backend**: direct `./run.sh` development uses Cargo debug output (`target/debug`) by default and reuses a healthy backend that this worktree owns when Rust source/config/profile have not changed. A compile failure leaves that healthy process alive. Use `OMI_DESKTOP_BACKEND_RELEASE=1` only for an explicit optimized local check; release/CI builds remain unchanged.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
@@ -286,12 +312,26 @@ Fast path (skips web login and sidebar click-through):
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
    - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
    - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
-3. **Read logs to confirm behavior:** app + chat bridge in `/private/tmp/omi-dev.log` (dev) or `/private/tmp/omi.log`; local Rust backend on the `./run.sh` stdout; per-user issues in Sentry/PostHog.
+3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
+   `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
+   (production); `./run.sh` prints the isolated local Rust backend log path at
+   launch; per-user issues in Sentry/PostHog.
 4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
+### Default agent development loop
+
+1. **Edit or diagnose:** run the smallest relevant unit/static harness. For repeated saves, start `./scripts/dev-feedback.py --watch swift '<filter>'` or `... rust '<filter>'`; do not launch the app only to obtain compile evidence.
+2. **Swift/UI behavior:** reuse the existing named bundle with `OMI_APP_NAME=omi-<feature> ./run.sh --yolo --fast-only`; add `--no-wait` only with a harness/external backend, then use the local bridge (`omi-ctl action`, `state`, or a semantic snapshot) to assert the changed behavior.
+3. **Package boundary:** use `./run.sh --full` only for the first named launch, resource/entitlement/package/runtime input changes, or when `--fast-only` reports an expected fingerprint mismatch.
+4. **QA, commit, and PR readiness:** run `./scripts/omi-macos-dev doctor`, exercise the real user-facing path, then run the appropriate full component/PR contract.
+
+`omi-macos-dev` defaults to bounded JSON summaries so an agent can safely inspect a busy machine. Pass `--verbose` to the specific command for path-level records (for example, `clean plan --verbose`); cleanup always requires the exact current plan hash. The normal 14-day retention window can be deliberately bypassed with `--older-than 0` only when the operator has explicitly approved immediate cleanup.
+
+Never ask a user to test an unexercised path. A fast named-bundle launch plus a semantic bridge assertion is valid inner-loop evidence; a clean full bundle is release/QA evidence.
+
 ### After Implementing Changes
+
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
-- To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - Voice-path verification means a natural authenticated PTT turn on a named bundle — signed-out, forced-transcript, or reducer-only runs do not count; provider mint or payload changes must also show the deploy-inline provider probe.
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 

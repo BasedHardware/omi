@@ -1,12 +1,16 @@
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 
 /// A bound query parameter for the sync batch query. Kept as a small typed enum
 /// (rather than `any DatabaseValueConvertible`) so `buildBatchQuery` is pure and
 /// its output is `Equatable`-testable.
 enum SyncQueryArg: Equatable {
-    case int(Int64)
-    case text(String)
+  case int(Int64)
+  case text(String)
+}
+
+private struct AgentSyncRowsPayload: @unchecked Sendable {
+  let rows: [[String: Any]]
 }
 
 /// Polls the local GRDB database every 3 seconds for new/changed rows and
@@ -18,559 +22,572 @@ enum SyncQueryArg: Equatable {
 ///
 /// Cursors are persisted in UserDefaults so sync resumes after restart.
 actor AgentSyncService {
-    static let shared = AgentSyncService()
+  static let shared = AgentSyncService()
 
-    struct NetworkHooks: Sendable {
-        let fetchIDToken: @Sendable () async throws -> String
-        let dataForRequest: @Sendable (URLRequest) async throws -> (Data, URLResponse)
-        let tableSyncEnabled: Bool
+  struct NetworkHooks: Sendable {
+    let fetchIDToken: @Sendable () async throws -> String
+    let dataForRequest: @Sendable (URLRequest) async throws -> (Data, URLResponse)
+    let tableSyncEnabled: Bool
 
-        static let live = NetworkHooks(
-            fetchIDToken: { try await AuthService.shared.getIdToken() },
-            dataForRequest: { try await URLSession.shared.data(for: $0) },
-            tableSyncEnabled: true)
+    static let live = NetworkHooks(
+      fetchIDToken: { try await AuthService.shared.getIdToken() },
+      dataForRequest: { try await URLSession.shared.data(for: $0) },
+      tableSyncEnabled: true)
+  }
+
+  // MARK: - Types
+
+  private struct SyncCursor: Codable {
+    var lastId: Int64
+    var lastUpdatedAt: String  // ISO-8601
+  }
+
+  private struct TableSpec {
+    let name: String
+    let appendOnly: Bool  // true = cursor by id, false = cursor by updatedAt
+    let excludedColumns: Set<String>
+  }
+
+  // MARK: - State
+
+  private var cursors: [String: SyncCursor] = [:]
+  private var cachedTableColumns: [String: [String]] = [:]
+  private var vmIP: String?
+  private var authToken: String?
+  private var isRunning = false
+  private var syncTask: Task<Void, Never>?
+  private var consecutiveFailures = 0
+  private var lastTokenRefresh: Date = .distantPast
+  private var isPaused = false
+  /// Invalidates every suspended loop/tick/network continuation on stop,
+  /// restart, VM replacement, or effective-owner transition.
+  private var syncGeneration: UInt64 = 0
+  private var cursorOwnerID: String?
+  private var latencyBackoffMultiplier: UInt64 = 1
+  private var lastReuploadAt: Date = .distantPast
+  private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
+  private let networkHooks: NetworkHooks
+
+  private let batchSize = 100
+  private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
+  private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
+  private let tokenRefreshInterval: TimeInterval = 30 * 60  // 30 minutes
+
+  private init() {
+    networkHooks = .live
+  }
+
+  init(networkHooks: NetworkHooks) {
+    self.networkHooks = networkHooks
+  }
+
+  // MARK: - Table definitions
+
+  private let tables: [TableSpec] = [
+    // Mutable (cursor by updatedAt) — sessions before segments (FK dependency)
+    TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
+    TableSpec(
+      name: "action_items", appendOnly: false,
+      excludedColumns: [
+        "agentStatus", "agentSessionName", "agentPrompt", "agentPlan",
+        "agentStartedAt", "agentCompletedAt", "agentEditedFilesJson",
+        "chatSessionId",
+      ]),
+    TableSpec(name: "memories", appendOnly: false, excludedColumns: []),
+    TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
+    TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
+    // Append-only (cursor by id) — segments after sessions
+    TableSpec(
+      name: "screenshots", appendOnly: true,
+      excludedColumns: [
+        "ocrDataJson"
+      ]),
+    TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
+    TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
+    TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
+  ]
+
+  // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
+  // by id — handled via appendOnly=true above.
+
+  // MARK: - Public API
+
+  /// Start the sync loop. Called after the VM is ready and DB is uploaded.
+  func start(vmIP: String, authToken: String) {
+    syncGeneration &+= 1
+    let generation = syncGeneration
+    syncTask?.cancel()
+    self.vmIP = vmIP
+    self.authToken = authToken
+    self.isRunning = true
+    self.cursorOwnerID = RuntimeOwnerIdentity.currentOwnerId()
+    cursors.removeAll()
+    cachedTableColumns.removeAll()
+    consecutiveFailures = 0
+    lastTokenRefresh = .distantPast
+    isPaused = false
+    latencyBackoffMultiplier = 1
+    lastReuploadAt = .distantPast
+    loadCursors(ownerID: cursorOwnerID)
+    log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
+    syncLoop(generation: generation)
+  }
+
+  /// Stop the sync loop. Normal shutdown flushes pending changes; an owner
+  /// transition cancels without a final tick because credentials/storage have
+  /// already moved to the next owner boundary.
+  func stop(flushPendingChanges: Bool = true) async {
+    syncGeneration &+= 1
+    let stopGeneration = syncGeneration
+    let wasRunning = isRunning
+    isRunning = false
+    syncTask?.cancel()
+    syncTask = nil
+    guard wasRunning else { return }
+    if flushPendingChanges {
+      log("AgentSync: stopping — flushing final changes")
+      await syncTick(generation: stopGeneration)
+    } else {
+      log("AgentSync: stopping for owner transition without final flush")
     }
-
-    // MARK: - Types
-
-    private struct SyncCursor: Codable {
-        var lastId: Int64
-        var lastUpdatedAt: String  // ISO-8601
+    guard syncGeneration == stopGeneration else {
+      log("AgentSync: stale stop completed after a newer start")
+      return
     }
+    vmIP = nil
+    authToken = nil
+    cursorOwnerID = nil
+    isPaused = false
+    cursors.removeAll()
+    cachedTableColumns.removeAll()
+    log("AgentSync: stopped")
+  }
 
-    private struct TableSpec {
-        let name: String
-        let appendOnly: Bool  // true = cursor by id, false = cursor by updatedAt
-        let excludedColumns: Set<String>
-    }
+  /// Pause sync — ticks are skipped but the loop keeps running.
+  func pause() {
+    guard !isPaused else { return }
+    isPaused = true
+    log("AgentSync: paused")
+  }
 
-    // MARK: - State
+  /// Resume sync after a pause.
+  func resume() {
+    guard isPaused else { return }
+    isPaused = false
+    log("AgentSync: resumed")
+  }
 
-    private var cursors: [String: SyncCursor] = [:]
-    private var cachedTableColumns: [String: [String]] = [:]
-    private var vmIP: String?
-    private var authToken: String?
-    private var isRunning = false
-    private var syncTask: Task<Void, Never>?
-    private var consecutiveFailures = 0
-    private var lastTokenRefresh: Date = .distantPast
-    private var isPaused = false
-    /// Invalidates every suspended loop/tick/network continuation on stop,
-    /// restart, VM replacement, or effective-owner transition.
-    private var syncGeneration: UInt64 = 0
-    private var cursorOwnerID: String?
-    private var latencyBackoffMultiplier: UInt64 = 1
-    private var lastReuploadAt: Date = .distantPast
-    private let reuploadCooldown: TimeInterval = 30 * 60  // don't re-upload more than once per 30 min
-    private let networkHooks: NetworkHooks
+  // MARK: - Sync loop
 
-    private let batchSize = 100
-    private let baseSyncInterval: UInt64 = 3_000_000_000  // 3s in nanoseconds
-    private let maxSyncInterval: UInt64 = 60_000_000_000  // 60s max backoff
-    private let tokenRefreshInterval: TimeInterval = 30 * 60  // 30 minutes
-
-    private init() {
-        networkHooks = .live
-    }
-
-    init(networkHooks: NetworkHooks) {
-        self.networkHooks = networkHooks
-    }
-
-    // MARK: - Table definitions
-
-    private let tables: [TableSpec] = [
-        // Mutable (cursor by updatedAt) — sessions before segments (FK dependency)
-        TableSpec(name: "transcription_sessions", appendOnly: false, excludedColumns: []),
-        TableSpec(name: "action_items", appendOnly: false, excludedColumns: [
-            "agentStatus", "agentSessionName", "agentPrompt", "agentPlan",
-            "agentStartedAt", "agentCompletedAt", "agentEditedFilesJson",
-            "chatSessionId",
-        ]),
-        TableSpec(name: "memories", appendOnly: false, excludedColumns: []),
-        TableSpec(name: "staged_tasks", appendOnly: false, excludedColumns: []),
-        TableSpec(name: "live_notes", appendOnly: false, excludedColumns: []),
-        // Append-only (cursor by id) — segments after sessions
-        TableSpec(name: "screenshots", appendOnly: true, excludedColumns: [
-            "ocrDataJson",
-        ]),
-        TableSpec(name: "transcription_segments", appendOnly: true, excludedColumns: []),
-        TableSpec(name: "focus_sessions", appendOnly: true, excludedColumns: []),
-        TableSpec(name: "observations", appendOnly: true, excludedColumns: []),
-    ]
-
-    // Tables with only a createdAt (no updatedAt) that are append-only but not tracked
-    // by id — handled via appendOnly=true above.
-
-    // MARK: - Public API
-
-    /// Start the sync loop. Called after the VM is ready and DB is uploaded.
-    func start(vmIP: String, authToken: String) {
-        syncGeneration &+= 1
-        let generation = syncGeneration
-        syncTask?.cancel()
-        self.vmIP = vmIP
-        self.authToken = authToken
-        self.isRunning = true
-        self.cursorOwnerID = RuntimeOwnerIdentity.currentOwnerId()
-        cursors.removeAll()
-        cachedTableColumns.removeAll()
-        consecutiveFailures = 0
-        lastTokenRefresh = .distantPast
-        isPaused = false
-        latencyBackoffMultiplier = 1
-        lastReuploadAt = .distantPast
-        loadCursors(ownerID: cursorOwnerID)
-        log("AgentSync: starting (vm=\(vmIP), tables=\(tables.count))")
-        syncLoop(generation: generation)
-    }
-
-    /// Stop the sync loop. Normal shutdown flushes pending changes; an owner
-    /// transition cancels without a final tick because credentials/storage have
-    /// already moved to the next owner boundary.
-    func stop(flushPendingChanges: Bool = true) async {
-        syncGeneration &+= 1
-        let stopGeneration = syncGeneration
-        let wasRunning = isRunning
-        isRunning = false
-        syncTask?.cancel()
-        syncTask = nil
-        guard wasRunning else { return }
-        if flushPendingChanges {
-            log("AgentSync: stopping — flushing final changes")
-            await syncTick(generation: stopGeneration)
-        } else {
-            log("AgentSync: stopping for owner transition without final flush")
+  private func syncLoop(generation: UInt64) {
+    syncTask = Task {
+      while !Task.isCancelled && isRunning && syncGeneration == generation {
+        if isPaused {
+          try? await Task.sleep(nanoseconds: baseSyncInterval)
+          continue
         }
-        guard syncGeneration == stopGeneration else {
-            log("AgentSync: stale stop completed after a newer start")
-            return
-        }
-        vmIP = nil
-        authToken = nil
-        cursorOwnerID = nil
-        isPaused = false
-        cursors.removeAll()
-        cachedTableColumns.removeAll()
-        log("AgentSync: stopped")
-    }
-
-    /// Pause sync — ticks are skipped but the loop keeps running.
-    func pause() {
-        guard !isPaused else { return }
-        isPaused = true
-        log("AgentSync: paused")
-    }
-
-    /// Resume sync after a pause.
-    func resume() {
-        guard isPaused else { return }
-        isPaused = false
-        log("AgentSync: resumed")
-    }
-
-    // MARK: - Sync loop
-
-    private func syncLoop(generation: UInt64) {
-        syncTask = Task {
-            while !Task.isCancelled && isRunning && syncGeneration == generation {
-                if isPaused {
-                    try? await Task.sleep(nanoseconds: baseSyncInterval)
-                    continue
-                }
-                await syncTick(generation: generation)
-                guard syncGeneration == generation else { return }
-                let interval = currentSyncInterval()
-                try? await Task.sleep(nanoseconds: interval)
-            }
-        }
-    }
-
-    private func currentSyncInterval() -> UInt64 {
-        let base: UInt64
-        if consecutiveFailures > 0 {
-            // Exponential backoff: 3s, 6s, 12s, 24s, 48s, capped at 60s
-            base = baseSyncInterval * UInt64(1 << min(consecutiveFailures, 5))
-        } else {
-            base = baseSyncInterval
-        }
-        return min(base * latencyBackoffMultiplier, maxSyncInterval)
-    }
-
-    private func syncTick(generation: UInt64) async {
+        await syncTick(generation: generation)
         guard syncGeneration == generation else { return }
-        // Skip if user is signed out (tokens are cleared)
-        guard await AuthState.shared.isSignedIn else { return }
-        guard syncGeneration == generation else { return }
-        let tickStart = ContinuousClock.now
-
-        // Periodically refresh Firebase token on the VM (every 30 min)
-        if Date().timeIntervalSince(lastTokenRefresh) >= tokenRefreshInterval {
-            await refreshFirebaseToken(generation: generation)
-            guard syncGeneration == generation else { return }
-        }
-        guard networkHooks.tableSyncEnabled else { return }
-
-        var totalSynced = 0
-        var anyFailed = false
-        for spec in tables {
-            let count = await syncTable(spec, generation: generation)
-            guard syncGeneration == generation else { return }
-            if count < 0 {
-                anyFailed = true
-            } else {
-                totalSynced += count
-            }
-        }
-        if anyFailed && totalSynced == 0 {
-            consecutiveFailures += 1
-            if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
-                log("AgentSync: backend unreachable (failures=\(consecutiveFailures), next retry in \(currentSyncInterval() / 1_000_000_000)s)")
-            }
-            // After 3 consecutive failures, check if the VM lost its database
-            if consecutiveFailures == 3 {
-                await checkAndTriggerReupload(generation: generation)
-                guard syncGeneration == generation else { return }
-            }
-        } else if totalSynced > 0 {
-            if consecutiveFailures > 0 {
-                log("AgentSync: backend reconnected after \(consecutiveFailures) failures")
-            }
-            consecutiveFailures = 0
-            log("AgentSync: pushed \(totalSynced) rows")
-            saveCursors(generation: generation)
-        }
-
-        // Latency-based backpressure
-        let elapsed = ContinuousClock.now - tickStart
-        let elapsedSeconds = elapsed / .seconds(1)
-        if elapsedSeconds > 10 {
-            let prev = latencyBackoffMultiplier
-            latencyBackoffMultiplier = min(latencyBackoffMultiplier * 2, maxSyncInterval / baseSyncInterval)
-            if latencyBackoffMultiplier != prev {
-                log("AgentSync: tick took \(String(format: "%.1f", elapsedSeconds))s, backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x (interval \(currentSyncInterval() / 1_000_000_000)s)")
-            }
-        } else if elapsedSeconds < 5 && latencyBackoffMultiplier > 1 {
-            let prev = latencyBackoffMultiplier
-            latencyBackoffMultiplier = max(latencyBackoffMultiplier / 2, 1)
-            if latencyBackoffMultiplier != prev {
-                log("AgentSync: tick fast (\(String(format: "%.1f", elapsedSeconds))s), backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x")
-            }
-        }
+        let interval = currentSyncInterval()
+        try? await Task.sleep(nanoseconds: interval)
+      }
     }
+  }
 
-    // MARK: - Re-upload trigger
-
-    /// Called after 3 consecutive sync failures. Hits /health — if the VM has no
-    /// database (e.g. it restarted and lost its data), triggers a full re-upload.
-    private func checkAndTriggerReupload(generation: UInt64) async {
-        guard syncGeneration == generation else { return }
-        guard let vmIP = vmIP, let authToken = authToken else { return }
-        guard Date().timeIntervalSince(lastReuploadAt) >= reuploadCooldown else {
-            log("AgentSync: skipping re-upload check (cooldown active)")
-            return
-        }
-
-        guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
-        do {
-            let (data, _) = try await URLSession.shared.data(from: url)
-            guard syncGeneration == generation else { return }
-            guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
-                  let dbReady = json["databaseReady"] as? Bool,
-                  !dbReady else { return }
-
-            log("AgentSync: VM has no database — triggering re-upload")
-            lastReuploadAt = Date()
-            await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
-            guard syncGeneration == generation else { return }
-        } catch {
-            log("AgentSync: re-upload health check failed — \(error.localizedDescription)")
-        }
+  private func currentSyncInterval() -> UInt64 {
+    let base: UInt64
+    if consecutiveFailures > 0 {
+      // Exponential backoff: 3s, 6s, 12s, 24s, 48s, capped at 60s
+      base = baseSyncInterval * UInt64(1 << min(consecutiveFailures, 5))
+    } else {
+      base = baseSyncInterval
     }
+    return min(base * latencyBackoffMultiplier, maxSyncInterval)
+  }
 
-    // MARK: - Firebase token refresh
+  private func syncTick(generation: UInt64) async {
+    guard syncGeneration == generation else { return }
+    // Skip if user is signed out (tokens are cleared)
+    guard await AuthState.shared.isSignedIn else { return }
+    guard syncGeneration == generation else { return }
+    let tickStart = ContinuousClock.now
 
-    private func refreshFirebaseToken(generation: UInt64) async {
-        guard syncGeneration == generation else { return }
-        guard let vmIP = vmIP, let authToken = authToken else { return }
-
-        do {
-            let idToken = try await networkHooks.fetchIDToken()
-            guard syncGeneration == generation else { return }
-            // Send token both as query param (backward compat) and header (preferred)
-            guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
-            var request = URLRequest(url: url)
-            request.httpMethod = "POST"
-            request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-            request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-            request.timeoutInterval = 15
-
-            let body: [String: String] = ["firebaseToken": idToken]
-            request.httpBody = try JSONSerialization.data(withJSONObject: body)
-
-            let (_, response) = try await networkHooks.dataForRequest(request)
-            guard syncGeneration == generation else { return }
-            if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
-                lastTokenRefresh = Date()
-                log("AgentSync: Firebase token refreshed on VM")
-            }
-        } catch {
-            log("AgentSync: Firebase token refresh failed — \(error.localizedDescription)")
-        }
+    // Periodically refresh Firebase token on the VM (every 30 min)
+    if Date().timeIntervalSince(lastTokenRefresh) >= tokenRefreshInterval {
+      await refreshFirebaseToken(generation: generation)
+      guard syncGeneration == generation else { return }
     }
+    guard networkHooks.tableSyncEnabled else { return }
 
-    // MARK: - Per-table sync
-
-    /// Build the batch SELECT for a table's next sync page.
-    ///
-    /// Append-only tables paginate by `id`. Mutable tables paginate by a COMPOUND
-    /// `(updatedAt, id)` cursor: a strict `updatedAt > ?` skips every row past the
-    /// first page when more than `batchSize` rows share the same `updatedAt`
-    /// (e.g. a bulk status update touching >100 rows in the same second), silently
-    /// diverging the VM's copy. The `OR (updatedAt = ? AND id > ?)` clause plus
-    /// `ORDER BY updatedAt ASC, id ASC` resumes correctly within such a run.
-    static func buildBatchQuery(
-        tableName: String,
-        selectCols: String,
-        appendOnly: Bool,
-        lastId: Int64,
-        lastUpdatedAt: String,
-        batchSize: Int
-    ) -> (sql: String, args: [SyncQueryArg]) {
-        if appendOnly {
-            return (
-                "SELECT \(selectCols) FROM \"\(tableName)\" WHERE id > ? ORDER BY id ASC LIMIT ?",
-                [.int(lastId), .int(Int64(batchSize))]
-            )
-        }
-        return (
-            "SELECT \(selectCols) FROM \"\(tableName)\" WHERE updatedAt > ? OR (updatedAt = ? AND id > ?) ORDER BY updatedAt ASC, id ASC LIMIT ?",
-            [.text(lastUpdatedAt), .text(lastUpdatedAt), .int(lastId), .int(Int64(batchSize))]
+    var totalSynced = 0
+    var anyFailed = false
+    for spec in tables {
+      let count = await syncTable(spec, generation: generation)
+      guard syncGeneration == generation else { return }
+      if count < 0 {
+        anyFailed = true
+      } else {
+        totalSynced += count
+      }
+    }
+    if anyFailed && totalSynced == 0 {
+      consecutiveFailures += 1
+      if consecutiveFailures == 1 || consecutiveFailures % 10 == 0 {
+        log(
+          "AgentSync: backend unreachable (failures=\(consecutiveFailures), next retry in \(currentSyncInterval() / 1_000_000_000)s)"
         )
+      }
+      // After 3 consecutive failures, check if the VM lost its database
+      if consecutiveFailures == 3 {
+        await checkAndTriggerReupload(generation: generation)
+        guard syncGeneration == generation else { return }
+      }
+    } else if totalSynced > 0 {
+      if consecutiveFailures > 0 {
+        log("AgentSync: backend reconnected after \(consecutiveFailures) failures")
+      }
+      consecutiveFailures = 0
+      log("AgentSync: pushed \(totalSynced) rows")
+      saveCursors(generation: generation)
     }
 
-    /// Forward local query failures to the database lifecycle owner. AgentSync
-    /// touches every table on a short polling interval, so ignoring a recoverable
-    /// SQLite I/O error here leaves a stale pool running indefinitely instead of
-    /// allowing RewindDatabase to rotate and recover it.
-    static func reportDatabaseReadFailure(_ error: Error) async {
-        await RewindDatabase.shared.reportQueryError(error)
+    // Latency-based backpressure
+    let elapsed = ContinuousClock.now - tickStart
+    let elapsedSeconds = elapsed / .seconds(1)
+    if elapsedSeconds > 10 {
+      let prev = latencyBackoffMultiplier
+      latencyBackoffMultiplier = min(latencyBackoffMultiplier * 2, maxSyncInterval / baseSyncInterval)
+      if latencyBackoffMultiplier != prev {
+        log(
+          "AgentSync: tick took \(String(format: "%.1f", elapsedSeconds))s, backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x (interval \(currentSyncInterval() / 1_000_000_000)s)"
+        )
+      }
+    } else if elapsedSeconds < 5 && latencyBackoffMultiplier > 1 {
+      let prev = latencyBackoffMultiplier
+      latencyBackoffMultiplier = max(latencyBackoffMultiplier / 2, 1)
+      if latencyBackoffMultiplier != prev {
+        log(
+          "AgentSync: tick fast (\(String(format: "%.1f", elapsedSeconds))s), backoff multiplier \(prev)x → \(latencyBackoffMultiplier)x"
+        )
+      }
+    }
+  }
+
+  /// AgentSync reads every table on a short polling interval. Forward a local
+  /// SQLite failure to the lifecycle owner so a recoverable stale pool can be
+  /// closed and reopened instead of being retried indefinitely.
+  static func reportDatabaseReadFailure(_ error: Error) async {
+    await RewindDatabase.shared.reportQueryError(error)
+  }
+
+  // MARK: - Re-upload trigger
+
+  /// Called after 3 consecutive sync failures. Hits /health — if the VM has no
+  /// database (e.g. it restarted and lost its data), triggers a full re-upload.
+  private func checkAndTriggerReupload(generation: UInt64) async {
+    guard syncGeneration == generation else { return }
+    guard let vmIP = vmIP, let authToken = authToken else { return }
+    guard Date().timeIntervalSince(lastReuploadAt) >= reuploadCooldown else {
+      log("AgentSync: skipping re-upload check (cooldown active)")
+      return
     }
 
-    private func syncTable(_ spec: TableSpec, generation: UInt64) async -> Int {
-        guard syncGeneration == generation else { return 0 }
-        guard let dbPool = await getDBPool() else { return 0 }
-        guard syncGeneration == generation else { return 0 }
+    guard let url = URL(string: "http://\(vmIP):8080/health") else { return }
+    do {
+      let (data, _) = try await URLSession.shared.data(from: url)
+      guard syncGeneration == generation else { return }
+      guard let json = try JSONSerialization.jsonObject(with: data) as? [String: Any],
+        let dbReady = json["databaseReady"] as? Bool,
+        !dbReady
+      else { return }
 
-        let cursor = cursors[spec.name] ?? SyncCursor(lastId: 0, lastUpdatedAt: "1970-01-01T00:00:00")
+      log("AgentSync: VM has no database — triggering re-upload")
+      lastReuploadAt = Date()
+      await AgentVMService.shared.reuploadDatabase(vmIP: vmIP, authToken: authToken)
+      guard syncGeneration == generation else { return }
+    } catch {
+      log("AgentSync: re-upload health check failed — \(error.localizedDescription)")
+    }
+  }
 
-        // Resolve columns once and cache — PRAGMA table_info is static at runtime
-        let columns: [String]
-        if let cached = cachedTableColumns[spec.name] {
-            columns = cached
-        } else {
-            do {
-                let fetched: [String] = try await dbPool.read { db in
-                    let columnInfos = try Row.fetchAll(db, sql: "PRAGMA table_info('\(spec.name)')")
-                    let allColumns = columnInfos.compactMap { $0["name"] as? String }
-                    return allColumns.filter { !spec.excludedColumns.contains($0) }
-                }
-                guard syncGeneration == generation else { return 0 }
-                cachedTableColumns[spec.name] = fetched
-                columns = fetched
-                await RewindDatabase.shared.reportQuerySuccess()
-            } catch {
-                log("AgentSync: error fetching schema for \(spec.name) — \(error.localizedDescription)")
-                await Self.reportDatabaseReadFailure(error)
-                return 0
-            }
+  // MARK: - Firebase token refresh
+
+  private func refreshFirebaseToken(generation: UInt64) async {
+    guard syncGeneration == generation else { return }
+    guard let vmIP = vmIP, let authToken = authToken else { return }
+
+    do {
+      let idToken = try await networkHooks.fetchIDToken()
+      guard syncGeneration == generation else { return }
+      // Send token both as query param (backward compat) and header (preferred)
+      guard let url = URL(string: "http://\(vmIP):8080/auth?token=\(authToken)") else { return }
+      var request = URLRequest(url: url)
+      request.httpMethod = "POST"
+      request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+      request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+      request.timeoutInterval = 15
+
+      let body: [String: String] = ["firebaseToken": idToken]
+      request.httpBody = try JSONSerialization.data(withJSONObject: body)
+
+      let (_, response) = try await networkHooks.dataForRequest(request)
+      guard syncGeneration == generation else { return }
+      if let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 {
+        lastTokenRefresh = Date()
+        log("AgentSync: Firebase token refreshed on VM")
+      }
+    } catch {
+      log("AgentSync: Firebase token refresh failed — \(error.localizedDescription)")
+    }
+  }
+
+  // MARK: - Per-table sync
+
+  /// Build the batch SELECT for a table's next sync page.
+  ///
+  /// Append-only tables paginate by `id`. Mutable tables paginate by a COMPOUND
+  /// `(updatedAt, id)` cursor: a strict `updatedAt > ?` skips every row past the
+  /// first page when more than `batchSize` rows share the same `updatedAt`
+  /// (e.g. a bulk status update touching >100 rows in the same second), silently
+  /// diverging the VM's copy. The `OR (updatedAt = ? AND id > ?)` clause plus
+  /// `ORDER BY updatedAt ASC, id ASC` resumes correctly within such a run.
+  static func buildBatchQuery(
+    tableName: String,
+    selectCols: String,
+    appendOnly: Bool,
+    lastId: Int64,
+    lastUpdatedAt: String,
+    batchSize: Int
+  ) -> (sql: String, args: [SyncQueryArg]) {
+    if appendOnly {
+      return (
+        "SELECT \(selectCols) FROM \"\(tableName)\" WHERE id > ? ORDER BY id ASC LIMIT ?",
+        [.int(lastId), .int(Int64(batchSize))]
+      )
+    }
+    return (
+      "SELECT \(selectCols) FROM \"\(tableName)\" WHERE updatedAt > ? OR (updatedAt = ? AND id > ?) ORDER BY updatedAt ASC, id ASC LIMIT ?",
+      [.text(lastUpdatedAt), .text(lastUpdatedAt), .int(lastId), .int(Int64(batchSize))]
+    )
+  }
+
+  private func syncTable(_ spec: TableSpec, generation: UInt64) async -> Int {
+    guard syncGeneration == generation else { return 0 }
+    guard let dbPool = await getDBPool() else { return 0 }
+    guard syncGeneration == generation else { return 0 }
+
+    let cursor = cursors[spec.name] ?? SyncCursor(lastId: 0, lastUpdatedAt: "1970-01-01T00:00:00")
+
+    // Resolve columns once and cache — PRAGMA table_info is static at runtime
+    let columns: [String]
+    if let cached = cachedTableColumns[spec.name] {
+      columns = cached
+    } else {
+      do {
+        let fetched: [String] = try await dbPool.read { db in
+          let columnInfos = try Row.fetchAll(db, sql: "PRAGMA table_info('\(spec.name)')")
+          let allColumns = columnInfos.compactMap { $0["name"] as? String }
+          return allColumns.filter { !spec.excludedColumns.contains($0) }
         }
-
-        guard !columns.isEmpty else { return 0 }
-
-        do {
-            let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
-            let batchSize = self.batchSize
-            let rows: [[String: Any]] = try await dbPool.read { db in
-                let (sql, queryArgs) = Self.buildBatchQuery(
-                    tableName: spec.name,
-                    selectCols: selectCols,
-                    appendOnly: spec.appendOnly,
-                    lastId: cursor.lastId,
-                    lastUpdatedAt: cursor.lastUpdatedAt,
-                    batchSize: batchSize
-                )
-                let args: [any DatabaseValueConvertible] = queryArgs.map { arg in
-                    switch arg {
-                    case .int(let v): return v
-                    case .text(let v): return v
-                    }
-                }
-
-                let dbRows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
-
-                return dbRows.map { row in
-                    var dict: [String: Any] = [:]
-                    for col in columns {
-                        let dbValue = row[col] as DatabaseValue
-                        switch dbValue.storage {
-                        case .null:
-                            // skip nulls — let the VM use its defaults
-                            break
-                        case .int64(let v):
-                            dict[col] = v
-                        case .double(let v):
-                            dict[col] = v
-                        case .string(let v):
-                            dict[col] = v
-                        case .blob(let data):
-                            // Embeddings and other blobs → base64
-                            dict[col] = data.base64EncodedString()
-                        }
-                    }
-                    return dict
-                }
-            }
-
-            guard syncGeneration == generation else { return 0 }
-            await RewindDatabase.shared.reportQuerySuccess()
-
-            guard !rows.isEmpty else { return 0 }
-
-            // Push to VM
-            let result = await pushRows(spec.name, rows)
-            guard syncGeneration == generation else { return 0 }
-            if result == .success {
-                // Update cursor
-                if spec.appendOnly {
-                    if let lastId = rows.last?["id"] as? Int64 {
-                        cursors[spec.name] = SyncCursor(
-                            lastId: lastId,
-                            lastUpdatedAt: cursor.lastUpdatedAt
-                        )
-                    }
-                } else {
-                    if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
-                        // Advance BOTH updatedAt and id so the compound cursor can
-                        // resume within a run of rows sharing the same updatedAt
-                        // (otherwise a >batchSize same-timestamp bulk update loses
-                        // every row past the first page).
-                        let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
-                        cursors[spec.name] = SyncCursor(
-                            lastId: lastRowId,
-                            lastUpdatedAt: lastUpdatedAt
-                        )
-                    }
-                }
-                return rows.count
-            } else if result == .networkError {
-                return -1  // Signal network failure for backoff
-            }
-        } catch {
-            log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
-            await Self.reportDatabaseReadFailure(error)
-        }
+        await RewindDatabase.shared.reportQuerySuccess()
+        guard syncGeneration == generation else { return 0 }
+        cachedTableColumns[spec.name] = fetched
+        columns = fetched
+      } catch {
+        log("AgentSync: error fetching schema for \(spec.name) — \(error.localizedDescription)")
+        await Self.reportDatabaseReadFailure(error)
         return 0
+      }
     }
 
-    // MARK: - HTTP push
+    guard !columns.isEmpty else { return 0 }
 
-    private enum PushResult {
-        case success
-        case httpError
-        case networkError
-    }
-
-    private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
-        guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
-
-        // Send token both as query param (backward compat) and header (preferred)
-        guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
-            log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
-            return .httpError
+    do {
+      let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
+      let batchSize = self.batchSize
+      let rowsPayload: AgentSyncRowsPayload = try await dbPool.read { db in
+        let (sql, queryArgs) = Self.buildBatchQuery(
+          tableName: spec.name,
+          selectCols: selectCols,
+          appendOnly: spec.appendOnly,
+          lastId: cursor.lastId,
+          lastUpdatedAt: cursor.lastUpdatedAt,
+          batchSize: batchSize
+        )
+        let args: [any DatabaseValueConvertible] = queryArgs.map { arg in
+          switch arg {
+          case .int(let v): return v
+          case .text(let v): return v
+          }
         }
 
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
-        request.timeoutInterval = 30
+        let dbRows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
 
-        let payload: [String: Any] = ["table": table, "rows": rows]
-        do {
-            request.httpBody = try JSONSerialization.data(withJSONObject: payload)
-        } catch {
-            log("AgentSync: JSON serialization error for \(table) — \(error.localizedDescription)")
-            return .httpError
-        }
-
-        do {
-            let (data, response) = try await networkHooks.dataForRequest(request)
-            guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
-
-            if httpResponse.statusCode == 200 {
-                return .success
-            } else if httpResponse.statusCode >= 500 {
-                let body = String(data: data, encoding: .utf8) ?? ""
-                log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
-                return .networkError  // 5xx = server not ready, trigger backoff
-            } else {
-                let body = String(data: data, encoding: .utf8) ?? ""
-                log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
-                return .httpError
+        let rows = dbRows.map { row in
+          var dict: [String: Any] = [:]
+          for col in columns {
+            let dbValue = row[col] as DatabaseValue
+            switch dbValue.storage {
+            case .null:
+              // skip nulls — let the VM use its defaults
+              break
+            case .int64(let v):
+              dict[col] = v
+            case .double(let v):
+              dict[col] = v
+            case .string(let v):
+              dict[col] = v
+            case .blob(let data):
+              // Embeddings and other blobs → base64
+              dict[col] = data.base64EncodedString()
             }
-        } catch {
-            log("AgentSync: push \(table) network error — \(error.localizedDescription)")
-            return .networkError
+          }
+          return dict
         }
+        return AgentSyncRowsPayload(rows: rows)
+      }
+      let rows = rowsPayload.rows
+      await RewindDatabase.shared.reportQuerySuccess()
+
+      guard syncGeneration == generation else { return 0 }
+
+      guard !rows.isEmpty else { return 0 }
+
+      // Push to VM
+      let result = await pushRows(spec.name, rows)
+      guard syncGeneration == generation else { return 0 }
+      if result == .success {
+        // Update cursor
+        if spec.appendOnly {
+          if let lastId = rows.last?["id"] as? Int64 {
+            cursors[spec.name] = SyncCursor(
+              lastId: lastId,
+              lastUpdatedAt: cursor.lastUpdatedAt
+            )
+          }
+        } else {
+          if let lastUpdatedAt = rows.last?["updatedAt"] as? String {
+            // Advance BOTH updatedAt and id so the compound cursor can
+            // resume within a run of rows sharing the same updatedAt
+            // (otherwise a >batchSize same-timestamp bulk update loses
+            // every row past the first page).
+            let lastRowId = (rows.last?["id"] as? Int64) ?? cursor.lastId
+            cursors[spec.name] = SyncCursor(
+              lastId: lastRowId,
+              lastUpdatedAt: lastUpdatedAt
+            )
+          }
+        }
+        return rows.count
+      } else if result == .networkError {
+        return -1  // Signal network failure for backoff
+      }
+    } catch {
+      log("AgentSync: error reading \(spec.name) — \(error.localizedDescription)")
+      await Self.reportDatabaseReadFailure(error)
+    }
+    return 0
+  }
+
+  // MARK: - HTTP push
+
+  private enum PushResult {
+    case success
+    case httpError
+    case networkError
+  }
+
+  private func pushRows(_ table: String, _ rows: [[String: Any]]) async -> PushResult {
+    guard let vmIP = vmIP, let authToken = authToken else { return .networkError }
+
+    // Send token both as query param (backward compat) and header (preferred)
+    guard let url = URL(string: "http://\(vmIP):8080/sync?token=\(authToken)") else {
+      log("AgentSync: invalid sync URL for vmIP=\(vmIP), skipping push")
+      return .httpError
     }
 
-    // MARK: - Database access
+    var request = URLRequest(url: url)
+    request.httpMethod = "POST"
+    request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+    request.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
+    request.timeoutInterval = 30
 
-    private func getDBPool() async -> DatabasePool? {
-        try? await RewindDatabase.shared.initialize()
-        return await RewindDatabase.shared.getDatabaseQueue()
+    let payload: [String: Any] = ["table": table, "rows": rows]
+    do {
+      request.httpBody = try JSONSerialization.data(withJSONObject: payload)
+    } catch {
+      log("AgentSync: JSON serialization error for \(table) — \(error.localizedDescription)")
+      return .httpError
     }
 
-    // MARK: - Cursor persistence
+    do {
+      let (data, response) = try await networkHooks.dataForRequest(request)
+      guard let httpResponse = response as? HTTPURLResponse else { return .httpError }
 
-    private func loadCursors(ownerID: String?) {
-        guard let ownerID, !ownerID.isEmpty else {
-            log("AgentSync: no effective owner, starting with empty cursors")
-            return
-        }
-        let ownerKey = cursorDefaultsKey(ownerID: ownerID)
-        let ownerData = UserDefaults.standard.data(forKey: ownerKey)
-        let legacyData = ownerData == nil
-            ? UserDefaults.standard.data(forKey: "agentSync_cursors")
-            : nil
-        guard let data = ownerData ?? legacyData,
-              let decoded = try? JSONDecoder().decode([String: SyncCursor].self, from: data)
-        else {
-            log("AgentSync: no saved cursors, starting fresh")
-            return
-        }
-        cursors = decoded
-        if legacyData != nil {
-            UserDefaults.standard.set(data, forKey: ownerKey)
-            UserDefaults.standard.removeObject(forKey: "agentSync_cursors")
-            log("AgentSync: migrated legacy cursors into the current owner scope")
-        }
-        log("AgentSync: loaded cursors for \(decoded.keys.sorted().joined(separator: ", "))")
+      if httpResponse.statusCode == 200 {
+        return .success
+      } else if httpResponse.statusCode >= 500 {
+        let body = String(data: data, encoding: .utf8) ?? ""
+        log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
+        return .networkError  // 5xx = server not ready, trigger backoff
+      } else {
+        let body = String(data: data, encoding: .utf8) ?? ""
+        log("AgentSync: push \(table) failed — HTTP \(httpResponse.statusCode): \(body)")
+        return .httpError
+      }
+    } catch {
+      log("AgentSync: push \(table) network error — \(error.localizedDescription)")
+      return .networkError
     }
+  }
 
-    private func saveCursors(generation: UInt64) {
-        guard syncGeneration == generation,
-              let ownerID = cursorOwnerID,
-              RuntimeOwnerIdentity.currentOwnerId() == ownerID
-        else {
-            return
-        }
-        guard let data = try? JSONEncoder().encode(cursors) else { return }
-        UserDefaults.standard.set(data, forKey: cursorDefaultsKey(ownerID: ownerID))
-    }
+  // MARK: - Database access
 
-    private func cursorDefaultsKey(ownerID: String) -> String {
-        "agentSync_cursors.\(ownerID)"
+  private func getDBPool() async -> DatabasePool? {
+    try? await RewindDatabase.shared.initialize()
+    return await RewindDatabase.shared.getDatabaseQueue()
+  }
+
+  // MARK: - Cursor persistence
+
+  private func loadCursors(ownerID: String?) {
+    guard let ownerID, !ownerID.isEmpty else {
+      log("AgentSync: no effective owner, starting with empty cursors")
+      return
     }
+    let ownerKey = cursorDefaultsKey(ownerID: ownerID)
+    let ownerData = UserDefaults.standard.data(forKey: ownerKey)
+    let legacyData =
+      ownerData == nil
+      ? UserDefaults.standard.data(forKey: "agentSync_cursors")
+      : nil
+    guard let data = ownerData ?? legacyData,
+      let decoded = try? JSONDecoder().decode([String: SyncCursor].self, from: data)
+    else {
+      log("AgentSync: no saved cursors, starting fresh")
+      return
+    }
+    cursors = decoded
+    if legacyData != nil {
+      UserDefaults.standard.set(data, forKey: ownerKey)
+      UserDefaults.standard.removeObject(forKey: "agentSync_cursors")
+      log("AgentSync: migrated legacy cursors into the current owner scope")
+    }
+    log("AgentSync: loaded cursors for \(decoded.keys.sorted().joined(separator: ", "))")
+  }
+
+  private func saveCursors(generation: UInt64) {
+    guard syncGeneration == generation,
+      let ownerID = cursorOwnerID,
+      RuntimeOwnerIdentity.currentOwnerId() == ownerID
+    else {
+      return
+    }
+    guard let data = try? JSONEncoder().encode(cursors) else { return }
+    UserDefaults.standard.set(data, forKey: cursorDefaultsKey(ownerID: ownerID))
+  }
+
+  private func cursorDefaultsKey(ownerID: String) -> String {
+    "agentSync_cursors.\(ownerID)"
+  }
 }

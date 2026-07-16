@@ -132,7 +132,9 @@ final class ScreenCaptureService: Sendable {
         log("Opened Screen Recording preferences via URL scheme")
         // Bring System Settings to front after a brief moment to ensure it's visible
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-          if let settingsApp = NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.systempreferences").first
+          if let settingsApp = NSRunningApplication.runningApplications(
+            withBundleIdentifier: "com.apple.systempreferences"
+          ).first
             ?? NSRunningApplication.runningApplications(withBundleIdentifier: "com.apple.Preferences").first
           {
             settingsApp.activate()
@@ -450,7 +452,8 @@ final class ScreenCaptureService: Sendable {
     AppState.relaunchCommand(
       appPath: appPath,
       isNonProduction: AppBuild.isNonProduction,
-      automationPort: DesktopAutomationLaunchOptions.port
+      automationPort: DesktopAutomationLaunchOptions.port,
+      terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier
     )
   }
 
@@ -613,7 +616,8 @@ final class ScreenCaptureService: Sendable {
 
   /// Private API: get CGWindowID directly from an AXUIElement (avoids fragile position/size matching)
   @_silgen_name("_AXUIElementGetWindow")
-  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>) -> AXError
+  private static func _AXUIElementGetWindow(_ element: AXUIElement, _ windowID: UnsafeMutablePointer<CGWindowID>)
+    -> AXError
 
   /// Get focused window info using Accessibility API, then match to CGWindowList for windowID
   private static func getWindowInfoViaAccessibility(

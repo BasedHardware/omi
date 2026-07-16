@@ -1,9 +1,9 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
-import OmiSupport
 @preconcurrency import ObjectiveC
+import OmiSupport
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum SystemAudioPermissionStatus: String {
   case unknown
@@ -42,13 +42,13 @@ struct SegmentTranslation: Identifiable {
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
   var id: String { segmentId ?? "\(speaker)-\(start)" }
-  var segmentId: String?   // Backend-assigned UUID
+  var segmentId: String?  // Backend-assigned UUID
   var speaker: Int
   var text: String
   var start: Double
   var end: Double
   var isUser: Bool = false
-  var personId: String?    // Backend-assigned person ID from speaker identification
+  var personId: String?  // Backend-assigned person ID from speaker identification
   var translations: [SegmentTranslation] = []
 }
 
@@ -140,11 +140,11 @@ enum DesktopConversationMatchPolicy {
   ) -> Bool {
     guard lifecycleVersion != nil || lifecycleSequence != nil else { return true }
     guard lifecycleVersion == 1,
-          let recordingSessionId,
-          !recordingSessionId.isEmpty,
-          lifecyclePhase == expectedLifecyclePhase,
-          let lifecycleSequence,
-          lifecycleSequence >= 0
+      let recordingSessionId,
+      !recordingSessionId.isEmpty,
+      lifecyclePhase == expectedLifecyclePhase,
+      let lifecycleSequence,
+      lifecycleSequence >= 0
     else { return false }
     if let expectedBackendId, !expectedBackendId.isEmpty {
       guard recordingSessionId == expectedBackendId, conversationId == expectedBackendId else { return false }
@@ -325,7 +325,7 @@ class AppState: ObservableObject {
 
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
-  let servicesCoordinator = AppServicesCoordinator()
+  nonisolated(unsafe) let servicesCoordinator = AppServicesCoordinator()
 
   var audioCaptureService: AudioCaptureService? {
     get { servicesCoordinator.audioCaptureService }
@@ -462,9 +462,43 @@ class AppState: ObservableObject {
     set { servicesCoordinator.bluetoothStateCancellable = newValue }
   }
 
+  nonisolated(unsafe) private var ownerChangeObserver: NSObjectProtocol?
+
+  /// Bumped on every in-place account switch. Owner-scoped loads capture it
+  /// before awaiting and drop their result if it moved — a previous account's
+  /// in-flight response must never repopulate state after the reset (the
+  /// skip-while-non-empty reload guards would then pin the stale data).
+  private(set) var ownerScopeGeneration: UInt64 = 0
+
+  /// Clear account-owned conversation UI state on an in-place account switch.
+  /// The .userDidSignOut handler in DesktopHomeView covers full sign-out (and
+  /// additionally resets onboarding and stops transcription); an in-place
+  /// switch posts only .runtimeOwnerDidChange, so without this the previous
+  /// account's folders, filters, counts, and people kept rendering.
+  func resetOwnerScopedContent() {
+    ownerScopeGeneration &+= 1
+    folders = []
+    selectedFolderId = nil
+    selectedDateFilter = nil
+    showStarredOnly = false
+    totalConversationsCount = nil
+    filteredConversationsCount = nil
+    conversationsError = nil
+    isLoadingConversations = false
+    isLoadingFolders = false
+    people = []
+  }
+
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetOwnerScopedContent()
+      }
+    }
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
@@ -564,7 +598,7 @@ class AppState: ObservableObject {
     // Detects when macOS silently revokes notification authorization and auto-repairs
     notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) {
       [weak self] _ in
-      DispatchQueue.main.async {
+      MainActor.assumeIsolated {
         self?.checkNotificationPermission()
       }
     }
@@ -741,6 +775,9 @@ class AppState: ObservableObject {
 
   deinit {
     servicesCoordinator.removeLifecycleObservers()
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 }
 
@@ -819,6 +856,8 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
+  static let desktopAutomationSetConversationsSearchRequested = Notification.Name(
+    "desktopAutomationSetConversationsSearchRequested")
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")

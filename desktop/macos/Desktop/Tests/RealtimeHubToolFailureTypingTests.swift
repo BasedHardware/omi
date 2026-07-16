@@ -26,7 +26,8 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertEqual(
       failure.userFacingOutput(base: "Could not read your memories right now."),
       "Could not read your memories right now. The provider credential needs attention.")
-    XCTAssertFalse(failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
+    XCTAssertFalse(
+      failure.userFacingOutput(base: "Could not read your memories right now.").contains("raw provider body"))
   }
 
   func testClassifiesTransportAndDecodeFailures() {
@@ -56,7 +57,7 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     XCTAssertTrue(source.contains("private func executeAuthorizedRealtimeTool("))
   }
 
-  func testBeginTurnNeverCapturesOrUploadsAmbientScreenshotPixels() throws {
+  func testRealtimeScreenshotUsesOnlyPreCapturedTurnEvidence() throws {
     let source = try realtimeHubControllerSource()
     let beginRange = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
     let nextRange = try XCTUnwrap(
@@ -66,11 +67,12 @@ final class RealtimeHubToolFailureTypingTests: XCTestCase {
     let beginTurnSource = String(source[beginRange.lowerBound..<nextRange.lowerBound])
 
     XCTAssertFalse(beginTurnSource.contains("ScreenCaptureManager.captureScreen"))
-    XCTAssertFalse(beginTurnSource.contains("speculativeScreenshot"))
     XCTAssertFalse(beginTurnSource.contains("sendVideoFrame"))
     XCTAssertFalse(source.contains("voiceTurnScreenContextEnvelopeJSON"))
     XCTAssertFalse(source.contains("sendVoiceTurnScreenContextIfNeeded"))
-    XCTAssertTrue(source.contains("effect: { [ScreenCaptureManager.captureScreenJPEG()] }"))
+    XCTAssertFalse(source.contains("ScreenCaptureManager.captureScreenJPEG"))
+    XCTAssertTrue(source.contains("effect: { [currentEvidence] in [currentEvidence] }"))
+    XCTAssertTrue(source.contains("RealtimeScreenEvidenceAttachment"))
   }
 
   private struct DummyDecodeError: Error {}

@@ -352,6 +352,10 @@ def test_streaming_success_requires_done_marker_and_records_byok_source(monkeypa
     assert recorded[0]['credential_source'] == 'service_forwarded_byok'
     assert recorded[0]['streaming'] is True
     assert recorded[0]['ttfb_seconds'] is not None
+    assert recorded[0]['budget_source'] == 'none'
+    assert recorded[0]['output_budget'] == 'none'
+    assert recorded[0]['completion_size'] == 'le_64'
+    assert recorded[0]['finish_reason'] == 'unknown'
 
 
 def test_streaming_payload_text_cannot_fake_done_marker(monkeypatch):

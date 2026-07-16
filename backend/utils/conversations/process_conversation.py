@@ -48,7 +48,6 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -76,6 +75,7 @@ from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
@@ -484,9 +484,18 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
         logger.error(f"[GOAL] Error updating progress: {e}")
 
 
-def _extract_memories(uid: str, conversation: Conversation) -> None:
+def extract_memories(uid: str, conversation: Conversation) -> None:
+    """Extract one conversation's memories through the selected memory system.
+
+    Finalization workers use this public boundary while holding their durable
+    lease. Keep the private helper below for existing in-module async callers.
+    """
     with track_usage(uid, Features.MEMORIES):
         _extract_memories_inner(uid, conversation)
+
+
+def _extract_memories(uid: str, conversation: Conversation) -> None:
+    extract_memories(uid, conversation)
 
 
 def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
@@ -589,7 +598,8 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
 def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
             _extract_memories_canonical(uid, conversation, db_client=db_client)
             return
 
@@ -600,16 +610,29 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
+    # Ground extraction in the date the content was captured, not the processing time, so
+    # relative dates in delayed or backfilled content resolve correctly (cubic on #8501).
+    content_date = None
+    if getattr(conversation, 'started_at', None):
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as e:
+            logger.warning(f"_extract_memories_inner content_date_failed uid={uid}: {e}")
+
     # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
         ext_data = conversation.external_data or {}
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+            new_memories = extract_memories_from_text(
+                uid, text_content, text_source, language=language, content_date=content_date
+            )
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+        new_memories = new_memories_extractor(
+            uid, conversation.transcript_segments, language=language, content_date=content_date
+        )
 
     is_locked = conversation.is_locked
     parsed_memories: List[MemoryDB] = []
@@ -992,6 +1015,7 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
     persistence_observer: Callable[[bool], None] | None = None,
+    defer_memory_extraction: bool = False,
 ) -> Conversation:
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
@@ -1180,7 +1204,15 @@ def process_conversation(
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                 submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
-        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+        if not defer_memory_extraction:
+            with memory_system_request_scope(uid) as memory_system:
+                if memory_system == MemorySystem.CANONICAL:
+                    # Canonical writes intentionally fail closed. Do not hide a
+                    # retryable gate/store failure in an unobserved future and
+                    # report this conversation as successfully processed.
+                    _extract_memories(uid, conversation)
+                else:
+                    submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
         submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 

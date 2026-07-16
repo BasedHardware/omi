@@ -319,7 +319,7 @@ enum AppBuild {
       currentBuild: currentBuildNumber,
       mainThreadBudget: channelProbeMainThreadBudget,
       fetchAppcast: fetchDesktopAppcast,
-      persistLateCorrection: storeLateChannelCorrection
+      persistLateCorrection: { storeLateChannelCorrection($0) }
     )
   }
 
@@ -336,8 +336,8 @@ enum AppBuild {
     fallback: String,
     currentBuild: Int?,
     mainThreadBudget: TimeInterval,
-    fetchAppcast: @escaping (@escaping (String?) -> Void) -> Void,
-    persistLateCorrection: @escaping (String) -> Void
+    fetchAppcast: @escaping (@escaping @Sendable (String?) -> Void) -> Void,
+    persistLateCorrection: @escaping @Sendable (String) -> Void
   ) -> String {
     if fallback == "beta" {
       return "beta"
@@ -382,7 +382,7 @@ enum AppBuild {
     return fallback
   }
 
-  private static func fetchDesktopAppcast(completion: @escaping (String?) -> Void) {
+  private static func fetchDesktopAppcast(completion: @escaping @Sendable (String?) -> Void) {
     let configuration = URLSessionConfiguration.ephemeral
     configuration.timeoutIntervalForRequest = channelProbeRequestTimeout
     configuration.timeoutIntervalForResource = channelProbeRequestTimeout

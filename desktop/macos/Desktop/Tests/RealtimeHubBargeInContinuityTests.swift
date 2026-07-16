@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -388,7 +389,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let accepted = await RealtimeTurnJournalAuthority.persist(
       turnOwnerID: "owner-a",
       acceptedSpawnOwnerID: nil,
-      refreshAcceptedSpawn: { XCTFail("no spawn receipt exists"); return false },
+      refreshAcceptedSpawn: {
+        XCTFail("no spawn receipt exists")
+        return false
+      },
       recordProviderExchange: {
         mutationCount += 1
         return true
@@ -440,19 +444,36 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 2, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .awaitPendingTools)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 1, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .awaitPendingTools)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 0, postToolContinuationRequired: true),
-      .awaitToolContinuation)
+      .requestPostToolContinuation)
     XCTAssertEqual(
       RealtimeProviderTurnDoneDisposition.decide(
         pendingToolCount: 0, postToolContinuationRequired: false),
       .finalizeLogicalTurn)
+  }
+
+  func testUnavailablePostToolContinuationFinishesPromptlyButInFlightAndStaleDoNot() {
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.transportUnavailable),
+      .finishProviderNoResponse)
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.exhausted),
+      .finishProviderNoResponse)
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.alreadyInFlight),
+      .waitForProvider,
+      "a healthy response already in flight must not be cut off")
+    XCTAssertEqual(
+      RealtimePostToolContinuationControllerAction.decide(.stale),
+      .ignoreStaleCallback,
+      "an old session callback must not affect a replacement turn")
   }
 
   func testSecondBargeInTurnExecutesAuthorizedToolWithoutFinalTranscriptAndFencesOldTurn() throws {
@@ -605,9 +626,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     var completed: Set<String> = []
     var physicalExecutionCount = 0
     for _ in 0..<2 {
-      guard RealtimeAuthorizedInvocationReplayGate.shouldExecute(
-        invocationID: invocationID,
-        completedInvocationIDs: completed)
+      guard
+        RealtimeAuthorizedInvocationReplayGate.shouldExecute(
+          invocationID: invocationID,
+          completedInvocationIDs: completed)
       else { continue }
       completed.insert(invocationID)
       physicalExecutionCount += 1
@@ -850,13 +872,15 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(source.contains("let interruptedContinuityTask = bargeInContinuityTask"))
     XCTAssertTrue(source.contains("await interruptedContinuityTask.value"))
     XCTAssertTrue(source.contains("pendingSessionRefreshReason = \"voice_context_changed\""))
-    XCTAssertTrue(source.contains("cancelContinuityFenceActive = true"))
-    XCTAssertTrue(source.contains("self.cancelContinuityFenceActive = false"))
-    XCTAssertTrue(source.contains("general warm deferred behind canceled-turn continuity fence"))
-    XCTAssertTrue(source.contains("session start rejected behind canceled-turn continuity fence"))
+    XCTAssertTrue(source.contains("reason: .cancelledTurnContinuity"))
+    XCTAssertTrue(
+      source.contains("pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue"))
+    XCTAssertTrue(source.contains("ensureWarm()"))
+    XCTAssertFalse(source.contains("general warm deferred behind canceled-turn continuity fence"))
+    XCTAssertFalse(source.contains("session start rejected behind canceled-turn continuity fence"))
   }
 
-  func testCancelKeepsReconnectFenceThroughEveryPersistencePathAndContextRefresh() throws {
+  func testCancelRefreshesPersistenceContextWithoutBlockingTheNextWarmSession() throws {
     let source = try realtimeHubControllerSource()
     let cancel = try XCTUnwrap(
       source.range(of: "func cancelTurn(turnID requestedTurnID: VoiceTurnID) -> Bool"))
@@ -867,12 +891,12 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
       cancelTail.range(of: "await interruptedContinuityTask.value"))
     let persistenceFence = try XCTUnwrap(
       cancelTail.range(of: "await self.refreshVoiceContextAfterPersistenceFence("))
-    let fenceRelease = try XCTUnwrap(
-      cancelTail.range(of: "self.cancelContinuityFenceActive = false"))
-
     XCTAssertLessThan(preparationWait.lowerBound, continuityWait.lowerBound)
     XCTAssertLessThan(continuityWait.lowerBound, persistenceFence.lowerBound)
-    XCTAssertLessThan(persistenceFence.lowerBound, fenceRelease.lowerBound)
+    XCTAssertLessThan(
+      try XCTUnwrap(cancelTail.range(of: "ensureWarm()", range: cancelTail.startIndex..<preparationWait.lowerBound))
+        .lowerBound,
+      persistenceFence.lowerBound)
 
     let helper = try XCTUnwrap(
       source.range(
@@ -991,19 +1015,47 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let harness = try XCTUnwrap(
       source.range(of: "private func runHeadlessPTTTurn("))
     let tail = source[harness.lowerBound...]
+    // omi-test-quality: source-inspection -- static contract: the live probe must
+    // freeze screen evidence at the physical PTT boundary, before warmup can let a
+    // focus change turn into a false current-screen assertion.
     let begin = try XCTUnwrap(
       tail.range(of: "let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)"))
     let route = try XCTUnwrap(
       tail.range(of: ".selectRoute(turnID: turnID, route: .hub(sessionID: nil))"))
+    let capture = try XCTUnwrap(
+      tail.range(of: "PushToTalkManager.shared.captureScreenEvidenceForAutomation(turnID: turnID)"))
+    let warm = try XCTUnwrap(tail.range(of: "ensureWarm()"))
     let controllerBegin = try XCTUnwrap(tail.range(of: "beginTurn(turnID: turnID)"))
     let finalize = try XCTUnwrap(
-      tail.range(of: "VoiceTurnCoordinator.shared.send(.finalize(turnID: turnID))"))
+      tail.range(of: "VoiceTurnCoordinator.shared.publish(.finalize(turnID: turnID))"))
     let commit = try XCTUnwrap(tail.range(of: "_ = commitTurn()"))
 
     XCTAssertLessThan(begin.lowerBound, route.lowerBound)
     XCTAssertLessThan(route.lowerBound, controllerBegin.lowerBound)
+    XCTAssertLessThan(route.lowerBound, capture.lowerBound)
+    XCTAssertLessThan(capture.lowerBound, warm.lowerBound)
+    XCTAssertLessThan(warm.lowerBound, controllerBegin.lowerBound)
     XCTAssertLessThan(controllerBegin.lowerBound, finalize.lowerBound)
     XCTAssertLessThan(finalize.lowerBound, commit.lowerBound)
+  }
+
+  func testHeadlessPTTHarnessWaitsForPlaybackTerminalAfterPersistenceDiagnostics() {
+    let turnID = VoiceTurnID()
+    XCTAssertNil(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: nil),
+      "persistence can finish while native audio still plays; it is not probe completion")
+    XCTAssertEqual(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: VoiceTurnTerminalRecord(turnID: turnID, reason: .success, route: .hub(sessionID: nil))),
+      .success)
+    XCTAssertNil(
+      RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+        for: turnID,
+        lastTerminal: VoiceTurnTerminalRecord(turnID: VoiceTurnID(), reason: .success, route: .hub(sessionID: nil))),
+      "a terminal record from another PTT turn must never complete this probe")
   }
 
   func testRapidBurstHarnessCommitsEveryClipWithoutWaitingForReplies() throws {
@@ -1306,16 +1358,11 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     XCTAssertTrue(resolution.usedLocalTranscript)
   }
 
-  func testCanceledTurnFenceResumesOnlyAfterAnotherTurnTerminates() {
-    let canceled = VoiceTurnID()
-    let next = VoiceTurnID()
-
-    XCTAssertFalse(
-      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
-        fenceTurnID: canceled, terminalTurnID: canceled))
+  func testGeneralWarmSessionIsNotBlockedByACompletedCanceledTurn() {
     XCTAssertTrue(
-      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
-        fenceTurnID: canceled, terminalTurnID: next))
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: false))
+    XCTAssertFalse(
+      RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(replacementPending: true))
   }
 
   func testNativeAudioFailureKeepsTextFallbackOnlyBeforePlaybackStarts() {
@@ -1328,10 +1375,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
     let coordinator = VoiceTurnCoordinator()
     let turnID = coordinator.begin(intent: .hold)
-    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
-    coordinator.send(.finalize(turnID: turnID))
-    coordinator.send(.transcriptionStarted(turnID: turnID))
-    coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "fixture"))
     guard case .acquired(let native) = coordinator.acquireOutput(.nativeRealtime, turnID: turnID) else {
       return XCTFail("native lane should acquire")
     }
@@ -1375,26 +1422,36 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
     let baseline = "version-a:renderer-a:capability-1"
     // A monotonic snapshot generation is intentionally absent from this
     // identity: unchanged material must not churn a warm voice socket.
-    XCTAssertFalse(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: baseline,
-      sessionSnapshotIdentity: baseline
-    ))
-    XCTAssertTrue(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: "version-b:renderer-a:capability-1",
-      sessionSnapshotIdentity: baseline
-    ))
-    XCTAssertTrue(RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-      currentSnapshotIdentity: "version-a:renderer-a:capability-2",
-      sessionSnapshotIdentity: baseline
-    ))
+    XCTAssertFalse(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: baseline,
+        sessionSnapshotIdentity: baseline
+      ))
+    XCTAssertTrue(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: "version-b:renderer-a:capability-1",
+        sessionSnapshotIdentity: baseline
+      ))
+    XCTAssertTrue(
+      RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+        currentSnapshotIdentity: "version-a:renderer-a:capability-2",
+        sessionSnapshotIdentity: baseline
+      ))
   }
 
-  func testBeginTurnWaitsForActiveSessionBeforeActivityStart() throws {
+  func testBeginTurnBuffersThroughTypedHandoffInsteadOfWaitingOnThePressPath() throws {
     let source = try realtimeHubControllerSource()
+    let begin = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
+    let nextMethod = try XCTUnwrap(
+      source.range(
+        of: "private func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
+    let beginBody = String(source[begin.lowerBound..<nextMethod.lowerBound])
 
-    XCTAssertTrue(source.contains("self.contextFreshInputPreparationIsCurrent("))
-    XCTAssertTrue(source.contains("await self.waitUntilActive(timeout: 15)"))
-    XCTAssertTrue(source.contains("inputTurnActivityStartPending = true"))
+    XCTAssertTrue(beginBody.contains("self.contextFreshInputPreparationIsCurrent("))
+    XCTAssertTrue(beginBody.contains("requestSessionHandoff("))
+    XCTAssertTrue(beginBody.contains("reason: .voiceContextFreshness"))
+    XCTAssertFalse(beginBody.contains("await self.waitUntilActive(timeout: 15)"))
+    XCTAssertFalse(beginBody.contains("inputTurnActivityStartPending"))
   }
 
   func testHubDidConnectCannotOpenInputFromTransportReadiness() throws {

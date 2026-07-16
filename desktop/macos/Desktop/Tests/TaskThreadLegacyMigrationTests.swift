@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -9,7 +9,6 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
   private var userDirectory: URL!
 
   override func setUp() async throws {
-    try await super.setUp()
     testUserID = "task-thread-migration-\(UUID().uuidString)"
     await RewindDatabase.shared.close()
     await TaskChatMessageStorage.shared.invalidateCache()
@@ -20,7 +19,8 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
       for: .applicationSupportDirectory,
       in: .userDomainMask
     ).first!
-    userDirectory = appSupport
+    userDirectory =
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserID, isDirectory: true)
@@ -31,7 +31,6 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
     await TaskChatMessageStorage.shared.invalidateCache()
     RewindDatabase.currentUserId = nil
     if let userDirectory { try? FileManager.default.removeItem(at: userDirectory) }
-    try await super.tearDown()
   }
 
   func testLegacyImportPagesAllImmutableRowsAndRemainsReadOnly() async throws {
@@ -42,10 +41,10 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
         let sourceTaskID = index < 130 ? "legacy-task-a" : "legacy-task-b"
         try database.execute(
           sql: """
-            INSERT INTO task_chat_messages (
-              taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
-            ) VALUES (?, ?, ?, ?, ?, ?, 0)
-          """,
+              INSERT INTO task_chat_messages (
+                taskId, messageId, sender, messageText, createdAt, updatedAt, backendSynced
+              ) VALUES (?, ?, ?, ?, ?, ?, 0)
+            """,
           arguments: [
             sourceTaskID,
             "message-\(index)",
@@ -70,7 +69,8 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
       pageSizes.append(page.rows.count)
       imported.append(contentsOf: page.rows)
       guard page.rows.count == TaskChatLegacyCompatibilityMetadata.pageSize,
-            let nextCursor = page.nextCursor else { break }
+        let nextCursor = page.nextCursor
+      else { break }
       cursor = nextCursor
     }
     let (legacyA, legacyB, workstreamCount) = try await db.read { database in
@@ -84,11 +84,12 @@ final class TaskThreadLegacyMigrationTests: XCTestCase {
         sql: "SELECT messageId FROM task_chat_messages WHERE taskId = ? ORDER BY createdAt, id",
         arguments: ["legacy-task-b"]
       )
-      let workstreamCount = try Int.fetchOne(
-        database,
-        sql: "SELECT COUNT(*) FROM task_chat_messages WHERE taskId = ?",
-        arguments: ["workstream-1"]
-      ) ?? 0
+      let workstreamCount =
+        try Int.fetchOne(
+          database,
+          sql: "SELECT COUNT(*) FROM task_chat_messages WHERE taskId = ?",
+          arguments: ["workstream-1"]
+        ) ?? 0
       return (legacyA, legacyB, workstreamCount)
     }
 

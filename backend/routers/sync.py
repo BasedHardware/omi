@@ -88,7 +88,13 @@ from utils.metrics import (
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
 from utils.subscription import has_transcription_credits
 from utils.sync import playback as sync_playback
-from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
+from utils.sync.files import (
+    decode_files_to_wav,
+    detect_source_from_filenames,
+    get_timestamp_from_path,
+    get_wav_duration,
+    retrieve_file_paths,
+)
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
@@ -570,11 +576,7 @@ async def sync_local_files(
     should_lock = not has_transcription_credits(uid)
 
     # Detect source from filenames
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     paths = []
     wav_paths = []
@@ -950,11 +952,7 @@ async def sync_local_files_v2(
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     cloud_tasks_dispatch_enabled = is_cloud_tasks_dispatch_enabled()
     byok_enabled = has_byok_keys()

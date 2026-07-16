@@ -52,7 +52,9 @@ final class SpatialOverlayPlacementTests: XCTestCase {
     let result = try SpatialOverlayPlacementSolver.place(target: target, spec: spec).get()
 
     XCTAssertEqual(result.attachmentEdge, .above)
-    XCTAssertFalse(result.panelFrame.intersects(target.targetRect.insetBy(dx: -spec.avoidTargetPadding, dy: -spec.avoidTargetPadding)))
+    XCTAssertFalse(
+      result.panelFrame.intersects(
+        target.targetRect.insetBy(dx: -spec.avoidTargetPadding, dy: -spec.avoidTargetPadding)))
     XCTAssertEqual(result.globalArrowTip.x, target.targetPoint.x, accuracy: 0.1)
     XCTAssertEqual(result.globalArrowTip.y, target.targetRect.maxY, accuracy: 0.1)
   }

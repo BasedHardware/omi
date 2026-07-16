@@ -39,6 +39,15 @@ case "$cmd" in
     # see backend and negotiated runtime diagnostics, not the auth-only state
     # snapshot served at the same path.
     curl -fsS "$BASE/health"; echo ;;
+  log-path)
+    curl -fsS "$BASE/health" | python3 -c '
+import json, sys
+health = json.load(sys.stdin)
+path = health.get("logFilePath")
+if not isinstance(path, str) or not path:
+    raise SystemExit("omi-ctl: health did not provide logFilePath")
+print(path)
+' ;;
   navigate)
     target="${1:?usage: omi-ctl navigate <screen> [settings-section]}"
     section="${2:-}"
@@ -84,6 +93,8 @@ omi-ctl — drive the Omi desktop app via the local automation bridge
 
 Usage:
   omi-ctl state                          App state snapshot (selected tab, auth, onboarding)
+  omi-ctl health                         Bundle, backend, runtime, and exact current log identity
+  omi-ctl log-path                       Print the exact current bundle-and-launch app log path
   omi-ctl navigate <screen> [section]    Jump to a screen; optional settings sub-section
   omi-ctl open-conversation <id> [--transcript]
   omi-ctl wait-ready [tries]             Block until app reaches "main" state (0.5s/try)

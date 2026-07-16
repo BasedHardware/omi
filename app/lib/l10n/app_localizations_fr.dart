@@ -9427,7 +9427,7 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Compatible avec les appareils Omi et Limitless pour le moment. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
+      'Compatible avec le microphone du téléphone ainsi que les appareils Omi et Limitless. L\'audio reste sur votre téléphone tant que vous ne décidez pas de l\'importer.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9681,4 +9681,8 @@ class AppLocalizationsFr extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Appareil presque plein — synchronisez pour libérer de l\'espace.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne.';
 }

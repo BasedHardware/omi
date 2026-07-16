@@ -61,6 +61,9 @@ jobs:
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/${{ env.SERVICE }}/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/parakeet/Dockerfile \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
       - name: Get GKE credentials

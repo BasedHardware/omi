@@ -4,10 +4,9 @@ from typing import Literal, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-from pydantic import ValidationError
-
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from models.other import Person
@@ -757,14 +756,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
-            try:
-                # Validate at the boundary: every caller builds Person(**p) from these dicts, so a
-                # legacy or partial doc (e.g. missing name) would 500 the read. Skip it instead.
-                Person(**data)
-            except ValidationError as e:
-                logger.warning('Skipping malformed person doc %s: %s', doc.id, e)
-                continue
-            all_people.append(data)
+            if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
+                all_people.append(data)
     return all_people
 
 
@@ -1419,11 +1412,22 @@ def get_user_subscription(uid: str) -> Subscription:
         user_data = user_doc.to_dict()
         if 'subscription' in user_data:
             sub_data = user_data['subscription']
-            # Handle migration for old 'free' plan identifier
-            if sub_data.get('plan') == 'free':
+            legacy_free_plan = isinstance(sub_data, dict) and sub_data.get('plan') == 'free'
+
+            def subscription_payload(_snapshot: object) -> dict:
+                if not isinstance(sub_data, dict):
+                    raise TypeError('Firestore subscription payload must be a mapping')
+                payload = dict(sub_data)
+                if legacy_free_plan:
+                    payload['plan'] = PlanType.basic.value
+                return payload
+
+            subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+            # Handle migration for old 'free' plan identifier after validating the normalized payload.
+            if legacy_free_plan:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
-            return Subscription(**sub_data)
+            return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
@@ -1447,9 +1451,16 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
         return None
 
     sub_data = user_data['subscription']
-    if sub_data.get('plan') == 'free':
-        sub_data['plan'] = PlanType.basic.value
-    return Subscription(**sub_data)
+
+    def subscription_payload(_snapshot: object) -> dict:
+        if not isinstance(sub_data, dict):
+            raise TypeError('Firestore subscription payload must be a mapping')
+        payload = dict(sub_data)
+        if payload.get('plan') == 'free':
+            payload['plan'] = PlanType.basic.value
+        return payload
+
+    return parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:

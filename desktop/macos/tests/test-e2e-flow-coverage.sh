@@ -5,6 +5,10 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SCRIPT="$MACOS_DIR/scripts/check-e2e-flow-coverage.py"
 
+coverage_check() {
+  "$SCRIPT" --formatter-binary none "$@"
+}
+
 fail() {
   echo "FAIL: $*" >&2
   exit 1
@@ -27,7 +31,7 @@ YAML
 covered="desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift"
 uncovered="desktop/macos/Desktop/Sources/MainWindow/Pages/UncoveredPage.swift"
 
-if ! "$SCRIPT" --root "$TMPDIR" "$covered" "$uncovered" >"$TMPDIR/report.out" 2>"$TMPDIR/report.err"; then
+if ! coverage_check --root "$TMPDIR" "$covered" "$uncovered" >"$TMPDIR/report.out" 2>"$TMPDIR/report.err"; then
   fail "advisory coverage check unexpectedly failed"
 fi
 grep -q "COVERED   $covered -> chat (chat.yaml)" "$TMPDIR/report.out" || fail "covered file was not reported"
@@ -35,7 +39,7 @@ grep -q "UNCOVERED $uncovered" "$TMPDIR/report.out" || fail "uncovered file was 
 grep -q "./scripts/desktop-core-harness.sh --tier 2 --bundle omi-core-e2e --port <automation-port> --keep-stack" "$TMPDIR/report.out" || \
   fail "recommended harness command missing"
 
-if "$SCRIPT" --root "$TMPDIR" --strict "$covered" "$uncovered" >"$TMPDIR/strict.out" 2>"$TMPDIR/strict.err"; then
+if coverage_check --root "$TMPDIR" --strict "$covered" "$uncovered" >"$TMPDIR/strict.out" 2>"$TMPDIR/strict.err"; then
   fail "strict coverage check unexpectedly passed with an uncovered file"
 fi
 grep -q "FAIL: uncovered changed desktop Swift files found" "$TMPDIR/strict.err" || fail "strict failure was not explained"
@@ -62,15 +66,19 @@ repo_git commit -q -m "old origin main"
 repo_git branch origin/main
 
 echo "fresh" >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/StaleMainOnly.swift"
-repo_git commit -q -am "fresh upstream main"
+echo 'let value = 1' >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/FormatterOnly.swift"
+echo 'let value = "same"' >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/LiteralWhitespace.swift"
+repo_git add .
+repo_git commit -q -m "fresh upstream main"
 repo_git branch upstream/main
 
 repo_git checkout -q -b feature
 echo "feature" >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift"
+echo 'let value=1' >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/FormatterOnly.swift"
 repo_git add .
 repo_git commit -q -m "feature change"
 
-if ! "$SCRIPT" --root "$REPO" --strict >"$TMPDIR/stale-ref.out" 2>"$TMPDIR/stale-ref.err"; then
+if ! coverage_check --root "$REPO" --strict >"$TMPDIR/stale-ref.out" 2>"$TMPDIR/stale-ref.err"; then
   cat "$TMPDIR/stale-ref.out"
   cat "$TMPDIR/stale-ref.err" >&2
   fail "strict coverage check should use the closest main ref when origin/main is stale"
@@ -82,10 +90,13 @@ grep -q "COVERED   desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift
 if grep -q "StaleMainOnly.swift" "$TMPDIR/stale-ref.out"; then
   fail "stale origin/main-only file appeared in coverage report"
 fi
+if grep -q "FormatterOnly.swift" "$TMPDIR/stale-ref.out"; then
+  fail "formatter-only Swift source was not excluded from coverage"
+fi
 
 POISONED_GIT_DIR="$(git -C "$MACOS_DIR/../.." rev-parse --git-dir 2>/dev/null || true)"
 if [ -n "$POISONED_GIT_DIR" ]; then
-  if ! env GIT_DIR="$POISONED_GIT_DIR" "$SCRIPT" --root "$REPO" --strict >"$TMPDIR/poisoned-env.out" 2>"$TMPDIR/poisoned-env.err"; then
+  if ! GIT_DIR="$POISONED_GIT_DIR" coverage_check --root "$REPO" --strict >"$TMPDIR/poisoned-env.out" 2>"$TMPDIR/poisoned-env.err"; then
     cat "$TMPDIR/poisoned-env.out"
     cat "$TMPDIR/poisoned-env.err" >&2
     fail "strict coverage check should ignore inherited Git environment"
@@ -95,5 +106,15 @@ if [ -n "$POISONED_GIT_DIR" ]; then
   grep -q "COVERED   desktop/macos/Desktop/Sources/MainWindow/Pages/ChatPage.swift" "$TMPDIR/poisoned-env.out" || \
     fail "inherited Git environment prevented feature change coverage detection"
 fi
+
+echo 'let value = "same "' >"$REPO/desktop/macos/Desktop/Sources/MainWindow/Pages/LiteralWhitespace.swift"
+repo_git add .
+repo_git commit -q -m "change user-visible string whitespace"
+
+if coverage_check --root "$REPO" --strict >"$TMPDIR/literal-whitespace.out" 2>"$TMPDIR/literal-whitespace.err"; then
+  fail "string-literal whitespace change unexpectedly bypassed strict coverage"
+fi
+grep -q "UNCOVERED desktop/macos/Desktop/Sources/MainWindow/Pages/LiteralWhitespace.swift" "$TMPDIR/literal-whitespace.out" || \
+  fail "string-literal whitespace change was not reported as uncovered"
 
 echo "e2e flow coverage tests passed"

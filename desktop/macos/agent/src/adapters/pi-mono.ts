@@ -901,12 +901,15 @@ export class PiMonoAdapter implements HarnessAdapter {
       case "compaction_end":
       case "auto_retry_start":
       case "auto_retry_end":
+      case "agent_settled":
         // Protocol control events the adapter observes but does not act on.
         // Turn boundaries and streaming state are already tracked via
         // message_update / turn_end; no action needed here.
         // auto_retry_* events fire when pi retries after a transient provider
         // error (rate limit, 5xx). They do NOT end the in-flight turn — the
         // subsequent turn_end is still authoritative for completion.
+        // agent_settled is an upstream advisory event; only turn_end carries
+        // the terminal result that can settle Omi's canonical run lifecycle.
         break;
 
       default:

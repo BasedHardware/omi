@@ -127,6 +127,50 @@ def test_typesense_and_google_binding_classifications_are_explicit():
     assert {"TYPESENSE_API_KEY", "GOOGLE_CLIENT_SECRET"}.issubset(kinds["secret"])
 
 
+def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
+    """Static workflow contract: reconciliation makes rendered references live before Helm."""
+    workflow = (SCRIPT.parents[2] / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+    required_config = {
+        "CONVERSATION_SUMMARIZED_APP_IDS",
+        "GOOGLE_CLIENT_ID",
+        "MCP_AUTHORIZATION_SERVER_URL",
+        "MCP_OAUTH_CHATGPT_CLIENT_ID",
+        "MCP_OAUTH_CHATGPT_REDIRECT_URIS",
+        "MCP_OAUTH_PUBLIC_CLIENT_ID",
+        "MCP_OAUTH_PUBLIC_REDIRECT_URIS",
+        "MCP_RESOURCE_URL",
+        "RAPID_API_HOST",
+        "REDIS_DB_HOST",
+        "STT_PRERECORDED_MODEL",
+        "STT_SERVICE_MODELS",
+        "TYPESENSE_HOST",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_API_KEY_SID",
+        "TWILIO_TWIML_APP_SID",
+        "X_OAUTH_CLIENT_ID",
+        "X_OAUTH_REDIRECT_URI",
+    }
+    prod_only_config = {
+        "ACCOUNT_DELETION_HANDLER_URL",
+        "MCP_OAUTH_CLAUDE_CLIENT_ID",
+        "MCP_OAUTH_CLAUDE_CLIENT_NAME",
+        "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
+        "SYNC_TASKS_HANDLER_URL",
+        "SYNC_TASKS_INVOKER_SA",
+    }
+
+    resolve_index = workflow.index("- name: Resolve production pusher runtime targets")
+    reconcile_index = workflow.index("- name: Apply non-secret pusher runtime config")
+    preflight_index = workflow.index("- name: Preflight pusher ConfigMap and Secret references")
+    helm_index = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
+    reconcile = workflow[reconcile_index:preflight_index]
+
+    assert resolve_index < reconcile_index < preflight_index < helm_index
+    assert all(f"          {name}:" in reconcile for name in required_config | prod_only_config)
+    assert "backend/scripts/deploy-backend-config.sh" in reconcile
+    assert "secrets." not in reconcile
+
+
 def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
     deployment = preflight.rendered_pusher_deployment("dev")
     expected, clear_historical_secret = preflight.dev_pusher_binding_contract()

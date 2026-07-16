@@ -1,8 +1,8 @@
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
 
 extension SettingsContentView {
   var generalSection: some View {
@@ -195,8 +195,7 @@ extension SettingsContentView {
 
               Spacer()
 
-              Picker(
-                "",
+              SettingsMenuPicker(
                 selection: Binding(
                   get: { systemAudioCaptureMode },
                   set: { newValue in
@@ -210,9 +209,6 @@ extension SettingsContentView {
                   AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
                 Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
               }
-              .pickerStyle(.menu)
-              .labelsHidden()
-              .frame(width: 200)
             }
 
             if systemAudioCaptureMode == .onlyDuringMeetings {
@@ -265,6 +261,9 @@ extension SettingsContentView {
 
             Slider(value: $fontScaleSettings.scale, in: 0.5...2.0, step: 0.05)
               .tint(OmiColors.info)
+              .onChange(of: fontScaleSettings.scale) { _, _ in
+                performStepHaptic()
+              }
 
             Text("A")
               .scaledFont(size: 18, weight: .medium)

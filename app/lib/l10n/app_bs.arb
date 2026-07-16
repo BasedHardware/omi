@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "Koristite vlastiti provajder transkripcije. Sinkronizacija ovih snimaka transkribuje ih na Omi serverima i broje se u limit transkripcije vašeg plana.",
     "transcribeLaterTitle": "Transkripcija kasnije",
     "transcribeLaterDescription": "Snimajte zvuk sada, a transkripciju pokrenite kasnije po potrebi umjesto uživo. Snimci se čuvaju na vašem telefonu, a zatim ih otpremite da biste kreirali razgovore.",
-    "transcribeLaterNote": "Za sada radi s Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
+    "transcribeLaterNote": "Radi s mikrofonom telefona te Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu sve dok ga sami ne otpremite.",
     "transcribeLaterStorageFull": "Vašem telefonu ponestaje prostora, pa je snimanje pauzirano. Oslobodite prostor ili otpremite svoje snimke i snimanje će se automatski nastaviti.",
     "unmute": "Uključi zvuk",
     "newRecording": "Novi snimak",
@@ -10726,5 +10726,6 @@
     "deviceStoragePercentFull": "{percent}% popunjeno",
     "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
     "deviceStorageFree": "{free} slobodno",
-    "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor."
+    "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte da oslobodite prostor.",
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kada ponovo budete na mreži."
 }

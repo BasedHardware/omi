@@ -31,14 +31,14 @@ Every change must satisfy this checklist before it is committed or put in a PR. 
 4. **Verification evidence is written down** — the commands you ran and what they showed, in the commit message or PR description.
 5. **No orphaned deferrals** — new `TODO`/`FIXME`/`HACK` comments reference a tracking issue or are resolved before merge.
 6. **Docs moved with the code** — setup, test commands, service boundaries, env vars, or agent-relevant behavior changes update the matching guide (this file, a component `AGENTS.md`, or `docs/doc/developer/`) in the same PR. Product-direction or invariant changes update `PRODUCT.md` / `docs/product/invariants/` in the same PR.
-7. **Bug classes are closed, not patched around** — write down the root cause and the durable guard in the PR. When recent history contains the same failure class, fix the shared boundary, state model, harness, or static contract that allowed all of them.
-8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). When product-invariant citations apply, draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` for paste-ready IDs).
+7. **Failure-class declaration** — before drafting a `fix:` PR body, run `scripts/pr-preflight --suggest` for its invariant citations and failure-class guidance; every `fix:` commit then declares `Failure-Class: FC-<slug> | new | none` and validates it with `scripts/failure-class`.
+8. **PR contracts pass before opening the PR** — run `make preflight`; it executes the same deterministic check manifest CI runs (`.github/checks-manifest.yaml`). Draft the PR body and run `scripts/pr-preflight --pr-body-file /tmp/pr-body.md` (or `scripts/pr-preflight --suggest` for paste-ready invariant and failure-class guidance).
 
 A deterministic diff-scoped check failing for the first time in CI is a manifest bug: fix the manifest instead of adding a one-off workflow step. Register new checks in `.github/checks-manifest.yaml` with both `local` and `ci` lanes.
 
-## Bug Fixes: Close the Failure Class
+## Bug Fixes: Repair the Failure-Class Boundary
 
-The unit of work is the violated contract, not only the line where the symptom appeared. Before fixing, inspect recent fixes in the same subsystem.
+The unit of work is the violated contract, not only the line where the symptom appeared. The declaration is the PR record for an ordinary instance fix; before fixing, inspect recent fixes in the same subsystem. Registry lifecycle transitions are separate PRs: dormant classes record `dormant_since`, and recurrence reopens them by setting `status: open` and removing it.
 
 - Identify the authoritative owner, identity, state transition, or boundary contract that failed — don't add another observer, fallback boolean, or call-site exception when ownership is the real problem.
 - If two or more recent fixes share the cause, add a reusable guard surface in the same PR: a typed state/policy model, behavioral contract test, fault harness, or narrow static checker.
@@ -77,17 +77,20 @@ The unit of work is the violated contract, not only the line where the symptom a
 ## Issues
 
 - Open issues freely — one paragraph of symptom plus evidence (logs, IDs, links) is a complete issue. Tracking beats polish; iterate in comments.
-- Issues state problems; PRs state solutions. Don't write implementation epics, acceptance-criteria matrices, SLOs, or rollout programs into an issue — that content hardens in the PR, where the Definition of Done already demands root cause, durable guard, and evidence.
+- Issues state problems; PRs state solutions. Don't write implementation epics, acceptance-criteria matrices, SLOs, or rollout programs into an issue — that content hardens in the PR, where the Definition of Done already demands evidence.
 - If an issue does prescribe implementation: scope it to one self-contained PR, verify every code claim against current code first (the fix may already exist), and any proposed check must run in an existing CI or deploy lane.
 - Close incident issues on live evidence, not code merge; if live verification is deferred, name its owner in the closing comment.
 
 ## Cross-Component Guidelines
 
 - **Product invariants:** read `PRODUCT.md` before changing product behavior. If your diff touches a locked invariant's path globs, name **every** matched invariant ID in the PR body (path-based, not intent-based; discover with `scripts/pr-preflight --suggest`) and update the invariant's guard test when behavior changes.
+- **No in-repo compatibility layers:** migrate every in-tree caller in the same change; do not add deprecated aliases, duplicate adapters, or fallback paths to preserve a retired shape.
+- **Compiler-first boundaries:** express ownership and mutation invariants with target dependencies, access control, and typed APIs before adding source scrapes or runtime assertions; behavioral tests still prove the permitted paths.
 - **Never use purple** anywhere in UI (icons, accents, glows, gradients) — off-brand; use white/neutral. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`.
 - **Fallback telemetry:** when a branch changes provider, mode, or correctness, or takes a fail-open path, call the shared `record_fallback`/`recordFallback` helper — never a new one-off counter. Full contract: `docs/agents/fallback-telemetry.md`.
 - **Logging:** never log raw sensitive data; sanitize API responses and PII (backend: `utils.log_sanitizer`).
 - **Deferred-work markers:** new `TODO`/`FIXME`/`HACK` must reference a tracking issue or be resolved before merge. Packages over 12 source files need a package-root `ARCHITECTURE.md`/`README.md` (`check_arch_guardrails.py` ratchet). Designated rollout scaffolding needs a `LIFECYCLE: permanent|one-time` header; one-time files also need `DELETE-AFTER: <issue URL or invariant ID>` (`check_lifecycle_headers.py`).
+- **New guards:** explain in the PR why the guard is not a shared primitive, and cite the real merged PR or incident it would have caught; no real instance means the check does not land.
 
 ## Formatting
 
@@ -100,9 +103,10 @@ The pre-commit hook (installed by `make setup`) auto-formats staged files. Verif
 | ARB (`app/lib/l10n/`) | `jq --indent 4 '.' <file> > tmp && mv tmp <file>` |
 | C/C++ (firmware) | `clang-format -i <files>` |
 | Rust (`desktop/macos/Backend-Rust/`) | `rustfmt --edition 2021 <files>` |
+| Swift (`desktop/macos/Desktop/`) | `desktop/macos/scripts/swift-format-wrapper.sh format -i <files>` |
 | Web (`web/`) | `npx prettier --write <files>` |
 
-Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually.
+Files ending in `.gen.dart` or `.g.dart` are auto-generated — don't format manually. Swift files under `Desktop/Sources/Generated/` are excluded from the formatter scope.
 
 ## Computer Control
 
@@ -111,6 +115,7 @@ Click at coordinates: `cliclick c:X,Y`. Mac screenshots: `screencapture -x /tmp/
 ## Testing
 
 - **Coverage grows by ratchet, not mandate:** every bug fix adds the regression test that would have caught it; new features test the core path and main error path — no more. A small test that stays meaningful in a year beats ten brittle ones.
+- **Push gate budget:** `scripts/pre-push` is a bounded local acceptance gate, intentionally smaller than CI: cap broad backend selection at 40 files and use only the desktop debug compile. Do not add full suites, release compiles, or CI-only toolchain pins to it — push-time bloat breaks normal iteration. Use focused feedback while editing; CI remains the full test authority.
 - **CI tests must be hermetic** (no live services, network, sleeps, or ordering dependence) — and hermetic tests must run in CI: put them where the component's runner discovers them. A test needing a live service stays out of CI; note in the PR how you ran it.
 - Delete or fix a flaky/obsolete test you encounter — a suite people distrust is worse than a smaller suite.
 - Component runners and prerequisites: see the component guides (`backend/AGENTS.md` → Testing, `app/AGENTS.md` → Test Strategy). High-risk backend workflows must be listed in `backend/testing/workflow_contracts.json` with contract tests.

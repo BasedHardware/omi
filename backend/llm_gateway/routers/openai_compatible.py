@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass
+import json
 from typing import Any, cast
 
 from fastapi import APIRouter, Depends, Request
@@ -28,6 +29,7 @@ from llm_gateway.gateway.executor import (
     ProviderRegistry,
     execute_chat_completion,
     _map_provider_failure,  # type: ignore[reportPrivateUsage]  # shared gateway failure mapper
+    output_budget_for,
     provider_request_for,
     selected_serving_route,
     selected_serving_route_artifact_id,
@@ -40,6 +42,7 @@ from llm_gateway.gateway.metrics import (
     report_observation_failure,
     time_request,
 )
+from llm_gateway.gateway.output_budget import OutputBudgetDecision, completion_size_bucket, output_budget_bucket
 from llm_gateway.gateway.providers import ProviderFailure
 from llm_gateway.gateway.request_context import request_id_for
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, resolve_chat_completion_route
@@ -84,6 +87,8 @@ async def create_chat_completion(
                 result,
                 credential_source=credential_source,
                 request_id=request_id,
+                completion_size=completion_size_bucket(_completion_character_count(result.response)),
+                finish_reason=_response_finish_reason(result.response),
             ),
             request_id=request_id,
             api_surface='openai_chat_completions',
@@ -300,6 +305,7 @@ async def _streaming_response(
     request_id: str,
 ) -> StreamingResponse:
     route = selected_serving_route(resolved_route)
+    output_budget = output_budget_for(resolved_route, route)
 
     prepared = await _prepared_streaming_iterator(resolved_route, credentials, provider_registry, route)
     async_iterator = _stream_with_terminal_metrics(
@@ -309,6 +315,7 @@ async def _streaming_response(
         route=route,
         started_at=started_at,
         request_id=request_id,
+        output_budget=output_budget,
     )
 
     return StreamingResponse(async_iterator, media_type='text/event-stream')
@@ -386,12 +393,16 @@ async def _stream_with_terminal_metrics(
     route: RouteArtifact,
     started_at: float,
     request_id: str,
+    output_budget: OutputBudgetDecision | None = None,
 ) -> AsyncIterator[bytes]:
     terminal_observed = False
     saw_output = prepared.first_chunk is not None
     terminal_marker_seen = False
     decoder = SSEEventDecoder()
     ttfb_seconds = time_request() - started_at if saw_output else None
+    completion_characters = 0
+    finish_reason = 'unknown'
+    output_budget = output_budget or OutputBudgetDecision(source='none', max_completion_tokens=None)
 
     def observe_terminal(*, outcome: str, error_class: str, phase: str) -> None:
         nonlocal terminal_observed
@@ -416,17 +427,26 @@ async def _stream_with_terminal_metrics(
                 streaming=True,
                 phase=phase,
                 ttfb_seconds=ttfb_seconds,
+                budget_source=output_budget.source,
+                output_budget=output_budget_bucket(output_budget.max_completion_tokens),
+                completion_size=completion_size_bucket(completion_characters),
+                finish_reason=finish_reason,
             ),
             request_id=request_id,
             api_surface='openai_chat_completions',
         )
 
     def inspect_chunk(chunk: bytes) -> None:
-        nonlocal terminal_marker_seen
+        nonlocal completion_characters, finish_reason, terminal_marker_seen
         for event in decoder.feed(chunk):
             if event.data.strip() == '[DONE]':
                 terminal_marker_seen = True
                 observe_terminal(outcome='success', error_class='none', phase='terminal_marker')
+                continue
+            completion_characters += _stream_completion_character_count(event.data)
+            observed_finish_reason = _stream_finish_reason(event.data)
+            if observed_finish_reason is not None:
+                finish_reason = observed_finish_reason
 
     if prepared.first_chunk is None:
         observe_terminal(outcome='error', error_class='empty_stream_before_output', phase='before_output')
@@ -469,3 +489,67 @@ async def _stream_with_terminal_metrics(
                 error_class='consumer_abandoned_stream',
                 phase='midstream' if saw_output else 'before_output',
             )
+
+
+def _completion_character_count(response: dict[str, Any]) -> int:
+    choices = response.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return 0
+    message = choices[0].get('message')
+    if not isinstance(message, dict):
+        return 0
+    content = message.get('content')
+    return len(content) if isinstance(content, str) else 0
+
+
+def _response_finish_reason(response: dict[str, Any]) -> str:
+    choices = response.get('choices')
+    if not isinstance(choices, list) or not choices or not isinstance(choices[0], dict):
+        return 'unknown'
+    return _normalize_finish_reason(choices[0].get('finish_reason'))
+
+
+def _stream_completion_character_count(data: str) -> int:
+    payload = _stream_payload(data)
+    if payload is None:
+        return 0
+    choices = payload.get('choices')
+    if not isinstance(choices, list):
+        return 0
+    character_count = 0
+    for choice in choices:
+        if not isinstance(choice, dict):
+            continue
+        for field in ('delta', 'message'):
+            value = choice.get(field)
+            if isinstance(value, dict) and isinstance(value.get('content'), str):
+                character_count += len(value['content'])
+    return character_count
+
+
+def _stream_finish_reason(data: str) -> str | None:
+    payload = _stream_payload(data)
+    if payload is None:
+        return None
+    choices = payload.get('choices')
+    if not isinstance(choices, list):
+        return None
+    for choice in choices:
+        if isinstance(choice, dict) and choice.get('finish_reason') is not None:
+            return _normalize_finish_reason(choice.get('finish_reason'))
+    return None
+
+
+def _stream_payload(data: str) -> dict[str, Any] | None:
+    try:
+        payload = json.loads(data)
+    except (TypeError, ValueError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _normalize_finish_reason(value: object) -> str:
+    normalized = str(value or '').strip().lower()
+    if normalized in {'stop', 'length', 'content_filter', 'tool_calls'}:
+        return normalized
+    return 'unknown'

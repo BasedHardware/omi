@@ -9353,7 +9353,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+      'फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9603,4 +9603,8 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.';
 }

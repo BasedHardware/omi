@@ -19,8 +19,7 @@ private struct AutomationErrorEnvelope: Decodable {
 
 @MainActor
 private final class StubPresentationCoordinator: DesktopAutomationPresentationCoordinating {
-  private(set) var calls:
-    [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
+  private(set) var calls: [(target: DesktopAutomationPresentationTarget, gate: DesktopAutomationPresentationGate)] = []
   var failure: DesktopAutomationPresentationFailure?
 
   func present(
@@ -59,6 +58,9 @@ final class DesktopAutomationBridgeRouteTests: XCTestCase {
     XCTAssertNotNil(object["backendEnvironment"] as? String)
     XCTAssertNotNil(object["pythonBackendURL"] as? String)
     XCTAssertNotNil(object["rustBackendURL"] as? String)
+    XCTAssertNotNil(object["processID"] as? Int)
+    XCTAssertEqual(object["logFilePath"] as? String, omiLogFilePath())
+    XCTAssertEqual(object["logLaunchID"] as? String, omiLogLaunchID())
     XCTAssertNotNil(object["agentRuntimeRunning"] as? Bool)
     XCTAssertEqual(
       object["agentRuntimeExpectedProtocolVersion"] as? Int,

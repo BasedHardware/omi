@@ -3056,7 +3056,7 @@
     "syncCustomSttWarningMessage": "ご自身の文字起こしプロバイダーを使用しています。これらの録音を同期すると Omi のサーバーで文字起こしされ、プランの文字起こし上限にカウントされます。",
     "transcribeLaterTitle": "後で文字起こし",
     "transcribeLaterDescription": "リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。",
-    "transcribeLaterNote": "現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。",
+    "transcribeLaterNote": "スマートフォンのマイク、OmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。",
     "transcribeLaterStorageFull": "スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。",
     "unmute": "ミュート解除",
     "newRecording": "新規録音",
@@ -3149,5 +3149,6 @@
     "deviceStoragePercentFull": "{percent}% 使用済み",
     "deviceStorageUsedOfTotal": "{total} 中 {used} を使用",
     "deviceStorageFree": "空き {free}",
-    "deviceStorageNearlyFull": "デバイスの空き容量がわずかです — 同期して空き容量を確保してください。"
+    "deviceStorageNearlyFull": "デバイスの空き容量がわずかです — 同期して空き容量を確保してください。",
+    "phoneMicOfflineFallbackMessage": "接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。"
 }

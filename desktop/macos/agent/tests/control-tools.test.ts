@@ -593,6 +593,39 @@ describe("agent control tools", () => {
     },
   );
 
+  it("treats a legacy closed child-discovery filter as terminal run status, not session archival", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const completedChild = await kernel.executeRun({
+      ...baseRunInput,
+      requestId: "closed-child-discovery",
+      surfaceKind: "floating_bar",
+      executionRole: "leaf",
+      externalRefKind: "pill",
+      externalRefId: "closed-child-discovery",
+    });
+
+    expect(completedChild.session.status).toBe("open");
+    const listed = parseToolResult(
+      await handleAgentControlToolCall(ownerContext(kernel), "list_agent_sessions", {
+        ownerId: "owner",
+        surfaceKind: "background_agent",
+        status: "closed",
+      }),
+    );
+
+    expect(listed.ok).toBe(true);
+    expect(listed.sessions).toHaveLength(1);
+    expect(listed.sessions[0]).toMatchObject({
+      session: { sessionId: completedChild.session.sessionId, status: "open" },
+      latestRun: {
+        runId: completedChild.run.runId,
+        status: "succeeded",
+        finalText: completedChild.run.finalText,
+      },
+    });
+    store.close();
+  });
+
   it("rejects unknown coordinator bundles at the control-tool boundary", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath());
     const result = parseToolResult(
@@ -1070,6 +1103,108 @@ describe("agent control tools", () => {
       query: "AWARENESS_CONTEXT_SENTINEL",
     }));
     expect(recovered.matches).toHaveLength(1);
+    store.close();
+  });
+
+  it("keeps owner-scoped direct awareness structurally usable when history exceeds provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_AWARENESS_CONTEXT_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({
+        prompt: "direct awareness",
+        surfaceContextJson: sentinel,
+        metadata: { externalSurface: { authority: "swift_realtime" } },
+      }),
+      result.run.runId,
+    ]);
+    for (let index = 0; index < 12; index += 1) {
+      store.insertAdapterBinding({
+        sessionId: result.session.sessionId,
+        adapterId: `historical-${index}`,
+        bindingGeneration: 1,
+        resumeFidelity: "none",
+        status: "stale",
+      });
+    }
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "build_desktop_awareness_snapshot",
+      { ownerId: "owner" },
+    );
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("DIRECT_AWARENESS_CONTEXT_SENTINEL");
+    expect(projected).toMatchObject({
+      ok: true,
+      snapshot: {
+        ownerId: "owner",
+        sessions: expect.any(Array),
+        runs: expect.any(Array),
+      },
+      toolResultEnvelope: {
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: expect.stringMatching(/^artifact:/),
+      },
+    });
+    expect(projected.snapshot.sessions).toHaveLength(1);
+    expect(projected.snapshot.sessions[0]).toMatchObject({
+      adapterBindings: expect.any(Array),
+      adapterBindingsTruncated: true,
+    });
+    expect(projected.snapshot.sessions[0].adapterBindings).toHaveLength(4);
+    expect(projected.snapshot.runs).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          runId: result.run.runId,
+          input: expect.objectContaining({
+            metadata: { externalSurface: { authority: "swift_realtime" } },
+          }),
+        }),
+      ]),
+    );
+    store.close();
+  });
+
+  it("keeps a direct run inspection structurally usable when its canonical detail exceeds provider budget", async () => {
+    const { store, kernel } = createKernelHarness(newDatabasePath());
+    const sentinel = "DIRECT_RUN_INSPECTION_SENTINEL".repeat(26_000);
+    const result = await kernel.executeRun({
+      ...baseRunInput,
+      surfaceContextJson: JSON.stringify({ rendered: sentinel }),
+    });
+    store.execute("UPDATE runs SET input_json = ? WHERE run_id = ?", [
+      JSON.stringify({ prompt: "direct run inspection", surfaceContextJson: sentinel }),
+      result.run.runId,
+    ]);
+
+    const raw = await handleAgentControlToolCall(
+      { ...ownerContext(kernel), trustedUserControl: true },
+      "get_agent_run",
+      { ownerId: "owner", runId: result.run.runId },
+    );
+    const projected = parseToolResult(raw);
+
+    expect(Buffer.byteLength(raw, "utf8")).toBeLessThanOrEqual(128 * 1024);
+    expect(raw).not.toContain("DIRECT_RUN_INSPECTION_SENTINEL");
+    expect(projected).toMatchObject({
+      ok: true,
+      session: { sessionId: result.session.sessionId, ownerId: "owner" },
+      run: { runId: result.run.runId, sessionId: result.session.sessionId },
+      attempts: expect.any(Array),
+      toolInvocations: expect.any(Array),
+      toolResultEnvelope: {
+        status: "succeeded",
+        truncated: true,
+        fullOutputRef: expect.stringMatching(/^artifact:/),
+      },
+    });
     store.close();
   });
 

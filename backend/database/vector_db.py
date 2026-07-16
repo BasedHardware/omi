@@ -217,7 +217,12 @@ def query_vectors_by_metadata(
         vector=vector, filter=filter_data, namespace="ns1", include_values=False, include_metadata=True, top_k=1000
     )
     if not xc['matches']:
-        if len(and_clauses) == 3:
+        # Relax-retry when the structured people/topics/entities $or clause produced no hits, dropping
+        # it and re-querying uid-only. The $or clause, when present, is always and_clauses[1] (the date
+        # range is appended after it). The previous len == 3 guard only relaxed when a date filter was
+        # ALSO present, so the common no-date query (uid + $or, len == 2) fell through to return [] and
+        # never broadened. Never pop a date-only clause.
+        if len(and_clauses) > 1 and '$or' in and_clauses[1]:
             and_clauses.pop(1)
             logger.warning(f'query_vectors_by_metadata retrying without structured filters: {json.dumps(filter_data)}')
             xc = index.query(

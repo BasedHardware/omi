@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -33,15 +33,31 @@ let package = Package(
     ),
     .target(
       name: "OmiSupport",
-      path: "Sources/OmiSupport"
+      path: "Sources/OmiSupport",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
     ),
     .target(
       name: "OmiTheme",
-      path: "Sources/Theme"
+      path: "Sources/Theme",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
     ),
     .target(
       name: "OmiWAL",
-      path: "Sources/OmiWAL"
+      path: "Sources/OmiWAL",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
+    ),
+    .target(
+      name: "VoiceTurnDomain",
+      path: "Sources/VoiceTurnDomain",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
     ),
     .executableTarget(
       name: "Omi Computer",
@@ -51,6 +67,7 @@ let package = Package(
         "OmiSupport",
         "OmiTheme",
         "OmiWAL",
+        "VoiceTurnDomain",
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
@@ -68,6 +85,7 @@ let package = Package(
         "Theme",
         "OmiSupport",
         "OmiWAL",
+        "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
       ],
       resources: [
@@ -77,6 +95,9 @@ let package = Package(
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
         .process("Resources"),
+      ],
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ]
     ),
     .testTarget(
@@ -86,11 +107,52 @@ let package = Package(
         "OmiSupport",
         "OmiTheme",
         "OmiWAL",
+        "VoiceTurnDomain",
       ],
       path: "Tests",
       exclude: [
-        "fixtures"
+        "fixtures",
+        "SemanticFeatureSentinels",
+        "OmiSupportTests",
+        "OmiWALTests",
+        "VoiceTurnDomainTests",
+      ],
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ]
     ),
-  ]
+    .testTarget(
+      name: "OmiSupportTests",
+      dependencies: ["OmiSupport"],
+      path: "Tests/OmiSupportTests",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
+    ),
+    .testTarget(
+      name: "OmiWALTests",
+      dependencies: ["OmiWAL"],
+      path: "Tests/OmiWALTests",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ]
+    ),
+    .testTarget(
+      name: "VoiceTurnDomainTests",
+      dependencies: [
+        .target(name: "Omi Computer"),
+        "VoiceTurnDomain",
+      ],
+      path: "Tests/VoiceTurnDomainTests"
+    ),
+    .testTarget(
+      name: "SemanticFeatureSentinels",
+      dependencies: [],
+      path: "Tests/SemanticFeatureSentinels",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete"])
+      ]
+    ),
+  ],
+  swiftLanguageModes: [.v6]
 )

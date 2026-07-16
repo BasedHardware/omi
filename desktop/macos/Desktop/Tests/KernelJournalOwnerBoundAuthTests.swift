@@ -5,7 +5,7 @@ import XCTest
 
 private final class InitialGreetingOwnerURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var requestCount = 0
+  private nonisolated(unsafe) static var requestCount = 0
 
   static func reset() {
     lock.lock()
@@ -54,7 +54,6 @@ final class KernelJournalOwnerBoundAuthTests: XCTestCase {
     auth.tokenStorageHooks = .live
     auth.tokenRefreshHooks = .live
     UserDefaults.standard.removeObject(forKey: .authUserId)
-    try await super.tearDown()
   }
 
   func testTokenOwnerExtractionAcceptsFirebaseUserIDAndSubject() throws {

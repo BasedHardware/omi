@@ -89,6 +89,11 @@ def test_llm_gateway_is_a_bounded_fallback_component():
     assert fallback_mod.bucket_component('llm_gateway') == 'llm_gateway'
 
 
+def test_firestore_malformed_document_labels_are_bounded():
+    assert fallback_mod.bucket_component('firestore_read') == 'firestore_read'
+    assert fallback_mod.bucket_reason('malformed_doc') == 'malformed_doc'
+
+
 def test_record_fallback_never_raises_on_metric_or_log_failure(monkeypatch):
     class BoomCounter:
         def labels(self, **_labels):

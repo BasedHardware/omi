@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -45,6 +46,34 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertNil(recall.spawn)
     XCTAssertTrue(recall.assistantText.contains(marker))
     XCTAssertFalse(recall.assistantText.contains("GAUNTLET-OLD"))
+  }
+
+  func testCanonicalSpawnReceiptKeepsProviderContinuationInNativeVoiceLane() {
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        reducerOutputSuppressed: false),
+      .present)
+    XCTAssertEqual(
+      RealtimeProviderTurnDoneDisposition.decide(
+        pendingToolCount: 0,
+        postToolContinuationRequired: true),
+      .requestPostToolContinuation)
+  }
+
+  func testCanonicalSpawnReceiptNeverRedrivesAfterExpectedSessionRefresh() {
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertTrue(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: false,
+        hasCanonicalSpawnReceipt: false))
   }
 
   func testSpawnJournalReceiptAcceptsOnlyCanonicalTurnIdentity() throws {
@@ -143,7 +172,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
   func testDirectedProviderSetupNeededIsTypedAndCannotCreateAPill() {
     let continuityKey = "voice:00000000-0000-0000-0000-000000009519"
-    let setupNeeded = #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"openclaw","message":"OpenClaw needs setup"}}"#
+    let setupNeeded =
+      #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"openclaw","message":"OpenClaw needs setup"}}"#
 
     XCTAssertEqual(
       RealtimeSpawnAgentToolOutcome.classify(
@@ -281,15 +311,24 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     // omi-test-quality: source-inspection -- static contract: an accepted PTT spawn can project only after the same current-turn fence used for its tool result.
     let source = try realtimeHubControllerSource()
 
-    let outputCall = try XCTUnwrap(source.range(of: "let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
-    let currentFence = try XCTUnwrap(source.range(of: "guard self.isCurrentToolTurn(", range: outputCall.upperBound..<source.endIndex))
-    let pillProjection = try XCTUnwrap(source.range(of: "AgentPillsManager.shared.upsertSpawnedPill(", range: currentFence.upperBound..<source.endIndex))
+    let outputCall = try XCTUnwrap(
+      source.range(of: "let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
+    let currentFence = try XCTUnwrap(
+      source.range(
+        of: #"guard\s+self\.isCurrentToolTurn\("#,
+        options: .regularExpression,
+        range: outputCall.upperBound..<source.endIndex))
+    let pillProjection = try XCTUnwrap(
+      source.range(of: "AgentPillsManager.shared.upsertSpawnedPill(", range: currentFence.upperBound..<source.endIndex))
     XCTAssertLessThan(outputCall.lowerBound, currentFence.lowerBound)
     XCTAssertLessThan(currentFence.lowerBound, pillProjection.lowerBound)
-    XCTAssertTrue(source.contains("producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference()"))
+    XCTAssertTrue(
+      source.contains("producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference()"))
   }
 
   func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
+    // omi-test-quality: source-inspection -- static contract: the realtime controller must not
+    // reintroduce a local TTS takeover for an accepted background-agent receipt.
     let source = try realtimeHubControllerSource()
 
     XCTAssertFalse(source.contains("AVSpeechSynthesizer"))
@@ -303,15 +342,22 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(
       source.contains(
         "acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
+    // The spawn receipt persists the canonical lifecycle fact, but only the
+    // native provider continuation may answer the same PTT turn aloud.
+    XCTAssertTrue(source.contains("preserving native provider continuation"))
+    XCTAssertFalse(source.contains("playCanonicalSpawnAcknowledgement"))
+    XCTAssertFalse(source.contains("kind: .spawnReceipt"))
+    XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
+    XCTAssertTrue(source.contains("postToolContinuationRequired"))
   }
 
   func testRealtimeHubAudibleOutputIsLeaseGated() throws {
     let coordinator = VoiceTurnCoordinator()
     let turnID = coordinator.begin(intent: .hold)
-    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
-    coordinator.send(.finalize(turnID: turnID))
-    coordinator.send(.transcriptionStarted(turnID: turnID))
-    coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+    coordinator.publish(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.publish(.finalize(turnID: turnID))
+    coordinator.publish(.transcriptionStarted(turnID: turnID))
+    coordinator.publish(.transcriptionFinal(turnID: turnID, text: "fixture"))
     guard case .acquired(let native) = coordinator.acquireOutput(.nativeRealtime, turnID: turnID) else {
       return XCTFail("native output should acquire the turn")
     }
@@ -329,14 +375,15 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let source = try realtimeHubControllerSource()
 
     XCTAssertTrue(source.contains("private var toolEffectIdentityByTransportKey"))
-    XCTAssertTrue(source.contains("private var realtimeToolTurnEpoch = 0"))
+    // The screen-receipt extension shares this epoch fence after the visual receipt refactor.
+    XCTAssertTrue(source.contains("var realtimeToolTurnEpoch = 0"))
     XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
-    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = identity"))
+    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = toolIdentity"))
     XCTAssertTrue(
       source.contains("toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)"))
     XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey.removeValue(forKey: key)"))
     XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
-    XCTAssertTrue(source.contains("waiting for post-tool continuation"))
+    XCTAssertTrue(source.contains("waiting for provider tool delivery"))
     XCTAssertTrue(source.contains("authorizedRealtimeInvocations"))
     XCTAssertTrue(source.contains("private func clearRealtimeToolTracking()"))
     XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))
@@ -386,7 +433,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     let sessionPoliciesSource = try realtimeHubSessionPoliciesSource()
 
     XCTAssertTrue(sessionPoliciesSource.contains("case deferredForReplacement"))
-    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement"))
+    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.publish(.hubCommitDeferredForReplacement"))
     XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true"))
     XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
     XCTAssertTrue(source.contains("return .deferredForReplacement"))

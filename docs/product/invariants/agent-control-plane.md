@@ -74,6 +74,25 @@ must name the invariant they affect and update the matching guard test.
   persisted run inputs, surface context, results, or metadata. Detail remains an
   explicit run lookup, and realtime provider responses enforce a byte ceiling so
   one oversized tool result cannot tear down the voice session.
+- Session archival state is not run lifecycle. A PTT or chat request for a
+  completed child must discover the recent canonical child run and answer from
+  its bounded final result (or explicit run inspection); it must never infer
+  completion from `sessions.status` or filter away an open reusable session as
+  though it were still running. Legacy child-discovery requests that say
+  `closed` retain that user intent by selecting terminal runs, not archived
+  sessions.
+- A realtime spawn acknowledgement is an admission receipt, not a child
+  completion claim. The kernel derives that acknowledgement deterministically;
+  only the canonical child run's terminal lifecycle may report completion,
+  failure, cancellation, or timeout. The receipt is persistence-only: it
+  records the canonical journal fact but does not claim a deterministic local
+  TTS lease or stop the native realtime stream. The active provider's post-tool
+  continuation is the sole audible response for the spawned turn; any pre-tool
+  speculation is cleared so it stays out of the visible reply without
+  interrupting the native voice lane, and the turn advances from that provider
+  continuation rather than from the receipt itself. Session-refresh recovery
+  must recognize that validated receipt as committed work and never replay it
+  into a duplicate child run.
 - Workstream consolidation moves task-scoped history through the canonical
   journal migration transaction, preserving typed payloads, revisions, outbox
   state, sequencing, and restart visibility; it never inserts or deletes turn

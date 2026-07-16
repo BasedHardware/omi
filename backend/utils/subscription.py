@@ -1092,13 +1092,15 @@ def has_transcription_credits(uid: str, source: Optional[str] = None) -> bool:
     if not subscription:
         return False
 
-    usage = get_monthly_usage_for_subscription(uid)
     limits = get_plan_limits(subscription.plan)
 
-    # Check transcription seconds (0 means unlimited)
-    if limits.transcription_seconds and limits.transcription_seconds > 0:
-        if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
-            return False
+    # Paid and other unlimited-transcription plans do not need a monthly usage scan.
+    if not limits.transcription_seconds or limits.transcription_seconds <= 0:
+        return True
+
+    usage = get_monthly_usage_for_subscription(uid)
+    if usage.get('transcription_seconds', 0) >= limits.transcription_seconds:
+        return False
 
     return True
 

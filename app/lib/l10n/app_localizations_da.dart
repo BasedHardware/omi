@@ -9328,7 +9328,7 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Fungerer indtil videre med Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
+      'Fungerer med telefonens mikrofon samt Omi- og Limitless-enheder. Lyden bliver på din telefon, indtil du vælger at uploade den.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9579,4 +9579,8 @@ class AppLocalizationsDa extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Enheden er næsten fuld — synkronisér for at frigøre plads.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen.';
 }

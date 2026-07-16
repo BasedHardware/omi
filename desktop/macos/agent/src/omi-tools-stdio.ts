@@ -250,7 +250,9 @@ async function handleJsonRpc(
             return;
           }
         }
-        const result = await requestSwiftTool("execute_sql", { query });
+        const input: Record<string, unknown> = { query };
+        if (args.parameters !== undefined) input.parameters = args.parameters;
+        const result = await requestSwiftTool("execute_sql", input);
         if (!isNotification) {
           send({
             jsonrpc: "2.0",

@@ -33,6 +33,13 @@ def canonical_write_decision(uid: str, *, db_client: Any) -> CanonicalWriteDecis
     """Resolve canonical write readiness without collapsing enrolled failures into legacy fallback."""
 
     if db_client is None:
+        if uid in set(list_canonical_cohort_uids()):
+            return CanonicalWriteDecision(
+                enabled=False,
+                memory_system=MemorySystem.CANONICAL,
+                fail_closed=True,
+                reason="missing_db_client",
+            )
         return CanonicalWriteDecision(
             enabled=False,
             memory_system=MemorySystem.LEGACY,
