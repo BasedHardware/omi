@@ -14,7 +14,7 @@ import {
 import { omiApi } from '../../lib/apiClient'
 import { getCacheUid } from '../../lib/persistentCache'
 import { toast } from '../../lib/toast'
-import { startSetupPolling } from '../../lib/appInstall'
+import { startSetupPolling, worksExternally } from '../../lib/appInstall'
 import type { App, AppCatalogItem, AppReview } from '../../lib/omiApi.generated'
 import { AddReviewDialog } from './AddReviewDialog'
 
@@ -144,6 +144,10 @@ export function AppDetailSheet({
   const installs = detail?.installs ?? app.installs ?? 0
   const integration = detail?.external_integration ?? app.external_integration ?? null
   const authSteps = integration?.auth_steps ?? []
+  // macOS worksExternally = capabilities include 'external_integration'. Gates the
+  // "Open" affordance for an installed integration (an installed non-external app just
+  // reads "Installed").
+  const external = worksExternally({ capabilities })
 
   // Paid-app state (Windows goes BEYOND macOS, which decodes is_paid but never shows a
   // purchase affordance and silently swallows the paid-gate 403). `is_user_paid` and
@@ -279,6 +283,20 @@ export function AppDetailSheet({
     }
   }
 
+  // Open an installed external-integration app (port of macOS openExternalApp): prefer
+  // app_home_url, else the first auth step carrying the user's uid. The auth-step
+  // fallback needs a signed-in uid; when there is neither a home url nor a resolvable
+  // step, do nothing (no dead link).
+  const onOpenApp = (): void => {
+    const homeUrl = integration?.app_home_url
+    const target =
+      homeUrl || (currentUid && authSteps[0]?.url ? `${authSteps[0].url}?uid=${currentUid}` : null)
+    if (!target) return
+    void window.omi.openExternalUrl(target).then((ok) => {
+      if (!ok) toast("This app's link is unavailable.", { tone: 'warn' })
+    })
+  }
+
   // Primary button states: "Setting up…" while polling an external setup, "Installed"
   // once enabled (disable is the separate trash icon), a real "Purchase — $x" affordance
   // for an unowned paid app (beyond macOS), else "Install". Disable-in-flight uses `busy`.
@@ -350,13 +368,23 @@ export function AppDetailSheet({
                         Setting up…
                       </button>
                     ) : enabled ? (
-                      <button
-                        disabled
-                        className="inline-flex cursor-default items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white"
-                      >
-                        <Check className="h-4 w-4" />
-                        Installed
-                      </button>
+                      external ? (
+                        <button
+                          onClick={onOpenApp}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-white/15"
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                          Open
+                        </button>
+                      ) : (
+                        <button
+                          disabled
+                          className="inline-flex cursor-default items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white"
+                        >
+                          <Check className="h-4 w-4" />
+                          Installed
+                        </button>
+                      )
                     ) : needsPurchase ? (
                       <button
                         onClick={onPurchase}
