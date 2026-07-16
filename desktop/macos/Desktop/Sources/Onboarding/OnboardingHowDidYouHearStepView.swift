@@ -16,16 +16,16 @@ struct OnboardingHowDidYouHearStepView: View {
   @State private var advanceTask: Task<Void, Never>?
 
   static let sources: [(name: String, icon: String)] = [
-    ("Social media", "bubble.left.and.bubble.right.fill"),
-    ("YouTube", "play.rectangle.fill"),
-    ("Friend", "person.fill"),
+    ("Social media", "bubble.left.and.bubble.right"),
+    ("YouTube", "play.rectangle"),
+    ("Friend", "person"),
     ("Search engine", "magnifyingglass"),
     ("AI chat", "sparkles"),
     ("Podcast", "waveform"),
-    ("Colleague", "person.2.fill"),
-    ("Article", "newspaper.fill"),
-    ("Product Hunt", "arrowtriangle.up.circle.fill"),
-    ("Newsletter", "envelope.fill"),
+    ("Colleague", "person.2"),
+    ("Article", "newspaper"),
+    ("Product Hunt", "arrowtriangle.up.circle"),
+    ("Newsletter", "envelope"),
     ("Event", "calendar"),
     ("Other", "ellipsis"),
   ]
