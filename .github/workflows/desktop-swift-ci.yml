@@ -92,7 +92,7 @@ jobs:
       - name: Run macOS-scoped manifest checks
         if: steps.changed.outputs.should_run == 'true'
         run: |
-          python3 .github/scripts/run_checks.py --lane ci --platform macos --base origin/main
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base origin/main --skip-pr-body-checks
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not

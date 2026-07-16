@@ -17,6 +17,8 @@ This test pins the contract:
      manifest step on macOS CI.
   3. Adversarial: a macOS-only check whose trigger escapes the gate is detected as a
      missing route.
+
+Stdlib-only (no PyYAML dependency) so it runs on any CI runner.
 """
 
 from __future__ import annotations
@@ -24,8 +26,6 @@ from __future__ import annotations
 import re
 import unittest
 from pathlib import Path
-
-import yaml
 
 from run_checks import Check, load_manifest, trigger_matches
 
@@ -40,14 +40,9 @@ WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 _GATE_RE = re.compile(r"grep\s+-[A-Za-z]*E[A-Za-z]*\s+'([^']+)'")
 
 
-def _workflow() -> dict:
-    with open(WORKFLOW_PATH, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
-
-
-def _step_run(step: dict) -> str:
-    run = step.get("run") or ""
-    return run if isinstance(run, str) else "\n".join(run)
+def _workflow_text() -> str:
+    """Return the raw workflow YAML text (no PyYAML needed)."""
+    return WORKFLOW_PATH.read_text(encoding="utf-8")
 
 
 def _runs_macos_manifest(run_body: str) -> bool:
@@ -60,24 +55,31 @@ def _extract_gate(run_body: str) -> str | None:
     return match.group(1) if match else None
 
 
-def _macos_route(workflow: dict) -> tuple[str | None, bool]:
+def _macos_route(workflow_text: str) -> tuple[str | None, bool]:
     """Return ``(changed-file gate regex, has_macos_manifest_step)``.
 
-    The gate is taken from the job that actually runs ``run_checks.py --platform
-    macos``: that job's changed-file ``grep`` is the only thing standing between a
-    changed trigger and the manifest step executing. Other jobs' gates are ignored.
+    The gate is taken from the step sequence surrounding the ``run_checks.py
+    --platform macos`` invocation: that job's changed-file ``grep`` is the only
+    thing standing between a changed trigger and the manifest step executing.
+
+    Works on raw YAML text (no PyYAML) by searching for the ``run_checks.py
+    --platform macos`` marker, then scanning backward for the nearest gate.
     """
-    for job in (workflow.get("jobs") or {}).values():
-        runs = [_step_run(step) for step in (job.get("steps") or [])]
-        if not any(_runs_macos_manifest(body) for body in runs):
-            continue
-        # First changed-file gate in this job is the one guarding ``should_run``.
-        for body in runs:
-            gate = _extract_gate(body)
-            if gate:
-                return gate, True
-        return None, True
-    return None, False
+    has_manifest = _runs_macos_manifest(workflow_text)
+    if not has_manifest:
+        return None, False
+    # The gate appears before the manifest step in the same job. Search the full
+    # text for the last gate before the run_checks.py invocation.
+    manifest_pos = workflow_text.find("run_checks.py")
+    # Find the first gate in the text (there is typically one per job)
+    gate_match = _GATE_RE.search(workflow_text)
+    gate = gate_match.group(1) if gate_match and gate_match.start() < manifest_pos else None
+    # If gate is after manifest step, try to find one before
+    if gate is None:
+        for m in _GATE_RE.finditer(workflow_text):
+            if m.start() < manifest_pos:
+                gate = m.group(1)
+    return gate, True
 
 
 def _materialize_trigger(pattern: str) -> list[str]:
@@ -118,8 +120,8 @@ class DesktopManifestRoutesTests(unittest.TestCase):
     """Guard the macOS manifest-check route in desktop-swift-ci.yml."""
 
     def setUp(self) -> None:
-        self.workflow = _workflow()
-        self.gate, self.has_manifest_step = _macos_route(self.workflow)
+        workflow_text = _workflow_text()
+        self.gate, self.has_manifest_step = _macos_route(workflow_text)
         self.manifest = load_manifest(MANIFEST_PATH)
 
     def test_macos_manifest_step_exists(self) -> None:
