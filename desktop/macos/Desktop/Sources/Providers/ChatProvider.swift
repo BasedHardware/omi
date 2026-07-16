@@ -3290,6 +3290,23 @@ class ChatProvider: ObservableObject {
 
   /// Upsert by canonical turn ID only. Text equality is deliberately ignored:
   /// two identical messages with distinct turn IDs are distinct journal rows.
+  /// Some `ChatMessage` fields live only in the in-memory row and are never
+  /// written to the kernel journal, so `KernelJournalTurn.chatMessage()` cannot
+  /// reconstruct them and a journal projection can never be their authority:
+  /// `rating` (user-set), `metadata` (model/token/cost stats attached at
+  /// completion, rendered in the message footer) and `notificationScreenshot`.
+  /// Replacing a row wholesale with the projection would drop them, so carry
+  /// them forward from the row being replaced. A field the projection *does*
+  /// carry (non-nil) wins, so this stays correct if the journal schema later
+  /// starts persisting one of them.
+  static func carryingLocalOnlyFields(_ projected: ChatMessage, from existing: ChatMessage) -> ChatMessage {
+    var merged = projected
+    if merged.rating == nil { merged.rating = existing.rating }
+    if merged.metadata == nil { merged.metadata = existing.metadata }
+    if merged.notificationScreenshot == nil { merged.notificationScreenshot = existing.notificationScreenshot }
+    return merged
+  }
+
   func projectJournalTurn(_ turn: KernelJournalTurn) {
     let expected = mainChatSurfaceReference()
     let voiceCompanion = expected.realtimeVoiceCompanion()
@@ -3320,17 +3337,13 @@ class ChatProvider: ObservableObject {
       return
     }
     if let index = messages.firstIndex(where: { $0.id == projected.id }) {
-      let rating = messages[index].rating
-      messages[index] = projected
-      messages[index].rating = rating
+      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
     } else if let continuityKey = projected.clientTurnId,
       let index = messages.firstIndex(where: {
         $0.clientTurnId == continuityKey && $0.sender == projected.sender
       })
     {
-      let rating = messages[index].rating
-      messages[index] = projected
-      messages[index].rating = rating
+      messages[index] = Self.carryingLocalOnlyFields(projected, from: messages[index])
     } else {
       messages.append(projected)
     }
@@ -3354,7 +3367,14 @@ class ChatProvider: ObservableObject {
     guard let message = messages.first(where: { $0.id == messageId }) else { return }
     guard let ownerID = journalOwnerByMessageID[messageId] ?? runtimeOwnerId else { return }
     let targetSurface = surface ?? mainChatSurfaceReference()
-    journalWriteCoordinator.schedule(messageID: messageId) { @MainActor [weak self] in
+    // A `.streaming` coalesce must never land after the terminal mutation (it
+    // would regress the turn back to streaming), so it stays gated by
+    // terminalization. Every other update is a durable, non-regressing content
+    // mutation and must remain journalable after the turn terminalizes.
+    journalWriteCoordinator.schedule(
+      messageID: messageId,
+      supersededByTerminalization: status == .streaming
+    ) { @MainActor [weak self] in
       guard let self else { return }
       _ = await self.kernelTurnProjection.updateTurn(
         surface: targetSurface,
