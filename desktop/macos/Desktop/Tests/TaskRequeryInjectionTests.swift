@@ -35,7 +35,7 @@ final class TaskRequeryInjectionTests: XCTestCase {
       "recompute requery must remain gated on suppressDatabaseRequery")
     // The counter must live PAST the empty-filter early return (count real DB reads).
     let requeryFn = src.range(of: "private func loadFilteredTasksFromDatabase() async {")!.upperBound
-    let guardIdx = src.range(of: "else {\n            filteredFromDatabase = []", range: requeryFn..<src.endIndex)!
+    let guardIdx = src.range(of: "else {\n      filteredFromDatabase = []", range: requeryFn..<src.endIndex)!
       .lowerBound
     let counterIdx = src.range(of: "automationRequeryCount += 1", range: requeryFn..<src.endIndex)!.lowerBound
     XCTAssertGreaterThan(
