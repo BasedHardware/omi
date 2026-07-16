@@ -197,6 +197,51 @@ describe('Tasks — a freshly-created row is id-gated until synced', () => {
   })
 })
 
+describe('Tasks — due-date buckets fold overdue into Today (Mac parity: 4 buckets)', () => {
+  const DAY = 86_400_000
+
+  it('renders no Overdue section — overdue tasks appear under Today', async () => {
+    incomplete = [
+      rec({ id: 1, backendId: 'b1', description: 'overdue task', dueAt: Date.now() - 3 * DAY }),
+      rec({ id: 2, backendId: 'b2', description: 'today task', dueAt: Date.now() })
+    ]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('overdue task')).not.toBeNull())
+
+    // There is no separate "Overdue" bucket header.
+    const headers = screen.getAllByRole('heading').map((h) => h.textContent ?? '')
+    expect(headers.some((h) => /Overdue/i.test(h))).toBe(false)
+
+    // Both the overdue and today tasks live inside the single "Today" section.
+    const todaySection = screen
+      .getAllByRole('heading')
+      .find((h) => /^Today/.test(h.textContent ?? ''))
+      ?.closest('section') as HTMLElement
+    expect(todaySection).toBeTruthy()
+    expect(within(todaySection).getByText('overdue task')).not.toBeNull()
+    expect(within(todaySection).getByText('today task')).not.toBeNull()
+  })
+
+  it('labels the far-future bucket "Later" (not "Upcoming")', async () => {
+    incomplete = [
+      rec({ id: 3, backendId: 'b3', description: 'tomorrow task', dueAt: Date.now() + DAY }),
+      rec({ id: 4, backendId: 'b4', description: 'later task', dueAt: Date.now() + 5 * DAY })
+    ]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('later task')).not.toBeNull())
+
+    const headers = screen.getAllByRole('heading').map((h) => h.textContent ?? '')
+    expect(headers.some((h) => /^Later/.test(h))).toBe(true)
+    expect(headers.some((h) => /Upcoming/i.test(h))).toBe(false)
+
+    const laterSection = screen
+      .getAllByRole('heading')
+      .find((h) => /^Later/.test(h.textContent ?? ''))
+      ?.closest('section') as HTMLElement
+    expect(within(laterSection).getByText('later task')).not.toBeNull()
+  })
+})
+
 describe('Tasks — freshness via onTasksChanged', () => {
   it('subscribes once and re-reads the store when the change event fires', async () => {
     incomplete = [rec({ id: 1, backendId: 'b1', description: 'first' })]
