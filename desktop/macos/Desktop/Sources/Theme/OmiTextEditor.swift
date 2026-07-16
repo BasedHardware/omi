@@ -304,7 +304,7 @@ package struct OmiTextEditor: NSViewRepresentable {
     func updateMarkedTextState(_ hasMarkedText: Bool) {
       guard hasMarkedText != lastMarkedTextState else { return }
       lastMarkedTextState = hasMarkedText
-      DispatchQueue.main.async { [weak self] in
+      Task { @MainActor [weak self] in
         guard self?.lastMarkedTextState == hasMarkedText else { return }
         self?.onMarkedTextChange?(hasMarkedText)
       }
