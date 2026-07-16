@@ -506,6 +506,16 @@ export function Apps(): React.JSX.Element {
       } catch (e) {
         if (worksExternally(a)) {
           beginSetupFlow(a)
+        } else if (a.is_paid) {
+          // Paid app the user hasn't bought → the backend gates enable with a 403
+          // (identical message to the private-app 403, so we can't branch on the body).
+          // macOS swallows this silently; surface it and point to the detail sheet's
+          // purchase flow instead of a bare "Couldn't install".
+          console.error('Enable paid app failed:', e)
+          toast(`${a.name} is a paid app`, {
+            tone: 'error',
+            body: 'Open it to purchase before installing.'
+          })
         } else {
           console.error('Enable app failed:', e)
           toast(`Couldn’t install ${a.name}`, { tone: 'error', body: userSafeDetail(e) })
