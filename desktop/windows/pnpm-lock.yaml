@@ -95,6 +95,9 @@ importers:
       firebase:
         specifier: ^12.13.0
         version: 12.14.0
+      jose:
+        specifier: ^6.1.0
+        version: 6.2.3
       koffi:
         specifier: ^3.0.2
         version: 3.0.2

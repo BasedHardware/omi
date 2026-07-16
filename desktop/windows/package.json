@@ -89,6 +89,7 @@
     "d3-force-3d": "^3.0.6",
     "electron-updater": "^6.8.9",
     "firebase": "^12.13.0",
+    "jose": "^6.1.0",
     "koffi": "^3.0.2",
     "lucide-react": "^1.16.0",
     "onnxruntime-web": "1.27.0",
