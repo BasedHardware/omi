@@ -54,3 +54,56 @@ describe('ChatMessages copy button', () => {
     expect(screen.queryByRole('button', { name: 'Copy message' })).toBeNull()
   })
 })
+
+const image = {
+  id: 'f-img',
+  name: 'photo.png',
+  mimeType: 'image/png',
+  thumbnailUrl: 'https://cdn.omi/thumb.png'
+}
+const pdf = { id: 'f-pdf', name: 'report.pdf', mimeType: 'application/pdf' }
+
+// The user bubble's inner text node carries `whitespace-pre-wrap`; a files-only
+// message must NOT render it (no empty bubble).
+const userBubbleText = (root: HTMLElement): HTMLElement | null =>
+  root.querySelector('.whitespace-pre-wrap')
+
+describe.each(['main', 'overlay'] as const)('ChatMessages [%s] — attachments', (variant) => {
+  it('renders the attachment strip ABOVE the user bubble, with both cards and the text', () => {
+    const messages: ChatMsg[] = [
+      { id: 'm1', role: 'user', content: 'here you go', attachments: [image, pdf] }
+    ]
+    const { container } = render(
+      <ChatMessages messages={messages} sending={false} variant={variant} />
+    )
+    const bubble = userBubbleText(container)
+    expect(bubble?.textContent).toBe('here you go')
+    const img = screen.getByAltText('photo.png')
+    expect(img.getAttribute('src')).toBe('https://cdn.omi/thumb.png')
+    expect(screen.getByText('application/pdf')).not.toBeNull()
+    // Strip precedes the bubble in document order (rendered above it).
+    expect(img.compareDocumentPosition(bubble as Node) & Node.DOCUMENT_POSITION_FOLLOWING).toBe(
+      Node.DOCUMENT_POSITION_FOLLOWING
+    )
+  })
+
+  it('renders a files-only message as a strip with NO empty bubble', () => {
+    const messages: ChatMsg[] = [{ id: 'm2', role: 'user', content: '', attachments: [pdf] }]
+    const { container } = render(
+      <ChatMessages messages={messages} sending={false} variant={variant} />
+    )
+    expect(screen.getByText('report.pdf')).not.toBeNull()
+    expect(userBubbleText(container)).toBeNull()
+  })
+
+  it('leaves a message without attachments as a single bubble (no strip)', () => {
+    const messages: ChatMsg[] = [{ id: 'm3', role: 'user', content: 'plain text' }]
+    const { container } = render(
+      <ChatMessages messages={messages} sending={false} variant={variant} />
+    )
+    expect(userBubbleText(container)?.textContent).toBe('plain text')
+    expect(container.querySelector('img')).toBeNull()
+    // The bubble div is the top-level message node (not wrapped in a strip column).
+    expect((container.firstElementChild as HTMLElement).className).toContain('group/msg')
+  })
+})

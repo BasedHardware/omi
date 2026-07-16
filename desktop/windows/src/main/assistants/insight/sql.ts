@@ -3,9 +3,18 @@
 // SELECT/WITH only): every layer here runs BEFORE the query reaches the DB.
 //
 // The impure edges (the DB query, the frame lookup, the JPEG read) are injected,
-// so every safety layer — read-only rejection, single-statement, LIMIT 200 auto-
-// append, 200-row cap, 500-char-per-cell truncation — is pure and hermetically
-// testable with a fake runner.
+// so every safety layer — read-only rejection, single-statement, table allowlist,
+// the DoS shape guard, the unsuppressible outer-LIMIT wrap, the 200-row cap and
+// 500-char-per-cell truncation — is pure and hermetically testable with a fake
+// runner.
+//
+// DoS hardening (a prompt-injected query reaches this backend): the row cap is an
+// OUTER `SELECT * FROM (<query>) LIMIT cap+1` wrap the model cannot suppress by
+// smuggling the word "limit" into a string literal / alias / inner subquery, and a
+// structural guard rejects the two shapes an outer LIMIT can't bound — an unbounded
+// recursive CTE and a cartesian join — because better-sqlite3 runs synchronously on
+// the Electron main thread with no interrupt/progress-handler API, so a recursive or
+// N-way-cross-join query would freeze the whole app. See rejectDangerousShape.
 //
 // NEVER log a query, a result cell, or a window title from here — SQL results are
 // raw OCR/screen text.
@@ -13,6 +22,9 @@ import type { RewindFrame } from '../../../shared/types'
 
 /** Mac's auto-limit + belt-and-suspenders row cap ("Auto-limited to 200 rows"). */
 export const MAX_ROWS = 200
+/** Rows actually fetched: cap + 1, so an (cap+1)th row is proof the result was
+ *  truncated (the model is told to narrow it) without materializing more. */
+export const ROW_FETCH_CAP = MAX_ROWS + 1
 /** Mac's per-cell truncation in the payload sent back to Gemini. */
 export const CELL_CAP = 500
 
@@ -294,12 +306,196 @@ export function isReadOnlySql(sql: string): boolean {
   )
 }
 
-/** Append `LIMIT 200` when the query has no LIMIT of its own (case-insensitive,
- *  after stripping a trailing `;`). Mac's executeSelectQuery behavior. */
-export function appendLimit(sql: string, cap: number = MAX_ROWS): string {
+/** Wrap the (already validated) query as `SELECT * FROM (<query>) LIMIT cap` so the
+ *  row cap ALWAYS applies. This replaces Mac's conditional `LIMIT 200` append, which
+ *  was suppressible: the append skipped whenever the raw query contained the word
+ *  "limit" anywhere — a `LIKE '%limit%'` literal, a `col AS limit_x` alias, or an
+ *  inner subquery's own LIMIT — letting a prompt-injected query run unbounded. An
+ *  outer LIMIT on a `SELECT *` over the subquery cannot be suppressed by any inner
+ *  "limit" text. A `WITH … SELECT` is a valid parenthesized subquery in SQLite, so
+ *  this wrap is valid for every read-only SELECT/WITH the gates above admit. The
+ *  trailing `;` is stripped so the wrap stays a single statement. */
+export function wrapWithRowCap(sql: string, cap: number = ROW_FETCH_CAP): string {
   const trimmed = sql.trim().replace(/;+\s*$/, '')
-  if (/\blimit\b/i.test(trimmed)) return trimmed
-  return `${trimmed} LIMIT ${cap}`
+  return `SELECT * FROM (${trimmed}) LIMIT ${cap}`
+}
+
+/** Index of the `)` that matches the `(` at `openIdx` (which must be a `(` punct
+ *  token), or -1 if unbalanced. */
+function matchParen(toks: SqlToken[], openIdx: number): number {
+  let depth = 0
+  for (let k = openIdx; k < toks.length; k++) {
+    const t = toks[k]
+    if (t.t === 'punct' && t.v === '(') depth++
+    else if (t.t === 'punct' && t.v === ')') {
+      depth--
+      if (depth === 0) return k
+    }
+  }
+  return -1
+}
+
+/** True iff a leading `WITH RECURSIVE` defines a CTE that references its own name in
+ *  its body but has no `LIMIT` inside that body to bound generation. SQLite only
+ *  permits a CTE to reference itself under `RECURSIVE`, so a non-recursive WITH can
+ *  never infinite-loop; a recursive CTE whose body carries its own LIMIT terminates.
+ *  An unbounded one (e.g. `WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1
+ *  FROM r) SELECT max(x) FROM r`) runs forever — and because the aggregate over it
+ *  must fully evaluate the recursion, the outer-LIMIT wrap can't stop it. Rejected. */
+function hasUnboundedRecursiveCte(toks: SqlToken[]): boolean {
+  let i = 0
+  if (!(toks[i]?.t === 'word' && toks[i].v === 'with')) return false
+  i++
+  if (toks[i]?.t === 'word' && toks[i].v === 'recursive') i++
+  else return false
+  for (;;) {
+    const nameTok = toks[i]
+    if (!nameTok || (nameTok.t !== 'word' && nameTok.t !== 'ident')) return false
+    const name = nameTok.v
+    i++
+    if (toks[i]?.t === 'punct' && toks[i].v === '(') {
+      const close = matchParen(toks, i) // optional column list
+      if (close < 0) return false
+      i = close + 1
+    }
+    if (!(toks[i]?.t === 'word' && toks[i].v === 'as')) return false
+    i++
+    if (!(toks[i]?.t === 'punct' && toks[i].v === '(')) return false
+    const bodyClose = matchParen(toks, i)
+    if (bodyClose < 0) return false
+    const body = toks.slice(i + 1, bodyClose)
+    const selfRef = body.some((t) => (t.t === 'word' || t.t === 'ident') && t.v === name)
+    const bodyHasLimit = body.some((t) => t.t === 'word' && t.v === 'limit')
+    if (selfRef && !bodyHasLimit) return true
+    i = bodyClose + 1
+    if (toks[i]?.t === 'punct' && toks[i].v === ',') {
+      i++
+      continue
+    }
+    return false
+  }
+}
+
+/** Keywords that end a JOIN's search for an ON/USING predicate. Hitting any of these
+ *  (or the end / an enclosing `)`) before a predicate means the JOIN is a cartesian
+ *  product. */
+const JOIN_BOUNDARY_KW = new Set([
+  'where',
+  'group',
+  'order',
+  'limit',
+  'having',
+  'window',
+  'union',
+  'except',
+  'intersect',
+  'returning',
+  'join',
+  'cross',
+  'inner',
+  'left',
+  'right',
+  'full',
+  'natural'
+])
+
+/** Walk one FROM clause (its keyword at `fromIdx`) and report whether it lists two
+ *  real tables separated by a top-level comma (`FROM a, b`) — an implicit cartesian
+ *  join. A subquery after the comma (`FROM t, (SELECT …)`) is NOT flagged: it is the
+ *  common 1-row scalar-cross idiom and its cardinality is unknowable here. */
+function fromHasCommaJoin(toks: SqlToken[], fromIdx: number): boolean {
+  let j = fromIdx + 1
+  for (;;) {
+    const nx = toks[j]
+    if (!nx) return false
+    if (nx.t === 'punct' && nx.v === '(') {
+      const close = matchParen(toks, j) // subquery item
+      if (close < 0) return false
+      j = close + 1
+    } else if (nx.t === 'word' || nx.t === 'ident') {
+      j++
+      if (
+        toks[j]?.t === 'punct' &&
+        toks[j].v === '.' &&
+        (toks[j + 1]?.t === 'word' || toks[j + 1]?.t === 'ident')
+      ) {
+        j += 2 // schema.table
+      }
+    } else {
+      return false
+    }
+    if (toks[j]?.t === 'word' && toks[j].v === 'as') j++
+    const alias = toks[j]
+    if (alias && (alias.t === 'word' || alias.t === 'ident') && !CLAUSE_KW.has(alias.v)) j++
+    const comma = toks[j]
+    if (comma && comma.t === 'punct' && comma.v === ',') {
+      const after = toks[j + 1]
+      if (after && (after.t === 'word' || after.t === 'ident')) return true
+      j++ // subquery after comma → keep walking, don't flag
+      continue
+    }
+    return false
+  }
+}
+
+/** True iff the JOIN keyword at `joinIdx` has no ON/USING predicate before the next
+ *  clause boundary — a cartesian product. Depth-tracked so predicates/keywords
+ *  inside a joined subquery don't confuse the scan. */
+function joinLacksPredicate(toks: SqlToken[], joinIdx: number): boolean {
+  let depth = 0
+  for (let k = joinIdx + 1; k < toks.length; k++) {
+    const t = toks[k]
+    if (t.t === 'punct') {
+      if (t.v === '(') depth++
+      else if (t.v === ')') {
+        if (depth === 0) return true
+        depth--
+      }
+      continue
+    }
+    if (depth !== 0) continue
+    if (t.t === 'word') {
+      if (t.v === 'on' || t.v === 'using') return false
+      if (JOIN_BOUNDARY_KW.has(t.v)) return true
+    }
+  }
+  return true
+}
+
+/** True iff the query contains a cartesian product: an implicit comma-join of two
+ *  real tables, a CROSS JOIN, or a JOIN with no ON/USING (and not NATURAL). Over
+ *  large tables a cartesian is an N² / N³ scan that — combined with an aggregate,
+ *  ORDER BY, GROUP BY or DISTINCT the outer LIMIT can't push down — freezes the
+ *  synchronous DB call. These joins are never needed on the tool surface (rewind
+ *  frames / app usage / tasks / conversations / memories), so they are rejected. */
+function hasCartesianJoin(toks: SqlToken[]): boolean {
+  for (let i = 0; i < toks.length; i++) {
+    const t = toks[i]
+    if (t.t !== 'word') continue
+    if (t.v === 'cross' && toks[i + 1]?.t === 'word' && toks[i + 1].v === 'join') return true
+    if (t.v === 'from' && fromHasCommaJoin(toks, i)) return true
+    if (t.v === 'join') {
+      const prev = toks[i - 1]
+      if (prev?.t === 'word' && (prev.v === 'cross' || prev.v === 'natural')) continue
+      if (joinLacksPredicate(toks, i)) return true
+    }
+  }
+  return false
+}
+
+/** The DoS shape guard: reject the two unbounded-computation shapes the outer-LIMIT
+ *  wrap cannot bound. Runs AFTER the read-only + allowlist gates (so it only ever
+ *  fires on an otherwise-valid, allowlisted query — the real DoS vector), and BEFORE
+ *  the wrap. Returns an `Error: …` string to reject, or null to allow. */
+export function rejectDangerousShape(sql: string): string | null {
+  const toks = tokenizeSql(sql)
+  if (hasUnboundedRecursiveCte(toks)) {
+    return 'Error: recursive queries must bound their recursion with a LIMIT inside the recursive CTE.'
+  }
+  if (hasCartesianJoin(toks)) {
+    return 'Error: cartesian joins are not allowed — add an ON/USING join condition, or query one table at a time.'
+  }
+  return null
 }
 
 function cellToString(v: unknown): string {
@@ -317,6 +513,18 @@ export function formatRows(columns: string[], rows: unknown[][]): string {
   for (const row of capped) lines.push(row.map(cellToString).join(' | '))
   lines.push(`${capped.length} row(s)`)
   return lines.join('\n')
+}
+
+/** Render a result set for the model, flagging truncation. The query is fetched with
+ *  `LIMIT MAX_ROWS + 1` (ROW_FETCH_CAP), so an (MAX_ROWS+1)th row is proof more rows
+ *  exist; formatRows still renders only the first MAX_ROWS, and the note tells the
+ *  model to narrow the query rather than silently dropping the tail. */
+function renderResult(result: { columns: string[]; rows: unknown[][] }): string {
+  const body = formatRows(result.columns, result.rows)
+  if (result.rows.length > MAX_ROWS) {
+    return `${body}\n(Auto-limited to ${MAX_ROWS} rows — add a LIMIT or a narrower WHERE to see the rest.)`
+  }
+  return body
 }
 
 /** When the user has a non-empty Insight denylist, execute_sql is closed to the
@@ -451,8 +659,15 @@ export function executeSql(
   if (!tablesAllowed(single, denyActive ? DENYLIST_ALLOWLIST : TABLE_ALLOWLIST, denyActive))
     return 'Error: only the rewind_frames table is queryable'
 
-  const limited = appendLimit(single, MAX_ROWS)
-  const finalSql = denyActive ? applyDenylistShadow(limited, denyTerms) : limited
+  // Reject the unbounded-computation shapes the outer-LIMIT wrap can't bound
+  // (recursive-CTE bomb, cartesian join) before any query reaches the DB.
+  const dangerous = rejectDangerousShape(single)
+  if (dangerous) return dangerous
+
+  // Shadow first (rewrites the user's query), then wrap the whole thing in the
+  // unsuppressible outer LIMIT.
+  const shaped = denyActive ? applyDenylistShadow(single, denyTerms) : single
+  const finalSql = wrapWithRowCap(shaped)
   let result: { columns: string[]; rows: unknown[][] }
   try {
     result = runQuery(finalSql)
@@ -461,7 +676,76 @@ export function executeSql(
     // row contents. Safe to surface to the model; do not log it here.
     return `Error: ${e instanceof Error ? e.message : 'query failed'}`
   }
-  return formatRows(result.columns, result.rows)
+  return renderResult(result)
+}
+
+/**
+ * The agent-kernel execute_sql backend: the SAME read-only safety stack Insight
+ * uses (single-statement, read-only SELECT/WITH gate, LIMIT 200 auto-append,
+ * 200-row / 500-char caps) but over a CALLER-SUPPLIED table allowlist instead of
+ * Insight's rewind-frames-only one. The agent tool needs a wider surface (app
+ * usage, tasks, conversations, memories, aggregations — see
+ * productToolExecutors.ts's AGENT_SQL_TABLE_ALLOWLIST), so the allowlist is a
+ * parameter; it is still a CLOSED allowlist (anything not listed is refused), so
+ * meta/kv/embedding/credential-shaped tables stay unreachable.
+ *
+ * No denylist-shadow path here (that is an Insight-privacy feature): the agent
+ * scope has no per-app denylist. Returns the string that becomes the tool_result —
+ * an `Error: …` string (never a throw) on any rejection so the tool loop continues.
+ *
+ * Write support is deliberately NOT ported: v1 is read-only on Windows (Mac's
+ * ask-mode write rules become moot), so INSERT/UPDATE/DELETE/DDL/PRAGMA/ATTACH are
+ * all rejected by isReadOnlySql before a query ever reaches the DB.
+ */
+export function executeReadOnlySql(
+  rawQuery: unknown,
+  runQuery: QueryRunner,
+  allowlist: ReadonlySet<string>
+): string {
+  const query = typeof rawQuery === 'string' ? rawQuery.trim() : ''
+  if (!query) return 'Error: query is required'
+
+  // Single statement only (Mac splits on ';' and rejects >1 non-empty).
+  const statements = query
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (statements.length > 1) {
+    return 'Error: multi-statement queries are not allowed. Send one statement at a time.'
+  }
+  const single = statements[0] ?? query
+
+  // Read-only gate: SELECT/WITH prefix AND no write/DDL keyword anywhere. This is
+  // what rejects INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/PRAGMA/ATTACH/DETACH/
+  // VACUUM/REINDEX/TRUNCATE/REPLACE (isReadOnlySql's blocklist).
+  if (!isReadOnlySql(single)) {
+    return 'Error: this SQL surface is read-only. Use SELECT or read-only WITH queries.'
+  }
+
+  // Even a valid read-only SELECT may only touch allowlisted tables — a closed
+  // allowlist so meta/embedding/credential-shaped tables can never be read.
+  if (!tablesAllowed(single, allowlist)) {
+    return (
+      'Error: that query references a table that is not queryable. Allowed tables: ' +
+      [...allowlist].sort().join(', ')
+    )
+  }
+
+  // Reject the unbounded-computation shapes the outer-LIMIT wrap can't bound
+  // (recursive-CTE bomb, cartesian join) before any query reaches the DB.
+  const dangerous = rejectDangerousShape(single)
+  if (dangerous) return dangerous
+
+  const finalSql = wrapWithRowCap(single)
+  let result: { columns: string[]; rows: unknown[][] }
+  try {
+    result = runQuery(finalSql)
+  } catch (e) {
+    // Message only — a better-sqlite3 error names columns/syntax, never row
+    // contents. Safe to surface to the model; do not log it here.
+    return `Error: ${e instanceof Error ? e.message : 'query failed'}`
+  }
+  return renderResult(result)
 }
 
 /** request_screenshot backend: resolve a frame id to its JPEG bytes, base64. null

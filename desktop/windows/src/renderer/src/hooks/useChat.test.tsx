@@ -42,15 +42,27 @@ vi.mock('../lib/agentTask', () => ({
   detectAgentTask: agentMocks.detectAgentTask,
   resolveTaskCwd: agentMocks.resolveTaskCwd
 }))
-vi.mock('../lib/preferences', () => ({
-  getPreferences: () => ({
-    chatHistoryMode: 'per-launch',
-    automationConsentedAt: null,
-    agentCommands: {}
-  })
+// Mutable so the rehydrate tests can flip to 'infinite' (which arms the mount
+// loader). Reset to 'per-launch' in beforeEach so every other test is unchanged.
+const prefs = vi.hoisted(() => ({
+  chatHistoryMode: 'per-launch' as 'per-launch' | 'infinite',
+  automationConsentedAt: null as string | null,
+  agentCommands: {} as Record<string, unknown>
 }))
+vi.mock('../lib/preferences', () => ({ getPreferences: () => prefs }))
+// The session-thread message reader (R3 rehydrate). Controllable per-test.
+const sessionMocks = vi.hoisted(() => ({
+  getMessages: vi.fn(async (): Promise<unknown[]> => [])
+}))
+vi.mock('../lib/chatSessionsClient', () => ({ getMessages: sessionMocks.getMessages }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+// Shared-thread continuity is best-effort HTTP; stub it so recordVoiceTurn's
+// backend echo is hermetic (and assertable).
+const saveDesktopMessageSpy = vi.fn(async (_r: unknown) => null)
+vi.mock('../lib/desktopChatMessages', () => ({
+  saveDesktopMessage: (r: unknown) => saveDesktopMessageSpy(r)
+}))
 
 import {
   useChat,
@@ -127,6 +139,7 @@ let agentEventCb: ((e: CodingAgentEvent) => void) | null = null
 let agentRunTaskId: string | null = null
 let agentRunResolve: ((r: { ok: boolean; text?: string; error?: string }) => void) | null = null
 const codingAgentCancelSpy = vi.fn(async () => {})
+const voiceHubRecordTurnSpy = vi.fn(async () => ({ recorded: true, duplicate: false }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -136,6 +149,9 @@ beforeEach(() => {
   bodies = []
   persisted = []
   clearAttachments() // reset the module-level pending-attachment singleton
+  prefs.chatHistoryMode = 'per-launch' // default; rehydrate tests opt into 'infinite'
+  sessionMocks.getMessages.mockReset()
+  sessionMocks.getMessages.mockResolvedValue([])
   agentEventCb = null
   agentRunTaskId = null
   agentRunResolve = null
@@ -174,8 +190,12 @@ beforeEach(() => {
     },
     codingAgentCancel: codingAgentCancelSpy,
     kgSearchFiles: async () => [],
-    kgExecuteSql: async () => ({ columns: [], rows: [] })
+    kgExecuteSql: async () => ({ columns: [], rows: [] }),
+    voiceHubRecordTurn: voiceHubRecordTurnSpy,
+    voiceHubGetSeedContext: async () => ({ context: '', idempotencyKeys: [] })
   }
+  saveDesktopMessageSpy.mockClear()
+  voiceHubRecordTurnSpy.mockClear()
 })
 afterEach(() => cleanup())
 
@@ -597,11 +617,42 @@ describe('useChat — recordVoiceTurn (native hub turn → one timeline, no LLM/
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('ignores an empty turn (missing user or assistant text)', () => {
+  it('records the turn to the ONE kernel conversation (origin realtime_voice, turnId key)', async () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('remember teal', 'noted', false, 'turn-xyz'))
+    await act(async () => {
+      await flush()
+    })
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledTimes(1)
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userText: 'remember teal',
+        assistantText: 'noted',
+        interrupted: false,
+        idempotencyKey: 'turn-xyz'
+      })
+    )
+  })
+
+  it('echoes both messages to the shared/mobile thread (messageSource realtime_voice)', async () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('hi omi', 'hello', false, 'turn-1'))
+    await act(async () => {
+      await flush()
+    })
+    const sources = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { messageSource: string }).messageSource)
+    expect(sources).toEqual(['realtime_voice', 'realtime_voice'])
+    const senders = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { sender: string }).sender)
+    expect(senders).toEqual(['human', 'ai'])
+  })
+
+  it('ignores an empty turn (missing user or assistant text) — nothing recorded anywhere', () => {
     const { result } = renderHook(() => useChat())
     act(() => result.current.recordVoiceTurn('', 'orphan'))
     act(() => result.current.recordVoiceTurn('orphan', '   '))
     expect(result.current.history).toHaveLength(0)
+    expect(voiceHubRecordTurnSpy).not.toHaveBeenCalled()
+    expect(saveDesktopMessageSpy).not.toHaveBeenCalled()
   })
 })
 
@@ -821,5 +872,67 @@ describe('useChat — first-chat not ready (legacy_sse readiness wait)', () => {
     expect(authHeaderOf(0)).toBe('Bearer test-token')
     // The pending bubble went straight to the reply — the interim copy never showed.
     expect(lastAssistant(result.current.history)?.content).toBe('hi')
+  })
+})
+
+// Rehydrate preservation: a reloaded / switched-to thread must keep the file
+// attachments on its user messages (the three loader mappers). Without these the
+// renderer fix would still show empty bubbles after reload / thread switch.
+describe('useChat — rehydrate preserves attachments', () => {
+  const withAttachments = {
+    id: 'u1',
+    role: 'user' as const,
+    content: 'see the file',
+    attachments: [
+      { id: 'srv-x', name: 'x.png', mimeType: 'image/png', thumbnailUrl: 'https://cdn/x.png' }
+    ]
+  }
+  const userAttachmentsOf = (history: { role: string; attachments?: unknown }[]): unknown =>
+    history.find((m) => m.role === 'user')?.attachments
+  const settle = async (result: { current: { history: { role: string }[] } }): Promise<void> => {
+    for (let k = 0; k < 50 && !result.current.history.some((m) => m.role === 'user'); k++)
+      await flush()
+  }
+
+  it('R1 — the mount loader (infinite) keeps attachments on the default thread', async () => {
+    prefs.chatHistoryMode = 'infinite'
+    ;(window as unknown as { omi: { getLocalConversation: unknown } }).omi.getLocalConversation =
+      async () => ({ startedAt: 1, messages: [withAttachments] })
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await settle(result)
+    })
+    expect(userAttachmentsOf(result.current.history)).toEqual(withAttachments.attachments)
+  })
+
+  it('R2 — switchThread(null) keeps attachments on the default thread', async () => {
+    const { result } = renderHook(() => useChat())
+    ;(window as unknown as { omi: { getLocalConversation: unknown } }).omi.getLocalConversation =
+      async () => ({ startedAt: 1, messages: [withAttachments] })
+    await act(async () => {
+      result.current.switchThread(null)
+      await settle(result)
+    })
+    expect(userAttachmentsOf(result.current.history)).toEqual(withAttachments.attachments)
+  })
+
+  it('R3 — switchThread(id) maps a session message`s attachments into history', async () => {
+    sessionMocks.getMessages.mockResolvedValueOnce([
+      {
+        id: 'm1',
+        text: 'look',
+        createdAt: '2026-07-14T00:00:00Z',
+        sender: 'human',
+        attachments: [{ id: 'srv-y', name: 'y.pdf', mimeType: 'application/pdf' }]
+      }
+    ])
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      result.current.switchThread('sess-1')
+      await settle(result)
+    })
+    expect(userAttachmentsOf(result.current.history)).toEqual([
+      { id: 'srv-y', name: 'y.pdf', mimeType: 'application/pdf' }
+    ])
   })
 })

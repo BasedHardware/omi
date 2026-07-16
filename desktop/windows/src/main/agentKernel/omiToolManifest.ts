@@ -10,9 +10,9 @@
 // store, no Electron, no I/O, no native imports. Same nature as
 // ./controlToolManifest.
 //
-// DARK / additive: nothing in production imports this yet. It exists so PR-C2 can
-// wire it into desktopToolPolicy.ts (`descriptorFromToolName` →
-// `descriptorFromOmiTool(productManifestEntry(name))`) and the pi-mono relay.
+// LIVE: this manifest is imported by desktopToolPolicy.ts (`descriptorFromToolName`
+// → `descriptorFromOmiTool(productManifestEntry(name))`), the toolRelayBridge, and
+// the pi-mono relay extension — it drives the live tool plane, not just tests.
 // macOS exports the single-entry lookup as `toolManifestEntry`; Windows renames
 // it `productManifestEntry` to match the wiring pointer in desktopToolPolicy.ts's
 // header comment.
@@ -263,7 +263,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     )
   },
   semantic_search: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc(
       'Semantic Search',
       "Vector similarity search on the user's screen history.",
@@ -313,7 +313,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     )
   },
   search_tasks: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc(
       'Search Tasks',
       'Vector similarity search on tasks (action_items + staged_tasks).',
@@ -338,13 +338,13 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     }
   },
   complete_task: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc('Complete Task', "Toggle a task's completion status by backendId.", [
       'Use after finding the task with execute_sql or search_tasks.'
     ])
   },
   delete_task: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc('Delete Task', 'Delete a task permanently by backendId.', [
       'Use after finding the task with execute_sql or search_tasks.'
     ])
@@ -497,7 +497,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     }
   },
   capture_screen: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc(
       'Capture Screen',
       'Capture raw screenshot pixels after screen summary context is not enough.',
@@ -596,7 +596,7 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
     )
   },
   get_work_context: {
-    surfaces: ['desktop_chat'],
+    surfaces: ['desktop_chat', 'realtime_voice'],
     capabilityDoc: doc(
       'Get Work Context',
       "Get the user's current screen plus a compressed timeline of recent on-screen activity.",

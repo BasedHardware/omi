@@ -182,6 +182,34 @@ export class KernelSessions extends KernelArtifacts {
     }
   }
 
+  /**
+   * READ-ONLY voice continuity seed for the main_chat/chat/<chatId> conversation —
+   * the same conversation typed chat reads (getMainChatTurnTail). Unlike
+   * getVoiceSeedContextForSurface (which resolveSurfaceSession-creates the
+   * conversation), this only reads: an absent conversation yields an empty seed, so
+   * the renderer's per-turn seed refresh never writes to the store (INV-CHAT-1
+   * read side). `maxTurns`/`maxCharacters` cap the window (voice uses a small
+   * Mac-parity window distinct from the kernel default).
+   */
+  getVoiceSeedContextForMainChat(input: {
+    ownerId: string
+    chatId?: string
+    maxTurns?: number
+    maxCharacters?: number
+  }): { conversationId: string | null; context: string; idempotencyKeys: string[] } {
+    const { conversationId } = getMainChatTurnTail(this.store, input.ownerId, 1, input.chatId)
+    if (!conversationId) return { conversationId: null, context: '', idempotencyKeys: [] }
+    const snapshot = getVoiceSeedSnapshot(this.store, conversationId, {
+      maxTurns: input.maxTurns,
+      maxCharacters: input.maxCharacters
+    })
+    return {
+      conversationId,
+      context: snapshot.context,
+      idempotencyKeys: snapshot.idempotencyKeys
+    }
+  }
+
   clearOwnerState(ownerId: string): { invalidatedBindingIds: string[] } {
     return clearOwnerSurfaceState(this.store, ownerId, () => Date.now())
   }

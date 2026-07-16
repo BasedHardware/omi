@@ -11,7 +11,7 @@ import {
   deleteProfile,
   editProfileText,
   generateNow,
-  getLatestProfileText,
+  getLatestProfileRecord,
   type AiProfileSession
 } from '../assistants/aiUserProfile/service'
 import type { AiUserProfileRecord } from '../../shared/types'
@@ -60,8 +60,10 @@ export function registerAiUserProfileHandlers(): void {
     }
   )
 
-  // Latest stored profile text (downstream grounding / Settings preview).
-  ipcMain.handle('aiProfile:getLatest', (): string | null => getLatestProfileText())
+  // Latest stored profile RECORD (drives the Settings preview/edit UI, which
+  // needs id/date/sources). Downstream grounding uses getLatestProfileText()
+  // directly in-process, not this IPC.
+  ipcMain.handle('aiProfile:getLatest', (): AiUserProfileRecord | null => getLatestProfileRecord())
 
   // Manual edit of a stored profile.
   ipcMain.handle(

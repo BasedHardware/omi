@@ -119,7 +119,7 @@ describe('appSettings', () => {
       focusNotificationsEnabled: true,
       focusCooldownMinutes: 10,
       focusExcludedApps: [],
-      glowOverlayEnabled: true,
+      glowOverlayEnabled: false,
       screenAnalysisEnabled: true,
       notificationsEnabled: true,
       notificationFrequency: 0,
@@ -176,9 +176,13 @@ describe('appSettings', () => {
     ).toEqual([{ id: 'g1', createdAt: 10 }])
     // Screen analysis is opt-OUT: on unless the user turns it off.
     expect(sanitizeAppSettings({ screenAnalysisEnabled: false }).screenAnalysisEnabled).toBe(false)
-    // The focus halo is opt-OUT (on unless explicitly disabled) — it only ever
-    // appears in response to a Focus verdict, and it is click-through.
-    expect(sanitizeAppSettings({ glowOverlayEnabled: false }).glowOverlayEnabled).toBe(false)
+    // The focus halo is opt-IN (=== true), matching Mac's default-OFF: absent or
+    // junk yields false, only an explicit true enables it.
+    expect(sanitizeAppSettings({} as never).glowOverlayEnabled).toBe(false)
+    expect(sanitizeAppSettings({ glowOverlayEnabled: true }).glowOverlayEnabled).toBe(true)
+    expect(sanitizeAppSettings({ glowOverlayEnabled: 'yes' } as never).glowOverlayEnabled).toBe(
+      false
+    )
     // The AI user profile is opt-OUT now that Focus consumes it: on unless the
     // user explicitly turns it off.
     expect(sanitizeAppSettings({ aiProfileEnabled: false }).aiProfileEnabled).toBe(false)

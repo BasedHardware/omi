@@ -13,7 +13,8 @@ import type {
   MainChatEvent,
   MainChatResult,
   ChatCitation,
-  ChatAttachment
+  ChatAttachment,
+  VoiceHubSeedContext
 } from '../../../shared/types'
 import { saveDesktopMessage } from '../lib/desktopChatMessages'
 import { getMessages as getSessionMessages } from '../lib/chatSessionsClient'
@@ -108,14 +109,27 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the bar. `fromVoice`
   // requests that the assistant's reply be spoken (TTS) once it's assembled.
-  send: (text: string, opts?: { fromVoice?: boolean }) => Promise<void>
+  send: (text: string, opts?: { fromVoice?: boolean; idempotencyKey?: string }) => Promise<void>
   /** Clear the thread to a fresh conversation. */
   reset: () => void
   /** Record a COMPLETED native realtime-hub voice turn (user transcript + assistant
    *  reply) into the thread — APPENDS both messages WITHOUT calling the LLM or TTS
    *  (the hub already produced and spoke the reply). INV-CHAT-1: the spoken turn
-   *  lands in the one shared timeline. Empty user/assistant is ignored. */
-  recordVoiceTurn: (userText: string, assistantText: string) => void
+   *  lands in the one shared timeline (renderer history + local SQLite), the ONE
+   *  kernel conversation (so typed chat + the context tail see it), and the
+   *  shared/mobile thread. `interrupted` marks a barge-in (partial reply still
+   *  recorded); `turnId` is the per-press idempotency key that dedupes the kernel
+   *  record. Empty user/assistant is ignored. */
+  recordVoiceTurn: (
+    userText: string,
+    assistantText: string,
+    interrupted?: boolean,
+    turnId?: string
+  ) => void
+  /** Read the voice continuity seed for THIS chat thread (the same conversation the
+   *  typed tail reads). Used by the hub to seed a realtime session with recent
+   *  typed/voice turns. Empty when nothing to seed / signed out. */
+  getVoiceSeedContext: () => Promise<VoiceHubSeedContext>
   /** Re-thread the live engine onto a chat session (multi-chat, pi_mono only).
    *  `id` = a server chat-session id → routes the kernel turn to that session's
    *  per-chatId conversation AND scopes shared-thread persistence to it; `null`
@@ -125,6 +139,14 @@ export type UseChat = {
   switchThread: (id: string | null) => void
   /** The active server chat-session id, or `null` on the default shared thread. */
   currentThreadId: string | null
+  /** Scope the chat to a specific installed app/persona, or `null` for the default
+   *  Omi assistant (Mac `ChatProvider.selectApp`). Threads `app_id` into session
+   *  fetch/create + message persistence and namespaces the kernel conversation, then
+   *  resets to that app's default chat (session cleared, transcript reloaded). `null`
+   *  returns to the plain main chat. No-op when the app is already selected. */
+  selectApp: (appId: string | null) => void
+  /** The selected chat-app/persona id, or `null` on the default Omi assistant. */
+  selectedAppId: string | null
 }
 
 /**
@@ -198,6 +220,15 @@ export function useChat(): UseChat {
   // save path reads the ref so it stays correct inside closures). Moved together in
   // switchThread. null = default shared thread.
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null)
+  // The selected chat-app/persona id, or null on the default Omi assistant (Mac
+  // ChatProvider.selectedAppId). The ref is read inside async save/send closures so
+  // it stays current; the state is the UI projection the picker reads. When null the
+  // send path threads NO app_id and is byte-identical to today. Distinct from
+  // sessionIdRef: an app scopes WHICH default chat (backend keys its default session
+  // by app_id), a session is an explicit desktop-local thread; both can be set (an
+  // app-scoped session carries both app_id and session_id, Mac parity).
+  const selectedAppIdRef = useRef<string | null>(null)
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
   const startedAtRef = useRef<number>(0)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
@@ -262,7 +293,8 @@ export function useChat(): UseChat {
           c.messages.map((m) => ({
             id: m.id ?? crypto.randomUUID(),
             role: m.role,
-            content: m.content
+            content: m.content,
+            ...(m.attachments?.length ? { attachments: m.attachments } : {})
           }))
         )
       })
@@ -552,7 +584,8 @@ export function useChat(): UseChat {
   const tryKernelChat = async (
     baseHistory: ChatMsg[],
     userMsg: ChatMsg,
-    fromVoice: boolean
+    fromVoice: boolean,
+    idempotencyKey?: string
   ): Promise<void> => {
     // send() bumped genRef just before calling us. reset()/dismiss bumps it again +
     // cancels the run, so isCurrent() goes false and every write below is dropped.
@@ -561,6 +594,18 @@ export function useChat(): UseChat {
 
     const assistantId = crypto.randomUUID()
     let assistantText = ''
+    // The latest running tool surfaces as a transient italic line in the bubble,
+    // mirroring the coding-agent door (:457-468 `_${name}…_`) so main + bar read the
+    // same. DISPLAY-ONLY: it is composed into the live bubble but never folded into
+    // `assistantText`, so persistChat and BOTH INV-CHAT-1 saveDesktopMessage calls
+    // (which store plain `assistantText`) never carry it. Reset per attempt alongside
+    // `assistantText`. Without this the pi_mono door dropped tool_activity entirely, so
+    // a long tool run looked like dead air / a stuck spinner.
+    let toolActivity: string | null = null
+    const composeLive = (): string =>
+      toolActivity
+        ? `${assistantText}${assistantText ? '\n\n' : ''}_${toolActivity}…_`
+        : assistantText
 
     // INV-CHAT-1 site 1: persist the RAW user message at turn start (never the
     // context-prepended prompt). Fire-and-forget. session_id is OMITTED on the
@@ -576,6 +621,9 @@ export function useChat(): UseChat {
       sender: 'human',
       clientMessageId: userMsg.id,
       messageSource: 'desktop_chat',
+      // Scope the write to the selected app (Mac saveMessage app_id) and/or session.
+      // Both omitted on the default main chat → the mobile/web continuity guard.
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
       // Include session_id ONLY for a selected session; the default thread omits
       // the key entirely (mobile/web continuity guard).
       ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
@@ -609,6 +657,7 @@ export function useChat(): UseChat {
     const attempt = async (reqId: string, textToSend: string): Promise<MainChatResult> => {
       let attemptRunId: string | null = null
       assistantText = ''
+      toolActivity = null
       const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
         if (event.requestId !== reqId) return
         // A dismissed turn (reset bumped the generation) drops all further renders
@@ -619,11 +668,21 @@ export function useChat(): UseChat {
           activeKernelRunRef.current = event.runId
         } else if (event.type === 'text_delta') {
           assistantText += event.text
-          writeAssistant(assistantText)
+          // Real reply text supersedes the transient tool line (clear on text_delta OR
+          // tool completion — see below), matching the coding-agent door's phases.
+          toolActivity = null
+          writeAssistant(composeLive())
+        } else if (event.type === 'tool_activity') {
+          // pi_mono tool lifecycle → transient display line only. `started` shows the
+          // running tool; `completed`/`failed` clears it. The terminal reply is still
+          // driven by the awaited mainChatSend result — this only fills the visual gap
+          // during a long tool run so it no longer reads as dead air.
+          toolActivity = event.status === 'started' ? event.name : null
+          writeAssistant(composeLive())
         }
-        // status / thinking_delta / tool_* / completed / run_finished are covered by
-        // the authoritative awaited mainChatSend result below (terminal + final
-        // text), exactly as tryAgentTask relies on codingAgentRun's return.
+        // status / thinking_delta / tool_result_display / completed / run_finished are
+        // covered by the authoritative awaited mainChatSend result below (terminal +
+        // final text), exactly as tryAgentTask relies on codingAgentRun's return.
         if (Date.now() - lastPersist > 1500) {
           lastPersist = Date.now()
           void persistChat(
@@ -641,7 +700,12 @@ export function useChat(): UseChat {
           requestId: reqId,
           prompt: textToSend,
           cleanUserText: userMsg.content,
-          chatId: chatIdRef.current ?? 'default'
+          chatId: chatIdRef.current ?? 'default',
+          // A voice CASCADE turn threads its per-press turnId so the kernel user-turn
+          // record shares the key a hub-native record would use (INV-CHAT-1
+          // double-record belt-and-suspenders). Undefined for typed sends → the door
+          // falls back to requestId.
+          ...(idempotencyKey ? { idempotencyKey } : {})
         })
       } finally {
         // Cleanup that must ALWAYS run (even for a dismissed turn): release the run
@@ -705,11 +769,19 @@ export function useChat(): UseChat {
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
 
-      let result = await attempt(crypto.randomUUID(), textToSend)
+      // One requestId for the WHOLE turn (both attempts). Main's recordSurfaceTurn
+      // records the kernel human turn keyed by this requestId and dedups on it, so
+      // the not-ready retry below MUST reuse the same id — a fresh id per attempt
+      // would defeat that dedup and append the user turn a second time on the kernel
+      // transcript (polluting the per-session context tail). Reuse is safe: run
+      // correlation uses a separate per-send clientId, and attempt 1 fully awaits +
+      // unsubscribes before the retry subscribes, so there is no stream cross-talk.
+      const requestId = crypto.randomUUID()
+      let result = await attempt(requestId, textToSend)
       // First-chat not-ready recovery (#123): right after sign-in the owner/adapter
       // relay may not have reached main yet, so the FIRST send fails not-ready. Show
-      // the interim copy, wait briefly, and retry ONCE with a FRESH requestId. Only
-      // the precise not-ready markers qualify (never a generic model error), so a
+      // the interim copy, wait briefly, and retry ONCE (same requestId — see above).
+      // Only the precise not-ready markers qualify (never a generic model error), so a
       // real failure surfaces immediately with no spurious retry. Guarded by
       // isCurrent() so a reset() during attempt 1 skips the retry. The delay's
       // setTimeout is NOT cancelled on reset(); instead the post-await isCurrent()
@@ -720,7 +792,7 @@ export function useChat(): UseChat {
         writeAssistant(CHAT_NOT_READY_INTERIM)
         await new Promise<void>((resolve) => setTimeout(resolve, NOT_READY_RETRY_DELAY_MS))
         if (!isCurrent()) return
-        result = await attempt(crypto.randomUUID(), textToSend)
+        result = await attempt(requestId, textToSend)
       }
 
       if (result.ok) {
@@ -733,11 +805,16 @@ export function useChat(): UseChat {
         errorLine = CHAT_NOT_READY_FINAL
       } else {
         // Any other kernel failure: friendly, plain-English copy — never a raw
-        // `Error: <technical string>` bubble (chat error taxonomy, Mac parity).
+        // `Error: <technical string>` bubble (chat error taxonomy, Mac parity). Log
+        // the RAW error first: the friendly copy reads as transient ("try again"),
+        // so a deterministic contract/logic failure (e.g. a 400) would otherwise be
+        // invisible in logs/Sentry. The bubble stays friendly; the log stays raw.
+        console.error('[chat] kernel turn failed:', result.error)
         errored = true
         errorLine = friendlyChatError(result.error ?? '')
       }
     } catch (e) {
+      console.error('[chat] kernel turn threw:', e)
       errored = true
       errorLine = friendlyChatError((e as Error).message)
     } finally {
@@ -778,6 +855,7 @@ export function useChat(): UseChat {
             sender: 'ai',
             clientMessageId: assistantId,
             messageSource: 'desktop_chat',
+            ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
             ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
           })
         }
@@ -787,7 +865,10 @@ export function useChat(): UseChat {
     }
   }
 
-  const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
+  const send = async (
+    text: string,
+    opts?: { fromVoice?: boolean; idempotencyKey?: string }
+  ): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     // A send is allowed with text OR with staged attachments (Mac parity —
     // attachment-only sends); only a truly empty send is dropped. The file_ids
@@ -817,7 +898,8 @@ export function useChat(): UseChat {
       sentAttachments = uploaded.map((a) => ({
         id: a.serverId as string,
         name: a.name,
-        mimeType: a.mimeType
+        mimeType: a.mimeType,
+        ...(a.thumbnailUrl ? { thumbnailUrl: a.thumbnailUrl } : {})
       }))
       // Guard the attachment-only path: if EVERY upload failed there are no
       // file_ids, and with empty text this would POST an empty message + render a
@@ -896,7 +978,7 @@ export function useChat(): UseChat {
     // yet (§6 out of scope), so a message carrying attachments keeps using
     // /v2/messages.
     if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
-      return tryKernelChat(baseHistory, userMsg, fromVoice)
+      return tryKernelChat(baseHistory, userMsg, fromVoice, opts?.idempotencyKey)
     }
 
     const assistantId = crypto.randomUUID()
@@ -977,7 +1059,14 @@ export function useChat(): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
-      const res = await fetch(`${OMI_BASE}/v2/messages`, {
+      // Scope the send to the selected app/persona (backend keys the chat session by
+      // this app_id — the persona mechanism). Query param, exactly like Mac threads
+      // app_id; omitted when no app is selected so the URL is byte-identical to today.
+      const sendAppId = selectedAppIdRef.current
+      const messagesUrl = sendAppId
+        ? `${OMI_BASE}/v2/messages?app_id=${encodeURIComponent(sendAppId)}`
+        : `${OMI_BASE}/v2/messages`
+      const res = await fetch(messagesUrl, {
         method: 'POST',
         // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
         // the user's own keys. This lane is a raw fetch, so it can't ride the
@@ -1171,7 +1260,12 @@ export function useChat(): UseChat {
   // calling the LLM or TTS — it must NOT re-answer (no send()). Windows-side mirror
   // of macOS RealtimeHubController's turn persistence (both texts, exactly-once on
   // the terminal; the driver owns the turnRecorded dedup + empty-final guard).
-  const recordVoiceTurn = (userText: string, assistantText: string): void => {
+  const recordVoiceTurn = (
+    userText: string,
+    assistantText: string,
+    interrupted = false,
+    turnId?: string
+  ): void => {
     const user = userText.trim()
     const assistant = assistantText.trim()
     if (!user || !assistant) return
@@ -1183,9 +1277,51 @@ export function useChat(): UseChat {
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: user }
     const assistantMsg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content: assistant }
     const base = history
+    // 1) The on-screen timeline + local SQLite (existing behavior — the UI renders
+    //    from here, NOT from the kernel, so there is no double-bubble).
     setHistory((h) => [...h, userMsg, assistantMsg])
     void persistChat([...base, userMsg, assistantMsg], isCurrent)
+    // 2) The ONE kernel conversation (INV-CHAT-1): record straight to the kernel via
+    //    the owner-gated main-side door, under the SAME main_chat/chat/<chatId> the
+    //    typed tail reads, origin 'realtime_voice', keyed on the per-press turnId so
+    //    a cascade record for the same logical turn dedupes. Fire-and-forget; the
+    //    handler no-ops when the owner isn't ready yet.
+    void window.omi
+      .voiceHubRecordTurn({
+        chatId: chatIdRef.current ?? 'default',
+        userText: user,
+        assistantText: assistant,
+        interrupted,
+        idempotencyKey: turnId
+      })
+      .catch(() => {})
+    // 3) The shared/mobile thread — the hub path (unlike the typed pi-mono path) did
+    //    NOT saveDesktopMessage, so voice turns were invisible on mobile. Echo both
+    //    messages (Mac's messageSource:'realtime_voice'). Best-effort.
+    void saveDesktopMessage({
+      text: user,
+      sender: 'human',
+      clientMessageId: userMsg.id,
+      messageSource: 'realtime_voice',
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
+      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+    })
+    void saveDesktopMessage({
+      text: assistant,
+      sender: 'ai',
+      clientMessageId: assistantMsg.id,
+      messageSource: 'realtime_voice',
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
+      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+    })
   }
+
+  // Read the voice continuity seed for THIS thread (the same main_chat conversation
+  // the typed tail reads). Encapsulates chatIdRef so the hub never has to know it.
+  const getVoiceSeedContext = (): Promise<VoiceHubSeedContext> =>
+    window.omi
+      .voiceHubGetSeedContext({ chatId: chatIdRef.current ?? 'default' })
+      .catch(() => ({ context: '', idempotencyKeys: [] }))
 
   // Re-thread the live engine onto a chat session (multi-chat, pi_mono). Aborts any
   // in-flight generation exactly like reset(), repoints chatIdRef + sessionIdRef at
@@ -1209,10 +1345,12 @@ export function useChat(): UseChat {
 
     // Point the engine at the target thread. For a session, unify the ids (D5:
     // session id == kernel chatId == saveDesktopMessage session_id). For null,
-    // return to the default shared thread (session_id omitted on saves).
+    // return to the default shared thread (session_id omitted on saves) — the app's
+    // default chat when an app is selected (namespaced kernel id), else the plain one.
     sessionIdRef.current = id
     setCurrentThreadId(id)
-    chatIdRef.current = id ?? resolveDefaultChatId()
+    const appId = selectedAppIdRef.current
+    chatIdRef.current = id ?? (appId ? `app-${appId}` : resolveDefaultChatId())
     startedAtRef.current = 0
 
     // Load the target's transcript. Capture the generation so a slower load a newer
@@ -1220,7 +1358,43 @@ export function useChat(): UseChat {
     const myGen = genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
     setHistory([])
-    if (id === null) {
+    if (id !== null) {
+      // A session: durable SERVER messages (cross-device, Mac parity) — NOT local
+      // SQLite, which has no rows for a session created on mobile / another install.
+      void getSessionMessages({ sessionId: id })
+        .then((msgs) => {
+          if (!isCurrent()) return
+          setHistory(
+            msgs.map((m) => ({
+              id: m.id,
+              role: m.sender === 'ai' ? 'assistant' : 'user',
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* leave the thread empty on a load failure */
+        })
+    } else if (appId) {
+      // The app's default chat: durable SERVER messages scoped by app_id (Mac
+      // loadDefaultChatMessages) — cross-device, like a session.
+      void getSessionMessages({ appId })
+        .then((msgs) => {
+          if (!isCurrent()) return
+          setHistory(
+            msgs.map((m) => ({
+              id: m.id,
+              role: m.sender === 'ai' ? 'assistant' : 'user',
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* leave the thread empty on a load failure */
+        })
+    } else {
       // Default thread: the local conversation (as the mount loader reads it).
       const localId = chatIdRef.current
       void window.omi
@@ -1232,29 +1406,88 @@ export function useChat(): UseChat {
             c.messages.map((m) => ({
               id: m.id ?? crypto.randomUUID(),
               role: m.role,
-              content: m.content
+              content: m.content,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
         })
         .catch(() => {
           /* no prior conversation — start empty */
         })
-    } else {
-      // A session: durable SERVER messages (cross-device, Mac parity) — NOT local
-      // SQLite, which has no rows for a session created on mobile / another install.
-      void getSessionMessages({ sessionId: id })
+    }
+  }
+
+  // Scope the chat to a specific installed app/persona, or null for the default Omi
+  // assistant (Mac ChatProvider.selectApp 5173). No-op if already selected. Otherwise:
+  // tear down any in-flight generation (like switchThread/reset), set selectedAppId,
+  // RESET the session to that app's default chat (session_id cleared — Mac clears
+  // currentSession + sets isInDefaultChat), repoint the kernel chatId at the app's
+  // namespace, and reload the app's default-chat transcript (server-scoped by app_id).
+  const selectApp = (appId: string | null): void => {
+    if (selectedAppIdRef.current === appId) return
+    // Same in-flight teardown as switchThread(): a dismissed reply from the previous
+    // app/thread must not write into the new one or steal the busy latch.
+    genRef.current++
+    abortRef.current?.abort()
+    abortRef.current = null
+    if (activeAgentTaskRef.current) {
+      void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
+      activeAgentTaskRef.current = null
+    }
+    if (activeKernelRunRef.current) {
+      void window.omi.mainChatCancel(activeKernelRunRef.current).catch(() => {})
+      activeKernelRunRef.current = null
+    }
+    setBusy(false)
+    setAgentActive(false)
+
+    // Switch the selected app and reset to its default chat (no session).
+    selectedAppIdRef.current = appId
+    setSelectedAppId(appId)
+    sessionIdRef.current = null
+    setCurrentThreadId(null)
+    chatIdRef.current = appId ? `app-${appId}` : resolveDefaultChatId()
+    startedAtRef.current = 0
+
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+    setHistory([])
+    if (appId) {
+      // The app's default chat: durable SERVER messages scoped by app_id.
+      void getSessionMessages({ appId })
         .then((msgs) => {
           if (!isCurrent()) return
           setHistory(
             msgs.map((m) => ({
               id: m.id,
               role: m.sender === 'ai' ? 'assistant' : 'user',
-              content: m.text
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
         })
         .catch(() => {
           /* leave the thread empty on a load failure */
+        })
+    } else {
+      // Back to the plain default thread: the local conversation.
+      const localId = chatIdRef.current
+      void window.omi
+        .getLocalConversation(localId)
+        .then((c) => {
+          if (!isCurrent() || !c?.messages) return
+          startedAtRef.current = c.startedAt || Date.now()
+          setHistory(
+            c.messages.map((m) => ({
+              id: m.id ?? crypto.randomUUID(),
+              role: m.role,
+              content: m.content,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* no prior conversation — start empty */
         })
     }
   }
@@ -1267,7 +1500,10 @@ export function useChat(): UseChat {
     send,
     reset,
     recordVoiceTurn,
+    getVoiceSeedContext,
     switchThread,
-    currentThreadId
+    currentThreadId,
+    selectApp,
+    selectedAppId
   }
 }

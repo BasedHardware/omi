@@ -19,6 +19,10 @@ export type PendingAttachment = {
   size: number
   status: AttachmentStatus
   serverId?: string
+  /** Public thumbnail URL from `/v2/files` (FileChat.thumbnail) — image files
+   *  only, absent for documents. Captured on upload so the sent message can
+   *  render the image tile. */
+  thumbnailUrl?: string
 }
 
 export type RejectReason = 'cap_exceeded' | 'too_large' | 'empty'
@@ -68,7 +72,11 @@ function startUpload(
 ): void {
   const p = upload({ name: att.name, mimeType: att.mimeType, bytes })
     .then((fc) => {
-      patch(att.id, { status: 'uploaded', serverId: fc.id })
+      patch(att.id, {
+        status: 'uploaded',
+        serverId: fc.id,
+        thumbnailUrl: fc.thumbnail ?? undefined
+      })
     })
     .catch(() => {
       // A failed upload marks ONLY this attachment failed; the others proceed.

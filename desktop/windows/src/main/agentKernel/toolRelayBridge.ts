@@ -32,9 +32,10 @@
 // handleAgentControlToolCall unchanged — there is deliberately no second copy of
 // any of those checks here.
 //
-// DARK / additive: nothing spawns pi with this pipe/token in production yet (that
-// env wiring is a later PR). The bridge is constructed and listens in the control
-// plane singleton, but no live client connects. Tests drive it with a mock socket.
+// LIVE: pi-mono is the default chat path (see piMono.ts / controlPlane.ts), and
+// executeAttempt hands each turn this bridge's pipe/token via the per-turn context
+// file, so the pi extension connects here for real. Tests also drive it with a mock
+// socket.
 
 import { createServer, type Server, type Socket } from 'node:net'
 import { randomBytes } from 'node:crypto'
@@ -48,6 +49,7 @@ import {
 } from './controlTools'
 import { productManifestEntry, type OmiToolTimeoutClass } from './omiToolManifest'
 import { createCaptureScreenExecutor } from './captureScreenExecutor'
+import { tierAProductToolExecutors, tierBProductToolExecutors } from './productToolExecutors'
 
 /** A single frame may not exceed this. Hostile input must not exhaust main's heap. */
 const MAX_FRAME_BYTES = 1024 * 1024
@@ -94,20 +96,33 @@ export type ProductToolExecutor = (
  * tool-registration projection should advertise only these to pi so the model does
  * not waste turns on tools that will only degrade.
  *
- * `capture_screen` is the FIRST serviceable product tool (PR-F). It captures the
- * screen locally and returns a file PATH, mirroring macOS' capture tool; its own
- * "Screen Sharing in Chat" consent gate lives inside the executor (see
- * captureScreenExecutor.ts), enforced here at dispatch. Every other product tool
- * still degrades cleanly (the "not available on Windows yet" path) with fallback
- * telemetry — macOS services those by handing them to Swift over a second process
- * boundary that Windows does not have, and building new backends is out of scope.
- * DARK: this map only decides what the relay WOULD dispatch; nothing connects a pi
- * client to the relay in production yet (see the file header).
+ * `capture_screen` (PR-F) captures the screen locally and returns a file PATH,
+ * mirroring macOS' capture tool; its "Screen Sharing in Chat" consent gate lives
+ * inside the executor (captureScreenExecutor.ts), enforced here at dispatch.
+ *
+ * The Tier-A bundle (PR-3, productToolExecutors.ts) adds the thin tasks + screen-
+ * search executors whose data layer already exists on Windows: `semantic_search`,
+ * `search_tasks`, `get_action_items`, `create_action_item`, `update_action_item`,
+ * `complete_task`, `delete_task`. `load_skill` needs no host executor — the pi-mono
+ * extension answers it in-process (node-tools.ts), never over this relay.
+ *
+ * The Tier-B bundle (PR-4..7) adds `execute_sql` (read-only, table-allowlisted),
+ * the backend-backed `get_memories` / `search_memories` / `get_conversations` /
+ * `search_conversations`, the local composition tools `get_work_context` /
+ * `get_daily_recap`, and `save_knowledge_graph`.
+ *
+ * Every still-unmapped product tool degrades cleanly (the "not available on Windows
+ * yet" path) with fallback telemetry — macOS services those by handing them to Swift
+ * over a second process boundary Windows does not have; later PRs port the rest.
  */
 export const defaultProductToolExecutors: ReadonlyMap<string, ProductToolExecutor> = new Map<
   string,
   ProductToolExecutor
->([['capture_screen', createCaptureScreenExecutor()]])
+>([
+  ['capture_screen', createCaptureScreenExecutor()],
+  ...tierAProductToolExecutors(),
+  ...tierBProductToolExecutors()
+])
 
 /** The advertised-serviceable allowlist, derived from the default registry so the
  *  two can never drift. Consumed by the extension's projection layer. */
@@ -221,6 +236,21 @@ export class AgentToolRelayBridge {
     this.tokensByBinding.set(key, token)
     this.authorities.set(token, { sessionId, adapterId })
     return { pipePath: this.pipePath, token }
+  }
+
+  /**
+   * Evict a single binding's token + authority when its session/adapter ends. Both
+   * maps otherwise only clear on `close()` (full shutdown), so over a long-lived
+   * process they would grow one entry per distinct binding ever registered. Idempotent
+   * — a no-op for an unknown binding. (Call this from the session/adapter teardown in
+   * controlPlane.ts; the bridge itself has no lifecycle signal for it.)
+   */
+  closeBinding(sessionId: string, adapterId: string): void {
+    const key = bindingKey(sessionId, adapterId)
+    const token = this.tokensByBinding.get(key)
+    if (token === undefined) return
+    this.tokensByBinding.delete(key)
+    this.authorities.delete(token)
   }
 
   async close(): Promise<void> {
@@ -431,20 +461,91 @@ export class AgentToolRelayBridge {
   }
 
   private contextFor(authority: BindingAuthority): AgentControlToolContext {
-    // Read fresh on every call: a session whose role or owner changed must not keep
-    // acting under the authority it had when its subprocess started.
-    const policy = this.kernel.executionPolicyForSession(authority.sessionId)
-    return {
-      kernel: this.kernel,
-      // A model is never trusted user control.
-      trustedUserControl: false,
-      executionRole: policy.executionRole,
-      providerBoundary: policy.providerBoundary,
-      defaultAdapterId: policy.defaultAdapterId,
-      // Load-bearing — see controlMcpBridge.ts note 4.
-      callerSessionId: authority.sessionId,
-      getOwnerId: () => policy.ownerId
+    return buildControlToolContext(this.kernel, authority)
+  }
+}
+
+/** Build a control-tool context with HOST-DERIVED authority. Read fresh on every
+ *  call: a session whose role or owner changed must not keep acting under the
+ *  authority it had when its subprocess started. Shared by the socket relay and
+ *  the in-process `executeHostTool` dispatcher so both enforce the identical
+ *  posture (a model is never trusted user control). */
+function buildControlToolContext(
+  kernel: AgentRuntimeKernel,
+  authority: BindingAuthority
+): AgentControlToolContext {
+  const policy = kernel.executionPolicyForSession(authority.sessionId)
+  return {
+    kernel,
+    // A model is never trusted user control.
+    trustedUserControl: false,
+    executionRole: policy.executionRole,
+    providerBoundary: policy.providerBoundary,
+    defaultAdapterId: policy.defaultAdapterId,
+    // Load-bearing — see controlMcpBridge.ts note 4.
+    callerSessionId: authority.sessionId,
+    getOwnerId: () => policy.ownerId
+  }
+}
+
+/** In-process host-tool dispatch context. Identity is HOST-DERIVED: the caller
+ *  supplies the kernel plus the sessionId/adapterId of the surface's OWN kernel
+ *  session (never a wire-claimed id), and role/owner are resolved fresh from
+ *  `executionPolicyForSession`. */
+export interface HostToolDispatchContext {
+  kernel: AgentRuntimeKernel
+  sessionId: string
+  adapterId: string
+  /** Aborted when the caller no longer wants the result (optional). */
+  signal?: AbortSignal
+  /** Serviceable product executors. Defaults to the production registry. */
+  productExecutors?: ReadonlyMap<string, ProductToolExecutor>
+}
+
+/**
+ * Dispatch one Omi tool IN-PROCESS, without the pi socket relay. This is the shared
+ * entry the voice-kernel hub dispatcher reuses so voice and chat answer from one
+ * code path (macOS parity — same executor functions, no second process hop). Same
+ * host-authoritative posture as the socket relay: control tools go through
+ * `handleAgentControlToolCall` with a `trustedUserControl:false` context whose
+ * role/owner are read fresh from the session; product tools look up the registry.
+ * Errors are RETURNED as `"Error: …"` strings, never thrown — matching the relay's
+ * `tool_result` contract.
+ *
+ * SECURITY (INV-AGENT): callers MUST pass the surface's own kernel session id and
+ * must NEVER route model-driven calls through the renderer's trusted-direct-control
+ * door (`agentControlCall`). This is that door's opposite: a model-authority
+ * dispatch that can never be trusted user control.
+ */
+export async function executeHostTool(
+  name: string,
+  input: Record<string, unknown>,
+  ctx: HostToolDispatchContext
+): Promise<string> {
+  const authority: BindingAuthority = { sessionId: ctx.sessionId, adapterId: ctx.adapterId }
+  try {
+    if (isAgentControlToolName(name)) {
+      // Leaf guard, trusted-control gate, owner guard, and Zod validation all live
+      // inside handleAgentControlToolCall — there is deliberately no second copy.
+      return await handleAgentControlToolCall(
+        buildControlToolContext(ctx.kernel, authority),
+        name,
+        input
+      )
     }
+    const registry = ctx.productExecutors ?? defaultProductToolExecutors
+    const executor = registry.get(name)
+    if (!executor) {
+      return `Error: ${name} is not available on Windows yet`
+    }
+    const result = await executor(input, {
+      sessionId: ctx.sessionId,
+      adapterId: ctx.adapterId,
+      signal: ctx.signal ?? new AbortController().signal
+    })
+    return typeof result === 'string' ? result : String(result)
+  } catch (error) {
+    return `Error: ${error instanceof Error ? error.message : String(error)}`
   }
 }
 

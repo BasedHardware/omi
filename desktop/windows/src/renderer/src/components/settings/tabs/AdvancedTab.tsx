@@ -22,6 +22,7 @@ import { resetOnboarding } from '../../../lib/preferences'
 import { SettingRow } from '../SettingRow'
 import { IntegrationsTab } from './IntegrationsTab'
 import { DeveloperKeysSection } from './DeveloperKeysSection'
+import { AiProfileCard } from './AiProfileCard'
 import type { ExportMemory, FileIndexStatus, LocalKGStatus } from '../../../../../shared/types'
 
 export function AdvancedTab(): React.JSX.Element {
@@ -428,6 +429,9 @@ export function AdvancedTab(): React.JSX.Element {
 
       {/* Integrations (Sticky Notes, Google) live under Advanced. */}
       <IntegrationsTab />
+
+      {/* AI profile — Mac renders this as the aiUserProfileSubsection in Advanced. */}
+      <AiProfileCard />
 
       {/* Developer API Keys (BYOK) — Mac renders this as an Advanced subsection. */}
       <DeveloperKeysSection />

@@ -33,6 +33,9 @@ const h = vi.hoisted(() => {
     hardDeleteAbsentTasks: vi.fn((): number[] => []),
     getAppMeta: vi.fn((): string | null => '1'), // full-sync flag set → skip full sync by default
     setAppMeta: vi.fn(),
+    // Event-driven promotion trigger (create.ts) — mocked so the engine's toggle/
+    // delete promote calls are observable without pulling create's real deps.
+    promoteIfNeeded: vi.fn(async () => {}),
     // `tasks:changed` broadcast spy — a fake window's webContents.send.
     send: vi.fn()
   }
@@ -59,6 +62,8 @@ vi.mock('../ipc/db', () => ({
   getAppMeta: h.getAppMeta,
   setAppMeta: h.setAppMeta
 }))
+
+vi.mock('../assistants/tasks/create', () => ({ promoteIfNeeded: h.promoteIfNeeded }))
 
 // Firebase-ish token: payload decodes to a uid (used only to key the full-sync flag).
 const TOKEN = `x.${Buffer.from(JSON.stringify({ user_id: 'u1' })).toString('base64')}.y`
@@ -339,6 +344,48 @@ describe('retryUnsynced', () => {
 
     expect(h.netFetch).not.toHaveBeenCalled()
     expect(h.markSyncedActionItem).not.toHaveBeenCalled()
+  })
+})
+
+describe('event-driven promotion (Mac TasksStore complete/delete triggers)', () => {
+  it('completing a task fires a promote (vacated slot → pull the next staged task up)', async () => {
+    const { engine } = await freshEngine()
+    engine.toggleTask('b1', true)
+    await flush()
+    expect(h.promoteIfNeeded).toHaveBeenCalledTimes(1)
+  })
+
+  it('un-completing a task does NOT fire a promote (Mac triggers on complete only)', async () => {
+    const { engine } = await freshEngine()
+    engine.toggleTask('b1', false)
+    await flush()
+    expect(h.promoteIfNeeded).not.toHaveBeenCalled()
+  })
+
+  it('deleting a task fires a promote', async () => {
+    h.deleteActionItemByBackendId.mockReturnValue([9])
+    const { engine } = await freshEngine()
+    engine.deleteTask('b1')
+    await flush()
+    expect(h.promoteIfNeeded).toHaveBeenCalledTimes(1)
+  })
+
+  it('the promote is fire-and-forget — a toggle FAILURE still reverts regardless', async () => {
+    // promoteIfNeeded runs alongside the toggle; even if it never resolved, the
+    // toggle's own revert-on-PATCH-failure path is independent and must still fire.
+    h.promoteIfNeeded.mockReturnValue(new Promise(() => {})) // never settles
+    h.netFetch.mockImplementation(async (_u: string, init?: { method?: string }) => {
+      if (init?.method === 'PATCH') return h.jsonResponse({}, false, 500)
+      return h.jsonResponse({ action_items: [], has_more: false })
+    })
+    const { engine } = await freshEngine()
+
+    engine.toggleTask('b1', true)
+    expect(h.updateCompletionStatus).toHaveBeenCalledWith('b1', true, expect.any(Number))
+    await flush()
+    // Revert happened despite the never-settling promote.
+    expect(h.updateCompletionStatus).toHaveBeenLastCalledWith('b1', false, expect.any(Number))
+    expect(h.promoteIfNeeded).toHaveBeenCalledTimes(1)
   })
 })
 

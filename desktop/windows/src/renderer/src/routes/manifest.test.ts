@@ -12,6 +12,7 @@ vi.mock('../pages/Tasks', () => ({ Tasks: () => null }))
 vi.mock('../pages/Goals', () => ({ Goals: () => null }))
 vi.mock('../pages/Apps', () => ({ Apps: () => null }))
 vi.mock('../pages/Rewind', () => ({ Rewind: () => null }))
+vi.mock('../pages/Insights', () => ({ Insights: () => null }))
 vi.mock('../pages/LiveConversation', () => ({ LiveConversation: () => null }))
 vi.mock('../pages/KnowledgeGraph', () => ({ KnowledgeGraph: () => null }))
 
@@ -116,13 +117,14 @@ describe('route manifest', () => {
     expect(resolveRoute('/nope')).toBeUndefined()
   })
 
-  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps in nav order', () => {
+  it('navRoutes are Home, Conversations, Tasks, Rewind, Apps, Insights in nav order', () => {
     expect(navRoutes().map((e) => e.id)).toEqual([
       'home',
       'conversations',
       'tasks',
       'rewind',
-      'apps'
+      'apps',
+      'insights'
     ])
   })
 
@@ -135,7 +137,8 @@ describe('route manifest', () => {
       'tasks',
       'goals',
       'apps',
-      'rewind'
+      'rewind',
+      'insights'
     ])
   })
 

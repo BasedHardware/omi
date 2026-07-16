@@ -68,7 +68,9 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerChatPrivacyHandlers } from './ipc/chatPrivacy'
+import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
+import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
 import {
@@ -83,6 +85,8 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
 import { registerMainChatHandlers } from './ipc/mainChat'
+import { registerVoiceHubHandlers } from './ipc/voiceHub'
+import { registerVoiceToolHandlers } from './ipc/voiceTool'
 import { registerByokHandlers } from './ipc/byok'
 import { registerMcpExportsHandlers } from './ipc/mcpExports'
 import { registerAuthStoreHandlers } from './ipc/authStore'
@@ -107,6 +111,7 @@ import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
+import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -806,7 +811,9 @@ app.whenReady().then(async () => {
   registerRewindHandlers()
   registerScreenHandlers()
   registerChatPrivacyHandlers()
+  registerAssistantSettingsHandlers()
   registerBillingIpc()
+  registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an
@@ -863,6 +870,12 @@ app.whenReady().then(async () => {
   // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
   // renderer calls it yet; default typed chat still routes through /v2/messages.
   registerMainChatHandlers()
+  // Realtime-hub voice turns → the one kernel transcript (INV-CHAT-1): record a
+  // completed hub turn into the typed conversation + read the continuity seed back.
+  registerVoiceHubHandlers()
+  // Realtime-hub tool loop (INV-AGENT): the voice tool catalog + in-process dispatch
+  // to the SAME host executor registry the typed path uses (authority host-derived).
+  registerVoiceToolHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
   // "Use omi memory anywhere" MCP export connectors (hosted key + config writers).
@@ -1107,6 +1120,12 @@ app.whenReady().then(async () => {
     // PR-A primitives were shipped but never wired until now.
     registerTaskAssistant()
     bringUpTaskEmbeddingIndex()
+    // Start the promotion safety net (startup promote + 60s bypass-debounce timer),
+    // the Windows port of Mac's TaskPromotionService.start(). This drains staged
+    // tasks the inline post-extraction promote leaves behind (a frame stages N tasks
+    // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
+    // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
+    startTaskPromotionService()
     // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
     // peer — it's a time-triggered job (no screen frames). Registers the manual
     // Suggest IPC and starts the periodic scheduler; both no-op until a session is

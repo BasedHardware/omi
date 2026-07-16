@@ -59,7 +59,11 @@ const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 const tid = 't1' as VoiceTurnID
 const rid = 'r1' as VoiceResponseID
 
-function harness(): {
+function harness(
+  opts: {
+    tools?: { name: string; description: string; parameters: Record<string, unknown> }[]
+  } = {}
+): {
   session: OpenAiHubSession
   events: ReturnType<typeof makeEvents>
   player: ReturnType<typeof makePlayer>
@@ -91,7 +95,8 @@ function harness(): {
     playerFactory: async () => player as never,
     clock,
     mintSessionID: () => 'sess-1' as VoiceSessionID,
-    idleReleaseMs: 180_000
+    idleReleaseMs: 180_000,
+    tools: opts.tools
   })
   return {
     session,
@@ -136,6 +141,35 @@ describe('OpenAiHubSession — warm config', () => {
     await warm
     expect(h.session.isWarm()).toBe(true)
     expect(h.events.onConnected).toHaveBeenCalledWith('sess-1')
+  })
+
+  it('projects the provider-neutral catalog into GA function tools (PR-C)', async () => {
+    const h = harness({
+      tools: [
+        {
+          name: 'list_agent_sessions',
+          description: 'list them',
+          parameters: { type: 'object', properties: {} }
+        }
+      ]
+    })
+    const warm = h.session.ensureWarm()
+    await tick()
+    h.getSocket().spec.onOpen()
+    const setup = h.getSocket().frames()[0]
+    const session = setup.session as Json
+    // Each neutral declaration is wrapped as a GA realtime function tool.
+    expect(session.tools).toEqual([
+      {
+        type: 'function',
+        name: 'list_agent_sessions',
+        description: 'list them',
+        parameters: { type: 'object', properties: {} }
+      }
+    ])
+    expect(session.tool_choice).toBe('auto')
+    h.getSocket().spec.onMessage(JSON.stringify({ type: 'session.created' }))
+    await warm
   })
 })
 

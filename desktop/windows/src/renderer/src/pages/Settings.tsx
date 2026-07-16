@@ -8,6 +8,7 @@ import { SettingsTabPanel } from '../components/settings/SettingsTabPanel'
 import { SETTINGS_TABS, type SettingsTabId } from '../components/settings/tabs'
 import { GeneralTab } from '../components/settings/tabs/GeneralTab'
 import { RewindTab } from '../components/settings/tabs/RewindTab'
+import { NotificationsTab } from '../components/settings/tabs/NotificationsTab'
 import { PrivacyTab } from '../components/settings/tabs/PrivacyTab'
 import { AccountTab } from '../components/settings/tabs/AccountTab'
 import { AdvancedTab } from '../components/settings/tabs/AdvancedTab'
@@ -26,6 +27,7 @@ const TAB_COMPONENTS: Partial<Record<SettingsTabId, () => React.JSX.Element>> = 
   agents: AgentsTab,
   transcription: TranscriptionTab,
   rewind: RewindTab,
+  notifications: NotificationsTab,
   privacy: PrivacyTab,
   account: AccountTab,
   'plan-usage': PlanUsageTab,

@@ -534,6 +534,12 @@ let omiPipeConnection: Socket | null = null
 let omiPipeBuffer = ''
 let omiCallIdCounter = 0
 const omiPendingCalls = new Map<string, { connection: Socket; resolve: (result: string) => void }>()
+/** `${pipePath}\0${token}` the live socket is authenticated to, or null. Lets a
+ *  per-turn target change (pool-eviction token remint) trigger a socket
+ *  reconnect — never a subprocess restart. */
+let omiConnectedKey: string | null = null
+/** An in-flight connect, so concurrent tool calls share one handshake. */
+let omiConnecting: { key: string; promise: Promise<void> } | null = null
 
 /** Handshake timeout — if the host does not answer hello with hello_ok within
  *  this window, the connect promise rejects (tools then go unregistered). */
@@ -547,14 +553,12 @@ export const OMI_BRIDGE_HANDSHAKE_TIMEOUT_MS = 10_000
  * macOS client — the macOS pipe was un-authed. The host is authoritative: it
  * validates the token→binding and never trusts wire-claimed identity.
  */
-function connectOmiPipe(pipePath: string): Promise<void> {
+function connectOmiPipe(pipePath: string, token: string): Promise<void> {
   return new Promise((resolvePromise, reject) => {
     let handshakeDone = false
     const connection = createConnection(pipePath, () => {
       process.stderr.write(`[omi-tools] Connected to bridge pipe\n`)
-      connection.write(
-        JSON.stringify({ type: 'hello', token: process.env.OMI_BRIDGE_TOKEN ?? '' }) + '\n'
-      )
+      connection.write(JSON.stringify({ type: 'hello', token }) + '\n')
     })
     omiPipeConnection = connection
 
@@ -615,6 +619,7 @@ function connectOmiPipe(pipePath: string): Promise<void> {
       }
       if (omiPipeConnection === connection) {
         omiPipeConnection = null
+        omiConnectedKey = null
         for (const [callId, pending] of omiPendingCalls) {
           if (pending.connection === connection) {
             pending.resolve('Error: Omi bridge disconnected')
@@ -626,14 +631,69 @@ function connectOmiPipe(pipePath: string): Promise<void> {
   })
 }
 
+/**
+ * Resolve this turn's host bridge target (pipe + token) and ensure a live,
+ * authenticated socket to it. Idempotent: reuses the current socket when it is
+ * already authenticated to the same pipe+token; when the token changes (a
+ * pool-eviction remint) it drops the stale socket and reconnects — a socket
+ * reconnect, NEVER a subprocess restart. Concurrent callers share one handshake.
+ */
+async function ensureOmiConnection(pipePath: string, token: string): Promise<void> {
+  const key = `${pipePath}\0${token}`
+  if (omiConnectedKey === key && omiPipeConnection) return
+  if (omiConnecting && omiConnecting.key === key) return omiConnecting.promise
+  // A different key (first connect, or a token/path change): drop any stale socket
+  // and its in-flight connect before reconnecting.
+  if (omiPipeConnection) {
+    const stale = omiPipeConnection
+    omiPipeConnection = null
+    omiConnectedKey = null
+    stale.destroy()
+  }
+  omiConnecting = null
+  const promise = connectOmiPipe(pipePath, token)
+    .then(() => {
+      omiConnectedKey = key
+    })
+    .finally(() => {
+      if (omiConnecting?.key === key) omiConnecting = null
+    })
+  omiConnecting = { key, promise }
+  return promise
+}
+
+/**
+ * The host tool-relay target for THIS turn: `{ pipePath, token }`. Read fresh from
+ * the per-turn context file (OMI_CONTEXT_FILE) written by the host adapter — so it
+ * tracks resume + pool-eviction remint with no subprocess restart. Falls back to
+ * spawn env (OMI_BRIDGE_PIPE/OMI_BRIDGE_TOKEN) only if BOTH are present, for
+ * compatibility with an env-injection host. Returns null when no target is
+ * available (tools then degrade gracefully per call).
+ */
+async function omiBridgeTarget(): Promise<{ pipePath: string; token: string } | null> {
+  const path = process.env.OMI_CONTEXT_FILE
+  if (path) {
+    try {
+      const parsed = JSON.parse(await readFile(path, 'utf8')) as Record<string, unknown>
+      const pipePath = typeof parsed.bridgePipe === 'string' ? parsed.bridgePipe : ''
+      const token = typeof parsed.bridgeToken === 'string' ? parsed.bridgeToken : ''
+      if (pipePath && token) return { pipePath, token }
+    } catch {
+      // Unreadable/partial context file → no target from this source.
+    }
+  }
+  const envPipe = process.env.OMI_BRIDGE_PIPE
+  const envToken = process.env.OMI_BRIDGE_TOKEN
+  if (envPipe && envToken) return { pipePath: envPipe, token: envToken }
+  return null
+}
+
 async function callSwiftTool(
   name: string,
   input: Record<string, unknown>,
   signal?: AbortSignal,
   timeoutMs = OMI_TOOL_TIMEOUT_MS
 ): Promise<string> {
-  const connection: Socket | null = omiPipeConnection
-  if (!connection) return Promise.resolve('Error: not connected to Omi bridge')
   if (signal?.aborted) return Promise.resolve('Error: tool call aborted')
   const callId = `omi-ext-${++omiCallIdCounter}-${Date.now()}`
   const correlation = await omiRelayCorrelation()
@@ -643,7 +703,35 @@ async function callSwiftTool(
     )
   }
   if (signal?.aborted) return Promise.resolve('Error: tool call aborted')
-  if (omiPipeConnection !== connection) return Promise.resolve('Error: Omi bridge disconnected')
+
+  // Lazy connect: resolve this turn's host bridge target and (re)connect on demand.
+  // When no target is present but a socket is already live (e.g. an env-injection
+  // host, or a pre-connected test), reuse it. When neither exists, degrade.
+  //
+  // NOTE (audit M2, considered + rejected): failing closed here — destroying the
+  // live socket whenever the target is null — is NOT applied on purpose. A token
+  // re-mint (pool eviction / resume) always writes the fresh {pipe,token} into the
+  // per-turn context file, so a null target never coexists with a *stale* token:
+  // the live socket's token is always the most recent valid one. And a context file
+  // may legitimately carry correlation data with no bridge target while the socket
+  // arrives via env injection, so a blanket fail-closed would regress that intended
+  // reuse path (covered by index.test.ts). ensureOmiConnection already drops+reconnects
+  // on any token change, which is where the real stale-authority window is closed.
+  const target = await omiBridgeTarget()
+  if (signal?.aborted) return Promise.resolve('Error: tool call aborted')
+  if (target) {
+    try {
+      await ensureOmiConnection(target.pipePath, target.token)
+    } catch (err) {
+      return `Error: could not connect to Omi bridge: ${
+        err instanceof Error ? err.message : String(err)
+      }`
+    }
+    if (signal?.aborted) return Promise.resolve('Error: tool call aborted')
+  }
+
+  const connection: Socket | null = omiPipeConnection
+  if (!connection) return Promise.resolve('Error: not connected to Omi bridge')
   return new Promise<string>((resolvePromise) => {
     const timer = setTimeout(() => {
       omiPendingCalls.delete(callId)
@@ -861,34 +949,56 @@ function loadSkillTool(): ReturnType<typeof defineTool> {
 const executionRole = process.env.OMI_EXECUTION_ROLE === 'leaf' ? 'leaf' : 'coordinator'
 const projectionContext = { executionRole } as const
 
+/** The product ("swiftTool") tools this process may advertise, from the spawn env
+ *  OMI_SERVICEABLE_PRODUCT_TOOLS (a comma list the host derives from the executor
+ *  registry). Absent/empty ⇒ fail-closed to NO product tools (control + load_skill
+ *  only). Read fresh so it tracks the spawn env and tests can set it per-case. */
+function serviceableProductTools(): ReadonlySet<string> {
+  const raw = process.env.OMI_SERVICEABLE_PRODUCT_TOOLS
+  if (!raw) return new Set()
+  return new Set(
+    raw
+      .split(',')
+      .map((name) => name.trim())
+      .filter(Boolean)
+  )
+}
+
 export function omiToolsForExecutionRole(
   role: 'coordinator' | 'leaf'
 ): ReturnType<typeof defineTool>[] {
-  return toolsForAdapter('pi-mono', { executionRole: role }).map((tool) =>
-    tool.executor.kind === 'nodeTool' ? loadSkillTool() : omiManifestTool(tool)
-  )
+  const serviceable = serviceableProductTools()
+  return toolsForAdapter('pi-mono', { executionRole: role })
+    .filter((tool) =>
+      // swiftTool = a product tool relayed to the host: advertise ONLY the ones
+      // the host can actually service, so the model never burns turns on tools
+      // that only degrade. nodeTool (load_skill, in-process) and runtimeControl
+      // (control tools) always pass through.
+      tool.executor.kind === 'swiftTool' ? serviceable.has(tool.name) : true
+    )
+    .map((tool) => (tool.executor.kind === 'nodeTool' ? loadSkillTool() : omiManifestTool(tool)))
 }
 
 export const OMI_TOOLS = omiToolsForExecutionRole(executionRole)
 
 async function registerOmiTools(pi: ExtensionAPI): Promise<void> {
-  const pipePath = process.env.OMI_BRIDGE_PIPE
-  if (!pipePath) {
-    process.stderr.write('[omi-tools] OMI_BRIDGE_PIPE not set — Omi tools unavailable\n')
-    return
-  }
-  try {
-    await connectOmiPipe(pipePath)
-  } catch (err) {
-    process.stderr.write(
-      `[omi-tools] Failed to connect: ${err instanceof Error ? err.message : err}\n`
-    )
-    return
-  }
+  // Advertisement is INDEPENDENT of the host bridge: register the role- and
+  // serviceable-filtered tools unconditionally so the model always sees the
+  // serviceable toolset. The socket connection is LAZY — established on the first
+  // tool call from that turn's context-file target (bridgePipe/bridgeToken) and
+  // reconnected on a token remint. A tool call with no host target for the turn
+  // degrades gracefully (see callSwiftTool), rather than the tools going dark.
   for (const tool of OMI_TOOLS) {
     pi.registerTool(tool)
   }
-  const snapshot = buildToolAvailabilitySnapshot('pi-mono', projectionContext)
+  // Report the set actually registered (serviceable-filtered), not the raw
+  // manifest projection, so the snapshot/stderr reflect what the model can see.
+  const registeredNames = OMI_TOOLS.map((tool) => tool.name)
+  const snapshot = {
+    ...buildToolAvailabilitySnapshot('pi-mono', projectionContext),
+    advertisedToolCount: registeredNames.length,
+    advertisedToolNames: registeredNames
+  }
   if (process.env.OMI_TOOL_AVAILABILITY_SNAPSHOT_PATH) {
     try {
       await writeFile(
@@ -1036,8 +1146,14 @@ export default function omiProvider(pi: ExtensionAPI): void {
 // Test-only exports — relay internals for unit tests
 // ---------------------------------------------------------------------------
 
-/** Test-only: connect the pipe relay to a pipe path (performs the handshake). */
-export const __connectOmiPipeForTest = connectOmiPipe
+/** Test-only: connect the pipe relay to a pipe path (performs the handshake).
+ *  The token defaults to OMI_BRIDGE_TOKEN for back-compat with existing call
+ *  sites that set it in env; pass an explicit token to exercise a remint. */
+export const __connectOmiPipeForTest = (pipePath: string, token?: string): Promise<void> =>
+  connectOmiPipe(pipePath, token ?? process.env.OMI_BRIDGE_TOKEN ?? '')
+
+/** Test-only: the lazy connect-or-reuse path callSwiftTool uses in production. */
+export const __ensureOmiConnectionForTest = ensureOmiConnection
 
 /** Test-only: call a host tool through the pipe relay. */
 export const __callSwiftToolForTest = callSwiftTool
@@ -1055,4 +1171,6 @@ export function __resetOmiPipeForTest(): void {
   omiPipeBuffer = ''
   omiCallIdCounter = 0
   omiPendingCalls.clear()
+  omiConnectedKey = null
+  omiConnecting = null
 }

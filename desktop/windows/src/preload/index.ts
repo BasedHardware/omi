@@ -40,8 +40,12 @@ import type {
   CodingAgentRunArgs,
   MainChatEvent,
   MainChatSendArgs,
+  VoiceHubRecordTurnArgs,
+  VoiceHubSeedContextArgs,
+  VoiceToolExecuteArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
+  AssistantSettingsView,
   ActionItemRecord,
   TaskCreateFields,
   TaskUpdateFields,
@@ -162,6 +166,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('chat:setScreenshotSharing', enabled),
   openCheckout: (url: string) => ipcRenderer.invoke('billing:openCheckout', url),
   openExternalUrl: (url: string) => ipcRenderer.invoke('billing:openExternal', url),
+  checkAppSetup: (args: { url: string; uid: string }) =>
+    ipcRenderer.invoke('apps:checkSetup', args),
   memoryImportParse: (dump: string) => ipcRenderer.invoke('memoryImport:parse', dump),
   memoryExportObsidian: (memories: ExportMemory[]) =>
     ipcRenderer.invoke('memoryExport:obsidian', memories),
@@ -206,7 +212,8 @@ const omi: OmiBridgeApi = {
   ) => ipcRenderer.invoke('aiProfile:setSession', session),
   aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
     ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
-  aiProfileGetLatest: () => ipcRenderer.invoke('aiProfile:getLatest') as Promise<string | null>,
+  aiProfileGetLatest: () =>
+    ipcRenderer.invoke('aiProfile:getLatest') as Promise<AiUserProfileRecord | null>,
   aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
   aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
   aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
@@ -247,6 +254,16 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('goals:changed', listener)
     return () => ipcRenderer.removeListener('goals:changed', listener)
+  },
+  // --- Track 3 (proactive-assistant settings — Notifications tab) ---
+  assistantsGetSettings: () =>
+    ipcRenderer.invoke('assistants:getSettings') as Promise<AssistantSettingsView>,
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) =>
+    ipcRenderer.invoke('assistants:setSettings', patch) as Promise<AssistantSettingsView>,
+  onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, view: AssistantSettingsView): void => cb(view)
+    ipcRenderer.on('assistants:settingsChanged', listener)
+    return () => ipcRenderer.removeListener('assistants:settingsChanged', listener)
   },
   // Dev/QA only (handler registered on dev builds): force one Focus analysis of
   // the latest captured frame, so the pipeline + halo can be exercised without
@@ -340,6 +357,12 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('mainChat:event', listener)
     return () => ipcRenderer.removeListener('mainChat:event', listener)
   },
+  voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) =>
+    ipcRenderer.invoke('voiceHub:recordTurn', args),
+  voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) =>
+    ipcRenderer.invoke('voiceHub:getSeedContext', args ?? {}),
+  voiceHubToolCatalog: () => ipcRenderer.invoke('voiceHub:toolCatalog'),
+  voiceToolExecute: (args: VoiceToolExecuteArgs) => ipcRenderer.invoke('voiceHub:execute', args),
   // pi-mono managed-cloud chat session relay: the Firebase token lives only in
   // the renderer, so push it (and re-push on ~hourly refresh) to the main-side
   // pi-mono session store; null on sign-out. Inert until PR-D spawns pi-mono.
@@ -437,6 +460,9 @@ const omi: OmiBridgeApi = {
   insightSetSettings: (patch) => ipcRenderer.invoke('insight:setSettings', patch),
   insightAdd: (p) => ipcRenderer.invoke('insight:add', p),
   insightRecent: (limit) => ipcRenderer.invoke('insight:recent', limit),
+  insightDismissRecord: (id) => ipcRenderer.invoke('insight:dismissRecord', id),
+  insightDismissAll: () => ipcRenderer.invoke('insight:dismissAll'),
+  insightClearAll: () => ipcRenderer.invoke('insight:clearAll'),
   insightShow: (p) => ipcRenderer.send('insight:show', p),
   insightDismiss: () => ipcRenderer.send('insight:dismiss'),
   insightHoverStart: () => ipcRenderer.send('insight:hoverStart'),

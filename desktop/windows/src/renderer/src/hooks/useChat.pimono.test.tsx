@@ -248,6 +248,135 @@ describe('useChat — pi_mono engine', () => {
   })
 })
 
+// Tool-activity display (pi_mono). Now that the tool plane fires, the kernel event
+// stream carries tool_activity events; the pi_mono door surfaces the running tool as
+// a TRANSIENT italic line (`_${name}…_`, matching the coding-agent door) so a long
+// tool run no longer reads as dead air. The line is DISPLAY-ONLY: it is never folded
+// into the persisted/streamed text nor written to the shared thread (INV-CHAT-1).
+describe('useChat — pi_mono tool-activity line', () => {
+  it('shows a transient tool line on tool_activity{started}, replaces it with real text, and NEVER persists it', async () => {
+    const result = await mountPiMono()
+    let p: Promise<void>
+    await act(async () => {
+      p = result.current.send('do a thing')
+      await waitForSend()
+      const rid = sendArgs!.requestId
+      emit({ type: 'accepted', requestId: rid, runId: 'run-t1' })
+      // A tool starts before any reply text → the transient line fills the gap.
+      emit({
+        type: 'tool_activity',
+        requestId: rid,
+        runId: 'run-t1',
+        name: 'search_memories',
+        status: 'started'
+      })
+      await flush()
+    })
+    // The running tool renders as the exact italic copy the ACP door uses.
+    expect(lastAssistant(result.current.history)?.content).toBe('_search_memories…_')
+
+    // Real reply text supersedes the tool line (cleared on text_delta).
+    await act(async () => {
+      const rid = sendArgs!.requestId
+      emit({ type: 'text_delta', requestId: rid, runId: 'run-t1', text: 'Found it.' })
+      await flush()
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('Found it.')
+    expect(lastAssistant(result.current.history)?.content).not.toContain('search_memories')
+
+    await act(async () => {
+      sendResolve!({
+        runId: 'run-t1',
+        requestId: sendArgs!.requestId,
+        ok: true,
+        text: 'Found it.',
+        terminalStatus: 'succeeded'
+      })
+      await p
+    })
+
+    // Final bubble is the plain reply — no tool line.
+    expect(lastAssistant(result.current.history)?.content).toBe('Found it.')
+    // INV-CHAT-1 unchanged: exactly two shared-thread writes (human@start, ai@end),
+    // and NEITHER carries the transient tool line.
+    expect(saveSpy).toHaveBeenCalledTimes(2)
+    expect(saveSpy.mock.calls[0][0]).toMatchObject({ text: 'do a thing', sender: 'human' })
+    expect(saveSpy.mock.calls[1][0]).toMatchObject({ text: 'Found it.', sender: 'ai' })
+    expect(saveSpy.mock.calls[1][0].text).not.toContain('search_memories')
+    // No persisted thread snapshot ever contained the tool line.
+    const anyToolLine = persisted.some((thread) =>
+      thread.some((m) => /search_memories/.test(m.content))
+    )
+    expect(anyToolLine).toBe(false)
+  })
+
+  it('clears the tool line on tool_activity{completed} and keeps streamed text below a later tool', async () => {
+    const result = await mountPiMono()
+    let p: Promise<void>
+    await act(async () => {
+      p = result.current.send('multi')
+      await waitForSend()
+      const rid = sendArgs!.requestId
+      emit({ type: 'accepted', requestId: rid, runId: 'run-t2' })
+      emit({
+        type: 'tool_activity',
+        requestId: rid,
+        runId: 'run-t2',
+        name: 'read_file',
+        status: 'started'
+      })
+      await flush()
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('_read_file…_')
+
+    // Tool completes with no text yet → the line clears, leaving an empty bubble.
+    await act(async () => {
+      const rid = sendArgs!.requestId
+      emit({
+        type: 'tool_activity',
+        requestId: rid,
+        runId: 'run-t2',
+        name: 'read_file',
+        status: 'completed'
+      })
+      await flush()
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('')
+
+    // Text streams, then a SECOND tool starts → the transient line rides BELOW the
+    // accumulated reply text (coding-agent door parity), never inside the saved text.
+    await act(async () => {
+      const rid = sendArgs!.requestId
+      emit({ type: 'text_delta', requestId: rid, runId: 'run-t2', text: 'Reading' })
+      emit({
+        type: 'tool_activity',
+        requestId: rid,
+        runId: 'run-t2',
+        name: 'write_file',
+        status: 'started'
+      })
+      await flush()
+    })
+    expect(lastAssistant(result.current.history)?.content).toBe('Reading\n\n_write_file…_')
+
+    await act(async () => {
+      sendResolve!({
+        runId: 'run-t2',
+        requestId: sendArgs!.requestId,
+        ok: true,
+        text: 'Reading done.',
+        terminalStatus: 'succeeded'
+      })
+      await p
+    })
+    // Terminal reply is the authoritative text — no tool line survives.
+    expect(lastAssistant(result.current.history)?.content).toBe('Reading done.')
+    expect(saveSpy).toHaveBeenCalledTimes(2)
+    expect(saveSpy.mock.calls[1][0]).toMatchObject({ text: 'Reading done.', sender: 'ai' })
+    expect(saveSpy.mock.calls[1][0].text).not.toMatch(/write_file|read_file/)
+  })
+})
+
 // #123 first-chat not-ready (pi_mono). Right after sign-in the owner/adapter relay
 // may not have reached main yet, so the FIRST send resolves `{ ok:false, error:<a
 // not-ready marker> }`. useChat must show the interim copy, retry ONCE, and — if it
@@ -335,10 +464,12 @@ describe('useChat — first-chat not ready (retry once)', () => {
           await vi.advanceTimersByTimeAsync(2000) // fire the retry delay → attempt 2
           await p
         })
-        // Retried exactly once (two sends total), with a FRESH requestId, and the
-        // real reply won — never an `Error:` line.
+        // Retried exactly once (two sends total), reusing the SAME requestId so
+        // main's recordSurfaceTurn dedups the kernel human-turn record (a fresh id
+        // per attempt would double-record it), and the real reply won — never an
+        // `Error:` line.
         expect(sendMock).toHaveBeenCalledTimes(2)
-        expect(sendMock.mock.calls[0][0].requestId).not.toBe(sendMock.mock.calls[1][0].requestId)
+        expect(sendMock.mock.calls[0][0].requestId).toBe(sendMock.mock.calls[1][0].requestId)
         expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
         // INV-CHAT-1: human saved once@start, ai once@completion — the retry did NOT
         // double-save the human turn (the whole point of keeping the user-save out of

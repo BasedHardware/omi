@@ -45,6 +45,7 @@ import { getAboutUserCard, refreshAboutUserCard } from '../aboutUser'
 import { buildVoiceSystemInstruction } from '../systemInstruction'
 import { mintRealtimeToken, MintError } from '../tokenMint'
 import type { VoiceProvider } from '../sessionMachine'
+import type { VoiceToolDeclaration } from '../../../../../shared/types'
 import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
 import { GeminiHubSession } from './geminiHubSession'
 import { OpenAiHubSession } from './openaiHubSession'
@@ -55,6 +56,17 @@ import {
   HUB_IDLE_TEARDOWN_THRESHOLD_MS,
   type HubCloseCategory
 } from './hubClose'
+
+// MARK: - Language resolution
+
+/** The languages the model should assume the user speaks. Prefer the explicit
+ *  `voiceLanguages` candidates; fall back to the single `language` pref (macOS
+ *  falls back to the system locale) so the imperative language line still renders
+ *  even before a `voiceLanguages` UI writer lands. */
+function resolveVoiceLanguages(prefs: { voiceLanguages?: string[]; language?: string }): string[] {
+  if (prefs.voiceLanguages && prefs.voiceLanguages.length > 0) return prefs.voiceLanguages
+  return prefs.language ? [prefs.language] : []
+}
 
 // MARK: - Public surface
 
@@ -100,6 +112,9 @@ export type HubSessionSpec = {
   token: string
   instructions: string
   events: HubSessionEvents
+  /** The provider-neutral tool catalog this session advertises (PR-C). Empty when
+   *  no `fetchTools` seam is wired or no signed-in owner exists yet. */
+  tools: VoiceToolDeclaration[]
 }
 
 export type HubControllerOptions = {
@@ -108,6 +123,19 @@ export type HubControllerOptions = {
   resolveProvider?: () => VoiceProvider
   /** A9 — assemble the per-session system instruction (persona + about_user). */
   buildInstructions?: () => string
+  /** Read the current voice continuity seed for the shared thread (the kernel tail,
+   *  source-tagged). Injected so the controller stays hermetic; the host wires it to
+   *  the `voiceHub:getSeedContext` IPC. Absent ⇒ the seed stays empty (today's
+   *  behavior). Its result feeds the default `buildInstructions`'
+   *  `topLevelConversationContext`, refreshed via a full reconnect when stale. */
+  fetchSeed?: () => Promise<{ context: string; idempotencyKeys: string[] }>
+  /** Read the provider-neutral tool catalog the session should advertise (PR-C).
+   *  Built HOST-side from the shared manifest with a host-derived execution role, so
+   *  a leaf voice session can't be handed coordinator tools. Injected so the
+   *  controller stays hermetic; the host wires it to `voiceHub:toolCatalog`. Absent ⇒
+   *  no tools (today's behavior). Fetched fresh at each warm; a fetch failure warms
+   *  tool-less rather than failing the session. */
+  fetchTools?: () => Promise<VoiceToolDeclaration[]>
   /** Mint one ephemeral token for the resolved provider. Fresh per `ensureWarm`. */
   mintToken?: (provider: VoiceProvider) => Promise<string>
   /** Construct the provider hub session. Default picks OpenAI/Gemini by provider. */
@@ -139,6 +167,8 @@ export class HubController {
   private readonly events: HubControllerEvents
   private readonly resolveProvider: () => VoiceProvider
   private readonly buildInstructions: () => string
+  private readonly fetchSeed?: () => Promise<{ context: string; idempotencyKeys: string[] }>
+  private readonly fetchTools?: () => Promise<VoiceToolDeclaration[]>
   private readonly mintToken: (provider: VoiceProvider) => Promise<string>
   private readonly createSession: (spec: HubSessionSpec) => HubSession
   private readonly now: () => number
@@ -188,6 +218,20 @@ export class HubController {
    *  `pendingSessionRefreshReason` / `applyPendingSessionRefreshIfIdle`). */
   private pendingRefreshReason: string | null = null
 
+  // Continuity seed (PR-B — the <recent_top_level_conversation> block) --------------
+  /** The seed string the current/next session's instruction is built with. Empty
+   *  until the first refresh finds prior turns. Staged for the next `buildInstructions`. */
+  private seedContext = ''
+  /** Idempotency keys the warm session ALREADY reflects (seeded-in on its build +
+   *  produced live). A fresh snapshot carrying a key NOT in here is an unseen turn
+   *  (typically a typed turn) → the session is stale and reconnects. Self-produced
+   *  hub turns are added via `markSeedKeyProduced` so they never look unseen (thrash
+   *  guard: without it, every hub turn would make the next one reconnect). */
+  private knownSeedKeys = new Set<string>()
+  /** A seed refresh that arrived mid-turn is deferred (never reconnect a live turn),
+   *  then applied on termination — mirrors the wake-refresh defer above. */
+  private pendingSeedRefresh = false
+
   // Per-turn state (all reset by voiceTurnDidTerminate) ------------------------
   private activeTurnID: VoiceTurnID | null = null
   /** Non-null ⇒ we are in the reducer's warm-wait and withholding PCM from the
@@ -209,12 +253,17 @@ export class HubController {
   constructor(options: HubControllerOptions = {}) {
     this.events = options.events ?? {}
     this.resolveProvider = options.resolveProvider ?? resolveEffectiveVoiceProvider
+    this.fetchSeed = options.fetchSeed
+    this.fetchTools = options.fetchTools
     this.buildInstructions =
       options.buildInstructions ??
       (() =>
         buildVoiceSystemInstruction({
           aboutUser: getAboutUserCard(),
-          userLanguages: getPreferences().voiceLanguages ?? []
+          // The kernel continuity seed (PR-B): recent typed/voice turns of the shared
+          // thread, so a realtime session isn't blind to the typed conversation.
+          topLevelConversationContext: this.seedContext,
+          userLanguages: resolveVoiceLanguages(getPreferences())
         }))
     this.mintToken =
       options.mintToken ?? ((provider) => mintRealtimeToken(provider).then((m) => m.token))
@@ -226,6 +275,7 @@ export class HubController {
           token: spec.token,
           instructions: spec.instructions,
           events: spec.events,
+          tools: spec.tools,
           sinkId: sinkId?.()
         }
         return spec.provider === 'openai' ? new OpenAiHubSession(opts) : new GeminiHubSession(opts)
@@ -304,12 +354,21 @@ export class HubController {
       // this not-yet-constructed session). Bail BEFORE building a session: nothing was
       // opened yet, so there is nothing to close, just discard the token.
       if (this.warmGeneration !== gen) throw new HubWarmAbortedError()
+      // The tool catalog is host-derived (role from the surface, never model-claimed).
+      // A fetch failure warms tool-less rather than failing the whole session — voice
+      // conversation still works; the model just can't act this session.
+      const tools = this.fetchTools ? await this.fetchTools().catch(() => []) : []
+      // The catalog fetch is another await point — re-check the generation so a
+      // teardown that straddled it discards this warm instead of installing a socket
+      // on a now-torn-down hub (M1), matching the mint/connect commit points.
+      if (this.warmGeneration !== gen) throw new HubWarmAbortedError()
       const instructions = this.buildInstructions()
       const session = this.createSession({
         provider: activeProvider,
         token,
         instructions,
-        events: this.sessionEvents()
+        events: this.sessionEvents(),
+        tools
       })
       this.session = session
       this.sessionProvider = activeProvider
@@ -515,6 +574,14 @@ export class HubController {
     this.session?.cancelTurn()
   }
 
+  /** Relay a tool result back to the warm provider session so the model can finish
+   *  the turn (PR-C). Keyed by the provider `callId`; a no-op when no session exists
+   *  (a torn-down / barged-in turn). The driver applies the turn-epoch gate before
+   *  calling this, so a stale turn's result never reaches the provider. */
+  sendToolResult(callId: string, name: string, output: string): void {
+    this.session?.sendToolResult(callId, name, output)
+  }
+
   /** The reducer's 1 s `hubWarm` deadline fired: the hub lost the race. Hand the
    *  buffered PCM to the batch cascade and record the fail-open. The turn CONTINUES
    *  on the cascade — nothing here terminates it (the reducer keeps it alive). */
@@ -559,6 +626,68 @@ export class HubController {
       const reason = this.pendingRefreshReason
       this.pendingRefreshReason = null
       this.requestSessionRefresh(reason)
+    }
+    // A seed refresh deferred behind this turn now runs idle (may reconnect if a
+    // typed turn appeared while this voice turn was live).
+    if (this.pendingSeedRefresh) {
+      this.pendingSeedRefresh = false
+      this.refreshSeedContext()
+    }
+  }
+
+  // MARK: Continuity seed (PR-B)
+
+  /** The warm session saw this turn LIVE (it produced it) — record its id as known
+   *  so a later seed refresh doesn't count it as an unseen turn and reconnect. */
+  markSeedKeyProduced(key: string): void {
+    if (key) this.knownSeedKeys.add(key)
+  }
+
+  /** Refresh the continuity seed from the kernel and, if it carries a turn the warm
+   *  session hasn't seen (e.g. a typed turn), rebuild the session so the NEXT voice
+   *  turn is seeded with it (macOS refreshes the seed via a full reconnect when
+   *  stale — the hub instruction is single-shot, so there is no mid-session patch).
+   *  Idle-only: deferred while a turn is active. Fire-and-forget. */
+  refreshSeedContext(): void {
+    void this.doRefreshSeedContext().catch(() => {})
+  }
+
+  private async doRefreshSeedContext(): Promise<void> {
+    if (!this.fetchSeed) return
+    // Never tear a live turn's session down mid-turn — defer to its termination.
+    if (this.activeTurnID !== null) {
+      this.pendingSeedRefresh = true
+      return
+    }
+    let snapshot: { context: string; idempotencyKeys: string[] }
+    try {
+      snapshot = await this.fetchSeed()
+    } catch {
+      return
+    }
+    // A turn began while the fetch was in flight — abandon and let its terminal
+    // re-trigger, so we never reconnect underneath an active turn.
+    if (this.activeTurnID !== null) {
+      this.pendingSeedRefresh = true
+      return
+    }
+    const hasUnseenTurn = snapshot.idempotencyKeys.some((key) => !this.knownSeedKeys.has(key))
+    const changed = snapshot.context !== this.seedContext
+    if (!hasUnseenTurn && !changed) return
+    // Stage the fresh seed for the next session build either way.
+    this.seedContext = snapshot.context
+    if (hasUnseenTurn) {
+      // The warm session is missing a turn — rebuild it so it carries the seed. The
+      // rebuilt session reflects exactly the fresh snapshot's keys.
+      this.knownSeedKeys = new Set(snapshot.idempotencyKeys)
+      if (this.session !== null) {
+        this.teardownSession()
+        void this.ensureWarm().catch(() => {})
+      }
+    } else {
+      // Text changed but every key is already reflected (e.g. our own turn's
+      // assistant row landing) — no reconnect; just keep the keys marked known.
+      for (const key of snapshot.idempotencyKeys) this.knownSeedKeys.add(key)
     }
   }
 

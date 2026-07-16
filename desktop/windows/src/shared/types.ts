@@ -76,8 +76,11 @@ export type ConversationPayload = {
 export type ChatCitation = { id: string; title: string; emoji?: string }
 
 /** A file attached to a sent chat message, as rendered in the thread. `id` is the
- *  server file id (FileChat.id) that was passed in the message's `file_ids`. */
-export type ChatAttachment = { id: string; name: string; mimeType: string }
+ *  server file id (FileChat.id) that was passed in the message's `file_ids`.
+ *  `thumbnailUrl` is the public image URL `/v2/files` returns for image files
+ *  (FileChat.thumbnail) — images only, absent for documents — rendered directly
+ *  with an unauthenticated `<img src>` (matches Mac's `AsyncImage`). */
+export type ChatAttachment = { id: string; name: string; mimeType: string; thumbnailUrl?: string }
 
 export type ChatMessage = {
   id?: string
@@ -412,7 +415,15 @@ export type BarReveal = 'summon' | 'ptt'
 /** A single chat message projected across the bar↔main bridge. Structurally the
  *  renderer's `ChatMsg` (hooks/useChat) — kept here so the shared preload types
  *  don't import renderer code. */
-export type BarChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+export type BarChatMessage = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  /** Files attached to a (user) message. Runtime already passes these through the
+   *  structured-clone bridge; declared here so the bar's renderer type-checks and
+   *  the projection stays honest. */
+  attachments?: ChatAttachment[]
+}
 /** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
  *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
 export type BarChatStatus = 'idle' | 'sending' | 'speaking'
@@ -758,6 +769,11 @@ export type OmiBridgeApi = {
   openCheckout: (url: string) => Promise<CheckoutOutcome>
   /** Open a web URL (e.g. the Stripe customer portal) in the system browser. */
   openExternalUrl: (url: string) => Promise<boolean>
+  /** Poll an external-integration developer's setup-completed webhook from the
+   *  main process (the renderer can't — CORS). https-only, side-effect-free GET;
+   *  resolves true only when the webhook returns `is_setup_completed: true`, false
+   *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
+  checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
@@ -781,7 +797,7 @@ export type OmiBridgeApi = {
     desktopApiBase: string
     token: string
   }) => Promise<AiUserProfileRecord>
-  aiProfileGetLatest: () => Promise<string | null>
+  aiProfileGetLatest: () => Promise<AiUserProfileRecord | null>
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
@@ -813,6 +829,18 @@ export type OmiBridgeApi = {
   goalsSetAutoGeneration: (enabled: boolean) => Promise<boolean>
   /** main → renderer: a goal was created/removed (auto-gen or manual). Re-fetch. */
   onGoalsChanged: (cb: () => void) => () => void
+  /** Read the proactive-assistant settings the Notifications tab drives (master
+   *  toggle, frequency, Focus/memory/glow, screen-analysis master). A scoped,
+   *  whitelisted projection — the renderer cannot reach any other setting. */
+  assistantsGetSettings: () => Promise<AssistantSettingsView>
+  /** Write a whitelisted patch of those flags. Anything outside the whitelist is
+   *  dropped in main; junk values are sanitized (a bad frequency → 0, never
+   *  louder). Returns the fresh, stored projection. */
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) => Promise<AssistantSettingsView>
+  /** main → renderer: the assistant settings changed (this window's write, the
+   *  tray "Screen Analysis" checkbox, or a background sync). Keeps rows in sync.
+   *  Returns an unsubscribe fn. */
+  onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => () => void
   /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
@@ -951,6 +979,12 @@ export type OmiBridgeApi = {
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>
   insightRecent: (limit: number) => Promise<InsightRecord[]>
+  /** Insights page: mark one record dismissed (read/handled). */
+  insightDismissRecord: (id: number) => Promise<boolean>
+  /** Insights page: mark all records dismissed (Mac's "Mark All Read"). */
+  insightDismissAll: () => Promise<number>
+  /** Insights page: delete all insight history (Mac's "Clear All History"). */
+  insightClearAll: () => Promise<number>
   /** Engine → main: deliver this insight in the user's chosen style. */
   insightShow: (p: InsightPayload) => void
   /** Toast renderer → main: dismiss now. */
@@ -1152,6 +1186,27 @@ export type OmiBridgeApi = {
   mainChatCancel: (runId: string) => Promise<boolean>
   /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
+  // --- realtime-hub voice turns → the one kernel-owned transcript (INV-CHAT-1) ---
+  /** Record a completed native realtime-hub voice turn into the SAME
+   *  main_chat/chat/<chatId> conversation typed chat reads, origin
+   *  'realtime_voice', so a spoken turn appears in the typed context tail + mobile.
+   *  Owner-gated main-side; the ownerId is host state, never renderer-supplied. */
+  voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) => Promise<VoiceHubRecordTurnResult>
+  /** Read-only continuity seed for the voice session — the recent turns of the
+   *  same main_chat conversation, source-tagged [live:voice]/[live:typed]. */
+  voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) => Promise<VoiceHubSeedContext>
+  // --- realtime-hub tool loop (INV-AGENT) ---
+  /** The per-provider-neutral tool declarations the warm voice session advertises.
+   *  Built HOST-SIDE from the shared manifest with a host-derived execution role
+   *  (never model/renderer-claimed) so a leaf voice session can't be handed
+   *  coordinator tools. Empty until a signed-in owner exists. */
+  voiceHubToolCatalog: () => Promise<VoiceToolDeclaration[]>
+  /** Execute one voice-requested tool IN-PROCESS via the SAME host executor registry
+   *  the typed chat path uses (`executeHostTool`) — control tools + serviceable
+   *  product tools + spawn_agent. Authority is HOST-derived from the main_chat
+   *  surface session; the model never supplies trust/role. Never throws — a failure
+   *  is returned as an `"Error: …"` string the model can recover from. */
+  voiceToolExecute: (args: VoiceToolExecuteArgs) => Promise<string>
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
    *  main-side pi-mono session store on sign-in and on every id-token refresh;
@@ -1358,6 +1413,67 @@ export type MainChatSendArgs = {
   /** Main-chat conversation id; maps to the main_chat/chat/<chatId> surface.
    *  Defaults to 'default' when omitted. */
   chatId?: string
+  /** Optional idempotency key for the user-turn kernel record. Defaults to
+   *  `requestId`. A voice CASCADE turn threads its per-press `turnId` here so its
+   *  user-turn record shares the key a hub-native record would use — the
+   *  belt-and-suspenders half of the INV-CHAT-1 double-record fix (the primary
+   *  guarantee is hub-XOR-cascade route mutual-exclusivity). */
+  idempotencyKey?: string
+}
+
+/** Args for `voiceHub:recordTurn` — a completed realtime-hub voice turn. The
+ *  ownerId is NOT here: it is host state (control-plane owner), never
+ *  renderer-asserted (INV-AGENT / same posture as agentControl). */
+export type VoiceHubRecordTurnArgs = {
+  /** Target conversation; maps to main_chat/chat/<chatId>. Defaults to 'default'.
+   *  MUST be the same chatId typed chat uses so the turn lands in the typed tail. */
+  chatId?: string
+  userText: string
+  assistantText: string
+  /** The turn was cut off by a barge-in (a partial reply is still recorded). */
+  interrupted?: boolean
+  /** The per-press `turnId`; the kernel dedupes on it (last-32 metadata scan). */
+  idempotencyKey?: string
+}
+
+export type VoiceHubRecordTurnResult = {
+  recorded: boolean
+  duplicate: boolean
+  conversationId?: string
+  /** Set when nothing was recorded: 'owner_not_ready' (auth relay not arrived) or
+   *  'empty' (both texts blank). */
+  reason?: 'owner_not_ready' | 'empty'
+}
+
+export type VoiceHubSeedContextArgs = {
+  /** Same chatId as the typed tail. Defaults to 'default'. */
+  chatId?: string
+}
+
+export type VoiceHubSeedContext = {
+  /** The rendered seed block text (freshest-last), or '' when there is nothing to
+   *  seed / the owner is not ready. Source-tagged [live:voice]/[live:typed]. */
+  context: string
+  /** Idempotency keys of the complete user turns included, so the caller can tell
+   *  whether the warm session already reflects them (avoids reconnect thrash). */
+  idempotencyKeys: string[]
+}
+
+/** A provider-neutral realtime tool declaration. Each hub session subclass projects
+ *  it to its wire shape (Gemini `functionDeclarations` entry = this shape as-is;
+ *  OpenAI realtime wraps it as `{ type:'function', ... }`). `parameters` is a JSON
+ *  Schema object (`{ type:'object', properties, required? }`). */
+export type VoiceToolDeclaration = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export type VoiceToolExecuteArgs = {
+  /** The tool name the model requested (control or product tool). */
+  name: string
+  /** The raw JSON arguments string from the provider tool call (parsed host-side). */
+  argumentsJSON: string
 }
 
 export type MainChatEvent =
@@ -1880,6 +1996,26 @@ export type DbRecoveryStatus = {
   damagedTables?: string[]
 }
 
+/** The whitelisted projection of proactive-assistant settings exposed to the
+ *  renderer through the `assistants:getSettings`/`setSettings` channel. Exactly
+ *  the keys the Notifications tab and the General "Screen Analysis" row may
+ *  read/write — see main/ipc/assistantSettings.ts. */
+export type AssistantSettingsView = {
+  /** Master switch for proactive notifications. */
+  notificationsEnabled: boolean
+  /** 0–5 → [Off, 60m, 30m, 10m, 3m, no throttle]. 0 = Off (default): the single
+   *  control that unblocks (or re-silences) every proactive toast. */
+  notificationFrequency: number
+  /** Whether Focus judges the screen + may notify (Mac's AND-gate half). */
+  focusNotificationsEnabled: boolean
+  /** Whether the interval-based memory extractor runs (quiet; writes memories). */
+  memoryEnabled: boolean
+  /** Whether Focus may draw its distraction/refocus glow ring. */
+  glowOverlayEnabled: boolean
+  /** Master switch for the whole screen-analysis loop (Focus/memory/task/insight). */
+  screenAnalysisEnabled: boolean
+}
+
 export type InsightPayload = {
   headline: string // <= 5 words
   advice: string // 1-2 sentences, <= ~100 chars
@@ -1889,7 +2025,8 @@ export type InsightPayload = {
   confidence: number // 0..1
 }
 
-// Stored row (for dedupe; not rendered as a page in v1).
+// Stored row: powers both toast dedupe and the Insights history page. `dismissed`
+// (0/1) is the read/handled marker.
 export type InsightRecord = InsightPayload & { id: number; ts: number; dismissed: number }
 
 export type InsightNotificationStyle = 'omi' | 'native'

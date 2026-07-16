@@ -1,3 +1,5 @@
+import { net } from 'electron'
+
 import type { ExportMemory } from '../../shared/types'
 
 // Pinned Notion REST API version (required header). Matches the macOS client.
@@ -31,7 +33,10 @@ export async function exportToNotion(
     'Content-Type': 'application/json'
   }
 
-  const createRes = await fetch('https://api.notion.com/v1/pages', {
+  // Electron's net.fetch uses Chromium's network stack (proxy/TLS aware) — the
+  // same path other main-process backend calls take. The Node global fetch
+  // (undici) bypasses it and can stall behind a corporate proxy.
+  const createRes = await net.fetch('https://api.notion.com/v1/pages', {
     method: 'POST',
     headers,
     body: JSON.stringify({
@@ -46,7 +51,7 @@ export async function exportToNotion(
   const page = (await createRes.json()) as { id: string; url?: string }
 
   for (let i = MAX_BLOCKS; i < memories.length; i += MAX_BLOCKS) {
-    const res = await fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
+    const res = await net.fetch(`https://api.notion.com/v1/blocks/${page.id}/children`, {
       method: 'PATCH',
       headers,
       body: JSON.stringify({ children: toBlocks(memories.slice(i, i + MAX_BLOCKS)) })

@@ -50,7 +50,9 @@ export function HubChatHeader(): React.JSX.Element | null {
 
 function HubChatHeaderInner(): React.JSX.Element {
   const { chat } = useAppState()
-  const sessions = useChatSessions()
+  // Scope the session list/create to the selected app/persona (Mac threads app_id
+  // into getChatSessions/createChatSession); null → the plain main-chat list.
+  const sessions = useChatSessions({ appId: chat.selectedAppId })
   const onDefault = chat.currentThreadId === null
 
   // Selection re-threads the live engine AND updates the list highlight/state.
