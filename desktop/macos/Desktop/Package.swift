@@ -94,7 +94,18 @@ let package = Package(
       ],
       path: "Tests",
       exclude: [
-        "fixtures"
+        "fixtures",
+        "SemanticFeatureSentinels",
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+    ),
+    .testTarget(
+      name: "SemanticFeatureSentinels",
+      dependencies: [],
+      path: "Tests/SemanticFeatureSentinels",
+      swiftSettings: [
+        .enableUpcomingFeature("BareSlashRegexLiterals"),
+        .unsafeFlags(["-strict-concurrency=complete"]),
       ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
