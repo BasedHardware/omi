@@ -1,17 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Brain,
-  Plus,
-  Loader2,
-  CheckSquare,
-  Trash2,
-  X,
-  Pencil,
-  Globe,
-  Lock,
-  Maximize2
-} from 'lucide-react'
+import { Brain, Plus, Loader2, CheckSquare, Trash2, X, Search, Maximize2 } from 'lucide-react'
 import { useMemories, type Memory } from '../hooks/useMemories'
 import { PageHeader } from '../components/layout/PageHeader'
 import { EmptyState } from '../components/ui/EmptyState'
@@ -20,15 +9,38 @@ import { useMemoryGraph } from '../hooks/useMemoryGraph'
 import { toast } from '../lib/toast'
 import { fetchAllMemories, deleteMemoriesPaced } from '../lib/memoriesBulk'
 import { isAppIndexMemory } from '../lib/memoryCleanup'
+import {
+  categoryOf,
+  filterMemories,
+  MEMORY_CATEGORIES,
+  type MemoryCategory,
+  type MemoryLayerFilter
+} from '../lib/memoryFilters'
+import { MemoryCard } from '../components/memories/MemoryCard'
+import { MemoryFilterBar } from '../components/memories/MemoryFilterBar'
+import { MemoryDetailSheet } from '../components/memories/MemoryDetailSheet'
+import { UndoDeleteToast } from '../components/memories/UndoDeleteToast'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
-// selection still operates on the full (filtered) set, not just what's rendered.
+// filtering/selection still operate on the full (filtered) set, not just what's
+// rendered.
 const RENDER_CAP = 400
+
+const emptyCategorySet = (): Set<MemoryCategory> => new Set<MemoryCategory>()
 
 export function Memories(): React.JSX.Element {
   const navigate = useNavigate()
-  const { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh } =
-    useMemories()
+  const {
+    memories,
+    loading,
+    error,
+    canonicalLifecycleExposed,
+    createMemory,
+    editMemory,
+    setMemoryVisibility,
+    deleteMemory,
+    refresh
+  } = useMemories()
   // Pass the live memories so the brain map scopes the server KG to entities
   // that reference a memory you actually have (no account-wide bloat / phantoms),
   // drops the layer when empty, and refetches on add/delete.
@@ -45,63 +57,42 @@ export function Memories(): React.JSX.Element {
     const t = setTimeout(() => setGraphReady(true), 4000)
     return () => clearTimeout(t)
   }, [graphReady, hasGraph])
+
+  // Compose (add memory).
   const [composing, setComposing] = useState(false)
   const [draft, setDraft] = useState('')
   const [saving, setSaving] = useState(false)
 
+  // Default-mode filters.
+  const [search, setSearch] = useState('')
+  const [categories, setCategories] = useState<Set<MemoryCategory>>(emptyCategorySet)
+  const [layer, setLayer] = useState<MemoryLayerFilter>('default')
+
+  // Detail sheet + per-memory mutation busy flags.
+  const [detailMemory, setDetailMemory] = useState<Memory | null>(null)
+  const [togglingVis, setTogglingVis] = useState(false)
+
+  // Undo-delete: a deleted memory is hidden locally and the server DELETE is
+  // held for a countdown window. Committing (timeout or explicit dismiss) fires
+  // the real delete; undo just clears the pending state. Only one delete is
+  // pending at a time — starting a second commits the first immediately.
+  const [pendingDelete, setPendingDelete] = useState<Memory | null>(null)
+  // Ids whose server delete has already been committed, so a given memory fires
+  // DELETE /v3/memories/<id> at most once. Guards two double-fire paths: the
+  // undo toast's countdown elapsing within ~100ms of the user clicking its X
+  // (both call onCommit), and StrictMode double-invoking dev code. Cleared on
+  // failure so a failed delete can still be retried.
+  const committedDeleteIds = useRef<Set<string>>(new Set())
+
   // Manage mode: load ALL memories, multi-select, and delete the selection.
   const [manage, setManage] = useState(false)
-  const [all, setAll] = useState<Memory[] | null>(null) // full set, owned locally so deletes can drop rows
+  const [all, setAll] = useState<Memory[] | null>(null)
   const [loadingAll, setLoadingAll] = useState(false)
-  const [filter, setFilter] = useState('')
+  const [manageFilter, setManageFilter] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [deleting, setDeleting] = useState(false)
   const [tally, setTally] = useState({ deleted: 0, failed: 0 })
   const stopRef = useRef({ stop: false }).current
-
-  // Inline edit (pencil → textarea → save/cancel) and per-row visibility toggle.
-  // Delete+recreate destroys the id/lineage the backend's temporal model
-  // preserves, so this is the only in-place remediation path on the page.
-  const [editingId, setEditingId] = useState<string | null>(null)
-  const [editDraft, setEditDraft] = useState('')
-  const [savingEditId, setSavingEditId] = useState<string | null>(null)
-  const [togglingVisId, setTogglingVisId] = useState<string | null>(null)
-
-  const startEdit = (m: Memory): void => {
-    setEditingId(m.id)
-    setEditDraft(m.content)
-  }
-
-  const cancelEdit = (): void => {
-    setEditingId(null)
-    setEditDraft('')
-  }
-
-  const saveEdit = async (id: string): Promise<void> => {
-    const text = editDraft.trim()
-    if (!text || savingEditId) return
-    setSavingEditId(id)
-    try {
-      await editMemory(id, text)
-      cancelEdit()
-    } catch (e) {
-      toast('Could not update memory', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setSavingEditId(null)
-    }
-  }
-
-  const toggleVisibility = async (m: Memory): Promise<void> => {
-    if (togglingVisId) return
-    setTogglingVisId(m.id)
-    try {
-      await setMemoryVisibility(m.id, m.visibility === 'public' ? 'private' : 'public')
-    } catch (e) {
-      toast('Could not change visibility', { tone: 'error', body: (e as Error).message })
-    } finally {
-      setTogglingVisId(null)
-    }
-  }
 
   const closeCompose = (): void => {
     setComposing(false)
@@ -123,6 +114,64 @@ export function Memories(): React.JSX.Element {
     }
   }
 
+  const onEdit = async (id: string, content: string): Promise<void> => {
+    try {
+      await editMemory(id, content)
+      // Reflect the new content in the open sheet without a refetch — otherwise
+      // the sheet keeps rendering the stale detailMemory prop and the edit looks
+      // like it reverted. Mirrors onToggleVisibility below.
+      setDetailMemory((cur) => (cur && cur.id === id ? { ...cur, content } : cur))
+    } catch (e) {
+      toast('Could not update memory', { tone: 'error', body: (e as Error).message })
+      throw e
+    }
+  }
+
+  const onToggleVisibility = async (m: Memory): Promise<void> => {
+    if (togglingVis) return
+    setTogglingVis(true)
+    try {
+      await setMemoryVisibility(m.id, m.visibility === 'public' ? 'private' : 'public')
+      // Reflect the flip in the open sheet without a refetch.
+      setDetailMemory((cur) =>
+        cur && cur.id === m.id
+          ? { ...cur, visibility: m.visibility === 'public' ? 'private' : 'public' }
+          : cur
+      )
+    } catch (e) {
+      toast('Could not change visibility', { tone: 'error', body: (e as Error).message })
+    } finally {
+      setTogglingVis(false)
+    }
+  }
+
+  // Commit a held delete to the server. Idempotent per id (see
+  // committedDeleteIds). Clears the pending slot if it still points at this
+  // memory. Failures revert inside deleteMemory + surface a toast, and release
+  // the id so the delete can be retried.
+  const commitDelete = async (m: Memory): Promise<void> => {
+    if (committedDeleteIds.current.has(m.id)) return
+    committedDeleteIds.current.add(m.id)
+    setPendingDelete((cur) => (cur?.id === m.id ? null : cur))
+    try {
+      await deleteMemory(m.id)
+    } catch (e) {
+      committedDeleteIds.current.delete(m.id)
+      toast('Could not delete memory', { tone: 'error', body: (e as Error).message })
+    }
+  }
+
+  const requestDelete = (m: Memory): void => {
+    setDetailMemory(null)
+    // Starting a new delete commits any already-pending one right away. Commit
+    // OUTSIDE the state updater — an updater must be pure, and StrictMode
+    // double-invokes it in dev, which would fire the delete twice.
+    if (pendingDelete && pendingDelete.id !== m.id) void commitDelete(pendingDelete)
+    setPendingDelete(m)
+  }
+
+  const undoDelete = (): void => setPendingDelete(null)
+
   const enterManage = async (): Promise<void> => {
     setManage(true)
     if (all === null) {
@@ -140,24 +189,72 @@ export function Memories(): React.JSX.Element {
   const exitManage = (): void => {
     setManage(false)
     setSelected(new Set())
-    setFilter('')
+    setManageFilter('')
   }
 
-  const source = manage ? (all ?? []) : memories
-  const q = filter.trim().toLowerCase()
-  const filtered = q ? source.filter((m) => m.content?.toLowerCase().includes(q)) : source
-  const rendered = filtered.slice(0, RENDER_CAP)
+  // Default-mode derived lists. Hide the memory whose delete is counting down so
+  // the undo window feels immediate.
+  const visibleBase = useMemo(
+    () => (pendingDelete ? memories.filter((m) => m.id !== pendingDelete.id) : memories),
+    [memories, pendingDelete]
+  )
+  // Category counts reflect the current search + layer (but not the category
+  // selection itself), so the popover shows how many memories each category
+  // would add.
+  const categoryCounts = useMemo(() => {
+    const afterSearchLayer = filterMemories(visibleBase, {
+      search,
+      categories: emptyCategorySet(),
+      layer,
+      thisDeviceOnly: false
+    })
+    const counts = Object.fromEntries(MEMORY_CATEGORIES.map((c) => [c, 0])) as Record<
+      MemoryCategory,
+      number
+    >
+    for (const m of afterSearchLayer) counts[categoryOf(m)]++
+    return counts
+  }, [visibleBase, search, layer])
 
-  const toggle = (id: string): void =>
+  const filtered = useMemo(
+    () => filterMemories(visibleBase, { search, categories, layer, thisDeviceOnly: false }),
+    [visibleBase, search, categories, layer]
+  )
+  const rendered = filtered.slice(0, RENDER_CAP)
+  const hasActiveFilters = search.trim().length > 0 || categories.size > 0 || layer !== 'default'
+
+  const clearFilters = (): void => {
+    setSearch('')
+    setCategories(emptyCategorySet())
+    setLayer('default')
+  }
+
+  const toggleCategory = (c: MemoryCategory): void =>
+    setCategories((s) => {
+      const n = new Set(s)
+      if (n.has(c)) n.delete(c)
+      else n.add(c)
+      return n
+    })
+
+  // Manage-mode derived list + selection.
+  const manageSource = all ?? []
+  const mq = manageFilter.trim().toLowerCase()
+  const manageFiltered = mq
+    ? manageSource.filter((m) => m.content?.toLowerCase().includes(mq))
+    : manageSource
+  const manageRendered = manageFiltered.slice(0, RENDER_CAP)
+
+  const toggleSel = (id: string): void =>
     setSelected((s) => {
       const n = new Set(s)
       if (n.has(id)) n.delete(id)
       else n.add(id)
       return n
     })
-  const selectAllFiltered = (): void => setSelected(new Set(filtered.map((m) => m.id)))
+  const selectAllFiltered = (): void => setSelected(new Set(manageFiltered.map((m) => m.id)))
   const selectJunk = (): void =>
-    setSelected(new Set(source.filter(isAppIndexMemory).map((m) => m.id)))
+    setSelected(new Set(manageSource.filter(isAppIndexMemory).map((m) => m.id)))
   const clearSel = (): void => setSelected(new Set())
 
   const deleteSelected = async (): Promise<void> => {
@@ -200,7 +297,7 @@ export function Memories(): React.JSX.Element {
   const headerCount = manage
     ? loadingAll
       ? 'Loading all…'
-      : `${filtered.length} shown${selected.size ? ` · ${selected.size} selected` : ''}`
+      : `${manageFiltered.length} shown${selected.size ? ` · ${selected.size} selected` : ''}`
     : loading
       ? 'Loading…'
       : `${memories.length} memor${memories.length === 1 ? 'y' : 'ies'}`
@@ -229,7 +326,7 @@ export function Memories(): React.JSX.Element {
               <button
                 onClick={() => setComposing((c) => !c)}
                 className="btn-primary px-3 py-2"
-                title="Create a memory"
+                title="Add a memory"
               >
                 <Plus className="h-4 w-4" />
                 New
@@ -239,11 +336,29 @@ export function Memories(): React.JSX.Element {
         }
       />
 
+      {/* Default-mode filter bar */}
+      {!manage && (
+        <div className="border-b border-white/5 px-6 py-3 lg:px-10">
+          <MemoryFilterBar
+            search={search}
+            onSearchChange={setSearch}
+            categories={categories}
+            onToggleCategory={toggleCategory}
+            onClearCategories={() => setCategories(emptyCategorySet())}
+            categoryCounts={categoryCounts}
+            layerExposed={canonicalLifecycleExposed}
+            layer={layer}
+            onLayerChange={setLayer}
+          />
+        </div>
+      )}
+
+      {/* Manage-mode toolbar */}
       {manage && (
         <div className="flex flex-wrap items-center gap-2 border-b border-white/5 px-6 py-3 lg:px-10">
           <input
-            value={filter}
-            onChange={(e) => setFilter(e.target.value)}
+            value={manageFilter}
+            onChange={(e) => setManageFilter(e.target.value)}
             placeholder="Filter by text (e.g. local projects include)…"
             className="input-field max-w-xs flex-1 py-1.5 text-sm"
           />
@@ -259,7 +374,7 @@ export function Memories(): React.JSX.Element {
             className="btn-ghost px-3 py-1.5 text-sm"
             disabled={deleting}
           >
-            Select all {q ? 'matching' : ''} ({filtered.length})
+            Select all {mq ? 'matching' : ''} ({manageFiltered.length})
           </button>
           <button
             onClick={clearSel}
@@ -400,6 +515,7 @@ export function Memories(): React.JSX.Element {
           </div>
         )}
 
+        {/* Empty (no memories at all) */}
         {!loading && !error && memories.length === 0 && !composing && (
           <EmptyState
             icon={Brain}
@@ -408,140 +524,105 @@ export function Memories(): React.JSX.Element {
           />
         )}
 
-        <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
-          {rendered.map((m) => {
-            const isSel = selected.has(m.id)
-            const isEditing = editingId === m.id
-            return (
-              <li
-                key={m.id}
-                onClick={manage ? () => toggle(m.id) : undefined}
-                className={`surface-card-interactive group p-5 ${manage ? 'cursor-pointer' : ''} ${
-                  isSel ? 'ring-2 ring-white/40' : ''
-                }`}
-              >
-                <div className="flex items-start gap-3">
-                  {manage && (
+        {/* No results (filtered empty, default mode) */}
+        {!manage && !loading && memories.length > 0 && filtered.length === 0 && (
+          <div className="flex flex-col items-center justify-center pt-12 text-center text-white/55">
+            <Search className="mb-3 h-9 w-9 opacity-40" />
+            <p className="text-sm">No results</p>
+            <p className="mt-1 text-xs text-white/40">Try a different search or filter.</p>
+            {hasActiveFilters && (
+              <button onClick={clearFilters} className="btn-ghost mt-4 px-3 py-1.5 text-sm">
+                Clear filters
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Default-mode card grid */}
+        {!manage && (
+          <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
+            {rendered.map((m) => (
+              <MemoryCard key={m.id} memory={m} onOpen={setDetailMemory} />
+            ))}
+          </ul>
+        )}
+        {!manage && filtered.length > RENDER_CAP && (
+          <p className="mx-auto mt-4 max-w-4xl text-center text-sm text-text-tertiary">
+            Showing first {RENDER_CAP} of {filtered.length}.
+          </p>
+        )}
+
+        {/* Manage-mode selectable list */}
+        {manage && (
+          <ul className="mx-auto grid max-w-4xl grid-cols-1 gap-3 lg:grid-cols-2">
+            {manageRendered.map((m) => {
+              const isSel = selected.has(m.id)
+              return (
+                <li
+                  key={m.id}
+                  onClick={() => toggleSel(m.id)}
+                  className={`surface-card-interactive group cursor-pointer p-5 ${
+                    isSel ? 'ring-2 ring-white/40' : ''
+                  }`}
+                >
+                  <div className="flex items-start gap-3">
                     <input
                       type="checkbox"
                       checked={isSel}
-                      onChange={() => toggle(m.id)}
+                      onChange={() => toggleSel(m.id)}
                       onClick={(e) => e.stopPropagation()}
                       className="mt-1.5 h-4 w-4 shrink-0"
                     />
-                  )}
-                  <div className="min-w-0 flex-1">
-                    {isEditing ? (
-                      <div className="space-y-2">
-                        <textarea
-                          autoFocus
-                          value={editDraft}
-                          onChange={(e) => setEditDraft(e.target.value)}
-                          onKeyDown={(e) => {
-                            if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') {
-                              e.preventDefault()
-                              void saveEdit(m.id)
-                            } else if (e.key === 'Escape') {
-                              cancelEdit()
-                            }
-                          }}
-                          rows={3}
-                          className="input-field resize-none text-sm"
-                        />
-                        <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={cancelEdit}
-                            disabled={savingEditId === m.id}
-                            className="btn-ghost px-3 py-1.5 text-sm"
-                          >
-                            Cancel
-                          </button>
-                          <button
-                            onClick={() => saveEdit(m.id)}
-                            disabled={savingEditId === m.id || !editDraft.trim()}
-                            className="btn-primary px-3 py-1.5 text-sm disabled:opacity-40"
-                          >
-                            {savingEditId === m.id ? (
-                              <Loader2 className="h-4 w-4 animate-spin" />
-                            ) : (
-                              'Save'
-                            )}
-                          </button>
-                        </div>
+                    <div className="min-w-0 flex-1">
+                      <p className="line-clamp-3 text-sm leading-relaxed text-text-primary">
+                        {m.content}
+                      </p>
+                      <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
+                        <time>{new Date(m.created_at).toLocaleString()}</time>
+                        {m.category && (
+                          <span className="badge text-text-tertiary">{m.category}</span>
+                        )}
                       </div>
-                    ) : (
-                      <>
-                        <div className="font-display text-lg font-bold leading-snug text-text-primary">
-                          {m.headline || m.content.slice(0, 80)}
-                        </div>
-                        {m.headline && (
-                          <p className="mt-2.5 line-clamp-3 text-sm leading-relaxed text-text-tertiary">
-                            {m.content}
-                          </p>
-                        )}
-                        <div className="mt-4 flex flex-wrap items-center gap-2 text-xs text-text-quaternary">
-                          <time>{new Date(m.created_at).toLocaleString()}</time>
-                          {m.category && (
-                            <span className="badge text-text-tertiary">{m.category}</span>
-                          )}
-                          {m.tags && m.tags.length > 0 && (
-                            <span className="truncate text-text-quaternary">
-                              {m.tags.join(' · ')}
-                            </span>
-                          )}
-                        </div>
-                      </>
-                    )}
-                  </div>
-                  {!manage && !isEditing && (
-                    <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-all group-hover:opacity-100">
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          void toggleVisibility(m)
-                        }}
-                        disabled={togglingVisId === m.id}
-                        className="rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70 disabled:opacity-50"
-                        title={
-                          m.visibility === 'public'
-                            ? 'Public — visible to your apps/personas. Click to make private.'
-                            : 'Private. Click to make public.'
-                        }
-                        aria-label={m.visibility === 'public' ? 'Make private' : 'Make public'}
-                      >
-                        {togglingVisId === m.id ? (
-                          <Loader2 className="h-3.5 w-3.5 animate-spin" />
-                        ) : m.visibility === 'public' ? (
-                          <Globe className="h-3.5 w-3.5" />
-                        ) : (
-                          <Lock className="h-3.5 w-3.5" />
-                        )}
-                      </button>
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation()
-                          startEdit(m)
-                        }}
-                        className="rounded-md p-1.5 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
-                        title="Edit memory"
-                        aria-label="Edit memory"
-                      >
-                        <Pencil className="h-3.5 w-3.5" />
-                      </button>
                     </div>
-                  )}
-                </div>
-              </li>
-            )
-          })}
-        </ul>
-        {manage && filtered.length > RENDER_CAP && (
+                  </div>
+                </li>
+              )
+            })}
+          </ul>
+        )}
+        {manage && manageFiltered.length > RENDER_CAP && (
           <p className="mx-auto mt-4 max-w-4xl text-center text-sm text-text-tertiary">
-            Showing first {RENDER_CAP} of {filtered.length}. Selection and delete still apply to all{' '}
-            {q ? 'matching' : ''} {filtered.length}.
+            Showing first {RENDER_CAP} of {manageFiltered.length}. Selection and delete still apply
+            to all {mq ? 'matching' : ''} {manageFiltered.length}.
           </p>
         )}
       </div>
+
+      {/* Detail sheet */}
+      {detailMemory && (
+        <MemoryDetailSheet
+          key={detailMemory.id}
+          memory={detailMemory}
+          onClose={() => setDetailMemory(null)}
+          onEdit={onEdit}
+          onToggleVisibility={onToggleVisibility}
+          onDelete={requestDelete}
+          onOpenConversation={(id) => {
+            setDetailMemory(null)
+            navigate(`/conversations/${id}`)
+          }}
+          togglingVisibility={togglingVis}
+        />
+      )}
+
+      {/* Undo-delete countdown */}
+      {pendingDelete && (
+        <UndoDeleteToast
+          key={pendingDelete.id}
+          onUndo={undoDelete}
+          onCommit={() => void commitDelete(pendingDelete)}
+        />
+      )}
     </div>
   )
 }

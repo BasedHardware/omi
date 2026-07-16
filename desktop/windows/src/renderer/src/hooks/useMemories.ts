@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
+import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
 
 export type Memory = {
   id: string
@@ -12,13 +13,35 @@ export type Memory = {
   created_at: string
   updated_at: string
   conversation_id?: string | null
+  // Canonical product lifecycle layer (short_term/long_term/…), derived from
+  // memory_tier on the backend at serialization time. Null for legacy/untiered
+  // memories — the tier badge renders ONLY when this is set (mirrors Mac's
+  // `tierIsExplicit` rule), and the layer filter is itself hidden unless the
+  // server advertises tier exposure (see canonicalLifecycleExposed).
+  layer?: string | null
+  memory_tier?: string | null
+  // Capture provenance — shown in the card footer / detail sheet when present.
+  primary_capture_device?: string | null
+  capture_device_ids?: string[]
+  manually_added?: boolean
+  capture_confidence?: number | null
+  app_id?: string | null
 }
 
 const cache = {
   list: null as Memory[] | null,
   error: null as string | null,
-  loaded: false
+  loaded: false,
+  // Whether the server exposes canonical memory tiering for this account
+  // (X-Omi-Memory-Canonical-Lifecycle-Exposed). Prod runs MEMORY_MODE=off, so
+  // this stays false and the tier/device filters never render. Set from the
+  // fetch response immediately BEFORE publish(), so the list re-render that
+  // publish triggers reads the fresh value.
+  canonicalLifecycleExposed: false
 }
+
+// Axios lowercases response header keys.
+const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
 
 // Every mounted useMemories subscribes here so a refresh/create in one place
 // (e.g. the Settings importer) updates the Memories page too — without this the
@@ -30,31 +53,28 @@ function publish(list: Memory[]): void {
   subscribers.forEach((fn) => fn(list))
 }
 
-function extractList(data: unknown): Memory[] {
-  if (Array.isArray(data)) return data as Memory[]
-  return ((data as { memories?: Memory[] })?.memories ?? []) as Memory[]
-}
-
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
 // 'omi-app-index'); `category` is sent best-effort — the server may ignore or
 // reassign it, so UI coloring must not depend on it.
 export type CreateMemoryExtra = { category?: string; tags?: string[] }
 
-// The server ignores this `limit` at offset 0: both the legacy and canonical
-// read paths force limit to 5000 whenever offset is 0 (backend/routers/
-// memories.py), so this single call already returns up to 5000 memories —
-// comfortably past the KG's ~500-memory build budget and enough for the
-// Memories page to show more than one page's worth. The `limit: 500` value is
-// vestigial documentation of intent, not an effective cap; Memories.tsx bounds
-// what it actually renders via its own RENDER_CAP.
+// Fetch EVERY memory for the page, not just the first server page. The backend
+// forces limit=5000 whenever offset is 0, so the old single
+// `GET /v3/memories?limit=500&offset=0` call silently capped the page at the
+// server's first ~5000 rows and never requested a second page — an account with
+// more than 5000 memories would never see the tail (while bulk export/purge,
+// which already paged via fetchAllMemories, reached all of them). Reuse the one
+// shared pager so display and bulk paths can't drift, and read the
+// canonical-lifecycle capability header off the first response to gate the
+// tier/device filters. Then sort newest-first: the server doesn't return
+// memories in created_at order, so freshly created/imported ones would
+// otherwise land mid-list and look "missing".
 async function fetchMemories(): Promise<Memory[]> {
-  const r = await omiApi.get('/v3/memories', { params: { limit: 500, offset: 0 } })
-  // The server doesn't return memories newest-first, so freshly created/imported
-  // ones land mid-list and look "missing". Sort by created_at desc here so new
-  // memories surface at the top of the Memories page right after a write.
-  return extractList(r.data).sort(
-    (a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime()
-  )
+  const list = await fetchAllMemoriesPaged((r) => {
+    const header = r.headers?.[CANONICAL_LIFECYCLE_HEADER]
+    if (typeof header === 'string') cache.canonicalLifecycleExposed = header === 'true'
+  })
+  return list.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
 }
 
 // Shared by editMemory and setMemoryVisibility: both PATCH a single field and
@@ -84,9 +104,16 @@ export function useMemories(): {
   memories: Memory[]
   loading: boolean
   error: string | null
+  // True only when the server advertises canonical memory tiering for this
+  // account. Gates the tier/device filters so they never render against a
+  // backend that would return nothing (prod runs MEMORY_MODE=off). Read at
+  // render time — every change to it lands alongside a list publish, which
+  // forces the re-render that surfaces the new value.
+  canonicalLifecycleExposed: boolean
   createMemory: (content: string, extra?: CreateMemoryExtra) => Promise<void>
   editMemory: (id: string, content: string) => Promise<void>
   setMemoryVisibility: (id: string, visibility: 'public' | 'private') => Promise<void>
+  deleteMemory: (id: string) => Promise<void>
   refresh: () => Promise<void>
 } {
   const [memories, setMemories] = useState<Memory[]>(cache.list ?? [])
@@ -159,11 +186,37 @@ export function useMemories(): {
     }))
   }
 
+  // Delete a single memory, optimistically dropping it from the cache and
+  // reverting on failure. The Memories page owns the undo window (it keeps the
+  // row hidden locally and only calls this once the countdown elapses), so by
+  // the time this fires the delete is committed — there's no server call to
+  // walk back, only the local list to restore if the request errors.
+  const deleteMemory = async (id: string): Promise<void> => {
+    const prev = cache.list ?? []
+    publish(prev.filter((m) => m.id !== id))
+    try {
+      await omiApi.delete(`/v3/memories/${id}`)
+    } catch (e) {
+      publish(prev)
+      throw e
+    }
+  }
+
   // Re-pull the server list and broadcast to all mounts. Used after a bulk
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
     publish(await fetchMemories())
   }
 
-  return { memories, loading, error, createMemory, editMemory, setMemoryVisibility, refresh }
+  return {
+    memories,
+    loading,
+    error,
+    canonicalLifecycleExposed: cache.canonicalLifecycleExposed,
+    createMemory,
+    editMemory,
+    setMemoryVisibility,
+    deleteMemory,
+    refresh
+  }
 }

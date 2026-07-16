@@ -10,17 +10,18 @@ import { renderHook, act, cleanup } from '@testing-library/react'
 const omiApiGet = vi.fn()
 const omiApiPost = vi.fn()
 const omiApiPatch = vi.fn()
+const omiApiDelete = vi.fn()
 
 vi.mock('../lib/apiClient', () => ({
   omiApi: {
     get: (...args: unknown[]) => omiApiGet(...args),
     post: (...args: unknown[]) => omiApiPost(...args),
     patch: (...args: unknown[]) => omiApiPatch(...args),
-    delete: vi.fn()
+    delete: (...args: unknown[]) => omiApiDelete(...args)
   }
 }))
 
-import { useMemories } from './useMemories'
+import { useMemories, type Memory } from './useMemories'
 
 const memory = (id: string, content: string, visibility?: string): unknown => ({
   id,
@@ -35,7 +36,32 @@ beforeEach(() => {
   omiApiGet.mockReset().mockResolvedValue({ data: [memory('m1', 'Original content', 'private')] })
   omiApiPost.mockReset()
   omiApiPatch.mockReset().mockResolvedValue({ data: { status: 'ok' } })
+  omiApiDelete.mockReset().mockResolvedValue({ data: { status: 'ok' } })
 })
+
+// Fakes the REAL GET /v3/memories pagination contract: offset===0 FORCES the
+// server to return min(total, 5000) items regardless of the requested limit;
+// only a non-zero offset honors the caller's limit. `header` rides on the
+// response so the hook can read the canonical-lifecycle capability flag.
+function fakeBackend(total: number, header?: string) {
+  return async (
+    _path: string,
+    config: { params: { limit: number; offset: number } }
+  ): Promise<{ data: Partial<Memory>[]; headers?: Record<string, string> }> => {
+    const { limit, offset } = config.params
+    const effectiveLimit = offset === 0 ? Math.min(total, 5000) : limit
+    const end = Math.min(offset + effectiveLimit, total)
+    const data = (
+      offset >= total
+        ? []
+        : Array.from({ length: end - offset }, (_, i) => memory(`m${offset + i}`, `c${offset + i}`))
+    ) as Partial<Memory>[]
+    return {
+      data,
+      ...(header ? { headers: { 'x-omi-memory-canonical-lifecycle-exposed': header } } : {})
+    }
+  }
+}
 
 afterEach(cleanup)
 
@@ -94,5 +120,70 @@ describe('useMemories — edit/visibility query-param contract (C9)', () => {
     ).rejects.toThrow('network down')
 
     expect(result.current.memories.find((m) => m.id === 'm1')?.content).toBe('Original content')
+  })
+})
+
+describe('useMemories — pagination, capability header, delete', () => {
+  it('pages past the forced 5000-item first page instead of stopping at it', async () => {
+    // Regression: fetchMemories used to do a single GET limit=500&offset=0.
+    // The backend forces limit=5000 at offset 0, so that one call returned the
+    // first ~5000 rows and NEVER requested a second page — an account with more
+    // than 5000 memories silently lost the tail on the Memories page. It must
+    // now page through the whole set.
+    omiApiGet.mockImplementation(fakeBackend(5200))
+    const { result } = renderHook(() => useMemories())
+
+    await act(async () => {
+      await result.current.refresh()
+    })
+
+    expect(result.current.memories).toHaveLength(5200)
+    expect(result.current.memories.some((m) => m.id === 'm5199')).toBe(true)
+    // Proves a second page was requested at the real resume offset (5000), not
+    // a naive offset=500 that would sit inside the already-collected first page.
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 5000, offset: 5000 }
+    })
+  })
+
+  it('sets canonicalLifecycleExposed from the response header', async () => {
+    omiApiGet.mockImplementation(fakeBackend(2, 'true'))
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(true)
+
+    // A subsequent fetch that reports the flag off must flip it back — the tier
+    // filters must not linger visible against a backend that stopped exposing them.
+    omiApiGet.mockImplementation(fakeBackend(2, 'false'))
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.canonicalLifecycleExposed).toBe(false)
+  })
+
+  it('deleteMemory drops the row optimistically and reverts on failure', async () => {
+    omiApiGet.mockImplementation(fakeBackend(3))
+    const { result } = renderHook(() => useMemories())
+    await act(async () => {
+      await result.current.refresh()
+    })
+    expect(result.current.memories).toHaveLength(3)
+
+    await act(async () => {
+      await result.current.deleteMemory('m1')
+    })
+    expect(omiApiDelete).toHaveBeenCalledWith('/v3/memories/m1')
+    expect(result.current.memories.some((m) => m.id === 'm1')).toBe(false)
+
+    omiApiDelete.mockRejectedValueOnce(new Error('offline'))
+    await expect(
+      act(async () => {
+        await result.current.deleteMemory('m0')
+      })
+    ).rejects.toThrow('offline')
+    // The failed delete is walked back — the row is still present.
+    expect(result.current.memories.some((m) => m.id === 'm0')).toBe(true)
   })
 })

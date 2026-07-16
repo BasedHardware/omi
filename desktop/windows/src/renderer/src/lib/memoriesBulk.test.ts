@@ -52,9 +52,32 @@ describe('fetchAllMemories', () => {
     expect(all).toHaveLength(5200)
     expect(all.some((m) => m.id === 'm5199')).toBe(true)
     // First call gets the forced 5000-item page; the follow-up call correctly
-    // resumes at offset=5000 (not offset=200).
-    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', { params: { limit: 200, offset: 0 } })
-    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', { params: { limit: 200, offset: 5000 } })
+    // resumes at offset=5000 (not offset=200). Both request the server's max
+    // page size (5000) so large accounts page in big strides.
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', { params: { limit: 5000, offset: 0 } })
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 5000, offset: 5000 }
+    })
+  })
+
+  it('pages a >10000-memory account in 5000-row strides, not small hops', async () => {
+    // FIX 3: subsequent pages used to request limit=200, so the tail of a large
+    // account took dozens of round-trips. Requesting the server max (5000) walks
+    // a 12000-memory account in 4 requests: offset 0 (forced 5000) → 5000 → 10000
+    // → 12000 (empty).
+    omiApiGet.mockImplementation(fakeBackend(12000))
+
+    const all = await fetchAllMemories()
+
+    expect(all).toHaveLength(12000)
+    expect(all.some((m) => m.id === 'm11999')).toBe(true)
+    expect(omiApiGet.mock.calls.length).toBeLessThan(6)
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 5000, offset: 5000 }
+    })
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 5000, offset: 10000 }
+    })
   })
 
   it('dedupes by id and stops once a full page adds nothing new (server ignoring offset)', async () => {
