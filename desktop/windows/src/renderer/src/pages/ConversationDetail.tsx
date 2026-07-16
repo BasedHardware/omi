@@ -10,6 +10,7 @@ import {
   PanelRightClose,
   PanelRightOpen,
   Pencil,
+  RefreshCw,
   Sparkles,
   Trash2
 } from 'lucide-react'
@@ -32,6 +33,7 @@ import { NameSpeakerModal } from '../components/conversations/NameSpeakerModal'
 import { TranscriptDrawer } from '../components/conversations/TranscriptDrawer'
 import { fetchPeople } from '../lib/conversations/people'
 import { fetchFolders } from '../lib/conversations/folders'
+import { friendlyConversationError } from '../lib/conversations/detailErrors'
 import {
   getConversationShareLink,
   moveConversationToFolder,
@@ -214,6 +216,8 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   const [conv, setConv] = useState<ServerConversation | null>(null)
   const [local, setLocal] = useState<LocalDisplay | null>(null)
   const [error, setError] = useState<string | null>(null)
+  // Bumping this re-runs the initial-load effect (Try again after a failed load).
+  const [reloadNonce, setReloadNonce] = useState(0)
   const [people, setPeople] = useState<Person[]>([])
   const [folders, setFolders] = useState<ConversationFolder[]>([])
   const [apps, setApps] = useState<AppEntry[]>([])
@@ -286,7 +290,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
     return () => {
       cancelled = true
     }
-  }, [id, isLocal, isPending, fetchConversation])
+  }, [id, isLocal, isPending, fetchConversation, reloadNonce])
 
   // Poll while Omi enriches: 15 attempts, 2s apart, stopping the moment the
   // status leaves `processing`. A self-scheduling timeout (not setInterval) so a
@@ -506,7 +510,21 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
   }
 
   if (error) {
-    return shell(<div className="px-10 py-8 text-sm text-text-tertiary">{error}</div>)
+    return shell(
+      <div className="flex flex-1 flex-col items-center justify-center gap-4 px-10 py-8 text-center">
+        <p className="max-w-sm text-sm text-text-tertiary">{friendlyConversationError(error)}</p>
+        <button
+          onClick={() => {
+            setError(null)
+            setReloadNonce((n) => n + 1)
+          }}
+          className="btn-ghost px-3 py-1.5 text-xs"
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Try again
+        </button>
+      </div>
+    )
   }
 
   if (local) {

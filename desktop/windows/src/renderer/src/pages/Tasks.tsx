@@ -548,9 +548,27 @@ export function Tasks(): React.JSX.Element {
           </ul>
         )}
 
-        {error && <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
+        {error && (
+          <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">
+            <p className="text-white/80">Couldn’t load your tasks.</p>
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setError(null)
+                  setLoading(true)
+                  void readTasks()
+                }}
+                className="btn-ghost px-3 py-1.5 text-xs"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Try again
+              </button>
+              <span className="text-xs text-white/35">{error}</span>
+            </div>
+          </div>
+        )}
 
-        {!loading && items.length === 0 && !composing && (
+        {!loading && !error && items.length === 0 && !composing && (
           <EmptyState
             icon={ListChecks}
             title="No tasks yet"
