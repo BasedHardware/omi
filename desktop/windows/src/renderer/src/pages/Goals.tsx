@@ -654,7 +654,10 @@ export function Goals(): React.JSX.Element {
           </ul>
         )}
 
-        {error && (
+        {/* Only alarm when there's genuinely nothing to show. A failed revalidation
+            over cached goals (offline cold start) stays silent — the last-known
+            list is on screen and the next successful fetch updates it. */}
+        {error && goals.length === 0 && (
           <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">
             <p className="text-white/80">Couldn’t load your goals.</p>
             <div className="mt-2 flex items-center gap-3">
