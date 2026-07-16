@@ -35,6 +35,9 @@ let package = Package(
     .target(
       name: "OmiSupport",
       path: "Sources/OmiSupport",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .target(
@@ -96,6 +99,16 @@ let package = Package(
       exclude: [
         "fixtures",
         "SemanticFeatureSentinels",
+        "OmiSupportTests",
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+    ),
+    .testTarget(
+      name: "OmiSupportTests",
+      dependencies: ["OmiSupport"],
+      path: "Tests/OmiSupportTests",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),

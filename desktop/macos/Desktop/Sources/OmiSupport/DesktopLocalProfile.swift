@@ -87,14 +87,18 @@ package enum DesktopLocalProfile {
   package static var selectedDisplayName: String? { nonEmpty(value("OMI_LOCAL_AUTH_DISPLAY_NAME")) }
 
   package static func applicationSupportURL() -> URL {
-    let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    guard let base = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first else {
+      fatalError("Application Support directory not available on this system")
+    }
     return storageIdentity.applicationSupportPathComponents.reduce(base) {
       $0.appendingPathComponent($1, isDirectory: true)
     }
   }
 
   package static func cachesURL() -> URL {
-    let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first!
+    guard let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first else {
+      fatalError("Caches directory not available on this system")
+    }
     return storageIdentity.applicationSupportPathComponents.reduce(base) {
       $0.appendingPathComponent($1, isDirectory: true)
     }
