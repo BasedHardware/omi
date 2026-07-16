@@ -278,7 +278,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
                                               itemBuilder: (context, chatIndex) {
                                                 if (!_hasInitialScrolled && provider.messages.isNotEmpty) {
                                                   _hasInitialScrolled = true;
-                                                  _schedulePostFrameModeAwareScroll();
+                                                  _scheduleInitialScrollToBottom();
                                                 }
 
                                                 final message = provider.messages[chatIndex];
@@ -990,7 +990,7 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
 
     if (addedMessages && !_hasInitialScrolled) {
       _hasInitialScrolled = true;
-      _schedulePostFrameModeAwareScroll();
+      _scheduleInitialScrollToBottom();
       return;
     }
 
@@ -1090,10 +1090,20 @@ class ChatPageState extends State<ChatPage> with AutomaticKeepAliveClientMixin {
     _scheduleModeAwareScroll(delayMs: delayMs, animated: animated, force: true);
   }
 
-  void _schedulePostFrameModeAwareScroll({bool animated = false, bool force = false}) {
+  // On the first frame maxScrollExtent is only an estimate for a lazy list of
+  // variable-height messages, so a single jump lands mid-list. Keep jumping
+  // across frames until the extent settles (or the reader scrolls away).
+  void _scheduleInitialScrollToBottom({int attemptsLeft = 12}) {
     SchedulerBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      _scheduleModeAwareScroll(delayMs: 0, animated: animated, force: force);
+      if (!mounted || !scrollController.hasClients) return;
+      if (_chatScrollMode != _ChatScrollMode.followingBottom) return;
+      final position = scrollController.position;
+      final target = position.maxScrollExtent;
+      if ((target - position.pixels).abs() <= 1 || attemptsLeft <= 0) return;
+      _isProgrammaticScroll = true;
+      scrollController.jumpTo(target);
+      _isProgrammaticScroll = false;
+      _scheduleInitialScrollToBottom(attemptsLeft: attemptsLeft - 1);
     });
   }
 
