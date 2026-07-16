@@ -184,6 +184,30 @@
       ]
     },
     {
+      "id": "firestore_schema_readiness",
+      "risk": "high",
+      "sources": [
+        "backend/database/firestore_index_registry.py",
+        "backend/scripts/firestore_workflow_policy.py",
+        "backend/scripts/reconcile_firestore_indexes.py",
+        "config/deployment-setting-classification.json",
+        "firestore.indexes.json",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_auto_dev.yml"
+      ],
+      "tests": [
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_verify_dev_backend_deployment.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
+        "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
+        "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
+      ]
+    },
+    {
       "id": "sync_cloud_tasks",
       "risk": "high",
       "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
@@ -236,16 +260,30 @@
     {
       "id": "account_deletion_wipe",
       "risk": "high",
-      "sources": ["backend/services/users/account_deletion.py", "backend/routers/users.py"],
+      "sources": [
+        "backend/database/users.py",
+        "backend/services/users/account_deletion.py",
+        "backend/routers/users.py",
+        "backend/utils/cloud_tasks.py",
+        "backend/main.py",
+        "backend/deploy/runtime_env.yaml",
+        "backend/scripts/validate-backend-runtime-env.py",
+        ".github/workflows/gcp_backend.yml"
+      ],
       "tests": [
         "tests/services/users/test_account_deletion.py",
+        "tests/routers/test_users.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_claim_deletion_wipe_txn.py",
         "tests/unit/test_delete_account_purge_storage.py"
       ],
       "checks": [],
       "invariants": [
         "irreversible auth deletion has a durable recovery marker",
-        "required derived-data purge failures cannot be marked completed"
+        "required derived-data purge failures cannot be marked completed",
+        "production deletion requests can only dispatch through a complete Cloud Tasks configuration",
+        "an account-deletion task identifies exactly one persisted wipe job and never exposes a user ID"
       ]
     },
     {
@@ -419,6 +457,26 @@
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
         "pusher heartbeat prevents idle connection drops"
+      ]
+    },
+    {
+      "id": "desktop_backend_realtime_provider_proof",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_auto_dev.yml",
+        "backend/scripts/firebase_release_probe_token.py",
+        "scripts/voice-provider-probe.sh"
+      ],
+      "tests": [
+        "tests/unit/test_firebase_release_probe_token.py",
+        "tests/unit/test_voice_provider_probe.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every deployed development desktop backend proves the managed OpenAI and Gemini mint-to-response paths",
+        "the Firebase ID token audience and issuer match the deployed backend's explicit Firebase auth project",
+        "the bypass is explicit in the workflow log and is limited to an operator-declared upstream outage",
+        "probe credentials and provider responses never appear in workflow output"
       ]
     },
     {

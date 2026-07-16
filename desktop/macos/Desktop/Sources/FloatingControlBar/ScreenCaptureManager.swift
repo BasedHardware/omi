@@ -2,14 +2,15 @@ import AppKit
 import CWebP
 
 class ScreenCaptureManager {
-    /// Returns a CGImage for the screen under the mouse cursor.
-    static func captureScreenImage() -> CGImage? {
+    /// Returns a CGImage for the requested display, or the display under the mouse cursor
+    /// for legacy callers that do not have an explicit capture target.
+    static func captureScreenImage(displayID requestedDisplayID: CGDirectDisplayID? = nil) -> CGImage? {
         guard CGPreflightScreenCaptureAccess() else {
             log("ScreenCaptureManager: Screen recording permission not granted, skipping capture")
             return nil
         }
 
-        let displayID = displayIDUnderMouse()
+        let displayID = requestedDisplayID ?? displayIDUnderMouse()
         guard let image = CGDisplayCreateImage(displayID) else {
             log("ScreenCaptureManager: Could not capture screen (display \(displayID))")
             return nil
@@ -21,14 +22,22 @@ class ScreenCaptureManager {
     /// Returns JPEG data for the screen under the mouse cursor. Gemini Live's realtime
     /// video channel reads JPEG/PNG frames; a WebP frame is delivered but not decoded
     /// (the model then answers blind), so the realtime-hub vision path uses this.
-    static func captureScreenJPEG(quality: CGFloat = 0.7) -> Data? {
-        guard let image = captureScreenImage() else { return nil }
+    static func captureScreenJPEG(
+        displayID: CGDirectDisplayID? = nil,
+        quality: CGFloat = 0.7
+    ) -> Data? {
+        guard let image = captureScreenImage(displayID: displayID) else { return nil }
+        return jpegData(from: image, quality: quality)
+    }
+
+    /// Encodes pixels that were already captured at the PTT boundary. Keeping this separate
+    /// prevents a later tool call from silently taking a second, pointer-selected screenshot.
+    static func jpegData(from image: CGImage, quality: CGFloat = 0.7) -> Data? {
         let rep = NSBitmapImageRep(cgImage: image)
         guard let data = rep.representation(using: .jpeg, properties: [.compressionFactor: quality]) else {
             log("ScreenCaptureManager: JPEG encoding failed")
             return nil
         }
-        log("ScreenCaptureManager: Screenshot captured \(image.width)x\(image.height), JPEG \(data.count / 1024) KB")
         return data
     }
 

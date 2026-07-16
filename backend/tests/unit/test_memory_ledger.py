@@ -21,6 +21,7 @@ import pytest
 from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
 from tests.unit.fake_firestore import FakeFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -126,7 +127,11 @@ class _LedgerTransaction:
 
 
 def _ledger_state_write(transaction):
-    return next(payload for path, payload in transaction.sets if path.endswith("/memory_state/head"))
+    return next(
+        payload
+        for path, payload in transaction.sets
+        if (path.endswith("/memory_state/head") if isinstance(path, str) else path[-2:] == ("memory_state", "head"))
+    )
 
 
 def test_fold_commits_replays_head_and_valid_time():
@@ -355,6 +360,76 @@ def test_ledger_append_repairs_clobbered_trusted_state_head_from_canonical_apply
     )
     assert trusted.read_error_reason is None
     assert trusted.account_generation == 7
+
+
+def _clobbered_state_docs(uid):
+    """State head lacks trusted canonical fields, so the write must fall back to
+    reading memory_state/apply_control — the read that regressed to happen after
+    the commit/projection writes (issue #9780)."""
+    return {
+        ('users', uid, 'memory_state', 'head'): {
+            "current_head_commit_id": "legacy-head",
+            "projection_version": 1,
+        },
+        ('users', uid, 'memory_state', 'apply_control'): {
+            "uid": uid,
+            "account_generation": 7,
+            "head_commit_id": "canonical-head",
+            "commit_sequence": 11,
+        },
+    }
+
+
+def test_ledger_append_reads_apply_control_before_any_write():
+    """Regression for #9780: the apply_control fallback read must precede writes.
+
+    The strict transaction fake raises ReadAfterWriteError if a get() lands after
+    a set(), reproducing Firestore's ordering contract that the pre-fix code and
+    the lenient fake did not enforce.
+    """
+    uid = "u1"
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
+
+    result = memory_ledger._append_commit_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))],
+        lambda _transaction: None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        None,
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
+
+
+def test_ledger_builder_append_reads_apply_control_before_any_write():
+    """Regression for #9780 on the builder append path."""
+    uid = "u1"
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
+
+    result = memory_ledger._append_commit_with_builder_transaction(
+        transaction,
+        database,
+        uid,
+        "legacy-head",
+        lambda _transaction: {"mutations": [memory_ledger.add_fact(_fact("m1", "Lives in NYC"))]},
+        None,
+        datetime(2026, 7, 14, tzinfo=timezone.utc),
+        False,
+    )
+
+    state_head = _ledger_state_write(transaction)
+    assert state_head["current_head_commit_id"] == result["commit"]["commit_id"]
+    assert state_head["head_commit_id"] == "canonical-head"
+    assert state_head["commit_sequence"] == 11
 
 
 def test_ledger_builder_append_preserves_existing_trusted_state_head_without_control_fallback():

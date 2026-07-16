@@ -99,7 +99,94 @@ jobs:
             --cloud-run-service backend-sync-backfill \
             --cloud-run-service backend-integration || true
 
+  firestore_readiness:
+    if: ${{ github.event.inputs.mode == 'deploy' }}
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      contents: 'read'
+    runs-on: ubuntu-latest-m
+    outputs:
+      candidate_sha: ${{ steps.approved_source.outputs.candidate_sha }}
+    steps:
+      - name: Validate Firestore readiness inputs
+        env:
+          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
+          DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
+        run: |
+          if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
+            echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
+            exit 1
+          fi
+          git check-ref-format "refs/heads/${DEPLOY_BRANCH}"
+
+      - name: Checkout approved Firestore control plane
+        uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Bind candidate to approved Firestore source
+        id: approved_source
+        env:
+          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
+        run: |
+          approved_sha="$(git rev-parse HEAD)"
+          git fetch --no-tags origin \
+            "refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate"
+          candidate_sha="$(git rev-parse refs/remotes/origin/firestore-candidate)"
+          if ! git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json; then
+            echo "ERROR: branch Firestore schema differs from main; merge and approve it before deployment."
+            exit 1
+          fi
+          printf 'approved_sha=%s\n' "$approved_sha" >> "$GITHUB_OUTPUT"
+          printf 'candidate_sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
+
+      - name: Google Auth for read-only Firestore inventory
+        uses: 'google-github-actions/auth@v2'
+        with:
+          credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v2
+
+      - name: Verify serving Firestore indexes
+        id: firestore_readiness
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --check-only \
+            --proposal-output "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Validate blocked Firestore schema proposal
+        id: validate_firestore_proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+        run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \
+            --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
+            --validate-proposal "$FIRESTORE_PROPOSAL_PATH" \
+            --source-commit "$FIRESTORE_SOURCE_COMMIT" \
+            --proposal-ttl-seconds 3600
+
+      - name: Preserve blocked Firestore schema proposal
+        if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' && steps.validate_firestore_proposal.outcome == 'success' }}
+        uses: actions/upload-artifact@v4
+        env:
+          FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
+        with:
+          name: firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ env.FIRESTORE_PROPOSAL_PATH }}
+          if-no-files-found: error
+          retention-days: 1
+
   deploy:
+    needs: firestore_readiness
     if: ${{ github.event.inputs.mode == 'deploy' }}
     environment: ${{ github.event.inputs.environment }}
     permissions:
@@ -126,7 +213,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.event.inputs.branch }}
+          ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}
 
       - name: Google Auth
         id: auth
@@ -137,14 +224,6 @@ jobs:
       - name: Set up gcloud
         uses: google-github-actions/setup-gcloud@v2
 
-      - name: Set up Node for Firebase index deployment
-        uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-
-      - name: Install locked Firebase tooling
-        run: npm ci --ignore-scripts
-
       - name: Verify serving sync ledger fence mode before deploy
         env:
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
@@ -153,11 +232,6 @@ jobs:
             --project=${{ vars.GCP_PROJECT_ID }} \
             --region=${{ env.REGION }} \
             --desired-mode="$SYNC_LEDGER_FENCE_MODE"
-
-      - name: Reconcile generated Firestore indexes before backend deploy
-        run: |
-          python3 backend/scripts/reconcile_firestore_indexes.py \
-            --project "${{ vars.GCP_PROJECT_ID }}"
 
       - name: Login to GCR
         run: gcloud auth configure-docker
@@ -175,9 +249,36 @@ jobs:
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
+      - name: Resolve production account-deletion task target
+        if: ${{ vars.ENV == 'prod' }}
+        id: account-deletion-target
+        run: |
+          set -euo pipefail
+          SYNC_SERVICE_URL="$(
+            gcloud run services describe "${{ env.SERVICE }}-sync" \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(status.url)'
+          )"
+          SYNC_TASKS_INVOKER_SA="$(
+            gcloud run services describe "${{ env.SERVICE }}-sync" \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+          )"
+          test -n "$SYNC_SERVICE_URL"
+          test -n "$SYNC_TASKS_INVOKER_SA"
+          {
+            echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+            echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
+            echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+          } >> "$GITHUB_OUTPUT"
+
       - name: Render backend runtime env
         id: runtime-env
         env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -187,6 +288,8 @@ jobs:
           OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
           STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
           SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+          SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
         run: |
           python3 backend/scripts/render_backend_runtime_env.py --env ${{ vars.ENV }} >> "$GITHUB_OUTPUT"
 
@@ -305,6 +408,7 @@ jobs:
       - name: Apply non-secret backend runtime config
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
           ENVIRONMENT: ${{ vars.ENV }}
           CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -321,6 +425,8 @@ jobs:
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
           STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
           STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          SYNC_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
           TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
           TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
@@ -409,6 +515,7 @@ jobs:
         with:
           candidate_api_url: ${{ steps.transcription-candidate.outputs.url }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
 
       - name: Remove passed transcription candidate tag
         if: ${{ success() }}

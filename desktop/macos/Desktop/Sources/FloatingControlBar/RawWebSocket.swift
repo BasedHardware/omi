@@ -71,8 +71,8 @@ final class RawWebSocket {
     c.start(queue: queue)
   }
 
-  func sendText(_ text: String) {
-    send(frame(opcode: 0x1, payload: Data(text.utf8)))
+  func sendText(_ text: String, completion: ((Error?) -> Void)? = nil) {
+    send(frame(opcode: 0x1, payload: Data(text.utf8)), completion: completion)
   }
 
   func close() {
@@ -255,9 +255,14 @@ final class RawWebSocket {
     }
   }
 
-  private func send(_ data: Data) {
-    conn?.send(content: data, completion: .contentProcessed { [weak self] e in
+  private func send(_ data: Data, completion: ((Error?) -> Void)? = nil) {
+    guard let conn else {
+      completion?(RawWebSocketSendError.notConnected)
+      return
+    }
+    conn.send(content: data, completion: .contentProcessed { [weak self] e in
       if let e { self?.fail("send: \(e)") }
+      completion?(e)
     })
   }
 
@@ -276,4 +281,10 @@ final class RawWebSocket {
     // release regardless so no future path can reintroduce a zombie keepalive timer.
     pingTimer?.cancel()
   }
+}
+
+private enum RawWebSocketSendError: LocalizedError {
+  case notConnected
+
+  var errorDescription: String? { "WebSocket is not connected." }
 }

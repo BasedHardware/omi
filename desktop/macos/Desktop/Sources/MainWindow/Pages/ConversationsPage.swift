@@ -131,6 +131,32 @@ struct ConversationsPage: View {
       notification in
       handleAutomationOpenConversation(notification)
     }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
+    ) { notification in
+      searchQuery = (notification.userInfo?["query"] as? String) ?? ""
+    }
+    // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
+    // this page's local state (active search results, multi-select/merge state,
+    // folder sheets) otherwise keeps rendering the previous account's rows even
+    // after AppState and the repository reset.
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      searchQuery = ""
+      searchResults = []
+      isSearching = false
+      searchError = nil
+      showDatePicker = false
+      showCreateFolderSheet = false
+      editingFolder = nil
+      deletingFolder = nil
+      isFilteringStarred = false
+      isFilteringDate = false
+      isMultiSelectMode = false
+      selectedConversationIds = []
+      showMergeConfirmation = false
+      isMerging = false
+      mergeError = nil
+    }
     .dismissableSheet(isPresented: $showCreateFolderSheet) {
       FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
         .environmentObject(appState)

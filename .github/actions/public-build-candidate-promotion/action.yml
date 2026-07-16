@@ -1,0 +1,68 @@
+name: Promote public-build candidate
+description: Browser-smoke an exact no-traffic Cloud Run revision before shifting traffic.
+inputs:
+  target:
+    description: Canonical public-build target name.
+    required: true
+  service:
+    description: Cloud Run service name.
+    required: true
+  project_id:
+    description: Google Cloud project id.
+    required: true
+  region:
+    description: Cloud Run region.
+    required: true
+  revision:
+    description: Exact candidate revision name.
+    required: true
+  tag:
+    description: Cloud Run tag that must resolve to the exact candidate revision.
+    required: true
+runs:
+  using: composite
+  steps:
+    - name: Wait for no-traffic candidate revision
+      shell: bash
+      run: |
+        set -euo pipefail
+        python3 backend/scripts/wait_cloud_run_candidate_readiness.py \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --service="${{ inputs.service }}" \
+          --revision="${{ inputs.revision }}" \
+          --timeout-seconds=150 \
+          --poll-interval-seconds=5
+
+    - name: Resolve and browser-smoke exact candidate
+      shell: bash
+      run: |
+        set -euo pipefail
+        candidate_url="$(python3 backend/scripts/resolve_cloud_run_tagged_url.py \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --service="${{ inputs.service }}" \
+          --revision="${{ inputs.revision }}" \
+          --tag="${{ inputs.tag }}")"
+        python3 .github/scripts/smoke_public_build_browser.py \
+          --target "${{ inputs.target }}" \
+          --base-url "$candidate_url"
+
+    - name: Verify candidate is still latest
+      shell: bash
+      run: |
+        set -euo pipefail
+        latest="$(gcloud run services describe "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --format='value(status.latestCreatedRevisionName)')"
+        test "$latest" = "${{ inputs.revision }}"
+
+    - name: Shift traffic to browser-accepted candidate
+      shell: bash
+      run: |
+        gcloud run services update-traffic "${{ inputs.service }}" \
+          --project="${{ inputs.project_id }}" \
+          --region="${{ inputs.region }}" \
+          --to-revisions="${{ inputs.revision }}=100" \
+          --quiet

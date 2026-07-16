@@ -126,34 +126,30 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
         action_item_data.setdefault('provenance', [])
         action_item_data.setdefault('sort_order', 0)
         action_item_data.setdefault('indent_level', 0)
-    # Ensure timestamps are properly formatted
-    if 'created_at' in action_item_data and action_item_data['created_at']:
-        if isinstance(action_item_data['created_at'], str):
-            action_item_data['created_at'] = datetime.fromisoformat(
-                action_item_data['created_at'].replace('Z', '+00:00')
-            )
-
-    if 'updated_at' in action_item_data and action_item_data['updated_at']:
-        if isinstance(action_item_data['updated_at'], str):
-            action_item_data['updated_at'] = datetime.fromisoformat(
-                action_item_data['updated_at'].replace('Z', '+00:00')
-            )
-
-    if 'due_at' in action_item_data and action_item_data['due_at']:
-        if isinstance(action_item_data['due_at'], str):
-            action_item_data['due_at'] = datetime.fromisoformat(action_item_data['due_at'].replace('Z', '+00:00'))
-
-    if 'completed_at' in action_item_data and action_item_data['completed_at']:
-        if isinstance(action_item_data['completed_at'], str):
-            action_item_data['completed_at'] = datetime.fromisoformat(
-                action_item_data['completed_at'].replace('Z', '+00:00')
-            )
+    # Normalize any ISO date strings to aware datetimes. These fields can arrive as strings from
+    # tool- and LLM-created action items (not only from validated API models), so a single malformed
+    # string must not raise and 500 the whole create/update. Drop the bad value with a warning and let
+    # the field fall back to its default or stay unset, matching the tolerant date handling on the read
+    # path and in _coerce_utc_datetime.
+    for date_field in ('created_at', 'updated_at', 'due_at', 'completed_at'):
+        value = action_item_data.get(date_field)
+        if isinstance(value, str) and value:
+            try:
+                action_item_data[date_field] = datetime.fromisoformat(value.replace('Z', '+00:00'))
+            except ValueError:
+                logger.warning("Dropping malformed %s=%r on action item write", date_field, value)
+                action_item_data.pop(date_field, None)
 
     return action_item_data
 
 
 def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
+    # won't overwrite an existing null, so drop it first and let status derive a concrete
+    # bool — strict client parsers reject a null `completed` and drop the whole page.
+    if action_item_data.get('completed') is None:
+        action_item_data.pop('completed', None)
     action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
     action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
     action_item_data.setdefault('owner', 'unknown')
@@ -466,12 +462,17 @@ def get_action_items(
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort results by due_at first (items without due_at come last), then by created_at.
+    # Sort: incomplete items first, then by due_at (items without due_at come last), then
+    # by created_at. Active-first is load-bearing for the default (completed=None) fetch:
+    # clients page this list (e.g. limit=100) and filter client-side, so without it a user
+    # with 100+ completed items that have due dates would have every active item pushed off
+    # page 1 — the task list then looks empty / all-done (see the reported regression).
     # The final order differs from the Firestore order_by (due_at/created_at DESC), so pagination
     # must be applied AFTER this sort. Slicing the Firestore-ordered set with offset/limit and then
     # re-sorting only that slice returns the wrong items for any page (even page 0 with a limit).
     action_items.sort(
         key=lambda x: (
+            bool(x.get('completed')),
             x.get('due_at') is None,
             x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
             -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),

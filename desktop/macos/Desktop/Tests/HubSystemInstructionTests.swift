@@ -14,19 +14,76 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertFalse(instr.contains("Always reply in English"))
         XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
         XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
-        XCTAssertTrue(instr.contains("image attached to its result"))
-        XCTAssertTrue(instr.contains("source of truth for any current-screen question"))
+        XCTAssertFalse(instr.contains("evidence_id"))
+        XCTAssertTrue(instr.contains("report_screen_observation"))
+        XCTAssertTrue(instr.contains("locally captured foreground-application context"))
     }
 
-    func testLiveScreenshotResultSupersedesConflictingWarmScreenContext() {
+    func testLiveScreenshotResultRequiresAValidatedObservationReport() {
+        let valid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let invalid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: nil)
+        let validPayload = try? JSONSerialization.jsonObject(with: Data(valid.utf8)) as? [String: Any]
+        let invalidPayload = try? JSONSerialization.jsonObject(with: Data(invalid.utf8)) as? [String: Any]
+
+        XCTAssertEqual(validPayload?["ok"] as? Bool, true)
+        XCTAssertNil(validPayload?["evidence_id"])
+        XCTAssertNil(validPayload?["frontmost_app"])
+        XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
+        XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
+    }
+
+    func testLiveScreenshotResultCarriesOnlySameCaptureForegroundContext() {
+        let result = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1,
+            frontmostApplication: "Example App")
+        let payload = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+        let context = payload?["capture_context"] as? [String: String]
+
+        XCTAssertEqual(context?["foreground_application"], "Example App")
+        XCTAssertNil(payload?["frontmost_app"], "legacy ambient app fields must remain unavailable")
+    }
+
+    func testValidatedScreenObservationContinuesToTheOriginalUserAnswer() {
+        let instruction = RealtimeHubTools.systemInstruction()
+        let accepted = RealtimeHubTools.screenObservationResult(accepted: true)
+        let acceptedPayload = try? JSONSerialization.jsonObject(with: Data(accepted.utf8)) as? [String: Any]
+
+        XCTAssertTrue(instruction.contains("internal verification, not your user-facing reply"))
+        XCTAssertTrue(instruction.contains("answer the user's original"))
+        XCTAssertTrue(instruction.contains("foreground-application context"))
+        XCTAssertTrue(instruction.contains("assistant chrome, not as the subject"))
+        XCTAssertTrue(instruction.contains("visible work and intent"))
+        XCTAssertFalse(instruction.contains("app will present an accepted report itself"))
+        XCTAssertEqual(acceptedPayload?["ok"] as? Bool, true)
+        XCTAssertTrue((acceptedPayload?["instruction"] as? String ?? "").contains("original request naturally"))
+    }
+
+    func testScreenObservationSchemaCarriesGroundingInsteadOfAUserFacingAnswer() {
+        let tool = RealtimeHubTools.openAITools.first {
+            ($0["name"] as? String) == HubTool.reportScreenObservation.rawValue
+        }
+        let parameters = tool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+
+        XCTAssertNotNil(properties?["observation"])
+        XCTAssertNil(properties?["answer"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["observation"])
+    }
+
+    func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
+        let raw = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let prepared = RealtimeProviderToolResultPolicy.prepare(
+            provider: .gemini, name: HubTool.screenshot.rawValue, output: raw)
+        let payload = try? JSONSerialization.jsonObject(with: Data(prepared.output.utf8)) as? [String: Any]
+
+        XCTAssertEqual(payload?["ok"] as? Bool, true)
+        XCTAssertNil(payload?["evidence_id"])
         XCTAssertEqual(
-            RealtimeHubTools.screenshotToolResult(capturedBytes: 1),
-            "Live screenshot captured just now. The attached image is authoritative for the current screen; disregard any conflicting screen summaries, OCR, or earlier screen descriptions."
-        )
-        XCTAssertEqual(
-            RealtimeHubTools.screenshotToolResult(capturedBytes: nil),
-            "Could not capture the screen."
-        )
+            ((payload?["toolResultEnvelope"] as? [String: Any])?["status"] as? String),
+            "succeeded")
     }
 
     func testInstructionDoesNotOwnSemanticSelectionOrRoutingPolicy() {

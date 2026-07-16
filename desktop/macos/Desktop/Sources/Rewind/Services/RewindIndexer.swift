@@ -57,7 +57,11 @@ actor RewindIndexer {
 
     /// Initialize all Rewind services
     func initialize() async throws {
-        guard !isInitialized, !isInitializing else { return }
+        let databaseIsInitialized = await RewindDatabase.shared.isInitialized
+        guard !(isInitialized && databaseIsInitialized), !isInitializing else { return }
+        // RewindDatabase can close itself after repeated I/O/corruption errors.
+        // Its readiness, not this cached flag, is authoritative.
+        isInitialized = false
         isInitializing = true
         defer { isInitializing = false }
 
@@ -89,7 +93,12 @@ actor RewindIndexer {
 
     /// Try to initialize with exponential backoff. Returns true if initialized.
     private func ensureInitialized() async -> Bool {
-        if isInitialized { return true }
+        let databaseIsInitialized = await RewindDatabase.shared.isInitialized
+        if isInitialized && databaseIsInitialized { return true }
+
+        // RewindDatabase can close itself after recovery while this actor retains
+        // its cached initialized flag; only the database can confirm readiness.
+        if isInitialized { isInitialized = false }
 
         // Check backoff timer - skip if too soon after last failure
         if Date() < nextRetryTime {
@@ -272,7 +281,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame: \(error)")
+            logError("RewindIndexer: Failed to process frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -353,7 +362,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process CGImage frame: \(error)")
+            logError("RewindIndexer: Failed to process CGImage frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -463,7 +472,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame with metadata: \(error)")
+            logError("RewindIndexer: Failed to process frame with metadata", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -532,7 +541,7 @@ actor RewindIndexer {
         do {
             _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
         } catch {
-            logError("RewindIndexer: Failed to flush video chunk: \(error)")
+            logError("RewindIndexer: Failed to flush video chunk", error: error)
             return false
         }
 

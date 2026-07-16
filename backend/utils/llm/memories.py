@@ -112,7 +112,7 @@ def new_memories_extractor(
         user_name, memories_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
-    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 25:  # less than 5 words, probably nothing
         return []
@@ -210,7 +210,7 @@ def new_learnings_extractor(
         user_name, learnings_str = get_prompt_memories(uid)
 
     person_ids = list(set([s.person_id for s in segments if s.person_id]))
-    people = [Person(**p) for p in users_db.get_people_by_ids(uid, person_ids)] if person_ids else []
+    people = Person.deserialize_many_safe(users_db.get_people_by_ids(uid, person_ids)) if person_ids else []
     content = TranscriptSegment.segments_as_string(segments, user_name=user_name, people=people)
     if not content or len(content) < 100:
         return []

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce target-scoped serialization for persistent Cloud Run/GKE writers.
+"""Enforce target-scoped serialization for persistent deployment writers.
 
 This is intentionally a narrow, stdlib-only structural policy check. Actionlint
 validates workflow syntax, but it cannot prove that separate workflow entry
@@ -10,10 +10,20 @@ group.
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.firestore_workflow_policy import (  # noqa: E402
+    has_direct_firestore_mutation,
+    reconciliation_invocations,
+)
+
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
@@ -113,6 +123,7 @@ WRITER_MARKERS = (
     "gcloud run jobs deploy ",
     "gcloud run jobs update ",
 )
+PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 
 PUSHER_CHART_MARKER = "backend/charts/pusher"
 PUSHER_CONFIGMAP_PREFLIGHT = (
@@ -230,6 +241,41 @@ def deploy_job_steps(block: list[str]) -> list[list[str]]:
     return steps
 
 
+def workflow_steps(text: str) -> list[list[str]]:
+    """Return top-level job step blocks from a workflow."""
+
+    steps: list[list[str]] = []
+    current: list[str] | None = None
+    for line in text.splitlines():
+        if line.startswith("      - "):
+            if current is not None:
+                steps.append(current)
+            current = [line]
+            continue
+        if current is None:
+            continue
+        if line and len(line) - len(line.lstrip()) < 6:
+            steps.append(current)
+            current = None
+            continue
+        current.append(line)
+    if current is not None:
+        steps.append(current)
+    return steps
+
+
+def has_firestore_index_writer(text: str) -> bool:
+    """Detect Firestore schema mutations by command semantics, not step names."""
+
+    for step in workflow_steps(text):
+        active = "\n".join(line for line in step if not line.lstrip().startswith("#"))
+        if has_direct_firestore_mutation(active):
+            return True
+        if any(invocation.mutates_schema for invocation in reconciliation_invocations(active)):
+            return True
+    return False
+
+
 def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
     """Return whether a deploy step performs an allowed pusher preflight."""
 
@@ -294,7 +340,17 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
 
 
 def is_persistent_writer(text: str) -> bool:
-    return any(marker in text for marker in WRITER_MARKERS)
+    return (
+        any(marker in text for marker in WRITER_MARKERS)
+        or any(
+            any(
+                PUBLIC_BUILD_DEPLOY_ACTION in line and not line.lstrip().startswith("#")
+                for line in step
+            )
+            for step in workflow_steps(text)
+        )
+        or has_firestore_index_writer(text)
+    )
 
 
 def resolve_environment(group: str, environment: str) -> str:
@@ -355,7 +411,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 def check_repository() -> list[str]:
     errors: list[str] = []
     workflow_text = {
-        path.name: path.read_text()
+        path.name: path.read_text(encoding="utf-8")
         for pattern in ("*.yml", "*.yaml")
         for path in WORKFLOWS.glob(pattern)
     }
@@ -366,11 +422,11 @@ def check_repository() -> list[str]:
     expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS)
     for name in sorted(detected - expected):
         errors.append(
-            f"{name}: persistent Cloud Run/GKE writer is missing from the lock policy"
+            f"{name}: persistent deployment writer is missing from the lock policy"
         )
     for name in sorted(expected - detected):
         errors.append(
-            f"{name}: lock policy entry no longer contains a recognized deploy writer"
+            f"{name}: lock policy entry no longer contains a recognized deployment writer"
         )
 
     groups: dict[str, str] = {}
@@ -423,6 +479,90 @@ def check_repository() -> list[str]:
 
 
 def run_self_test() -> None:
+    firestore_read_only = """name: fixture
+jobs:
+  verify:
+    steps:
+      - run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \\
+            --project runtime-project \\
+            --check-only
+"""
+    if is_persistent_writer(firestore_read_only):
+        raise PolicyError("read-only Firestore readiness was classified as a persistent writer")
+    default_reconciliation = firestore_read_only.replace(" \\" + "\n            --check-only\n", "\n")
+    if not is_persistent_writer(default_reconciliation):
+        raise PolicyError("default Firestore reconciliation bypassed persistent-writer detection")
+    if not is_persistent_writer(firestore_read_only.replace("--check-only", "--provision-missing")):
+        raise PolicyError("explicit Firestore provisioning bypassed persistent-writer detection")
+    mixed_firestore_step = firestore_read_only.replace(
+        "            --check-only\n",
+        "            --check-only\n          python3 backend/scripts/reconcile_firestore_indexes.py --project runtime-project\n",
+    )
+    if not is_persistent_writer(mixed_firestore_step):
+        raise PolicyError("a read-only token masked a second Firestore writer in the same step")
+    leading_comment = firestore_read_only.replace(
+        "          python3",
+        "          # readiness check\n          python3",
+    )
+    if is_persistent_writer(leading_comment):
+        raise PolicyError("a leading shell comment changed read-only Firestore classification")
+    comment_separated_writer = firestore_read_only.replace(
+        "            --check-only\n",
+        "            --check-only\n          # writer follows\n"
+        "          python3 backend/scripts/reconcile_firestore_indexes.py --project runtime-project\n",
+    )
+    if not is_persistent_writer(comment_separated_writer):
+        raise PolicyError("an inter-command comment masked a Firestore writer")
+    direct_firebase_writer = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: npx firebase deploy --only firestore:indexes
+"""
+    if not is_persistent_writer(direct_firebase_writer):
+        raise PolicyError("direct Firebase index deployment bypassed persistent-writer detection")
+    commented_firebase_writer = direct_firebase_writer.replace(
+        "      - run: npx firebase",
+        "      - run: |\n          # npx firebase",
+    )
+    if is_persistent_writer(commented_firebase_writer):
+        raise PolicyError("a commented Firebase example was classified as a writer")
+    direct_writer_commands = (
+        "npx firebase deploy",
+        "npx firebase deploy --project prod --only=firestore:indexes",
+        "gcloud --project=prod firestore indexes composite create --collection-group=memories",
+    )
+    for command in direct_writer_commands:
+        fixture = direct_firebase_writer.replace(
+            "npx firebase deploy --only firestore:indexes",
+            command,
+        )
+        if not is_persistent_writer(fixture):
+            raise PolicyError(f"direct Firestore writer bypassed detection: {command}")
+    non_firestore_firebase_deploy = direct_firebase_writer.replace(
+        "--only firestore:indexes",
+        "--only functions",
+    )
+    if is_persistent_writer(non_firestore_firebase_deploy):
+        raise PolicyError("a functions-only Firebase deploy was classified as a Firestore writer")
+    centralized_public_build_writer = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - uses: ./.github/actions/deploy-public-build
+"""
+    if not is_persistent_writer(centralized_public_build_writer):
+        raise PolicyError("centralized public-build deployment bypassed persistent-writer detection")
+    if is_persistent_writer(centralized_public_build_writer.replace("      - uses:", "      # - uses:")):
+        raise PolicyError("a commented centralized public-build deployment was classified as a writer")
+    gcloud_list = direct_firebase_writer.replace(
+        "npx firebase deploy --only firestore:indexes",
+        "gcloud firestore indexes composite list",
+    )
+    if is_persistent_writer(gcloud_list):
+        raise PolicyError("a read-only gcloud index list was classified as a writer")
+
     good = """name: fixture
 concurrency:
   group: deploy-fixture-development

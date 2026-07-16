@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Manages the cloud agent VM lifecycle: provisioning, status polling, and database upload.
 /// All operations are fire-and-forget from the caller's perspective.
@@ -174,10 +175,8 @@ actor AgentVMService {
         defer { Task { await AgentSyncService.shared.resume() } }
         // Find the local database path
         let dbPath = await MainActor.run {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             let userId = RewindDatabase.currentUserId ?? "anonymous"
-            return appSupport
-                .appendingPathComponent("Omi", isDirectory: true)
+            return DesktopLocalProfile.applicationSupportURL()
                 .appendingPathComponent("users", isDirectory: true)
                 .appendingPathComponent(userId, isDirectory: true)
                 .appendingPathComponent("omi.db")

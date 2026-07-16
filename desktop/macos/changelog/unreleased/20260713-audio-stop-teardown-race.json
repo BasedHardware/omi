@@ -1,3 +1,0 @@
-{
-  "change": "Fixed an intermittent crash when stopping recording caused by audio teardown racing the live capture thread"
-}

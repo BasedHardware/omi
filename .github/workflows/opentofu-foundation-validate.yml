@@ -1,0 +1,68 @@
+name: OpenTofu Foundation Validation
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/scripts/check_opentofu_foundation.py"
+      - ".github/scripts/test_check_opentofu_foundation.py"
+      - ".github/workflows/opentofu-foundation-validate.yml"
+      - "infrastructure/opentofu/**"
+  pull_request:
+    branches: [main]
+    paths:
+      - ".github/scripts/check_opentofu_foundation.py"
+      - ".github/scripts/test_check_opentofu_foundation.py"
+      - ".github/workflows/opentofu-foundation-validate.yml"
+      - "infrastructure/opentofu/**"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: opentofu-foundation-validate-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  validate-no-mutation-slice:
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.4
+          tofu_wrapper: false
+
+      - name: Test foundation boundary checker
+        run: python3 .github/scripts/test_check_opentofu_foundation.py
+
+      - name: Check foundation source boundary
+        run: python3 .github/scripts/check_opentofu_foundation.py
+
+      - name: Validate source without a remote backend
+        run: |
+          export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-foundation-validate-data"
+          tofu -chdir=infrastructure/opentofu/foundation init -backend=false -input=false -no-color
+          tofu -chdir=infrastructure/opentofu/foundation validate -no-color
+
+      - name: Generate and check an offline empty plan
+        run: |
+          OFFLINE_MODULE="${RUNNER_TEMP}/opentofu-foundation-offline-plan"
+          python3 .github/scripts/check_opentofu_foundation.py \
+            --prepare-offline-plan-module "$OFFLINE_MODULE"
+          export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-foundation-plan-data"
+          tofu -chdir="$OFFLINE_MODULE" init -backend=false -input=false -no-color
+          tofu -chdir="$OFFLINE_MODULE" validate -no-color
+          tofu -chdir="$OFFLINE_MODULE" plan \
+            -input=false \
+            -lock=false \
+            -refresh=false \
+            -no-color \
+            -out="${RUNNER_TEMP}/foundation.tfplan"
+          tofu -chdir="$OFFLINE_MODULE" show \
+            -json "${RUNNER_TEMP}/foundation.tfplan" > "${RUNNER_TEMP}/foundation-plan.json"
+          python3 .github/scripts/check_opentofu_foundation.py \
+            --plan-json "${RUNNER_TEMP}/foundation-plan.json"

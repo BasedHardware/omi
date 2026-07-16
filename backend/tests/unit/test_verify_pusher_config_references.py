@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import copy
+import json
 from pathlib import Path
 import runpy
 import shutil
@@ -13,6 +15,7 @@ import pytest
 import yaml
 
 SCRIPT = Path(__file__).resolve().parents[2] / "scripts" / "verify_pusher_config_references.py"
+CLASSIFICATION = SCRIPT.parents[2] / "config" / "deployment-setting-classification.json"
 
 
 @pytest.fixture
@@ -85,24 +88,128 @@ def test_rendered_dev_pusher_redis_host_clears_legacy_secret_source(preflight: S
     }
 
 
+def test_rendered_dev_pusher_google_client_id_clears_legacy_secret_source(preflight: SimpleNamespace):
+    environment = "dev"
+    deployment = next(document for document in preflight.render(environment) if document.get("kind") == "Deployment")
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    google_client_id = next(item for item in env if item["name"] == "GOOGLE_CLIENT_ID")
+    google_client_secret = next(item for item in env if item["name"] == "GOOGLE_CLIENT_SECRET")
+
+    assert google_client_id["valueFrom"] == {
+        "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": "GOOGLE_CLIENT_ID"},
+        "secretKeyRef": None,
+    }
+    assert google_client_secret["valueFrom"] == {
+        "secretKeyRef": {"name": f"{environment}-omi-backend-secrets", "key": "GOOGLE_CLIENT_SECRET"}
+    }
+
+
+@pytest.mark.parametrize("environment", ["dev", "prod"])
+def test_rendered_pusher_typesense_host_clears_legacy_secret_source(preflight: SimpleNamespace, environment: str):
+    deployment = next(document for document in preflight.render(environment) if document.get("kind") == "Deployment")
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    typesense_host = next(item for item in env if item["name"] == "TYPESENSE_HOST")
+    typesense_api_key = next(item for item in env if item["name"] == "TYPESENSE_API_KEY")
+
+    assert typesense_host["valueFrom"] == {
+        "configMapKeyRef": {"name": f"{environment}-omi-backend-config", "key": "TYPESENSE_HOST"},
+        "secretKeyRef": None,
+    }
+    assert typesense_api_key["valueFrom"] == {
+        "secretKeyRef": {"name": f"{environment}-omi-backend-secrets", "key": "TYPESENSE_API_KEY"}
+    }
+
+
+def test_typesense_and_google_binding_classifications_are_explicit():
+    kinds = json.loads(CLASSIFICATION.read_text(encoding="utf-8"))["kinds"]
+
+    assert "TYPESENSE_HOST" in kinds["config"]
+    assert {"TYPESENSE_API_KEY", "GOOGLE_CLIENT_SECRET"}.issubset(kinds["secret"])
+
+
+def test_standalone_pusher_reconciles_non_secret_config_before_preflight():
+    """Static workflow contract: reconciliation makes rendered references live before Helm."""
+    workflow = (SCRIPT.parents[2] / ".github/workflows/gcp_backend_pusher.yml").read_text(encoding="utf-8")
+    required_config = {
+        "CONVERSATION_SUMMARIZED_APP_IDS",
+        "GOOGLE_CLIENT_ID",
+        "MCP_AUTHORIZATION_SERVER_URL",
+        "MCP_OAUTH_CHATGPT_CLIENT_ID",
+        "MCP_OAUTH_CHATGPT_REDIRECT_URIS",
+        "MCP_OAUTH_PUBLIC_CLIENT_ID",
+        "MCP_OAUTH_PUBLIC_REDIRECT_URIS",
+        "MCP_RESOURCE_URL",
+        "RAPID_API_HOST",
+        "REDIS_DB_HOST",
+        "STT_PRERECORDED_MODEL",
+        "STT_SERVICE_MODELS",
+        "TYPESENSE_HOST",
+        "TWILIO_ACCOUNT_SID",
+        "TWILIO_API_KEY_SID",
+        "TWILIO_TWIML_APP_SID",
+        "X_OAUTH_CLIENT_ID",
+        "X_OAUTH_REDIRECT_URI",
+    }
+    prod_only_config = {
+        "ACCOUNT_DELETION_HANDLER_URL",
+        "MCP_OAUTH_CLAUDE_CLIENT_ID",
+        "MCP_OAUTH_CLAUDE_CLIENT_NAME",
+        "MCP_OAUTH_CLAUDE_REDIRECT_URIS",
+        "SYNC_TASKS_HANDLER_URL",
+        "SYNC_TASKS_INVOKER_SA",
+    }
+
+    resolve_index = workflow.index("- name: Resolve production pusher runtime targets")
+    reconcile_index = workflow.index("- name: Apply non-secret pusher runtime config")
+    preflight_index = workflow.index("- name: Preflight pusher ConfigMap and Secret references")
+    helm_index = workflow.index("helm -n ${{ vars.ENV }}-omi-backend upgrade --install")
+    reconcile = workflow[reconcile_index:preflight_index]
+
+    assert resolve_index < reconcile_index < preflight_index < helm_index
+    assert all(f"          {name}:" in reconcile for name in required_config | prod_only_config)
+    assert "backend/scripts/deploy-backend-config.sh" in reconcile
+    assert "secrets." not in reconcile
+
+
+def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("dev")
+    expected, clear_historical_secret = preflight.dev_pusher_binding_contract()
+
+    assert preflight.direct_pusher_bindings(deployment) == expected
+    assert clear_historical_secret == {"REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"}
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == []
+
+
+def test_dev_pusher_contract_requires_typesense_host_secret_clear(preflight: SimpleNamespace):
+    deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
+    env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]
+    typesense_host = next(item for item in env if item["name"] == "TYPESENSE_HOST")
+    del typesense_host["valueFrom"]["secretKeyRef"]
+
+    assert preflight.validate_dev_pusher_binding_contract(deployment) == [
+        "dev pusher binding contract must clear historical Secret source for TYPESENSE_HOST"
+    ]
+
+
 @pytest.mark.skipif(shutil.which("kubectl") is None, reason="kubectl is required for the local strategic-merge fixture")
-def test_historical_secret_redis_host_upgrade_uses_kubernetes_strategic_merge(
-    tmp_path: Path, preflight: SimpleNamespace
+@pytest.mark.parametrize("env_name", ["REDIS_DB_HOST", "GOOGLE_CLIENT_ID", "TYPESENSE_HOST"])
+def test_historical_secret_named_env_upgrade_uses_kubernetes_strategic_merge(
+    tmp_path: Path, preflight: SimpleNamespace, env_name: str
 ):
     """Exercise Kubernetes' named-env strategic merge behavior without a cluster.
 
-    Helm emits the new REDIS_DB_HOST item for the release update. The fixture
-    starts with the historical live Secret source and applies that item through
+    Helm emits the new named env item for the release update. The fixture starts
+    with the historical live Secret source and applies that item through
     Kustomize's Kubernetes strategic-merge implementation. Without an explicit
-    null, the nested valueFrom map retains the Secret source and matches the
-    failed live validation. The explicit null removes it while retaining the
-    ConfigMap source.
+    null, the nested valueFrom map retains the Secret source and produces the
+    invalid dual-source representation. The explicit null removes it while
+    retaining the ConfigMap source.
     """
 
     base = tmp_path / "base"
     base.mkdir()
     (base / "kustomization.yaml").write_text("resources:\n  - deployment.yaml\n")
-    (base / "deployment.yaml").write_text(textwrap.dedent("""\
+    (base / "deployment.yaml").write_text(textwrap.dedent(f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -120,17 +227,17 @@ def test_historical_secret_redis_host_upgrade_uses_kubernetes_strategic_merge(
                     - name: pusher
                       image: example/pusher
                       env:
-                        - name: REDIS_DB_HOST
+                        - name: {env_name}
                           valueFrom:
                             secretKeyRef:
                               name: dev-omi-backend-secrets
-                              key: REDIS_DB_HOST
+                              key: {env_name}
             """))
 
     def render(value_from: str) -> dict:
         overlay = tmp_path / f"overlay-{len(list(tmp_path.glob('overlay-*')))}"
         overlay.mkdir()
-        strategic_patch = textwrap.dedent("""\
+        strategic_patch = textwrap.dedent(f"""\
             apiVersion: apps/v1
             kind: Deployment
             metadata:
@@ -141,7 +248,7 @@ def test_historical_secret_redis_host_upgrade_uses_kubernetes_strategic_merge(
                   containers:
                     - name: pusher
                       env:
-                        - name: REDIS_DB_HOST
+                        - name: {env_name}
                           valueFrom:
             """)
         strategic_patch += textwrap.indent(value_from, " " * 16)
@@ -158,20 +265,23 @@ def test_historical_secret_redis_host_upgrade_uses_kubernetes_strategic_merge(
         result = subprocess.run(["kubectl", "kustomize", str(overlay)], check=True, capture_output=True, text=True)
         return yaml.safe_load(result.stdout)
 
-    broken = render("""\
+    broken = render(f"""\
 configMapKeyRef:
   name: dev-omi-backend-config
-  key: REDIS_DB_HOST
+  key: {env_name}
 """)
     broken_value_from = broken["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
-    assert set(broken_value_from) == {"configMapKeyRef", "secretKeyRef"}
+    assert broken_value_from == {
+        "configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name},
+        "secretKeyRef": {"name": "dev-omi-backend-secrets", "key": env_name},
+    }
 
     rendered_deployment = next(document for document in preflight.render("dev") if document.get("kind") == "Deployment")
     rendered_env = rendered_deployment["spec"]["template"]["spec"]["containers"][0]["env"]
-    rendered_redis_host = next(item for item in rendered_env if item["name"] == "REDIS_DB_HOST")
-    fixed = render(yaml.safe_dump(rendered_redis_host["valueFrom"], sort_keys=False))
+    rendered_item = next(item for item in rendered_env if item["name"] == env_name)
+    fixed = render(yaml.safe_dump(rendered_item["valueFrom"], sort_keys=False))
     fixed_value_from = fixed["spec"]["template"]["spec"]["containers"][0]["env"][0]["valueFrom"]
-    assert fixed_value_from == {"configMapKeyRef": {"name": "dev-omi-backend-config", "key": "REDIS_DB_HOST"}}
+    assert fixed_value_from == {"configMapKeyRef": {"name": "dev-omi-backend-config", "key": env_name}}
 
 
 @pytest.mark.parametrize("kind", ["configmap", "secret"])

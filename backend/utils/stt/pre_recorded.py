@@ -67,7 +67,6 @@ _parakeet_languages = {
 
 
 class PrerecordedSTTProvider(ABC):
-
     @abstractmethod
     def transcribe_url(
         self,
@@ -667,7 +666,6 @@ def modulate_prerecorded(
 
 
 class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
-
     def __init__(self, model: str = 'nova-3'):
         self._model = model
 
@@ -721,7 +719,6 @@ class DeepgramPrerecordedProvider(PrerecordedSTTProvider):
 
 
 class ModulatePrerecordedProvider(PrerecordedSTTProvider):
-
     def _normalize_lang(self, language: Optional[str]) -> str:
         if not language:
             return 'en'
@@ -978,7 +975,6 @@ def _wrap_pcm_as_wav(pcm_bytes: bytes, sample_rate: int, channels: int, bits_per
 
 
 class ParakeetPrerecordedProvider(PrerecordedSTTProvider):
-
     def transcribe_url(
         self,
         audio_url: str,

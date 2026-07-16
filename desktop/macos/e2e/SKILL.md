@@ -63,6 +63,49 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+For a background-agent/voice regression, use the read-only cross-surface probe after
+the child run reaches a terminal state:
+```bash
+./scripts/omi-ctl action agent_lifecycle_convergence_snapshot runIds=<canonical-run-id>
+```
+It reports only run identity and state—not prompts or output—and passes only when the
+canonical terminal run, visible pill, and producing journal completion have converged.
+The continuity gauntlet uses this before it asserts the exact one-spawn/one-completion
+journal receipt, so new PTT work should extend that contract rather than add UI sleeps.
+
+### 2b.1 Probe a current-screen PTT turn
+
+`ptt_test_turn` is the non-production controller probe. It captures the same one pre-overlay
+screen image used by a physical PTT press and drives the real hub turn. Its added screen-protocol
+diagnostics expose only safe lifecycle state—never pixels, app names, or evidence IDs. Use it to
+reproduce and diagnose a screen-answer stall without coordinate clicking:
+
+```bash
+cd desktop/macos
+OMI_AUTOMATION_PORT=47920 bash ./scripts/ptt-screen-probe.sh
+```
+
+The probe emits only the safe state needed to diagnose its result. For a successful screen report,
+expect `screen_evidence_last_completion=completed`, `screen_evidence_protocol_active=false`,
+and `pending_tool_count=0`. A non-`completed` completion class identifies the local fail-closed
+boundary; `terminal_reason=tool_timeout` is always a regression. This validates the controller
+and capture/transport lifecycle.
+
+For a regression in first-press admission, reconnect, or warm buffering, use the separate
+manager-level probe. It drives `PushToTalkManager`'s actual route selection and injects a raw
+PCM file through its capture callback equivalent; it intentionally does not perform the
+controller-only auto-redrive or forced-text behavior:
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action ptt_manager_turn pcm=/absolute/path/to/clip.pcm
+./scripts/omi-ctl action ptt_turn_snapshot
+```
+
+Assert `injected_bytes` equals the clip length, then inspect only the typed diagnostics (admission,
+route, pending deadlines, terminal reason). This is the first automated surface for the actual PTT
+manager; use a natural authenticated physical PTT press as the final UX validation.
+
 ### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
 After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
 saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
@@ -74,7 +117,8 @@ cd desktop/macos && ./scripts/omi-ctl action wal_snapshot
 # Expect pending_count=0 and status synced|uploaded after SD-card sync completes
 
 # After triggering SD sync in a named test bundle:
-rg 'Uploaded WAL|WiFi sync completed|syncToCloud' /private/tmp/omi-dev.log | tail -20
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+rg 'Uploaded WAL|WiFi sync completed|syncToCloud' "$OMI_LOG_PATH" | tail -20
 ```
 Expect log lines like `Uploaded WAL <id>: status=synced` (or `status=uploaded` for
 202-queued jobs). Hermetic regression:
@@ -232,9 +276,10 @@ The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen
 calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
 `quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
 `reset_onboarding`), delayed so the action's HTTP response flushes before the process
-terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
-`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
-app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+terminates. The relaunch waits for the old PID to exit before invoking `open <bundle>`;
+on non-prod it uses `open -n` only after that handoff and re-passes
+`--automation-port=<current port>` as an argv. The reopened app therefore **rebinds the
+SAME port** you launched with (argv beats any launchd-inherited
 `OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
 
 Two traps make a naive `wait-ready` lie, so the recipe below guards against both:
@@ -298,13 +343,14 @@ production 500ms debounce running: rapid calls must coalesce into exactly ONE
 ```bash
 cd desktop/macos
 ./scripts/omi-ctl action seed_tasks count=5 prefix=T05x      # note the returned ids
-MARK="T05-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+MARK="T05-$(date +%s)"; echo "$MARK" >> "$OMI_LOG_PATH"
 # three reorders inside one debounce window (each returns immediately, flushed=false)
 ./scripts/omi-ctl action reorder_task id=<id1> index=0 category=nodeadline flush=false
 ./scripts/omi-ctl action reorder_task id=<id2> index=1 category=nodeadline flush=false
 ./scripts/omi-ctl action reorder_task id=<id3> index=2 category=nodeadline flush=false
 sleep 2   # > 500ms debounce + sync
-awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -c 'TasksVM: Synced'   # assert exactly 1
+awk "/$MARK/{f=1} f" "$OMI_LOG_PATH" | grep -c 'TasksVM: Synced'   # assert exactly 1
 ./scripts/omi-ctl action dump_tasks limit=5000                 # assert final order persisted (no lost update)
 ```
 Hermetic ratchets: `--filter HardeningSeamActionTests` (flush param wiring) and
@@ -321,10 +367,11 @@ of CHAT-07 is the CHAT-02 suspend/resume path (a SIGSTOP'd agent across a "sleep
 the same stale-subprocess class) — already runtime-proven; see §2e.
 ```bash
 cd desktop/macos
-MARK="C07-$(date +%s)"; echo "$MARK" >> /private/tmp/omi-dev.log
+OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+MARK="C07-$(date +%s)"; echo "$MARK" >> "$OMI_LOG_PATH"
 ./scripts/omi-ctl action simulate_system_wake     # {"posted":"NSWorkspace.didWakeNotification"}
 sleep 2
-awk "/$MARK/{f=1} f" /private/tmp/omi-dev.log | grep -E 'System woke from sleep|system_wake'
+awk "/$MARK/{f=1} f" "$OMI_LOG_PATH" | grep -E 'System woke from sleep|system_wake'
 #   assert: "System woke from sleep" (AppState observer ran) AND a RealtimeHub system_wake line —
 #   either "re-warming idle session" or "deferring system_wake ..." (defer while mid-turn). With no
 #   warm session yet, requestSessionRefresh no-ops by design (guard session != nil); warm one first
@@ -495,7 +542,7 @@ After making changes, verify them in the live app:
 | Element not found | Re-snapshot, try scrolling, check if on wrong screen |
 | Click doesn't navigate | Try `press` instead (Settings sidebar = `press`, main sidebar = `click`) |
 | Picker not responding | SwiftUI Picker `.menu` style may not expose as `popupbutton` — look for `button` with value label |
-| App seems frozen | Check `agent-swift status --json`, re-connect, check `/private/tmp/omi-dev.log` |
+| App seems frozen | Check `agent-swift status --json`, re-connect, check `./scripts/omi-ctl log-path` |
 
 ## Guard Conditions
 

@@ -3,6 +3,7 @@ import { AuthProvider } from '@/components/auth/AuthProvider';
 import { MobileBlockOverlay } from '@/components/layout/MobileBlockOverlay';
 import { RecordingProvider, RecordingController } from '@/components/recording';
 import { ToastProvider } from '@/components/ui/Toast';
+import { PublicBuildCanary } from '@/components/public-build-canary';
 import './globals.css';
 
 export const viewport: Viewport = {
@@ -33,14 +34,11 @@ export const metadata: Metadata = {
   },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html lang="en" className="dark">
       <body className="bg-bg-primary text-text-primary font-body antialiased overflow-x-hidden w-full">
+        <PublicBuildCanary />
         <MobileBlockOverlay />
         <AuthProvider>
           <RecordingProvider>

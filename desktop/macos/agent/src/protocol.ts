@@ -784,6 +784,22 @@ export interface ContextSnapshotProjection {
     updatedAtMs: number;
     finalText: string | null;
   }>;
+  /**
+   * Bounded, kernel-owned terminal child runs. These are contextual status
+   * records, not tool receipts: use get_agent_run before claiming a side
+   * effect beyond the recorded final output.
+   */
+  recentCompletedRuns: Array<{
+    sessionId: string;
+    runId: string;
+    parentRunId: string;
+    status: string;
+    title: string;
+    surfaceKind: string;
+    completedAtMs: number;
+    finalText: string | null;
+    errorMessage: string | null;
+  }>;
   capabilities: {
     executionRole: "coordinator" | "leaf";
     manifestVersion: number;

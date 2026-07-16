@@ -198,7 +198,7 @@ actor MemoryAssistant: ProactiveAssistant {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend with full extraction data
-        if let backendId = await syncMemoryToBackend(
+        if let backendMemory = await syncMemoryToBackend(
             memory: memory,
             contextSummary: memoryResult.contextSummary,
             windowTitle: windowTitle,
@@ -208,7 +208,7 @@ actor MemoryAssistant: ProactiveAssistant {
             // Update SQLite record with backend ID
             if let recordId = extractionRecord?.id {
                 do {
-                    try await MemoryStorage.shared.markSynced(id: recordId, backendId: backendId)
+                    try await MemoryStorage.shared.markSynced(id: recordId, serverMemory: backendMemory)
                     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Memory: Failed to update sync status", error: error)
@@ -287,7 +287,7 @@ actor MemoryAssistant: ProactiveAssistant {
         contextSummary: String? = nil,
         windowTitle: String? = nil,
         ownerID: String
-    ) async -> String? {
+    ) async -> ServerMemory? {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Convert ExtractedMemory category to MemoryCategory
@@ -306,7 +306,7 @@ actor MemoryAssistant: ProactiveAssistant {
             guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Memory: Synced to backend (id: \(response.id))")
-            return response.id
+            return response
         } catch {
             logError("Memory: Failed to sync to backend", error: error)
             return nil

@@ -4007,10 +4007,24 @@ private var activeBridgeSendGeneration: Int?
                     // but they must not manufacture a screen-permission request for generic utterances.
                 } else {
                     screenContextEligibleForTurn = true
-                    let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
-                    let screenContextPayload = screenContextReason.isExplicitScreenRequest
-                        ? rawScreenContextPayload
-                        : ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    let screenContextPayload: [String: Any]
+                    if screenContextReason.isExplicitScreenRequest {
+                        // An explicit current-screen question gets one capture
+                        // scoped to this exact turn. Never let a Rewind frame or
+                        // OCR summary impersonate the image the model receives.
+                        if screenRecordingGranted {
+                            effectiveImageData = await Task.detached(priority: .userInitiated) {
+                                ScreenCaptureManager.captureScreenData()
+                            }.value
+                        }
+                        screenContextPayload = ScreenContextWorkContextBuilder.explicitCurrentScreenPayload(
+                            screenRecordingGranted: screenRecordingGranted,
+                            imageAttached: effectiveImageData != nil
+                        )
+                    } else {
+                        let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+                        screenContextPayload = ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
+                    }
                     screenPayload = [
                         "permission": [
                             "screen_recording": screenRecordingGranted ? "granted" : "not_granted"
@@ -4435,8 +4449,8 @@ private var activeBridgeSendGeneration: Int?
                     cacheWriteTokens: queryResult.cacheWriteTokens,
                     costUsd: queryResult.costUsd,
                     systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration)",
-                    hasScreenshot: imageData != nil,
-                    screenshotSizeBytes: imageData?.count,
+                    hasScreenshot: effectiveImageData != nil,
+                    screenshotSizeBytes: effectiveImageData?.count,
                     toolNames: toolNames,
                     sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
                     sqlQueryCount: metricsSnapshot.sqlQueryCount
@@ -4894,6 +4908,16 @@ private var activeBridgeSendGeneration: Int?
 
     private func clearSendLockState() {
         assert(!sendLockOwnership.isHeld, "send presentation state cleared while another generation owns the lock")
+        let terminalizedMessageIDs = Self.terminalizeOrphanedStreamingMessages(
+            &messages,
+            hasActiveSendLock: sendLockOwnership.isHeld
+        )
+        for messageID in terminalizedMessageIDs {
+            scheduleJournalUpdate(messageId: messageID)
+        }
+        if !terminalizedMessageIDs.isEmpty {
+            log("ChatProvider: terminalized \(terminalizedMessageIDs.count) orphaned streaming message(s) after send release")
+        }
         isSending = false
         isStopping = false
         activeBridgeSendGeneration = nil
@@ -4904,6 +4928,26 @@ private var activeBridgeSendGeneration: Int?
                 await self?.sendMessage(prompt)
             }
         }
+    }
+
+    /// A released send lock is the UI's terminal boundary. A transport failure
+    /// can otherwise leave an old tool row marked streaming while `isSending`
+    /// is already false, which makes later chat/PTT turns look stuck.
+    static func terminalizeOrphanedStreamingMessages(
+        _ messages: inout [ChatMessage],
+        hasActiveSendLock: Bool
+    ) -> [String] {
+        guard !hasActiveSendLock else { return [] }
+        var terminalizedMessageIDs: [String] = []
+        for index in messages.indices where messages[index].sender == .ai && messages[index].isStreaming {
+            messages[index].isStreaming = false
+            ToolCallBlockUpdater.completeRemainingToolCalls(
+                in: &messages[index].contentBlocks,
+                terminalStatus: .failed
+            )
+            terminalizedMessageIDs.append(messages[index].id)
+        }
+        return terminalizedMessageIDs
     }
 
     /// Generate a title for the session using LLM

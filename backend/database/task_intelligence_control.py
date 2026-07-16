@@ -1,11 +1,10 @@
 """Firestore persistence for per-user task workflow migration controls."""
 
-from typing import Any, cast
-
 from google.api_core.exceptions import AlreadyExists, Conflict
 
 from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID, is_development_smoke_fixture
 from database._client import db
+from database.read_boundary import parse_snapshot_or_none
 from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 
 CONTROL_COLLECTION = 'task_intelligence_control'
@@ -26,10 +25,7 @@ def get_task_workflow_control(uid: str) -> TaskWorkflowControl:
     snapshot = ref.get()
     if snapshot.exists is not True:
         return TaskWorkflowControl()
-    payload = snapshot.to_dict()
-    if not isinstance(payload, dict):
-        return TaskWorkflowControl()
-    return TaskWorkflowControl.model_validate(cast(dict[str, Any], payload))
+    return parse_snapshot_or_none(TaskWorkflowControl, snapshot) or TaskWorkflowControl()
 
 
 def set_task_workflow_control(uid: str, control: TaskWorkflowControl) -> None:

@@ -5,6 +5,8 @@ from pathlib import Path
 from types import ModuleType
 from unittest.mock import MagicMock
 
+import pytest
+
 os.environ.setdefault('OPENAI_API_KEY', 'sk-test-not-real')
 os.environ.setdefault('ENCRYPTION_SECRET', 'omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv')
 
@@ -141,6 +143,15 @@ from models.conversation import Conversation, CreateConversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 
 NOW = datetime(2026, 1, 1, tzinfo=timezone.utc)
+
+
+@pytest.fixture(autouse=True)
+def _passthrough_resolve_geolocation(monkeypatch):
+    # utils.conversations.location is stubbed with an AutoMockModule here, so the imported
+    # resolve_geolocation is a MagicMock that returns a MagicMock (not None) for a None geolocation,
+    # which would fail CreateConversation validation. Patch it to a passthrough so the geolocation flows
+    # through unchanged, matching production for the None / already-resolved cases these tests exercise.
+    monkeypatch.setattr(developer, 'resolve_geolocation', lambda g: g)
 
 
 def _segment():

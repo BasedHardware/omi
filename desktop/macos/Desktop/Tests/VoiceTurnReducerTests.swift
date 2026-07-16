@@ -238,6 +238,52 @@ final class VoiceTurnReducerTests: XCTestCase {
       timedOut.effects.contains(.fallbackToTranscription(turnID: turnID, reason: .hubWarmTimeout)))
   }
 
+  func testBufferedReconnectSupersedesGenericHubWarmDeadline() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+
+    let reconnecting = reduce(
+      reservation.model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil))
+
+    XCTAssertFalse(reconnecting.model.turn?.deadlines.contains(.hubWarm) == true)
+    XCTAssertTrue(reconnecting.model.turn?.deadlines.contains(.providerReconnect) == true)
+  }
+
+  func testWarmManagerBufferRemainsRoutableUntilItsPrepareEffectFlushesIt() {
+    let turnID = VoiceTurnID()
+    let sessionID = VoiceSessionID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
+    let reservation = reserveIdentity(model, turnID: turnID)
+    model = reduce(
+      reservation.model,
+      .providerReconnectStarted(
+        turnID: turnID,
+        identity: reservation.identity,
+        previousSessionID: nil)).model
+
+    let reconnected = reduce(
+      model,
+      .providerReconnected(
+        turnID: turnID,
+        identity: reservation.identity,
+        sessionID: sessionID))
+
+    XCTAssertEqual(reconnected.model.turn?.providerConnection, .ready)
+    XCTAssertEqual(reconnected.model.turn?.sessionID, sessionID)
+    XCTAssertEqual(reconnected.model.turn?.route, .hubWarmWait)
+
+    let ready = reduce(reconnected.model, .hubReady(turnID: turnID, sessionID: sessionID))
+    XCTAssertEqual(ready.model.turn?.route, .hub(sessionID: sessionID))
+    XCTAssertTrue(ready.effects.contains(.prepareHubInput(turnID: turnID, sessionID: sessionID)))
+  }
+
   func testTransportReadyBindsHubRouteAndPreparesContext() {
     let turnID = VoiceTurnID()
     let sessionID = VoiceSessionID()
@@ -411,6 +457,23 @@ final class VoiceTurnReducerTests: XCTestCase {
 
     XCTAssertEqual(result.model.turn?.phase, .terminal(.bargeInReplacementTimeout))
     XCTAssertEqual(result.model.lastTerminal?.reason, .bargeInReplacementTimeout)
+  }
+
+  func testStaleBargeInReplacementDeadlineCannotTerminalizeAdvancedTurn() {
+    let turnID = VoiceTurnID()
+    var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
+    model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: nil))).model
+    model = reduce(model, .finalize(turnID: turnID)).model
+    model = reduce(model, .hubCommitDeferredForReplacement(turnID: turnID)).model
+    model.turn?.phase = .finalizing
+
+    let stale = reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .bargeInReplacement))
+
+    XCTAssertEqual(stale.model.turn?.phase, .finalizing)
+    XCTAssertEqual(stale.model.staleEventCount, model.staleEventCount + 1)
+    XCTAssertFalse(stale.effects.contains(where: \.isTerminal))
   }
 
   func testProviderNoResponseDeadlineTerminatesAndShowsActionableHint() {
@@ -630,6 +693,274 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(acceptJournal(continuation).model.turn?.phase, .terminal(.success))
   }
 
+  func testCanonicalSpawnReceiptCompletesWithoutProviderContinuation() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let toolIdentity = reservation.identity
+    let callID = VoiceToolCallID("spawn-agent")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
+    XCTAssertTrue(model.turn?.deadlines.contains(.pendingTools) == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: toolIdentity,
+        callID: callID,
+        kind: .spawnReceipt)
+    ).model
+
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    guard case .writing = model.turn?.journalFinalization else {
+      return XCTFail("the canonical receipt must open the journal fence")
+    }
+
+    let finished = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
+    ).model
+    let accepted = acceptJournal(finished)
+    XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
+    XCTAssertEqual(accepted.model.lastTerminal?.reason, .success)
+    XCTAssertEqual(accepted.model.lastTerminal?.route, .hub(sessionID: sessionID))
+    XCTAssertEqual(accepted.model.turn?.responseID, responseID)
+  }
+
+  func testVerifiedScreenEvidenceRequiresProviderContinuationForTheOriginalRequest() throws {
+    let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
+    let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = screenshotReservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      screenshotReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+
+    let reportReservation = reserveIdentity(model, turnID: turnID)
+    let reportIdentity = reportReservation.identity
+    let reportCallID = VoiceToolCallID("report")
+    model = reduce(
+      reportReservation.model,
+      .toolStartedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)).model
+    let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
+    model = reduce(
+      model,
+      .providerTurnFinishedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: sessionID,
+        responseID: responseID)).model
+    XCTAssertEqual(model.turn?.phase, .awaitingTools)
+    model = reduce(
+      model,
+      .screenEvidenceReportVerifiedScoped(
+        turnID: turnID,
+        screenshotIdentity: screenshotIdentity,
+        screenshotCallID: screenshotCallID,
+        reportIdentity: reportIdentity,
+        reportCallID: reportCallID)
+    ).model
+
+    XCTAssertNil(model.turn?.screenEvidenceProtocol)
+    XCTAssertFalse(model.turn?.providerFinished == true)
+    XCTAssertTrue(model.turn?.postToolContinuationRequired == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+    XCTAssertEqual(model.turn?.journalFinalization, .pending)
+
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
+    ).model
+    XCTAssertEqual(model.turn?.phase, .awaitingResponse)
+    XCTAssertTrue(model.turn?.deadlines.contains(.providerResponse) == true)
+    XCTAssertEqual(model.turn?.journalFinalization, .pending)
+  }
+
+  func testFailedScreenEvidenceCompletesWithoutProviderContinuation() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidenceFailure)
+    ).model
+
+    XCTAssertNil(model.turn?.screenEvidenceProtocol)
+    XCTAssertTrue(model.turn?.providerFinished == true)
+    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
+    XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
+
+    model = reduce(
+      model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+  }
+
+  func testFailedScreenEvidenceRejectsLateProviderToolWithoutReopeningTheTurn() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let screenshotReservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = screenshotReservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      screenshotReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)).model
+    model = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidenceFailure)
+    ).model
+
+    let lateReportReservation = reserveIdentity(model, turnID: turnID)
+    let lateReport = reduce(
+      lateReportReservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: lateReportReservation.identity,
+        callID: VoiceToolCallID("report-screen-observation")))
+
+    XCTAssertEqual(lateReport.model.staleEventCount, lateReportReservation.model.staleEventCount + 1)
+    XCTAssertEqual(lateReport.model.turn?.pendingToolCallIDs, Set([screenshotCallID]))
+    XCTAssertTrue(lateReport.model.turn?.providerFinished == true)
+    XCTAssertFalse(lateReport.model.turn?.postToolContinuationRequired == true)
+
+    model = reduce(
+      lateReport.model,
+      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+    ).model
+    XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
+  }
+
+  func testScreenEvidenceProtocolDeadlineEmitsExactFailureEffect() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+
+    let expiration = reduce(
+      model,
+      .deadlineFired(turnID: turnID, deadline: .screenEvidenceProtocol))
+
+    XCTAssertEqual(expiration.model.turn?.screenEvidenceProtocol, token)
+    XCTAssertTrue(
+      expiration.effects.contains(
+        .screenEvidenceProtocolExpired(turnID: turnID, token: token)))
+    XCTAssertFalse(expiration.effects.contains(where: \.isTerminal))
+  }
+
+  func testScreenEvidenceResolutionFromBargedTurnIsDropped() {
+    let (startingModel, turnID, _, _) = awaitingHubResponse()
+    let reservation = reserveIdentity(startingModel, turnID: turnID)
+    let screenshotIdentity = reservation.identity
+    let screenshotCallID = VoiceToolCallID("screenshot")
+    var model = reduce(
+      reservation.model,
+      .toolStartedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID)).model
+    let token = VoiceScreenEvidenceProtocolToken(
+      turnID: turnID,
+      screenshotCallID: screenshotCallID,
+      screenshotIdentity: screenshotIdentity)
+    model = reduce(
+      model,
+      .screenEvidenceProtocolStartedScoped(
+        turnID: turnID,
+        token: token,
+        expiresAfter: 5)).model
+    let replacementID = VoiceTurnID()
+    model = reduce(model, .start(turnID: replacementID, ownerID: nil, intent: .hold)).model
+
+    let stale = reduce(
+      model,
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: screenshotIdentity,
+        callID: screenshotCallID,
+        kind: .screenEvidenceFailure))
+
+    XCTAssertEqual(stale.model.turn?.id, replacementID)
+    XCTAssertEqual(stale.model.turn?.phase, .recording)
+    XCTAssertEqual(stale.model.staleEventCount, model.staleEventCount + 1)
+  }
+
   func testProviderOutputCannotMutateRecordingTurnBeforeCommit() {
     let turnID = VoiceTurnID()
     let lease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
@@ -709,6 +1040,24 @@ final class VoiceTurnReducerTests: XCTestCase {
       .playbackFailed(turnID: turnID, leaseID: lease.id, message: "fixture"))
     XCTAssertEqual(failed.model.turn?.phase, .terminal(.playbackFailed))
     XCTAssertEqual(failed.model.turn?.projection.hint, "Audio playback failed")
+  }
+
+  func testNativePlaybackProgressRefreshesDrainWatchdogWithoutChangingLease() throws {
+    let (awaiting, turnID, _, _) = awaitingHubResponse()
+    let requestedLease = VoiceOutputLease(id: VoiceLeaseID(), turnID: turnID, lane: .nativeRealtime)
+    let playing = reduce(awaiting, .playbackStarted(turnID: turnID, lease: requestedLease)).model
+    let lease = try XCTUnwrap(playing.turn?.activeLease)
+
+    let refreshed = reducer.reduce(
+      playing,
+      .playbackProgressScoped(turnID: turnID, identity: lease.identity, leaseID: lease.id))
+
+    XCTAssertEqual(refreshed.model.turn?.phase, .playing(.nativeRealtime))
+    XCTAssertEqual(refreshed.model.turn?.activeLease, lease)
+    XCTAssertEqual(refreshed.model.staleEventCount, playing.staleEventCount)
+    XCTAssertTrue(
+      refreshed.effects.contains(
+        .scheduleDeadline(turnID: turnID, deadline: .playbackDrain, after: reducer.deadlines.playbackDrain)))
   }
 
   func testCompetingPlaybackLeaseIsRejectedAsInvalidTransition() {
@@ -1255,7 +1604,7 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(reconnected.model.turn?.hubCommitPending == true)
   }
 
-  func testContextRefreshFailureReleasesDeferredShortPressInsteadOfWedgingNextTurn() {
+  func testContextRefreshFailureFallsBackWithTheDeferredShortPressInsteadOfDroppingIt() {
     let turnID = VoiceTurnID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
@@ -1276,7 +1625,12 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: reservation.identity,
         message: "Voice context is temporarily unavailable"))
-    XCTAssertEqual(failed.model.turn?.phase, .terminal(.providerFailed))
+    XCTAssertEqual(failed.model.turn?.phase, .finalizing)
+    XCTAssertEqual(failed.model.turn?.route, .deepgramBatch)
+    XCTAssertFalse(failed.model.turn?.hubCommitPending == true)
+    XCTAssertTrue(
+      failed.effects.contains(
+        .fallbackToTranscription(turnID: turnID, reason: .providerFailed)))
   }
 
   func testExplicitInterruptRevokesToolAndRejectsItsLateCallback() throws {

@@ -82,16 +82,21 @@ extension AppState {
       Self.relaunchCommand(
         appPath: relaunchURL.path,
         isNonProduction: AppBuild.isNonProduction,
-        automationPort: DesktopAutomationLaunchOptions.port),
+        automationPort: DesktopAutomationLaunchOptions.port,
+        terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier),
     ]
 
     do {
       try task.run()
       log("Restart scheduled, terminating current instance...")
 
-      // Terminate the current app
+      // Terminate on AppKit's main queue.  Keep an explicit before/after marker:
+      // a restart helper intentionally waits on this PID, so a cancelled AppKit
+      // quit must be distinguishable from a failed helper launch in local logs.
       DispatchQueue.main.async {
+        log("Restart: requesting AppKit termination for pid=\(ProcessInfo.processInfo.processIdentifier)")
         NSApplication.shared.terminate(nil)
+        log("Restart: AppKit termination request returned")
       }
     } catch {
       log("Failed to schedule restart: \(error)")
@@ -106,18 +111,27 @@ extension AppState {
   /// the reopened app would fall back to a launchd-session-inherited
   /// `OMI_AUTOMATION_PORT` (or the default port), and the automation harness, still
   /// polling the pre-quit port, would find nothing after Quit & Reopen (PERM-06). argv
-  /// is the highest-precedence port source, so it wins over any inherited env. The
-  /// production relaunch stays a plain `open` and is unchanged.
+  /// is the highest-precedence port source, so it wins over any inherited env.
+  ///
+  /// The command also waits for the terminating process to exit before asking Launch
+  /// Services to open the bundle.  A fixed delay alone races app termination: if
+  /// `open` reaches Launch Services while the old process is still alive, macOS
+  /// treats it as a reopen of that process rather than a relaunch.  Waiting on the
+  /// original PID gives the single-instance guard and the automation listener an
+  /// unambiguous handoff.  Non-production uses `open -n` after that handoff so the
+  /// harness gets a distinct replacement process even if Launch Services retains an
+  /// activation record for the old test instance.
   nonisolated static func relaunchCommand(
     appPath: String,
     isNonProduction: Bool,
-    automationPort: UInt16
+    automationPort: UInt16,
+    terminatingProcessIdentifier: Int32
   ) -> String {
     var openCommand = "open \"\(appPath)\""
     if isNonProduction {
-      openCommand += " --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
+      openCommand = "open -n \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
     }
-    return "sleep 0.5 && \(openCommand)"
+    return "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
   }
 
   /// Reset onboarding state for the current app only, then restart.

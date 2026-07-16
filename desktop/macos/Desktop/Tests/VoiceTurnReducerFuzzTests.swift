@@ -100,7 +100,8 @@ private func fuzzEffectKind(_ effect: VoiceTurnEffect) -> FuzzEffectKind {
   case .scheduleDeadline(_, let deadline, _):
     return deadline == .hintVisibility ? .terminalTransitionAllowed : .nonTerminalWork
   case .finalizeCapturedInput, .commitClaimedHubInput, .prepareHubInput,
-    .transcriptionFinalizationTimedOut, .finalizeJournal, .fallbackToTranscription:
+    .transcriptionFinalizationTimedOut, .screenEvidenceProtocolExpired, .finalizeJournal,
+    .fallbackToTranscription:
     return .nonTerminalWork
   }
 }
@@ -111,7 +112,7 @@ private func fuzzEffectTurnID(_ effect: VoiceTurnEffect) -> VoiceTurnID? {
     .cancelAllDeadlines(let turnID), .stopCapture(let turnID, _),
     .finalizeCapturedInput(let turnID), .commitClaimedHubInput(let turnID),
     .prepareHubInput(let turnID, _), .transcriptionFinalizationTimedOut(let turnID, _),
-    .finalizeJournal(let turnID, _), .cancelHub(let turnID, _),
+    .screenEvidenceProtocolExpired(let turnID, _), .finalizeJournal(let turnID, _), .cancelHub(let turnID, _),
     .fallbackToTranscription(let turnID, _):
     return turnID
   case .stopPlayback(let lease):
@@ -509,6 +510,8 @@ private struct FuzzSequenceHarness {
       return turn.phase == .awaitingResponse
     case .pendingTools:
       return turn.phase == .awaitingTools
+    case .screenEvidenceProtocol:
+      return turn.phase == .awaitingTools && turn.screenEvidenceProtocol != nil
     case .deferredCommit, .bargeInReplacement:
       return turn.phase == .awaitingResponse && turn.hubCommitPending
     case .playbackDrain:

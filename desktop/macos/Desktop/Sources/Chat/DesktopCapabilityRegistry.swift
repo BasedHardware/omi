@@ -136,14 +136,14 @@ enum DesktopCapabilityRegistry {
       "Specific past conversations/events -> \(toolList(conversationTools)).",
       when: !available(conversationTools).isEmpty
     )
-    append(
-      "Current screen/current work questions (\"what is on my screen?\", \"do you see my screen?\") -> get_work_context first.",
-      when: has("get_work_context")
-    )
     let screenshotTools = ["capture_screen", "get_screenshot"]
     append(
-      "Raw screenshot pixels -> \(toolList(screenshotTools)) only when work context is insufficient and approval is available.",
+      "Direct current-screen questions (\"what is on my screen?\", \"do you see my screen?\") -> \(toolList(screenshotTools)) when available. Use get_work_context only for recent historical activity; it never proves the screen is current.",
       when: !available(screenshotTools).isEmpty
+    )
+    append(
+      "Recent work/activity history -> get_work_context. Treat its screen_now and timeline fields as historical unless this turn has a separately attached live image.",
+      when: has("get_work_context")
     )
     append(
       "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet and ask whether they want to grant it. Call request_permission with the returned permission type only after explicit current-turn consent.",

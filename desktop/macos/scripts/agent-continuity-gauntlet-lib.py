@@ -31,7 +31,6 @@ from typing import Any
 SCRIPT_DIR = Path(__file__).resolve().parent
 DESKTOP_DIR = SCRIPT_DIR.parent
 DEFAULT_PORT = int(os.environ.get("OMI_AUTOMATION_PORT", "47777"))
-DEFAULT_LOG = Path("/private/tmp/omi-dev.log")
 TRACE_LOG = Path.home() / "Library/Logs/Omi/traces.jsonl"
 DEFAULT_BUNDLE_SUFFIX = "omi-gauntlet"
 GAUNTLET_ROOT = DESKTOP_DIR / ".harness/agent-continuity-gauntlet"
@@ -158,17 +157,19 @@ def bridge_request(
     body: dict[str, Any] | None = None,
     *,
     timeout_sec: float = 60,
+    authenticate: bool = True,
 ) -> dict[str, Any]:
     payload = None
     headers = {"Accept": "application/json"}
-    try:
-        token = automation_token(port)
-    except AutomationTokenError as exc:
-        # Fail closed: never send an unauthenticated request when the token
-        # contract is broken. Still return a structured failure (no crash).
-        return {"ok": False, "error": f"automation_token_unreadable: {exc}"}
-    if token:
-        headers["Authorization"] = f"Bearer {token}"
+    if authenticate:
+        try:
+            token = automation_token(port)
+        except AutomationTokenError as exc:
+            # Fail closed: never send an unauthenticated request when the token
+            # contract is broken. Still return a structured failure (no crash).
+            return {"ok": False, "error": f"automation_token_unreadable: {exc}"}
+        if token:
+            headers["Authorization"] = f"Bearer {token}"
     if body is not None:
         payload = json.dumps(body).encode("utf-8")
         headers["Content-Type"] = "application/json"
@@ -196,6 +197,30 @@ def bridge_request(
         return {"ok": False, "error": f"bridge_http_timeout after {timeout_sec:.0f}s: {exc}"}
     except http.client.RemoteDisconnected as exc:
         return {"ok": False, "error": f"bridge_http_disconnected: {exc}"}
+
+
+def health_log_path(health: dict[str, Any]) -> str | None:
+    """Read the log path from the bridge's standard success envelope."""
+    if health.get("ok") is not True:
+        return None
+    result = health.get("result")
+    raw_path = result.get("logFilePath") if isinstance(result, dict) else health.get("logFilePath")
+    return raw_path if isinstance(raw_path, str) else None
+
+
+def resolve_active_log_path(port: int, explicit_path: str | None) -> str:
+    if explicit_path:
+        return explicit_path
+    # /health deliberately serves immutable launch diagnostics only to callers
+    # without credentials; an authenticated request returns the state envelope.
+    health = bridge_request(port, "GET", "/health", authenticate=False)
+    raw_path = health_log_path(health)
+    if not isinstance(raw_path, str) or not raw_path or not Path(raw_path).is_absolute():
+        raise SystemExit(
+            "automation health did not provide an absolute logFilePath; use a current named bundle "
+            "or pass --log-path explicitly"
+        )
+    return raw_path
 
 
 def bridge_action(
@@ -571,6 +596,15 @@ def coordinator_run_payload(action_response: dict[str, Any]) -> dict[str, Any]:
     return payload
 
 
+def agent_lifecycle_convergence_payload(action_response: dict[str, Any]) -> dict[str, Any]:
+    payload = embedded_coordinator_payload(action_response, "snapshot")
+    entries = payload.get("entries")
+    missing = payload.get("missingRequestedRunIds")
+    if not isinstance(entries, list) or not isinstance(missing, list):
+        raise ValueError("agent lifecycle convergence snapshot omitted entries or requested-run coverage")
+    return payload
+
+
 def awareness_session_parts(
     summary: dict[str, Any],
 ) -> tuple[dict[str, Any], dict[str, Any]]:
@@ -805,7 +839,10 @@ def spawn_tool_acceptance_error(output: Any) -> str | None:
     requested = payload.get("requestedAgentCount")
     if isinstance(requested, int) and requested > 0 and len(agents) != requested:
         return f"spawn_agent admitted {len(agents)} agents, expected {requested}"
-    accepted_statuses = {"queued", "running", "succeeded"}
+    # Admission happens before adapter execution. `starting` is a valid
+    # transient receipt; lifecycle convergence separately requires the child
+    # to reach a canonical terminal state.
+    accepted_statuses = {"queued", "starting", "running", "succeeded"}
     for index, agent in enumerate(agents):
         run = agent.get("run") if isinstance(agent, dict) else None
         status = run.get("status") if isinstance(run, dict) else None
@@ -858,13 +895,16 @@ def current_turn_snapshot_text(snapshot_detail: dict[str, str], query_text: str)
     return json.dumps(messages[start_index:], sort_keys=True)
 
 
-def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+def terminal_assistant_for_exact_turn(
+    snapshot_detail: dict[str, str], query_text: str
+) -> dict[str, Any] | None:
+    """Return only this query's terminal assistant, never a neighboring turn's."""
     try:
         messages = json.loads(snapshot_detail.get("messages_json", "[]"))
     except json.JSONDecodeError:
-        return ""
+        return None
     if not isinstance(messages, list):
-        return ""
+        return None
     query = query_text.strip()
     start_index: int | None = None
     for index, message in enumerate(messages):
@@ -873,12 +913,21 @@ def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str
         if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
             start_index = index
     if start_index is None:
-        return ""
-    for message in reversed(messages[start_index:]):
-        if isinstance(message, dict) and message.get("role") == "assistant" and message.get("streaming") != "true":
-            text = (message.get("text") or "").strip()
-            if text:
-                return text
+        return None
+    for message in messages[start_index + 1 :]:
+        if not isinstance(message, dict):
+            continue
+        if message.get("role") == "user":
+            # A later user turn owns any following assistant rows.
+            return None
+        if message.get("role") == "assistant" and message.get("streaming") != "true":
+            return message
+    return None
+
+
+def current_turn_assistant_text(snapshot_detail: dict[str, str], query_text: str) -> str:
+    if message := terminal_assistant_for_exact_turn(snapshot_detail, query_text):
+        return str(message.get("text") or "").strip()
     return ""
 
 
@@ -889,27 +938,7 @@ def current_turn_has_terminal_assistant(snapshot_detail: dict[str, str], query_t
     produced a terminal row. Keying the wait to the exact user text prevents a
     failed empty turn from inheriting the previous turn's assistant response.
     """
-    try:
-        messages = json.loads(snapshot_detail.get("messages_json", "[]"))
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(messages, list):
-        return False
-    query = query_text.strip()
-    start_index: int | None = None
-    for index, message in enumerate(messages):
-        if not isinstance(message, dict):
-            continue
-        if message.get("role") == "user" and str(message.get("text") or "").strip() == query:
-            start_index = index
-    if start_index is None:
-        return False
-    return any(
-        isinstance(message, dict)
-        and message.get("role") == "assistant"
-        and message.get("streaming") != "true"
-        for message in messages[start_index + 1 :]
-    )
+    return terminal_assistant_for_exact_turn(snapshot_detail, query_text) is not None
 
 
 def exact_voice_agent_turn_signature(
@@ -917,8 +946,15 @@ def exact_voice_agent_turn_signature(
     *,
     child_session_id: str,
     child_run_id: str,
+    expected_assistant_text: str | None = None,
 ) -> dict[str, Any]:
-    """Validate the one canonical producing turn for the exact #9515 voice request."""
+    """Validate the initial canonical run on the exact #9515 producing turn.
+
+    A continuation reuses the child session but creates a distinct canonical run.
+    Its terminal block belongs on the same producing receipt, so this verifier
+    pins exactly one spawn and completion for *the initial run* while requiring
+    each later completion to have a distinct terminal run identity.
+    """
     try:
         messages = json.loads(str(snapshot_detail.get("messages_json", "[]")))
     except json.JSONDecodeError as exc:
@@ -963,8 +999,18 @@ def exact_voice_agent_turn_signature(
             "accepted child producing assistant does not have exactly one adjacent exact voice user turn"
         )
     assistant_raw_text = str(assistant.get("raw_text") or assistant.get("text") or "").strip()
-    if assistant_raw_text != "I started a background agent for that.":
-        raise ValueError(f"producing assistant used noncanonical acknowledgement: {assistant_raw_text!r}")
+    if not assistant_raw_text:
+        raise ValueError("producing assistant omitted its canonical spawn acknowledgement")
+    # The kernel owns this acknowledgement after it accepts the spawn. Its
+    # wording may include the accepted agent title, so a fixed English sentence
+    # would reject a healthy receipt. What matters is that the exact receipt
+    # shown to the PTT caller is the text persisted on its producing journal
+    # turn—not speculative provider narration or a second assistant row.
+    if expected_assistant_text is not None and assistant_raw_text != expected_assistant_text.strip():
+        raise ValueError(
+            "producing assistant acknowledgement disagrees with the canonical PTT receipt: "
+            f"{assistant_raw_text!r} != {expected_assistant_text!r}"
+        )
 
     try:
         resources = json.loads(str(assistant.get("resources_json", "[]")))
@@ -976,13 +1022,24 @@ def exact_voice_agent_turn_signature(
     completions = [
         block for block in blocks if isinstance(block, dict) and block.get("type") == "agentCompletion"
     ]
-    if len(spawns) != 1 or len(completions) != 1:
+    matching_spawns = [
+        block
+        for block in spawns
+        if block.get("sessionId") == child_session_id and block.get("runId") == child_run_id
+    ]
+    matching_completions = [
+        block
+        for block in completions
+        if block.get("sessionId") == child_session_id and block.get("runId") == child_run_id
+    ]
+    if len(spawns) != 1 or len(matching_spawns) != 1 or len(matching_completions) != 1:
         raise ValueError(
-            "expected one agentSpawn and one agentCompletion on the producing turn "
-            f"(spawn={len(spawns)}, completion={len(completions)})"
+            "expected one initial-run agentSpawn and one matching agentCompletion on the producing turn "
+            f"(spawn={len(spawns)}, initial_spawn={len(matching_spawns)}, "
+            f"initial_completion={len(matching_completions)}, completions={len(completions)})"
         )
-    spawn = spawns[0]
-    completion = completions[0]
+    spawn = matching_spawns[0]
+    completion = matching_completions[0]
     for label, block in (("spawn", spawn), ("completion", completion)):
         if block.get("sessionId") != child_session_id or block.get("runId") != child_run_id:
             raise ValueError(
@@ -993,11 +1050,23 @@ def exact_voice_agent_turn_signature(
         raise ValueError("spawn/completion pill identity changed")
     if completion.get("status") != "completed":
         raise ValueError(f"agentCompletion is not terminal-success: {completion.get('status')!r}")
+    completion_run_ids: set[str] = set()
+    for continuation_completion in completions:
+        continuation_session_id = str(continuation_completion.get("sessionId") or "")
+        continuation_pill_id = continuation_completion.get("pillId")
+        continuation_run_id = str(continuation_completion.get("runId") or "")
+        if continuation_session_id != child_session_id or continuation_pill_id != spawn.get("pillId"):
+            raise ValueError("producing turn contains a completion for another child identity")
+        if not continuation_run_id:
+            raise ValueError("producing turn contains a completion without a run identity")
+        if continuation_run_id in completion_run_ids:
+            raise ValueError(f"producing turn contains duplicate completion for run {continuation_run_id!r}")
+        completion_run_ids.add(continuation_run_id)
     for resource in resources:
         if not isinstance(resource, dict):
             raise ValueError("producing turn resource is not an object")
         resource_run = resource.get("runId")
-        if resource_run not in {None, "", child_run_id}:
+        if resource_run not in {None, "", *completion_run_ids}:
             raise ValueError(f"producing turn contains an orphan resource for run {resource_run!r}")
     return {
         "messageId": assistant.get("id"),
@@ -1275,7 +1344,7 @@ class GauntletRunner:
         skip_identity_drift: bool = False,
     ) -> None:
         step_dir = self.run_dir / step_id
-        assistant_text = latest_assistant_text(snapshot_detail)
+        assistant_text = current_turn_assistant_text(snapshot_detail, user_text)
         write_json(step_dir / "action-response.json", action_response)
         write_json(step_dir / "chat-snapshot.json", snapshot_detail)
         write_json(step_dir / "query-traces.json", traces)
@@ -1414,6 +1483,7 @@ class GauntletRunner:
         child_run_id: str,
         step_dir: Path,
         artifact_stem: str,
+        expected_assistant_text: str | None = None,
         timeout_sec: float = 45,
     ) -> tuple[dict[str, Any], dict[str, Any]] | None:
         deadline = time.monotonic() + timeout_sec
@@ -1429,6 +1499,7 @@ class GauntletRunner:
                     detail,
                     child_session_id=child_session_id,
                     child_run_id=child_run_id,
+                    expected_assistant_text=expected_assistant_text,
                 )
             except ValueError as exc:
                 last_error = str(exc)
@@ -1442,6 +1513,61 @@ class GauntletRunner:
             write_json(step_dir / f"{artifact_stem}-journal-signature.json", signature)
             return action, signature
         self.fail(f"exact voice producing journal turn never converged: {last_error}")
+        return None
+
+    def wait_for_agent_lifecycle_convergence(
+        self,
+        *,
+        run_id: str,
+        step_dir: Path,
+        artifact_stem: str,
+        timeout_sec: float = 30,
+    ) -> dict[str, Any] | None:
+        """Wait for one terminal child to converge into its visible pill + journal block."""
+        deadline = time.monotonic() + timeout_sec
+        poll_path = step_dir / f"{artifact_stem}-lifecycle-convergence-polls.jsonl"
+        last_error = "lifecycle projection unavailable"
+        final_action: dict[str, Any] = {}
+        while time.monotonic() < deadline:
+            action = self.bridge_act(
+                "agent_lifecycle_convergence_snapshot",
+                {"runIds": run_id},
+            )
+            final_action = action
+            try:
+                payload = agent_lifecycle_convergence_payload(action)
+                if payload.get("canonicalReadError"):
+                    raise ValueError(f"canonical read failed: {payload['canonicalReadError']}")
+                if payload.get("missingRequestedRunIds"):
+                    raise ValueError(f"requested run missing: {payload['missingRequestedRunIds']}")
+                matching = [
+                    entry
+                    for entry in payload["entries"]
+                    if isinstance(entry, dict) and entry.get("runId") == run_id
+                ]
+                if len(matching) != 1:
+                    raise ValueError(f"expected one lifecycle entry for run, found {len(matching)}")
+                entry = matching[0]
+                if entry.get("canonicalStatus") != "succeeded":
+                    raise ValueError(f"canonical child is not succeeded: {entry.get('canonicalStatus')!r}")
+                if entry.get("projectedStatus") != "done":
+                    raise ValueError(f"visible pill has not converged: {entry.get('projectedStatus')!r}")
+                if entry.get("completionMaterialized") is not True:
+                    raise ValueError("producing journal turn has no terminal agent completion")
+                if entry.get("converged") is not True:
+                    raise ValueError("lifecycle entry reports non-converged terminal state")
+                write_json(step_dir / f"{artifact_stem}-lifecycle-convergence-action.json", action)
+                write_json(step_dir / f"{artifact_stem}-lifecycle-convergence.json", payload)
+                return entry
+            except ValueError as exc:
+                last_error = str(exc)
+                append_text(
+                    poll_path,
+                    json.dumps({"action": action, "error": last_error}, sort_keys=True, default=str) + "\n",
+                )
+                time.sleep(0.25)
+        write_json(step_dir / f"{artifact_stem}-lifecycle-convergence-action.json", final_action)
+        self.fail(f"terminal child did not converge into pill and journal: {last_error}")
         return None
 
     def restart_named_bundle_and_wait(self, step_dir: Path) -> bool:
@@ -2270,6 +2396,12 @@ class GauntletRunner:
             child_run_id=initial_child_run_id,
             step_dir=step_dir,
             artifact_stem="before-restart",
+            expected_assistant_text=str(ptt_detail.get("assistant_reply") or "").strip(),
+        )
+        lifecycle_convergence = self.wait_for_agent_lifecycle_convergence(
+            run_id=initial_child_run_id,
+            step_dir=step_dir,
+            artifact_stem="initial-child",
         )
 
         continuation = self.bridge_act(
@@ -2334,6 +2466,7 @@ class GauntletRunner:
                 child_run_id=initial_child_run_id,
                 step_dir=step_dir,
                 artifact_stem="after-restart",
+                expected_assistant_text=str(ptt_detail.get("assistant_reply") or "").strip(),
                 timeout_sec=60,
             )
             if (
@@ -2386,6 +2519,7 @@ class GauntletRunner:
                 "ptt": ptt,
                 "parentAuthority": parent_authority,
                 "initialChild": initial_child,
+                "lifecycleConvergence": lifecycle_convergence,
                 "continuation": continuation,
                 "followupChild": followup_child,
                 "finalAwareness": final_awareness,
@@ -2449,6 +2583,7 @@ class GauntletRunner:
                 initial_child_run_id,
                 "succeeded",
             ),
+            "initialPillConverged": lifecycle_convergence is not None,
             "followupCompletionEvents": run_terminal_event_count(
                 followup_child,
                 continuation_run_id,
@@ -2577,7 +2712,7 @@ class GauntletRunner:
         list_outputs = "\n".join(str(tool.get("output", "")) for tool in list_tools)
         evidence_blob = strip_probe_text(assistant + "\n" + list_outputs, [status_query])
         status_words = re.search(
-            r"running|working|in progress|started|completed|queued|active|failed|succeeded",
+            r"starting|running|working|in progress|started|completed|queued|active|failed|succeeded",
             evidence_blob,
             re.I,
         )
@@ -3722,6 +3857,7 @@ def self_check() -> int:
         "wait_main_chat_idle",
         "agent_runtime_evidence",
         "coordinator_awareness_snapshot",
+        "agent_lifecycle_convergence_snapshot",
         "coordinator_continue_agent",
         "coordinator_inspect_run",
         "quit_and_reopen",
@@ -3729,6 +3865,8 @@ def self_check() -> int:
         "restore_test_owner",
         "clear_owner_surface_state",
         "kernel_turn_tail",
+        "ptt_turn_snapshot",
+        "ptt_manager_turn",
     }
     hub_actions = {"ptt_test_turn"}
     bridge_source = (DESKTOP_DIR / "Desktop/Sources/DesktopAutomationBridge.swift").read_text(encoding="utf-8")
@@ -3742,6 +3880,14 @@ def self_check() -> int:
         return 1
     if not script.is_file():
         print("self-check failed: agent-continuity-gauntlet.sh missing", file=sys.stderr)
+        return 1
+    enveloped_health = {"ok": True, "result": {"logFilePath": "/private/tmp/omi-gauntlet.log"}}
+    if health_log_path(enveloped_health) != "/private/tmp/omi-gauntlet.log":
+        print("self-check failed: health log path must read the standard result envelope", file=sys.stderr)
+        return 1
+    legacy_health = {"ok": True, "logFilePath": "/private/tmp/omi-gauntlet.log"}
+    if health_log_path(legacy_health) != "/private/tmp/omi-gauntlet.log":
+        print("self-check failed: health log path must preserve legacy top-level compatibility", file=sys.stderr)
         return 1
     trace_cursor_failures = trace_cursor_self_check_failures()
     if trace_cursor_failures:
@@ -3856,6 +4002,21 @@ def self_check() -> int:
             file=sys.stderr,
         )
         return 1
+    interleaved_turn_snapshot = {
+        "messages_json": json.dumps(
+            [
+                {"role": "user", "text": "first query", "streaming": "false"},
+                {"role": "user", "text": "second query", "streaming": "false"},
+                {"role": "assistant", "text": "second answer", "streaming": "false"},
+            ]
+        )
+    }
+    if current_turn_has_terminal_assistant(interleaved_turn_snapshot, "first query"):
+        print(
+            "self-check failed: query-specific wait inherited a later user's assistant turn",
+            file=sys.stderr,
+        )
+        return 1
     missing_contract_checks = continuity_contract_self_check_failures()
     if missing_contract_checks:
         print(
@@ -3910,6 +4071,11 @@ def spawn_acceptance_self_check_failures(driver_source: str) -> list[str]:
     )
     if spawn_tool_acceptance_error(accepted) is not None:
         failures.append("ok=true queued delegation is accepted despite nested error keys")
+    starting = json.dumps(
+        {"ok": True, "requestedAgentCount": 1, "agents": [{"run": {"status": "starting"}}]}
+    )
+    if spawn_tool_acceptance_error(starting) is not None:
+        failures.append("ok=true starting child is accepted as an admitted asynchronous spawn")
     rejected = json.dumps(
         {"ok": False, "error": {"code": "spawn_denied", "message": "denied by policy"}}
     )
@@ -4032,6 +4198,7 @@ def exact_voice_acceptance_self_check_failures(driver_source: str) -> list[str]:
         "wait_for_run_success",
         "wait_for_single_parent_spawn_invocation",
         "wait_for_exact_voice_producing_turn",
+        "wait_for_agent_lifecycle_convergence",
         "restart_named_bundle_and_wait",
     ):
         if method_name not in methods:
@@ -4041,6 +4208,7 @@ def exact_voice_acceptance_self_check_failures(driver_source: str) -> list[str]:
     for literal in (
         "ptt_test_turn",
         "coordinator_awareness_snapshot",
+        "agent_lifecycle_convergence_snapshot",
         "coordinator_continue_agent",
         "get_memories",
         "zero-legacy-jsonl-tool-routing-evidence.json",
@@ -4123,6 +4291,14 @@ def exact_voice_acceptance_self_check_failures(driver_source: str) -> list[str]:
                                 "pillId": "00000000-0000-0000-0000-000000000951",
                                 "sessionId": "child-session",
                                 "runId": "child-run",
+                                "status": "completed",
+                            },
+                            {
+                                "type": "agentCompletion",
+                                "id": "continuation-completion-1",
+                                "pillId": "00000000-0000-0000-0000-000000000951",
+                                "sessionId": "child-session",
+                                "runId": "continued-child-run",
                                 "status": "completed",
                             },
                         ]
@@ -4413,7 +4589,7 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--bundle-id", default=os.environ.get("OMI_GAUNTLET_BUNDLE_ID", f"com.omi.{DEFAULT_BUNDLE_SUFFIX}"))
     parser.add_argument("--run-id", default=None)
     parser.add_argument("--run-dir", default=None)
-    parser.add_argument("--log-path", default=str(DEFAULT_LOG))
+    parser.add_argument("--log-path", default=None)
     parser.add_argument("--turn-timeout-ms", type=int, default=180_000)
     parser.add_argument(
         "--suite",
@@ -4435,6 +4611,7 @@ def main() -> int:
     args = parse_args()
     if args.self_check:
         return self_check()
+    args.log_path = resolve_active_log_path(args.port, args.log_path)
     return GauntletRunner(args).run()
 
 
