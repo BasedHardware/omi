@@ -9,8 +9,8 @@ import { XConnector } from './XConnector'
 import { PasteImportConnector } from './PasteImportConnector'
 import { ExportsConnector } from './ExportsConnector'
 import { ConnectorRow } from './ConnectorRow'
-import { ConnectorBrandMark, type ConnectorBrand } from './ConnectorBrandMark'
 import { ConnectTray } from './ConnectTray'
+import { McpExportDetail } from './McpExportDetail'
 
 // The Connections home — the content registered into the Hub's Connect stage (see
 // hubConnectSlot.ts). The Windows-native port of macOS's DashboardPage connect tray.
@@ -33,16 +33,21 @@ import { ConnectTray } from './ConnectTray'
 
 const OMI_DEVICE_URL = 'https://www.omi.me'
 
+type ExportId = 'claude' | 'chatgpt' | 'openclaw' | 'hermes'
+
 type View =
   | { kind: 'tray' }
   | { kind: 'source'; id: 'gmail' | 'calendar' | 'sticky' | 'x' }
   | { kind: 'imports' }
   | { kind: 'exports' }
-  | { kind: 'comingSoon'; id: 'openclaw' | 'hermes' }
+  | { kind: 'export'; id: ExportId }
 
-const COMING_SOON: Record<'openclaw' | 'hermes', { title: string; brand: ConnectorBrand }> = {
-  openclaw: { title: 'OpenClaw', brand: 'openclaw' },
-  hermes: { title: 'Hermes', brand: 'hermes' }
+// Title shown in the DetailShell header for each export destination.
+const EXPORT_TITLES: Record<ExportId, string> = {
+  claude: 'Claude / Claude Code',
+  chatgpt: 'ChatGPT / Codex',
+  openclaw: 'OpenClaw',
+  hermes: 'Hermes'
 }
 
 function SectionHeader({ children }: { children: React.ReactNode }): React.JSX.Element {
@@ -139,7 +144,7 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
         onOpenSource={(id) => setView({ kind: 'source', id })}
         onOpenImports={() => setView({ kind: 'imports' })}
         onOpenExports={() => setView({ kind: 'exports' })}
-        onOpenComingSoon={(id) => setView({ kind: 'comingSoon', id })}
+        onOpenExport={(id) => setView({ kind: 'export', id })}
         onAskOmi={askOmi}
         onOpenDevice={openDevice}
         onDismiss={onDismiss}
@@ -200,26 +205,16 @@ export function ConnectionsPanel({ onDismiss }: HubConnectSlotProps): React.JSX.
     )
   }
 
-  // comingSoon — OpenClaw / Hermes: a clean resting detail (brand mark + copy + the
-  // marketplace link) until live MCP-destination setup ships (phase 2).
-  const { title, brand } = COMING_SOON[view.id]
+  // export — a single destination's connect/detail (Claude·Claude Code,
+  // ChatGPT·Codex, OpenClaw, Hermes): the real MCP memory-bank connectors that
+  // give an external tool read access to your Omi memory.
   return (
-    <DetailShell title={title} onBack={back} onDismiss={onDismiss}>
-      <div className="flex flex-col items-center gap-4 py-10 text-center">
-        <span
-          className="flex h-14 w-14 items-center justify-center rounded-[18px] border border-white/[0.06]"
-          style={{ backgroundColor: 'rgb(255 255 255 / 0.05)' }}
-        >
-          <span className="h-8 w-8">
-            <ConnectorBrandMark brand={brand} />
-          </span>
-        </span>
-        <div className="max-w-[360px]">
-          <p className="text-[15px] font-semibold text-home-ink">{title}</p>
-          <p className="mt-1 text-[13px] text-home-muted">Live connection setup is coming soon.</p>
-        </div>
+    <DetailShell title={EXPORT_TITLES[view.id]} onBack={back} onDismiss={onDismiss}>
+      <SectionHeader>Use omi memory anywhere</SectionHeader>
+      <McpExportDetail exportId={view.id} />
+      <div className="mt-6">
+        <MarketplaceLink onOpen={openApps} />
       </div>
-      <MarketplaceLink onOpen={openApps} />
     </DetailShell>
   )
 }

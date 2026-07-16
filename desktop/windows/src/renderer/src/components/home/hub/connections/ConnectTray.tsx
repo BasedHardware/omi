@@ -21,10 +21,10 @@ export interface ConnectTrayCallbacks {
   onOpenSource: (id: 'gmail' | 'calendar' | 'sticky' | 'x') => void
   /** LEFT "+ More" → the full Imports list. */
   onOpenImports: () => void
-  /** RIGHT Claude/ChatGPT tiles AND "+ More" → the Exports (memory-pack) list. */
+  /** RIGHT "+ More" → the Exports (memory-pack) list. */
   onOpenExports: () => void
-  /** RIGHT OpenClaw/Hermes → the "coming soon" detail. */
-  onOpenComingSoon: (id: 'openclaw' | 'hermes') => void
+  /** RIGHT brand tile → that export destination's connect/detail view. */
+  onOpenExport: (id: 'claude' | 'chatgpt' | 'openclaw' | 'hermes') => void
   /** RIGHT "Ask Omi" → close the panel and focus the hub ask bar. */
   onAskOmi: () => void
   /** LEFT "Omi Device" → open the omi.me device page (no drill-in, like Mac). */
@@ -55,7 +55,7 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
     onOpenSource,
     onOpenImports,
     onOpenExports,
-    onOpenComingSoon,
+    onOpenExport,
     onAskOmi,
     onOpenDevice,
     onDismiss
@@ -167,18 +167,18 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
               />
               <div className="flex flex-col gap-2.5">
                 <TrayTile title="Ask Omi" brand="omi" onClick={onAskOmi} />
-                <TrayTile title="Claude / Claude Code" brand="claude" onClick={onOpenExports} />
-                <TrayTile title="ChatGPT / Codex" brand="chatgpt" onClick={onOpenExports} />
                 <TrayTile
-                  title="OpenClaw"
-                  brand="openclaw"
-                  onClick={() => onOpenComingSoon('openclaw')}
+                  title="Claude / Claude Code"
+                  brand="claude"
+                  onClick={() => onOpenExport('claude')}
                 />
                 <TrayTile
-                  title="Hermes"
-                  brand="hermes"
-                  onClick={() => onOpenComingSoon('hermes')}
+                  title="ChatGPT / Codex"
+                  brand="chatgpt"
+                  onClick={() => onOpenExport('chatgpt')}
                 />
+                <TrayTile title="OpenClaw" brand="openclaw" onClick={() => onOpenExport('openclaw')} />
+                <TrayTile title="Hermes" brand="hermes" onClick={() => onOpenExport('hermes')} />
                 <TrayTile
                   title="More"
                   plus
