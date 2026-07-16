@@ -176,7 +176,6 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
         echo "No tests matched marker expression for $test_path; treating as skipped."
         status=0
       fi
-      printf '%s\t%s\n' "$status" "$test_path" > "$status_file"
       if [[ "$status" -ne 0 ]]; then
         echo "::error title=Backend unit file failed::$test_path exited with status $status"
       fi

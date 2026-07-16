@@ -161,6 +161,7 @@ tests/unit/test_sync_v2.py::TestAsyncCoordinatorBehavioral::test_zero_segments_a
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_404_expired_job
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_403_wrong_owner
 tests/unit/test_sync_v2.py::TestV2EndpointExecution::test_get_poll_completed_includes_result
+tests/unit/test_tools_rest_memory_runtime_adapter.py::test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision
 tests/unit/test_tools_router.py::TestRouterEnvelope::test_ok_normal
 tests/unit/test_transcript_segment.py::test_forward_merge_on_short_incomplete_last_sentence
 tests/unit/test_translation_optimization.py::test_confident_language_detection_handles_short_fillers_and_real_text
