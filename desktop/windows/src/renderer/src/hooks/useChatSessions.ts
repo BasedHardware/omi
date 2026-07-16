@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChatSession } from '../../../shared/chatSessions'
 import {
   createSession as createSessionApi,
@@ -84,8 +84,16 @@ export interface UseChatSessions {
  * the header calls `selectSession(id)` here AND `useChat().switchThread(id)` so
  * `chatIdRef` + the loaded transcript follow the highlight.
  */
-export function useChatSessions(options?: { client?: SessionsClientLike }): UseChatSessions {
+export function useChatSessions(options?: {
+  client?: SessionsClientLike
+  /** The selected chat-app/persona id, or null for the default assistant. Scopes the
+   *  session list + new-session create to that app (Mac threads `app_id` into
+   *  getChatSessions/createChatSession). Changing it re-queries and clears the
+   *  selection. Omitted/undefined ⇒ the plain main-chat session list, unchanged. */
+  appId?: string | null
+}): UseChatSessions {
   const client = options?.client ?? realClient
+  const appId = options?.appId ?? null
 
   const [sessions, setSessions] = useState<ChatSession[]>([])
   const [currentSessionId, setCurrentSessionId] = useState<string | null>(null)
@@ -106,7 +114,10 @@ export function useChatSessions(options?: { client?: SessionsClientLike }): UseC
     let cancelled = false
     void (async () => {
       try {
-        const rows = await client.listSessions(showStarredOnly ? { starred: true } : {})
+        const rows = await client.listSessions({
+          ...(appId ? { appId } : {}),
+          ...(showStarredOnly ? { starred: true } : {})
+        })
         if (cancelled) return
         setSessions(rows)
         setError(null)
@@ -120,7 +131,18 @@ export function useChatSessions(options?: { client?: SessionsClientLike }): UseC
     return () => {
       cancelled = true
     }
-  }, [client, showStarredOnly, reloadToken])
+  }, [client, appId, showStarredOnly, reloadToken])
+
+  // Changing the selected app resets the session selection (Mac's selectApp clears
+  // currentSession); the fetch effect above re-queries the new app's list. Skips the
+  // initial mount (currentSessionId already starts null) so it never fights a
+  // freshly-selected session.
+  const prevAppIdRef = useRef<string | null>(appId)
+  useEffect(() => {
+    if (prevAppIdRef.current === appId) return
+    prevAppIdRef.current = appId
+    setCurrentSessionId(null)
+  }, [appId])
 
   // Event handlers may setState freely (the effect restriction is the concern).
   // Show the spinner, then let the effect fetch and clear it.
@@ -140,7 +162,9 @@ export function useChatSessions(options?: { client?: SessionsClientLike }): UseC
   const createNewSession = useCallback(async (): Promise<ChatSession | null> => {
     setCreateError(null)
     try {
-      const created = await client.createSession()
+      // Scope a new session to the selected app (Mac createChatSession app_id);
+      // omitted → a plain main-chat session, unchanged.
+      const created = await client.createSession(appId ? { appId } : {})
       setSessions((prev) => [created, ...prev])
       setCurrentSessionId(created.id)
       return created
@@ -150,7 +174,7 @@ export function useChatSessions(options?: { client?: SessionsClientLike }): UseC
       setCreateError(errorMessage(e))
       return null
     }
-  }, [client])
+  }, [client, appId])
 
   // Mutations catch and surface failures via `error` rather than rejecting — the
   // UI fires them as `void toggleStar(...)`, so an unhandled rejection is the

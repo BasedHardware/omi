@@ -9,6 +9,7 @@ import { HubSuggestions } from './HubSuggestions'
 import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
 import { HubChatHeader } from '../../chat/HubChatHeader'
+import { ChatAppPicker } from '../../chat/ChatAppPicker'
 import { HubConnectPanel } from './HubConnectPanel'
 import { getHubHomeWidgets } from './hubHomeWidgetsSlot'
 import { useHubStats } from './useHubStats'
@@ -190,7 +191,12 @@ export function HomeHub(): React.JSX.Element {
                 <HubChatPanel
                   messages={chat.history}
                   sending={chat.sending}
-                  header={<HubChatHeader />}
+                  header={
+                    <>
+                      <ChatAppPicker />
+                      <HubChatHeader />
+                    </>
+                  }
                 >
                   {askBar}
                 </HubChatPanel>
