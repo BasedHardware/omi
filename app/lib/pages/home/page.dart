@@ -1117,8 +1117,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                   );
                 },
               ),
-              // Recording mode chip — home tab only. Shown when a Transcribe-Later-capable
-              // device is connected, or (with no device) for the phone mic on iOS.
+              // Recording mode chip — home tab only. Shown when the capture source
+              // supports Transcribe Later — a supported device, or (with no device) the phone mic.
               Consumer2<HomeProvider, DeviceProvider>(
                 builder: (context, homeProvider, deviceProvider, _) {
                   if (homeProvider.selectedIndex != 0) return const SizedBox.shrink();
