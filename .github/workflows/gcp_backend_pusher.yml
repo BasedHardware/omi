@@ -118,8 +118,14 @@ jobs:
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
             docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/Dockerfile \
+              --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
           else
             docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/pusher/Dockerfile .
+            python3 backend/scripts/runtime_image_contracts.py smoke \
+              --dockerfile backend/pusher/Dockerfile \
+              --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
           fi
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
