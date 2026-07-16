@@ -46,10 +46,19 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout approved Firestore control plane
+      - name: Checkout dispatched Firestore control plane
         uses: actions/checkout@v4
         with:
-          ref: main
+          ref: ${{ github.sha }}
+
+      - name: Verify dispatched Firestore control plane
+        run: |
+          checked_sha="$(git rev-parse HEAD)"
+          if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then
+            echo "Expected dispatched commit $GITHUB_SHA, checked out $checked_sha."
+            exit 1
+          fi
+          echo "Reconciling Firestore indexes from dispatched commit $checked_sha."
 
       - name: Google Auth for Firestore schema migration
         uses: google-github-actions/auth@v2

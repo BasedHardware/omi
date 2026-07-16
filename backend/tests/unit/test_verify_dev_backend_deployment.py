@@ -340,7 +340,9 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
     assert "if: github.ref == 'refs/heads/main'" in text
     assert 'group: deploy-backend-stack-${{ github.event.inputs.environment }}' in text
     assert 'environment: ${{ github.event.inputs.environment }}' in text
-    assert 'ref: main' in text
+    assert 'ref: ${{ github.sha }}' in text
+    assert 'git rev-parse HEAD' in text
+    assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
     assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
     assert text.count('--provision-missing') == 2
     assert text.count('--dry-run') == 1
@@ -349,8 +351,10 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
 
     plan_step = '- name: Show create-only Firestore schema plan'
     apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
+    verification_step = '- name: Verify dispatched Firestore control plane'
     plan = text.split(plan_step, 1)[1].split(apply_step, 1)[0]
     apply = text.split(apply_step, 1)[1]
+    assert text.index(verification_step) < text.index(plan_step)
     assert text.index(plan_step) < text.index(apply_step)
     assert '--provision-missing' in plan
     assert '--dry-run' in plan
