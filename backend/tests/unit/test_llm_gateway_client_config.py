@@ -252,6 +252,16 @@ def test_gateway_serving_does_not_fallback_on_non_transport_errors():
     assert legacy.calls == []
 
 
+def test_gateway_serving_does_not_fallback_on_gateway_configuration_503():
+    from utils.llm import gateway_serving
+
+    request = httpx.Request('POST', 'http://gateway/v1/chat/completions')
+    response = httpx.Response(503, request=request)
+    error = httpx.HTTPStatusError('gateway route configuration failed', request=request, response=response)
+
+    assert gateway_serving.is_gateway_transport_failure(error) is False
+
+
 def test_get_llm_feature_gateway_mode_routes_byok_through_gateway_with_fallback(monkeypatch):
     captured: dict[str, object] = {}
     legacy = FakeChatModel(name='byok', calls=[])
