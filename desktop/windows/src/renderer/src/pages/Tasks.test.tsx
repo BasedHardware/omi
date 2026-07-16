@@ -260,6 +260,41 @@ describe('Tasks — due-date buckets fold overdue into Today (Mac parity: 4 buck
   })
 })
 
+describe('Tasks — error vs empty (PR-D)', () => {
+  it('a failed store read shows friendly copy and NOT the "No tasks yet" empty state', async () => {
+    tasks.tasksListIncomplete = vi.fn(() => Promise.reject(new Error('store read failed')))
+    await renderTasks()
+
+    await waitFor(() => expect(screen.queryByText('Couldn’t load your tasks.')).not.toBeNull())
+    // The empty state must be suppressed while there is an error — otherwise a
+    // failed read reads as "you have no tasks".
+    expect(screen.queryByText('No tasks yet')).toBeNull()
+  })
+
+  it('a genuinely empty (successful) read shows the "No tasks yet" empty state', async () => {
+    incomplete = []
+    completed = []
+    await renderTasks()
+
+    await waitFor(() => expect(screen.queryByText('No tasks yet')).not.toBeNull())
+    expect(screen.queryByText('Couldn’t load your tasks.')).toBeNull()
+  })
+
+  it('Try again re-reads the store; a recovered read clears the error and renders rows', async () => {
+    tasks.tasksListIncomplete = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('boom'))
+      .mockResolvedValue([rec({ id: 1, backendId: 'b1', description: 'recovered task' })])
+    await renderTasks()
+
+    await waitFor(() => expect(screen.queryByText('Couldn’t load your tasks.')).not.toBeNull())
+    fireEvent.click(screen.getByRole('button', { name: /Try again/i }))
+
+    await waitFor(() => expect(screen.queryByText('recovered task')).not.toBeNull())
+    expect(screen.queryByText('Couldn’t load your tasks.')).toBeNull()
+  })
+})
+
 describe('Tasks — freshness via onTasksChanged', () => {
   it('subscribes once and re-reads the store when the change event fires', async () => {
     incomplete = [rec({ id: 1, backendId: 'b1', description: 'first' })]

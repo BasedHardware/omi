@@ -656,9 +656,26 @@ export function Goals(): React.JSX.Element {
           </ul>
         )}
 
-        {error && <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">{error}</div>}
+        {error && (
+          <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">
+            <p className="text-white/80">Couldn’t load your goals.</p>
+            <div className="mt-2 flex items-center gap-3">
+              <button
+                onClick={() => {
+                  setLoading(true)
+                  void load()
+                }}
+                className="btn-ghost px-3 py-1.5 text-xs"
+              >
+                <RefreshCw className="h-3.5 w-3.5" />
+                Try again
+              </button>
+              <span className="text-xs text-white/35">{error}</span>
+            </div>
+          </div>
+        )}
 
-        {!loading && goals.length === 0 && !composing && (
+        {!loading && !error && goals.length === 0 && !composing && (
           <EmptyState
             icon={Target}
             title="No goals yet"

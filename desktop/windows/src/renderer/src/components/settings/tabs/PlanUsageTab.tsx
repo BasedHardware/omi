@@ -188,7 +188,22 @@ export function PlanUsageTab(): React.JSX.Element {
     )
   }
 
-  if (!sub || !subscription) return <></>
+  // A 200 that lacks `.subscription` (or a null body) leaves the tab with nothing
+  // renderable — surface a friendly retry instead of a blank panel. Mirrors the
+  // `error && !sub` state above.
+  if (!sub || !subscription) {
+    return (
+      <div>
+        <div className="glass-subtle mb-4 px-4 py-3 text-sm text-white/60">
+          Couldn’t load your plan details.
+        </div>
+        <button onClick={onRefresh} disabled={refreshing} className="btn-ghost">
+          <RefreshCw className={`h-4 w-4 ${refreshing ? 'animate-spin' : ''}`} />
+          Try again
+        </button>
+      </div>
+    )
+  }
 
   const showCatalog = sub.show_subscription_ui !== false && catalog.length > 0
 

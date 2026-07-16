@@ -137,3 +137,41 @@ describe('ConversationDetail — action item toggle (C3)', () => {
     })
   })
 })
+
+// PR-D: a failed load must never render the raw axios/Error string as the page
+// body — it shows friendly copy (see detailErrors.test.ts for the mapping) and a
+// retry. These pin the rendered behaviour end-to-end.
+describe('ConversationDetail — error copy (PR-D)', () => {
+  it('renders friendly copy, not the raw error string, when the load fails', async () => {
+    getMock.mockReset()
+    getMock.mockRejectedValue(new Error('Request failed with status code 500'))
+    const { findByText, queryByText } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+
+    await findByText('Couldn’t load this conversation.')
+    expect(queryByText('Request failed with status code 500')).toBeNull()
+  })
+
+  it('Try again re-runs the load; a recovered fetch clears the error', async () => {
+    getMock.mockReset()
+    getMock
+      .mockRejectedValueOnce(new Error('Request failed with status code 500'))
+      .mockResolvedValue({ data: CONVERSATION })
+    const { findByText, findByRole, findAllByTitle, queryByText } = render(
+      <MemoryRouter>
+        <ConversationDetail conversationId="conv1" />
+      </MemoryRouter>
+    )
+
+    await findByText('Couldn’t load this conversation.')
+    fireEvent.click(await findByRole('button', { name: /Try again/i }))
+
+    // The conversation body renders on the recovered load (its action-item rows
+    // appear), and the error clears.
+    await findAllByTitle('Mark as done')
+    expect(queryByText('Couldn’t load this conversation.')).toBeNull()
+  })
+})
