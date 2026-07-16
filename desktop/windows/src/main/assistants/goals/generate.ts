@@ -241,10 +241,10 @@ export function validateLinkedTaskIds(
 
 // --- Orchestration (injectable side-effects) ---------------------------------
 
-/** The outcome of a generation run. `created` carries the new goal id + title.
- *  `error` is reserved for callers (schedule.generateGoalNow) to report a
- *  transport failure after retries; runGoalGenerationWith itself never returns it
- *  (a transport failure throws out of `deps.generate`/`deps.createGoal`). */
+/** The outcome of a create. `created` carries the new goal id + title. `error` is
+ *  reserved for callers reporting a transport failure after retries;
+ *  createCandidateWith itself never returns it (a transport failure throws out of
+ *  `deps.createGoal`). */
 export type GenerateSkipReason =
   | 'no_session'
   | 'insufficient_context'
