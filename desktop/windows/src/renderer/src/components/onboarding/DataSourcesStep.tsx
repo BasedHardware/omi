@@ -413,9 +413,15 @@ function MemoryLogRow({ source }: { source: MemorySource }): React.JSX.Element {
             className="w-full resize-none rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2.5 text-[13px] text-white/85 placeholder:text-white/30 focus:border-white/20 focus:outline-none"
           />
           <div className="flex items-center gap-2">
-            <Pill tone="primary" onClick={runImport} disabled={!dump.trim() || importing}>
-              {importing ? 'Importing…' : `Import ${title}`}
-            </Pill>
+            {/* The white/primary commit only appears once there's text to import —
+                so it never sits next to Connect as a dimmed charcoal button (which
+                muddied the button hierarchy). Matches the Hub PasteImportConnector's
+                progressive reveal. "Open & Copy Prompt" stays the secondary CTA. */}
+            {dump.trim() && (
+              <Pill tone="primary" onClick={runImport} disabled={importing}>
+                {importing ? 'Importing…' : `Import ${title}`}
+              </Pill>
+            )}
             <Pill
               tone="ghost"
               onClick={() => {
