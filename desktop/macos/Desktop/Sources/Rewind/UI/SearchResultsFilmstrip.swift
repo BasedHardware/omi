@@ -157,7 +157,7 @@ struct SearchResultsFilmstrip: View {
       loadingIds.insert(screenshotId)
 
       do {
-        let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+        let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
         let thumbnail = await createThumbnail(from: image)
 
         await MainActor.run {

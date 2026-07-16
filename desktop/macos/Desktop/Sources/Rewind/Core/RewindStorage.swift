@@ -134,12 +134,12 @@ actor RewindStorage {
   }
 
   /// Load screenshot as NSImage (legacy JPEG path)
-  func loadScreenshotImage(relativePath: String) async throws -> NSImage {
+  func loadScreenshotImage(relativePath: String) async throws -> RewindImageBox {
     let data = try await loadScreenshot(relativePath: relativePath)
     guard let image = NSImage(data: data) else {
       throw RewindError.invalidImage
     }
-    return image
+    return RewindImageBox(image: image)
   }
 
   // MARK: - Video Frame Loading
@@ -440,12 +440,12 @@ actor RewindStorage {
   }
 
   /// Unified loading interface - loads from either JPEG or video storage
-  func loadScreenshotImage(for screenshot: Screenshot) async throws -> NSImage {
+  func loadScreenshotImage(for screenshot: Screenshot) async throws -> RewindImageBox {
     if screenshot.usesVideoStorage,
       let videoPath = screenshot.videoChunkPath,
       let offset = screenshot.frameOffset
     {
-      return try await loadVideoFrame(videoPath: videoPath, frameOffset: offset)
+      return RewindImageBox(image: try await loadVideoFrame(videoPath: videoPath, frameOffset: offset))
     } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
       return try await loadScreenshotImage(relativePath: imagePath)
     } else {

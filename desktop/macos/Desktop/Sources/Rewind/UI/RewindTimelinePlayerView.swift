@@ -418,7 +418,7 @@ class TimelinePlayerViewModel: ObservableObject {
     let screenshot = screenshots[index]
 
     do {
-      return try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+      return (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
     } catch {
       // Don't log errors during search - only log when we find a valid frame or give up
       return nil
@@ -431,7 +431,7 @@ class TimelinePlayerViewModel: ObservableObject {
     isLoading = true
 
     do {
-      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+      let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
       currentImage = image
     } catch {
       logError("TimelinePlayer: Failed to load frame: \(error)")

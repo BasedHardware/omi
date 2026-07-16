@@ -1558,7 +1558,7 @@ private struct AudioLevelNavItem: View {
 /// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
 /// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
 enum OmiDeviceImage {
-  static let shared: NSImage? = {
+  @MainActor static let shared: NSImage? = {
     guard
       let url = Bundle.resourceBundle.url(
         forResource: "omi-with-rope-no-padding", withExtension: "webp")

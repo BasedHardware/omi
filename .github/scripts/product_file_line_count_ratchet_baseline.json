@@ -77,7 +77,7 @@
     "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Strict concurrency cleanup keeps non-Sendable JSON payloads behind checked boundaries without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
-    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Strict concurrency cleanup unwraps actor-safe screenshot image boxes at UI boundary without changing rendering behavior.",
     "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "The strict VoiceTurnDomain target centralizes reducer ownership and moves the lifecycle state machine intact."
   },

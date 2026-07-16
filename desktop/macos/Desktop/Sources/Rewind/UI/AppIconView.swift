@@ -31,7 +31,7 @@ struct AppIconView: View {
       }
     }
     .task {
-      icon = await AppIconCache.shared.getIcon(for: appName, size: size)
+      icon = (await AppIconCache.shared.getIcon(for: appName, size: size)).image
     }
   }
 }
@@ -48,12 +48,12 @@ actor AppIconCache {
     return cache
   }()
 
-  func getIcon(for appName: String, size: CGFloat) async -> NSImage? {
+  func getIcon(for appName: String, size: CGFloat) async -> OptionalRewindImageBox {
     let cacheKey = appName as NSString
 
     // Check cache first
     if let cached = cache.object(forKey: cacheKey) {
-      return cached
+      return OptionalRewindImageBox(image: cached)
     }
 
     // Try to find the app and get its icon
@@ -63,10 +63,10 @@ actor AppIconCache {
       // Resize to requested size
       let resized = resizeIcon(icon, to: CGFloat(size * 2))  // 2x for retina
       cache.setObject(resized, forKey: cacheKey)
-      return resized
+      return OptionalRewindImageBox(image: resized)
     }
 
-    return nil
+    return OptionalRewindImageBox(image: nil)
   }
 
   /// System apps that were renamed across macOS versions — stored names may
