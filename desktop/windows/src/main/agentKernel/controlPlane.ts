@@ -19,9 +19,14 @@
 // For the same reason `setControlPlaneOwner` is MAIN-SIDE ONLY and is not
 // reachable from the renderer: a caller that can set the active owner defeats the
 // per-call guard entirely (the guard would just compare against whatever it set).
-// Until main itself owns auth, the owner stays DEFAULT_LOCAL_OWNER_ID — the
-// single local user. Wire this to main's auth state when sign-in moves into main;
-// never re-expose it over IPC. See ../ipc/agentControl.ts.
+// It IS now wired to main's auth state — the `pimono:setSession` IPC handler
+// decodes the uid from the relayed Firebase ID token (the credential itself, not
+// a renderer-asserted field) and calls `setControlPlaneOwner`, resetting to
+// DEFAULT_LOCAL_OWNER_ID on sign-out. Until that relay arrives on cold start the
+// owner is the default constant; `hasKnownControlPlaneOwner()` is false then, and
+// the main-chat / control-tool paths refuse rather than key a session under the
+// shared default. Never re-expose the setter over IPC. See ../ipc/agentControl.ts
+// and ../ipc/pimono.ts.
 //
 // Chat routing stays OFF: constructing the kernel does not route user-facing chat
 // through it. The adapter registry starts EMPTY, so the read/policy/dispatch
@@ -188,7 +193,10 @@ export function ensurePiMonoAdapterRegistered(): boolean {
 
 /**
  * Set the authoritative owner for control-tool calls. MAIN-SIDE ONLY — must never
- * be wired to an IPC handler (see the owner-authority note above).
+ * be wired to a plain IPC handler (see the owner-authority note above). Called by
+ * the `pimono:setSession` handler with the uid decoded from the relayed Firebase
+ * ID token; an empty/null id resets to DEFAULT_LOCAL_OWNER_ID (sign-out or an
+ * undecodable token).
  */
 export function setControlPlaneOwner(ownerId: string | null | undefined): void {
   activeOwnerId = ownerId?.trim() || DEFAULT_LOCAL_OWNER_ID
@@ -196,6 +204,18 @@ export function setControlPlaneOwner(ownerId: string | null | undefined): void {
 
 export function controlPlaneOwnerId(): string {
   return activeOwnerId
+}
+
+/**
+ * True once a real signed-in owner has been wired — i.e. the active owner is no
+ * longer the shared DEFAULT_LOCAL_OWNER_ID constant. The pi-mono main-chat path
+ * and control-tool calls gate on this to close the cold-start window: before the
+ * auth relay sets the owner, a kernel session opened under the default constant
+ * would collide across accounts on a shared profile and could never migrate to
+ * the real uid. Refusing while unknown is fail-closed and correct.
+ */
+export function hasKnownControlPlaneOwner(): boolean {
+  return activeOwnerId !== DEFAULT_LOCAL_OWNER_ID
 }
 
 /**
@@ -213,11 +233,25 @@ export function trustedDirectControlContext(): AgentControlToolContext {
   }
 }
 
-/** Run one agent-control tool as trusted direct control. Returns the JSON envelope. */
+/** Run one agent-control tool as trusted direct control. Returns the JSON envelope.
+ *
+ * Refuses while the owner is unknown (the cold-start window before the auth relay
+ * wires the signed-in uid). Running a control tool under the shared default owner
+ * would scope its kernel reads/writes to a constant every account collides on — so
+ * fail closed with a clear envelope instead of touching the store. */
 export async function callAgentControlTool(
   name: string,
   input: Record<string, unknown>
 ): Promise<string> {
+  if (!hasKnownControlPlaneOwner()) {
+    return JSON.stringify({
+      ok: false,
+      error: {
+        code: 'owner_not_ready',
+        message: 'Sign-in has not completed; the agent control plane has no owner yet.'
+      }
+    })
+  }
   return handleAgentControlToolCall(trustedDirectControlContext(), name, input)
 }
 

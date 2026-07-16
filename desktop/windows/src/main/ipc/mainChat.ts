@@ -11,6 +11,7 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
+import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
 import { formatTranscriptTail } from '../agentKernel/turnContext'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
@@ -168,6 +169,15 @@ export async function runMainChatTurn(
   let unsubscribe: () => void = () => {}
 
   try {
+    // Cold-start gate: refuse before the auth relay has wired the signed-in owner.
+    // pi-mono managed cloud requires a Firebase session anyway, so ownerId still at
+    // the shared DEFAULT_LOCAL_OWNER_ID means either not-signed-in or the relay has
+    // not arrived yet. Resolving a surface session here would key it under that
+    // shared constant — the exact cross-account collision the owner wiring closes —
+    // and it would never migrate to the real uid. Fail closed instead.
+    if (ownerId === DEFAULT_LOCAL_OWNER_ID) {
+      throw new Error('Sign-in has not completed yet — try again in a moment.')
+    }
     const surfaceRef = {
       surfaceKind: 'main_chat',
       externalRefKind: 'chat',
