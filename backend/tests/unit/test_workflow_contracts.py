@@ -179,8 +179,8 @@ def test_every_external_workflow_contract_source_triggers_backend_unit_workflow(
     assert missing == set()
 
 
-def test_backend_unit_ci_runner_is_shared_by_pre_push_and_github_actions():
-    """Push and CI execute one checked-in unit-test contract with one failure ceiling."""
+def test_backend_unit_ci_runner_stays_in_ci_while_pre_push_keeps_its_budget():
+    """#9440: CI is full-suite authority; push latency must remain bounded."""
     repo = BACKEND_DIR.parent
     workflow_text = (repo / ".github/workflows/backend-unit-tests.yml").read_text(encoding="utf-8")
     pre_push = (repo / "scripts/pre-push").read_text(encoding="utf-8")
@@ -188,7 +188,9 @@ def test_backend_unit_ci_runner_is_shared_by_pre_push_and_github_actions():
 
     assert "scripts/run-unit-ci.sh --changed-files" in workflow_text
     assert "scripts/run-unit-ci.sh --all" in workflow_text
-    assert "backend/scripts/run-unit-ci.sh --changed-files" in pre_push
+    assert "backend/scripts/run-unit-ci.sh" not in pre_push
+    assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
+    assert "pre-push is intentionally a bounded local-feedback gate" in pre_push
     assert 'BACKEND_FAST_UNIT_WARN_SECONDS="0.1"' in runner
     assert 'BACKEND_FAST_UNIT_FAIL_SECONDS="1.0"' in runner
 
@@ -209,6 +211,7 @@ def test_pre_push_requires_backend_python_lazily():
     assert 'if [[ ! -x "$BACKEND_PYTHON" ]]' not in setup_prefix
     for function_name in (
         "check_backend_runtime_env_if_needed",
+        "check_backend_typecheck_if_needed",
         "check_backend_unit_tests_if_needed",
         "check_openapi_contract_if_needed",
     ):
@@ -256,7 +259,8 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
     assert 'scripts/changed-files "$DIFF_BASE" "$local_oid"' in pre_push
     assert "scripts/pr-preflight --lane local" in pre_push
-    assert "backend/scripts/run-unit-ci.sh" in pre_push
+    assert "backend/scripts/run-unit-ci.sh" not in pre_push
+    assert 'PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40' in pre_push
     assert "scan_import_time_side_effects.py" not in pre_push
     assert "check_module_stub_pollution.py" not in pre_push
     assert "check_desktop_test_quality.py" in manifest
