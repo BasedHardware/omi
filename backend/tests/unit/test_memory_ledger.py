@@ -21,6 +21,7 @@ import pytest
 from database import firestore_transaction_retry
 from testing.import_isolation import load_module_fresh, stub_modules
 from tests.unit.fake_firestore import FakeFirestore
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
 _BACKEND = Path(__file__).resolve().parents[2]
@@ -126,54 +127,11 @@ class _LedgerTransaction:
 
 
 def _ledger_state_write(transaction):
-    return next(payload for path, payload in transaction.sets if path.endswith("/memory_state/head"))
-
-
-class ReadAfterWriteError(Exception):
-    """Mirror of Firestore's read-after-write guard for strict ordering tests."""
-
-
-class _StrictLedgerTransaction:
-    """Transaction fake that enforces Firestore's read-before-write ordering."""
-
-    def __init__(self):
-        self.sets = []
-        self.has_written = False
-
-    def set(self, ref, payload):
-        self.has_written = True
-        self.sets.append((ref.path, payload))
-
-
-class _StrictLedgerDocument:
-    def __init__(self, db, path):
-        self._db = db
-        self.path = path
-
-    def collection(self, name):
-        return _StrictLedgerCollection(self._db, f"{self.path}/{name}")
-
-    def get(self, transaction=None):
-        if transaction is not None and transaction.has_written:
-            raise ReadAfterWriteError("Attempted read after write in a transaction.")
-        return _LedgerSnapshot(self._db.docs.get(self.path))
-
-
-class _StrictLedgerCollection:
-    def __init__(self, db, path):
-        self._db = db
-        self.path = path
-
-    def document(self, document_id):
-        return _StrictLedgerDocument(self._db, f"{self.path}/{document_id}")
-
-
-class _StrictLedgerDb:
-    def __init__(self, docs):
-        self.docs = dict(docs)
-
-    def collection(self, name):
-        return _StrictLedgerCollection(self, name)
+    return next(
+        payload
+        for path, payload in transaction.sets
+        if (path.endswith("/memory_state/head") if isinstance(path, str) else path[-2:] == ("memory_state", "head"))
+    )
 
 
 def test_fold_commits_replays_head_and_valid_time():
@@ -409,11 +367,11 @@ def _clobbered_state_docs(uid):
     reading memory_state/apply_control — the read that regressed to happen after
     the commit/projection writes (issue #9780)."""
     return {
-        f"users/{uid}/memory_state/head": {
+        ('users', uid, 'memory_state', 'head'): {
             "current_head_commit_id": "legacy-head",
             "projection_version": 1,
         },
-        f"users/{uid}/memory_state/apply_control": {
+        ('users', uid, 'memory_state', 'apply_control'): {
             "uid": uid,
             "account_generation": 7,
             "head_commit_id": "canonical-head",
@@ -430,8 +388,8 @@ def test_ledger_append_reads_apply_control_before_any_write():
     the lenient fake did not enforce.
     """
     uid = "u1"
-    database = _StrictLedgerDb(_clobbered_state_docs(uid))
-    transaction = _StrictLedgerTransaction()
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
 
     result = memory_ledger._append_commit_transaction(
         transaction,
@@ -454,8 +412,8 @@ def test_ledger_append_reads_apply_control_before_any_write():
 def test_ledger_builder_append_reads_apply_control_before_any_write():
     """Regression for #9780 on the builder append path."""
     uid = "u1"
-    database = _StrictLedgerDb(_clobbered_state_docs(uid))
-    transaction = _StrictLedgerTransaction()
+    database = StrictFirestore(_clobbered_state_docs(uid))
+    transaction = database.transaction()
 
     result = memory_ledger._append_commit_with_builder_transaction(
         transaction,
