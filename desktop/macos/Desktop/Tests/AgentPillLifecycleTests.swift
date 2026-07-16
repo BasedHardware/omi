@@ -515,7 +515,7 @@ import XCTest
         "notchAgentLogoHitTarget\n                            .frame(width: notchChromeLayoutWidth, height: notchChromeHeight + notchHoverMenuHeight)"
       ))
     XCTAssertTrue(source.contains("@State private var notchSettingsHovering = false"))
-    XCTAssertTrue(source.contains("if !showingNotchThinking && notchSettingsHovering"))
+    XCTAssertTrue(source.contains("if !state.isVoicePresentationActive && notchSettingsHovering"))
     XCTAssertTrue(source.contains("private var notchSettingsButton: some View"))
     XCTAssertTrue(source.contains(".frame(width: 44, height: 44)"))
     XCTAssertTrue(source.contains(".accessibilityIdentifier(\"notch_floating_bar_settings\")"))
@@ -523,7 +523,7 @@ import XCTest
       source.contains(
         ".background(Color.white.opacity(0.12))\n                .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))"
       ))
-    XCTAssertTrue(source.contains("notchSettingsHovering = hovering"))
+    XCTAssertTrue(source.contains("notchSettingsHovering = showsHoverChrome"))
     XCTAssertTrue(source.contains("openFloatingBarSettings()"))
     XCTAssertTrue(source.contains("openAgentChatsFromNotchLogo()"))
     XCTAssertFalse(

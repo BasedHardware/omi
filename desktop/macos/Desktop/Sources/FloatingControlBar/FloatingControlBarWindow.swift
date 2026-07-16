@@ -220,7 +220,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// engaged — PTT listening, thinking, or speaking a reply — on ANY display,
   /// so external monitors morph from the idle pill into the island too.
   private var barWantsActiveIsland: Bool {
-    state.isVoiceListening || state.isThinking || state.isVoiceResponseGlowActive
+    state.isVoicePresentationActive
   }
   private var notchModeEnabled: Bool {
     Self.shouldUseNotchIsland(
@@ -243,7 +243,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         ? Self.notchCompactSideWidth
         : Self.notchActiveSideWidth
     }
-    if AgentPillsManager.shared.pills.isEmpty && !state.isVoiceListening {
+    if AgentPillsManager.shared.pills.isEmpty && !state.isVoicePresentationActive {
       return Self.notchCompactSideWidth
     }
     return Self.notchActiveSideWidth
@@ -1042,7 +1042,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
           // outset promptly when agents appear or all disappear
           // (same reasoning as the voice-response glow observer).
           guard !self.state.showingAIConversation,
-            !self.state.isVoiceListening,
+            !self.state.isVoicePresentationActive,
             !self.state.isHoveringBar,
             self.state.currentNotification == nil
           else { return }
@@ -1060,11 +1060,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
           return
         }
         // Voice listening/thinking/glow own their own frames (syncActiveIsland).
-        guard !self.state.isVoiceListening,
-          !self.state.isThinking,
-          !self.state.isVoiceResponseGlowActive,
-          self.state.pttHintText.isEmpty
-        else { return }
+        guard !self.state.isVoicePresentationActive else { return }
         // Idle ↔ hover lifecycle: pills appearing or disappearing must
         // not resize the panel — the fixed frame already fits the
         // agent-count ceiling and the content morph handles the rest.
@@ -1806,7 +1802,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// drift).
   @discardableResult
   func resizeForHover(expanded: Bool) -> Bool {
-    guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseGlowActive,
+    guard !state.showingAIConversation, !state.isVoicePresentationActive,
       !state.isShowingNotification, !suppressHoverResize
     else { return false }
     // The pill agent list owns the window size while open; hover
@@ -1828,8 +1824,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let doResize: () -> Void = { [weak self] in
       guard let self = self else { return }
       guard !self.state.showingAIConversation,
-        !self.state.isVoiceListening,
-        !self.state.isVoiceResponseGlowActive,
+        !self.state.isVoicePresentationActive,
         !self.state.isShowingNotification,
         !self.suppressHoverResize
       else { return }
@@ -1900,7 +1895,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// outsets.
   func resizeForAgentSwitcher(visible: Bool) {
     guard !state.showingAIConversation,
-      !state.isVoiceListening,
+      !state.isVoicePresentationActive,
       !state.isShowingNotification,
       !suppressHoverResize
     else { return }
@@ -2132,9 +2127,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     state.currentNotification = nil
 
     let targetSize: NSSize
-    if state.isVoiceListening && !notchModeEnabled {
-      targetSize = Self.voiceBarSize
-    } else if notchModeEnabled && !state.isVoiceListening {
+    if state.isVoicePresentationActive {
+      targetSize = currentSurfaceSizeForCurrentScreen()
+    } else if notchModeEnabled {
       // Return to the fixed idle/hover surface frame.
       targetSize = notchFixedIdleSurfaceSize()
     } else {
@@ -2146,7 +2141,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Restore the compact pill size when we temporarily surface the bar outside
   /// of an active hover, notification, voice session, or AI conversation.
   func normalizeForTemporaryShow() {
-    guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+    guard !state.showingAIConversation, !state.isVoicePresentationActive, state.currentNotification == nil else { return }
     resizeAnchored(
       to: notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize,
       makeResizable: false,

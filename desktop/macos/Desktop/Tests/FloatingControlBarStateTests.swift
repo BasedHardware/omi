@@ -50,6 +50,39 @@ final class FloatingControlBarStateTests: XCTestCase {
     XCTAssertFalse(state.isHoveringBar)
   }
 
+  func testNotchHoverSurfaceIsReservedForEveryVoicePresentationPhase() {
+    XCTAssertTrue(
+      NotchHoverSurfacePolicy.allowsMenu(
+        showingAIConversation: false,
+        isVoicePresentationActive: false,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertTrue(
+      NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
+        usesNotchIsland: true,
+        showingAIConversation: false,
+        isVoicePresentationActive: false,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertFalse(
+      NotchHoverSurfacePolicy.allowsMenu(
+        showingAIConversation: false,
+        isVoicePresentationActive: true,
+        isShowingNotification: false
+      )
+    )
+    XCTAssertFalse(
+      NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
+        usesNotchIsland: true,
+        showingAIConversation: false,
+        isVoicePresentationActive: true,
+        isShowingNotification: false
+      )
+    )
+  }
+
   func testAgentSurfaceDoesNotDependOnMainChatContentOrHeight() {
     let state = FloatingControlBarState()
     let agentID = UUID()
