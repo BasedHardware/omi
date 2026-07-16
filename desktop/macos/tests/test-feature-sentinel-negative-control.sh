@@ -49,11 +49,10 @@ fi
 
 # --- POSITIVE (compile + upcoming feature): sentinel target builds under Swift 6 ---
 # Force recompilation so the result reflects the current source even when the
-# caller has already warmed the package build cache.
+# caller has already warmed the package build cache. Do not remove the target's
+# derived output-file map: SwiftPM owns that map and can otherwise reuse stale
+# build-plan metadata pointing at a file we just deleted.
 touch "$SENTINEL"
-rm -rf \
-  "$MACOS_DIR/Desktop/.build/debug/SemanticFeatureSentinels.build" \
-  "$MACOS_DIR/Desktop/.build/arm64-apple-macosx/debug/SemanticFeatureSentinels.build"
 if BUILD_OUTPUT=$(xcrun swift build --package-path "$MACOS_DIR/Desktop" --target SemanticFeatureSentinels 2>&1); then
   BUILD_STATUS=0
 else
