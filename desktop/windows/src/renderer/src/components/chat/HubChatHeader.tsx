@@ -15,9 +15,10 @@ import { ChatHistoryPopover } from './ChatHistoryPopover'
 // GATE (DARK invariant): the header renders ONLY when the `multiChatEnabled` pref
 // is ON *and* the chat engine is pi_mono — re-threading routes a turn to a
 // per-session kernel conversation, which only the pi_mono path does; under legacy
-// there is no per-session memory, so a switcher would be cosmetic. Both gates
-// default OFF (the pref is unset; the engine is legacy_sse — a dark main-process
-// flag), so by default this returns null and the Hub is byte-identical to today.
+// there is no per-session memory, so a switcher would be cosmetic. The
+// `multiChatEnabled` pref defaults OFF (unset), so by default this returns null and
+// the Hub is byte-identical to today. (pi_mono is now the default chat engine, so
+// the engine condition is normally true — multiChatEnabled is the effective switch.)
 
 /** Gate wrapper: renders the header only when multiChatEnabled && engine==pi_mono
  *  (so the session-fetch hook never runs on the default path). */
