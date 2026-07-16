@@ -257,6 +257,23 @@ export function Conversations(): React.JSX.Element {
       // A superseded fetch (a newer loadAll already started) must not overwrite the
       // fresher state — but still return its cloud ids so a caller can inspect them.
       if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
+      // Cache-first resilience: a SILENT revalidation whose cloud fetch failed
+      // (offline cold start, transient blip) must not wipe the already-shown
+      // default-view rows — a hydrated cold-start snapshot or a prior load — down to
+      // local-only. Keep the last-known list on screen (the whole point of cache
+      // first). An explicit loading fetch (true cold start / filter change) still
+      // commits its result, and a new local recording still surfaces via the
+      // subscribeConversations live-refresh path.
+      const cloudFailed = cloudIds === null
+      if (
+        cloudFailed &&
+        !showLoading &&
+        isDefaultView(folderFilter, dateRange) &&
+        (conversationsCache.rows?.length ?? 0) > 0
+      ) {
+        setLoading(false)
+        return cloudIds
+      }
       // Only the default view is the canonical shared cache.
       if (isDefaultView(folderFilter, dateRange)) {
         publishConversationsCache(merged)
