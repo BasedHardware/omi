@@ -393,8 +393,9 @@ describe('product-tool dispatch', () => {
   it('an unsupported product tool degrades cleanly AND fires fallback telemetry', async () => {
     const { kernel, store } = newKernel()
     const recordFallback = vi.fn()
-    // Default (empty) serviceable set — execute_sql is a real product tool but not wired.
-    const bridge = await startBridge(kernel, { recordFallback })
+    // Empty serviceable set — execute_sql is a real product tool but not wired here
+    // (an explicit empty map, since the production default registry now services it).
+    const bridge = await startBridge(kernel, { recordFallback, productExecutors: new Map() })
     const { token, pipePath } = bindSession(bridge, store, 'coordinator')
     const client = await connect(pipePath, token)
 
