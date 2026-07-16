@@ -1170,7 +1170,7 @@ struct NotificationPermissionSection: View {
 }
 
 /// Kept as an alias for the System Audio section (now identical to the default).
-private func neutralInstructionStep(number: Int, text: String) -> some View {
+@MainActor private func neutralInstructionStep(number: Int, text: String) -> some View {
   instructionStep(number: number, text: text)
 }
 

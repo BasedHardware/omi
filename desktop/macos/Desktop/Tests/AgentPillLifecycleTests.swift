@@ -1429,11 +1429,7 @@ final class AgentPillLifecycleTests: XCTestCase {
 
     XCTAssertTrue(
       source.contains(
-        """
-        pill.status = .failed(errorText)
-                    pill.latestActivity = errorText
-                    pill.completedAt = Date()
-        """))
+        "      pill.status = .failed(errorText)\n      pill.latestActivity = errorText\n      pill.completedAt = Date()"))
     XCTAssertTrue(
       source.contains(
         "      pill.status = .failed(\"Agent ended before reporting a final result\")\n      pill.completedAt = Date()")
