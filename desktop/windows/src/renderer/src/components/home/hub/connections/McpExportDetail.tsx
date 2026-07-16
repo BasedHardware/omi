@@ -3,8 +3,14 @@ import { useState } from 'react'
 import { toast } from '../../../../lib/toast'
 import { rotateMcpKey } from '../../../../lib/mcpConnect'
 import { useMcpExports } from '../../../../hooks/useMcpExports'
-import { MCP_CONFIG_CONNECTORS, type McpConnectorId } from '../../../../../../shared/mcpExports'
+import {
+  MCP_CONFIG_CONNECTORS,
+  type McpConnectorId,
+  type McpCloudConnectorId
+} from '../../../../../../shared/mcpExports'
 import { McpConfigConnectorRow } from './McpConfigConnectorRow'
+import { McpCloudConnectorCard } from './McpCloudConnectorCard'
+import { MemoryPackRow } from './MemoryPackRow'
 
 // The detail body for one export destination in the "Use omi memory anywhere"
 // column. Each destination shows its config-write connector(s) — the row that
@@ -23,6 +29,16 @@ const CONNECTORS_FOR: Record<string, McpConnectorId[]> = {
   hermes: ['hermes']
 }
 
+// Which destinations also offer a cloud (OAuth) connector + a memory-pack row.
+const CLOUD_FOR: Record<string, McpCloudConnectorId | undefined> = {
+  claude: 'claude',
+  chatgpt: 'chatgpt'
+}
+const PACK_FOR: Record<string, 'chatgpt' | 'claude' | undefined> = {
+  claude: 'claude',
+  chatgpt: 'chatgpt'
+}
+
 export function McpExportDetail({ exportId }: { exportId: string }): React.JSX.Element {
   const { snapshot, statusFor, refresh } = useMcpExports()
   const [rotating, setRotating] = useState(false)
@@ -30,6 +46,8 @@ export function McpExportDetail({ exportId }: { exportId: string }): React.JSX.E
   const ids = CONNECTORS_FOR[exportId] ?? []
   const connectors = MCP_CONFIG_CONNECTORS.filter((c) => ids.includes(c.id))
   const anyConnected = connectors.some((c) => statusFor(c.id)?.kind === 'connected')
+  const cloudId = CLOUD_FOR[exportId]
+  const packProvider = PACK_FOR[exportId]
 
   const rotate = async (): Promise<void> => {
     if (rotating) return
@@ -56,6 +74,8 @@ export function McpExportDetail({ exportId }: { exportId: string }): React.JSX.E
             onChanged={refresh}
           />
         ))}
+        {cloudId && <McpCloudConnectorCard id={cloudId} />}
+        {packProvider && <MemoryPackRow provider={packProvider} />}
       </div>
 
       {/* Hosted-key management — only meaningful once a key exists (something is

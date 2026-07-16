@@ -129,9 +129,6 @@ export interface McpCloudConnectorInfo {
   connectorUrl: string
   /** The copy-rows shown on the guide card (Name, server URL, client id, …). */
   rows: McpCloudCopyRow[]
-  /**
-   * Set when the backend OAuth client for this provider is NOT known to be
-   * registered — the UI shows a "needs backend setup" notice instead of a guide.
-   */
-  needsBackendRegistration?: boolean
+  /** True when this account has completed the provider's OAuth grant. */
+  connected?: boolean
 }

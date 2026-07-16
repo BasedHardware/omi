@@ -53,7 +53,11 @@ import type {
   XRunState
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
-import type { McpConnectorId, McpExportsSnapshot } from '../shared/mcpExports'
+import type {
+  McpConnectorId,
+  McpExportsSnapshot,
+  McpCloudConnectorInfo
+} from '../shared/mcpExports'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -219,7 +223,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('tasks:toggle', args) as Promise<void>,
   tasksUpdate: (args: { backendId: string; fields: TaskUpdateFields }) =>
     ipcRenderer.invoke('tasks:update', args) as Promise<void>,
-  tasksDelete: (args: { backendId: string }) => ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
+  tasksDelete: (args: { backendId: string }) =>
+    ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
   tasksReconcile: () => ipcRenderer.invoke('tasks:reconcile') as Promise<void>,
   onTasksChanged: (cb: () => void) => {
     const listener = (): void => cb()
@@ -360,6 +365,18 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('mcp:changed', listener)
     return () => ipcRenderer.removeListener('mcp:changed', listener)
   },
+  // Cloud (OAuth) connector cards + connected state. `token` (nullable) is
+  // relayed for the grants lookup; the cards themselves carry no secret.
+  mcpCloudInfo: (token: string | null): Promise<McpCloudConnectorInfo[]> =>
+    ipcRenderer.invoke('mcp:cloudInfo', token),
+  mcpOpenCloudConnector: (url: string): Promise<void> =>
+    ipcRenderer.invoke('mcp:openCloudConnector', url),
+  // Memory-PACK variant: main formats the pack, copies it to the clipboard, and
+  // opens the provider chat. Returns the opened URL.
+  mcpMemoryPack: (
+    provider: 'gemini' | 'chatgpt' | 'claude',
+    memories: ExportMemory[]
+  ): Promise<string> => ipcRenderer.invoke('mcp:memoryPack', provider, memories),
   // Encrypted-at-rest Firebase auth persistence (main-process safeStorage/DPAPI).
   // Backs lib/encryptedAuthPersistence — Firebase drives the read/write/migrate
   // lifecycle over these channels; token values never touch plaintext localStorage.

@@ -8,9 +8,13 @@
 // tool's config file itself, and returns only non-secret status. The key is a
 // credential — never logged.
 
-import { ipcMain, webContents } from 'electron'
+import { ipcMain, webContents, clipboard, shell } from 'electron'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import { McpExportsService } from '../mcp/mcpExportsService'
+import { buildCloudConnectors, connectedCloudConnectors } from '../mcp/cloudConnectors'
+import { buildMemoryPack, memoryPackChatUrl, type MemoryPackProvider } from '../mcp/memoryPack'
+import type { ExportMemory } from '../../shared/types'
+import type { McpCloudConnectorInfo } from '../../shared/mcpExports'
 import {
   detectClaudeCode,
   claudeMcpConnected,
@@ -126,8 +130,38 @@ async function rotate(token: string, ownerUserId: string): Promise<McpExportsSna
   return snapshot(ownerUserId)
 }
 
+/** Cloud (OAuth) connector cards + their connected state (grants lookup). */
+async function cloudInfo(token: string | null): Promise<McpCloudConnectorInfo[]> {
+  const base = apiBase()
+  const infos = buildCloudConnectors(base)
+  const connected = await connectedCloudConnectors(base, token)
+  return infos.map((info) => ({ ...info, connected: connected.has(info.id) }))
+}
+
+/**
+ * Build the memory pack for `provider`, copy it to the clipboard, and open the
+ * provider's chat. The renderer owns the memories (its API token) and passes them
+ * in. Returns the chat URL that was opened.
+ */
+function openMemoryPack(provider: MemoryPackProvider, memories: ExportMemory[]): string {
+  clipboard.writeText(buildMemoryPack(provider, memories))
+  const url = memoryPackChatUrl(provider)
+  void shell.openExternal(url)
+  return url
+}
+
+/** Open a cloud connector's provider connector page (the assisted "open & guide"). */
+function openCloudConnector(url: string): void {
+  void shell.openExternal(url)
+}
+
 export function registerMcpExportsHandlers(): void {
   ipcMain.handle('mcp:status', (_e, ownerUserId: string) => snapshot(ownerUserId))
+  ipcMain.handle('mcp:cloudInfo', (_e, token: string | null) => cloudInfo(token))
+  ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))
+  ipcMain.handle('mcp:memoryPack', (_e, provider: MemoryPackProvider, memories: ExportMemory[]) =>
+    openMemoryPack(provider, memories)
+  )
   ipcMain.handle(
     'mcp:connect',
     (_e, connectorId: McpConnectorId, token: string, ownerUserId: string) =>

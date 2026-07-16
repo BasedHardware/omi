@@ -1,6 +1,6 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
-import type { McpConnectorId, McpExportsSnapshot } from './mcpExports'
+import type { McpConnectorId, McpExportsSnapshot, McpCloudConnectorInfo } from './mcpExports'
 
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
@@ -1176,6 +1176,17 @@ export type OmiBridgeApi = {
   mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Fires when any connector's status changed. Returns an unsubscribe fn. */
   onMcpChanged: (cb: () => void) => () => void
+  /** ChatGPT/Claude assisted-connector cards + connected state. `token` (nullable)
+   *  is relayed for the OAuth grants lookup; the cards carry no secret. */
+  mcpCloudInfo: (token: string | null) => Promise<McpCloudConnectorInfo[]>
+  /** Open a cloud connector's provider connector page (assisted "open & guide"). */
+  mcpOpenCloudConnector: (url: string) => Promise<void>
+  /** Memory-PACK variant: format the pack, copy to clipboard, open the provider
+   *  chat. Returns the opened URL. */
+  mcpMemoryPack: (
+    provider: 'gemini' | 'chatgpt' | 'claude',
+    memories: ExportMemory[]
+  ) => Promise<string>
   // --- Encrypted-at-rest Firebase auth persistence ---
   /** Main-process encrypted store (safeStorage/DPAPI) backing a custom Firebase
    *  Persistence, so ID/refresh tokens never sit in plaintext localStorage. Keyed
