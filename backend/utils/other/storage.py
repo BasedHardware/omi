@@ -1366,7 +1366,6 @@ def precache_conversation_audio(
         return
 
     def _precache_all():
-
         def _cache_single(af: Dict[str, Any]) -> None:
             try:
                 audio_file_id = af.get('id')

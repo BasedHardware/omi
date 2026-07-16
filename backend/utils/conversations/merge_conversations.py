@@ -22,7 +22,6 @@ from models.conversation_enums import ConversationStatus
 from models.structured import Structured
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.datetime_utils import coerce_utc_datetime
 from utils.conversations import lifecycle as lifecycle_service
@@ -527,14 +526,21 @@ def _delete_conversation_and_related_data(uid: str, conversation_id: str) -> Non
     import database.memories as memories_db
     import database.action_items as action_items_db
 
+    memory_system: MemorySystem | None = None
     try:
         memory_system = pin_memory_system(uid, db_client=firestore_db)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=firestore_db):
+        if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=firestore_db).retract_conversation_memories(uid, conversation_id)
         else:
             memories_db.delete_memories_for_conversation(uid, conversation_id)
     except Exception as e:
         logger.error(f"Error deleting memories for {conversation_id}: {e}")
+        # A canonical-selected account must retry the merge rather than delete
+        # its source conversation while its canonical evidence retraction is
+        # unavailable. Continuing here would silently leave active canonical
+        # memories pointing at a deleted source.
+        if memory_system == MemorySystem.CANONICAL:
+            raise
 
     try:
         # Delete action items from standalone collection

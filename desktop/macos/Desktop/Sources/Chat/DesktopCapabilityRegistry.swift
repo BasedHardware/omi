@@ -19,23 +19,24 @@ enum DesktopCapabilityRegistry {
     let filteredCapabilities = capabilities(for: .desktopChat)
       .filter { !excludedToolNames.contains($0.toolName) }
     let availableToolNames = Set(filteredCapabilities.map(\.toolName))
-    let docs = filteredCapabilities
+    let docs =
+      filteredCapabilities
       .map { toolDoc($0, excluding: excludedToolNames) }
       .joined(separator: "\n\n")
     let taskAgentAwareness = taskAgentAwarenessPrompt(availableToolNames: availableToolNames)
     let proactiveGuidance = proactiveGuidancePrompt(availableToolNames: availableToolNames)
     let usageGuidance = usageGuidancePrompt(availableToolNames: availableToolNames)
     return """
-    These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
+      These Omi data/status tools are documented for desktop chat. Use them before answering when the question depends on the user's personal data, tasks, conversations, memories, app/screen activity, or task-agent state. Do not guess when you can look it up. Do not call tools for simple chit-chat or general knowledge that does not depend on the user's data.
 
-    \(docs)
+      \(docs)
 
-    \(taskAgentAwareness)
+      \(taskAgentAwareness)
 
-    \(proactiveGuidance)
+      \(proactiveGuidance)
 
-    \(usageGuidance)
-    """
+      \(usageGuidance)
+      """
   }
 
   static var desktopToolPrompt: String {
@@ -74,9 +75,9 @@ enum DesktopCapabilityRegistry {
       .map { "- \($0)" }
       .joined(separator: "\n")
     return """
-    **\(capability.toolName)** (\(capability.latency.rawValue)): \(capability.summary)
-    \(bullets)
-    """
+      **\(capability.toolName)** (\(capability.latency.rawValue)): \(capability.summary)
+      \(bullets)
+      """
   }
 
   private static func proactiveGuidancePrompt(availableToolNames: Set<String>) -> String {
@@ -96,10 +97,14 @@ enum DesktopCapabilityRegistry {
       "1. FIRST check <user_facts> — if the answer is there, use it directly.",
     ]
     if !memoryTools.isEmpty {
-      lines.append("2. If NOT in <user_facts>, use \(memoryTools.joined(separator: ", ")) over memories before saying you don't know.")
+      lines.append(
+        "2. If NOT in <user_facts>, use \(memoryTools.joined(separator: ", ")) over memories before saying you don't know."
+      )
     }
     if !conversationTools.isEmpty {
-      lines.append("3. For questions about past events or conversations, query \(conversationTools.joined(separator: ", ")) or transcription_sessions/transcription_segments.")
+      lines.append(
+        "3. For questions about past events or conversations, query \(conversationTools.joined(separator: ", ")) or transcription_sessions/transcription_segments."
+      )
     }
     lines.append("NEVER say \"I don't know\" or \"I don't have that info\" without checking first.")
     return lines.joined(separator: "\n")
@@ -110,11 +115,11 @@ enum DesktopCapabilityRegistry {
       return ""
     }
     return """
-    **Task-Agent Awareness:**
-    - Omi can run local task-chat agents/subagents in the desktop task panel and floating-bar background agents.
-    - If the user says "your subagents", "task agents", "running agents", "background agents", or mentions task-agent errors/timeouts, do NOT deny that you have subagents.
-    - Call list_agent_sessions before answering those questions.
-    """
+      **Task-Agent Awareness:**
+      - Omi can run local task-chat agents/subagents in the desktop task panel and floating-bar background agents.
+      - If the user says "your subagents", "task agents", "running agents", "background agents", or mentions task-agent errors/timeouts, do NOT deny that you have subagents.
+      - Call list_agent_sessions before answering those questions.
+      """
   }
 
   private static func usageGuidancePrompt(availableToolNames: Set<String>) -> String {
@@ -136,14 +141,14 @@ enum DesktopCapabilityRegistry {
       "Specific past conversations/events -> \(toolList(conversationTools)).",
       when: !available(conversationTools).isEmpty
     )
-    append(
-      "Current screen/current work questions (\"what is on my screen?\", \"do you see my screen?\") -> get_work_context first.",
-      when: has("get_work_context")
-    )
     let screenshotTools = ["capture_screen", "get_screenshot"]
     append(
-      "Raw screenshot pixels -> \(toolList(screenshotTools)) only when work context is insufficient and approval is available.",
+      "Direct current-screen questions (\"what is on my screen?\", \"do you see my screen?\") -> \(toolList(screenshotTools)) when available. Use get_work_context only for recent historical activity; it never proves the screen is current.",
       when: !available(screenshotTools).isEmpty
+    )
+    append(
+      "Recent work/activity history -> get_work_context. Treat its screen_now and timeline fields as historical unless this turn has a separately attached live image.",
+      when: has("get_work_context")
     )
     append(
       "If a screen tool reports permission_required, tell the user Omi cannot access that capability yet and ask whether they want to grant it. Call request_permission with the returned permission type only after explicit current-turn consent.",

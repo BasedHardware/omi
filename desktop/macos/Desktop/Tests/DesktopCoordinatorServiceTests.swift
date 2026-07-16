@@ -19,20 +19,20 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testRouteIntentSendsStructuredProposalAndParsesTypedKernelDecision() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {
-        "ok": true,
-        "route": {
-          "decisionId": "decision-1",
-          "intent": "continue_run",
-          "surfaceKind": "main_chat",
-          "snapshotVersion": "snapshot-7",
-          "reasonCode": "continue_proposal",
-          "explanation": "Continue the resolved run.",
-          "sessionId": "session-1",
-          "runId": "run-1"
+        {
+          "ok": true,
+          "route": {
+            "decisionId": "decision-1",
+            "intent": "continue_run",
+            "surfaceKind": "main_chat",
+            "snapshotVersion": "snapshot-7",
+            "reasonCode": "continue_proposal",
+            "explanation": "Continue the resolved run.",
+            "sessionId": "session-1",
+            "runId": "run-1"
+          }
         }
-      }
-      """)
+        """)
     let service = DesktopCoordinatorService(
       runtime: runtime,
       clientId: "test-route",
@@ -72,20 +72,21 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(functionSource.contains(#"let error = object["error"] as? [String: Any]"#))
     XCTAssertTrue(functionSource.contains(#"let code = stringValue(error?["code"])"#))
     XCTAssertTrue(functionSource.contains(#"let detail = code.map { "\($0): \(message)" } ?? message"#))
-    XCTAssertFalse(functionSource.contains(#"guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else"#))
+    XCTAssertFalse(
+      functionSource.contains(#"guard let object = jsonObject(from: raw), object["ok"] as? Bool != false else"#))
   }
 
   @MainActor
   func testSpawnAgentUsesCanonicalDirectControlPayload() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {
-        "ok": true,
-        "session": {"sessionId": "ses_pill", "title": "Create Memory Story"},
-        "run": {"runId": "run_pill"},
-        "attempt": {"attemptId": "att_pill"}
-      }
-      """
+        {
+          "ok": true,
+          "session": {"sessionId": "ses_pill", "title": "Create Memory Story"},
+          "run": {"runId": "run_pill"},
+          "attempt": {"attemptId": "att_pill"}
+        }
+        """
     )
     let service = DesktopCoordinatorService(
       runtime: runtime,
@@ -137,34 +138,34 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testSpawnAgentsIssuesOneCanonicalRequestAndProjectsEverySibling() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {
-        "ok": true,
-        "requestedAgentCount": 3,
-        "agents": [
-          {
-            "kind": "background",
-            "delegation": null,
-            "session": {"sessionId": "ses_1", "title": "Research (1/3)", "externalRefId": "11111111-1111-1111-1111-111111111111"},
-            "run": {"runId": "run_1"},
-            "attempt": {"attemptId": "att_1"}
-          },
-          {
-            "kind": "background",
-            "delegation": null,
-            "session": {"sessionId": "ses_2", "title": "Research (2/3)", "externalRefId": "22222222-2222-2222-2222-222222222222"},
-            "run": {"runId": "run_2"},
-            "attempt": {"attemptId": "att_2"}
-          },
-          {
-            "kind": "background",
-            "delegation": null,
-            "session": {"sessionId": "ses_3", "title": "Research (3/3)", "externalRefId": "33333333-3333-3333-3333-333333333333"},
-            "run": {"runId": "run_3"},
-            "attempt": null
-          }
-        ]
-      }
-      """)
+        {
+          "ok": true,
+          "requestedAgentCount": 3,
+          "agents": [
+            {
+              "kind": "background",
+              "delegation": null,
+              "session": {"sessionId": "ses_1", "title": "Research (1/3)", "externalRefId": "11111111-1111-1111-1111-111111111111"},
+              "run": {"runId": "run_1"},
+              "attempt": {"attemptId": "att_1"}
+            },
+            {
+              "kind": "background",
+              "delegation": null,
+              "session": {"sessionId": "ses_2", "title": "Research (2/3)", "externalRefId": "22222222-2222-2222-2222-222222222222"},
+              "run": {"runId": "run_2"},
+              "attempt": {"attemptId": "att_2"}
+            },
+            {
+              "kind": "background",
+              "delegation": null,
+              "session": {"sessionId": "ses_3", "title": "Research (3/3)", "externalRefId": "33333333-3333-3333-3333-333333333333"},
+              "run": {"runId": "run_3"},
+              "attempt": null
+            }
+          ]
+        }
+        """)
     let service = DesktopCoordinatorService(
       runtime: runtime,
       clientId: "test-spawn-batch",
@@ -191,24 +192,26 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertEqual(batch.requestedAgentCount, 3)
     XCTAssertEqual(batch.agents.map(\.sessionId), ["ses_1", "ses_2", "ses_3"])
     XCTAssertEqual(batch.agents.map(\.runId), ["run_1", "run_2", "run_3"])
-    XCTAssertEqual(batch.agents.compactMap(\.externalRefId), [
-      "11111111-1111-1111-1111-111111111111",
-      "22222222-2222-2222-2222-222222222222",
-      "33333333-3333-3333-3333-333333333333",
-    ])
+    XCTAssertEqual(
+      batch.agents.compactMap(\.externalRefId),
+      [
+        "11111111-1111-1111-1111-111111111111",
+        "22222222-2222-2222-2222-222222222222",
+        "33333333-3333-3333-3333-333333333333",
+      ])
   }
 
   @MainActor
   func testSpawnAgentOmitsModelWhenCallerLeavesModelNil() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {
-        "ok": true,
-        "session": {"sessionId": "ses_pill", "title": "Hermes Task"},
-        "run": {"runId": "run_pill"},
-        "attempt": {"attemptId": "att_pill"}
-      }
-      """
+        {
+          "ok": true,
+          "session": {"sessionId": "ses_pill", "title": "Hermes Task"},
+          "run": {"runId": "run_pill"},
+          "attempt": {"attemptId": "att_pill"}
+        }
+        """
     )
     let service = DesktopCoordinatorService(
       runtime: runtime,
@@ -240,7 +243,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   @MainActor
   func testSpawnOriginIsTypedAndIndependentFromChildProjectionSurface() async throws {
     let runtime = RecordingCoordinatorRuntime(
-      response: #"{"ok":true,"session":{"sessionId":"ses","title":"Task"},"run":{"runId":"run"},"attempt":{"attemptId":"attempt"}}"#
+      response:
+        #"{"ok":true,"session":{"sessionId":"ses","title":"Task"},"run":{"runId":"run"},"attempt":{"attemptId":"attempt"}}"#
     )
     let service = DesktopCoordinatorService(
       runtime: runtime,
@@ -280,10 +284,11 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       runtime.calls.compactMap { $0.input["originSurfaceKind"] as? String },
       ["main_chat", "floating_bar", "realtime", "task_chat"]
     )
-    XCTAssertTrue(runtime.calls.prefix(3).allSatisfy {
-      ($0.input["metadata"] as? [String: String])?["uiProjection"] == "floating_bar"
-        && $0.input["externalRefId"] as? String == pillID.uuidString
-    })
+    XCTAssertTrue(
+      runtime.calls.prefix(3).allSatisfy {
+        ($0.input["metadata"] as? [String: String])?["uiProjection"] == "floating_bar"
+          && $0.input["externalRefId"] as? String == pillID.uuidString
+      })
     XCTAssertEqual(runtime.calls.last?.name, "send_agent_message")
     XCTAssertEqual(runtime.calls.last?.input["sessionId"] as? String, "ses")
     XCTAssertEqual(DesktopCoordinatorOriginSurface.taskChat.rawValue, "task_chat")
@@ -293,13 +298,13 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testInspectAgentRunUsesStrictGetAgentRunPayload() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {
-        "ok": true,
-        "session": {"sessionId": "ses_pill", "metadata": {"provider": "openclaw"}},
-        "run": {"runId": "run_pill", "status": "running"},
-        "attempt": {"attemptId": "att_pill"}
-      }
-      """
+        {
+          "ok": true,
+          "session": {"sessionId": "ses_pill", "metadata": {"provider": "openclaw"}},
+          "run": {"runId": "run_pill", "status": "running"},
+          "attempt": {"attemptId": "att_pill"}
+        }
+        """
     )
     let service = DesktopCoordinatorService(
       runtime: runtime,
@@ -326,17 +331,18 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
       (#""attemptId": "att_top""#, "att_top"),
       (#""run": {"runId": "run_pill", "status": "running", "attemptId": "att_run"}"#, "att_run"),
     ] {
-      let runShape = attemptShape.hasPrefix(#""run":"#)
+      let runShape =
+        attemptShape.hasPrefix(#""run":"#)
         ? attemptShape
         : #""run": {"runId": "run_pill", "status": "running"},"# + attemptShape
       let runtime = RecordingCoordinatorRuntime(
         response: """
-        {
-          "ok": true,
-          "session": {"sessionId": "ses_pill"},
-          \(runShape)
-        }
-        """
+          {
+            "ok": true,
+            "session": {"sessionId": "ses_pill"},
+            \(runShape)
+          }
+          """
       )
       let service = DesktopCoordinatorService(
         runtime: runtime,
@@ -355,10 +361,11 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let nodeManifest = try repoFile("../agent/src/runtime/control-tool-manifest.ts")
     let regex = try NSRegularExpression(pattern: #"name:\s*"([^"]+)""#)
     let range = NSRange(nodeManifest.startIndex..., in: nodeManifest)
-    let nodeToolNames = Set(regex.matches(in: nodeManifest, range: range).compactMap { match -> String? in
-      guard let nameRange = Range(match.range(at: 1), in: nodeManifest) else { return nil }
-      return String(nodeManifest[nameRange])
-    })
+    let nodeToolNames = Set(
+      regex.matches(in: nodeManifest, range: range).compactMap { match -> String? in
+        guard let nameRange = Range(match.range(at: 1), in: nodeManifest) else { return nil }
+        return String(nodeManifest[nameRange])
+      })
 
     XCTAssertFalse(nodeToolNames.isEmpty)
     for toolName in DesktopCoordinatorService.shared.runtimeControlManifest() {
@@ -435,7 +442,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertFalse(source.contains("buildMainChatCoordinatorRouteContextIfNeeded("))
     XCTAssertFalse(source.contains("buildMainChatCoordinatorCompletionDeltaIfNeeded("))
     XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.routeIntentJSON("))
-    XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)"))
+    XCTAssertFalse(
+      source.contains("DesktopCoordinatorService.shared.peekCompletedAgentDelta(surface: consumerSurface)"))
     XCTAssertFalse(source.contains("DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta("))
     XCTAssertTrue(source.contains("queryResult.completionDeltaArtifacts"))
     XCTAssertTrue(source.contains("queryResult = try await resolvedAgentClient().query("))
@@ -450,14 +458,11 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 
   func testRealtimeStatusReadsCoordinatorOpenLoops() throws {
-    let source = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let source = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
 
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("pendingCompletedAgentDeltaAckIds"))
-    XCTAssertTrue(source.contains("pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
+    XCTAssertFalse(source.contains("pendingCompletedAgentDeltaAckIds"))
+    XCTAssertFalse(source.contains("pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
     XCTAssertTrue(source.contains("voice context"))
@@ -476,7 +481,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(source.contains("completedAtMs > highWaterMs"))
     XCTAssertTrue(source.contains(".sorted { ($0.completedAtMs ?? 0) < ($1.completedAtMs ?? 0) }"))
     XCTAssertTrue(source.contains("completedAtHighWaterMs: items.compactMap(\\.completedAtMs).max()"))
-    XCTAssertTrue(source.contains("checkpointCompletionDelta(surfaceKey: surface.key, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)"))
+    XCTAssertTrue(
+      source.contains(
+        "checkpointCompletionDelta(surfaceKey: surface.key, ids: ids, completedAtHighWaterMs: completedAtHighWaterMs)"))
     XCTAssertTrue(source.contains("surfaceKind != \"main_chat\""))
     XCTAssertTrue(source.contains("finalText: sanitizePromptLine(finalText"))
     XCTAssertTrue(source.contains("finished with status \\(status)"))
@@ -510,7 +517,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testPTTVoiceSpawnUsesCanonicalBackgroundAgentProjection() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let pillSource = try sourceFile("FloatingControlBar/AgentPill.swift")
 
     XCTAssertTrue(chatSource.contains("kernelTurnProjection"))
@@ -541,7 +548,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testPTTBuildsFreshRealtimeSessionsFromTypedKernelContextSnapshot() throws {
     let chatSource = try sourceFile("Providers/ChatProvider.swift")
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
     let bridgeSource = try sourceFile("Chat/AgentBridge.swift")
 
@@ -582,7 +589,9 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     XCTAssertTrue(managerSource.contains("Default floating/notch chat is a second view over the main chat provider."))
     XCTAssertTrue(managerSource.contains("historyChatProvider = chatProvider"))
     XCTAssertTrue(managerSource.contains("var sharedFloatingProvider: ChatProvider? { historyChatProvider }"))
-    XCTAssertTrue(managerSource.contains("private func activeFloatingProvider() -> ChatProvider? {\n        historyChatProvider\n    }"))
+    XCTAssertTrue(
+      managerSource.contains(
+        "private func activeFloatingProvider() -> ChatProvider? {\n    historyChatProvider\n  }"))
     XCTAssertTrue(managerSource.contains("provider.canInterruptActiveTurn(owner: turnOwner)"))
     XCTAssertTrue(managerSource.contains("turnOwner: chatTurnOwner(for: .visible(fromVoice: queryFromVoice))"))
     XCTAssertTrue(managerSource.contains("$0.clientTurnId == clientTurnId && $0.sender == .ai"))
@@ -606,7 +615,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testVoiceContextSnapshotUsesDedicatedRealtimeSessionAndTypedFreshness() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let providerSource = try sourceFile("Providers/ChatProvider.swift")
 
     XCTAssertTrue(managerSource.contains("provider.prepareRealtimeVoiceContextSnapshot()"))
@@ -620,7 +629,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
 
   func testVoiceKernelAuthorizedToolResultFlowsIntoFinalTranscript() throws {
     let managerSource = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
-    let hubSource = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
 
     XCTAssertTrue(managerSource.contains("func recordExchange("))
     XCTAssertFalse(hubSource.contains("let persistedReply ="))
@@ -658,36 +667,36 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
     let completedAtMs = nowMs - 5_000
     let listResponse = """
-    {
-      "ok": true,
-      "sessions": [
-        {
-          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
-          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "sessions": [
+          {
+            "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Dog File"},
+            "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+          }
+        ]
+      }
+      """
     let runResponse = """
-    {
-      "ok": true,
-      "session": {"sessionId": "ses_child"},
-      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
-      "artifacts": [
-        {
-          "artifactId": "art_dog",
-          "sessionId": "ses_child",
-          "runId": "run_child",
-          "kind": "html",
-          "role": "result",
-          "uri": "file:///tmp/dogs.html",
-          "displayName": "dogs.html",
-          "mimeType": "text/html",
-          "lifecycleState": "retained"
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "session": {"sessionId": "ses_child"},
+        "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+        "artifacts": [
+          {
+            "artifactId": "art_dog",
+            "sessionId": "ses_child",
+            "runId": "run_child",
+            "kind": "html",
+            "role": "result",
+            "uri": "file:///tmp/dogs.html",
+            "displayName": "dogs.html",
+            "mimeType": "text/html",
+            "lifecycleState": "retained"
+          }
+        ]
+      }
+      """
     let runtime = ScriptedCoordinatorRuntime(responses: [
       "list_agent_sessions": listResponse,
       "get_agent_run": runResponse,
@@ -695,7 +704,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts")!
     defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts")
     // Prime the high-water below the completion time so the item is in range.
-    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    defaults.set(
+      nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
     let service = DesktopCoordinatorService(
       runtime: runtime,
       clientId: "test-desktop-coordinator",
@@ -720,36 +730,36 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
     let completedAtMs = nowMs - 5_000
     let listResponse = """
-    {
-      "ok": true,
-      "sessions": [
-        {
-          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
-          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "sessions": [
+          {
+            "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML Penguin File"},
+            "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+          }
+        ]
+      }
+      """
     let runResponse = """
-    {
-      "ok": true,
-      "session": {"sessionId": "ses_child"},
-      "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
-      "artifacts": [
-        {
-          "artifactId": "art_penguin",
-          "sessionId": "ses_child",
-          "runId": "run_child",
-          "kind": "html",
-          "role": "result",
-          "uri": "file:///tmp/penguins.html",
-          "displayName": "penguins.html",
-          "mimeType": "text/html",
-          "lifecycleState": "retained"
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "session": {"sessionId": "ses_child"},
+        "run": {"runId": "run_child", "status": "succeeded", "finalText": "Done."},
+        "artifacts": [
+          {
+            "artifactId": "art_penguin",
+            "sessionId": "ses_child",
+            "runId": "run_child",
+            "kind": "html",
+            "role": "result",
+            "uri": "file:///tmp/penguins.html",
+            "displayName": "penguins.html",
+            "mimeType": "text/html",
+            "lifecycleState": "retained"
+          }
+        ]
+      }
+      """
     let runtime = ScriptedCoordinatorRuntime(responses: [
       "list_agent_sessions": listResponse,
       "get_agent_run": runResponse,
@@ -775,37 +785,37 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let nowMs = Int(Date().timeIntervalSince1970 * 1_000)
     let completedAtMs = nowMs - 5_000
     let listResponse = """
-    {
-      "ok": true,
-      "sessions": [
-        {
-          "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
-          "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "sessions": [
+          {
+            "session": {"sessionId": "ses_child", "surfaceKind": "background_agent", "title": "Create HTML File"},
+            "latestRun": {"runId": "run_child", "status": "succeeded", "completedAtMs": \(completedAtMs), "finalText": "Done."}
+          }
+        ]
+      }
+      """
     let runResponse = """
-    {"ok": false, "error": {"code": "control_tool_failed", "message": "Run was compacted"}}
-    """
+      {"ok": false, "error": {"code": "control_tool_failed", "message": "Run was compacted"}}
+      """
     let artifactResponse = """
-    {
-      "ok": true,
-      "artifacts": [
-        {
-          "artifactId": "art_fallback",
-          "sessionId": "ses_child",
-          "runId": "run_child",
-          "kind": "html",
-          "role": "result",
-          "uri": "file:///tmp/fallback.html",
-          "displayName": "fallback.html",
-          "mimeType": "text/html",
-          "lifecycleState": "retained"
-        }
-      ]
-    }
-    """
+      {
+        "ok": true,
+        "artifacts": [
+          {
+            "artifactId": "art_fallback",
+            "sessionId": "ses_child",
+            "runId": "run_child",
+            "kind": "html",
+            "role": "result",
+            "uri": "file:///tmp/fallback.html",
+            "displayName": "fallback.html",
+            "mimeType": "text/html",
+            "lifecycleState": "retained"
+          }
+        ]
+      }
+      """
     let runtime = ScriptedCoordinatorRuntime(responses: [
       "list_agent_sessions": listResponse,
       "get_agent_run": runResponse,
@@ -813,7 +823,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     ])
     let defaults = UserDefaults(suiteName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")!
     defaults.removePersistentDomain(forName: "DesktopCoordinatorServiceTests.deltaArtifacts.fallback")
-    defaults.set(nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
+    defaults.set(
+      nowMs - 60_000, forKey: "desktopCoordinator.completedAgentDelta.highWaterMs.floating_chat|chat|default")
     let service = DesktopCoordinatorService(
       runtime: runtime,
       clientId: "test-desktop-coordinator",
@@ -832,8 +843,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   func testInspectAgentRunSurfacesRuntimeControlErrors() async throws {
     let runtime = RecordingCoordinatorRuntime(
       response: """
-      {"ok": false, "error": {"code": "control_tool_failed", "message": "Run run_missing was not found"}}
-      """
+        {"ok": false, "error": {"code": "control_tool_failed", "message": "Run run_missing was not found"}}
+        """
     )
     let service = DesktopCoordinatorService(
       runtime: runtime,
@@ -865,7 +876,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 }
 
-private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling, @unchecked Sendable {
   private let responses: [String: String]
   private(set) var calledTools: [String] = []
 
@@ -877,14 +888,14 @@ private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControl
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String {
     calledTools.append(name)
     return responses[name] ?? "{\"ok\": true}"
   }
 }
 
-private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeControlling, @unchecked Sendable {
   struct Call {
     let clientId: String
     let harnessMode: String
@@ -903,9 +914,9 @@ private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeContro
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String {
-    calls.append(Call(clientId: clientId, harnessMode: harnessMode, name: name, input: input))
+    calls.append(Call(clientId: clientId, harnessMode: harnessMode, name: name, input: input.value))
     return response
   }
 }

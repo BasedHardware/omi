@@ -201,6 +201,7 @@ def test_duplicate_reconnect_reuses_the_same_outbox_job():
         'dispatch_generation': 1,
         'requires_byok': False,
         'fanout_key': None,
+        'created': False,
     }
     assert transaction.sets == []
     assert transaction.updates == []
@@ -304,7 +305,7 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
     first = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(first, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 1, 'created_at': None}
     claim_update = first.updates[0][1]
     assert claim_update['status'] == 'leased'
     assert claim_update['attempt_count'] == 1
@@ -315,6 +316,7 @@ def test_duplicate_task_delivery_claims_only_once_until_lease_expires():
         'status': 'leased',
         'lease_epoch': None,
         'attempt_count': 0,
+        'created_at': None,
     }
     assert duplicate.updates == []
 
@@ -333,7 +335,7 @@ def test_expired_worker_lease_can_be_safely_reclaimed():
     transaction = _Transaction()
 
     claim = jobs._claim_finalization_job_txn(transaction, ref, 2, False, 1500, now)
-    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2}
+    assert claim == {'status': 'claimed', 'lease_epoch': 1, 'attempt_count': 2, 'created_at': None}
     assert transaction.updates[0][1]['attempt_count'] == 2
     assert transaction.updates[0][1]['lease_epoch'] == 1
 
@@ -470,7 +472,7 @@ def test_completed_fenced_job_replays_as_a_fenced_result():
 
     claim = jobs._claim_finalization_job_txn(_Transaction(), ref, 1, False, 1500, _now())
 
-    assert claim == {'status': 'fenced', 'lease_epoch': None, 'attempt_count': 0}
+    assert claim == {'status': 'fenced', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
 
 
 def test_live_pusher_claim_cannot_use_another_conversations_job():
@@ -496,7 +498,7 @@ def test_live_pusher_claim_cannot_use_another_conversations_job():
         expected_conversation_id='other-conversation',
     )
 
-    assert status == {'status': 'identity_mismatch', 'lease_epoch': None, 'attempt_count': 0}
+    assert status == {'status': 'identity_mismatch', 'lease_epoch': None, 'attempt_count': 0, 'created_at': None}
     assert transaction.updates == []
 
 
@@ -508,6 +510,7 @@ def test_completed_and_dead_letter_jobs_never_execute_again():
             'status': status,
             'lease_epoch': None,
             'attempt_count': 0,
+            'created_at': None,
         }
         assert transaction.updates == []
 
@@ -547,7 +550,7 @@ def test_expired_lease_reclaim_fences_a_stale_worker_terminal_write():
 
     reclaim = _Transaction()
     new_claim = jobs._claim_finalization_job_txn(reclaim, ref, 3, False, 1500, now)
-    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1}
+    assert new_claim == {'status': 'claimed', 'lease_epoch': 5, 'attempt_count': 1, 'created_at': None}
     ref.data = ref.data | reclaim.updates[0][1]
 
     stale_completion = _Transaction()

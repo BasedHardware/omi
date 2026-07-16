@@ -14,7 +14,26 @@ import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/logger.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 
+typedef ActionItemsFetcher =
+    Future<ActionItemsResponse?> Function({
+      int limit,
+      int offset,
+      bool? completed,
+      String? conversationId,
+      DateTime? startDate,
+      DateTime? endDate,
+    });
+
 class ActionItemsProvider extends ChangeNotifier {
+  ActionItemsProvider({ActionItemsFetcher? getActionItems})
+    : _getActionItems = getActionItems ?? api.tryGetActionItems {
+    unawaited(_preload());
+  }
+
+  final ActionItemsFetcher _getActionItems;
+  Future<void>? _initialLoad;
+  bool _initialLoadCompleted = false;
+
   List<ActionItemWithMetadata> _actionItems = [];
 
   bool _isLoading = false;
@@ -127,13 +146,25 @@ class ActionItemsProvider extends ChangeNotifier {
     }).toList();
   }
 
-  ActionItemsProvider() {
-    _preload();
+  Future<void> _preload() async {
+    await ensureLoaded(showShimmer: true);
+    await _migrateCategoryOrderFromPrefs();
   }
 
-  void _preload() async {
-    await fetchActionItems();
-    _migrateCategoryOrderFromPrefs();
+  /// Shares the eager Home preload with the Tasks page's first visible load.
+  Future<void> ensureLoaded({bool showShimmer = false}) {
+    if (_initialLoadCompleted) return Future.value();
+
+    final existingLoad = _initialLoad;
+    if (existingLoad != null) return existingLoad;
+
+    final load = fetchActionItems(showShimmer: showShimmer).then((loaded) {
+      _initialLoadCompleted = loaded;
+    });
+    _initialLoad = load.whenComplete(() {
+      _initialLoad = null;
+    });
+    return _initialLoad!;
   }
 
   /// One-time migration: convert SharedPreferences taskCategoryOrder to sort_order on items
@@ -169,7 +200,8 @@ class ActionItemsProvider extends ChangeNotifier {
   static bool shouldAutoRevealCompleted(List<ActionItemWithMetadata> items) =>
       items.isNotEmpty && items.every((item) => item.completed);
 
-  Future<void> fetchActionItems({bool showShimmer = false}) async {
+  Future<bool> fetchActionItems({bool showShimmer = false}) async {
+    var loaded = false;
     if (showShimmer) {
       setLoading(true);
     } else {
@@ -177,7 +209,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     try {
-      final response = await api.getActionItems(
+      final response = await _getActionItems(
         limit: 100,
         offset: 0,
         completed: _includeCompleted ? null : false,
@@ -185,11 +217,14 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
       );
 
-      _actionItems = response.actionItems;
-      _hasMore = response.hasMore;
+      if (response != null) {
+        _actionItems = response.actionItems;
+        _hasMore = response.hasMore;
+        loaded = true;
 
-      if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
-        _showCompletedView = true;
+        if (!_showCompletedView && shouldAutoRevealCompleted(_actionItems)) {
+          _showCompletedView = true;
+        }
       }
     } catch (e) {
       Logger.debug('Error fetching action items: $e');
@@ -202,6 +237,7 @@ class ActionItemsProvider extends ChangeNotifier {
     }
 
     notifyListeners();
+    return loaded;
   }
 
   Future<void> loadMoreActionItems() async {
@@ -210,7 +246,7 @@ class ActionItemsProvider extends ChangeNotifier {
     setFetching(true);
 
     try {
-      final response = await api.getActionItems(
+      final response = await _getActionItems(
         limit: 50,
         offset: _actionItems.length,
         completed: _includeCompleted ? null : false,
@@ -218,8 +254,10 @@ class ActionItemsProvider extends ChangeNotifier {
         endDate: _endDate,
       );
 
-      _actionItems.addAll(response.actionItems);
-      _hasMore = response.hasMore;
+      if (response != null) {
+        _actionItems.addAll(response.actionItems);
+        _hasMore = response.hasMore;
+      }
     } catch (e) {
       Logger.debug('Error loading more action items: $e');
     } finally {

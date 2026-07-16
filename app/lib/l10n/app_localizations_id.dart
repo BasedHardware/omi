@@ -9351,7 +9351,7 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Untuk saat ini berfungsi dengan perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
+      'Berfungsi dengan mikrofon ponsel serta perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9604,4 +9604,8 @@ class AppLocalizationsId extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.';
 }

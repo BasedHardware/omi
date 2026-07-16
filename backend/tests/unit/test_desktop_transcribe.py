@@ -107,7 +107,6 @@ def _desktop_transcribe_isolation():
     _saved_modules = dict(_sys.modules)
     _saved_keys = set(_saved_modules)
     try:
-
         _restore_package_paths()
 
         # Stub models package (required before importing utils.stt.pre_recorded)

@@ -35,11 +35,7 @@ class ServiceManager {
     // stays on the flutter_sound path. The shared arbiter keeps the two
     // stacks from contending for the microphone.
     sm._phoneMic = Platform.isIOS
-        ? ArbitratedMic(
-            inner: NativeMicRecorderService(),
-            arbiter: micArbiter,
-            owner: 'conversation',
-          )
+        ? ArbitratedMic(inner: NativeMicRecorderService(), arbiter: micArbiter, owner: 'conversation')
         : sm._mic;
     sm._device = DeviceService();
     sm._socket = SocketServicePool();
@@ -168,11 +164,7 @@ class BackgroundService {
     _status = BackgroundServiceStatus.initiated;
 
     await _service.configure(
-      iosConfiguration: IosConfiguration(
-        autoStart: false,
-        onForeground: onStart,
-        onBackground: onIosBackground,
-      ),
+      iosConfiguration: IosConfiguration(autoStart: false, onForeground: onStart, onBackground: onIosBackground),
       androidConfiguration: AndroidConfiguration(
         autoStart: false,
         onStart: onStart,
@@ -279,6 +271,19 @@ abstract class IMicRecorderService {
     // mirrors the state.
     Function(bool began)? onInterruption,
   });
+
+  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
+  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
+  // fires when the native liveness feed (onBatchProgress) goes silent; onError
+  // forwards non-fatal native failures (e.g. batch_storage_full). iOS-only — the
+  // flutter_sound stacks throw UnsupportedError.
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  });
+
   void stop();
 }
 
@@ -309,6 +314,16 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     );
 
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native iOS recorder');
   }
 
   @override
@@ -358,9 +373,7 @@ class MicRecorderService implements IMicRecorderService {
     Function(bool began)? onInterruption,
   }) async {
     if (_status == RecorderServiceStatus.recording) {
-      throw Exception(
-        "Recorder is recording, please stop it before start new recording.",
-      );
+      throw Exception("Recorder is recording, please stop it before start new recording.");
     }
     if (_status == RecorderServiceStatus.initialising) {
       throw Exception("Recorder is initialising");
@@ -412,6 +425,16 @@ class MicRecorderService implements IMicRecorderService {
 
     _status = RecorderServiceStatus.recording;
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native iOS recorder');
   }
 
   @override

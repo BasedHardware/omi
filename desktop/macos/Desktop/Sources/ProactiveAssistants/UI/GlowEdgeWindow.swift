@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Which edge of the target window this glow window represents
 enum GlowEdge {

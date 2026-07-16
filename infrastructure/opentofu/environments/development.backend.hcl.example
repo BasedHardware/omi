@@ -1,0 +1,3 @@
+# Replace only during the approved state-backend bootstrap in based-hardware-dev.
+bucket = "REPLACE_WITH_APPROVED_DEVELOPMENT_STATE_BUCKET"
+prefix = "opentofu/foundation/development"

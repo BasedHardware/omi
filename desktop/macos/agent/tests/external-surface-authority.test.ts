@@ -424,6 +424,41 @@ describe("external realtime surface authority", () => {
     })).toMatchObject({ action: "execute", toolName: "set_desktop_attention_override" });
   });
 
+  it("defaults external spawns to Omi unless the current user selects one provider", () => {
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Sleep for five seconds", provider: "hermes" },
+      originatingPrompt: "Have an agent sleep for five seconds.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Sleep for five seconds" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Check X trends", provider: "hermes" },
+      originatingPrompt: "Ask OpenCloud what is trending on X.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Check X trends", provider: "openclaw" },
+      recoveredFromDelegation: false,
+    });
+
+    expect(routeExternalSurfaceTool({
+      toolName: "spawn_agent",
+      toolInput: { objective: "Review the release notes" },
+      originatingPrompt: "Run this in Hermes.",
+    })).toEqual({
+      action: "execute",
+      toolName: "spawn_agent",
+      toolInput: { objective: "Review the release notes", provider: "hermes" },
+      recoveredFromDelegation: false,
+    });
+  });
+
   it("applies semantic safety policy from the persisted external run prompt", () => {
     const permissionFixture = createFixture();
     const permissionRun = permissionFixture.kernel.beginExternalSurfaceRun({
@@ -1057,7 +1092,7 @@ describe("external realtime surface authority", () => {
       continuityKey: "voice:voice-turn-1",
       userTurnId: stableAgentSpawnTurnId("voice:voice-turn-1", "user"),
       assistantTurnId: stableAgentSpawnTurnId("voice:voice-turn-1", "assistant"),
-      assistantText: "I started a background agent for that.",
+      assistantText: "Delegated: Research the launch plan started and is working in the background.",
     });
     expect(JSON.parse(compactRealtimeSpawnToolResult('{"ok":true}', descriptor))).toMatchObject({
       ok: false,
@@ -1350,7 +1385,10 @@ rl.on("line", (line) => {
       surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
       defaultAdapterId: "pi-mono",
     }, () => 1);
-    const run = kernel.beginExternalSurfaceRun(beginInput(session.agentSessionId));
+    const run = kernel.beginExternalSurfaceRun({
+      ...beginInput(session.agentSessionId),
+      prompt: "Ask OpenClaw to check the release notes in the background",
+    });
     const routed = kernel.routeExternalSurfaceToolInvocation({
       ownerId: "owner",
       sessionId: session.agentSessionId,

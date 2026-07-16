@@ -86,6 +86,14 @@ envFrom:
       name: prod-omi-backend-config
 
 env:
+  - name: ACCOUNT_DELETION_DISPATCH_MODE
+    value: "cloud_tasks"
+  - name: ACCOUNT_DELETION_TASKS_QUEUE
+    value: "account-deletion"
+  - name: SYNC_TASKS_PROJECT
+    value: "based-hardware"
+  - name: SYNC_TASKS_LOCATION
+    value: "us-central1"
   - name: DESKTOP_UPDATE_POINTERS_MODE
     value: "primary"
   - name: DESKTOP_UPDATE_RECONCILE_SAMPLE_RATE
@@ -279,6 +287,8 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: HOSTED_TRANSLATION_API_URL

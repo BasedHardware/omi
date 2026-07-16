@@ -568,7 +568,6 @@ def _build_wav_header(sample_rate: int, bits_per_sample: int = 16, channels: int
 
 
 class SafeModulateSocket(STTSocket):
-
     def __init__(
         self,
         ws: Any,

@@ -11,6 +11,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 BACKEND_DIR = Path(__file__).resolve().parents[2]
 
@@ -108,6 +109,24 @@ def _make_chat_client():
     sanitizer.sanitize_pii = lambda value: value
     observability = _install_package('utils.observability', BACKEND_DIR / 'utils' / 'observability')
     observability.submit_langsmith_feedback = MagicMock()
+    journey_observability = _install_module('utils.observability.journeys', ModuleType('utils.observability.journeys'))
+
+    class JourneyAttempt:
+        instances = []
+
+        def __init__(self, journey):
+            self.journey = journey
+            self.finished = False
+            self.outcomes = []
+            self.__class__.instances.append(self)
+
+        def finish(self, outcome):
+            if self.finished:
+                return
+            self.finished = True
+            self.outcomes.append(outcome)
+
+    journey_observability.JourneyAttempt = JourneyAttempt
     transcription_observability = _install_module(
         'utils.observability.transcription',
         ModuleType('utils.observability.transcription'),
@@ -266,6 +285,39 @@ def test_v2_messages_quota_exceeded_reply_does_not_record_quota_question():
         assert response.status_code == 200
         assert 'done: ' in response.text
         module.llm_usage_db.record_chat_quota_question.assert_not_called()
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_records_success_when_the_terminal_sse_frame_is_yielded():
+    client, module, saved = _make_chat_client()
+    try:
+        response = client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+
+        assert response.status_code == 200
+        assert 'done: ' in response.text
+        assert len(module.JourneyAttempt.instances) == 1
+        assert module.JourneyAttempt.instances[0].journey == 'chat_response'
+        assert module.JourneyAttempt.instances[0].outcomes == ['success']
+    finally:
+        _cleanup(saved)
+
+
+def test_v2_messages_records_failure_when_the_production_stream_errors():
+    client, module, saved = _make_chat_client()
+    try:
+
+        async def failing_stream(*_args, **_kwargs):
+            raise RuntimeError('provider unavailable')
+            yield ''
+
+        module.execute_chat_stream = failing_stream
+
+        with pytest.raises(RuntimeError, match='provider unavailable'):
+            client.post('/v2/messages', json={'text': 'hello', 'file_ids': []})
+
+        assert len(module.JourneyAttempt.instances) == 1
+        assert module.JourneyAttempt.instances[0].outcomes == ['failure']
     finally:
         _cleanup(saved)
 

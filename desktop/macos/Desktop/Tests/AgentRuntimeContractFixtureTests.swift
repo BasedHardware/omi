@@ -21,16 +21,19 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
     XCTAssertEqual((contract["sessionListingBudget"] as? [String: Any])?["maxBytes"] as? Int, 8_192)
     XCTAssertTrue((contract["failureTaxonomy"] as? [String] ?? []).contains("bridge_start_failed"))
     XCTAssertEqual((contract["permissionDecision"] as? [String: Any])?["decision"] as? String, "approved")
-    XCTAssertEqual((contract["toolInvocation"] as? [String: Any])?["invocationId"] as? String,
+    XCTAssertEqual(
+      (contract["toolInvocation"] as? [String: Any])?["invocationId"] as? String,
       ((envelope["provenance"] as? [String: Any])?["invocationId"] as? String))
     XCTAssertEqual((contract["lifecycle"] as? [String: [String]])?["run"]?.contains("succeeded"), true)
     XCTAssertEqual((contract["adapterConformance"] as? [[String: Any]])?.count, 7)
-    XCTAssertTrue((contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
-      $0["adapterId"] as? String == "openai-realtime" && $0["transport"] as? String == "swift_realtime"
-    })
-    XCTAssertTrue((contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
-      $0["adapterId"] as? String == "codex" && $0["transport"] as? String == "node_runtime"
-    })
+    XCTAssertTrue(
+      (contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
+        $0["adapterId"] as? String == "openai-realtime" && $0["transport"] as? String == "swift_realtime"
+      })
+    XCTAssertTrue(
+      (contract["adapterConformance"] as? [[String: Any]] ?? []).contains {
+        $0["adapterId"] as? String == "codex" && $0["transport"] as? String == "node_runtime"
+      })
   }
 
   func testSharedMalformedFixtureFailsTheSwiftContextPlanContract() throws {
@@ -46,8 +49,9 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
     adapters[0]["expectsToolEnvelope"] = false
     contract["adapterConformance"] = adapters
 
-    XCTAssertTrue(validate(value: contract, schema: schema)
-      .contains("$.adapterConformance[0].expectsToolEnvelope: const mismatch"))
+    XCTAssertTrue(
+      validate(value: contract, schema: schema)
+        .contains("$.adapterConformance[0].expectsToolEnvelope: const mismatch"))
 
     for (name, key) in [
       ("malformed-tool-result-envelope.fixture.json", "toolResultEnvelope"),
@@ -69,13 +73,14 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
     let contract = try fixture(named: "agent-runtime-contract.fixture.json")
     let adapters = try XCTUnwrap(contract["adapterConformance"] as? [[String: Any]])
     let toolName = try XCTUnwrap((contract["toolInvocation"] as? [String: Any])?["toolName"] as? String)
-    let oversizedOutput = try XCTUnwrap(String(
-      data: JSONSerialization.data(withJSONObject: [
-        "ok": true,
-        "payload": String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1),
-        "toolResultEnvelope": contract["toolResultEnvelope"] as Any,
-      ]),
-      encoding: .utf8))
+    let oversizedOutput = try XCTUnwrap(
+      String(
+        data: JSONSerialization.data(withJSONObject: [
+          "ok": true,
+          "payload": String(repeating: "x", count: RealtimeProviderToolResultPolicy.maximumByteCount + 1),
+          "toolResultEnvelope": contract["toolResultEnvelope"] as Any,
+        ]),
+        encoding: .utf8))
 
     for adapter in adapters where adapter["transport"] as? String == "swift_realtime" {
       let provider: RealtimeHubProvider = adapter["adapterId"] as? String == "gemini-realtime" ? .gemini : .openai
@@ -95,7 +100,8 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
         XCTAssertEqual(scenario["runState"] as? String, "failed")
         XCTAssertEqual(scenario["attemptState"] as? String, "failed")
         XCTAssertEqual(scenario["turnState"] as? String, "failed")
-        XCTAssertTrue((contract["failureTaxonomy"] as? [String] ?? []).contains(scenario["failureCode"] as? String ?? ""))
+        XCTAssertTrue(
+          (contract["failureTaxonomy"] as? [String] ?? []).contains(scenario["failureCode"] as? String ?? ""))
         XCTAssertEqual(scenario["consumesToolInvocation"] as? Bool, true)
         XCTAssertEqual(scenario["expectsTruncatedToolEnvelope"] as? Bool, true)
       }
@@ -123,7 +129,8 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
         errors.append("$.toolInvocation.\(field): does not match envelope provenance")
       }
     }
-    if let provenance, let permission, !jsonEqual(provenance["invocationId"] as Any, permission["invocationId"] as Any) {
+    if let provenance, let permission, !jsonEqual(provenance["invocationId"] as Any, permission["invocationId"] as Any)
+    {
       errors.append("$.permissionDecision.invocationId: does not match envelope provenance")
     }
     if let envelope, envelope["truncated"] as? Bool == true, !(envelope["fullOutputRef"] is String) {
@@ -213,9 +220,9 @@ final class AgentRuntimeContractFixtureTests: XCTestCase {
 
   private func jsonEqual(_ lhs: Any, _ rhs: Any) -> Bool {
     switch (lhs, rhs) {
-    case let (lhs as NSNumber, rhs as NSNumber): return lhs == rhs
-    case let (lhs as String, rhs as String): return lhs == rhs
-    case let (lhs as Bool, rhs as Bool): return lhs == rhs
+    case (let lhs as NSNumber, let rhs as NSNumber): return lhs == rhs
+    case (let lhs as String, let rhs as String): return lhs == rhs
+    case (let lhs as Bool, let rhs as Bool): return lhs == rhs
     default: return false
     }
   }

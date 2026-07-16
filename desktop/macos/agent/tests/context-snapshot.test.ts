@@ -104,6 +104,36 @@ describe("kernel ContextSnapshot", () => {
     expect(policy).toContain("Do not ask for a second confirmation merely to delegate");
   });
 
+  it("marks realtime history as historical-only visual context", () => {
+    const { store, session } = fixture("realtime_voice");
+    const surface = resolveSurfaceSession(store, {
+      ownerId: session.ownerId,
+      surfaceRef: { surfaceKind: "realtime_voice", externalRefKind: "chat", externalRefId: "default" },
+      defaultAdapterId: "fake",
+    }, () => 1);
+    recordJournalTurn(store, {
+      ownerId: session.ownerId,
+      conversationId: surface.conversationId,
+      turnId: "stale-visual-claim",
+      role: "assistant",
+      surfaceKind: "realtime_voice",
+      origin: "realtime_voice",
+      status: "completed",
+      content: "You are looking at a pull request in Cursor.",
+      contentBlocks: [],
+      createdAtMs: 1,
+    });
+
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 2);
+    const rendered = renderContextSnapshot(snapshot, "realtime_voice", "coordinator");
+
+    expect(rendered).toContain('"visualAuthority":"historical_only"');
+    expect(rendered).toContain("You are looking at a pull request in Cursor.");
+    expect(kernelSystemPolicy("realtime_voice", "coordinator")).toContain(
+      "never present-screen evidence");
+    store.close();
+  });
+
   it("keeps user then assistant chronology when reconciliation revisions arrive in reverse order", () => {
     const { store } = fixture();
     const surface = resolveSurfaceSession(store, {
@@ -295,6 +325,35 @@ describe("kernel ContextSnapshot", () => {
     expect(aAgain.version).toBe(first.snapshot.version);
     expect(aAgain.snapshotGeneration).toBeGreaterThan(b.snapshotGeneration);
     expect(aAgain.snapshotId).toBe(aAgain.version);
+    store.close();
+  });
+
+  it("accepts a newer observation for identical revision material", () => {
+    const { store, session } = fixture("realtime_voice");
+    const first = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 100,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 100);
+    const concurrentObservation = updateContextSource(store, {
+      ownerId: session.ownerId,
+      sessionId: session.sessionId,
+      source: "workspace",
+      sourceRevision: "workspace@same-content",
+      outcome: "available",
+      capturedAtMs: 101,
+      payload: { workingDirectory: "/tmp/context-workspace" },
+    }, 101);
+
+    expect(concurrentObservation.changed).toBe(true);
+    expect(concurrentObservation.snapshot.version).toBe(first.snapshot.version);
+    expect(
+      concurrentObservation.snapshot.sourceOutcomes.find((source) => source.source === "workspace")?.capturedAtMs,
+    ).toBe(101);
     store.close();
   });
 
@@ -770,6 +829,77 @@ describe("kernel ContextSnapshot", () => {
     expect(childInput.admittedContextSnapshot.sessionId).toBe(delegated.childSession.sessionId);
     expect(childInput.admittedContextSnapshot.capabilityVersion)
       .not.toBe(parentInput.admittedContextSnapshot.capabilityVersion);
+    store.close();
+  });
+
+  it("projects only recent bounded terminal child output into coordinator context", () => {
+    const { store, session } = fixture("realtime_voice");
+    const parent = store.insertRun({
+      sessionId: session.sessionId,
+      clientId: "realtime",
+      requestId: "parent",
+      status: "running",
+      mode: "act",
+      createdAtMs: 1_000,
+      updatedAtMs: 1_000,
+    });
+    const beforeCompletion = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    const childSession = store.insertSession({
+      ownerId: session.ownerId,
+      surfaceKind: "background_agent",
+      title: "Research agent",
+      defaultAdapterId: "fake",
+      executionRole: "leaf",
+    });
+    const completed = store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "completed-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: `completed answer ${"x".repeat(1_500)}`,
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      clientId: "realtime",
+      requestId: "unrelated-terminal",
+      status: "succeeded",
+      mode: "act",
+      finalText: "must not leak",
+      completedAtMs: 999_950,
+      updatedAtMs: 999_950,
+    });
+    store.insertRun({
+      sessionId: childSession.sessionId,
+      parentRunId: parent.runId,
+      clientId: "realtime",
+      requestId: "expired-child",
+      status: "succeeded",
+      mode: "act",
+      finalText: "expired output",
+      completedAtMs: 1,
+      updatedAtMs: 1,
+    });
+
+    const snapshot = buildContextSnapshot(store, session.sessionId, session.ownerId, 1_000_000);
+    expect(snapshot.recentCompletedRuns).toEqual([
+      expect.objectContaining({
+        runId: completed.runId,
+        parentRunId: parent.runId,
+        status: "succeeded",
+        title: "Research agent",
+        completedAtMs: 999_950,
+      }),
+    ]);
+    expect(snapshot.recentCompletedRuns[0]?.finalText).toHaveLength(1_200);
+    expect(snapshot.renderedContext).toContain(completed.runId);
+    expect(snapshot.renderedContext).not.toContain("must not leak");
+    expect(snapshot.renderedContext).not.toContain("expired output");
+    expect(renderContextSnapshot(snapshot, "delegated_agent", "leaf")).not.toContain(completed.runId);
+    expect(snapshot.rendererFingerprint).not.toBe(beforeCompletion.rendererFingerprint);
     store.close();
   });
 });

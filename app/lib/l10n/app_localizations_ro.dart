@@ -9388,7 +9388,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+      'Funcționează cu microfonul telefonului și cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9641,4 +9641,8 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Fără conexiune — se înregistrează local. Va fi transcris când revii online.';
 }

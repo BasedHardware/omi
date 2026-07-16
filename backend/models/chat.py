@@ -200,7 +200,10 @@ class Message(BaseModel):
 {file_section}
 </message>"""
 
-            formatted_messages.append(msg.replace('    ', '').strip())
+            # Only strip the block's surrounding whitespace. The template above is flush-left, so a
+            # .replace('    ', '') here would instead delete 4-space runs from message.text (code,
+            # tables, aligned or pasted text), corrupting the history shown to the LLM.
+            formatted_messages.append(msg.strip())
 
         return '\n'.join(formatted_messages)
 

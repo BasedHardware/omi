@@ -24,6 +24,7 @@ enum HubTool: String {
   case createCalendarEvent = "create_calendar_event"
   case askHigherModel = "ask_higher_model"
   case screenshot = "screenshot"
+  case reportScreenObservation = "report_screen_observation"
   case pointClick = "point_click"
 }
 
@@ -73,19 +74,10 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
+    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     "parameters": {
       "type": "object",
       "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "open",
-            "archived",
-            "closed"
-          ],
-          "description": "Optional session status filter."
-        },
         "surfaceKind": {
           "type": "string",
           "enum": [
@@ -268,7 +260,7 @@ enum GeneratedRealtimeTools {
             "hermes",
             "codex"
           ],
-          "description": "Optional local provider override."
+          "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent."
         },
         "parent_run_id": {
           "type": "string",
@@ -647,6 +639,23 @@ enum GeneratedRealtimeTools {
       "type": "object",
       "properties": {},
       "required": []
+    }
+  },
+  {
+    "type": "function",
+    "name": "report_screen_observation",
+    "description": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
+    "parameters": {
+      "type": "object",
+      "properties": {
+        "observation": {
+          "type": "string",
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
+        }
+      },
+      "required": [
+        "observation"
+      ]
     }
   },
   {

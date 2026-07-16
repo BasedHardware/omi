@@ -1,3 +1,0 @@
-{
-  "change": "Fixed a rare crash when stopping a recording or changing audio devices mid-capture"
-}

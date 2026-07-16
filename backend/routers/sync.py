@@ -78,6 +78,7 @@ from utils.fair_use import (
     trigger_classifier_if_needed,
 )
 from utils.observability.fallback import record_fallback
+from utils.multipart import MultipartMaxPartSizeRoute, SYNC_AUDIO_MAX_PART_SIZE, max_part_size
 from utils.metrics import (
     OMI_SYNC_DISPATCH_ATTEMPTS_TOTAL,
     OMI_SYNC_LANE_JOBS_TOTAL,
@@ -87,7 +88,13 @@ from utils.metrics import (
 from utils.client_device import resolve_client_device, resolve_client_device_from_request
 from utils.subscription import has_transcription_credits
 from utils.sync import playback as sync_playback
-from utils.sync.files import decode_files_to_wav, get_timestamp_from_path, get_wav_duration, retrieve_file_paths
+from utils.sync.files import (
+    decode_files_to_wav,
+    detect_source_from_filenames,
+    get_timestamp_from_path,
+    get_wav_duration,
+    retrieve_file_paths,
+)
 from utils.sync.pipeline import (
     _OrderedTurnstile,
     _cleanup_files,
@@ -137,7 +144,7 @@ AUDIO_SAMPLE_RATE = 16000
 
 _V1_DEPRECATION_HEADERS = {'Deprecation': 'true', 'Link': '</v2/sync-local-files>; rel="successor-version"'}
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 _CAPTURE_PROVENANCE_SLOP_SECONDS = 30 * 60
 
@@ -471,6 +478,7 @@ def download_audio_file_endpoint(
 # response_model omitted: deprecated v1 endpoint with mixed dict + JSONResponse returns;
 # the v2 typed equivalent (SyncJobStatusResponse) covers the contract.
 @router.post("/v1/sync-local-files", deprecated=True)
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files(
     request: Request,
     response: Response,
@@ -568,11 +576,7 @@ async def sync_local_files(
     should_lock = not has_transcription_credits(uid)
 
     # Detect source from filenames
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     paths = []
     wav_paths = []
@@ -832,6 +836,7 @@ async def sync_local_files(
 
 
 @router.post("/v2/sync-local-files", status_code=202, response_model=SyncJobStartResponse)
+@max_part_size(SYNC_AUDIO_MAX_PART_SIZE)
 async def sync_local_files_v2(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.get_current_user_uid),
@@ -947,11 +952,7 @@ async def sync_local_files_v2(
     should_lock = not await run_blocking(critical_executor, has_transcription_credits, uid)
 
     # Detect source
-    source = ConversationSource.omi
-    for f in files:
-        if f.filename and 'limitless' in f.filename.lower():
-            source = ConversationSource.limitless
-            break
+    source = detect_source_from_filenames([f.filename for f in files])
 
     cloud_tasks_dispatch_enabled = is_cloud_tasks_dispatch_enabled()
     byok_enabled = has_byok_keys()

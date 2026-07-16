@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Naudojate savo transkripcijos paslaugą. Sinchronizuojant šiuos įrašus jie transkribuojami Omi serveriuose ir įskaičiuojami į jūsų plano transkripcijos limitą.",
     "transcribeLaterTitle": "Transkribuoti vėliau",
     "transcribeLaterDescription": "Įrašykite garsą dabar, o transkribuokite vėliau, kai patogu, užuot tai darę tiesiogiai. Įrašai saugomi telefone, o juos įkėlę sukursite pokalbius.",
-    "transcribeLaterNote": "Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
+    "transcribeLaterNote": "Veikia su telefono mikrofonu bei Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.",
     "transcribeLaterStorageFull": "Telefone trūksta vietos, todėl įrašymas pristabdytas. Atlaisvinkite vietos arba įkelkite įrašus ir įrašymas bus automatiškai atnaujintas.",
     "unmute": "Įjungti garsą",
     "newRecording": "Naujas įrašas",
@@ -3148,5 +3148,6 @@
     "deviceStoragePercentFull": "užpildyta {percent}%",
     "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
     "deviceStorageFree": "{free} laisva",
-    "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos."
+    "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.",
+    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę."
 }

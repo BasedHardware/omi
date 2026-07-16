@@ -7,6 +7,7 @@ import 'package:latlong2/latlong.dart';
 import 'package:provider/provider.dart';
 
 import 'package:omi/backend/http/api/users.dart';
+import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/daily_summary.dart';
 import 'package:omi/pages/conversation_capturing/page.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
@@ -18,6 +19,7 @@ import 'package:omi/pages/settings/daily_summary_detail_page.dart';
 import 'package:omi/providers/capture_provider.dart';
 import 'package:omi/providers/conversation_provider.dart';
 import 'package:omi/providers/home_provider.dart';
+import 'package:omi/utils/alerts/app_snackbar.dart';
 import 'package:omi/utils/enums.dart';
 import 'package:omi/utils/l10n_extensions.dart';
 import 'package:omi/utils/ui_guidelines.dart';
@@ -171,6 +173,15 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
     if (captureProvider.recordingState != RecordingState.record) {
       await captureProvider.streamRecording();
       PlatformManager.instance.analytics.phoneMicRecordingStarted();
+    }
+    // A phone-mic Transcribe Later (batch) session has no live transcript — the
+    // conversations-list batch card is its surface, so skip the capturing page
+    // (same as BLE batch). Surface the auto offline fallback once.
+    if (captureProvider.isPhoneMicBatchRecording) {
+      if (SharedPreferencesUtil().phoneBatchAuto && context.mounted) {
+        AppSnackbar.showSnackbar(context.l10n.phoneMicOfflineFallbackMessage);
+      }
+      return;
     }
     if (!context.mounted) return;
     Navigator.push(

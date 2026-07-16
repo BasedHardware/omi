@@ -9374,7 +9374,7 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ಸದ್ಯಕ್ಕೆ Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
+      'ಫೋನ್ ಮೈಕ್ರೊಫೋನ್, Omi ಮತ್ತು Limitless ಸಾಧನಗಳೊಂದಿಗೆ ಕೆಲಸ ಮಾಡುತ್ತದೆ. ನೀವು ಅಪ್‌ಲೋಡ್ ಮಾಡಲು ಆಯ್ಕೆ ಮಾಡುವವರೆಗೆ ಧ್ವನಿ ನಿಮ್ಮ ಫೋನ್‌ನಲ್ಲೇ ಇರುತ್ತದೆ.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9625,4 +9625,8 @@ class AppLocalizationsKn extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.';
 }

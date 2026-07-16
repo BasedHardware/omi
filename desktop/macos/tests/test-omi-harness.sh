@@ -67,6 +67,17 @@ mismatch = module.expectation_mismatches(
     {"result": {"count": "1"}}, {"result.count": {"minimum": 1}}
 )["result.count"]
 assert "unsupported expectation operator" in mismatch["reason"]
+
+assert module.log_path_from_health(
+    {"ok": True, "logFilePath": "/private/tmp/omi/com.omi.qa/pid-1.log"}
+).as_posix().endswith("pid-1.log")
+assert module.log_path_from_health({"ok": True}, "/tmp/explicit.log").as_posix() == "/tmp/explicit.log"
+try:
+    module.log_path_from_health({"ok": True, "logFilePath": "relative.log"})
+except RuntimeError:
+    pass
+else:
+    raise AssertionError("relative health log path must fail loudly")
 PY
 
 write_flow() {

@@ -1,7 +1,7 @@
+import OmiTheme
 import Sentry
 import SwiftUI
 import UniformTypeIdentifiers
-import OmiTheme
 
 /// The Sentry event title used when a user submits feedback. Shared by the real
 /// `submitFeedback()` path and the non-prod dry-run bridge action so the dry-run

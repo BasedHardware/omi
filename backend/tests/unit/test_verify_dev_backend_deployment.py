@@ -305,6 +305,80 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
     assert '--check-runtime-bindings' not in production_workflow.read_text(encoding='utf-8')
 
 
+def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> None:
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+    )
+
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        assert text.count('backend/scripts/reconcile_firestore_indexes.py') == 2
+        assert '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"' in text
+        assert text.count('--check-only') == 1
+        assert text.count('--validate-proposal') == 1
+        assert '--provision-missing' not in text
+        assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
+        assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
+        assert '--proposal-ttl-seconds 3600' in text
+        assert 'actions/upload-artifact@v4' in text
+        assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
+        assert 'if-no-files-found: error' in text
+        assert 'retention-days: 1' in text
+        assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
+        assert 'needs: firestore_readiness' in text
+
+
+def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
+    """Static guard: serving-schema writes stay outside backend deployment workflows."""
+
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_firestore_indexes.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'workflow_dispatch:' in text
+    assert 'APPLY_FIRESTORE_INDEXES' in text
+    assert "if: github.ref == 'refs/heads/main'" in text
+    assert 'group: deploy-backend-stack-${{ github.event.inputs.environment }}' in text
+    assert 'environment: ${{ github.event.inputs.environment }}' in text
+    assert 'ref: ${{ github.sha }}' in text
+    assert 'git rev-parse HEAD' in text
+    assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
+    assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
+    assert text.count('--provision-missing') == 2
+    assert text.count('--dry-run') == 1
+    assert '--check-only' not in text
+    assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
+
+    plan_step = '- name: Show create-only Firestore schema plan'
+    apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
+    verification_step = '- name: Verify dispatched Firestore control plane'
+    plan = text.split(plan_step, 1)[1].split(apply_step, 1)[0]
+    apply = text.split(apply_step, 1)[1]
+    assert text.index(verification_step) < text.index(plan_step)
+    assert text.index(plan_step) < text.index(apply_step)
+    assert '--provision-missing' in plan
+    assert '--dry-run' in plan
+    assert '--dry-run' not in apply
+    assert '--timeout-seconds 3600' in apply
+
+
+def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+    readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+    deploy = text.split('\n  deploy:\n', 1)[1]
+
+    schema_guard = 'git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json'
+    assert 'ref: main' in readiness
+    assert 'refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate' in readiness
+    assert schema_guard in readiness
+    assert "printf 'candidate_sha=%s\\n' \"$candidate_sha\" >> \"$GITHUB_OUTPUT\"" in readiness
+    assert 'ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}' in deploy
+    assert readiness.index(schema_guard) < readiness.index('Google Auth for read-only Firestore inventory')
+    assert readiness.index(schema_guard) < readiness.index('--check-only')
+    assert 'secrets.GCP_CREDENTIALS' not in readiness
+
+
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:
     expectation = _expectation()
 
@@ -341,6 +415,16 @@ def test_evaluate_fails_closed_when_a_stale_revision_is_serving() -> None:
     assert 'cloud_run/backend: expected revision does not receive 100% traffic' in errors
     assert 'gke/deployment: desired replicas are not all available' in errors
     assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_candidate_evaluation_accepts_ready_revision_before_traffic_promotion() -> None:
+    expectation = _expectation()
+    documents = _documents(expectation)
+    documents['cloud_run/backend']['status']['traffic'] = [{'revisionName': 'backend-old', 'percent': 100}]
+
+    errors = verifier.evaluate(expectation, documents, require_serving_traffic=False)
+
+    assert errors == []
 
 
 def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_template() -> None:

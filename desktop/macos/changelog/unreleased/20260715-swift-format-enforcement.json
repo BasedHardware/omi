@@ -1,0 +1,3 @@
+{
+  "change": "Enforced pinned swift-format in pre-commit and macOS CI — staged Swift files auto-format on commit, CI rejects formatting drift"
+}

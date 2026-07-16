@@ -9288,7 +9288,7 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'يعمل مع أجهزة Omi وLimitless في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
+      'يعمل مع ميكروفون الهاتف وأجهزة Omi وLimitless. يبقى الصوت على هاتفك إلى أن تختار رفعه.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9537,4 +9537,8 @@ class AppLocalizationsAr extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.';
 }

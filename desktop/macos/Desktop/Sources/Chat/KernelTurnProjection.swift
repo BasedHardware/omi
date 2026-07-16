@@ -70,20 +70,21 @@ enum KernelAgentLifecycleMutation {
     }
 
     let normalizedRunID = normalized(runID)
-    guard let sourceTurn = latestByTurnID.values
-      .filter({ $0.role == "assistant" })
-      .filter({ turn in
-        let blocks = ChatContentBlockCodec.decode(turn.contentBlocksJSON) ?? []
-        return blocks.contains { block in
-          guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _, _) = block else {
-            return false
+    guard
+      let sourceTurn = latestByTurnID.values
+        .filter({ $0.role == "assistant" })
+        .filter({ turn in
+          let blocks = ChatContentBlockCodec.decode(turn.contentBlocksJSON) ?? []
+          return blocks.contains { block in
+            guard case .agentSpawn(_, let spawnPillID, _, let spawnRunID, _, _, _) = block else {
+              return false
+            }
+            if spawnPillID == pillID { return true }
+            guard let normalizedRunID else { return false }
+            return normalized(spawnRunID) == normalizedRunID
           }
-          if spawnPillID == pillID { return true }
-          guard let normalizedRunID else { return false }
-          return normalized(spawnRunID) == normalizedRunID
-        }
-      })
-      .max(by: { $0.turnSeq < $1.turnSeq })
+        })
+        .max(by: { $0.turnSeq < $1.turnSeq })
     else { return nil }
 
     var message = sourceTurn.chatMessage()
@@ -527,12 +528,13 @@ final class KernelTurnProjection {
         createdAt: baseDate,
         sender: .user
       )
-      writes.append(user.journalWrite(
-        origin: origin,
-        status: .completed,
-        continuityKey: continuityKey,
-        messageSource: origin
-      ))
+      writes.append(
+        user.journalWrite(
+          origin: origin,
+          status: .completed,
+          continuityKey: continuityKey,
+          messageSource: origin
+        ))
     }
     if !assistantText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
       || !assistantContentBlocks.isEmpty || !resources.isEmpty
@@ -546,12 +548,13 @@ final class KernelTurnProjection {
         contentBlocks: assistantContentBlocks,
         resources: resources
       )
-      writes.append(assistant.journalWrite(
-        origin: origin,
-        status: .completed,
-        continuityKey: continuityKey,
-        messageSource: origin
-      ))
+      writes.append(
+        assistant.journalWrite(
+          origin: origin,
+          status: .completed,
+          continuityKey: continuityKey,
+          messageSource: origin
+        ))
     }
 
     return await recordExchange(
@@ -596,8 +599,9 @@ final class KernelTurnProjection {
   ) async -> [KernelJournalTurn]? {
     guard !writes.isEmpty, writes.count <= 2 else { return nil }
     let roles = writes.map(\.role)
-    guard roles == ["user"] || roles == ["assistant"]
-      || roles == ["user", "assistant"]
+    guard
+      roles == ["user"] || roles == ["assistant"]
+        || roles == ["user", "assistant"]
     else { return nil }
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return nil }
     guard await host.ensureBridgeStartedForKernel(), isCurrent(lease), let client else { return nil }
@@ -695,11 +699,12 @@ final class KernelTurnProjection {
 
   func clear(surface: AgentSurfaceReference, ownerID: String? = nil) async -> Bool {
     guard let lease = captureOwnerLease(ownerID: ownerID), let host else { return false }
-    let kernelReady = if let kernelReadyOperation {
-      await kernelReadyOperation()
-    } else {
-      await host.ensureBridgeStartedForKernel()
-    }
+    let kernelReady =
+      if let kernelReadyOperation {
+        await kernelReadyOperation()
+      } else {
+        await host.ensureBridgeStartedForKernel()
+      }
     guard kernelReady, isCurrent(lease), let client else { return false }
     do {
       let surfaceKey = surface.key
@@ -901,7 +906,8 @@ final class KernelTurnProjection {
       host.projectJournalTurn(turn)
     }
 
-    let checkpoint = highWaterByConversation[checkpointKey]
+    let checkpoint =
+      highWaterByConversation[checkpointKey]
       ?? result.generationBaseTurnSeq
     let contiguous = KernelJournalReplay.contiguousTurns(
       from: result.turns,

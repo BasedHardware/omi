@@ -85,6 +85,7 @@ from utils.executors import (
     db_executor,
 )
 from utils.executors import start_background_task
+from utils.cloud_tasks import validate_account_deletion_dispatch_configuration
 from services.conversation_finalization import reconcile_listen_finalization_jobs
 from services.users.account_deletion import reconcile_pending_deletion_wipes
 
@@ -108,13 +109,6 @@ elif os.environ.get("SERVICE_ACCOUNT_JSON"):
     firebase_admin.initialize_app(credentials)  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
 else:
     firebase_admin.initialize_app()  # type: ignore[reportUnknownMemberType]  # firebase_admin untyped
-
-# starlette 0.40 added a default 1 MB cap per multipart form part. Voice
-# messages, audio uploads, and persona/app images legitimately exceed that.
-# Match the existing per-request PCM ceiling.
-from starlette.formparsers import MultiPartParser
-
-MultiPartParser.max_part_size = 200 * 1024 * 1024  # 200 MB
 
 app = FastAPI()
 
@@ -208,6 +202,7 @@ app.add_middleware(BYOKMiddleware)
 
 @app.on_event("startup")  # type: ignore[reportDeprecated]  # FastAPI on_event still functional; lifespan migration would change app wiring
 async def startup_event():
+    validate_account_deletion_dispatch_configuration()
     asyncio.create_task(log_executor_health())
     # Drain account-deletion wipes orphaned by a previous deploy/restart. Offloaded
     # to db_executor so the blocking Firestore queries don't stall event-loop startup.

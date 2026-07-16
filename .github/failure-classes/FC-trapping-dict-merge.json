@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-trapping-dict-merge",
+  "violated_contract": "Merging data with possible duplicate keys must not trap at runtime.",
+  "canonical_prevention": "Use the established last-write-wins dictionary merger when duplicate keys are possible; do not construct the dictionary with Dictionary(uniqueKeysWithValues:).",
+  "evidence_prs": [6506, 9288],
+  "scope_hints": ["desktop/macos/**"],
+  "status": "open"
+}

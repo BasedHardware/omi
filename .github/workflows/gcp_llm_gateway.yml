@@ -79,6 +79,9 @@ jobs:
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/Dockerfile \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}
 
       - name: Get GKE credentials
@@ -91,6 +94,7 @@ jobs:
       - name: Deploy LLM Gateway to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}

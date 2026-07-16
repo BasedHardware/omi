@@ -73,7 +73,6 @@ def test_cdist_stub_handles_pairwise_rows():
 
 
 class TestFactoryRouting:
-
     def test_parakeet_routing_in_get_prerecorded_service(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('en')
@@ -152,7 +151,6 @@ class TestFactoryRouting:
 
 
 class TestTranscribeBytes:
-
     def test_missing_endpoint_raises_controlled_configuration_error(self, monkeypatch):
         wav = _make_wav()
         monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
@@ -373,7 +371,6 @@ class TestTranscribeBytes:
 
 
 class TestTranscribeUrl:
-
     def test_downloads_then_transcribes(self):
         wav = _make_wav()
 
@@ -445,7 +442,6 @@ class TestTranscribeUrl:
 
 
 class TestStreamingFactoryRouting:
-
     def test_parakeet_in_stt_service_models(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
@@ -479,7 +475,6 @@ class TestStreamingFactoryRouting:
 
 
 class TestOutputFormat:
-
     def test_words_compatible_with_postprocess_words(self):
         wav = _make_wav(duration_s=3.0)
         segments = [
@@ -534,7 +529,6 @@ class TestOutputFormat:
 
 
 class TestDiarization:
-
     def _dir_vec(self, idx: int) -> np.ndarray:
         v = np.zeros((1, 256), np.float32)
         v[0, idx] = 1.0
@@ -631,7 +625,6 @@ class TestDiarization:
 
 
 class TestProviderClass:
-
     def test_provider_transcribe_bytes_resets_state(self):
         provider = pr.ParakeetPrerecordedProvider()
         wav = _make_wav()

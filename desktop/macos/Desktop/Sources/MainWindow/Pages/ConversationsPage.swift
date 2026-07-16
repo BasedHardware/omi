@@ -1,6 +1,6 @@
 import Combine
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Search Debouncer
 
@@ -131,6 +131,32 @@ struct ConversationsPage: View {
       notification in
       handleAutomationOpenConversation(notification)
     }
+    .onReceive(
+      NotificationCenter.default.publisher(for: .desktopAutomationSetConversationsSearchRequested)
+    ) { notification in
+      searchQuery = (notification.userInfo?["query"] as? String) ?? ""
+    }
+    // Owner fencing: an in-place account switch posts only .runtimeOwnerDidChange;
+    // this page's local state (active search results, multi-select/merge state,
+    // folder sheets) otherwise keeps rendering the previous account's rows even
+    // after AppState and the repository reset.
+    .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+      searchQuery = ""
+      searchResults = []
+      isSearching = false
+      searchError = nil
+      showDatePicker = false
+      showCreateFolderSheet = false
+      editingFolder = nil
+      deletingFolder = nil
+      isFilteringStarred = false
+      isFilteringDate = false
+      isMultiSelectMode = false
+      selectedConversationIds = []
+      showMergeConfirmation = false
+      isMerging = false
+      mergeError = nil
+    }
     .dismissableSheet(isPresented: $showCreateFolderSheet) {
       FolderFormSheet(folder: nil, onDismiss: { showCreateFolderSheet = false })
         .environmentObject(appState)
@@ -197,6 +223,10 @@ struct ConversationsPage: View {
 
         Spacer()
 
+        if !appState.conversations.isEmpty {
+          selectModeButton
+        }
+
         quickNoteButton
 
         if !appState.isTranscribing {
@@ -210,6 +240,42 @@ struct ConversationsPage: View {
       // Conversation list
       conversationListSection
     }
+  }
+
+  /// IDs of the conversations currently shown to the user — search results while
+  /// a search is active, otherwise the full list. Used to scope "Select All".
+  private var displayedConversationIds: [String] {
+    searchQuery.isEmpty ? appState.conversations.map { $0.id } : searchResults.map { $0.id }
+  }
+
+  /// Entry point for the multi-select / merge feature. Without this the whole
+  /// merge UI (checkboxes, action bar, Merge button) was permanently unreachable
+  /// because `isMultiSelectMode` was never set true anywhere.
+  private var selectModeButton: some View {
+    Button {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+        isMultiSelectMode.toggle()
+        if !isMultiSelectMode {
+          selectedConversationIds.removeAll()
+          showMergeConfirmation = false
+        }
+      }
+    } label: {
+      HStack(spacing: OmiSpacing.xxs) {
+        Image(systemName: isMultiSelectMode ? "checkmark.circle" : "checkmark.circle.badge.questionmark")
+          .scaledFont(size: OmiType.caption)
+        Text(isMultiSelectMode ? "Done" : "Select")
+          .scaledFont(size: OmiType.body, weight: .medium)
+      }
+      .foregroundColor(isMultiSelectMode ? OmiColors.textPrimary : OmiColors.textSecondary)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
+      .omiControlSurface(
+        fill: OmiColors.backgroundSecondary, radius: 18, stroke: OmiColors.border.opacity(0.18))
+    }
+    .buttonStyle(.plain)
+    .help(isMultiSelectMode ? "Exit selection" : "Select conversations to merge")
+    .accessibilityIdentifier("conversations-select-toggle")
   }
 
   private var quickNoteButton: some View {
@@ -613,17 +679,21 @@ struct ConversationsPage: View {
 
       Spacer()
 
-      // Select All / Deselect All
+      // Select All / Deselect All — scoped to the CURRENTLY DISPLAYED list
+      // (search results when searching, otherwise all conversations), so
+      // "Select All" in search mode selects the results the user can see rather
+      // than the entire conversation list.
       Button(action: {
-        if selectedConversationIds.count == appState.conversations.count {
-          selectedConversationIds.removeAll()
-        } else {
-          selectedConversationIds = Set(appState.conversations.map { $0.id })
-        }
+        selectedConversationIds = ConversationMergeSelection.toggledSelectAll(
+          displayedIds: displayedConversationIds,
+          current: selectedConversationIds
+        )
       }) {
         Text(
-          selectedConversationIds.count == appState.conversations.count
-            ? "Deselect All" : "Select All"
+          ConversationMergeSelection.allDisplayedSelected(
+            displayedIds: displayedConversationIds,
+            current: selectedConversationIds
+          ) ? "Deselect All" : "Select All"
         )
         .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textSecondary)
@@ -754,6 +824,32 @@ struct ConversationsPage: View {
 
 }
 
+// MARK: - Conversation Merge Selection
+
+/// Pure selection logic for the conversation multi-select / merge feature.
+/// Kept free of view state so it is unit-testable and so "Select All" is always
+/// scoped to the list the user is actually looking at.
+enum ConversationMergeSelection {
+  /// Toggle "select all" over the currently displayed list. If every displayed
+  /// id is already selected, deselect just those (leaving any selections from
+  /// another view intact); otherwise add all displayed ids to the selection.
+  static func toggledSelectAll(displayedIds: [String], current: Set<String>) -> Set<String> {
+    let displayed = Set(displayedIds)
+    guard !displayed.isEmpty else { return current }
+    if displayed.isSubset(of: current) {
+      return current.subtracting(displayed)
+    }
+    return current.union(displayed)
+  }
+
+  /// True when every currently displayed id is selected (drives the
+  /// "Select All" / "Deselect All" label). False for an empty displayed list.
+  static func allDisplayedSelected(displayedIds: [String], current: Set<String>) -> Bool {
+    let displayed = Set(displayedIds)
+    return !displayed.isEmpty && displayed.isSubset(of: current)
+  }
+}
+
 // MARK: - Transcript Notes Divider
 
 /// Draggable divider between transcript and notes panels
@@ -792,9 +888,9 @@ private struct TranscriptNotesDivider: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
-    .frame(width: 600, height: 800)
-    .background(OmiColors.backgroundSecondary)
-}
+  #Preview {
+    ConversationsPage(appState: AppState(), selectedConversation: .constant(nil))
+      .frame(width: 600, height: 800)
+      .background(OmiColors.backgroundSecondary)
+  }
 #endif

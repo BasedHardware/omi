@@ -65,6 +65,9 @@ jobs:
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} -f plugins/Dockerfile .
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile plugins/Dockerfile \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
 
       - name: Deploy to Cloud Run

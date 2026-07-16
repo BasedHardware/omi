@@ -3151,7 +3151,7 @@
     "syncCustomSttWarningMessage": "Saját átírási szolgáltatót használsz. Ezek a felvételek szinkronizáláskor az Omi szerverein kerülnek átírásra, és beleszámítanak a csomagod átírási keretébe.",
     "transcribeLaterTitle": "Átírás később",
     "transcribeLaterDescription": "Vedd fel a hangot most, és írd át igény szerint, az élő átírás helyett. A felvételek a telefonodon tárolódnak, majd feltöltve beszélgetéseket hozhatsz létre belőlük.",
-    "transcribeLaterNote": "Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.",
+    "transcribeLaterNote": "A telefon mikrofonjával, valamint Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.",
     "transcribeLaterStorageFull": "Kevés a szabad hely a telefonodon, ezért a felvétel szünetel. Szabadíts fel helyet, vagy töltsd fel a felvételeidet, és a rögzítés automatikusan folytatódik.",
     "unmute": "Némítás feloldása",
     "newRecording": "Új felvétel",
@@ -3244,5 +3244,6 @@
     "deviceStoragePercentFull": "{percent}% megtelt",
     "deviceStorageUsedOfTotal": "{used} / {total} felhasználva",
     "deviceStorageFree": "{free} szabad",
-    "deviceStorageNearlyFull": "Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához."
+    "deviceStorageNearlyFull": "Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.",
+    "phoneMicOfflineFallbackMessage": "Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy."
 }

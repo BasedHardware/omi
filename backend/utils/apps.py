@@ -721,7 +721,6 @@ def find_app_subscription(app_id: str, uid: str, status_filter: str = 'all') -> 
         Dictionary representation of the subscription or None if not found
     """
     try:
-
         cached_customer_id = get_user_app_subscription_customer_id(app_id, uid)
         latest_subscription = None
 
@@ -1610,7 +1609,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         'name': name.strip(),
         'description': description.strip(),
         'endpoint': endpoint.strip(),
-        'method': typed_tool.get('method', 'POST').upper(),
+        'method': (typed_tool.get('method') or 'POST').upper(),
         'auth_required': typed_tool.get('auth_required', True),
     }
 

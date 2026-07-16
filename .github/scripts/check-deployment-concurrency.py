@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Enforce target-scoped serialization for persistent Cloud Run/GKE writers.
+"""Enforce target-scoped serialization for persistent deployment writers.
 
 This is intentionally a narrow, stdlib-only structural policy check. Actionlint
 validates workflow syntax, but it cannot prove that separate workflow entry
@@ -10,10 +10,20 @@ group.
 from __future__ import annotations
 
 import argparse
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
+BACKEND_ROOT = ROOT / "backend"
+if str(BACKEND_ROOT) not in sys.path:
+    sys.path.insert(0, str(BACKEND_ROOT))
+
+from scripts.firestore_workflow_policy import (  # noqa: E402
+    has_direct_firestore_mutation,
+    reconciliation_invocations,
+)
+
 WORKFLOWS = ROOT / ".github" / "workflows"
 
 
@@ -34,15 +44,10 @@ LOCK_CONTRACTS = {
     "gcp_app.yml": LockContract(
         "deploy-cloud-run-omi-web-app-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_backend.yml": LockContract(
-        "deploy-backend-stack-${{ github.event.inputs.environment }}"
-    ),
-    "gcp_backend_agent_proxy.yml": LockContract(
-        "deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"
-    ),
-    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract(
-        "deploy-gke-agent-proxy-development"
-    ),
+    "gcp_backend.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    "gcp_firestore_indexes.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
+    "gcp_backend_agent_proxy.yml": LockContract("deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"),
+    "gcp_backend_agent_proxy_auto_deploy.yml": LockContract("deploy-gke-agent-proxy-development"),
     "gcp_backend_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_backend_listen_helm.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment || 'development' }}"
@@ -51,40 +56,26 @@ LOCK_CONTRACTS = {
         "${{ (github.event.inputs.service || 'pusher') == 'llm-gateway' && format('deploy-backend-stack-{0}', github.event.inputs.environment) || format('deploy-gke-pusher-{0}', github.event.inputs.environment) }}"
     ),
     "gcp_backend_pusher_auto_deploy.yml": LockContract("deploy-gke-pusher-development"),
-    "gcp_diarizer.yml": LockContract(
-        "deploy-gke-diarizer-${{ github.event.inputs.environment }}"
-    ),
+    "gcp_diarizer.yml": LockContract("deploy-gke-diarizer-${{ github.event.inputs.environment }}"),
     "gcp_frontend.yml": LockContract(
         "deploy-cloud-run-frontend-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_llm_gateway.yml": LockContract(
-        "deploy-backend-stack-${{ github.event.inputs.environment }}"
-    ),
+    "gcp_llm_gateway.yml": LockContract("deploy-backend-stack-${{ github.event.inputs.environment }}"),
     "gcp_llm_gateway_auto_dev.yml": LockContract("deploy-backend-stack-development"),
     "gcp_memory_maintenance_job.yml": LockContract(
         "deploy-cloud-run-memory-maintenance-job-${{ github.event.inputs.environment }}"
     ),
-    "gcp_memory_maintenance_job_auto_dev.yml": LockContract(
-        "deploy-cloud-run-memory-maintenance-job-development"
-    ),
-    "gcp_models.yml": LockContract(
-        "deploy-gke-vad-${{ github.event.inputs.environment }}"
-    ),
-    "gcp_nllb_translation.yml": LockContract(
-        "deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"
-    ),
+    "gcp_memory_maintenance_job_auto_dev.yml": LockContract("deploy-cloud-run-memory-maintenance-job-development"),
+    "gcp_models.yml": LockContract("deploy-gke-vad-${{ github.event.inputs.environment }}"),
+    "gcp_nllb_translation.yml": LockContract("deploy-gke-nllb-translation-${{ github.event.inputs.environment }}"),
     "gcp_notifications_job.yml": LockContract(
         "deploy-cloud-run-notifications-job-${{ github.event.inputs.environment }}"
     ),
-    "gcp_parakeet.yml": LockContract(
-        "deploy-gke-parakeet-${{ github.event.inputs.environment }}"
-    ),
+    "gcp_parakeet.yml": LockContract("deploy-gke-parakeet-${{ github.event.inputs.environment }}"),
     "gcp_personas.yml": LockContract(
         "deploy-cloud-run-omi-web-${{ github.event_name == 'workflow_dispatch' && github.event.inputs.environment || github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}"
     ),
-    "gcp_plugins.yml": LockContract(
-        "deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"
-    ),
+    "gcp_plugins.yml": LockContract("deploy-cloud-run-plugins-${{ github.event.inputs.environment }}"),
 }
 
 
@@ -94,6 +85,10 @@ LOCK_CONTRACTS = {
 RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
 }
+
+# Firestore index creation is a schema migration, not ordinary deploy work.
+# Keep a single auditable writer so backend readiness can stay read-only.
+FIRESTORE_SCHEMA_WRITERS = frozenset({"gcp_firestore_indexes.yml"})
 
 # The manual pusher workflow routes its default pusher service and its
 # llm-gateway compatibility mode to different lock domains. The default pusher
@@ -113,11 +108,11 @@ WRITER_MARKERS = (
     "gcloud run jobs deploy ",
     "gcloud run jobs update ",
 )
+PUBLIC_BUILD_DEPLOY_ACTION = "uses: ./.github/actions/deploy-public-build"
 
 PUSHER_CHART_MARKER = "backend/charts/pusher"
 PUSHER_CONFIGMAP_PREFLIGHT = (
-    "kubectl -n ${{ vars.ENV }}-omi-backend get configmap "
-    "${{ vars.ENV }}-omi-backend-config >/dev/null"
+    "kubectl -n ${{ vars.ENV }}-omi-backend get configmap " "${{ vars.ENV }}-omi-backend-config >/dev/null"
 )
 PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py"
 
@@ -131,9 +126,7 @@ def parse_top_level_concurrency(text: str) -> dict[str, str] | None:
 
     lines = text.splitlines()
     try:
-        start = next(
-            index for index, line in enumerate(lines) if line == "concurrency:"
-        )
+        start = next(index for index, line in enumerate(lines) if line == "concurrency:")
     except StopIteration:
         return None
 
@@ -175,43 +168,39 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
 
     actual_group = concurrency.get("group")
     if actual_group != contract.group:
-        errors.append(
-            f"{name}: concurrency group must be {contract.group!r}, got {actual_group!r}"
-        )
+        errors.append(f"{name}: concurrency group must be {contract.group!r}, got {actual_group!r}")
     if concurrency.get("cancel-in-progress") != "false":
         errors.append(f"{name}: deploy locks must use cancel-in-progress: false")
     return errors
 
 
-def auto_deploy_acceptance_is_eligible(deploy_result: str) -> bool:
-    """Model the integrated acceptance job's `needs: deploy` success guard."""
-
-    return deploy_result == "success"
-
-
 def validate_auto_deploy_acceptance(text: str) -> list[str]:
-    """Keep acceptance inside the source deploy workflow's mutation lock."""
+    """Keep exact candidate acceptance in the locked deploy job before promotion."""
 
-    block = job_block(text, "verify")
+    block = job_block(text, "deploy")
     if block is None:
-        return ["gcp_backend_auto_dev.yml: missing integrated verify job"]
+        return ["gcp_backend_auto_dev.yml: missing deploy job"]
     required_markers = (
-        "needs: deploy",
-        "if: needs.deploy.result == 'success'",
+        "Capture exact no-traffic candidate URLs",
         "backend/scripts/verify_dev_backend_deployment.py",
+        "backend/scripts/run_dev_candidate_acceptance.py",
+        "--candidate",
         '--commit-sha "${{ github.sha }}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
+        "Shift Cloud Run traffic to validated revisions",
     )
     errors = [
-        f"gcp_backend_auto_dev.yml: integrated verify job missing {marker!r}"
+        f"gcp_backend_auto_dev.yml: candidate acceptance missing {marker!r}"
         for marker in required_markers
         if not any(marker in line for line in block)
     ]
-    if any("concurrency:" in line for line in block):
-        errors.append(
-            "gcp_backend_auto_dev.yml: integrated verify must inherit the workflow mutation lock"
-        )
+    smoke_index = next((index for index, line in enumerate(block) if "run_dev_candidate_acceptance.py" in line), -1)
+    promotion_index = next((index for index, line in enumerate(block) if "Shift Cloud Run traffic" in line), -1)
+    if smoke_index >= promotion_index:
+        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must run before traffic promotion")
+    if job_block(text, "verify") is not None:
+        errors.append("gcp_backend_auto_dev.yml: candidate acceptance must not run in a post-promotion verify job")
     return errors
 
 
@@ -232,27 +221,69 @@ def deploy_job_steps(block: list[str]) -> list[list[str]]:
     return steps
 
 
+def workflow_steps(text: str) -> list[list[str]]:
+    """Return top-level job step blocks from a workflow."""
+
+    steps: list[list[str]] = []
+    current: list[str] | None = None
+    for line in text.splitlines():
+        if line.startswith("      - "):
+            if current is not None:
+                steps.append(current)
+            current = [line]
+            continue
+        if current is None:
+            continue
+        if line and len(line) - len(line.lstrip()) < 6:
+            steps.append(current)
+            current = None
+            continue
+        current.append(line)
+    if current is not None:
+        steps.append(current)
+    return steps
+
+
+def has_firestore_index_writer(text: str) -> bool:
+    """Detect Firestore schema mutations by command semantics, not step names."""
+
+    for step in workflow_steps(text):
+        active = "\n".join(line for line in step if not line.lstrip().startswith("#"))
+        if has_direct_firestore_mutation(active):
+            return True
+        if any(invocation.mutates_schema for invocation in reconciliation_invocations(active)):
+            return True
+    return False
+
+
+def validate_firestore_schema_writers(workflow_text: dict[str, str]) -> list[str]:
+    """Require every detected Firestore schema writer to be explicitly owned."""
+
+    detected = {name for name, text in workflow_text.items() if has_firestore_index_writer(text)}
+    owner = ", ".join(sorted(FIRESTORE_SCHEMA_WRITERS))
+    return [
+        *(
+            f"{name}: Firestore schema writes are owned only by {owner}"
+            for name in sorted(detected - FIRESTORE_SCHEMA_WRITERS)
+        ),
+        *(
+            f"{name}: canonical Firestore schema writer is missing"
+            for name in sorted(FIRESTORE_SCHEMA_WRITERS - detected)
+        ),
+    ]
+
+
 def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
     """Return whether a deploy step performs an allowed pusher preflight."""
 
     if step[0].lstrip().startswith("#"):
         return False
 
-    conditions = [
-        candidate.strip()
-        for candidate in step
-        if candidate.strip().startswith("if:")
-    ]
+    conditions = [candidate.strip() for candidate in step if candidate.strip().startswith("if:")]
     nonfatal = any(
-        candidate.strip().startswith("continue-on-error:")
-        or candidate.strip() == "set +e"
-        for candidate in step
+        candidate.strip().startswith("continue-on-error:") or candidate.strip() == "set +e" for candidate in step
     )
-    allowed_conditions = (
-        ["if: env.SERVICE == 'pusher'"]
-        if name == "gcp_backend_pusher.yml"
-        else []
-    )
+    allowed_conditions = ["if: env.SERVICE == 'pusher'"] if name == "gcp_backend_pusher.yml" else []
     if nonfatal or conditions != allowed_conditions:
         return False
 
@@ -280,9 +311,7 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
         return [f"{name}: pusher deploy must verify the backend runtime ConfigMap before Helm"]
 
     chart_indexes = [
-        index
-        for index, line in enumerate(block)
-        if PUSHER_CHART_MARKER in line and not line.lstrip().startswith("#")
+        index for index, line in enumerate(block) if PUSHER_CHART_MARKER in line and not line.lstrip().startswith("#")
     ]
     if not chart_indexes:
         return []
@@ -296,19 +325,24 @@ def validate_pusher_config_preflight(name: str, text: str) -> list[str]:
 
 
 def is_persistent_writer(text: str) -> bool:
-    return any(marker in text for marker in WRITER_MARKERS)
+    return (
+        any(marker in text for marker in WRITER_MARKERS)
+        or any(
+            any(PUBLIC_BUILD_DEPLOY_ACTION in line and not line.lstrip().startswith("#") for line in step)
+            for step in workflow_steps(text)
+        )
+        or has_firestore_index_writer(text)
+    )
 
 
 def resolve_environment(group: str, environment: str) -> str:
-    return group.replace(
-        "${{ github.event.inputs.environment || 'development' }}", environment
-    ).replace("${{ github.event.inputs.environment }}", environment)
+    return group.replace("${{ github.event.inputs.environment || 'development' }}", environment).replace(
+        "${{ github.event.inputs.environment }}", environment
+    )
 
 
 def development_group(name: str, group: str) -> str:
-    return DEVELOPMENT_GROUP_OVERRIDES.get(
-        name, resolve_environment(group, "development")
-    )
+    return DEVELOPMENT_GROUP_OVERRIDES.get(name, resolve_environment(group, "development"))
 
 
 def validate_shared_families(groups: dict[str, str]) -> list[str]:
@@ -316,6 +350,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 
     family_pairs = (
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
+        ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_llm_gateway_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
@@ -332,6 +367,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 
     environment_scoped = (
         "gcp_backend.yml",
+        "gcp_firestore_indexes.yml",
         "gcp_backend_agent_proxy.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
@@ -344,12 +380,8 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
         "gcp_plugins.yml",
     )
     for name in environment_scoped:
-        if resolve_environment(groups[name], "development") == resolve_environment(
-            groups[name], "prod"
-        ):
-            errors.append(
-                f"{name}: development and prod must resolve to different lock groups"
-            )
+        if resolve_environment(groups[name], "development") == resolve_environment(groups[name], "prod"):
+            errors.append(f"{name}: development and prod must resolve to different lock groups")
 
     return errors
 
@@ -357,23 +389,18 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 def check_repository() -> list[str]:
     errors: list[str] = []
     workflow_text = {
-        path.name: path.read_text()
+        path.name: path.read_text(encoding="utf-8")
         for pattern in ("*.yml", "*.yaml")
         for path in WORKFLOWS.glob(pattern)
     }
+    errors.extend(validate_firestore_schema_writers(workflow_text))
 
-    detected = {
-        name for name, text in workflow_text.items() if is_persistent_writer(text)
-    }
+    detected = {name for name, text in workflow_text.items() if is_persistent_writer(text)}
     expected = set(LOCK_CONTRACTS) | set(RUN_SCOPED_EXEMPTIONS)
     for name in sorted(detected - expected):
-        errors.append(
-            f"{name}: persistent Cloud Run/GKE writer is missing from the lock policy"
-        )
+        errors.append(f"{name}: persistent deployment writer is missing from the lock policy")
     for name in sorted(expected - detected):
-        errors.append(
-            f"{name}: lock policy entry no longer contains a recognized deploy writer"
-        )
+        errors.append(f"{name}: lock policy entry no longer contains a recognized deployment writer")
 
     groups: dict[str, str] = {}
     for name, contract in LOCK_CONTRACTS.items():
@@ -392,9 +419,7 @@ def check_repository() -> list[str]:
     for name, marker in RUN_SCOPED_EXEMPTIONS.items():
         text = workflow_text.get(name, "")
         if marker not in text:
-            errors.append(
-                f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}"
-            )
+            errors.append(f"{name}: run-scoped deploy-lock exemption lost required marker {marker!r}")
 
     identity_markers = (
         'SHORT_SHA="$(git rev-parse --short=7 HEAD)"',
@@ -404,9 +429,7 @@ def check_repository() -> list[str]:
         text = workflow_text.get(name, "")
         for marker in identity_markers:
             if marker not in text:
-                errors.append(
-                    f"{name}: backend revision identity must include {marker!r}"
-                )
+                errors.append(f"{name}: backend revision identity must include {marker!r}")
 
     auto_deploy = workflow_text.get("gcp_backend_auto_dev.yml", "")
     errors.extend(validate_auto_deploy_acceptance(auto_deploy))
@@ -415,8 +438,7 @@ def check_repository() -> list[str]:
     separate_acceptance_workflows = sorted(
         name
         for name, text in workflow_text.items()
-        if name != "gcp_backend_auto_dev.yml"
-        and "backend/scripts/verify_dev_backend_deployment.py" in text
+        if name != "gcp_backend_auto_dev.yml" and "backend/scripts/verify_dev_backend_deployment.py" in text
     )
     for name in separate_acceptance_workflows:
         errors.append(f"{name}: acceptance must remain inside the source deploy workflow")
@@ -424,7 +446,109 @@ def check_repository() -> list[str]:
     return errors
 
 
-def run_self_test() -> None:
+def _self_test_firestore_schema_ownership() -> None:
+    firestore_read_only = """name: fixture
+jobs:
+  verify:
+    steps:
+      - run: |
+          python3 backend/scripts/reconcile_firestore_indexes.py \\
+            --project runtime-project \\
+            --check-only
+"""
+    if is_persistent_writer(firestore_read_only):
+        raise PolicyError("read-only Firestore readiness was classified as a persistent writer")
+    default_reconciliation = firestore_read_only.replace(" \\" + "\n            --check-only\n", "\n")
+    if not is_persistent_writer(default_reconciliation):
+        raise PolicyError("default Firestore reconciliation bypassed persistent-writer detection")
+    if not is_persistent_writer(firestore_read_only.replace("--check-only", "--provision-missing")):
+        raise PolicyError("explicit Firestore provisioning bypassed persistent-writer detection")
+    mixed_firestore_step = firestore_read_only.replace(
+        "            --check-only\n",
+        "            --check-only\n          python3 backend/scripts/reconcile_firestore_indexes.py --project runtime-project\n",
+    )
+    if not is_persistent_writer(mixed_firestore_step):
+        raise PolicyError("a read-only token masked a second Firestore writer in the same step")
+    leading_comment = firestore_read_only.replace(
+        "          python3",
+        "          # readiness check\n          python3",
+    )
+    if is_persistent_writer(leading_comment):
+        raise PolicyError("a leading shell comment changed read-only Firestore classification")
+    comment_separated_writer = firestore_read_only.replace(
+        "            --check-only\n",
+        "            --check-only\n          # writer follows\n"
+        "          python3 backend/scripts/reconcile_firestore_indexes.py --project runtime-project\n",
+    )
+    if not is_persistent_writer(comment_separated_writer):
+        raise PolicyError("an inter-command comment masked a Firestore writer")
+    direct_firebase_writer = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - run: npx firebase deploy --only firestore:indexes
+"""
+    if not is_persistent_writer(direct_firebase_writer):
+        raise PolicyError("direct Firebase index deployment bypassed persistent-writer detection")
+    commented_firebase_writer = direct_firebase_writer.replace(
+        "      - run: npx firebase",
+        "      - run: |\n          # npx firebase",
+    )
+    if is_persistent_writer(commented_firebase_writer):
+        raise PolicyError("a commented Firebase example was classified as a writer")
+    direct_writer_commands = (
+        "npx firebase deploy",
+        "npx firebase deploy --project prod --only=firestore:indexes",
+        "gcloud --project=prod firestore indexes composite create --collection-group=memories",
+    )
+    for command in direct_writer_commands:
+        fixture = direct_firebase_writer.replace(
+            "npx firebase deploy --only firestore:indexes",
+            command,
+        )
+        if not is_persistent_writer(fixture):
+            raise PolicyError(f"direct Firestore writer bypassed detection: {command}")
+    non_firestore_firebase_deploy = direct_firebase_writer.replace(
+        "--only firestore:indexes",
+        "--only functions",
+    )
+    if is_persistent_writer(non_firestore_firebase_deploy):
+        raise PolicyError("a functions-only Firebase deploy was classified as a Firestore writer")
+    centralized_public_build_writer = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - uses: ./.github/actions/deploy-public-build
+"""
+    if not is_persistent_writer(centralized_public_build_writer):
+        raise PolicyError("centralized public-build deployment bypassed persistent-writer detection")
+    if is_persistent_writer(centralized_public_build_writer.replace("      - uses:", "      # - uses:")):
+        raise PolicyError("a commented centralized public-build deployment was classified as a writer")
+    gcloud_list = direct_firebase_writer.replace(
+        "npx firebase deploy --only firestore:indexes",
+        "gcloud firestore indexes composite list",
+    )
+    if is_persistent_writer(gcloud_list):
+        raise PolicyError("a read-only gcloud index list was classified as a writer")
+
+    canonical_firestore_writer = {"gcp_firestore_indexes.yml": direct_firebase_writer}
+    if validate_firestore_schema_writers(canonical_firestore_writer):
+        raise PolicyError("the canonical Firestore schema writer was rejected")
+    duplicate_firestore_writer = {
+        **canonical_firestore_writer,
+        "gcp_backend_auto_dev.yml": direct_firebase_writer,
+    }
+    if not any(
+        "gcp_backend_auto_dev.yml" in error for error in validate_firestore_schema_writers(duplicate_firestore_writer)
+    ):
+        raise PolicyError("an unapproved Firestore schema writer bypassed ownership enforcement")
+    if not any(
+        "canonical Firestore schema writer is missing" in error for error in validate_firestore_schema_writers({})
+    ):
+        raise PolicyError("a missing canonical Firestore schema writer bypassed ownership enforcement")
+
+
+def _self_test_workflow_lock() -> None:
     good = """name: fixture
 concurrency:
   group: deploy-fixture-development
@@ -444,49 +568,36 @@ jobs:
       group: deploy-fixture-development
       cancel-in-progress: false
 """
-    if not any(
-        "workflow-level" in error
-        for error in validate_lock("fixture.yml", job_only, contract)
-    ):
+    if not any("workflow-level" in error for error in validate_lock("fixture.yml", job_only, contract)):
         raise PolicyError("job-level-only lock satisfied the workflow-level contract")
 
     wrong_group = good.replace("deploy-fixture-development", "deploy-other-development")
-    if not any(
-        "group must be" in error
-        for error in validate_lock("fixture.yml", wrong_group, contract)
-    ):
+    if not any("group must be" in error for error in validate_lock("fixture.yml", wrong_group, contract)):
         raise PolicyError("mismatched group satisfied the contract")
 
     canceling = good.replace("cancel-in-progress: false", "cancel-in-progress: true")
-    if not any(
-        "cancel-in-progress" in error
-        for error in validate_lock("fixture.yml", canceling, contract)
-    ):
+    if not any("cancel-in-progress" in error for error in validate_lock("fixture.yml", canceling, contract)):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
 
-    integrated_acceptance = """name: fixture
+
+def _self_test_deploy_guards() -> None:
+    in_deploy_acceptance = """name: fixture
 jobs:
   deploy:
-    runs-on: ubuntu-latest
-  verify:
-    needs: deploy
-    if: needs.deploy.result == 'success'
     runs-on: ubuntu-latest
     steps:
       - run: >-
           python3 backend/scripts/verify_dev_backend_deployment.py
+          --candidate
           --commit-sha "${{ github.sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
+      - name: Capture exact no-traffic candidate URLs
+      - run: python3 backend/scripts/run_dev_candidate_acceptance.py
+      - name: Shift Cloud Run traffic to validated revisions
 """
-    if validate_auto_deploy_acceptance(integrated_acceptance):
-        raise PolicyError("valid integrated acceptance job was rejected")
-    if auto_deploy_acceptance_is_eligible("cancelled"):
-        raise PolicyError("cancelled deployment made integrated acceptance eligible")
-    if not auto_deploy_acceptance_is_eligible("success"):
-        raise PolicyError(
-            "successful deployment did not make integrated acceptance eligible"
-        )
+    if validate_auto_deploy_acceptance(in_deploy_acceptance):
+        raise PolicyError("valid in-deploy candidate acceptance was rejected")
 
     pusher_deploy = """name: fixture
 jobs:
@@ -514,10 +625,7 @@ jobs:
         "kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null\n",
         "",
     )
-    if not any(
-        "before Helm" in error
-        for error in validate_pusher_config_preflight("fixture.yml", missing_preflight)
-    ):
+    if not any("before Helm" in error for error in validate_pusher_config_preflight("fixture.yml", missing_preflight)):
         raise PolicyError("missing pusher ConfigMap preflight satisfied the deploy contract")
 
     equivalent_chart_path = """name: fixture
@@ -536,10 +644,7 @@ jobs:
       - run: helm upgrade ./backend/charts/pusher
       - run: kubectl -n ${{ vars.ENV }}-omi-backend get configmap ${{ vars.ENV }}-omi-backend-config >/dev/null
 """
-    if not any(
-        "before Helm" in error
-        for error in validate_pusher_config_preflight("fixture.yml", late_preflight)
-    ):
+    if not any("before Helm" in error for error in validate_pusher_config_preflight("fixture.yml", late_preflight)):
         raise PolicyError("late pusher ConfigMap preflight satisfied the deploy contract")
 
     cross_job_preflight = """name: fixture
@@ -587,6 +692,14 @@ jobs:
 """
     if not validate_pusher_config_preflight("fixture.yml", masked_preflight):
         raise PolicyError("masked pusher ConfigMap preflight satisfied the deploy contract")
+
+
+def run_self_test() -> None:
+    """Exercise independent policy fixtures without creating a monolithic test body."""
+
+    _self_test_firestore_schema_ownership()
+    _self_test_workflow_lock()
+    _self_test_deploy_guards()
 
 
 def main() -> int:

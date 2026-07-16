@@ -2,6 +2,57 @@
   "unreleased": [],
   "releases": [
     {
+      "version": "0.12.75",
+      "date": "2026-07-16",
+      "changes": [
+        "Fixed canonical memory views so only server-confirmed Short-term and Long-term memories receive lifecycle badges and filters",
+        "Fixed chat hanging on a spinning cursor when the model provider stalled mid-answer — the turn now ends with a clear error instead of waiting",
+        "Kept push-to-talk interruptions and background recovery visually minimal while preserving clear error messages",
+        "Fixed push-to-talk occasionally reporting a background agent as finished before its task had actually completed",
+        "Fixed the floating bar failing to escalate a hard voice question to the higher model at the start of a new conversation",
+        "Fixed push-to-talk screen questions so Omi answers the original question from a fresh, turn-specific screen capture instead of only reading back a visual report.",
+        "Fixed switching accounts showing the previous account's conversations and memories until the app was restarted",
+        "Fixed an open conversation and the folder filters still showing the previous account's data after switching accounts",
+        "Fixed folders and people from the previous account briefly reappearing right after switching accounts",
+        "Fixed an active conversations search still showing the previous account's results after switching accounts",
+        "Fixed Desktop agent SQL queries with names, dates, and search patterns so they no longer fail on malformed literals",
+        "The floating bar and notch island now stay above other overlay apps (e.g. Clicky) instead of being buried under them",
+        "Fixed background-agent completion states and results staying out of sync between push-to-talk and the agent list",
+        "Made push-to-talk keep one captured turn through a stale realtime session handoff or a fast transcript fallback instead of requiring a repeat press",
+        "Fixed voice input attempting to use a connection that had already closed",
+        "Fixed Rewind capture getting stuck after a recoverable local database failure instead of reopening its database automatically",
+        "Improved macOS Settings controls with better alignment, larger inputs, and more responsive interactions",
+        "Fixed task prioritization syncing large score updates by sending them in backend-safe batches",
+        "Improved macOS development bundle isolation and troubleshooting."
+      ]
+    },
+    {
+      "version": "0.12.74",
+      "date": "2026-07-15",
+      "changes": [
+        "Fixed a crash on launch that could occur when preparing an empty local database for agent sync",
+        "Fixed a rare crash when stopping a recording or changing audio devices mid-capture",
+        "Fixed an intermittent crash when stopping recording caused by audio teardown racing the live capture thread",
+        "Fixed chat answers inserting a stray space into code like <code>pd.DataFrame</code> when normalizing sentence spacing",
+        "Fixed a crash that could occur when a paired BLE device sent a corrupt or malformed data packet",
+        "Fixed a crash when a window reported a zero-area frame while the app was capturing screen context",
+        "Redesigned Screen Recording setup with a compact animated Omi drag-to-enable helper",
+        "Improved recovery guidance when the desktop AI runtime or a selected local provider cannot start",
+        "Fixed clear voice delegation requests to start the requested agent directly without repeated confirmation",
+        "Improved recording reliability when reconnecting after a conversation finishes.",
+        "Fixed the Home screenshot counter appearing unavailable during app startup",
+        "Fixed the app freezing for several seconds on its first launch when the network was slow, and stopped a slow first launch from pinning beta installs to the stable update channel",
+        "Improved push-to-talk recovery after silent microphone capture",
+        "Push-to-talk now shows transcription progress, clearer failure reasons, and backup-transcription notices when realtime falls back",
+        "Fixed push-to-talk turns spoken while the voice connection was still warming up getting stuck thinking with no reply",
+        "Fixed realtime voice to prioritize fresh screen captures and reliably handle the first push-to-talk after launch",
+        "Fixed Calendar, Gmail and Apple Notes imports failing to extract anything, and chat turns erroring out, when a message merely mentioned something like \"today\" plus \"schedule\"",
+        "Fixed duplicate sign-in prompts appearing in Home chat after a session expires",
+        "Added maintainer-approved desktop preview apps that can be installed and tested side-by-side",
+        "Improved PTT higher-model answers by preserving the current conversation context"
+      ]
+    },
+    {
       "version": "0.12.73",
       "date": "2026-07-14",
       "changes": [

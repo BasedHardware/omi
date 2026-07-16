@@ -19,6 +19,7 @@ Cross-platform view of backend Prometheus fallbacks, desktop PostHog heals, and 
 | Fallback rate by component & outcome | `sum by (component, outcome) (rate(omi_fallback_total[5m]))` | Dashboard only (`recovered` is expected) |
 | Sync enqueue uncertainty share | `sum(rate(omi_sync_dispatch_attempts_total{mode="enqueue_uncertain"}[10m])) / clamp_min(sum(rate(omi_sync_dispatch_attempts_total[10m])), 1e-9)` | Dashboard only until Cloud Run scrape — see [sync-dispatch-fallback.md](./sync-dispatch-fallback.md) |
 | Pusher degraded sessions & ratio | `pusher_sessions_degraded`, `pusher_active_ws_connections`, ratio | **PAGE** — see [pusher-degraded.md](./pusher-degraded.md) |
+| Real-traffic journey outcomes | `omi_journey_*`, `omi_capture_finalization_reconciliations_total`, `listen_finalization_oldest_nonterminal_age_seconds` | Traffic-gated product alerts plus separate scrape-source health — see [real-traffic-journeys.md](./real-traffic-journeys.md) |
 | LLM gateway fallback rate | `sum(rate(llm_gateway_requests_total{fallback_used="true"}[30m])) / clamp_min(sum(rate(llm_gateway_requests_total[30m])), 1e-9)` | **Ticket** — see [llm-gateway-fallback.md](./llm-gateway-fallback.md) |
 
 The dashboard text panel repeats paging policy: page only on exhausted outcomes, sync enqueue uncertainty, and pusher degraded ratio. Successful `outcome=recovered` heals are dashboard-only.

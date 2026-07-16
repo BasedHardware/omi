@@ -1,8 +1,92 @@
+import AppKit
+import OmiTheme
 import Sparkle
 import SwiftUI
 import UniformTypeIdentifiers
 import WebKit
-import OmiTheme
+
+enum SettingsControlMetrics {
+  static let steppedSliderThumbDiameter: CGFloat = 22
+
+  static func steppedSliderInset(in containerWidth: CGFloat) -> CGFloat {
+    min(steppedSliderThumbDiameter / 2, max(0, containerWidth / 2))
+  }
+
+  static func steppedSliderTrackWidth(in containerWidth: CGFloat) -> CGFloat {
+    max(0, containerWidth - (2 * steppedSliderInset(in: containerWidth)))
+  }
+
+  static func steppedSliderPosition(index: Int, stepCount: Int, containerWidth: CGFloat) -> CGFloat {
+    let inset = steppedSliderInset(in: containerWidth)
+    guard stepCount > 1 else { return inset }
+
+    let clampedIndex = max(0, min(stepCount - 1, index))
+    let fraction = CGFloat(clampedIndex) / CGFloat(stepCount - 1)
+    return inset + (steppedSliderTrackWidth(in: containerWidth) * fraction)
+  }
+
+  static func steppedSliderIndex(locationX: CGFloat, stepCount: Int, containerWidth: CGFloat) -> Int {
+    let trackWidth = steppedSliderTrackWidth(in: containerWidth)
+    guard stepCount > 1, trackWidth > 0 else { return 0 }
+
+    let fraction = max(0, min(1, (locationX - steppedSliderInset(in: containerWidth)) / trackWidth))
+    return Int(round(fraction * CGFloat(stepCount - 1)))
+  }
+
+  static func dailySummaryDate(forHour hour: Int, referenceDate: Date, calendar: Calendar = .current) -> Date {
+    let normalizedHour = max(0, min(23, hour))
+    return calendar.date(bySettingHour: normalizedHour, minute: 0, second: 0, of: referenceDate)
+      ?? referenceDate
+  }
+
+  static func dailySummaryHour(from date: Date, calendar: Calendar = .current) -> Int {
+    calendar.component(.hour, from: date)
+  }
+}
+
+struct SettingsMenuPicker<SelectionValue: Hashable, Content: View>: View {
+  @Binding private var selection: SelectionValue
+  private let content: Content
+
+  init(selection: Binding<SelectionValue>, @ViewBuilder content: () -> Content) {
+    _selection = selection
+    self.content = content()
+  }
+
+  var body: some View {
+    Picker("", selection: $selection) {
+      content
+    }
+    .pickerStyle(.menu)
+    .labelsHidden()
+    .fixedSize()
+  }
+}
+
+private struct SettingsTextInputStyle: ViewModifier {
+  func body(content: Content) -> some View {
+    content
+      .textFieldStyle(.plain)
+      .scaledFont(size: OmiType.body)
+      .foregroundColor(OmiColors.textPrimary)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+          .fill(OmiColors.backgroundTertiary)
+          .overlay(
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius, style: .continuous)
+              .stroke(OmiColors.backgroundQuaternary, lineWidth: 1)
+          )
+      )
+  }
+}
+
+extension View {
+  func settingsTextInputStyle() -> some View {
+    modifier(SettingsTextInputStyle())
+  }
+}
 
 extension SettingsContentView {
   var floatingBarTypedVoiceAnswersBinding: Binding<Bool> {
@@ -34,31 +118,29 @@ extension SettingsContentView {
           }
           Spacer()
           Text("\(String(format: "%.1f", currentSpeed))×")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.accent)
-            .frame(width: 52, height: 52)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .fill(OmiColors.accent.opacity(0.15))
-            )
         }
 
         VStack(spacing: OmiSpacing.xs) {
           // Stepped slider
           GeometryReader { geo in
-            let trackWidth = geo.size.width
             let segmentCount = CGFloat(steps.count - 1)
+            let trackWidth = SettingsControlMetrics.steppedSliderTrackWidth(in: geo.size.width)
+            let trackInset = SettingsControlMetrics.steppedSliderInset(in: geo.size.width)
 
             ZStack(alignment: .leading) {
               // Track background
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                 .fill(OmiColors.backgroundQuaternary)
-                .frame(height: 6)
+                .frame(width: trackWidth, height: 6)
+                .offset(x: trackInset)
 
               // Filled track
               RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
                 .fill(OmiColors.accent)
                 .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+                .offset(x: trackInset)
 
               // Step dots
               ForEach(0..<steps.count, id: \.self) { i in
@@ -68,7 +150,8 @@ extension SettingsContentView {
                   )
                   .frame(width: 12, height: 12)
                   .position(
-                    x: trackWidth * CGFloat(i) / segmentCount,
+                    x: SettingsControlMetrics.steppedSliderPosition(
+                      index: i, stepCount: steps.count, containerWidth: geo.size.width),
                     y: geo.size.height / 2
                   )
               }
@@ -79,20 +162,25 @@ extension SettingsContentView {
                 .frame(width: 22, height: 22)
                 .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
                 .position(
-                  x: trackWidth * CGFloat(currentIndex) / segmentCount,
+                  x: SettingsControlMetrics.steppedSliderPosition(
+                    index: currentIndex, stepCount: steps.count, containerWidth: geo.size.width),
                   y: geo.size.height / 2
                 )
                 .gesture(
-                  DragGesture(minimumDistance: 0)
+                  DragGesture(minimumDistance: 0, coordinateSpace: .named("voiceSpeedSlider"))
                     .onChanged { value in
-                      let fraction = max(0, min(1, value.location.x / trackWidth))
-                      let nearestIndex = Int(round(fraction * segmentCount))
-                      let clamped = max(0, min(steps.count - 1, nearestIndex))
-                      shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                      let clamped = SettingsControlMetrics.steppedSliderIndex(
+                        locationX: value.location.x, stepCount: steps.count,
+                        containerWidth: geo.size.width)
+                      if shortcutSettings.voicePlaybackSpeed != steps[clamped] {
+                        performStepHaptic()
+                        shortcutSettings.voicePlaybackSpeed = steps[clamped]
+                      }
                     }
                 )
             }
           }
+          .coordinateSpace(name: "voiceSpeedSlider")
           .frame(height: 22)
 
           HStack {
@@ -142,16 +230,19 @@ extension SettingsContentView {
       }
 
       GeometryReader { geo in
-        let trackWidth = geo.size.width
+        let trackWidth = SettingsControlMetrics.steppedSliderTrackWidth(in: geo.size.width)
+        let trackInset = SettingsControlMetrics.steppedSliderInset(in: geo.size.width)
 
         ZStack(alignment: .leading) {
           RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
             .fill(OmiColors.backgroundQuaternary)
-            .frame(height: 6)
+            .frame(width: trackWidth, height: 6)
+            .offset(x: trackInset)
 
           RoundedRectangle(cornerRadius: OmiChrome.stripRadius)
             .fill(OmiColors.accent)
             .frame(width: trackWidth * CGFloat(currentIndex) / segmentCount, height: 6)
+            .offset(x: trackInset)
 
           ForEach(0..<stepCount, id: \.self) { i in
             Circle()
@@ -160,7 +251,8 @@ extension SettingsContentView {
               )
               .frame(width: 12, height: 12)
               .position(
-                x: trackWidth * CGFloat(i) / segmentCount,
+                x: SettingsControlMetrics.steppedSliderPosition(
+                  index: i, stepCount: stepCount, containerWidth: geo.size.width),
                 y: geo.size.height / 2
               )
           }
@@ -170,16 +262,17 @@ extension SettingsContentView {
             .frame(width: 22, height: 22)
             .shadow(color: .black.opacity(0.25), radius: 3, y: 1)
             .position(
-              x: trackWidth * CGFloat(currentIndex) / segmentCount,
+              x: SettingsControlMetrics.steppedSliderPosition(
+                index: currentIndex, stepCount: stepCount, containerWidth: geo.size.width),
               y: geo.size.height / 2
             )
             .gesture(
-              DragGesture(minimumDistance: 0)
+              DragGesture(minimumDistance: 0, coordinateSpace: .named("notificationFrequencySlider"))
                 .onChanged { value in
-                  let fraction = max(0, min(1, value.location.x / trackWidth))
-                  let nearestIndex = Int(round(fraction * segmentCount))
-                  let clamped = max(0, min(stepCount - 1, nearestIndex))
+                  let clamped = SettingsControlMetrics.steppedSliderIndex(
+                    locationX: value.location.x, stepCount: stepCount, containerWidth: geo.size.width)
                   if clamped != notificationFrequency {
+                    performStepHaptic()
                     notificationFrequency = clamped
                     updateNotificationSettings(frequency: clamped)
                   }
@@ -187,6 +280,7 @@ extension SettingsContentView {
             )
         }
       }
+      .coordinateSpace(name: "notificationFrequencySlider")
       .frame(height: 22)
 
       HStack {
@@ -556,8 +650,7 @@ extension SettingsContentView {
             title: "Update Channel", subtitle: updaterViewModel.updateChannel.description,
             settingId: "about.channel"
           ) {
-            Picker(
-              "",
+            SettingsMenuPicker(
               selection: Binding(
                 get: { updaterViewModel.updateChannel },
                 set: { newChannel in
@@ -576,9 +669,6 @@ extension SettingsContentView {
                 Text(channel.displayName).tag(channel)
               }
             }
-            .pickerStyle(.menu)
-            .labelsHidden()
-            .frame(width: 200)
           }
         }
       }
@@ -693,6 +783,22 @@ extension SettingsContentView {
         row
       }
     }
+  }
+
+  func settingsCardHeader(icon: String, title: String) -> some View {
+    HStack(spacing: OmiSpacing.sm) {
+      Image(systemName: icon)
+        .scaledFont(size: OmiType.subheading)
+        .foregroundColor(OmiColors.textSecondary)
+
+      Text(title)
+        .scaledFont(size: OmiType.subheading, weight: .medium)
+        .foregroundColor(OmiColors.textPrimary)
+    }
+  }
+
+  func performStepHaptic() {
+    NSHapticFeedbackManager.defaultPerformer.perform(.alignment, performanceTime: .now)
   }
 
   func linkRow(title: String, url: String) -> some View {

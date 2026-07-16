@@ -173,6 +173,25 @@ token_file() { printf '%s/omi-automation-%s.token' "${TMPDIR:-/tmp}" "$PORT"; }
 
 bridge() { OMI_AUTOMATION_PORT="$PORT" "$OMI_CTL" "$@"; }
 
+bridge_active_log_path() {
+  # The bridge owns the running named bundle's identity. Never infer its log
+  # from a shared filename: another QA bundle may be running concurrently.
+  local advertised_bundle path
+  advertised_bundle="$(bridge health 2>/dev/null | python3 -c '
+import json, sys
+try:
+    print(json.load(sys.stdin).get("bundleIdentifier", ""))
+except Exception:
+    print("")
+' 2>/dev/null || true)"
+  path="$(bridge log-path 2>/dev/null || true)"
+  [ "$advertised_bundle" = "$BUNDLE_ID" ] || return 1
+  case "$path" in
+    /private/tmp/omi/*/*.log) printf '%s\n' "$path" ;;
+    *) return 1 ;;
+  esac
+}
+
 action_json() {
   # action_json <action-name> — raw JSON of the action's `detail` object.
   # If the bridge/action returns an error outside detail, preserve it as
@@ -308,10 +327,14 @@ probe_auth_06() {
 }
 
 probe_set_04() {
-  local t0 f total=0 hits status scanned=0 scan_errors=0
+  local t0 f active_log total=0 hits status scanned=0 scan_errors=0
   t0=$(now_s)
+  if ! active_log="$(bridge_active_log_path)"; then
+    record set-04 BLOCKED $(( $(now_s) - t0 )) "named bundle health did not provide its matching log path"
+    return
+  fi
   {
-    for f in /private/tmp/omi-dev.log /private/tmp/omi.log; do
+    for f in "$active_log" /private/tmp/omi.log; do
       if [ ! -r "$f" ]; then echo "$f: not present/readable"; continue; fi
       set +e
       hits="$(grep -cE "$CRED_PATTERNS" "$f" 2>/dev/null)"

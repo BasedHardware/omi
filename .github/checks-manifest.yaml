@@ -1,12 +1,29 @@
 # Single source of truth for deterministic, diff-scoped, stdlib-or-repo-only checks.
 # Values use JSON scalars/lists within this stdlib-parsed YAML subset.
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
+# Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
+# push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: pre-push-final-pr-diff
+    command: ["bash", "scripts/test-pre-push-diff-base.sh"]
+    triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: product-file-line-count-ratchet
+    command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why"
+  - id: product-file-line-count-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_product_file_line_count_ratchet.py"]
+    triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -17,6 +34,11 @@ checks:
     triggers: [".github/schemas/desktop-release-evidence-v1.schema.json", ".github/scripts/desktop_release_doctor.py", ".github/scripts/desktop_release_doctor_report.py", ".github/scripts/test_desktop_release_doctor.py", ".github/workflows/desktop_release_doctor.yml"]
     lanes: ["local", "ci"]
     reason: "advisory desktop release evidence and drift report"
+  - id: agents-md-lean
+    command: ["python3", ".github/scripts/check_agents_md_lean.py"]
+    triggers: ["AGENTS.md", ".github/scripts/check_agents_md_lean.py"]
+    lanes: ["local", "ci"]
+    reason: "root AGENTS.md stays a lean index; detail lives in component guides"
   - id: diff-hygiene
     command: ["python3", ".github/scripts/check_diff_hygiene.py", "--changed-files", "{changed_files}", "--base", "{base}", "--head", "{head}"]
     triggers: ["all"]
@@ -31,7 +53,14 @@ checks:
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "changed paths determine required invariant citations"
+  - id: failure-class-protocol
+    command: ["python3", "scripts/failure-class", "validate", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "fix commits declare a validated semantic failure class"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
     triggers: ["all"]
@@ -42,11 +71,17 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: omi-macos-dev-cli
+    command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
+    triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
+    lanes: ["local", "ci"]
+    reason: "agent-facing macOS development hygiene CLI remains safe and deterministic"
   - id: desktop-e2e-flow-coverage
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
     lanes: ["local", "ci"]
-    reason: "desktop Swift sources changed"
+    platforms: ["macos"]
+    reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
   - id: brand-ui
     command: ["python3", ".github/scripts/check_brand_ui.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]
@@ -67,11 +102,51 @@ checks:
     triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
     lanes: ["local", "ci"]
     reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: telegram-deployment-notifier
+    command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
+    triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "optional Telegram deployment notifications must not fail deploy workflows when credentials are absent"
+  - id: opentofu-foundation-boundary
+    command: ["python3", ".github/scripts/check_opentofu_foundation.py"]
+    triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "OpenTofu remains limited to durable foundation resources and cannot carry secret values"
+  - id: opentofu-foundation-boundary-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_foundation.py"]
+    triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/scripts/test_check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "OpenTofu foundation boundary fixtures must reject release and secret-value ownership"
+  - id: opentofu-development-wif-pilot
+    command: ["python3", ".github/scripts/check_opentofu_development_wif_pilot.py"]
+    triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "development WIF pilot stays read-only, GitHub-main-scoped, and outside release ownership"
+  - id: opentofu-development-wif-pilot-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_development_wif_pilot.py"]
+    triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/scripts/test_check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "development WIF pilot fixtures must reject secret access, apply, and scope expansion"
+  - id: public-build-contract
+    command: ["python3", ".github/scripts/check_public_build_contract.py"]
+    triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx"]
+    lanes: ["local", "ci"]
+    reason: "reviewed public inputs, Docker guards, client canaries, no-traffic candidates, and promotion wiring must match one contract"
+  - id: public-build-contract-fixtures
+    command: ["python3", ".github/scripts/test_check_public_build_contract.py"]
+    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py"]
+    lanes: ["local", "ci"]
+    reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: backend-async-blockers
     command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
+  - id: backend-datetime-sort-sentinel-ratchet
+    command: ["python3", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "#9571/#9600 reject naive datetime min/max fallbacks in backend sort keys"
   - id: backend-route-policy-baseline
     command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
@@ -87,6 +162,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
     lanes: ["local", "ci"]
     reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
+  - id: firestore-model-read-boundary
+    command: ["python3", ".github/scripts/check_firestore_model_read_boundary.py"]
+    triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
@@ -102,6 +182,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/tests/.import_time_side_effects_legacy_allowlist"]
     lanes: ["local", "ci"]
     reason: "backend production Python or its allowlist changed"
+  - id: backend-runtime-image-source-closure
+    command: ["python3", "backend/scripts/runtime_image_contracts.py", "check"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
+    lanes: ["local", "ci"]
+    reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
   - id: backend-module-isolation
     command: ["python3", "backend/scripts/check_module_stub_pollution.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]
@@ -117,21 +202,69 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
     lanes: ["local", "ci"]
     reason: "conversation lifecycle has one mutation owner"
-  - id: desktop-userdefaults-ratchet
-    command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
+  - id: desktop-swift-ci-contract
+    command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
-    reason: "desktop Swift defaults surfaces changed"
-  - id: desktop-async-after-ratchet
-    command: ["python3", "desktop/macos/scripts/check-async-after-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: desktop-manifest-routes
+    command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
-    reason: "floating control bar timing surfaces changed"
+    reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: desktop-swift-format-wrapper
+    command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 02: pinned swift-format bootstrap wrapper provenance contract"
+  - id: desktop-main-actor-xctest-hooks
+    command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "Xcode 16.4 rejects non-Sendable XCTestCase transfers from @MainActor async lifecycle hooks; fail before the full Swift test build"
+  - id: desktop-main-actor-xctest-hooks-fixtures
+    command: ["python3", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
+  - id: desktop-swift-format-lint
+    command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 05: enforce pinned swift-format lint on all first-party Swift"
+  - id: desktop-swiftlint-config
+    command: ["python3", ".github/scripts/test_swiftlint_config.py"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh", ".github/scripts/test_swiftlint_config.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
+  - id: desktop-swiftlint
+    command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 06: pinned SwiftLint must reject new safety violations outside the committed baseline"
+  - id: desktop-swiftlint-baseline
+    command: ["python3", "desktop/macos/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: SwiftLint baseline is down-only; swiftlint:disable requires named rule + reason"
+  - id: desktop-swiftlint-baseline-fixtures
+    command: ["python3", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    triggers: ["desktop/macos/scripts/check-swiftlint-baseline.py", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
+  - id: desktop-feature-sentinels
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     lanes: ["local", "ci"]
-    reason: "realtime hub ownership/line-count anti-regrowth ratchet"
+    reason: "realtime hub extracted-type ownership anti-regrowth ratchet"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]
@@ -149,7 +282,7 @@ checks:
     reason: "#9688 keeps bridge lifecycle/context decisions extracted and both historic coordinator files bounded"
   - id: desktop-agent-runtime-contract-conformance
     command: ["bash", "desktop/macos/scripts/test-tool-surfaces.sh"]
-    triggers: ["desktop/macos/agent/contracts/**", "desktop/macos/agent/src/adapters/**/*.ts", "desktop/macos/agent/src/runtime/control-tools.ts", "desktop/macos/agent/src/runtime/contract-schema.ts", "desktop/macos/agent/src/runtime/relay-tool-result.ts", "desktop/macos/agent/src/runtime/tool-result-envelope.ts", "desktop/macos/agent/tests/agent-runtime-contract-fixtures.test.ts", "desktop/macos/agent/tests/control-tools.test.ts", "desktop/macos/agent/tests/relay-tool-result.test.ts", "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts", "desktop/macos/scripts/test-tool-surfaces.sh", "desktop/macos/scripts/agent-logic-harness.sh"]
+    triggers: ["desktop/macos/agent/contracts/**", "desktop/macos/agent/src/adapters/**/*.ts", "desktop/macos/agent/src/runtime/control-tools.ts", "desktop/macos/agent/src/runtime/contract-schema.ts", "desktop/macos/agent/src/runtime/relay-tool-result.ts", "desktop/macos/agent/src/runtime/tool-result-envelope.ts", "desktop/macos/agent/tests/agent-runtime-contract-fixtures.test.ts", "desktop/macos/agent/tests/control-tools.test.ts", "desktop/macos/agent/tests/relay-tool-result.test.ts", "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts", "desktop/macos/scripts/test-tool-surfaces.sh", "desktop/macos/scripts/agent-logic-harness.sh", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh"]
     lanes: ["local", "ci"]
     reason: "#9688 gates adapter lifecycle fixtures and artifact-backed bounded tool-result delivery"
   - id: desktop-spawn-receipt-fixtures-v1

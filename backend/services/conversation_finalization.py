@@ -24,6 +24,10 @@ from utils.metrics import (
     LISTEN_FINALIZATION_RETRIES_TOTAL,
 )
 from utils.observability.fallback import record_fallback
+from utils.observability.journeys import (
+    record_capture_finalization_reconciliation,
+    record_capture_finalization_terminal,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +68,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
         try:
             enqueue_listen_finalization_job(job_id, int(claimed['dispatch_generation']))
         except Exception:
+            record_capture_finalization_reconciliation('enqueue_failed')
             record_fallback(
                 component='pusher',
                 from_mode='cloud_tasks',
@@ -76,6 +81,7 @@ def reconcile_listen_finalization_jobs(limit: int = 100, *, firestore_client: An
             result['enqueue_failed'] += 1
             continue
         result['requeued'] += 1
+        record_capture_finalization_reconciliation('requeued')
         LISTEN_FINALIZATION_RETRIES_TOTAL.inc()
 
     _publish_job_metrics(firestore_client=firestore_client)
@@ -94,6 +100,14 @@ def final_attempt_failed(
     )
     if marked:
         LISTEN_FINALIZATION_DEAD_LETTER_TOTAL.inc()
+        try:
+            job = jobs_db.get_finalization_job(job_id, firestore_client=firestore_client)
+            accepted_at = job.get('created_at') if job else None
+            record_capture_finalization_terminal('failure', accepted_at)
+        except Exception:
+            # Dead-lettering is authoritative; a best-effort metric lookup must
+            # never prevent the caller from discarding the terminal conversation.
+            logger.exception('listen finalization terminal metric lookup failed job=%s', job_id)
     return marked
 
 

@@ -24,6 +24,7 @@ class SmokeConfig:
     base_url: str
     admin_key: str
     timeout_seconds: float
+    cloud_run_identity_token: str = ''
 
 
 def _validate_base_url(value: str) -> str:
@@ -36,13 +37,16 @@ def _validate_base_url(value: str) -> str:
 
 def run_smoke(config: SmokeConfig, *, http_open: Callable = urlopen) -> int:
     url = f'{_validate_base_url(config.base_url)}/v1/what-matters-now'
+    headers = {
+        'Accept': 'application/json',
+        'Authorization': f'Bearer {config.admin_key}{WHAT_MATTERS_NOW_SMOKE_UID}',
+    }
+    if config.cloud_run_identity_token:
+        headers['X-Serverless-Authorization'] = f'Bearer {config.cloud_run_identity_token}'
     request = Request(
         url,
         method='GET',
-        headers={
-            'Accept': 'application/json',
-            'Authorization': f'Bearer {config.admin_key}{WHAT_MATTERS_NOW_SMOKE_UID}',
-        },
+        headers=headers,
     )
     try:
         with http_open(request, timeout=config.timeout_seconds) as response:
@@ -62,11 +66,23 @@ def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--base-url', required=True)
     parser.add_argument('--admin-key-env', default='ADMIN_KEY')
+    parser.add_argument(
+        '--cloud-run-identity-token-env',
+        default='',
+        help='optional environment variable holding an OIDC token for a tagged Cloud Run candidate',
+    )
     parser.add_argument('--timeout-seconds', type=float, default=30.0)
     args = parser.parse_args()
     admin_key = os.environ.get(args.admin_key_env, '').strip()
     if not admin_key:
         print(f'ERROR: required admin-key environment variable {args.admin_key_env} is empty', file=sys.stderr)
+        return 1
+    identity_token = os.environ.get(args.cloud_run_identity_token_env, '').strip()
+    if args.cloud_run_identity_token_env and not identity_token:
+        print(
+            f'ERROR: required Cloud Run identity token environment variable {args.cloud_run_identity_token_env} is empty',
+            file=sys.stderr,
+        )
         return 1
     try:
         run_smoke(
@@ -74,6 +90,7 @@ def main() -> int:
                 base_url=args.base_url,
                 admin_key=admin_key,
                 timeout_seconds=args.timeout_seconds,
+                cloud_run_identity_token=identity_token,
             )
         )
     except (RuntimeError, ValueError) as exc:

@@ -67,11 +67,19 @@ from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
+from utils.multipart import (
+    CHAT_FILE_MAX_PART_SIZE,
+    MultipartMaxPartSizeRoute,
+    VOICE_MESSAGE_MAX_PART_SIZE,
+    max_part_size,
+    parse_multipart_form,
+)
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
+from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
     read_wav_duration_ms,
@@ -83,7 +91,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
@@ -413,8 +421,11 @@ def send_message(
 
         return ai_message, ask_for_nps
 
+    journey_attempt = JourneyAttempt('chat_response')
+
     async def generate_stream():
         callback_data = {}
+        stream_exhausted = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
@@ -440,9 +451,21 @@ def send_message(
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
                             'utf-8'
                         )
+                        # This is the furthest server-observable client boundary:
+                        # a yielded terminal frame is not a client-render acknowledgement.
+                        journey_attempt.finish('success')
                         yield f"done: {encoded_response}\n\n"
+            stream_exhausted = True
+        except asyncio.CancelledError:
+            journey_attempt.finish('cancelled')
+            raise
+        except Exception:
+            journey_attempt.finish('failure')
+            raise
         finally:
             reset_usage_context(usage_token)
+            if not journey_attempt.finished:
+                journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -541,6 +564,7 @@ def get_messages(
         }
     },
 )
+@max_part_size(VOICE_MESSAGE_MAX_PART_SIZE)
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
@@ -794,7 +818,7 @@ async def transcribe_voice_message(
         return response
 
     # Multipart file upload mode (original behavior)
-    form = await request.form()
+    form = await parse_multipart_form(request, max_part_size=VOICE_MESSAGE_MAX_PART_SIZE)
     files = form.getlist("files")
     language = form.get("language")
     upload_files = [f for f in files if hasattr(f, 'file')]
@@ -1253,6 +1277,7 @@ async def transcribe_voice_message_stream(
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
+@max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
@@ -1312,6 +1337,7 @@ def upload_file_chat(
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+@max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),

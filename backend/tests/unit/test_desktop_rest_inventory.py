@@ -28,10 +28,9 @@ ROOT_DIR = Path(__file__).resolve().parents[3]
 SPEC_PATH = ROOT_DIR / 'docs' / 'api-reference' / 'app-client-openapi.json'
 APICLIENT_SOURCE_ROOT = ROOT_DIR / 'desktop' / 'macos' / 'Desktop' / 'Sources'
 APICLIENT_SWIFT = APICLIENT_SOURCE_ROOT / 'APIClient.swift'
-# High-water mark ratchet: APIClient.swift must shrink as transport/DTOs extract out.
-# Raised after the INV-AUTH-1 and revision-aware conversation merges left the
-# consolidated client at 6500 lines. Future transport/DTO extractions lower it.
-APICLIENT_SWIFT_MAX_LINES = 6500
+# APIClient.swift owns only the stateful transport/auth boundary. Feature APIs
+# and DTOs live in nested APIClient+*.swift extensions.
+APICLIENT_SWIFT_MAX_LINES = 1500
 CONVERSATIONS_ROUTER = ROOT_DIR / 'backend' / 'routers' / 'conversations.py'
 CONVERSATIONS_DB = ROOT_DIR / 'backend' / 'database' / 'conversations.py'
 

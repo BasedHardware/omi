@@ -22,9 +22,9 @@ Future<String> triggerTestConversationPrompt(String prompt, String transcript) a
   return await executeGptPrompt(
     '''
         Your task is: $prompt
-        
+
         Current Conversation: ```${transcript.trim()}```,
-       
+
         Output your response in plain text, without markdown.
         Make sure to be concise and clear.
         '''

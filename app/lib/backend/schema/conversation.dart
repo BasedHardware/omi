@@ -96,9 +96,11 @@ class ConversationPostProcessing {
 
   factory ConversationPostProcessing.fromJson(Map<String, dynamic> json) {
     return ConversationPostProcessing(
-      status: ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
+      status:
+          ConversationPostProcessingStatus.values.asNameMap()[json['status']] ??
           ConversationPostProcessingStatus.in_progress,
-      model: ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
+      model:
+          ConversationPostProcessingModel.values.asNameMap()[json['model']] ??
           ConversationPostProcessingModel.fal_whisperx,
       failReason: json['fail_reason'],
     );
@@ -287,12 +289,14 @@ class ConversationAudioInfo {
       duration: generated.duration,
       capturedDuration: generated.capturedDuration,
       spans: generated.spans
-          .map((s) => ConversationAudioSpan(
-                fileId: s.fileId,
-                wallOffset: s.wallOffset,
-                artifactOffset: s.artifactOffset,
-                len: s.len,
-              ))
+          .map(
+            (s) => ConversationAudioSpan(
+              fileId: s.fileId,
+              wallOffset: s.wallOffset,
+              artifactOffset: s.artifactOffset,
+              len: s.len,
+            ),
+          )
           .toList(),
     );
   }
@@ -396,12 +400,14 @@ class ServerConversation {
           ? null
           : ConversationAudioInfo.fromGenerated(generated.conversationAudio!),
       discarded: generated.discarded,
-      source:
-          generated.source != null ? ConversationSource.values.asNameMap()[generated.source] : ConversationSource.omi,
+      source: generated.source != null
+          ? ConversationSource.values.asNameMap()[generated.source]
+          : ConversationSource.omi,
       language: generated.language,
       deleted: deleted,
-      externalIntegration:
-          generated.externalData != null ? ConversationExternalData.fromJson(generated.externalData!) : null,
+      externalIntegration: generated.externalData != null
+          ? ConversationExternalData.fromJson(generated.externalData!)
+          : null,
       calendarEvent: generated.calendarEvent == null ? null : CalendarEventLink.fromGenerated(generated.calendarEvent!),
       status: generated.status != null
           ? ConversationStatus.values.asNameMap()[generated.status] ?? ConversationStatus.completed
@@ -564,12 +570,18 @@ class SyncLocalFilesResponse {
   int totalSegments;
   List<String> errors;
 
+  /// Client-side batches that could not be uploaded. Unlike [failedSegments],
+  /// these failures leave WALs retryable locally and must re-arm foreground
+  /// recovery rather than presenting a completed sync.
+  int localUploadFailures;
+
   SyncLocalFilesResponse({
     required this.newConversationIds,
     required this.updatedConversationIds,
     this.failedSegments = 0,
     this.totalSegments = 0,
     this.errors = const [],
+    this.localUploadFailures = 0,
   });
 
   bool get hasPartialFailure => failedSegments > 0;

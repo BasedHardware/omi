@@ -67,8 +67,9 @@ class FakeStreamingSTTSocket:
 
 
 def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
-    """Patch routers.transcribe.process_audio_dg and return created fake sockets."""
-    import routers.transcribe as transcribe_router
+    """Patch the listen receiver provider boundary and return fake sockets."""
+    from routers.listen import receiver as listen_receiver
+    from routers.listen import runtime as listen_runtime
 
     sockets = []
 
@@ -79,15 +80,14 @@ def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
         sockets.append(socket)
         return socket
 
-    monkeypatch.setattr(transcribe_router, "process_audio_dg", fake_process_audio_dg)
+    monkeypatch.setattr(listen_receiver, "process_audio_dg", fake_process_audio_dg)
     monkeypatch.setattr(
-        transcribe_router,
+        listen_runtime,
         "get_stt_service_for_language",
-        lambda *_args, **_kwargs: (transcribe_router.STTService.deepgram, "en", "nova-3"),
+        lambda *_args, **_kwargs: (listen_runtime.STTService.deepgram, "en", "nova-3"),
     )
-    monkeypatch.setattr(transcribe_router, "is_gate_enabled", lambda: False)
-    monkeypatch.setattr(transcribe_router, "has_transcription_credits", lambda *args, **kwargs: True)
-    monkeypatch.setattr(transcribe_router, "record_usage", lambda *args, **kwargs: None)
+    monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
+    monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)
     return sockets
 
 

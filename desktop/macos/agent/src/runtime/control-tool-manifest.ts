@@ -716,7 +716,7 @@ Pass parentRunId to link the new run to a parent.`,
     promptGuidelines: [
       "Calling spawn_agent is the only way to start a visible floating-bar background agent; saying you will start one does not start it.",
       "Use visible=false for parent-linked background work that should not appear as a pill.",
-      "If the user asks to use OpenClaw, Hermes, or Codex, pass provider='openclaw', provider='hermes', or provider='codex'.",
+      "Pass provider='openclaw', provider='hermes', or provider='codex' only when the current user explicitly names that provider; otherwise omit provider so Omi starts its regular managed agent.",
       "Inspect progress with list_agent_sessions or get_agent_run.",
     ],
     capabilityDoc: controlDoc(
@@ -736,7 +736,11 @@ Pass parentRunId to link the new run to a parent.`,
     properties: {
       objective: { type: "string", description: "Self-contained background-agent objective." },
       requestedAgentCount: { type: "number", description: "Number of sibling agents requested in this single canonical route decision (default 1, maximum 8)." },
-      provider: { type: "string", enum: ["openclaw", "hermes", "codex"], description: "Optional local provider override." },
+      provider: {
+        type: "string",
+        enum: ["openclaw", "hermes", "codex"],
+        description: "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
+      },
       parentRunId: { type: "string", description: "Optional parent run to link via delegation." },
       visible: { type: "boolean", description: "Whether to project into floating-bar pill UI. Default true." },
       title: { type: "string", description: "Optional visible session title." },

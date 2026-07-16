@@ -2,17 +2,18 @@ name: Deploy Admin Dashboard to Cloud Run
 
 on:
   push:
-    branches: [ "main", "development" ]
+    branches: ["main", "development"]
     paths:
       - 'web/admin/**'
+      - 'config/public-build-*.json'
+      - '.github/actions/deploy-public-build/**'
+      - '.github/actions/prepare-public-build/**'
+      - '.github/actions/public-build-candidate-promotion/**'
+      - '.github/scripts/preflight_public_build_config.py'
+      - '.github/scripts/preflight_public_build_runtime.py'
+      - '.github/scripts/smoke_public_build_browser.py'
   workflow_dispatch:
 
-env:
-  SERVICE: omi-admin-dashboard
-  REGION: us-central1
-
-# Serialize writes to the same Cloud Run service. Non-deploy refs get an
-# isolated group because this workflow's job is intentionally skipped there.
 concurrency:
   group: deploy-cloud-run-omi-admin-dashboard-${{ github.ref == 'refs/heads/development' && 'development' || github.ref == 'refs/heads/main' && 'prod' || format('nondeploy-{0}', github.run_id) }}
   cancel-in-progress: false
@@ -22,76 +23,18 @@ jobs:
     if: github.ref == 'refs/heads/main' || github.ref == 'refs/heads/development'
     environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
     permissions:
-      contents: 'read'
-      id-token: 'write'
-
+      actions: read
+      contents: read
+      id-token: write
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Google Auth
-        id: auth
-        uses: 'google-github-actions/auth@v2'
+      - name: Deploy checked public-build candidate
+        uses: ./.github/actions/deploy-public-build
         with:
-          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
-      - run: gcloud auth configure-docker
-
-      - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
-        with:
-          context: web/admin
-          push: true
-          platforms: linux/amd64
-          tags: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          build-args: |
-            NEXT_PUBLIC_FIREBASE_API_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_API_KEY }}
-            NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN=${{ vars.NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN }}
-            NEXT_PUBLIC_FIREBASE_PROJECT_ID=${{ vars.NEXT_PUBLIC_FIREBASE_PROJECT_ID }}
-            NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET=${{ vars.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET }}
-            NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID=${{ vars.NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID }}
-            NEXT_PUBLIC_FIREBASE_APP_ID=${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
-            NEXT_PUBLIC_FIREBASE_VAPID_KEY=${{ vars.NEXT_PUBLIC_FIREBASE_VAPID_KEY }}
-            NEXT_PUBLIC_PLUGINS_APP_ID=${{ vars.NEXT_PUBLIC_PLUGINS_APP_ID }}
-            NEXT_PUBLIC_OMI_API_URL=${{ vars.NEXT_PUBLIC_OMI_API_URL }}
-
-      - name: Deploy to Cloud Run
-        id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
-        with:
-          service: ${{ env.SERVICE }}
-          region: ${{ env.REGION }}
-          image: gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}
-          revision_traffic: LATEST=100
-          # listUsers() scans ~112K Firebase Auth users for the Cumulative
-          # Users chart; 512Mi was OOMing (SIGABRT) during the scan. The
-          # /api/internal/precompute route runs the heaviest aggregations
-          # (profitability/infra-costs) off the request path, so the timeout is
-          # raised to 3600s and memory to 2Gi for that job.
-          flags: '--memory=2Gi --cpu=1 --timeout=3600'
-          secrets: |
-            FIREBASE_PROJECT_ID=WEB_ADMIN_FIREBASE_PROJECT_ID:latest
-            FIREBASE_CLIENT_EMAIL=WEB_ADMIN_FIREBASE_CLIENT_EMAIL:latest
-            FIREBASE_PRIVATE_KEY=WEB_ADMIN_FIREBASE_PRIVATE_KEY:latest
-            OMI_API_SECRET_KEY=WEB_ADMIN_OMI_API_SECRET_KEY:latest
-            TYPESENSE_HOST=WEB_ADMIN_TYPESENSE_HOST:latest
-            TYPESENSE_API_KEY=WEB_ADMIN_TYPESENSE_API_KEY:latest
-            STRIPE_SECRET_KEY=WEB_ADMIN_STRIPE_SECRET_KEY:latest
-            STRIPE_UNLIMITED_MONTHLY_PRICE_ID=WEB_ADMIN_STRIPE_UNLIMITED_MONTHLY_PRICE_ID:latest
-            STRIPE_UNLIMITED_ANNUAL_PRICE_ID=WEB_ADMIN_STRIPE_UNLIMITED_ANNUAL_PRICE_ID:latest
-            REDIS_HOST=WEB_ADMIN_REDIS_HOST:latest
-            REDIS_PORT=WEB_ADMIN_REDIS_PORT:latest
-            REDIS_PASSWORD=WEB_ADMIN_REDIS_PASSWORD:latest
-            SHIPBOB_API_KEY=WEB_ADMIN_SHIPBOB_API_KEY:latest
-            SHOPIFY_STORE=WEB_ADMIN_SHOPIFY_STORE:latest
-            SHOPIFY_ACCESS_TOKEN=WEB_ADMIN_SHOPIFY_ACCESS_TOKEN:latest
-            MIXPANEL_SECRET=WEB_ADMIN_MIXPANEL_SECRET:latest
-            OPENAI_API_KEY=WEB_ADMIN_OPENAI_API_KEY:latest
-            POSTHOG_PERSONAL_API_KEY=WEB_ADMIN_POSTHOG_PERSONAL_API_KEY:latest
-            POSTHOG_PROJECT_ID=WEB_ADMIN_POSTHOG_PROJECT_ID:latest
-            POSTHOG_HOST=WEB_ADMIN_POSTHOG_HOST:latest
-            GOAFFPRO_ACCESS_TOKEN=GOAFFPRO_ACCESS_TOKEN:latest
-            CRON_SECRET=WEB_ADMIN_CRON_SECRET:latest
-
-      - name: Show Output
-        run: echo ${{ steps.deploy.outputs.url }}
+          target: admin
+          environment: ${{ github.ref == 'refs/heads/development' && 'development' || 'prod' }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          gcp_credentials: ${{ secrets.GCP_CREDENTIALS }}

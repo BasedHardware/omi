@@ -1,4 +1,5 @@
 import importlib.util
+import base64
 import json
 import stat
 import sys
@@ -14,6 +15,16 @@ def _load_module():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+def _id_token(*, aud='based-hardware', sub='omi-release-probe'):
+    claims = {
+        'aud': aud,
+        'iss': f'https://securetoken.google.com/{aud}',
+        'sub': sub,
+    }
+    encoded = base64.urlsafe_b64encode(json.dumps(claims).encode()).decode().rstrip('=')
+    return f'header.{encoded}.signature'
 
 
 def test_mint_probe_token_uses_fixed_uid_short_lived_custom_claims_and_discards_refresh(monkeypatch):
@@ -34,7 +45,7 @@ def test_mint_probe_token_uses_fixed_uid_short_lived_custom_claims_and_discards_
         if stage == 'custom_token_signing':
             return {'signedJwt': 'custom-token-that-must-not-leak'}
         return {
-            'idToken': 'firebase-id-token-that-must-not-leak',
+            'idToken': _id_token(),
             'refreshToken': 'refresh-token-that-must-not-leak',
         }
 
@@ -42,7 +53,7 @@ def test_mint_probe_token_uses_fixed_uid_short_lived_custom_claims_and_discards_
     monkeypatch.setattr(module, '_request_json', fake_request)
     monkeypatch.setattr(module.time, 'time', lambda: 1_700_000_000)
 
-    assert module.mint_probe_token('omi-prod') == 'firebase-id-token-that-must-not-leak'
+    assert module.mint_probe_token('based-hardware-dev', 'based-hardware') == _id_token()
     assert commands[0][0][0:5] == ['gcloud', 'secrets', 'versions', 'access', 'latest']
     signing_url, signing_body, signing_access_token, signing_stage = requests[0]
     claims = json.loads(signing_body['payload'])
@@ -64,10 +75,14 @@ def test_token_acquisition_failure_is_redacted_and_does_not_create_output(monkey
     module = _load_module()
     output = tmp_path / 'probe-token'
     monkeypatch.setattr(
-        module, 'mint_probe_token', lambda _project: (_ for _ in ()).throw(module.ProbeTokenError('secret_access'))
+        module,
+        'mint_probe_token',
+        lambda _secret_project, _firebase_project: (_ for _ in ()).throw(module.ProbeTokenError('secret_access')),
     )
 
-    exit_code = module.main(['--project', 'omi-prod', '--token-output', str(output)])
+    exit_code = module.main(
+        ['--secret-project', 'omi-prod', '--firebase-project', 'based-hardware', '--token-output', str(output)]
+    )
 
     report = json.loads(capsys.readouterr().out)
     assert exit_code == 1
@@ -99,3 +114,19 @@ def test_write_token_uses_owner_only_permissions(tmp_path):
 
     assert output.read_text(encoding='utf-8') == 'firebase-id-token-that-must-not-leak'
     assert stat.S_IMODE(output.stat().st_mode) == 0o600
+
+
+def test_mint_probe_token_rejects_a_token_for_a_different_firebase_auth_project(monkeypatch):
+    module = _load_module()
+    monkeypatch.setattr(module, '_access_secret', lambda _project: 'api-key-that-must-not-leak')
+    monkeypatch.setattr(module, '_active_service_account', lambda: 'deployer@omi-prod.iam.gserviceaccount.com')
+    monkeypatch.setattr(module, '_access_token', lambda: 'access-token-that-must-not-leak')
+    monkeypatch.setattr(module, '_signed_custom_token', lambda _account, _token: 'custom-token-that-must-not-leak')
+    monkeypatch.setattr(module, '_exchange_custom_token', lambda _custom, _key: _id_token(aud='wrong-project'))
+
+    try:
+        module.mint_probe_token('based-hardware-dev', 'based-hardware')
+    except module.ProbeTokenError as error:
+        assert error.stage == 'firebase_token_claims'
+    else:
+        raise AssertionError('expected Firebase auth-project mismatch')

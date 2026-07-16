@@ -50,9 +50,10 @@ enum WALCloudSyncLogic {
     for index in result.indices {
       let id = result[index].id
       guard let updated = reconciledById[id], let original = snapshotById[id] else { continue }
-      guard updated.status != original.status
-        || updated.jobId != original.jobId
-        || updated.uploadedAt != original.uploadedAt
+      guard
+        updated.status != original.status
+          || updated.jobId != original.jobId
+          || updated.uploadedAt != original.uploadedAt
       else { continue }
       result[index].status = updated.status
       result[index].jobId = updated.jobId

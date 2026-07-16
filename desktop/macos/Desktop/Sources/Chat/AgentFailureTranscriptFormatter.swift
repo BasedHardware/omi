@@ -6,7 +6,8 @@ enum AgentFailureTranscriptFormatter {
   static func errorText(for projection: AgentRunProjection) -> String? {
     switch projection.status {
     case .failed, .timedOut, .orphaned:
-      let raw = projection.failure?.displayMessage
+      let raw =
+        projection.failure?.displayMessage
         ?? projection.errorMessage
         ?? projection.statusText
         ?? "Agent failed"

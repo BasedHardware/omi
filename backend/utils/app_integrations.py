@@ -615,7 +615,12 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     chat_messages = []
     if 'user_chat' in filter_scopes:
-        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
+        # Skip any malformed/legacy stored message rather than letting one bad record raise a
+        # ValidationError that aborts the whole notification. The sole caller swallows exceptions
+        # from here, so an unguarded build silently dropped the proactive notification every run
+        # until the bad row aged out of the last-10 window. deserialize_many_safe (#8882) is the
+        # shared safe-deserialize path for exactly this class.
+        chat_messages = list(reversed(Message.deserialize_many_safe(get_app_messages(uid, app.id, limit=10))))
 
     # Build prompt with substitutions
     for param in filter_scopes:

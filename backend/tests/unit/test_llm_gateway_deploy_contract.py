@@ -36,12 +36,17 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
             'key': 'ANTHROPIC_API_KEY',
         }
         assert 'ANTHROPIC_API_KEY' in _secret_keys(secrets)
-        for provider_secret in ('GEMINI_API_KEY', 'OPENROUTER_API_KEY'):
+        for provider_secret in ('OPENROUTER_API_KEY',):
             assert env[provider_secret]['valueFrom']['secretKeyRef'] == {
                 'name': f'{environment}-omi-backend-secrets',
                 'key': provider_secret,
             }
             assert provider_secret in _secret_keys(secrets)
+        assert 'GEMINI_API_KEY' not in env
+        assert env['GOOGLE_CLOUD_PROJECT']['value'] == (
+            'based-hardware-dev' if environment == 'dev' else 'based-hardware'
+        )
+        assert env['GCP_LOCATION']['value'] == 'us-central1'
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
         assert 'PERPLEXITY_API_KEY' not in env
         probe_command = gateway['readinessProbe']['exec']['command'][-1]
@@ -60,6 +65,9 @@ def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
     assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+    assert gke_env['USE_VERTEX_AI']['value'] == 'true'
+    assert gke_env['GCP_LOCATION']['value'] == 'us-central1'
+    assert gke_env['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
 
     for service in ('backend', 'backend-sync', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
@@ -67,6 +75,9 @@ def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
         assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
+        assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
+        assert service_config['env']['GCP_LOCATION']['value'] == 'us-central1'
+        assert service_config['env']['GOOGLE_CLOUD_PROJECT']['value'] == 'based-hardware'
         assert service_config['secrets']['OMI_LLM_GATEWAY_SERVICE_TOKEN'] == {
             'secret': 'OMI_LLM_GATEWAY_SERVICE_TOKEN',
             'version': 'latest',
@@ -87,6 +98,9 @@ def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     assert '"$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod"' in helper
     assert 'github.event.inputs.environment }}" != "prod"' in workflow
     assert 'Verify production gateway service token' in workflow
+    assert 'LLM_GATEWAY_GSA is required for Vertex Workload Identity' in helper
+    assert 'serviceAccount.annotations.iam\\\\.gke\\\\.io/gcp-service-account=${LLM_GATEWAY_GSA}' in helper
+    assert 'LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}' in workflow
 
 
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():
@@ -105,7 +119,7 @@ def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():
         assert name_filter['regex'] == 'llm-gateway'
 
 
-def test_gateway_env_validator_requires_all_managed_provider_credentials(tmp_path):
+def test_gateway_env_validator_requires_vertex_runtime_configuration_not_gemini_api_key(tmp_path):
     backend_values = tmp_path / 'backend.yaml'
     gateway_values = tmp_path / 'gateway.yaml'
     backend_values.write_text('env: []\n', encoding='utf-8')
@@ -137,4 +151,6 @@ def test_gateway_env_validator_requires_all_managed_provider_credentials(tmp_pat
     )
 
     assert result.returncode == 1
-    assert 'gateway has no GEMINI_API_KEY env' in result.stdout
+    assert 'gateway has no GOOGLE_CLOUD_PROJECT env' in result.stdout
+    assert 'gateway has no GCP_LOCATION env' in result.stdout
+    assert 'GEMINI_API_KEY' not in result.stdout

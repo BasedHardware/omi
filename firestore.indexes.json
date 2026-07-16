@@ -255,6 +255,10 @@
         {
           "fieldPath": "expires_at",
           "order": "ASCENDING"
+        },
+        {
+          "fieldPath": "__name__",
+          "order": "ASCENDING"
         }
       ]
     }
