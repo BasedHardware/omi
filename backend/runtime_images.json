@@ -92,13 +92,11 @@
             "entrypoints": ["memory_maintenance_job"],
             "image_import_smoke": true,
             "smoke_environment": {
-                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef"
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
+                "OPENAI_API_KEY": "fake-memory-maintenance-image-smoke-only"
             },
             "dependency_probe_smoke": true,
             "pull_request_smoke": true,
-            "smoke_environment": {
-                "OPENAI_API_KEY": "fake-memory-maintenance-image-smoke-only"
-            },
             "dependency_probe_exclusions": {
                 "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
             }
