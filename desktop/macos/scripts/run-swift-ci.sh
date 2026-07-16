@@ -15,7 +15,7 @@ usage() {
 
 select_toolchain() {
   if [ ! -d "$XCODE_APP" ]; then
-    echo "FAIL: authoritative desktop pre-push requires Xcode $EXPECTED_XCODE_VERSION at $XCODE_APP." >&2
+    echo "FAIL: desktop Swift CI requires Xcode $EXPECTED_XCODE_VERSION at $XCODE_APP." >&2
     echo "Available Xcodes:" >&2
     ls -d /Applications/Xcode*.app 2>/dev/null >&2 || true
     exit 1

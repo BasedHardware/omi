@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Run the backend unit-test contract shared by pre-push and GitHub Actions.
+# Run the full backend unit-test contract used by GitHub Actions.
 set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
