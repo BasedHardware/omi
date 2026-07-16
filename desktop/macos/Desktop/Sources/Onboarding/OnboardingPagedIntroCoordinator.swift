@@ -173,6 +173,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     calendarTask?.cancel()
     appleNotesTask?.cancel()
     webResearchTask?.cancel()
+    localFileMemoryImportTask?.cancel()
   }
 
   /// Adopt a name that landed after init — but only replace the "there"
