@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
 import { X, Trash2, Pencil, ArrowUpRight, Loader2 } from 'lucide-react'
 import type { Memory } from '../../hooks/useMemories'
@@ -45,16 +45,12 @@ export function MemoryDetailSheet({
   onOpenConversation,
   togglingVisibility
 }: MemoryDetailSheetProps): React.JSX.Element {
+  // State initializes from the memory; the sheet is mounted with a `key` of the
+  // memory id at the call site, so switching memories remounts it fresh rather
+  // than needing a reset effect.
   const [editing, setEditing] = useState(false)
-  const [draft, setDraft] = useState('')
+  const [draft, setDraft] = useState(memory?.content ?? '')
   const [saving, setSaving] = useState(false)
-
-  // Reset edit state whenever the viewed memory changes (or the sheet reopens).
-  useEffect(() => {
-    setEditing(false)
-    setDraft(memory?.content ?? '')
-    setSaving(false)
-  }, [memory])
 
   if (!memory) return <></>
 
@@ -69,6 +65,9 @@ export function MemoryDetailSheet({
     try {
       await onEdit(memory.id, text)
       setEditing(false)
+    } catch {
+      // The page surfaces the error toast; keep the editor open so the user can
+      // retry rather than silently dropping their edit.
     } finally {
       setSaving(false)
     }

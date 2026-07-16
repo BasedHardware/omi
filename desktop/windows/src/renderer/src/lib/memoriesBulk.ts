@@ -115,7 +115,8 @@ export async function deleteMemoriesPaced(
         ok = true
         break
       } catch (e) {
-        const resp = (e as { response?: { status?: number; headers?: Record<string, string> } }).response
+        const resp = (e as { response?: { status?: number; headers?: Record<string, string> } })
+          .response
         const status = resp?.status
         if (status === 404) {
           ok = true // already gone
@@ -123,7 +124,9 @@ export async function deleteMemoriesPaced(
         }
         if (status === 429) {
           const ra = Number(resp?.headers?.['retry-after'])
-          await sleep(Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000))
+          await sleep(
+            Number.isFinite(ra) && ra > 0 ? ra * 1000 : Math.min(3000 * 1.6 ** attempt, 60_000)
+          )
           continue
         }
         if (!firstError) firstError = status ? `HTTP ${status}` : (e as Error).message

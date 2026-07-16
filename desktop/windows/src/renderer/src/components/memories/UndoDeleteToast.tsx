@@ -20,9 +20,12 @@ export function UndoDeleteToast({
   onCommit
 }: UndoDeleteToastProps): React.JSX.Element {
   const [remaining, setRemaining] = useState(durationMs)
-  // Keep the latest onCommit without resubscribing the interval each render.
+  // Keep the latest onCommit without resubscribing the interval each render (a
+  // new onCommit identity per parent render must not reset the countdown).
   const commitRef = useRef(onCommit)
-  commitRef.current = onCommit
+  useEffect(() => {
+    commitRef.current = onCommit
+  })
 
   useEffect(() => {
     const start = Date.now()
