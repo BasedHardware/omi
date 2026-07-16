@@ -90,13 +90,21 @@ export type VoiceHubTurnDriverDeps = {
    *  Production wraps `transport.batchTranscribe`. */
   transcribe: (pcm: Int16Array) => Promise<string>
   /** Commit the final user transcript to the chat engine (the main window's send).
-   *  CASCADE route only — this re-answers via the LLM (fromVoice ⇒ spoken reply). */
-  onFinalText: (text: string) => void
+   *  CASCADE route only — this re-answers via the LLM (fromVoice ⇒ spoken reply).
+   *  `turnId` is the per-press id; threaded so the cascade user-turn kernel record
+   *  shares the key a hub-native record would use (INV-CHAT-1 double-record guard). */
+  onFinalText: (text: string, turnId?: string) => void
   /** Record a COMPLETED HUB turn (user transcript + assistant reply) into the ONE
    *  chat engine — APPEND-only, NO re-answer (the hub already produced and spoke it).
    *  `interrupted` = the turn was cut off by a barge-in (a partial reply is still
-   *  recorded, per macOS RealtimeHubController.recordInterruptedTurn). */
-  onRecordTurn?: (userText: string, assistantText: string, interrupted: boolean) => void
+   *  recorded, per macOS RealtimeHubController.recordInterruptedTurn). `turnId` is
+   *  the per-press idempotency key that dedupes the kernel record. */
+  onRecordTurn?: (
+    userText: string,
+    assistantText: string,
+    interrupted: boolean,
+    turnId?: string
+  ) => void
   /** Pref-gated system-audio duck at capture start (defaults to the shipped A4 call). */
   muteForCapture?: () => void
   /** Unconditional, idempotent system-audio restore (defaults to shipped). */
@@ -377,7 +385,7 @@ export class VoiceHubTurnDriver {
       .then((text) => {
         if (this.turnID !== turnID) return
         this.dispatch({ type: 'transcriptionFinal', turnID, text })
-        if (text) this.deps.onFinalText(text)
+        if (text) this.deps.onFinalText(text, turnID as unknown as string)
         // The user's capture+transcribe turn is done; the reply is a separate chat
         // turn on the main path. End the reducer turn (success) so the orb idles.
         this.dispatch({ type: 'providerTurnFinished', turnID, sessionID: null, responseID: null })
@@ -520,7 +528,19 @@ export class VoiceHubTurnDriver {
     const assistant = this.assistantText.trim()
     if (!user || !assistant) return
     this.turnRecorded = true
-    this.deps.onRecordTurn?.(user, assistant, interrupted)
+    const turnId = this.turnID as unknown as string | null
+    // The warm hub SAW this turn live — mark its id so the continuity seed refresh
+    // doesn't treat it as an unseen turn and needlessly reconnect (thrash guard).
+    if (turnId) this.hub.markSeedKeyProduced(turnId)
+    this.deps.onRecordTurn?.(user, assistant, interrupted, turnId ?? undefined)
+  }
+
+  /** Refresh the hub's continuity seed (idle-only reconnect when it carries turns the
+   *  warm session hasn't seen). Called by the host when the shared thread changes so
+   *  the NEXT voice turn's realtime session is seeded with the latest typed/voice
+   *  turns (macOS refreshes the seed via a full reconnect when stale). */
+  refreshSeedContext(): void {
+    this.hub.refreshSeedContext()
   }
 
   private onProjection(projection: VoiceTurnUIProjection): void {

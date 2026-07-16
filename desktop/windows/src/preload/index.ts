@@ -40,6 +40,8 @@ import type {
   CodingAgentRunArgs,
   MainChatEvent,
   MainChatSendArgs,
+  VoiceHubRecordTurnArgs,
+  VoiceHubSeedContextArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
   ActionItemRecord,
@@ -340,6 +342,10 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('mainChat:event', listener)
     return () => ipcRenderer.removeListener('mainChat:event', listener)
   },
+  voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) =>
+    ipcRenderer.invoke('voiceHub:recordTurn', args),
+  voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) =>
+    ipcRenderer.invoke('voiceHub:getSeedContext', args ?? {}),
   // pi-mono managed-cloud chat session relay: the Firebase token lives only in
   // the renderer, so push it (and re-push on ~hourly refresh) to the main-side
   // pi-mono session store; null on sign-out. Inert until PR-D spawns pi-mono.

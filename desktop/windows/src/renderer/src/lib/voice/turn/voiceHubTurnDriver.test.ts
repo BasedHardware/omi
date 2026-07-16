@@ -55,6 +55,8 @@ function makeFakeHub() {
     cancelTurn: [] as VoiceTurnID[],
     handoff: [] as VoiceTurnID[],
     didTerminate: [] as VoiceTurnID[],
+    seedProduced: [] as string[],
+    seedRefresh: 0,
     ensureWarm: 0
   }
   let warmError: unknown = null
@@ -77,7 +79,11 @@ function makeFakeHub() {
     commitTurn: (turnID: VoiceTurnID) => calls.commitTurn.push(turnID),
     cancelTurn: (turnID: VoiceTurnID) => calls.cancelTurn.push(turnID),
     handoffWarmWaitToCascade: (turnID: VoiceTurnID) => calls.handoff.push(turnID),
-    voiceTurnDidTerminate: (turnID: VoiceTurnID) => calls.didTerminate.push(turnID)
+    voiceTurnDidTerminate: (turnID: VoiceTurnID) => calls.didTerminate.push(turnID),
+    markSeedKeyProduced: (key: string) => calls.seedProduced.push(key),
+    refreshSeedContext: () => {
+      calls.seedRefresh++
+    }
   }
   return {
     factory: (e: HubControllerEvents): HubController => {
@@ -312,7 +318,16 @@ describe('chat recording', () => {
     ev.onAssistantText?.("it's noon", false, null)
     finishTurn(h)
     expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
-    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('what time is it', "it's noon", false)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith(
+      'what time is it',
+      "it's noon",
+      false,
+      expect.any(String)
+    )
+    // The per-press turnId is threaded through as the record's idempotency key, and
+    // the same id is marked "seen" so the seed refresh won't reconnect for it.
+    const recordedTurnId = h.spies.onRecordTurn.mock.calls[0][3]
+    expect(h.hub.calls.seedProduced).toContain(recordedTurnId)
     // Append-only: a hub turn must NOT go through the cascade send (no LLM re-answer).
     expect(h.spies.onFinalText).not.toHaveBeenCalled()
   })
@@ -327,7 +342,12 @@ describe('chat recording', () => {
     ev.onAssistantText?.('Paris', false, null) // streamed delta
     ev.onAssistantText?.('', true, null) // OpenAI GA empty-final marker
     finishTurn(h)
-    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('capital of france', 'Paris', false)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith(
+      'capital of france',
+      'Paris',
+      false,
+      expect.any(String)
+    )
   })
 
   it('barge-in records the interrupted turn once, then the successor — no double-record', async () => {
@@ -342,13 +362,26 @@ describe('chat recording', () => {
     h.driver.begin({ backfillMs: 0 }) // barge-in
     await flush()
     expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
-    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith('turn one', 'partial reply', true)
+    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith(
+      'turn one',
+      'partial reply',
+      true,
+      expect.any(String)
+    )
     // Turn 2 completes normally.
     ev.onInputTranscript?.('turn two', true, null)
     ev.onAssistantText?.('full reply', false, null)
     finishTurn(h)
     expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(2)
-    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith('turn two', 'full reply', false)
+    expect(h.spies.onRecordTurn).toHaveBeenLastCalledWith(
+      'turn two',
+      'full reply',
+      false,
+      expect.any(String)
+    )
+    // Each turn carries a DISTINCT id (the barge-in successor is a new press).
+    const [firstId, secondId] = h.spies.onRecordTurn.mock.calls.map((c) => c[3])
+    expect(firstId).not.toEqual(secondId)
   })
 
   it('does not record a cascade turn via onRecordTurn (no accumulated hub reply)', async () => {
@@ -360,7 +393,8 @@ describe('chat recording', () => {
     await flush()
     await flush()
     expect(h.spies.onRecordTurn).not.toHaveBeenCalled()
-    expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note') // cascade records via send
+    // cascade records via send, threading the per-press turnId as the shared key.
+    expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note', expect.any(String))
   })
 })
 
@@ -402,7 +436,7 @@ describe('cascade route (omniSTT)', () => {
     await flush()
     await flush()
     expect(h.spies.transcribe).toHaveBeenCalledTimes(1)
-    expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note')
+    expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note', expect.any(String))
     expect(h.states.at(-1)!.active).toBe(false) // turn ended, orb idle
   })
 })
@@ -424,7 +458,7 @@ describe('warm-wait fallback', () => {
     await flush()
     await flush()
     expect(h.spies.transcribe).toHaveBeenCalled()
-    expect(h.spies.onFinalText).toHaveBeenCalledWith('fallback text')
+    expect(h.spies.onFinalText).toHaveBeenCalledWith('fallback text', expect.any(String))
   })
 })
 

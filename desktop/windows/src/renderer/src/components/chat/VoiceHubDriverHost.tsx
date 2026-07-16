@@ -39,6 +39,10 @@ export function VoiceHubDriverHost(): null {
   const recordVoiceTurnRef = useRef(chat.recordVoiceTurn)
   // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
   recordVoiceTurnRef.current = chat.recordVoiceTurn
+  // Latest-ref for the continuity-seed reader (the same chat thread's kernel tail).
+  const getSeedRef = useRef(chat.getVoiceSeedContext)
+  // eslint-disable-next-line react-hooks/refs -- latest-ref for the once-built driver
+  getSeedRef.current = chat.getVoiceSeedContext
 
   // Built once. Every collaborator points at the real main-resident subsystem:
   //   * hub session (playback via its own pcmPlayer, D3) — HubController.
@@ -51,16 +55,29 @@ export function VoiceHubDriverHost(): null {
     // eslint-disable-next-line react-hooks/refs -- latest-ref (sendRef) is read at turn-commit time inside the once-built driver, never during render
     () =>
       new VoiceHubTurnDriver({
-        createHub: (events) => new HubController({ events }),
+        createHub: (events) =>
+          new HubController({
+            events,
+            // Seed a realtime session with the shared thread's recent turns (PR-B).
+            // Reads the SAME conversation the typed tail reads, via the chat hook so
+            // the chatId stays encapsulated.
+            fetchSeed: () => getSeedRef.current()
+          }),
         interruptPlayback: (leaseID) => interruptCurrentResponse(leaseID),
         publishState: (state) => window.omi?.publishVoiceHubState?.(state),
         startCapture: (opts) => startPttCapture(opts),
         transcribe: (pcm) => batchTranscribe(pcm, new AbortController().signal),
-        onFinalText: (text) => void sendRef.current(text, { fromVoice: true }),
+        // CASCADE route: re-answer via the chat engine (fromVoice ⇒ spoken reply).
+        // Thread the per-press turnId so the kernel user-turn record shares the key a
+        // hub-native record would use (INV-CHAT-1 double-record belt-and-suspenders).
+        onFinalText: (text, turnId) =>
+          void sendRef.current(text, { fromVoice: true, idempotencyKey: turnId }),
         // A completed HUB turn: APPEND its text to the ONE chat engine (INV-CHAT-1),
-        // no LLM/TTS re-run (the hub already spoke it).
-        onRecordTurn: (userText, assistantText) =>
-          recordVoiceTurnRef.current(userText, assistantText),
+        // no LLM/TTS re-run (the hub already spoke it). Threads `interrupted` (a
+        // barge-in still records a partial reply) and the per-press turnId (the
+        // kernel dedupe key).
+        onRecordTurn: (userText, assistantText, interrupted, turnId) =>
+          recordVoiceTurnRef.current(userText, assistantText, interrupted, turnId),
         muteForCapture: muteSystemAudioForHubCapture
       })
   )
@@ -84,6 +101,17 @@ export function VoiceHubDriverHost(): null {
   // hub.isAvailable() true — without it selectPttRoute always picks the cascade and
   // the warm hub never engages. Tears down on toggle-off / sign-out.
   useHubWarmLifecycle(driver, { ready: !loading, signedIn: !!user, hubEnabled })
+
+  // Refresh the hub's continuity seed whenever the shared thread grows — a typed
+  // turn (or the initial history load) means the warm session is now stale, so the
+  // NEXT voice turn's realtime session should carry it. The controller only
+  // reconnects when the fresh seed holds a turn it hasn't seen (a self-produced
+  // voice turn is already marked known, so it doesn't thrash), and never mid-turn.
+  // Doing it on thread-change (not per-press) keeps the mic-start path latency-free.
+  const threadLen = chat.history.length
+  useEffect(() => {
+    driver.refreshSeedContext()
+  }, [driver, threadLen])
 
   return null
 }

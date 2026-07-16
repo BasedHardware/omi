@@ -13,7 +13,8 @@ import type {
   MainChatEvent,
   MainChatResult,
   ChatCitation,
-  ChatAttachment
+  ChatAttachment,
+  VoiceHubSeedContext
 } from '../../../shared/types'
 import { saveDesktopMessage } from '../lib/desktopChatMessages'
 import { getMessages as getSessionMessages } from '../lib/chatSessionsClient'
@@ -108,14 +109,30 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the bar. `fromVoice`
   // requests that the assistant's reply be spoken (TTS) once it's assembled.
-  send: (text: string, opts?: { fromVoice?: boolean }) => Promise<void>
+  send: (
+    text: string,
+    opts?: { fromVoice?: boolean; idempotencyKey?: string }
+  ) => Promise<void>
   /** Clear the thread to a fresh conversation. */
   reset: () => void
   /** Record a COMPLETED native realtime-hub voice turn (user transcript + assistant
    *  reply) into the thread — APPENDS both messages WITHOUT calling the LLM or TTS
    *  (the hub already produced and spoke the reply). INV-CHAT-1: the spoken turn
-   *  lands in the one shared timeline. Empty user/assistant is ignored. */
-  recordVoiceTurn: (userText: string, assistantText: string) => void
+   *  lands in the one shared timeline (renderer history + local SQLite), the ONE
+   *  kernel conversation (so typed chat + the context tail see it), and the
+   *  shared/mobile thread. `interrupted` marks a barge-in (partial reply still
+   *  recorded); `turnId` is the per-press idempotency key that dedupes the kernel
+   *  record. Empty user/assistant is ignored. */
+  recordVoiceTurn: (
+    userText: string,
+    assistantText: string,
+    interrupted?: boolean,
+    turnId?: string
+  ) => void
+  /** Read the voice continuity seed for THIS chat thread (the same conversation the
+   *  typed tail reads). Used by the hub to seed a realtime session with recent
+   *  typed/voice turns. Empty when nothing to seed / signed out. */
+  getVoiceSeedContext: () => Promise<VoiceHubSeedContext>
   /** Re-thread the live engine onto a chat session (multi-chat, pi_mono only).
    *  `id` = a server chat-session id → routes the kernel turn to that session's
    *  per-chatId conversation AND scopes shared-thread persistence to it; `null`
@@ -553,7 +570,8 @@ export function useChat(): UseChat {
   const tryKernelChat = async (
     baseHistory: ChatMsg[],
     userMsg: ChatMsg,
-    fromVoice: boolean
+    fromVoice: boolean,
+    idempotencyKey?: string
   ): Promise<void> => {
     // send() bumped genRef just before calling us. reset()/dismiss bumps it again +
     // cancels the run, so isCurrent() goes false and every write below is dropped.
@@ -642,7 +660,12 @@ export function useChat(): UseChat {
           requestId: reqId,
           prompt: textToSend,
           cleanUserText: userMsg.content,
-          chatId: chatIdRef.current ?? 'default'
+          chatId: chatIdRef.current ?? 'default',
+          // A voice CASCADE turn threads its per-press turnId so the kernel user-turn
+          // record shares the key a hub-native record would use (INV-CHAT-1
+          // double-record belt-and-suspenders). Undefined for typed sends → the door
+          // falls back to requestId.
+          ...(idempotencyKey ? { idempotencyKey } : {})
         })
       } finally {
         // Cleanup that must ALWAYS run (even for a dismissed turn): release the run
@@ -801,7 +824,10 @@ export function useChat(): UseChat {
     }
   }
 
-  const send = async (text: string, opts?: { fromVoice?: boolean }): Promise<void> => {
+  const send = async (
+    text: string,
+    opts?: { fromVoice?: boolean; idempotencyKey?: string }
+  ): Promise<void> => {
     // Re-entrancy latch (sendingRef is the always-current mirror of `sending`).
     // A send is allowed with text OR with staged attachments (Mac parity —
     // attachment-only sends); only a truly empty send is dropped. The file_ids
@@ -911,7 +937,7 @@ export function useChat(): UseChat {
     // yet (§6 out of scope), so a message carrying attachments keeps using
     // /v2/messages.
     if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
-      return tryKernelChat(baseHistory, userMsg, fromVoice)
+      return tryKernelChat(baseHistory, userMsg, fromVoice, opts?.idempotencyKey)
     }
 
     const assistantId = crypto.randomUUID()
@@ -1186,7 +1212,12 @@ export function useChat(): UseChat {
   // calling the LLM or TTS — it must NOT re-answer (no send()). Windows-side mirror
   // of macOS RealtimeHubController's turn persistence (both texts, exactly-once on
   // the terminal; the driver owns the turnRecorded dedup + empty-final guard).
-  const recordVoiceTurn = (userText: string, assistantText: string): void => {
+  const recordVoiceTurn = (
+    userText: string,
+    assistantText: string,
+    interrupted = false,
+    turnId?: string
+  ): void => {
     const user = userText.trim()
     const assistant = assistantText.trim()
     if (!user || !assistant) return
@@ -1198,9 +1229,49 @@ export function useChat(): UseChat {
     const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: user }
     const assistantMsg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content: assistant }
     const base = history
+    // 1) The on-screen timeline + local SQLite (existing behavior — the UI renders
+    //    from here, NOT from the kernel, so there is no double-bubble).
     setHistory((h) => [...h, userMsg, assistantMsg])
     void persistChat([...base, userMsg, assistantMsg], isCurrent)
+    // 2) The ONE kernel conversation (INV-CHAT-1): record straight to the kernel via
+    //    the owner-gated main-side door, under the SAME main_chat/chat/<chatId> the
+    //    typed tail reads, origin 'realtime_voice', keyed on the per-press turnId so
+    //    a cascade record for the same logical turn dedupes. Fire-and-forget; the
+    //    handler no-ops when the owner isn't ready yet.
+    void window.omi
+      .voiceHubRecordTurn({
+        chatId: chatIdRef.current ?? 'default',
+        userText: user,
+        assistantText: assistant,
+        interrupted,
+        idempotencyKey: turnId
+      })
+      .catch(() => {})
+    // 3) The shared/mobile thread — the hub path (unlike the typed pi-mono path) did
+    //    NOT saveDesktopMessage, so voice turns were invisible on mobile. Echo both
+    //    messages (Mac's messageSource:'realtime_voice'). Best-effort.
+    void saveDesktopMessage({
+      text: user,
+      sender: 'human',
+      clientMessageId: userMsg.id,
+      messageSource: 'realtime_voice',
+      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+    })
+    void saveDesktopMessage({
+      text: assistant,
+      sender: 'ai',
+      clientMessageId: assistantMsg.id,
+      messageSource: 'realtime_voice',
+      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+    })
   }
+
+  // Read the voice continuity seed for THIS thread (the same main_chat conversation
+  // the typed tail reads). Encapsulates chatIdRef so the hub never has to know it.
+  const getVoiceSeedContext = (): Promise<VoiceHubSeedContext> =>
+    window.omi
+      .voiceHubGetSeedContext({ chatId: chatIdRef.current ?? 'default' })
+      .catch(() => ({ context: '', idempotencyKeys: [] }))
 
   // Re-thread the live engine onto a chat session (multi-chat, pi_mono). Aborts any
   // in-flight generation exactly like reset(), repoints chatIdRef + sessionIdRef at
@@ -1284,6 +1355,7 @@ export function useChat(): UseChat {
     send,
     reset,
     recordVoiceTurn,
+    getVoiceSeedContext,
     switchThread,
     currentThreadId
   }

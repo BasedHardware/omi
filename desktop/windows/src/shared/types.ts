@@ -1163,6 +1163,15 @@ export type OmiBridgeApi = {
   mainChatCancel: (runId: string) => Promise<boolean>
   /** Subscribe to streaming main-chat events. Returns an unsubscribe function. */
   onMainChatEvent: (cb: (event: MainChatEvent) => void) => () => void
+  // --- realtime-hub voice turns → the one kernel-owned transcript (INV-CHAT-1) ---
+  /** Record a completed native realtime-hub voice turn into the SAME
+   *  main_chat/chat/<chatId> conversation typed chat reads, origin
+   *  'realtime_voice', so a spoken turn appears in the typed context tail + mobile.
+   *  Owner-gated main-side; the ownerId is host state, never renderer-supplied. */
+  voiceHubRecordTurn: (args: VoiceHubRecordTurnArgs) => Promise<VoiceHubRecordTurnResult>
+  /** Read-only continuity seed for the voice session — the recent turns of the
+   *  same main_chat conversation, source-tagged [live:voice]/[live:typed]. */
+  voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) => Promise<VoiceHubSeedContext>
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
    *  main-side pi-mono session store on sign-in and on every id-token refresh;
@@ -1369,6 +1378,50 @@ export type MainChatSendArgs = {
   /** Main-chat conversation id; maps to the main_chat/chat/<chatId> surface.
    *  Defaults to 'default' when omitted. */
   chatId?: string
+  /** Optional idempotency key for the user-turn kernel record. Defaults to
+   *  `requestId`. A voice CASCADE turn threads its per-press `turnId` here so its
+   *  user-turn record shares the key a hub-native record would use — the
+   *  belt-and-suspenders half of the INV-CHAT-1 double-record fix (the primary
+   *  guarantee is hub-XOR-cascade route mutual-exclusivity). */
+  idempotencyKey?: string
+}
+
+/** Args for `voiceHub:recordTurn` — a completed realtime-hub voice turn. The
+ *  ownerId is NOT here: it is host state (control-plane owner), never
+ *  renderer-asserted (INV-AGENT / same posture as agentControl). */
+export type VoiceHubRecordTurnArgs = {
+  /** Target conversation; maps to main_chat/chat/<chatId>. Defaults to 'default'.
+   *  MUST be the same chatId typed chat uses so the turn lands in the typed tail. */
+  chatId?: string
+  userText: string
+  assistantText: string
+  /** The turn was cut off by a barge-in (a partial reply is still recorded). */
+  interrupted?: boolean
+  /** The per-press `turnId`; the kernel dedupes on it (last-32 metadata scan). */
+  idempotencyKey?: string
+}
+
+export type VoiceHubRecordTurnResult = {
+  recorded: boolean
+  duplicate: boolean
+  conversationId?: string
+  /** Set when nothing was recorded: 'owner_not_ready' (auth relay not arrived) or
+   *  'empty' (both texts blank). */
+  reason?: 'owner_not_ready' | 'empty'
+}
+
+export type VoiceHubSeedContextArgs = {
+  /** Same chatId as the typed tail. Defaults to 'default'. */
+  chatId?: string
+}
+
+export type VoiceHubSeedContext = {
+  /** The rendered seed block text (freshest-last), or '' when there is nothing to
+   *  seed / the owner is not ready. Source-tagged [live:voice]/[live:typed]. */
+  context: string
+  /** Idempotency keys of the complete user turns included, so the caller can tell
+   *  whether the warm session already reflects them (avoids reconnect thrash). */
+  idempotencyKeys: string[]
 }
 
 export type MainChatEvent =
