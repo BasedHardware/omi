@@ -1,12 +1,16 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import type { BrowserWindow, ContextMenuParams } from 'electron'
 
-type Item = { role?: string; type?: string }
+type Item = { role?: string; type?: string; label?: string; click?: (...args: unknown[]) => void }
 
 const popup = vi.fn()
 const buildFromTemplate = vi.fn((_template: Item[]) => ({ popup }))
+const writeText = vi.fn()
+const openExternal = vi.fn()
 vi.mock('electron', () => ({
-  Menu: { buildFromTemplate: (t: Item[]) => buildFromTemplate(t) }
+  Menu: { buildFromTemplate: (t: Item[]) => buildFromTemplate(t) },
+  clipboard: { writeText: (s: string) => writeText(s) },
+  shell: { openExternal: (u: string) => openExternal(u) }
 }))
 
 const { installContextMenu } = await import('./contextMenu')
@@ -29,6 +33,7 @@ function fakeWindow(): { win: BrowserWindow; fire: (p: Partial<ContextMenuParams
     handler({}, {
       isEditable: false,
       selectionText: '',
+      linkURL: '',
       misspelledWord: '',
       dictionarySuggestions: [],
       editFlags: {
@@ -47,16 +52,21 @@ function fakeWindow(): { win: BrowserWindow; fire: (p: Partial<ContextMenuParams
   return { win, fire }
 }
 
-const roles = (): (string | undefined)[] => {
+const lastTemplate = (): Item[] => {
   const t = buildFromTemplate.mock.calls.at(-1)?.[0]
   if (!t) throw new Error('Menu.buildFromTemplate was never called')
-  return t.map((i) => i.role ?? i.type)
+  return t
 }
+
+const roles = (): (string | undefined)[] => lastTemplate().map((i) => i.role ?? i.type)
+const ids = (): (string | undefined)[] => lastTemplate().map((i) => i.role ?? i.type ?? i.label)
 
 describe('installContextMenu', () => {
   beforeEach(() => {
     popup.mockClear()
     buildFromTemplate.mockClear()
+    writeText.mockClear()
+    openExternal.mockClear()
   })
 
   it('pops a native menu over the owning window on a right-click in a text field', () => {
@@ -102,5 +112,32 @@ describe('installContextMenu', () => {
 
     expect(buildFromTemplate).not.toHaveBeenCalled()
     expect(popup).not.toHaveBeenCalled()
+  })
+
+  it('offers Open Link / Copy Link Address on a right-clicked http/https link and wires them to electron', () => {
+    const { win, fire } = fakeWindow()
+    installContextMenu(win)
+
+    fire({ linkURL: 'https://omi.me/x' })
+
+    expect(ids()).toEqual(['Open Link', 'Copy Link Address'])
+    const t = lastTemplate()
+    // "Open Link" hands the URL to the OS browser via the scheme-checked opener.
+    t.find((i) => i.label === 'Open Link')?.click?.()
+    expect(openExternal).toHaveBeenCalledWith('https://omi.me/x')
+    // "Copy Link Address" copies the raw href to the clipboard.
+    t.find((i) => i.label === 'Copy Link Address')?.click?.()
+    expect(writeText).toHaveBeenCalledWith('https://omi.me/x')
+    expect(popup).toHaveBeenCalledWith({ window: win })
+  })
+
+  it('shows no link menu and never opens the OS for a non-web link (file://)', () => {
+    const { win, fire } = fakeWindow()
+    installContextMenu(win)
+
+    fire({ linkURL: 'file:///etc/passwd' }) // read-only, no selection, disallowed scheme
+
+    expect(buildFromTemplate).not.toHaveBeenCalled()
+    expect(openExternal).not.toHaveBeenCalled()
   })
 })

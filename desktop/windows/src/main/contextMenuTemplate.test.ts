@@ -1,6 +1,6 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect, vi } from 'vitest'
 import { buildContextMenuTemplate } from './contextMenuTemplate'
-import type { ContextMenuInput } from './contextMenuTemplate'
+import type { ContextMenuDeps, ContextMenuInput } from './contextMenuTemplate'
 
 type Flags = ContextMenuInput['editFlags']
 
@@ -16,13 +16,15 @@ const flags = (over: Partial<Flags> = {}): Flags => ({
   ...over
 })
 
-// Defaults to "no misspelling"; spell-check cases opt in.
+// Defaults to "no misspelling" and "not on a link" (linkURL is '' off a link in
+// real Electron); spell-check and link cases opt in.
 const input = (over: Partial<ContextMenuInput> = {}): ContextMenuInput => ({
   isEditable: false,
   selectionText: '',
   editFlags: flags(),
   misspelledWord: '',
   dictionarySuggestions: [],
+  linkURL: '',
   ...over
 })
 
@@ -169,5 +171,88 @@ describe('buildContextMenuTemplate', () => {
                     }
                   }
     expect(checked).toBe(384)
+  })
+
+  // --- Link group (right-click on a hyperlink) -----------------------------
+
+  const fakeDeps = (): ContextMenuDeps & {
+    openExternal: ReturnType<typeof vi.fn>
+    copyText: ReturnType<typeof vi.fn>
+  } => ({ openExternal: vi.fn(), copyText: vi.fn() })
+
+  const clickItem = (item: ReturnType<typeof buildContextMenuTemplate>[number]): void => {
+    ;(item.click as unknown as () => void)()
+  }
+
+  it('prepends Open Link + Copy Link Address on an http/https link', () => {
+    const t = buildContextMenuTemplate(input({ linkURL: 'https://omi.me/x' }), fakeDeps())
+    expect(ids(t)).toEqual(['Open Link', 'Copy Link Address'])
+  })
+
+  it('clicking the link items invokes the injected deps with the exact URL', () => {
+    const deps = fakeDeps()
+    const url = 'https://omi.me/docs?token=abc'
+    const t = buildContextMenuTemplate(input({ linkURL: url }), deps)
+    const open = t.find((i) => i.label === 'Open Link')!
+    const copy = t.find((i) => i.label === 'Copy Link Address')!
+
+    clickItem(open)
+    expect(deps.openExternal).toHaveBeenCalledWith(url)
+    clickItem(copy)
+    expect(deps.copyText).toHaveBeenCalledWith(url)
+  })
+
+  it('puts the link group first, then a separator, then editing items', () => {
+    // A link inside an editable field (rare, but the ordering must hold): Chrome/
+    // Edge show link actions ahead of the edit commands.
+    const t = buildContextMenuTemplate(
+      input({ isEditable: true, selectionText: 'sel', editFlags: ALL_EDIT, linkURL: 'http://a.b' }),
+      fakeDeps()
+    )
+    expect(ids(t)).toEqual([
+      'Open Link',
+      'Copy Link Address',
+      'separator',
+      'undo',
+      'redo',
+      'separator',
+      'cut',
+      'copy',
+      'paste',
+      'delete',
+      'separator',
+      'selectAll'
+    ])
+  })
+
+  it('omits the link group for a non-web scheme (file/UNC/custom-protocol/js)', () => {
+    for (const linkURL of [
+      'file:///etc/passwd',
+      '\\\\host\\share\\x',
+      'javascript:alert(1)',
+      'mailto:a@b.com',
+      'not a url'
+    ]) {
+      const deps = fakeDeps()
+      const t = buildContextMenuTemplate(input({ linkURL }), deps)
+      expect(ids(t)).not.toContain('Open Link')
+      expect(deps.openExternal).not.toHaveBeenCalled()
+    }
+  })
+
+  it('is byte-identical to the editing menu when there is no link', () => {
+    // Same params, with and without deps → the deps path must not perturb the
+    // editing menu at all.
+    const editable = { isEditable: true, selectionText: 'sel', editFlags: ALL_EDIT }
+    const withDeps = buildContextMenuTemplate(input(editable), fakeDeps())
+    const plain = buildContextMenuTemplate(input(editable))
+    expect(ids(withDeps)).toEqual(ids(plain))
+  })
+
+  it('emits no link group without injected deps, even on a valid link', () => {
+    // The pure builder cannot fabricate the electron-touching actions; a menu
+    // with a live "Open Link" that does nothing would be worse than none.
+    const t = buildContextMenuTemplate(input({ linkURL: 'https://omi.me' }))
+    expect(ids(t)).not.toContain('Open Link')
   })
 })
