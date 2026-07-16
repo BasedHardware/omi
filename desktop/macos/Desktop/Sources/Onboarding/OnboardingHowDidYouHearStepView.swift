@@ -15,19 +15,19 @@ struct OnboardingHowDidYouHearStepView: View {
   @State private var hadSelectionOnAppear = false
   @State private var advanceTask: Task<Void, Never>?
 
-  static let sources = [
-    "Social media",
-    "YouTube",
-    "Friend",
-    "Search engine",
-    "AI chat",
-    "Podcast",
-    "Colleague",
-    "Article",
-    "Product Hunt",
-    "Newsletter",
-    "Event",
-    "Other",
+  static let sources: [(name: String, icon: String)] = [
+    ("Social media", "bubble.left.and.bubble.right.fill"),
+    ("YouTube", "play.rectangle.fill"),
+    ("Friend", "person.fill"),
+    ("Search engine", "magnifyingglass"),
+    ("AI chat", "sparkles"),
+    ("Podcast", "waveform"),
+    ("Colleague", "person.2.fill"),
+    ("Article", "newspaper.fill"),
+    ("Product Hunt", "arrowtriangle.up.circle.fill"),
+    ("Newsletter", "envelope.fill"),
+    ("Event", "calendar"),
+    ("Other", "ellipsis"),
   ]
 
   var body: some View {
@@ -42,13 +42,14 @@ struct OnboardingHowDidYouHearStepView: View {
     ) {
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
         FlowLayout(spacing: OmiSpacing.sm) {
-          ForEach(Self.sources, id: \.self) { source in
+          ForEach(Self.sources, id: \.name) { source in
             OnboardingSelectableChip(
-              title: source,
-              isSelected: selectedSource == source
+              title: source.name,
+              icon: source.icon,
+              isSelected: selectedSource == source.name
             ) {
-              selectedSource = source
-              AnalyticsManager.shared.onboardingHowDidYouHear(source: source)
+              selectedSource = source.name
+              AnalyticsManager.shared.onboardingHowDidYouHear(source: source.name)
               // First-ever answer auto-advances; on a revisit the user changes
               // the saved selection and moves on with the Continue button.
               if !hadSelectionOnAppear {
