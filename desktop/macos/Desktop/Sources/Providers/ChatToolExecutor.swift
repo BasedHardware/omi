@@ -1653,20 +1653,24 @@ class ChatToolExecutor {
           completion(granted)
         }
       }
-      guard requestResult != nil,
+      guard let screenRecordingGranted = requestResult,
         isPermissionAuthorizationCurrent(
           expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
-      _ = openPermissionPrivacySettings(
-        pane: "Privacy_ScreenCapture",
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
-      try? await Task.sleep(nanoseconds: 2_000_000_000)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
-      else { return authorizedOwnerChangedResult() }
+      // Already granted → don't reopen System Settings over a toggle that's
+      // already on (mirrors requestScreenRecordingAccessAndOpenSettings).
+      if !screenRecordingGranted {
+        _ = openPermissionPrivacySettings(
+          pane: "Privacy_ScreenCapture",
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        try? await Task.sleep(nanoseconds: 2_000_000_000)
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
+      }
       appState?.checkScreenRecordingPermission()
       return permissionRequestResult(
         type: type,
@@ -1775,18 +1779,22 @@ class ChatToolExecutor {
         expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot)
       else { return authorizedOwnerChangedResult() }
-      _ = openPermissionPrivacySettings(
-        pane: "Privacy_AllFiles",
-        expectedOwnerID: expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
-      // Same drag-to-grant mechanic as Screen Recording: drop the app into the
-      // Full Disk Access list to add and enable it in one gesture.
-      Task { await PermissionDragGuidance.presentDragToGrantHelper() }
-      try? await Task.sleep(nanoseconds: 3_000_000_000)
-      guard isPermissionAuthorizationCurrent(
-        expectedOwnerID,
-        authorizationSnapshot: authorizationSnapshot)
-      else { return authorizedOwnerChangedResult() }
+      // Already granted → skip Settings and the drag card entirely (mirrors
+      // the notifications/automation cases, which only open when denied).
+      if !checkFullDiskAccessDirectly() {
+        _ = openPermissionPrivacySettings(
+          pane: "Privacy_AllFiles",
+          expectedOwnerID: expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        // Same drag-to-grant mechanic as Screen Recording: drop the app into the
+        // Full Disk Access list to add and enable it in one gesture.
+        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
+        try? await Task.sleep(nanoseconds: 3_000_000_000)
+        guard isPermissionAuthorizationCurrent(
+          expectedOwnerID,
+          authorizationSnapshot: authorizationSnapshot)
+        else { return authorizedOwnerChangedResult() }
+      }
       let granted = checkFullDiskAccessDirectly()
       appState?.hasFullDiskAccess = granted
       return permissionRequestResult(
