@@ -1,0 +1,36 @@
+# Test artifacts and dev-only files.
+test/
+.pytest_cache/
+.venv/
+venv/
+__pycache__/
+*.pyc
+*.pyo
+
+# Local environment files — may contain real Telethon session strings
+# and must NEVER ship into the image.
+.env
+.env.*
+!.env.example
+
+# Runtime data files written by simple_storage.py — contain user
+# config and chat history. Must NEVER ship into the image.
+users_data.json
+chats_data.json
+account.json
+
+# Repo-level / IDE / dev files
+.git/
+.gitignore
+.dockerignore
+.idea/
+.vscode/
+*.swp
+.DS_Store
+
+# Dev/test requirements (only useful at test time)
+requirements-dev.txt
+
+# Session string generator (dev tool, not needed at runtime —
+# the session is piped via stdin at startup)
+session_string_generator.py

@@ -1,0 +1,8 @@
+# Dev/test dependencies for the user-account plugin.
+# Install with:
+#   pip install -r requirements.txt -r requirements-dev.txt
+-r requirements.txt
+
+pytest==8.3.3
+pytest-asyncio==0.24.0
+black==24.10.0

@@ -1,0 +1,41 @@
+# E2E Flow: AI Clone — navigate the AI Clone settings, connect a plugin, verify status
+# Tests: AIClonePage, ConnectSheet, AICloneConfig, AICloneClient, AICloneKeychain,
+#        AIPlugin, PluginDiscovery, PluginCard, PluginURLCard, APIClient, OmiApp
+# Core feature: AI Clone persona plugin configuration and auto-reply management
+
+version: 2
+tier: 2
+name: ai-clone
+description: AI Clone flow — open AI Clone settings, verify plugin URL/bearer token fields, Telegram/WhatsApp connect sheets, ToS acknowledgement, rate-limit badge, auto-reply toggle, and status poll wiring
+app: com.omi.computer-macos
+covers:
+  - desktop/Desktop/Sources/AIClone/AICloneClient.swift
+  - desktop/Desktop/Sources/AIClone/AICloneConfig.swift
+  - desktop/Desktop/Sources/AIClone/AICloneKeychain.swift
+  - desktop/Desktop/Sources/AIClone/AIPlugin.swift
+  - desktop/Desktop/Sources/AIClone/PluginDiscovery.swift
+  - desktop/Desktop/Sources/APIClient.swift
+  - desktop/Desktop/Sources/APIClient+Persona.swift
+  - desktop/Desktop/Sources/MainWindow/Components/AIClone/ConnectSheet.swift
+  - desktop/Desktop/Sources/MainWindow/Components/AIClone/PluginCard.swift
+  - desktop/Desktop/Sources/MainWindow/Components/AIClone/PluginURLCard.swift
+  - desktop/Desktop/Sources/MainWindow/Pages/AIClonePage.swift
+  - desktop/Desktop/Sources/OmiApp.swift
+preconditions:
+  - auth_ready  # User signed in and onboarding completed. App shows main window.
+
+steps:
+  - id: AC1
+    name: Open AI Clone settings
+    do: "Open Settings via Cmd+comma, navigate to the AI Clone section in the sidebar."
+    verify: true
+
+  - id: AC2
+    name: Verify plugin URL and bearer token fields
+    do: "On the AI Clone page, verify the plugin URL input field, bearer token field, and Connect button are visible. Verify the plugin card shows connection status."
+    verify: true
+
+  - id: AC3
+    name: Open Telegram connect sheet
+    do: "Click the Telegram plugin card. Verify the ConnectSheet opens with a Telegram bot token input field and QR code."
+    verify: true

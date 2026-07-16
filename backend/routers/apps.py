@@ -2259,7 +2259,16 @@ def create_api_key_for_app(app_id: str, uid: str = Depends(auth.get_current_user
 
     key, hashed_key, label = generate_api_key()
 
-    data = {'id': str(ULID()), 'hashed': hashed_key, 'label': label, 'created_at': datetime.now(timezone.utc)}
+    data = {
+        'id': str(ULID()),
+        'hashed': hashed_key,
+        'label': label,
+        'created_at': datetime.now(timezone.utc),
+        # Stamp the uid on the key so sensitive endpoints (e.g. persona-chat)
+        # can verify the key was issued by this exact user, not just by anyone
+        # who happens to hold an app-level key.
+        'uid': uid,
+    }
     create_api_key_db(app_id, data)
 
     # Return both the raw key (for one-time display to user) and the stored data

@@ -779,7 +779,9 @@ class TestExpandedCallsiteCoverage:
 
         source = self._read_source("utils/retrieval/graph.py")
         calls = re.findall(r"get_llm\('(\w+)'", source)
-        assert 'chat_graph' in calls
+        # graph.py uses 'persona_chat' for the persona path (was 'chat_graph'
+        # before the streaming fix — changed to the correct QoS feature).
+        assert 'persona_chat' in calls
 
     def test_perplexity_tools_key(self):
         import re

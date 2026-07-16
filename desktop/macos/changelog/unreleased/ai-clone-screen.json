@@ -1,0 +1,3 @@
+{
+  "change": "Added AI Clone screen in Settings — connect and configure Telegram and WhatsApp plugins (v0.1, single global auto-reply toggle; per-chat toggles ship once the plugins expose a global-toggle endpoint)"
+}

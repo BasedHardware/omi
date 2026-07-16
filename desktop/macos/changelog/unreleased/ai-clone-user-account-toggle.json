@@ -1,0 +1,3 @@
+{
+  "change": "AI Clone (PR #8822 follow-up): added an Auto-reply toggle for the Telegram user-account (Telethon) mode. The ConnectSheet's 'Reply as me' connected state now has an Auto-reply switch that calls POST /toggle on the user-account plugin; /persona_chat now returns 403 when auto-reply is disabled, so the user can pause AI replies without signing out. The /status response exposes the auto-reply aggregate so the desktop's 30s poll keeps the toggle in sync with the plugin's authoritative state."
+}

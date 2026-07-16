@@ -1096,7 +1096,8 @@
           "create_facts",
           "read_memories",
           "read_conversations",
-          "read_tasks"
+          "read_tasks",
+          "persona_chat"
         ],
         "title": "ActionType",
         "type": "string"

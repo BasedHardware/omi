@@ -1,0 +1,10 @@
+# Runtime data written by simple_storage.py (test artifacts and per-instance state).
+# These files hold user tokens and setup data — they must NEVER be committed.
+users_data.json
+pending_setups.json
+
+# Python
+__pycache__/
+*.pyc
+.pytest_cache/
+.venv/

@@ -59,6 +59,7 @@ class ActionType(str, Enum):
     READ_MEMORIES = "read_memories"
     READ_CONVERSATIONS = "read_conversations"
     READ_TASKS = "read_tasks"
+    PERSONA_CHAT = "persona_chat"  # AI Clone plugins (Telegram/WhatsApp/iMessage)
 
 
 class Action(BaseModel):

@@ -109,8 +109,18 @@ def get_chat_tracer_callbacks(
     global tracing. Returns an empty list if API key is not configured.
 
     Args:
-        run_id: Optional explicit run ID for the trace (for feedback attachment)
-        run_name: Optional name for the run (e.g., "chat.agentic.stream")
+        run_id: Optional explicit run ID for the trace. NOTE: this
+            parameter is ACCEPTED for forward-compatibility / future use
+            but is currently NOT passed to LangChainTracer — the
+            constructor doesn't accept a run_id kwarg (langchain-core
+            swallows it silently via **kwargs). To actually pin the
+            run_id of the generated trace, callers must also pass
+            `run_id` via RunnableConfig (`llm.astream(messages,
+            config={"callbacks": [...], "run_id": run_id})`).
+        run_name: Optional name for the run (e.g., "chat.agentic.stream").
+            Accepted for forward-compat; not currently plumbed into
+            the tracer (LangChainTracer exposes this via metadata on
+            the parent run, not as a constructor arg).
         tags: Optional tags for the run (e.g., ["chat", "agentic"])
         metadata: Optional metadata dict for the run
 

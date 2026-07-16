@@ -24,7 +24,6 @@ from utils.llm.clients import get_llm
 from utils.executors import run_blocking, llm_executor
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
-from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
@@ -119,10 +118,15 @@ async def execute_persona_chat_stream(
     cited: Optional[bool] = False,
     callback_data: Optional[Dict[str, Any]] = None,
     chat_session: Optional[ChatSession] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Handle streaming chat responses for persona-type apps."""
     system_prompt = app.persona_prompt
     formatted_messages: List[BaseMessage] = [SystemMessage(content=system_prompt)]
+
+    # T-020: optional context blocks (sender name, platform, chat type).
+    if extra_user_messages:
+        formatted_messages.extend(extra_user_messages)
 
     for msg in messages:
         if msg.sender == "ai":
@@ -131,60 +135,66 @@ async def execute_persona_chat_stream(
             formatted_messages.append(HumanMessage(content=msg.text))
 
     full_response: List[str] = []
-    callback = AsyncStreamingCallback()
 
-    # Generate run_id for LangSmith tracing
-    langsmith_run_id = str(uuid.uuid4())
+    # LangSmith tracing — only generate a run_id when the API key
+    # is configured so callback_data doesn't carry a phantom UUID
+    # that submit_langsmith_feedback() would 404 against.
+    from utils.observability.langsmith import has_langsmith_api_key, get_chat_tracer_callbacks
 
-    tracer_callbacks = get_chat_tracer_callbacks(
-        run_id=langsmith_run_id,
-        run_name="chat.persona.stream",
-        tags=["chat", "persona", "streaming"],
-        metadata={
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
+    langsmith_run_id = uuid.uuid4() if has_langsmith_api_key() else None
+
+    tracer_callbacks = (
+        get_chat_tracer_callbacks(
+            run_id=str(langsmith_run_id),
+            run_name="chat.persona.stream",
+            tags=["chat", "persona", "streaming"],
+            metadata={
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        )
+        if langsmith_run_id is not None
+        else []
     )
 
-    all_callbacks: List[Any] = [callback] + tracer_callbacks
-
-    run_metadata: Dict[str, Any] = {
-        "run_id": langsmith_run_id,
-        "run_name": "chat.persona.stream",
-        "tags": ["chat", "persona", "streaming"],
-        "metadata": {
-            "uid": uid,
-            "app_id": app.id if app else None,
-            "app_name": app.name if app else None,
-            "cited": cited,
-        },
+    # Pass a RunnableConfig to astream() so LangSmith traces get
+    # stamped with the run_id. The config dict carries 'callbacks'
+    # (tracer wiring) and 'run_id' (trace UUID stamping).
+    runnable_kwargs = {
+        "config": {
+            "callbacks": tracer_callbacks,
+            "run_id": langsmith_run_id,
+            "tags": ["chat", "persona", "streaming"],
+            "metadata": {
+                "uid": uid,
+                "app_id": app.id if app else None,
+                "app_name": app.name if app else None,
+                "cited": cited,
+            },
+        }
     }
 
-    if callback_data is not None:
-        callback_data['langsmith_run_id'] = langsmith_run_id
+    if callback_data is not None and langsmith_run_id is not None:
+        callback_data['langsmith_run_id'] = str(langsmith_run_id)
 
     try:
-        task = asyncio.create_task(
-            get_llm('chat_graph', streaming=True).agenerate(
-                messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
-            )
-        )
+        llm = get_llm('persona_chat', streaming=True)
 
-        while True:
-            try:
-                chunk = await callback.queue.get()
-                if chunk:
-                    token = chunk.replace("data: ", "")
-                    full_response.append(token)
-                    yield chunk
-                else:
-                    break
-            except asyncio.CancelledError:
-                break
-
-        await task
+        # Use astream() with a RunnableConfig so LangSmith traces get
+        # stamped with the run_id. The old agenerate(callbacks=) pattern
+        # required AsyncStreamingCallback to implement the full langchain
+        # callback protocol (run_inline, on_llm_new_token, ...) — which it
+        # didn't. After the upstream langchain_core bump, passing a
+        # non-conforming callback crashes. astream() yields chunks directly.
+        async for chunk in llm.astream(formatted_messages, **runnable_kwargs):  # type: ignore[arg-type]
+            raw = chunk.content if hasattr(chunk, 'content') else str(chunk)
+            # LangChain AIMessageChunk.content can be str or list[str|dict]
+            token = raw if isinstance(raw, str) else str(raw)
+            if token:
+                full_response.append(token)
+                yield f"data: {token}"
 
         if callback_data is not None:
             callback_data['answer'] = ''.join(full_response)
@@ -215,6 +225,7 @@ async def execute_chat_stream(
     callback_data: Dict[str, Any] = {},
     chat_session: Optional[ChatSession] = None,
     context: Optional[PageContext] = None,
+    extra_user_messages: Optional[List["HumanMessage"]] = None,
 ) -> AsyncGenerator[Optional[str], None]:
     """Route chat requests to the appropriate handler.
 
@@ -227,7 +238,13 @@ async def execute_chat_stream(
     # 1. Persona apps
     if app and app.is_a_persona():
         async for chunk in execute_persona_chat_stream(
-            uid, messages, app, cited=cited, callback_data=callback_data, chat_session=chat_session
+            uid,
+            messages,
+            app,
+            cited=cited,
+            callback_data=callback_data,
+            chat_session=chat_session,
+            extra_user_messages=extra_user_messages,
         ):
             yield chunk
         return

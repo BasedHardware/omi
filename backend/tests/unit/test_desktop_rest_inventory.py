@@ -180,6 +180,7 @@ KNOWN_MISSING_ROUTES: Set[str] = {
     '/v1/goals/completed',
     '/v1/personas/check-username',
     '/v1/personas/generate-prompt',
+    '/v1/user/persona',  # AI Clone: get-or-create persona (not yet a backend route)
     '/v3/memories/mark-all-read',
     '/v3/memories/visibility',  # backend has /v3/memories/{memory_id}/visibility
     '/v3/memories/{param}/read',

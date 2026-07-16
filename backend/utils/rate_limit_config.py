@@ -94,6 +94,7 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # Integration (key = app_id:uid)
     "integration:conversations": (10, 3600),
     "integration:memories": (60, 3600),
+    "integration:persona": (60, 3600),  # AI Clone plugins (Telegram/WhatsApp/iMessage)
     # Phone verification uses IP-based rate_limit_dependency (pre-auth, no UID).
     # Not migrated to per-UID Lua limiter intentionally.
     # Dev API. Read limits are intentionally separate from write limits so a

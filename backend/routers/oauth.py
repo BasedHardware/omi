@@ -81,6 +81,13 @@ def oauth_authorize(
                         permissions.append({"icon": "🔍", "text": "Access and read your stored memories."})
                     elif action_type_value == ActionType.READ_TASKS.value:
                         permissions.append({"icon": "📋", "text": "Access and read your stored tasks."})
+                    elif action_type_value == ActionType.PERSONA_CHAT.value:
+                        permissions.append(
+                            {
+                                "icon": "🤖",
+                                "text": "Reply to messages on your behalf using your persona.",
+                            }
+                        )
         if (
             "proactive_notification" in app.capabilities
             and app.proactive_notification

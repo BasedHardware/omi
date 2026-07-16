@@ -669,6 +669,65 @@ class TestChatToolCircuitBreaker:
         mock_fail.assert_called_once_with("app-1", 0, "TimeoutException", "chat_tool")
 
 
+def _load_validate_helper():
+    """Load validate_app_endpoints_for_reenable directly from source, bypassing heavy deps."""
+    _utils_apps_key = "utils.apps"
+    if _utils_apps_key in sys.modules and hasattr(sys.modules[_utils_apps_key], 'validate_app_endpoints_for_reenable'):
+        return sys.modules[_utils_apps_key].validate_app_endpoints_for_reenable
+    _saved = {}
+    _mock_modules = [
+        "database.redis_db",
+        "database.apps",
+        "database.auth",
+        "database.cache",
+        "database.conversations",
+        "database.memories",
+        "database.users",
+        "database._client",
+        "database.vector_db",
+        "utils.stripe",
+        "utils.llm",
+        "utils.llm.persona",
+        "utils.llm.usage_tracker",
+        "utils.llm.clients",
+        "utils.memory",
+        "utils.memory.memory_service",
+        "utils.memory.memory_system",
+        "utils.memory.surface_routing",
+        "utils.social",
+        "utils.conversations",
+        "utils.conversations.factory",
+        "utils.conversations.render",
+        # T-022: utils.apps now also imports utils.retrieval.rag (the
+        # memory RAG helper). The bare `MagicMock()` below doesn't have
+        # a `__spec__`, so `from X import Y` against the stubbed module
+        # raises `AttributeError: __spec__` during exec_module. Use a
+        # proper types.ModuleType so the from-import resolves cleanly.
+        "utils.retrieval",
+        "utils.retrieval.rag",
+        "models.app",
+    ]
+    for mod_name in _mock_modules:
+        _saved[mod_name] = sys.modules.get(mod_name)
+        # types.ModuleType (not MagicMock) so __spec__ is set and
+        # `from X import Y` resolves cleanly during exec_module.
+        sys.modules[mod_name] = types.ModuleType(mod_name)
+        # __getattr__ so attribute lookups (e.g. `get_memory_cache`)
+        # return something instead of raising AttributeError.
+        sys.modules[mod_name].__getattr__ = lambda _attr: MagicMock()  # type: ignore[attr-defined]     # noqa: F841
+    spec = importlib.util.spec_from_file_location(
+        _utils_apps_key,
+        os.path.join(os.path.dirname(__file__), '..', '..', 'utils', 'apps.py'),
+    )
+    mod = importlib.util.module_from_spec(spec)
+    sys.modules[_utils_apps_key] = mod
+    spec.loader.exec_module(mod)
+    for mod_name, orig in _saved.items():
+        if orig is not None:
+            sys.modules[mod_name] = orig
+    return mod.validate_app_endpoints_for_reenable
+
+
 class TestReEnableRouterBehavior:
     """Tests for the production validate_app_endpoints_for_reenable helper from utils.apps."""
 

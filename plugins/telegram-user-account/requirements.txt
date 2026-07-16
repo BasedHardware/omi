@@ -1,0 +1,17 @@
+# Pinned to >=0.115.4 so the resolver picks Starlette >=0.40.0
+# (CVE-2024-47874 — Starlette DoS via unbounded multipart/form-data
+# fields with no filename; fixed in starlette 0.40.0 by enforcing
+# max_fields / max_files / max_part_size limits). Same pin as the
+# bot plugin (plugins/omi-telegram-app/requirements.txt) and the
+# WhatsApp plugin.
+fastapi==0.115.12
+uvicorn[standard]==0.32.0
+httpx==0.27.2
+httpx-sse==0.4.3
+python-dotenv==1.0.1
+pydantic==2.9.2
+# Telethon is the ONLY new dep vs the bot/WhatsApp plugins.
+# It's the MTProto client that authenticates as the user's
+# personal Telegram account (the bot plugin uses the Bot API
+# via httpx instead).
+telethon==1.36.0

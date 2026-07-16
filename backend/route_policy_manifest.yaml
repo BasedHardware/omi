@@ -185,6 +185,28 @@ routes:
         state: active
   - route_type: http
     method: POST
+    path: /v2/integrations/{app_id}/user/persona-chat
+    policy:
+      review_status: legacy_unreviewed
+      auth:
+        mechanisms:
+          - developer_api_key
+        placement: inline
+        scopes: []
+      byok: not_applicable
+      rate_limit:
+        policy_name: none
+        key_subject: none
+        enforcement: none
+        placement: none
+      timeout_class: streaming
+      surface: webhook
+      visibility: internal
+      data_domain: chat
+      deprecation:
+        state: active
+  - route_type: http
+    method: POST
     path: /v1/conversation-finalization-jobs/run
     policy:
       review_status: reviewed

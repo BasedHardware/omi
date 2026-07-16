@@ -131,6 +131,11 @@ tests/unit/test_payment_promotion_codes.py::test_checkout_invalid_promo_returns_
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_releases_only_matching_active
 tests/unit/test_payment_promotion_codes.py::test_release_attached_schedules_noop_without_customer
 tests/unit/test_people_conversations_500s.py::TestGetPeopleDocIdInjection::test_get_people_injects_doc_id
+# AI Clone persona chat tests — exec source in isolated namespace (source-extraction pattern).
+tests/unit/test_persona_chat_endpoint.py
+tests/unit/test_persona_chat_with_context.py
+tests/unit/test_persona_memory_retrieval.py
+tests/unit/test_persona_prompt_rewrite.py
 tests/unit/test_product_capability_synthetics.py::test_output_uses_required_status_vocabulary_and_json_formatting
 tests/unit/test_prompt_cache_integration.py::test_core_tools_has_26_tools
 tests/unit/test_prompt_cache_integration.py::test_llm_agent_model_kwargs_via_real_instantiation

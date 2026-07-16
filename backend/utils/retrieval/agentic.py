@@ -162,7 +162,25 @@ def get_tool_display_name(tool_name: str, tool_obj: Optional[Any] = None) -> str
 
 
 class AsyncStreamingCallback:
-    """Callback for streaming LLM responses with data and thought prefixes."""
+    """Callback for streaming LLM responses with data and thought prefixes.
+
+    This is a simple async queue wrapper — NOT a langchain BaseCallbackHandler.
+    It's used in two patterns:
+
+    1. **Anthropic agentic chat** (this file): the producer calls
+       `await callback.put_data(chunk)` directly from inside the
+       Anthropic SDK's streaming event loop.
+    2. **File chat** (graph.py _execute_file_chat_stream): same direct
+       put_data pattern via fc_tool.process_chat_with_file_stream.
+
+    The persona chat path (execute_persona_chat_stream) previously tried
+    to pass this callback into langchain's `agenerate(callbacks=[cb])`,
+    but that requires the callback to implement the full langchain
+    callback protocol (run_inline, on_llm_start, on_llm_new_token, ...).
+    It didn't, so tokens were silently lost. That path was rewritten to
+    use `llm.astream()` directly — this class is no longer involved in
+    persona chat.
+    """
 
     def __init__(self):
         self.queue = asyncio.Queue()

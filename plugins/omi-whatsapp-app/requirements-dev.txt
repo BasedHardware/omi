@@ -1,0 +1,19 @@
+# Test/dev dependencies for the Omi WhatsApp AI-clone plugin.
+#
+# These are separate from requirements.txt (production runtime deps) so a
+# minimal deployment doesn't pull in pytest and its plugins.
+#
+# Install both for development:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# Then run the tests:
+#   pytest plugins/omi-whatsapp-app/test/ -v
+#
+# Why pytest-asyncio: the async tests across the plugin's test/ directory
+# use `async def test_*` methods with explicit `@pytest.mark.asyncio`
+# decorators. Without pytest-asyncio they fail with "async def functions
+# are not natively supported".
+# See https://pytest-asyncio.readthedocs.io/ for configuration.
+
+pytest>=8.0
+pytest-asyncio>=0.23
