@@ -24,12 +24,16 @@ const HIGHLIGHT_FILL = macPurple('0.2')
 export function RewindPlayer({
   frames,
   cursorTs,
-  highlightQuery = ''
+  highlightQuery = '',
+  loading = false
 }: {
   frames: RewindFrame[]
   cursorTs: number
   /** Active search query — when set, matching OCR lines are boxed on the frame. */
   highlightQuery?: string
+  /** True while the frame set is still loading from the local store. Gates the
+   *  "No frames yet" empty state so it can't flash before the frames arrive. */
+  loading?: boolean
 }): React.JSX.Element {
   const [src, setSrc] = useState<string | null>(null)
   const [expanded, setExpanded] = useState(false)
@@ -120,6 +124,10 @@ export function RewindPlayer({
           ) : (
             <div className="text-white/40 text-sm">Loading…</div>
           )
+        ) : loading && frames.length === 0 ? (
+          // Still loading the local frame set — show a neutral placeholder, not the
+          // misleading "enable capture" message (the frames may already exist).
+          <div className="text-white/40 text-sm">Loading…</div>
         ) : (
           <div className="text-white/50 text-sm">
             {frames.length === 0

@@ -123,7 +123,12 @@ export function Rewind(): React.JSX.Element {
 
       {!searching ? (
         <>
-          <RewindPlayer frames={r.frames} cursorTs={r.cursorTs} highlightQuery={query} />
+          <RewindPlayer
+            frames={r.frames}
+            cursorTs={r.cursorTs}
+            highlightQuery={query}
+            loading={r.loading}
+          />
           <RewindThumbnailStrip frames={r.frames} cursorTs={r.cursorTs} onSeek={r.setCursorTs} />
           <RewindTimelineBar
             frames={r.frames}
