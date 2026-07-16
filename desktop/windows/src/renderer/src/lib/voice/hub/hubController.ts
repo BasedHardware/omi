@@ -164,6 +164,12 @@ export class HubController {
    *  (recovered) so the recovered event fires exactly once (Mac `pendingFailoverReason`). */
   private pendingFailoverReason: string | null = null
 
+  // A7c wake / zombie-session refresh (item E — ported from macOS RealtimeHubController) ---
+  /** A wake/unlock refresh that arrived mid-turn is deferred here so we never tear
+   *  down a live turn, then applied once the turn terminates (Mac
+   *  `pendingSessionRefreshReason` / `applyPendingSessionRefreshIfIdle`). */
+  private pendingRefreshReason: string | null = null
+
   // Per-turn state (all reset by voiceTurnDidTerminate) ------------------------
   private activeTurnID: VoiceTurnID | null = null
   /** Non-null ⇒ we are in the reducer's warm-wait and withholding PCM from the
@@ -357,12 +363,47 @@ export class HubController {
     // clean reset — cancel any pending backoff and clear the strike budget.
     this.cancelReconnect()
     this.reconnectStrikes = 0
+    // An explicit drop also cancels any wake refresh that was deferred behind a turn —
+    // re-warming a hub that was just told to close (kill-switch off / sign-out) is wrong.
+    this.pendingRefreshReason = null
     const s = this.session
     this.session = null
     this.sessionProvider = null
     this.sessionID = null
     this.connectedAt = null
     s?.teardown()
+  }
+
+  /** A7c item E — the OS suspended/locked and resumed: while suspended the OS likely
+   *  killed the warm TCP socket, so the next PTT press would commit onto a zombie
+   *  session (no reply, no fallback, hang). Proactively drop the possibly-dead socket
+   *  and re-warm so the first press after wake is warm. Ported from macOS
+   *  RealtimeHubController `requestSessionRefresh`.
+   *
+   *  Only acts when idle — a live session exists, no active turn, no connect already in
+   *  flight (Mac: "neither mid-reply nor mid-mint") — so it never interrupts a turn nor
+   *  races an in-flight warm (which is already building a fresh socket anyway). Mid-turn
+   *  it DEFERS the reason and re-warms once the turn terminates. It NEVER force-warms a
+   *  hub with no session (disabled / signed out): that gate mirrors eager-warm, so wake
+   *  can't open a socket the kill-switch closed. No telemetry — a wake refresh of an idle
+   *  socket is not a fallback (Mac only logs it). */
+  requestSessionRefresh(reason: string): void {
+    // Nothing to refresh when the hub isn't warm — never open a socket for a
+    // disabled / signed-out hub (Mac `guard session != nil`).
+    if (this.session === null) return
+    // Mid-turn: defer to the turn's termination so we never tear down a live turn.
+    if (this.activeTurnID !== null) {
+      this.pendingRefreshReason = reason
+      return
+    }
+    // Mid-connect: a warm is already in flight building a fresh socket — let it finish
+    // rather than race it (no need to defer; the in-flight warm is what we'd want anyway).
+    if (this.warming !== null) return
+    // Idle + warm: drop the (possibly dead) socket and rebuild. teardownSession forces
+    // session=null so ensureWarm rebuilds instead of treating the stale socket as warm;
+    // swallow the re-warm reject exactly like the A7c reconnect path.
+    this.teardownSession()
+    void this.ensureWarm().catch(() => {})
   }
 
   // MARK: The four per-turn primitives (turn-ID fenced)
@@ -462,6 +503,14 @@ export class HubController {
     this.warmCommitted = false
     this.handedOff = false
     this.pendingBegin = null
+    // A wake/refresh that arrived mid-turn was deferred (Mac
+    // applyPendingSessionRefreshIfIdle); now idle, honor it. requestSessionRefresh
+    // re-checks the gates (session present, no in-flight connect) before re-warming.
+    if (this.pendingRefreshReason !== null) {
+      const reason = this.pendingRefreshReason
+      this.pendingRefreshReason = null
+      this.requestSessionRefresh(reason)
+    }
   }
 
   // MARK: Session event wiring (pass-through + connect/error enrichment)

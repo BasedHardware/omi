@@ -492,6 +492,11 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('voiceHub:cancel', listener)
     return () => ipcRenderer.removeListener('voiceHub:cancel', listener)
   },
+  onVoiceHubWake: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('voiceHub:wake', listener)
+    return () => ipcRenderer.removeListener('voiceHub:wake', listener)
+  },
   publishVoiceHubState: (state: VoiceHubBarState) =>
     ipcRenderer.send('voiceHub:publishState', state),
   // --- Tray + lifecycle (Phase 1) ---

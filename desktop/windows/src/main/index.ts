@@ -1078,6 +1078,15 @@ app.whenReady().then(async () => {
   powerMonitor.on('lock-screen', () => endActiveSummonHold('lock-screen'))
   powerMonitor.on('suspend', () => endActiveSummonHold('suspend'))
 
+  // A7c wake / zombie-session refresh (item E): while the machine was suspended/locked
+  // the OS kills the warm realtime-hub TCP socket, so the first PTT press after resume
+  // would commit onto a dead session (no reply, no fallback, hang). Nudge the main
+  // window's warm-hub driver to refresh the idle socket now. Cheapest to always send;
+  // the renderer no-ops when signed out / the hub is disabled / a turn is active.
+  const refreshHubOnWake = (): void => withMainWindow((w) => w.webContents.send('voiceHub:wake'))
+  powerMonitor.on('resume', refreshHubOnWake)
+  powerMonitor.on('unlock-screen', refreshHubOnWake)
+
   // Mic record chord (default Ctrl+Space, rebindable + persisted). Fires
   // 'recorder:hotkey' at the renderer (receiver already exists) and surfaces the
   // window if it was hidden, so a global hotkey both starts capture AND brings Omi

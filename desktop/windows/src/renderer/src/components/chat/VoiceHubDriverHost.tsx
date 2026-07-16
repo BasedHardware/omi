@@ -69,10 +69,14 @@ export function VoiceHubDriverHost(): null {
     const un1 = window.omi?.onVoiceHubBegin?.((p) => driver.begin(p))
     const un2 = window.omi?.onVoiceHubEnd?.(() => driver.end())
     const un3 = window.omi?.onVoiceHubCancel?.(() => driver.cancel())
+    // A7c wake: the machine resumed/unlocked — a socket warmed before suspend is likely
+    // a zombie, so refresh it now (idle) rather than let the next press land on it dead.
+    const un4 = window.omi?.onVoiceHubWake?.(() => driver.requestSessionRefresh('system_wake'))
     return () => {
       un1?.()
       un2?.()
       un3?.()
+      un4?.()
     }
   }, [driver])
 
