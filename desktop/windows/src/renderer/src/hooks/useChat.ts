@@ -11,6 +11,7 @@ import type {
   AutomationPlan,
   CodingAgentEvent,
   MainChatEvent,
+  MainChatResult,
   ChatCitation,
   ChatAttachment
 } from '../../../shared/types'
@@ -54,6 +55,32 @@ const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 // this long, abort the fetch, unlatch the engine, and surface a timeout so a
 // wedged stream can't strand the chat forever.
 export const CHAT_STREAM_TIMEOUT_MS = 180_000
+
+// First-chat readiness copy (#123). Right after sign-in the FIRST turn can race
+// session readiness — on legacy_sse the persisted Firebase user may not be
+// rehydrated yet (auth.currentUser null → `Bearer undefined` → a raw 401 bubble);
+// on pi_mono the owner/adapter relay may not have reached main yet (the send fails
+// with a not-ready marker). Instead of surfacing a raw `Error:` line, show the
+// INTERIM copy while we wait/retry once, and the FINAL copy if readiness never
+// arrives. Exported so tests key off the same strings (no copy drift).
+export const CHAT_NOT_READY_INTERIM = 'One moment, finishing sign-in…'
+export const CHAT_NOT_READY_FINAL = 'Still finishing sign-in. Try again in a moment.'
+
+// pi_mono not-ready markers (`result.error`). These strings are produced ONLY when
+// the kernel isn't wired for a turn yet — the cold-start owner gate hasn't seen the
+// verified uid (mainChat.ts), the adapter was never registered (adapterRegistry.ts),
+// or the session was cleared before the pool built the adapter (controlPlane.ts).
+// A genuine model/tool error ("the model exploded") never matches, so keying the
+// one-shot retry on this can't swallow a real failure. Anchored/substring-exact.
+const PI_MONO_NOT_READY_RE =
+  /^Adapter not registered: pi-mono$|pi-mono session was cleared|^Sign-in has not completed yet/
+
+// One-shot not-ready recovery timing. pi_mono: wait this long before the single
+// retry so the async relay can land. legacy_sse: poll auth.currentUser this many
+// times at this interval (~1.5s total) before giving up to the FINAL copy.
+const NOT_READY_RETRY_DELAY_MS = 600
+const NOT_READY_POLL_TRIES = 5
+const NOT_READY_POLL_INTERVAL_MS = 300
 
 export type UseChat = {
   history: ChatMsg[]
@@ -526,16 +553,18 @@ export function useChat(): UseChat {
     const myGen = genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
 
-    const requestId = crypto.randomUUID()
     const assistantId = crypto.randomUUID()
-    let myRunId: string | null = null
     let assistantText = ''
 
     // INV-CHAT-1 site 1: persist the RAW user message at turn start (never the
     // context-prepended prompt). Fire-and-forget. session_id is OMITTED on the
     // default shared thread (sessionIdRef null → mobile/web continuity) and PASSED
     // when a chat session is selected (multi-chat), targeting that desktop-local
-    // thread. saveDesktopMessage drops the field when undefined.
+    // thread. saveDesktopMessage drops the field when undefined. This fires EXACTLY
+    // ONCE per send: the not-ready retry below re-issues mainChatSend but never
+    // re-runs this write (this renderer-side save is not idempotent — main's own
+    // recordSurfaceTurn is requestId-keyed, but a second call here would double-save
+    // the human turn), so it stays OUTSIDE the per-attempt helper.
     void saveDesktopMessage({
       text: userMsg.content,
       sender: 'human',
@@ -562,29 +591,59 @@ export function useChat(): UseChat {
     )
 
     let lastPersist = Date.now()
-    const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
-      if (event.requestId !== requestId) return
-      // A dismissed turn (reset bumped the generation) drops all further renders and
-      // persists — events keep arriving until mainChatCancel lands.
-      if (!isCurrent()) return
-      if (event.type === 'accepted') {
-        myRunId = event.runId
-        activeKernelRunRef.current = event.runId
-      } else if (event.type === 'text_delta') {
-        assistantText += event.text
-        writeAssistant(assistantText)
+
+    // One send attempt: subscribe to the mainChat event stream for THIS requestId,
+    // capture the run handle (so reset()/mainChatCancel targets the in-flight
+    // attempt — verify activeKernelRunRef tracks the CURRENT attempt's run), await
+    // the authoritative mainChatSend result, and unsubscribe. Streamed deltas
+    // accumulate into the shared `assistantText`, reset per attempt so a retried
+    // attempt starts clean. Deliberately does NOT persist/save/unlatch — the
+    // user-save (above), assistant bubble, and terminal handling (below) all live
+    // OUTSIDE this helper so they run exactly once regardless of a retry.
+    const attempt = async (reqId: string, textToSend: string): Promise<MainChatResult> => {
+      let attemptRunId: string | null = null
+      assistantText = ''
+      const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
+        if (event.requestId !== reqId) return
+        // A dismissed turn (reset bumped the generation) drops all further renders
+        // and persists — events keep arriving until mainChatCancel lands.
+        if (!isCurrent()) return
+        if (event.type === 'accepted') {
+          attemptRunId = event.runId
+          activeKernelRunRef.current = event.runId
+        } else if (event.type === 'text_delta') {
+          assistantText += event.text
+          writeAssistant(assistantText)
+        }
+        // status / thinking_delta / tool_* / completed / run_finished are covered by
+        // the authoritative awaited mainChatSend result below (terminal + final
+        // text), exactly as tryAgentTask relies on codingAgentRun's return.
+        if (Date.now() - lastPersist > 1500) {
+          lastPersist = Date.now()
+          void persistChat(
+            [
+              ...baseHistory,
+              userMsg,
+              { id: assistantId, role: 'assistant', content: assistantText }
+            ],
+            isCurrent
+          )
+        }
+      })
+      try {
+        return await window.omi.mainChatSend({
+          requestId: reqId,
+          prompt: textToSend,
+          cleanUserText: userMsg.content,
+          chatId: chatIdRef.current ?? 'default'
+        })
+      } finally {
+        // Cleanup that must ALWAYS run (even for a dismissed turn): release the run
+        // handle if it's still this attempt's, and drop the listener.
+        if (activeKernelRunRef.current === attemptRunId) activeKernelRunRef.current = null
+        unsubscribe()
       }
-      // status / thinking_delta / tool_* / completed / run_finished are covered by
-      // the authoritative awaited mainChatSend result below (terminal + final text),
-      // exactly as tryAgentTask relies on codingAgentRun's return, not the stream.
-      if (Date.now() - lastPersist > 1500) {
-        lastPersist = Date.now()
-        void persistChat(
-          [...baseHistory, userMsg, { id: assistantId, role: 'assistant', content: assistantText }],
-          isCurrent
-        )
-      }
-    })
+    }
 
     let errored = false
     let errorLine = ''
@@ -592,6 +651,7 @@ export function useChat(): UseChat {
       // Same hybrid context pre-step as the /v2/messages path (:578-591): prepend
       // screen OCR + local KG context to the text SENT to the model, but persist
       // only the raw user text. Plain string concat — never the context packet (§6).
+      // Gathered ONCE and reused across a retry (the message hasn't changed).
       const [screenContext, localContext] = await Promise.all([
         readCurrentScreen(),
         gatherLocalContext(userMsg.content)
@@ -601,14 +661,32 @@ export function useChat(): UseChat {
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
 
-      const result = await window.omi.mainChatSend({
-        requestId,
-        prompt: textToSend,
-        cleanUserText: userMsg.content,
-        chatId: chatIdRef.current ?? 'default'
-      })
+      let result = await attempt(crypto.randomUUID(), textToSend)
+      // First-chat not-ready recovery (#123): right after sign-in the owner/adapter
+      // relay may not have reached main yet, so the FIRST send fails not-ready. Show
+      // the interim copy, wait briefly, and retry ONCE with a FRESH requestId. Only
+      // the precise not-ready markers qualify (never a generic model error), so a
+      // real failure surfaces immediately with no spurious retry. Guarded by
+      // isCurrent() so a reset() during attempt 1 skips the retry. The delay's
+      // setTimeout is NOT cancelled on reset(); instead the post-await isCurrent()
+      // check is what prevents attempt 2. A reset() during the wait already
+      // unlatched busy and cleared history, so the lingering ~600ms promise is
+      // harmless: when it resolves we bail here before sending attempt 2.
+      if (!result.ok && result.error && PI_MONO_NOT_READY_RE.test(result.error) && isCurrent()) {
+        writeAssistant(CHAT_NOT_READY_INTERIM)
+        await new Promise<void>((resolve) => setTimeout(resolve, NOT_READY_RETRY_DELAY_MS))
+        if (!isCurrent()) return
+        result = await attempt(crypto.randomUUID(), textToSend)
+      }
+
       if (result.ok) {
         if (result.text) assistantText = result.text
+      } else if (result.error && PI_MONO_NOT_READY_RE.test(result.error)) {
+        // Still not ready after the one retry: a friendly line, never a raw `Error:`.
+        // hasRealText is false here, so (like any error line) it is neither saved to
+        // the shared thread nor spoken.
+        errored = true
+        errorLine = CHAT_NOT_READY_FINAL
       } else {
         errored = true
         errorLine = `Error: ${result.error ?? 'the chat engine could not answer.'}`
@@ -617,12 +695,10 @@ export function useChat(): UseChat {
       errored = true
       errorLine = `Error: ${(e as Error).message}`
     } finally {
-      // Cleanup that must ALWAYS run (even for a dismissed turn): release the run
-      // handle if it's still ours, and drop the listener.
-      if (activeKernelRunRef.current === myRunId) activeKernelRunRef.current = null
-      unsubscribe()
-      // State writes only for the still-current generation (a dismissed turn was
-      // already torn down by reset(): busy unlatched, history cleared, run cancelled).
+      // Terminal handling runs exactly once, after the FINAL attempt (each attempt
+      // already released its own run handle + listener in its own finally). State
+      // writes only for the still-current generation (a dismissed turn was already
+      // torn down by reset(): busy unlatched, history cleared, run cancelled).
       if (isCurrent()) {
         const hasRealText = assistantText.trim().length > 0
         // Keep any partial streamed text on error (Mac keeps the partial); only show
@@ -811,6 +887,28 @@ export function useChat(): UseChat {
       ac.abort()
     }, CHAT_STREAM_TIMEOUT_MS)
     try {
+      // First-chat readiness gate (#123, legacy_sse): right after sign-in the
+      // persisted Firebase user may not be rehydrated yet, so auth.currentUser is
+      // null and getIdToken() below would yield `Bearer undefined` → a raw 401
+      // bubble. Show the interim copy and briefly wait for the session to
+      // rehydrate BEFORE the fetch (Mac-parity: wait for readiness, don't
+      // send-fail-retry); if it never arrives, show a friendly line instead of the
+      // raw error. Gated ONLY on `!auth.currentUser` pre-fetch — a genuinely
+      // revoked session that 401s AFTER the fetch is a real failure, not not-ready,
+      // and must NOT be silently retried. When currentUser is already set (the
+      // normal case) this whole block is skipped and the path is byte-identical.
+      if (!auth.currentUser) {
+        renderAssistant(assistantMsg(CHAT_NOT_READY_INTERIM))
+        for (let i = 0; i < NOT_READY_POLL_TRIES && !auth.currentUser; i++) {
+          await new Promise<void>((resolve) => setTimeout(resolve, NOT_READY_POLL_INTERVAL_MS))
+          if (!isCurrent()) return
+        }
+        if (!auth.currentUser) {
+          finalMsg = assistantMsg(CHAT_NOT_READY_FINAL)
+          renderAssistant(finalMsg)
+          return
+        }
+      }
       const token = await auth.currentUser?.getIdToken()
       // Hybrid pre-step: gather context to PREPEND to the text we send (not what we
       // persist). Both are best-effort ('' on failure) and run concurrently so the

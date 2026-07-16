@@ -52,7 +52,7 @@ vi.mock('../lib/desktopChatMessages', () => ({
   saveDesktopMessage: (req: Record<string, unknown>) => saveSpy(req)
 }))
 
-import { useChat } from './useChat'
+import { useChat, CHAT_NOT_READY_INTERIM, CHAT_NOT_READY_FINAL } from './useChat'
 import { clearAttachments } from '../lib/chatAttachments'
 
 let persisted: ChatMessage[][] = []
@@ -227,5 +227,245 @@ describe('useChat — pi_mono engine', () => {
     // Nothing from the dismissed turn's completion was persisted.
     const anyZombie = persisted.some((thread) => thread.some((m) => /ZOMBIE FINAL/.test(m.content)))
     expect(anyZombie).toBe(false)
+  })
+})
+
+// #123 first-chat not-ready (pi_mono). Right after sign-in the owner/adapter relay
+// may not have reached main yet, so the FIRST send resolves `{ ok:false, error:<a
+// not-ready marker> }`. useChat must show the interim copy, retry ONCE, and — if it
+// still fails not-ready — show a friendly final line, NEVER a raw `Error:` bubble.
+// A generic model error must be unaffected (no retry). Fake timers drive the delay.
+describe('useChat — first-chat not ready (retry once)', () => {
+  const setSend = (
+    fn: (args: MainChatSendArgs) => Promise<MainChatResult>
+  ): ReturnType<typeof vi.fn> => {
+    const mock = vi.fn(fn)
+    ;(window as unknown as { omi: { mainChatSend: unknown } }).omi.mainChatSend = mock
+    return mock
+  }
+
+  // Mount and flush the mount effect (engineRef → 'pi_mono') under fake timers.
+  async function mountFake(): Promise<
+    ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  > {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    return result
+  }
+
+  // Advance 1ms at a time (never crossing the 600ms retry delay) until the interim
+  // copy appears — i.e. attempt 1 has resolved not-ready and written the bubble.
+  async function pumpToInterim(
+    result: ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  ): Promise<void> {
+    for (
+      let k = 0;
+      k < 50 && lastAssistant(result.current.history)?.content !== CHAT_NOT_READY_INTERIM;
+      k++
+    ) {
+      await vi.advanceTimersByTimeAsync(1)
+    }
+  }
+
+  // All three not-ready markers this branch can produce must trigger the retry:
+  // adapter never registered, session cleared before the pool built the adapter,
+  // and the cold-start owner gate (mainChat.ts — dominant right after sign-in).
+  it.each([
+    'Adapter not registered: pi-mono',
+    'pi-mono session was cleared before the adapter started.',
+    'Sign-in has not completed yet — try again in a moment.'
+  ])(
+    'retries once and renders the reply when the first send fails not-ready (%s)',
+    async (marker) => {
+      vi.useFakeTimers()
+      try {
+        let call = 0
+        const sendMock = setSend(async (args) => {
+          sendArgs = args
+          call++
+          return call === 1
+            ? {
+                runId: '',
+                requestId: args.requestId,
+                ok: false,
+                text: '',
+                terminalStatus: 'failed',
+                error: marker
+              }
+            : {
+                runId: 'run-ok',
+                requestId: args.requestId,
+                ok: true,
+                text: 'Hi there',
+                terminalStatus: 'succeeded'
+              }
+        })
+        const result = await mountFake()
+
+        let p!: Promise<void>
+        await act(async () => {
+          p = result.current.send('hello')
+          await pumpToInterim(result)
+        })
+        // Attempt 1 failed not-ready → exactly one send so far, interim copy shown.
+        expect(sendMock).toHaveBeenCalledTimes(1)
+        expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_INTERIM)
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2000) // fire the retry delay → attempt 2
+          await p
+        })
+        // Retried exactly once (two sends total), with a FRESH requestId, and the
+        // real reply won — never an `Error:` line.
+        expect(sendMock).toHaveBeenCalledTimes(2)
+        expect(sendMock.mock.calls[0][0].requestId).not.toBe(sendMock.mock.calls[1][0].requestId)
+        expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+        // INV-CHAT-1: human saved once@start, ai once@completion — the retry did NOT
+        // double-save the human turn (the whole point of keeping the user-save out of
+        // the per-attempt helper).
+        expect(saveSpy).toHaveBeenCalledTimes(2)
+        expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human', text: 'hello' })
+        expect(saveSpy.mock.calls[1][0]).toMatchObject({ sender: 'ai', text: 'Hi there' })
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
+  // The FINAL friendly copy must show for EVERY not-ready marker when the retry
+  // also fails not-ready — never a raw `Error:` line, for any of the three.
+  it.each([
+    'Adapter not registered: pi-mono',
+    'pi-mono session was cleared before the adapter started.',
+    'Sign-in has not completed yet — try again in a moment.'
+  ])(
+    'shows the friendly final copy (not a raw error) when BOTH attempts fail not-ready (%s)',
+    async (marker) => {
+      vi.useFakeTimers()
+      try {
+        const sendMock = setSend(async (args) => {
+          sendArgs = args
+          return {
+            runId: '',
+            requestId: args.requestId,
+            ok: false,
+            text: '',
+            terminalStatus: 'failed',
+            error: marker
+          }
+        })
+        const result = await mountFake()
+
+        let p!: Promise<void>
+        await act(async () => {
+          p = result.current.send('hello')
+          await pumpToInterim(result)
+        })
+        expect(sendMock).toHaveBeenCalledTimes(1)
+
+        await act(async () => {
+          await vi.advanceTimersByTimeAsync(2000) // retry → attempt 2, still not ready
+          await p
+        })
+        expect(sendMock).toHaveBeenCalledTimes(2)
+        // Friendly final line, never `Error: <marker>`.
+        expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_FINAL)
+        expect(lastAssistant(result.current.history)?.content).not.toMatch(/^Error:/)
+        // Only the human turn is saved to the shared thread — the friendly line is not.
+        expect(saveSpy).toHaveBeenCalledTimes(1)
+        expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+        expect(speakSpy).not.toHaveBeenCalled()
+      } finally {
+        vi.useRealTimers()
+      }
+    }
+  )
+
+  it('does NOT retry a generic (non-not-ready) failure — unchanged behavior', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendMock = setSend(async (args) => {
+        sendArgs = args
+        return {
+          runId: 'r',
+          requestId: args.requestId,
+          ok: false,
+          text: '',
+          terminalStatus: 'failed',
+          error: 'the model exploded'
+        }
+      })
+      const result = await mountFake()
+
+      await act(async () => {
+        const p = result.current.send('boom')
+        await vi.advanceTimersByTimeAsync(2000) // ample time for any (wrong) retry to fire
+        await p
+      })
+      // Exactly one send, raw error surfaced verbatim, no retry.
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      expect(lastAssistant(result.current.history)?.content).toBe('Error: the model exploded')
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // The single most delicate new window: reset() DURING the 600ms retry delay. The
+  // setTimeout is NOT cancelled, so the post-await isCurrent() check is the ONLY
+  // thing preventing attempt 2 — lock it in.
+  it('reset() DURING the retry delay skips attempt 2 (no second send, no zombie)', async () => {
+    vi.useFakeTimers()
+    try {
+      const sendMock = setSend(async (args) => {
+        sendArgs = args
+        return {
+          runId: '',
+          requestId: args.requestId,
+          ok: false,
+          text: '',
+          terminalStatus: 'failed',
+          error: 'Adapter not registered: pi-mono'
+        }
+      })
+      const result = await mountFake()
+
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hello')
+        await pumpToInterim(result)
+      })
+      // Attempt 1 failed not-ready; interim shown; the 600ms retry delay is pending.
+      expect(sendMock).toHaveBeenCalledTimes(1)
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_INTERIM)
+
+      // Dismiss WHILE the delay is pending — do NOT advance past 600ms first.
+      act(() => result.current.reset())
+      expect(result.current.history).toEqual([])
+      // Attempt 1 failed pre-stream, so no run was ever accepted → nothing to cancel.
+      expect(cancelSpy).not.toHaveBeenCalled()
+
+      // Now let the lingering delay fire: the post-await isCurrent() check must bail
+      // BEFORE attempt 2, so mainChatSend is never called a second time.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2000)
+        await p
+      })
+      expect(sendMock).toHaveBeenCalledTimes(1) // still ONE send — attempt 2 was skipped
+      expect(result.current.history).toEqual([]) // reset's empty thread stands
+      // Only the human@start save fired; no ai-completion save from the dismissed turn.
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+      // The interim copy was never persisted as a zombie.
+      const anyZombie = persisted.some((thread) =>
+        thread.some((m) => m.content === CHAT_NOT_READY_INTERIM)
+      )
+      expect(anyZombie).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
