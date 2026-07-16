@@ -6013,6 +6013,30 @@
     "@tasksEmptyStateMessage": {
         "description": "Empty state message shown when there are no tasks, with instruction to tap + button"
     },
+    "tasksAllCaughtUpTitle": "All caught up",
+    "@tasksAllCaughtUpTitle": {
+        "description": "Title shown on the Tasks empty state when the user has completed every active task but still has completed tasks in history"
+    },
+    "tasksAllCaughtUpMessage": "You've cleared every active task. {count, plural, =1{One completed task is hidden} other{{count} completed tasks are hidden}} in the Completed view.",
+    "@tasksAllCaughtUpMessage": {
+        "description": "Subtitle shown on the Tasks empty state when the user has completed every active task but still has completed tasks",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "12"
+            }
+        }
+    },
+    "tasksSeeCompletedCta": "See {count} completed",
+    "@tasksSeeCompletedCta": {
+        "description": "CTA button on the Tasks empty state that toggles into the Completed view",
+        "placeholders": {
+            "count": {
+                "type": "int",
+                "example": "12"
+            }
+        }
+    },
     "clearChatAction": "Clear Chat",
     "@clearChatAction": {
         "description": "Menu item text for clearing chat history"
