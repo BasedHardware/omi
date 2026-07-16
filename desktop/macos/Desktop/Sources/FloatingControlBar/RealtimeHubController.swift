@@ -909,7 +909,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     DesktopAutomationActionRegistry.shared.register(
       name: "ptt_test_turn",
       summary: "Drive a real PTT hub turn from a PCM16/16k mono file through the controller "
-        + "(language ID + provider hint + bubble fallback); returns turn diagnostics.",
+        + "with the production pre-overlay screen capture; returns safe lifecycle and screen-protocol diagnostics.",
       params: ["pcm", "timeout", "force_transcript", "text_only"]
     ) { [weak self] params in
       guard let path = params["pcm"],
@@ -918,9 +918,13 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       let timeout = Double(params["timeout"] ?? "") ?? 30
       let textOnly = params["text_only"] == "1"
       guard let self else { return ["error": "hub controller unavailable"] }
-      return await self.runHeadlessPTTTurn(
+      var result = await self.runHeadlessPTTTurn(
         pcm16k: data, timeout: timeout, forceTranscript: params["force_transcript"],
         textOnly: textOnly)
+      for (key, value) in self.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
     }
   }
 
@@ -949,20 +953,31 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
           VoiceTurnCoordinator.shared.send(.finish(turnID: staleTurnID, reason: .providerFailed))
         }
       }
-      ensureWarm()
-      guard await waitUntilActive(timeout: 15) else {
-        return ["error": "hub session did not become active (check sign-in / provider keys)"]
-      }
-      prefetchVoiceContextSnapshotIfNeeded()
-      try? await Task.sleep(nanoseconds: 500_000_000)
-      ensureWarm()
-      guard await waitUntilActive(timeout: 15) else {
-        return ["error": "hub session did not become active after voice context prefetch"]
-      }
       lastTurnDiagnostics = [:]
       let turnID = RealtimeAutomationTurnHarness.begin(on: VoiceTurnCoordinator.shared)
       VoiceTurnCoordinator.shared.send(
         .selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
+      // A real PTT press freezes the screen before its session/context work can
+      // continue. Keep the probe at that same boundary: waiting for a warm socket
+      // here lets a focus change masquerade as the screen the user asked about.
+      prefetchVoiceContextSnapshotIfNeeded()
+      let screenEvidenceCaptured = PushToTalkManager.shared.captureScreenEvidenceForAutomation(turnID: turnID)
+      log(
+        "RealtimeHub: headless PTT screen evidence capture="
+          + (screenEvidenceCaptured ? "available" : "unavailable"))
+      ensureWarm()
+      guard await waitUntilActive(timeout: 15) else {
+        _ = cancelTurn(turnID: turnID)
+        VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+        return ["error": "hub session did not become active (check sign-in / provider keys)"]
+      }
+      try? await Task.sleep(nanoseconds: 500_000_000)
+      ensureWarm()
+      guard await waitUntilActive(timeout: 15) else {
+        _ = cancelTurn(turnID: turnID)
+        VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
+        return ["error": "hub session did not become active after voice context prefetch"]
+      }
       beginTurn(turnID: turnID)
       testProviderTranscriptOverride = forceTranscript
       let forcedSelection = RealtimeAutomationTranscriptOverridePolicy.select(
@@ -1021,16 +1036,18 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       while Date() < deadline {
         let hasCanonicalSpawnReceipt =
           acceptedSpawnJournalReceiptByContinuityKey[canonicalContinuityKey] != nil
-        if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
-          terminal.turnID == turnID
+        switch RealtimeHeadlessPTTCompletionPolicy.terminalReason(
+          for: turnID,
+          lastTerminal: VoiceTurnCoordinator.shared.model.lastTerminal)
         {
-          if terminal.reason == .success, !lastTurnDiagnostics.isEmpty {
-            return lastTurnDiagnostics
-          }
-          return ["error": "voice turn terminated with \(terminal.reason.rawValue)"]
-        }
-        if !hasCanonicalSpawnReceipt, !lastTurnDiagnostics.isEmpty {
-          return lastTurnDiagnostics
+        case .success:
+          var result = lastTurnDiagnostics
+          result["terminal_reason"] = VoiceTurnTerminalReason.success.rawValue
+          return result
+        case let reason?:
+          return ["error": "voice turn terminated with \(reason.rawValue)"]
+        case nil:
+          break
         }
         if attempt == 0,
           RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
