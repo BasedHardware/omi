@@ -68,6 +68,7 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerChatPrivacyHandlers } from './ipc/chatPrivacy'
+import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
@@ -807,6 +808,7 @@ app.whenReady().then(async () => {
   registerRewindHandlers()
   registerScreenHandlers()
   registerChatPrivacyHandlers()
+  registerAssistantSettingsHandlers()
   registerBillingIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every

@@ -42,6 +42,7 @@ import type {
   MainChatSendArgs,
   VoiceTurnOutboxInput,
   AiUserProfileRecord,
+  AssistantSettingsView,
   ActionItemRecord,
   TaskCreateFields,
   TaskUpdateFields,
@@ -247,6 +248,16 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('goals:changed', listener)
     return () => ipcRenderer.removeListener('goals:changed', listener)
+  },
+  // --- Track 3 (proactive-assistant settings — Notifications tab) ---
+  assistantsGetSettings: () =>
+    ipcRenderer.invoke('assistants:getSettings') as Promise<AssistantSettingsView>,
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) =>
+    ipcRenderer.invoke('assistants:setSettings', patch) as Promise<AssistantSettingsView>,
+  onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, view: AssistantSettingsView): void => cb(view)
+    ipcRenderer.on('assistants:settingsChanged', listener)
+    return () => ipcRenderer.removeListener('assistants:settingsChanged', listener)
   },
   // Dev/QA only (handler registered on dev builds): force one Focus analysis of
   // the latest captured frame, so the pipeline + halo can be exercised without
