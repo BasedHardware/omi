@@ -1,60 +1,62 @@
 import Foundation
+import VoiceTurnDomain
 
 #if DEBUG
-/// Deterministic provider decisions for the hermetic desktop profile. This type
-/// is absent from release builds and is reachable only through `ptt_test_turn`.
-struct RealtimeLocalProfileTurnPlan: Equatable {
-  struct Spawn: Equatable {
-    let objective: String
-    let title: String
-  }
-
-  static let exactMemoryAgentRequest =
-    "Have an agent look through my memories today and surface one surprising insight."
-
-  let assistantText: String
-  let spawn: Spawn?
-
-  static func make(
-    transcript rawTranscript: String,
-    voiceContext: String,
-    localProfileEnabled: Bool
-  ) -> Self? {
-    guard localProfileEnabled else { return nil }
-    let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !transcript.isEmpty else { return nil }
-
-    if transcript == exactMemoryAgentRequest {
-      return Self(
-        assistantText: "I started a background agent to review today's memories.",
-        spawn: Spawn(objective: transcript, title: "Today's memory insight"))
+  /// Deterministic provider decisions for the hermetic desktop profile. This type
+  /// is absent from release builds and is reachable only through `ptt_test_turn`.
+  struct RealtimeLocalProfileTurnPlan: Equatable {
+    struct Spawn: Equatable {
+      let objective: String
+      let title: String
     }
 
-    if transcript.localizedCaseInsensitiveContains("what was the last thing i asked you for"),
-      let reference = lastHarnessReference(in: voiceContext)
-    {
-      return Self(
-        assistantText: "The last request was the background-agent task tagged \(reference).",
-        spawn: nil)
+    static let exactMemoryAgentRequest =
+      "Have an agent look through my memories today and surface one surprising insight."
+
+    let assistantText: String
+    let spawn: Spawn?
+
+    static func make(
+      transcript rawTranscript: String,
+      voiceContext: String,
+      localProfileEnabled: Bool
+    ) -> Self? {
+      guard localProfileEnabled else { return nil }
+      let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+      guard !transcript.isEmpty else { return nil }
+
+      if transcript == exactMemoryAgentRequest {
+        return Self(
+          assistantText: "I started a background agent to review today's memories.",
+          spawn: Spawn(objective: transcript, title: "Today's memory insight"))
+      }
+
+      if transcript.localizedCaseInsensitiveContains("what was the last thing i asked you for"),
+        let reference = lastHarnessReference(in: voiceContext)
+      {
+        return Self(
+          assistantText: "The last request was the background-agent task tagged \(reference).",
+          spawn: nil)
+      }
+
+      if let marker = lastHarnessReference(in: transcript) {
+        return Self(assistantText: "Stub saw marker: \(marker)", spawn: nil)
+      }
+      return Self(assistantText: "Hermetic realtime stub response.", spawn: nil)
     }
 
-    if let marker = lastHarnessReference(in: transcript) {
-      return Self(assistantText: "Stub saw marker: \(marker)", spawn: nil)
+    private static func lastHarnessReference(in text: String) -> String? {
+      guard
+        let expression = try? NSRegularExpression(
+          pattern: #"(?:GAUNTLET|RESILIENCE)[A-Z0-9-]*"#),
+        let match = expression.matches(
+          in: text, range: NSRange(text.startIndex..., in: text)
+        ).last,
+        let range = Range(match.range, in: text)
+      else { return nil }
+      return String(text[range])
     }
-    return Self(assistantText: "Hermetic realtime stub response.", spawn: nil)
   }
-
-  private static func lastHarnessReference(in text: String) -> String? {
-    guard
-      let expression = try? NSRegularExpression(
-        pattern: #"(?:GAUNTLET|RESILIENCE)[A-Z0-9-]*"#),
-      let match = expression.matches(
-        in: text, range: NSRange(text.startIndex..., in: text)).last,
-      let range = Range(match.range, in: text)
-    else { return nil }
-    return String(text[range])
-  }
-}
 #endif
 
 /// Audio and text are two transports for the same response. Keeping every
@@ -157,7 +159,7 @@ enum RealtimeHubCloseClassifier {
     let lower = message.lowercased()
     if provider == .openai,
       lower.contains("your session hit the maximum duration")
-      && lower.contains("60 minutes")
+        && lower.contains("60 minutes")
     {
       return .expectedSessionRotation
     }
@@ -315,7 +317,8 @@ enum RealtimeProviderToolResultPolicy {
         provider: provider, name: name, error: error, originalOutput: originalOutput),
     ]
     let data = try? JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
-    let bounded = data.flatMap { String(data: $0, encoding: .utf8) }
+    let bounded =
+      data.flatMap { String(data: $0, encoding: .utf8) }
       ?? #"{"ok":false,"error":{"code":"tool_result_too_large"}}"#
     return RealtimeProviderToolResult(
       output: bounded,
@@ -505,37 +508,37 @@ enum RealtimeHubOwnerScope: Equatable, Sendable {
 }
 
 #if DEBUG
-struct RealtimeHubOwnerBoundarySnapshot: Equatable {
-  let hasPhysicalSession: Bool
-  let physicalOwnerID: String?
-  let prefetchedOwnerID: String?
-  let prefetchedContextIsEmpty: Bool
-  let hasPendingOwnerWork: Bool
-  let hubConnected: Bool
-  let turnAudioByteCount: Int
-}
-
-/// Exact non-production capability for the hermetic local-profile transport.
-/// A process-wide "test mode" boolean is not enough: the authority is bound to
-/// one physical session and one immutable owner scope, so a replaced socket or
-/// an owner transition cannot inherit the provider-warm bypass.
-struct RealtimeLocalProfileTransportAuthority: Equatable {
-  let sourceID: ObjectIdentifier
-  let ownerScope: RealtimeHubOwnerScope
-  let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-
-  func accepts(
-    sourceID candidateSourceID: ObjectIdentifier?,
-    currentOwnerID: String?,
-    localProfileEnabled: Bool,
-    authorizationIsCurrent: Bool
-  ) -> Bool {
-    localProfileEnabled
-      && candidateSourceID == sourceID
-      && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
-      && authorizationIsCurrent
+  struct RealtimeHubOwnerBoundarySnapshot: Equatable {
+    let hasPhysicalSession: Bool
+    let physicalOwnerID: String?
+    let prefetchedOwnerID: String?
+    let prefetchedContextIsEmpty: Bool
+    let hasPendingOwnerWork: Bool
+    let hubConnected: Bool
+    let turnAudioByteCount: Int
   }
-}
+
+  /// Exact non-production capability for the hermetic local-profile transport.
+  /// A process-wide "test mode" boolean is not enough: the authority is bound to
+  /// one physical session and one immutable owner scope, so a replaced socket or
+  /// an owner transition cannot inherit the provider-warm bypass.
+  struct RealtimeLocalProfileTransportAuthority: Equatable {
+    let sourceID: ObjectIdentifier
+    let ownerScope: RealtimeHubOwnerScope
+    let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+
+    func accepts(
+      sourceID candidateSourceID: ObjectIdentifier?,
+      currentOwnerID: String?,
+      localProfileEnabled: Bool,
+      authorizationIsCurrent: Bool
+    ) -> Bool {
+      localProfileEnabled
+        && candidateSourceID == sourceID
+        && ownerScope.isCurrent(currentOwnerID: currentOwnerID)
+        && authorizationIsCurrent
+    }
+  }
 #endif
 
 /// Shared owner policy used by warm reuse, delayed mint completion, and

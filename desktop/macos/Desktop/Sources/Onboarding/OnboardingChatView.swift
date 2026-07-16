@@ -1,7 +1,7 @@
 import GRDB
 import MarkdownUI
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Onboarding Chat Persistence
 
@@ -243,8 +243,7 @@ struct OnboardingChatView: View {
 
               // Show permission media for permission-related quick replies, including
               // post-request follow-ups like "Done with Screen Recording?"
-              if let permType = permissionType(for: quickReplyQuestion, options: quickReplyOptions)
-              {
+              if let permType = permissionType(for: quickReplyQuestion, options: quickReplyOptions) {
                 OnboardingPermissionImage(permissionType: permType)
                   .frame(maxWidth: .infinity, alignment: .leading)
                   .padding(.leading, OmiSpacing.page)
@@ -792,11 +791,13 @@ struct OnboardingChatView: View {
         await maybeCreateTask(from: text, source: "typed")
         awaitingDailyTaskInput = false
       }
-      await chatProvider.sendMessage(text, onAccepted: {
-        if inputRevision == submittedRevision, inputText == draft {
-          inputText = ""
-        }
-      })
+      await chatProvider.sendMessage(
+        text,
+        onAccepted: {
+          if inputRevision == submittedRevision, inputText == draft {
+            inputText = ""
+          }
+        })
     }
   }
 

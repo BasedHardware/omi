@@ -10,7 +10,7 @@ enum ChatContentBlockCodec {
     guard !blocks.isEmpty else { return nil }
     let encoded = blocks.map(persistenceDictionary(for:))
     guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-          let json = String(data: data, encoding: .utf8)
+      let json = String(data: data, encoding: .utf8)
     else { return nil }
     return json
   }
@@ -21,7 +21,7 @@ enum ChatContentBlockCodec {
 
   static func decode(_ json: String) -> [ChatContentBlock]? {
     guard let data = json.data(using: .utf8),
-          let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+      let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
     else { return nil }
     return decode(array)
   }
@@ -30,7 +30,7 @@ enum ChatContentBlockCodec {
     var blocks: [ChatContentBlock] = []
     for dict in array {
       guard let type = dict["type"] as? String,
-            let id = dict["id"] as? String
+        let id = dict["id"] as? String
       else { continue }
 
       switch type {
@@ -135,23 +135,23 @@ enum ChatContentBlockCodec {
     guard !contentBlocks.isEmpty else { return metadataJSON }
     var root: [String: Any] = [:]
     if let metadataJSON,
-       let data = metadataJSON.data(using: .utf8),
-       let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      let data = metadataJSON.data(using: .utf8),
+      let parsed = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     {
       root = parsed
     }
     root[messageMetadataKey] = encodeArray(contentBlocks)
     guard let data = try? JSONSerialization.data(withJSONObject: root),
-          let json = String(data: data, encoding: .utf8)
+      let json = String(data: data, encoding: .utf8)
     else { return metadataJSON }
     return json
   }
 
   static func decodeFromMessageMetadata(_ metadataJSON: String?) -> [ChatContentBlock] {
     guard let metadataJSON,
-          let data = metadataJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let array = root[messageMetadataKey] as? [[String: Any]]
+      let data = metadataJSON.data(using: .utf8),
+      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let array = root[messageMetadataKey] as? [[String: Any]]
     else { return [] }
     return decode(array)
   }

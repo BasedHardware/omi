@@ -1,7 +1,7 @@
-import SceneKit
-import SwiftUI
 import OmiSupport
 import OmiTheme
+import SceneKit
+import SwiftUI
 
 // MARK: - Memory Graph Page
 
@@ -1015,8 +1015,8 @@ extension SCNVector3 {
 // MARK: - Preview
 
 #if canImport(PreviewsMacros)
-#Preview {
-  MemoryGraphPage(viewModel: MemoryGraphViewModel())
-    .frame(width: 800, height: 600)
-}
+  #Preview {
+    MemoryGraphPage(viewModel: MemoryGraphViewModel())
+      .frame(width: 800, height: 600)
+  }
 #endif

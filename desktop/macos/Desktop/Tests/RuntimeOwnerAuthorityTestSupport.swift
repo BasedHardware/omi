@@ -44,7 +44,8 @@ final class RuntimeOwnerAuthorityTestFixture: @unchecked Sendable {
     automationBackupID: String?
   ) async {
     let finalOwner = normalized(automationOverrideID) ?? normalized(authOwnerID)
-    let bootstrapOwner = finalOwner == "runtime-owner-test-bootstrap-a"
+    let bootstrapOwner =
+      finalOwner == "runtime-owner-test-bootstrap-a"
       ? "runtime-owner-test-bootstrap-b"
       : "runtime-owner-test-bootstrap-a"
     await transition(

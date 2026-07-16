@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {
@@ -379,8 +379,7 @@ struct SidebarView: View {
         }
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh permissions when app becomes active (user may have changed them in System Settings)
       appState.checkAllPermissions()
     }
@@ -486,7 +485,6 @@ struct SidebarView: View {
           )
       )
   }
-
 
   // MARK: - Update Available Widget
   @State private var updateGlowAnimating = false
@@ -1516,7 +1514,6 @@ struct BottomNavItemView: View {
       "sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
   }
 }
-
 
 // MARK: - Audio Level Nav Item Wrapper
 

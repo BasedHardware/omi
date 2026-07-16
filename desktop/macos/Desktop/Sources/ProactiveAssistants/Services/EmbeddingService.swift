@@ -318,7 +318,9 @@ actor EmbeddingService {
         log("EmbeddingService: Backfill complete — \(totalProcessed) items embedded")
       }
     } catch let error as EmbeddingError where error.isExpectedBackendState {
-      log("EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)")
+      log(
+        "EmbeddingService: Backfill stopped after \(totalProcessed) items — backend gating/limit: \(error.localizedDescription)"
+      )
     } catch {
       logError("EmbeddingService: Backfill failed after \(totalProcessed) items", error: error)
     }

@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// Guards the fix for the too-short PTT tap (BL-031 / MIC-02): a press+release
 /// faster than capture spins up produces a turn with no usable audio. `finalize()`
@@ -95,7 +96,10 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertFalse(view.contains("notchPttHintRow"))
     // Waveform no longer excludes open chat; thinking still does (chat has its own loader).
     XCTAssertFalse(view.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
-    XCTAssertTrue(view.contains("&& !state.showingAIConversation\n            && !state.isVoiceListening"))
+    XCTAssertNotNil(
+      view.range(
+        of: #"&& !state\.showingAIConversation\s*&& !state\.isVoiceListening"#,
+        options: .regularExpression))
 
     let window = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarWindow.swift")
     XCTAssertTrue(window.contains("pttHintRowHeight"))
@@ -103,7 +107,10 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(window.contains("pttHintSurfaceSize"))
     XCTAssertTrue(window.contains("pttStatusBannerBudget"))
     // Chat-open hints must grow the panel (do not bail out of observePttHint).
-    XCTAssertFalse(window.contains("guard !self.state.showingAIConversation else { return }\n                self.resizeAnchored(\n                    to: self.currentSurfaceSizeForCurrentScreen()"))
+    XCTAssertFalse(
+      window.contains(
+        "guard !self.state.showingAIConversation else { return }\n                self.resizeAnchored(\n                    to: self.currentSurfaceSizeForCurrentScreen()"
+      ))
   }
 
   private func managerSource() throws -> String {
@@ -112,6 +119,7 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
 
   private func source(relativePath: String) throws -> String {
     let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent(relativePath)

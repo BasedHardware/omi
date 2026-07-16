@@ -26,7 +26,8 @@ final class AuthTokenStorageTests: XCTestCase {
     )
 
     XCTAssertNoThrow(
-      try auth.saveTokens(idToken: "id-token-stable", refreshToken: "refresh-token-stable", expiresIn: 3600, userId: "user-stable")
+      try auth.saveTokens(
+        idToken: "id-token-stable", refreshToken: "refresh-token-stable", expiresIn: 3600, userId: "user-stable")
     )
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "id-token-stable")
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "refresh-token-stable")
@@ -49,7 +50,8 @@ final class AuthTokenStorageTests: XCTestCase {
     )
 
     XCTAssertThrowsError(
-      try auth.saveTokens(idToken: "id-token-stable", refreshToken: "refresh-token-stable", expiresIn: 3600, userId: "user-stable")
+      try auth.saveTokens(
+        idToken: "id-token-stable", refreshToken: "refresh-token-stable", expiresIn: 3600, userId: "user-stable")
     ) { error in
       guard case AuthError.keychainTokenStorageUnavailable = error else {
         return XCTFail("expected keychainTokenStorageUnavailable, got \(error)")
@@ -135,7 +137,8 @@ final class AuthTokenStorageTests: XCTestCase {
   }
 
   func testKeychainReadBackMismatchRestoresPreviousKeychainOnlySession() {
-    let previousPayload = #"{"idToken":"old-id-token","refreshToken":"old-refresh-token","expiryTime":4102444800,"tokenUserId":"old-user"}"#
+    let previousPayload =
+      #"{"idToken":"old-id-token","refreshToken":"old-refresh-token","expiryTime":4102444800,"tokenUserId":"old-user"}"#
     var keychainPayload: String? = previousPayload
     var isFirstWrite = true
     let auth = AuthService()
@@ -157,7 +160,8 @@ final class AuthTokenStorageTests: XCTestCase {
     )
 
     XCTAssertThrowsError(
-      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
+      try auth.saveTokens(
+        idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
     )
     XCTAssertEqual(keychainPayload, previousPayload)
   }
@@ -180,7 +184,8 @@ final class AuthTokenStorageTests: XCTestCase {
     UserDefaults.standard.set("same-user", forKey: .authUserId)
 
     XCTAssertNoThrow(
-      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "same-user")
+      try auth.saveTokens(
+        idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "same-user")
     )
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "new-id-token")
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "new-refresh-token")
@@ -204,7 +209,8 @@ final class AuthTokenStorageTests: XCTestCase {
     UserDefaults.standard.set("old-user", forKey: .authUserId)
 
     XCTAssertThrowsError(
-      try auth.saveTokens(idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
+      try auth.saveTokens(
+        idToken: "new-id-token", refreshToken: "new-refresh-token", expiresIn: 3600, userId: "new-user")
     )
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authIdToken), "old-id-token")
     XCTAssertEqual(UserDefaults.standard.string(forKey: .authRefreshToken), "old-refresh-token")
@@ -230,7 +236,8 @@ final class AuthTokenStorageTests: XCTestCase {
     UserDefaults.standard.set("old-default-refresh-token", forKey: .authRefreshToken)
     UserDefaults.standard.set("old-default-user", forKey: .authTokenUserId)
 
-    try auth.saveTokens(idToken: "id-token-keychain", refreshToken: "refresh-token-keychain", expiresIn: 3600, userId: "user-keychain")
+    try auth.saveTokens(
+      idToken: "id-token-keychain", refreshToken: "refresh-token-keychain", expiresIn: 3600, userId: "user-keychain")
 
     XCTAssertNotNil(keychainPayload)
     XCTAssertNil(UserDefaults.standard.string(forKey: .authIdToken))

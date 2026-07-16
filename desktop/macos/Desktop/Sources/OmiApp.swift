@@ -1,10 +1,10 @@
 import FirebaseAuth
 import FirebaseCore
 import OmiSupport
+import OmiTheme
 import Sentry
 import Sparkle
 import SwiftUI
-import OmiTheme
 
 // MARK: - Launch Mode
 /// Determines which UI to show based on command-line arguments
@@ -440,9 +440,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     AnalyticsManager.shared.initialize()
     AnalyticsManager.shared.detectAndReportCrash()
     if let attempt = pendingUpdateRelaunch?.attempt {
-      let installedVersion = Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
+      let installedVersion =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString")
         as? String ?? "unknown"
-      let installedBuild = Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
+      let installedBuild =
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String
         ?? "unknown"
       if installedBuild == attempt.targetBuild {
         AnalyticsManager.shared.updateInstalled(
@@ -1238,8 +1240,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     return shouldTerminate
   }
 
-  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool
-  {
+  func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
     // Always try to show the main Omi window when dock icon is clicked
     for window in sender.windows where window.title.hasPrefix("Omi") {
       if window.isMiniaturized {
@@ -1258,7 +1259,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   /// not from this durable file.
   private func publishNamedBundleRuntimeManifest() {
     guard DesktopLocalProfile.isNamedDevelopmentBundle,
-          let bundleID = Bundle.main.bundleIdentifier
+      let bundleID = Bundle.main.bundleIdentifier
     else { return }
 
     let manifest = DesktopDevRuntimeManifest(

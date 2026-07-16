@@ -80,14 +80,16 @@ final class AppIconCacheTests: XCTestCase {
   func testLogResolutionForCommonNames() async {
     let probes = [
       "Calculator",  // stage 1: exact /System/Applications path
-      "safari",      // stage 2: case-insensitive scan of /Applications
-      "Finder",      // stage 3 only: lives in CoreServices, resolves iff running
-      "Passwords",   // default excluded app on macOS 15+
-      "zoom.us",     // third-party, resolves only if installed
+      "safari",  // stage 2: case-insensitive scan of /Applications
+      "Finder",  // stage 3 only: lives in CoreServices, resolves iff running
+      "Passwords",  // default excluded app on macOS 15+
+      "zoom.us",  // third-party, resolves only if installed
     ]
     for name in probes {
       let icon = await AppIconCache.shared.getIcon(for: name, size: 24)
-      print("AppIconCacheTests: '\(name)' → \(icon == nil ? "nil (fallback symbol)" : "resolved \(Int(icon!.size.width))pt"))")
+      print(
+        "AppIconCacheTests: '\(name)' → \(icon == nil ? "nil (fallback symbol)" : "resolved \(Int(icon!.size.width))pt"))"
+      )
     }
   }
 }

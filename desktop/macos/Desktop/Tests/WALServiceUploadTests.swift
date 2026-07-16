@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 private actor SequencedFrameWriter {
   enum Step: Sendable {

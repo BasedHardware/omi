@@ -24,7 +24,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
 preconditions:
   - automation_bridge_ready
 

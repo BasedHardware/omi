@@ -529,8 +529,9 @@ final class ConversationRepository {
   private func rollbackPendingField(id: String, operation: MutationOperation) {
     let shouldRollback = clearPendingField(id: id, operation: operation)
     if shouldRollback,
-       let baseline = mutationBaselines[id],
-       let index = conversations.firstIndex(where: { $0.id == id }) {
+      let baseline = mutationBaselines[id],
+      let index = conversations.firstIndex(where: { $0.id == id })
+    {
       conversations[index] = operation.rollback(conversations[index], to: baseline)
       applyPending(id: id)
     }
@@ -555,8 +556,9 @@ final class ConversationRepository {
       return
     }
     if let incomingRevision = canonical.updatedAt,
-       let existingRevision = existing.updatedAt,
-       incomingRevision < existingRevision {
+      let existingRevision = existing.updatedAt,
+      incomingRevision < existingRevision
+    {
       return
     }
     mutationBaselines[id] = canonical
@@ -623,8 +625,9 @@ final class ConversationRepository {
     guard let index = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
     let existing = conversations[index]
     if let incoming = conversation.updatedAt,
-       let current = existing.updatedAt,
-       incoming < current {
+      let current = existing.updatedAt,
+      incoming < current
+    {
       return
     }
     conversations[index] = conversation

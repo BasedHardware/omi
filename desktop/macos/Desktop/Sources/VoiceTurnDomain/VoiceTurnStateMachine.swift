@@ -2,85 +2,85 @@ import Foundation
 
 // MARK: - Typed identities
 
-struct VoiceTurnID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: UUID
+package struct VoiceTurnID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: UUID
 
-  init(_ rawValue: UUID = UUID()) {
+  package init(_ rawValue: UUID = UUID()) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue.uuidString }
+  package var description: String { rawValue.uuidString }
 }
 
-struct VoiceCaptureID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: UInt64
+package struct VoiceCaptureID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: UInt64
 
-  init(_ rawValue: UInt64) {
+  package init(_ rawValue: UInt64) {
     self.rawValue = rawValue
   }
 
-  var description: String { String(rawValue) }
+  package var description: String { String(rawValue) }
 }
 
-struct VoiceSessionID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: UUID
+package struct VoiceSessionID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: UUID
 
-  init(_ rawValue: UUID = UUID()) {
+  package init(_ rawValue: UUID = UUID()) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue.uuidString }
+  package var description: String { rawValue.uuidString }
 }
 
-struct VoiceResponseID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: String
+package struct VoiceResponseID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: String
 
-  init(_ rawValue: String) {
+  package init(_ rawValue: String) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue }
+  package var description: String { rawValue }
 }
 
-struct VoiceToolCallID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: String
+package struct VoiceToolCallID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: String
 
-  init(_ rawValue: String) {
+  package init(_ rawValue: String) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue }
+  package var description: String { rawValue }
 }
 
-struct VoiceLeaseID: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: UUID
+package struct VoiceLeaseID: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: UUID
 
-  init(_ rawValue: UUID = UUID()) {
+  package init(_ rawValue: UUID = UUID()) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue.uuidString }
+  package var description: String { rawValue.uuidString }
 }
 
-struct VoiceContextSnapshotVersion: Hashable, Equatable, Sendable, CustomStringConvertible {
-  let rawValue: String
+package struct VoiceContextSnapshotVersion: Hashable, Equatable, Sendable, CustomStringConvertible {
+  package let rawValue: String
 
-  init(_ rawValue: String) {
+  package init(_ rawValue: String) {
     self.rawValue = rawValue
   }
 
-  var description: String { rawValue }
+  package var description: String { rawValue }
 }
 
 /// Identity for one asynchronous effect within a logical turn. `generation`
 /// is the immutable turn generation; `effectID` distinguishes remints,
 /// reconnects, tool attempts, playback attempts, and journal writes that happen
 /// without changing the logical turn ID.
-struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
-  let generation: UUID
-  let effectID: UInt64
+package struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
+  package let generation: UUID
+  package let effectID: UInt64
 
-  init(turnID: VoiceTurnID, effectID: UInt64) {
+  package init(turnID: VoiceTurnID, effectID: UInt64) {
     generation = turnID.rawValue
     self.effectID = effectID
   }
@@ -91,29 +91,39 @@ struct VoiceEffectIdentity: Hashable, Equatable, Sendable {
 /// Keeping this token in the reducer prevents a provider callback from using a
 /// stale or cross-turn image, while a verified report still requires the
 /// provider to answer the user's original request.
-struct VoiceScreenEvidenceProtocolToken: Equatable, Sendable {
-  let turnID: VoiceTurnID
-  let screenshotCallID: VoiceToolCallID
-  let screenshotIdentity: VoiceEffectIdentity
+package struct VoiceScreenEvidenceProtocolToken: Equatable, Sendable {
+  package let turnID: VoiceTurnID
+  package let screenshotCallID: VoiceToolCallID
+  package let screenshotIdentity: VoiceEffectIdentity
+
+  package init(
+    turnID: VoiceTurnID,
+    screenshotCallID: VoiceToolCallID,
+    screenshotIdentity: VoiceEffectIdentity
+  ) {
+    self.turnID = turnID
+    self.screenshotCallID = screenshotCallID
+    self.screenshotIdentity = screenshotIdentity
+  }
 }
 
 /// A local result may be the canonical user-visible answer for a tool-driven
 /// turn. The provider must not hold that answer open for an additional text or
 /// audio continuation.
-enum VoiceAuthoritativeLocalResultKind: Equatable, Sendable {
+package enum VoiceAuthoritativeLocalResultKind: Equatable, Sendable {
   case spawnReceipt
   case screenEvidenceFailure
 }
 
 // MARK: - State
 
-enum VoiceTurnIntent: String, Equatable, Sendable {
+package enum VoiceTurnIntent: String, Equatable, Sendable {
   case hold
   case locked
   case automation
 }
 
-enum VoiceTurnRoute: Equatable, Sendable {
+package enum VoiceTurnRoute: Equatable, Sendable {
   case undecided
   case hubWarmWait
   case hub(sessionID: VoiceSessionID?)
@@ -122,29 +132,29 @@ enum VoiceTurnRoute: Equatable, Sendable {
   case deepgramLive
 }
 
-enum VoiceContextOutcome: Equatable, Sendable {
+package enum VoiceContextOutcome: Equatable, Sendable {
   case captured(VoiceContextSnapshotVersion)
   case omitted(reason: String)
 }
 
-enum VoiceProviderConnection: Equatable, Sendable {
+package enum VoiceProviderConnection: Equatable, Sendable {
   case ready
   case reconnecting(identity: VoiceEffectIdentity, previousSessionID: VoiceSessionID?)
   case replacing(identity: VoiceEffectIdentity, previousResponseID: VoiceResponseID?)
 }
 
-enum VoiceJournalFinalization: Equatable, Sendable {
+package enum VoiceJournalFinalization: Equatable, Sendable {
   case pending
   case writing(VoiceEffectIdentity)
   case accepted(VoiceEffectIdentity)
 }
 
-enum VoiceTranscriptionFinalizationMode: Equatable, Sendable {
+package enum VoiceTranscriptionFinalizationMode: Equatable, Sendable {
   case omni
   case live
 }
 
-enum VoiceOutputLane: String, Equatable, Sendable, CaseIterable {
+package enum VoiceOutputLane: String, Equatable, Sendable, CaseIterable {
   case nativeRealtime = "native_realtime"
   case selectedVoiceFallback = "selected_voice_fallback"
   case deterministicAgentAck = "deterministic_agent_ack"
@@ -153,13 +163,13 @@ enum VoiceOutputLane: String, Equatable, Sendable, CaseIterable {
   case systemVoiceFallback = "system_voice_fallback"
 }
 
-struct VoiceOutputLease: Equatable, Sendable {
-  let id: VoiceLeaseID
-  let turnID: VoiceTurnID
-  let lane: VoiceOutputLane
-  let identity: VoiceEffectIdentity
+package struct VoiceOutputLease: Equatable, Sendable {
+  package let id: VoiceLeaseID
+  package let turnID: VoiceTurnID
+  package let lane: VoiceOutputLane
+  package let identity: VoiceEffectIdentity
 
-  init(
+  package init(
     id: VoiceLeaseID,
     turnID: VoiceTurnID,
     lane: VoiceOutputLane,
@@ -172,20 +182,26 @@ struct VoiceOutputLease: Equatable, Sendable {
   }
 }
 
-enum VoiceOutputDecision: Equatable, Sendable {
+package enum VoiceOutputDecision: Equatable, Sendable {
   case acquired(VoiceOutputLease)
   case denied(active: VoiceOutputLease)
   case staleTurn
 }
 
-struct VoiceOutputSnapshot: Equatable, Sendable {
-  let turnID: VoiceTurnID?
-  let activeLease: VoiceOutputLease?
-  let providerOutputSuppressed: Bool
+package struct VoiceOutputSnapshot: Equatable, Sendable {
+  package let turnID: VoiceTurnID?
+  package let activeLease: VoiceOutputLease?
+  package let providerOutputSuppressed: Bool
+
+  package init(turnID: VoiceTurnID?, activeLease: VoiceOutputLease?, providerOutputSuppressed: Bool) {
+    self.turnID = turnID
+    self.activeLease = activeLease
+    self.providerOutputSuppressed = providerOutputSuppressed
+  }
 }
 
-enum VoiceOutputHandoffPolicy {
-  static func fillerCanYield(
+package enum VoiceOutputHandoffPolicy {
+  package static func fillerCanYield(
     active: VoiceOutputLease,
     to incomingLane: VoiceOutputLane,
     turnID: VoiceTurnID
@@ -194,7 +210,7 @@ enum VoiceOutputHandoffPolicy {
   }
 }
 
-enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable {
+package enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable {
   case success
   case tooShort = "too_short"
   case silentRejected = "silent_rejected"
@@ -216,7 +232,7 @@ enum VoiceTurnTerminalReason: String, Equatable, Sendable, CaseIterable {
   case cleanup
 }
 
-enum VoiceTurnPhase: Equatable, Sendable {
+package enum VoiceTurnPhase: Equatable, Sendable {
   case idle
   case pendingLockDecision
   case recording
@@ -228,17 +244,17 @@ enum VoiceTurnPhase: Equatable, Sendable {
   case playing(VoiceOutputLane)
   case terminal(VoiceTurnTerminalReason)
 
-  var isRecording: Bool {
+  package var isRecording: Bool {
     self == .recording || self == .lockedRecording || self == .pendingLockDecision
   }
 
-  var isTerminal: Bool {
+  package var isTerminal: Bool {
     if case .terminal = self { return true }
     return false
   }
 }
 
-enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseIterable {
+package enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseIterable {
   case lockDecision = "lock_decision"
   case captureStart = "capture_start"
   case hubWarm = "hub_warm"
@@ -255,32 +271,32 @@ enum VoiceTurnDeadline: String, Equatable, Hashable, Sendable, CaseIterable {
   case hintVisibility = "hint_visibility"
 }
 
-struct VoiceTurnUIProjection: Equatable, Sendable {
-  var isListening = false
-  var isLocked = false
-  var transcript = ""
-  var hint = ""
-  var isThinking = false
-  var isResponseWaiting = false
-  var isResponseActive = false
+package struct VoiceTurnUIProjection: Equatable, Sendable {
+  package var isListening = false
+  package var isLocked = false
+  package var transcript = ""
+  package var hint = ""
+  package var isThinking = false
+  package var isResponseWaiting = false
+  package var isResponseActive = false
 
-  static let idle = VoiceTurnUIProjection()
+  package static let idle = VoiceTurnUIProjection()
 }
 
 /// Pure copy / status-banner projections over reducer state and terminal reasons.
 /// Every string here is derived from existing `VoiceTurnUIProjection` / `VoiceTurnTerminalReason`
 /// — not a second lifecycle enum.
-enum VoiceTurnUICopy {
-  static let transcribingProgress = "Transcribing…"
+package enum VoiceTurnUICopy {
+  package static let transcribingProgress = "Transcribing…"
 
   /// Banner text is reserved for actionable capture/provider failures. Normal
   /// recording, transcription, fallback, and barge-in state stays visual.
-  static func statusBannerText(for projection: VoiceTurnUIProjection) -> String {
+  package static func statusBannerText(for projection: VoiceTurnUIProjection) -> String {
     projection.hint
   }
 
   /// User-facing terminal hint. Branches on typed reason only.
-  static func terminalHint(for reason: VoiceTurnTerminalReason) -> String? {
+  package static func terminalHint(for reason: VoiceTurnTerminalReason) -> String? {
     switch reason {
     case .tooShort:
       return "Hold longer to record"
@@ -308,13 +324,13 @@ enum VoiceTurnUICopy {
   }
 }
 
-enum VoiceTurnDebugPresentationState: String, Equatable, Sendable {
+package enum VoiceTurnDebugPresentationState: String, Equatable, Sendable {
   case idle
   case listening
   case thinking
   case answering
 
-  var projection: VoiceTurnUIProjection {
+  package var projection: VoiceTurnUIProjection {
     switch self {
     case .idle:
       return .idle
@@ -328,42 +344,42 @@ enum VoiceTurnDebugPresentationState: String, Equatable, Sendable {
   }
 }
 
-struct VoiceTurn: Equatable, Sendable {
-  let id: VoiceTurnID
+package struct VoiceTurn: Equatable, Sendable {
+  package let id: VoiceTurnID
   /// Immutable authenticated owner captured when the physical voice turn starts.
   /// Every provider, tool, and journal driver must fence against this identity;
   /// reading the ambient account after an `await` can otherwise route owner A's
   /// speech or response into owner B's session.
-  let ownerID: String?
-  var supersededTurnID: VoiceTurnID?
-  var intent: VoiceTurnIntent
-  var phase: VoiceTurnPhase
-  var route: VoiceTurnRoute
-  var captureID: VoiceCaptureID?
-  var sessionID: VoiceSessionID?
-  var responseID: VoiceResponseID?
-  var pendingToolCallIDs: Set<VoiceToolCallID>
-  var toolEffectIdentities: [VoiceToolCallID: VoiceEffectIdentity]
-  var screenEvidenceProtocol: VoiceScreenEvidenceProtocolToken?
-  var activeLease: VoiceOutputLease?
-  var providerFinished: Bool
-  var postToolContinuationRequired: Bool
-  var hubCommitPending: Bool
-  var providerEffectIdentity: VoiceEffectIdentity?
-  var transcriptionEffectIdentity: VoiceEffectIdentity?
-  var transcriptionCompletionClaimed: Bool
-  var providerConnection: VoiceProviderConnection
-  var contextOutcome: VoiceContextOutcome?
-  var journalFinalization: VoiceJournalFinalization
-  var transcriptionFinalizationMode: VoiceTranscriptionFinalizationMode?
-  var providerOutputSuppressed: Bool
-  var nextEffectID: UInt64
-  var reservedEffectIdentities: Set<VoiceEffectIdentity>
-  var deadlines: Set<VoiceTurnDeadline>
-  var projection: VoiceTurnUIProjection
-  var terminalReason: VoiceTurnTerminalReason?
+  package let ownerID: String?
+  package var supersededTurnID: VoiceTurnID?
+  package var intent: VoiceTurnIntent
+  package var phase: VoiceTurnPhase
+  package var route: VoiceTurnRoute
+  package var captureID: VoiceCaptureID?
+  package var sessionID: VoiceSessionID?
+  package var responseID: VoiceResponseID?
+  package var pendingToolCallIDs: Set<VoiceToolCallID>
+  package var toolEffectIdentities: [VoiceToolCallID: VoiceEffectIdentity]
+  package var screenEvidenceProtocol: VoiceScreenEvidenceProtocolToken?
+  package var activeLease: VoiceOutputLease?
+  package var providerFinished: Bool
+  package var postToolContinuationRequired: Bool
+  package var hubCommitPending: Bool
+  package var providerEffectIdentity: VoiceEffectIdentity?
+  package var transcriptionEffectIdentity: VoiceEffectIdentity?
+  package var transcriptionCompletionClaimed: Bool
+  package var providerConnection: VoiceProviderConnection
+  package var contextOutcome: VoiceContextOutcome?
+  package var journalFinalization: VoiceJournalFinalization
+  package var transcriptionFinalizationMode: VoiceTranscriptionFinalizationMode?
+  package var providerOutputSuppressed: Bool
+  package var nextEffectID: UInt64
+  package var reservedEffectIdentities: Set<VoiceEffectIdentity>
+  package var deadlines: Set<VoiceTurnDeadline>
+  package var projection: VoiceTurnUIProjection
+  package var terminalReason: VoiceTurnTerminalReason?
 
-  init(
+  package init(
     id: VoiceTurnID,
     ownerID: String? = nil,
     intent: VoiceTurnIntent,
@@ -403,12 +419,12 @@ struct VoiceTurn: Equatable, Sendable {
   }
 }
 
-struct VoiceTurnTerminalRecord: Equatable, Sendable {
-  let turnID: VoiceTurnID
-  let reason: VoiceTurnTerminalReason
-  let route: VoiceTurnRoute
+package struct VoiceTurnTerminalRecord: Equatable, Sendable {
+  package let turnID: VoiceTurnID
+  package let reason: VoiceTurnTerminalReason
+  package let route: VoiceTurnRoute
 
-  init(
+  package init(
     turnID: VoiceTurnID,
     reason: VoiceTurnTerminalReason,
     route: VoiceTurnRoute = .undecided
@@ -419,14 +435,14 @@ struct VoiceTurnTerminalRecord: Equatable, Sendable {
   }
 }
 
-struct VoiceTurnModel: Equatable, Sendable {
-  var turn: VoiceTurn?
-  var lastTerminal: VoiceTurnTerminalRecord?
-  var staleEventCount = 0
-  var invalidTransitionCount = 0
-  var duplicateTerminalCount = 0
+package struct VoiceTurnModel: Equatable, Sendable {
+  package var turn: VoiceTurn?
+  package var lastTerminal: VoiceTurnTerminalRecord?
+  package var staleEventCount = 0
+  package var invalidTransitionCount = 0
+  package var duplicateTerminalCount = 0
 
-  init(
+  package init(
     turn: VoiceTurn? = nil,
     lastTerminal: VoiceTurnTerminalRecord? = nil,
     staleEventCount: Int = 0,
@@ -440,7 +456,7 @@ struct VoiceTurnModel: Equatable, Sendable {
     self.duplicateTerminalCount = duplicateTerminalCount
   }
 
-  static let idle = VoiceTurnModel()
+  package static let idle = VoiceTurnModel()
 }
 
 // MARK: - Events and effects
@@ -651,7 +667,356 @@ enum VoiceTurnEvent: Equatable, Sendable {
   }
 }
 
-enum VoiceTurnEffect: Equatable, Sendable {
+/// Facts observed by physical voice drivers. Lifecycle events remain internal
+/// to `VoiceTurnDomain`; callers can publish only this typed input surface.
+package struct VoiceTurnFact: Sendable {
+  fileprivate let event: VoiceTurnEvent
+
+  private init(_ event: VoiceTurnEvent) {
+    self.event = event
+  }
+
+  package var diagnosticLabel: String { event.diagnosticLabel }
+  package var turnID: VoiceTurnID? { event.turnID }
+
+  package static func start(turnID: VoiceTurnID, ownerID: String?, intent: VoiceTurnIntent) -> Self {
+    Self(.start(turnID: turnID, ownerID: ownerID, intent: intent))
+  }
+
+  package static func effectIdentityReserved(turnID: VoiceTurnID) -> Self {
+    Self(.effectIdentityReserved(turnID: turnID))
+  }
+
+  package static func transcriptionProviderStartedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity
+  ) -> Self {
+    Self(.transcriptionProviderStartedScoped(turnID: turnID, identity: identity))
+  }
+
+  package static func transcriptionCompletionClaimedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity
+  ) -> Self {
+    Self(.transcriptionCompletionClaimedScoped(turnID: turnID, identity: identity))
+  }
+
+  package static func openLockWindow(turnID: VoiceTurnID) -> Self { Self(.openLockWindow(turnID: turnID)) }
+  package static func lock(turnID: VoiceTurnID) -> Self { Self(.lock(turnID: turnID)) }
+  package static func finalize(turnID: VoiceTurnID) -> Self { Self(.finalize(turnID: turnID)) }
+
+  package static func captureStarted(turnID: VoiceTurnID, captureID: VoiceCaptureID) -> Self {
+    Self(.captureStarted(turnID: turnID, captureID: captureID))
+  }
+
+  package static func captureFailed(
+    turnID: VoiceTurnID,
+    captureID: VoiceCaptureID?,
+    message: String
+  ) -> Self {
+    Self(.captureFailed(turnID: turnID, captureID: captureID, message: message))
+  }
+
+  package static func selectRoute(turnID: VoiceTurnID, route: VoiceTurnRoute) -> Self {
+    Self(.selectRoute(turnID: turnID, route: route))
+  }
+
+  package static func hubReady(turnID: VoiceTurnID, sessionID: VoiceSessionID) -> Self {
+    Self(.hubReady(turnID: turnID, sessionID: sessionID))
+  }
+
+  package static func hubAdmissionRejected(turnID: VoiceTurnID) -> Self {
+    Self(.hubAdmissionRejected(turnID: turnID))
+  }
+
+  package static func hubCommitAccepted(
+    turnID: VoiceTurnID,
+    sessionID: VoiceSessionID,
+    responseID: VoiceResponseID?
+  ) -> Self {
+    Self(.hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: responseID))
+  }
+
+  package static func hubCommitClaimed(turnID: VoiceTurnID) -> Self { Self(.hubCommitClaimed(turnID: turnID)) }
+  package static func hubCommitDeferred(turnID: VoiceTurnID) -> Self { Self(.hubCommitDeferred(turnID: turnID)) }
+
+  package static func hubCommitDeferredForReplacement(turnID: VoiceTurnID) -> Self {
+    Self(.hubCommitDeferredForReplacement(turnID: turnID))
+  }
+
+  package static func providerReconnectStarted(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    previousSessionID: VoiceSessionID?
+  ) -> Self {
+    Self(.providerReconnectStarted(turnID: turnID, identity: identity, previousSessionID: previousSessionID))
+  }
+
+  package static func providerReconnected(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    sessionID: VoiceSessionID
+  ) -> Self {
+    Self(.providerReconnected(turnID: turnID, identity: identity, sessionID: sessionID))
+  }
+
+  package static func providerReconnectFailed(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    message: String
+  ) -> Self {
+    Self(.providerReconnectFailed(turnID: turnID, identity: identity, message: message))
+  }
+
+  package static func providerReplacementStarted(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    previousResponseID: VoiceResponseID?,
+    nextResponseID: VoiceResponseID
+  ) -> Self {
+    Self(
+      .providerReplacementStarted(
+        turnID: turnID,
+        identity: identity,
+        previousResponseID: previousResponseID,
+        nextResponseID: nextResponseID))
+  }
+
+  package static func providerReplacementReady(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    sessionID: VoiceSessionID,
+    responseID: VoiceResponseID
+  ) -> Self {
+    Self(
+      .providerReplacementReady(
+        turnID: turnID,
+        identity: identity,
+        sessionID: sessionID,
+        responseID: responseID))
+  }
+
+  package static func providerReplacementFailed(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    message: String
+  ) -> Self {
+    Self(.providerReplacementFailed(turnID: turnID, identity: identity, message: message))
+  }
+
+  package static func contextResolved(turnID: VoiceTurnID, outcome: VoiceContextOutcome) -> Self {
+    Self(.contextResolved(turnID: turnID, outcome: outcome))
+  }
+
+  package static func transcriptionStarted(turnID: VoiceTurnID) -> Self {
+    Self(.transcriptionStarted(turnID: turnID))
+  }
+
+  package static func transcriptionFinal(turnID: VoiceTurnID, text: String) -> Self {
+    Self(.transcriptionFinal(turnID: turnID, text: text))
+  }
+
+  package static func transcriptionFailed(turnID: VoiceTurnID, message: String) -> Self {
+    Self(.transcriptionFailed(turnID: turnID, message: message))
+  }
+
+  package static func providerResponseStartedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    sessionID: VoiceSessionID?,
+    responseID: VoiceResponseID?
+  ) -> Self {
+    Self(
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: identity,
+        sessionID: sessionID,
+        responseID: responseID))
+  }
+
+  package static func providerTurnFinishedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    sessionID: VoiceSessionID?,
+    responseID: VoiceResponseID?
+  ) -> Self {
+    Self(
+      .providerTurnFinishedScoped(
+        turnID: turnID,
+        identity: identity,
+        sessionID: sessionID,
+        responseID: responseID))
+  }
+
+  package static func toolStartedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID
+  ) -> Self {
+    Self(.toolStartedScoped(turnID: turnID, identity: identity, callID: callID))
+  }
+
+  package static func authoritativeLocalResultAcceptedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID,
+    kind: VoiceAuthoritativeLocalResultKind
+  ) -> Self {
+    Self(
+      .authoritativeLocalResultAcceptedScoped(
+        turnID: turnID,
+        identity: identity,
+        callID: callID,
+        kind: kind))
+  }
+
+  package static func screenEvidenceReportVerifiedScoped(
+    turnID: VoiceTurnID,
+    screenshotIdentity: VoiceEffectIdentity,
+    screenshotCallID: VoiceToolCallID,
+    reportIdentity: VoiceEffectIdentity,
+    reportCallID: VoiceToolCallID
+  ) -> Self {
+    Self(
+      .screenEvidenceReportVerifiedScoped(
+        turnID: turnID,
+        screenshotIdentity: screenshotIdentity,
+        screenshotCallID: screenshotCallID,
+        reportIdentity: reportIdentity,
+        reportCallID: reportCallID))
+  }
+
+  package static func screenEvidenceProtocolStartedScoped(
+    turnID: VoiceTurnID,
+    token: VoiceScreenEvidenceProtocolToken,
+    expiresAfter: TimeInterval
+  ) -> Self {
+    Self(.screenEvidenceProtocolStartedScoped(turnID: turnID, token: token, expiresAfter: expiresAfter))
+  }
+
+  package static func toolFinishedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    callID: VoiceToolCallID
+  ) -> Self {
+    Self(.toolFinishedScoped(turnID: turnID, identity: identity, callID: callID))
+  }
+
+  package static func playbackStartedScoped(turnID: VoiceTurnID, lease: VoiceOutputLease) -> Self {
+    Self(.playbackStartedScoped(turnID: turnID, lease: lease))
+  }
+
+  package static func playbackProgressScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    leaseID: VoiceLeaseID
+  ) -> Self {
+    Self(.playbackProgressScoped(turnID: turnID, identity: identity, leaseID: leaseID))
+  }
+
+  package static func playbackDrainedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    leaseID: VoiceLeaseID
+  ) -> Self {
+    Self(.playbackDrainedScoped(turnID: turnID, identity: identity, leaseID: leaseID))
+  }
+
+  package static func playbackFailedScoped(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    leaseID: VoiceLeaseID?,
+    message: String
+  ) -> Self {
+    Self(.playbackFailedScoped(turnID: turnID, identity: identity, leaseID: leaseID, message: message))
+  }
+
+  package static func transcriptionFinalizationStarted(
+    turnID: VoiceTurnID,
+    mode: VoiceTranscriptionFinalizationMode
+  ) -> Self {
+    Self(.transcriptionFinalizationStarted(turnID: turnID, mode: mode))
+  }
+
+  package static func transcriptionFinalizationCompleted(turnID: VoiceTurnID) -> Self {
+    Self(.transcriptionFinalizationCompleted(turnID: turnID))
+  }
+
+  package static func journalAccepted(turnID: VoiceTurnID, identity: VoiceEffectIdentity) -> Self {
+    Self(.journalAccepted(turnID: turnID, identity: identity))
+  }
+
+  package static func journalFailed(
+    turnID: VoiceTurnID,
+    identity: VoiceEffectIdentity,
+    message: String
+  ) -> Self {
+    Self(.journalFailed(turnID: turnID, identity: identity, message: message))
+  }
+
+  package static func transcriptChanged(turnID: VoiceTurnID, text: String) -> Self {
+    Self(.transcriptChanged(turnID: turnID, text: text))
+  }
+
+  package static func hintChanged(turnID: VoiceTurnID, text: String) -> Self {
+    Self(.hintChanged(turnID: turnID, text: text))
+  }
+
+  package static func responseWaitingChanged(turnID: VoiceTurnID, active: Bool) -> Self {
+    Self(.responseWaitingChanged(turnID: turnID, active: active))
+  }
+
+  package static func responseActiveChanged(turnID: VoiceTurnID, active: Bool) -> Self {
+    Self(.responseActiveChanged(turnID: turnID, active: active))
+  }
+
+  package static func debugPresentationChanged(
+    turnID: VoiceTurnID,
+    state: VoiceTurnDebugPresentationState
+  ) -> Self {
+    Self(.debugPresentationChanged(turnID: turnID, state: state))
+  }
+
+  package static func clearPresentation(turnID: VoiceTurnID) -> Self {
+    Self(.clearPresentation(turnID: turnID))
+  }
+
+  package static func deadlineFired(turnID: VoiceTurnID, deadline: VoiceTurnDeadline) -> Self {
+    Self(.deadlineFired(turnID: turnID, deadline: deadline))
+  }
+
+  package static func finish(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason) -> Self {
+    Self(.finish(turnID: turnID, reason: reason))
+  }
+
+  package static func cancel(turnID: VoiceTurnID, reason: VoiceTurnTerminalReason) -> Self {
+    Self(.cancel(turnID: turnID, reason: reason))
+  }
+
+  package static func interrupt(turnID: VoiceTurnID) -> Self { Self(.interrupt(turnID: turnID)) }
+  package static let cleanup = Self(.cleanup)
+  package static let reset = Self(.reset)
+}
+
+/// The only mutable lifecycle owner. Its event representation and reducer stay
+/// internal to this target; drivers publish facts and consume immutable results.
+@MainActor package final class VoiceTurnDomain {
+  private let reducer: VoiceTurnReducer
+  package private(set) var model: VoiceTurnModel
+
+  package init(model: VoiceTurnModel = .idle) {
+    reducer = VoiceTurnReducer()
+    self.model = model
+  }
+
+  package func publish(_ fact: VoiceTurnFact) -> VoiceTurnReduction {
+    let reduction = reducer.reduce(model, fact.event)
+    model = reduction.model
+    return reduction
+  }
+}
+
+package enum VoiceTurnEffect: Equatable, Sendable {
   case scheduleDeadline(turnID: VoiceTurnID, deadline: VoiceTurnDeadline, after: TimeInterval)
   case cancelDeadline(turnID: VoiceTurnID, deadline: VoiceTurnDeadline)
   case cancelAllDeadlines(turnID: VoiceTurnID)
@@ -677,9 +1042,9 @@ enum VoiceTurnEffect: Equatable, Sendable {
   case invalidTransition(turnID: VoiceTurnID?, event: String, phase: VoiceTurnPhase?)
 }
 
-struct VoiceTurnReduction: Equatable, Sendable {
-  var model: VoiceTurnModel
-  var effects: [VoiceTurnEffect]
+package struct VoiceTurnReduction: Equatable, Sendable {
+  package var model: VoiceTurnModel
+  package var effects: [VoiceTurnEffect]
 }
 
 // MARK: - Pure reducer

@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 final class WALCloudSyncLogicTests: XCTestCase {
 
@@ -241,7 +242,7 @@ final class WALCloudSyncLogicTests: XCTestCase {
   func testMergeIsNoOpWhenNothingReconciled() {
     let a = makeWal(timerStart: 1_700_000_000, status: .uploaded, jobId: "job-1")
     let snapshot = [a]
-    let reconciled = snapshot // unchanged
+    let reconciled = snapshot  // unchanged
     let live = [a]
     let merged = WALCloudSyncLogic.mergeReconciledUploads(
       live: live, snapshot: snapshot, reconciled: reconciled)

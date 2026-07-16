@@ -356,7 +356,6 @@ actor GeminiClient {
     URL(string: "\(Self.proxyBaseURL)v1/proxy/gemini/models/\(modelOverride ?? model):\(action)")!
   }
 
-
   /// Log the raw API error message for debugging and throw a sanitized error.
   /// The `errorDescription` on GeminiClientError is user-friendly; this log preserves the raw detail.
   private func throwAPIError(_ rawMessage: String) throws -> Never {
@@ -464,7 +463,9 @@ actor GeminiClient {
   /// Sleep with exponential backoff (2s, 8s) and log the retry attempt.
   private func retryBackoff(attempt: Int, error: Error) async {
     let delaySec = [2, 8][min(attempt, 1)]
-    log("GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)")
+    log(
+      "GeminiClient: transient error, retrying in \(delaySec)s (attempt \(attempt + 2)/3): \(error.localizedDescription)"
+    )
     try? await Task.sleep(nanoseconds: UInt64(delaySec) * 1_000_000_000)
   }
 
@@ -507,7 +508,8 @@ actor GeminiClient {
             generationConfig: GeminiRequest.GenerationConfig(
               responseMimeType: "application/json",
               responseSchema: responseSchema,
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+              thinkingConfig: ThinkingConfig(
+                thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
             )
           )
 
@@ -584,7 +586,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: nil,
             responseSchema: nil,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -655,7 +658,8 @@ actor GeminiClient {
           generationConfig: GeminiRequest.GenerationConfig(
             responseMimeType: "application/json",
             responseSchema: responseSchema,
-            thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
+            thinkingConfig: ThinkingConfig(
+              thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: model)))
           )
         )
 
@@ -697,7 +701,6 @@ actor GeminiClient {
   }
 
 }
-
 
 // MARK: - Tool Calling Support
 
@@ -773,7 +776,6 @@ struct GeminiTool: Encodable {
     }
   }
 }
-
 
 /// Result of a tool-enabled chat (may include tool calls)
 struct ToolChatResult {
@@ -939,99 +941,100 @@ extension GeminiClient {
     var lastError: Error?
 
     for (modelIndex, activeModel) in models.enumerated() {
-    for attempt in 0...maxRetries {
-      do {
-        // Wrap JSON serialization in autoreleasepool (contents may include
-        // large base64 image data that creates bridged Obj-C intermediaries).
-        let requestBody: Data = try autoreleasepool {
-          let toolConfig =
-            forceToolCall
-            ? GeminiImageToolRequest.ToolConfig(
-              functionCallingConfig: .init(mode: "ANY")
-            ) : nil
+      for attempt in 0...maxRetries {
+        do {
+          // Wrap JSON serialization in autoreleasepool (contents may include
+          // large base64 image data that creates bridged Obj-C intermediaries).
+          let requestBody: Data = try autoreleasepool {
+            let toolConfig =
+              forceToolCall
+              ? GeminiImageToolRequest.ToolConfig(
+                functionCallingConfig: .init(mode: "ANY")
+              ) : nil
 
-          let request = GeminiImageToolRequest(
-            contents: contents,
-            systemInstruction: GeminiImageToolRequest.SystemInstruction(
-              parts: [.init(text: systemPrompt)]
-            ),
-            generationConfig: GeminiImageToolRequest.GenerationConfig(
-              thinkingConfig: ThinkingConfig(thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
-            ),
-            tools: tools,
-            toolConfig: toolConfig
+            let request = GeminiImageToolRequest(
+              contents: contents,
+              systemInstruction: GeminiImageToolRequest.SystemInstruction(
+                parts: [.init(text: systemPrompt)]
+              ),
+              generationConfig: GeminiImageToolRequest.GenerationConfig(
+                thinkingConfig: ThinkingConfig(
+                  thinkingBudget: max(thinkingBudget, ThinkingConfig.minimumBudget(for: activeModel)))
+              ),
+              tools: tools,
+              toolConfig: toolConfig
+            )
+
+            return try JSONEncoder().encode(request)
+          }
+
+          let url = proxyURL(action: "generateContent", modelOverride: activeModel)
+          var urlRequest = URLRequest(url: url)
+          urlRequest.httpMethod = "POST"
+          urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
+          urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
+          urlRequest.timeoutInterval = 300
+          urlRequest.httpBody = requestBody
+
+          let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
+          try checkHTTPStatus(urlResponse, data: data)
+
+          let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
+
+          if let error = response.error {
+            try throwAPIError(error.message)
+          }
+
+          guard let candidate = response.candidates?.first,
+            let parts = candidate.content?.parts
+          else {
+            try throwBlockedOrInvalidResponse(
+              blockReason: response.promptFeedback?.blockReason,
+              finishReason: response.candidates?.first?.finishReason
+            )
+          }
+
+          var toolCalls: [ToolCall] = []
+          var textResponse = ""
+
+          for part in parts {
+            if let functionCall = part.functionCall {
+              let args = functionCall.args?.mapValues { $0.value } ?? [:]
+              toolCalls.append(
+                ToolCall(
+                  name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
+            }
+            if let text = part.text {
+              textResponse += text
+            }
+          }
+
+          return ToolChatResult(
+            text: textResponse,
+            toolCalls: toolCalls,
+            requiresToolExecution: !toolCalls.isEmpty
           )
-
-          return try JSONEncoder().encode(request)
-        }
-
-        let url = proxyURL(action: "generateContent", modelOverride: activeModel)
-        var urlRequest = URLRequest(url: url)
-        urlRequest.httpMethod = "POST"
-        urlRequest.setValue("application/json", forHTTPHeaderField: "Content-Type")
-        urlRequest.setValue(try await authHeader(), forHTTPHeaderField: "Authorization")
-        urlRequest.timeoutInterval = 300
-        urlRequest.httpBody = requestBody
-
-        let (data, urlResponse) = try await URLSession.shared.data(for: urlRequest)
-        try checkHTTPStatus(urlResponse, data: data)
-
-        let response = try JSONDecoder().decode(GeminiToolResponse.self, from: data)
-
-        if let error = response.error {
-          try throwAPIError(error.message)
-        }
-
-        guard let candidate = response.candidates?.first,
-          let parts = candidate.content?.parts
-        else {
-          try throwBlockedOrInvalidResponse(
-            blockReason: response.promptFeedback?.blockReason,
-            finishReason: response.candidates?.first?.finishReason
-          )
-        }
-
-        var toolCalls: [ToolCall] = []
-        var textResponse = ""
-
-        for part in parts {
-          if let functionCall = part.functionCall {
-            let args = functionCall.args?.mapValues { $0.value } ?? [:]
-            toolCalls.append(
-              ToolCall(
-                name: functionCall.name, arguments: args, thoughtSignature: part.thoughtSignature))
+        } catch {
+          lastError = error
+          guard attempt < maxRetries && isTransientError(error) else {
+            // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
+            // if the failure is transient and a fallback model remains.
+            if modelIndex < models.count - 1 && isTransientError(error) {
+              DesktopDiagnosticsManager.shared.recordFallback(
+                area: "gemini_model",
+                from: Self.bucketGeminiModel(activeModel),
+                to: Self.bucketGeminiModel(models[modelIndex + 1]),
+                reason: Self.fallbackReason(for: error),
+                outcome: .degraded,
+                extra: ["user_visible": false])
+              log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
+              break
+            }
+            throw error
           }
-          if let text = part.text {
-            textResponse += text
-          }
+          await retryBackoff(attempt: attempt, error: error)
         }
-
-        return ToolChatResult(
-          text: textResponse,
-          toolCalls: toolCalls,
-          requiresToolExecution: !toolCalls.isEmpty
-        )
-      } catch {
-        lastError = error
-        guard attempt < maxRetries && isTransientError(error) else {
-          // Primary model's retries exhausted — fall back to the next model (e.g. Pro→Flash)
-          // if the failure is transient and a fallback model remains.
-          if modelIndex < models.count - 1 && isTransientError(error) {
-            DesktopDiagnosticsManager.shared.recordFallback(
-              area: "gemini_model",
-              from: Self.bucketGeminiModel(activeModel),
-              to: Self.bucketGeminiModel(models[modelIndex + 1]),
-              reason: Self.fallbackReason(for: error),
-              outcome: .degraded,
-              extra: ["user_visible": false])
-            log("GeminiClient: model \(activeModel) failing transiently, falling back to \(models[modelIndex + 1])")
-            break
-          }
-          throw error
-        }
-        await retryBackoff(attempt: attempt, error: error)
       }
-    }
     }
 
     throw lastError!

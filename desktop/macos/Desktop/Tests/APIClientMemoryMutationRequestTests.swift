@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {

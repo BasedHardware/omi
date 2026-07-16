@@ -75,17 +75,29 @@ final class RewindStorageErrorClassificationTests: XCTestCase {
       encoding: .utf8
     )
 
-    XCTAssertTrue(encoder.contains(#"logError("VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#))
-    XCTAssertTrue(encoder.contains(#"logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#))
+    XCTAssertTrue(
+      encoder.contains(
+        #"logError("VideoChunkEncoder: Failed to start video writer (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#
+      ))
+    XCTAssertTrue(
+      encoder.contains(
+        #"logError("VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error)"#
+      ))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame", error: error)"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process CGImage frame", error: error)"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to process frame with metadata", error: error)"#))
     XCTAssertTrue(indexer.contains(#"logError("RewindIndexer: Failed to flush video chunk", error: error)"#))
-    XCTAssertTrue(encoder.contains(#"logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)"#))
+    XCTAssertTrue(
+      encoder.contains(#"logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)"#))
     XCTAssertFalse(encoder.contains("try? await finalizeCurrentChunk()"))
-    XCTAssertTrue(resourceMonitor.contains(#"logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)"#))
+    XCTAssertTrue(
+      resourceMonitor.contains(
+        #"logError("ResourceMonitor: Failed to flush video chunk during memory remediation", error: error)"#))
     XCTAssertFalse(resourceMonitor.contains("try? await VideoChunkEncoder.shared.flushCurrentChunk()"))
-    XCTAssertTrue(proactiveAssistantsPlugin.contains(#"logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)"#))
+    XCTAssertTrue(
+      proactiveAssistantsPlugin.contains(
+        #"logError("ProactiveAssistantsPlugin: Failed to flush video chunk before power cadence switch", error: error)"#
+      ))
   }
 
   func testGenericStorageErrorStillCaptured() {

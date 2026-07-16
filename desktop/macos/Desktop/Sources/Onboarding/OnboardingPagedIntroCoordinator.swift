@@ -127,7 +127,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let defaults = UserDefaults.standard
     let currentUserID = Self.normalizedUserID(defaults.string(forKey: .authUserId))
     var ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
-    let hasLegacyImport = defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
+    let hasLegacyImport =
+      defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
       || defaults.object(forKey: chatGPTImportSummaryKey) != nil
       || defaults.object(forKey: claudeImportedMemoriesKey) != nil
       || defaults.object(forKey: claudeImportSummaryKey) != nil
@@ -136,13 +137,17 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ownerUserID = currentUserID
     }
     let canRestoreMemoryImports = ownerUserID == nil || ownerUserID == currentUserID
-    chatGPTImportedMemoriesCount = canRestoreMemoryImports
+    chatGPTImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: chatGPTImportedMemoriesKey) : 0
-    claudeImportedMemoriesCount = canRestoreMemoryImports
+    claudeImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: claudeImportedMemoriesKey) : 0
-    chatGPTImportSummary = canRestoreMemoryImports
+    chatGPTImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: chatGPTImportSummaryKey) ?? "" : ""
-    claudeImportSummary = canRestoreMemoryImports
+    claudeImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
   }
 

@@ -221,73 +221,73 @@ extension AppState {
     DispatchQueue.main.async { [weak self] in
       guard let self else { return }
       UNUserNotificationCenter.current().getNotificationSettings { settings in
-      DispatchQueue.main.async {
-        let isNowGranted = settings.authorizationStatus == .authorized
-        self.hasNotificationPermission = isNowGranted
-        self.notificationAlertStyle = settings.alertStyle
+        DispatchQueue.main.async {
+          let isNowGranted = settings.authorizationStatus == .authorized
+          self.hasNotificationPermission = isNowGranted
+          self.notificationAlertStyle = settings.alertStyle
 
-        // Log the current notification settings
-        let authStatus =
-          switch settings.authorizationStatus {
-          case .notDetermined: "notDetermined"
-          case .denied: "denied"
-          case .authorized: "authorized"
-          case .provisional: "provisional"
-          case .ephemeral: "ephemeral"
-          @unknown default: "unknown"
-          }
-        let alertStyleName =
-          switch settings.alertStyle {
-          case .none: "NONE (no banners)"
-          case .banner: "BANNER"
-          case .alert: "ALERT"
-          @unknown default: "unknown"
-          }
-        log(
-          "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
-        )
-
-        // Track notification settings in analytics only when they change
-        let soundEnabled = settings.soundSetting == .enabled
-        let badgeEnabled = settings.badgeSetting == .enabled
-        let settingsChanged =
-          authStatus != self.lastNotificationAuthStatus
-          || alertStyleName != self.lastNotificationAlertStyle
-          || soundEnabled != self.lastNotificationSoundEnabled
-          || badgeEnabled != self.lastNotificationBadgeEnabled
-
-        if settingsChanged {
-          AnalyticsManager.shared.notificationSettingsChecked(
-            authStatus: authStatus,
-            alertStyle: alertStyleName,
-            soundEnabled: soundEnabled,
-            badgeEnabled: badgeEnabled,
-            bannersDisabled: settings.alertStyle == .none
+          // Log the current notification settings
+          let authStatus =
+            switch settings.authorizationStatus {
+            case .notDetermined: "notDetermined"
+            case .denied: "denied"
+            case .authorized: "authorized"
+            case .provisional: "provisional"
+            case .ephemeral: "ephemeral"
+            @unknown default: "unknown"
+            }
+          let alertStyleName =
+            switch settings.alertStyle {
+            case .none: "NONE (no banners)"
+            case .banner: "BANNER"
+            case .alert: "ALERT"
+            @unknown default: "unknown"
+            }
+          log(
+            "Notification settings: auth=\(authStatus), alertStyle=\(alertStyleName), sound=\(settings.soundSetting.rawValue), badge=\(settings.badgeSetting.rawValue)"
           )
 
-          // Detect regression: was authorized, now reverted to notDetermined
-          // This happens on macOS 26+ where the OS silently revokes notification permission
-          if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
-            log(
-              "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+          // Track notification settings in analytics only when they change
+          let soundEnabled = settings.soundSetting == .enabled
+          let badgeEnabled = settings.badgeSetting == .enabled
+          let settingsChanged =
+            authStatus != self.lastNotificationAuthStatus
+            || alertStyleName != self.lastNotificationAlertStyle
+            || soundEnabled != self.lastNotificationSoundEnabled
+            || badgeEnabled != self.lastNotificationBadgeEnabled
+
+          if settingsChanged {
+            AnalyticsManager.shared.notificationSettingsChecked(
+              authStatus: authStatus,
+              alertStyle: alertStyleName,
+              soundEnabled: soundEnabled,
+              badgeEnabled: badgeEnabled,
+              bannersDisabled: settings.alertStyle == .none
             )
-            AnalyticsManager.shared.notificationRepairTriggered(
-              reason: "auth_regression",
-              previousStatus: "authorized",
-              currentStatus: "notDetermined"
-            )
-            self.repairNotificationRegistrationAndRetry()
+
+            // Detect regression: was authorized, now reverted to notDetermined
+            // This happens on macOS 26+ where the OS silently revokes notification permission
+            if self.lastNotificationAuthStatus == "authorized" && authStatus == "notDetermined" {
+              log(
+                "Notification permission REGRESSED from authorized to notDetermined — triggering auto-repair"
+              )
+              AnalyticsManager.shared.notificationRepairTriggered(
+                reason: "auth_regression",
+                previousStatus: "authorized",
+                currentStatus: "notDetermined"
+              )
+              self.repairNotificationRegistrationAndRetry()
+            }
+
+            // Update last known state
+            self.lastNotificationAuthStatus = authStatus
+            self.lastNotificationAlertStyle = alertStyleName
+            self.lastNotificationSoundEnabled = soundEnabled
+            self.lastNotificationBadgeEnabled = badgeEnabled
           }
 
-          // Update last known state
-          self.lastNotificationAuthStatus = authStatus
-          self.lastNotificationAlertStyle = alertStyleName
-          self.lastNotificationSoundEnabled = soundEnabled
-          self.lastNotificationBadgeEnabled = badgeEnabled
         }
-
       }
-    }
     }  // end DispatchQueue.main.async
   }
 

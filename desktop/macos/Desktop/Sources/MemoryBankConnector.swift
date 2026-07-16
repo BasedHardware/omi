@@ -131,7 +131,8 @@ enum MemoryBankConnector {
     let backups = try FileManager.default
       .contentsOfDirectory(
         at: backupDir,
-        includingPropertiesForKeys: nil)
+        includingPropertiesForKeys: nil
+      )
       .filter { $0.lastPathComponent.hasPrefix(".claude.json.backup.") }
       .sorted { lhs, rhs in
         backupTimestamp(lhs) > backupTimestamp(rhs)
@@ -192,7 +193,8 @@ enum MemoryBankConnector {
       throw ConnectError.notInstalled(
         "OpenClaw CLI not found locally. Install OpenClaw or add the openclaw command to PATH, then try again.")
     }
-    let workspace = openClawConfiguredWorkspace(configURL: config, cliPath: cliPath)
+    let workspace =
+      openClawConfiguredWorkspace(configURL: config, cliPath: cliPath)
       ?? home.appendingPathComponent(".openclaw/workspace")
     guard fm.fileExists(atPath: workspace.path) else {
       throw ConnectError.notInstalled(
@@ -221,17 +223,17 @@ enum MemoryBankConnector {
     } catch {
       let message = sanitizeCommandError(error.localizedDescription)
       throw ConnectError.invalidConfig(
-        "OpenClaw MCP config was updated, but OpenClaw rejected MCP reload for \(displayPath(for: configURL)): \(message)")
+        "OpenClaw MCP config was updated, but OpenClaw rejected MCP reload for \(displayPath(for: configURL)): \(message)"
+      )
     }
   }
 
   private static func openClawConfiguredWorkspace(configURL: URL, cliPath: String) -> URL? {
-    if
-      let output = try? runOpenClawCLI(
-        cliPath: cliPath,
-        configURL: configURL,
-        arguments: ["config", "get", "agents.defaults.workspace"]
-      ),
+    if let output = try? runOpenClawCLI(
+      cliPath: cliPath,
+      configURL: configURL,
+      arguments: ["config", "get", "agents.defaults.workspace"]
+    ),
       let workspace = normalizedPath(output.stdout)
     {
       return workspace
@@ -258,8 +260,7 @@ enum MemoryBankConnector {
       configURL: configURL,
       arguments: ["mcp", "show", "omi-memory", "--json"]
     )
-    if
-      let existing,
+    if let existing,
       let data = existing.stdout.data(using: .utf8),
       let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
       NSDictionary(dictionary: json).isEqual(to: server)
@@ -305,8 +306,10 @@ enum MemoryBankConnector {
     if let path = candidates.first(where: { FileManager.default.isExecutableFile(atPath: $0) }) {
       return path
     }
-    return try? runShell(["-lc", "command -v \(shellQuote(command))"]).stdout.trimmingCharacters(in: .whitespacesAndNewlines)
-      .nilIfEmpty
+    return try? runShell(["-lc", "command -v \(shellQuote(command))"]).stdout.trimmingCharacters(
+      in: .whitespacesAndNewlines
+    )
+    .nilIfEmpty
   }
 
   private static func runOpenClawCLI(cliPath: String, configURL: URL, arguments: [String]) throws -> CommandOutput {
@@ -448,7 +451,8 @@ enum MemoryBankConnector {
     let output = String(data: result.stdout, encoding: .utf8) ?? ""
     let error = String(data: result.stderr, encoding: .utf8) ?? ""
     guard result.terminationStatus == 0 else {
-      let message = error.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
+      let message =
+        error.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ?? output.trimmingCharacters(in: .whitespacesAndNewlines).nilIfEmpty
         ?? "exit code \(result.terminationStatus)"
       throw ConnectError.invalidConfig(message)
@@ -469,8 +473,7 @@ enum MemoryBankConnector {
 
   private static func normalizedPath(_ raw: String) -> URL? {
     var path = raw.trimmingCharacters(in: .whitespacesAndNewlines)
-    if
-      path.count >= 2,
+    if path.count >= 2,
       let first = path.first,
       let last = path.last,
       (first == "\"" && last == "\"") || (first == "'" && last == "'")
@@ -478,7 +481,8 @@ enum MemoryBankConnector {
       path = String(path.dropFirst().dropLast())
     }
     guard !path.isEmpty else { return nil }
-    let expanded = path
+    let expanded =
+      path
       .replacingOccurrences(of: "~", with: home.path, options: .anchored)
       .replacingOccurrences(of: "${HOME}", with: home.path)
       .replacingOccurrences(of: "$HOME", with: home.path)
@@ -544,7 +548,8 @@ enum MemoryBankConnector {
     let hermesDir = home.appendingPathComponent(".hermes")
     guard hermesInstallIsPresent(hermesDir: hermesDir, fileManager: fm) else {
       throw ConnectError.notInstalled(
-        "Hermes not found locally (looked for ~/.hermes/config.yaml and Hermes install files). Install Hermes, then try again.")
+        "Hermes not found locally (looked for ~/.hermes/config.yaml and Hermes install files). Install Hermes, then try again."
+      )
     }
 
     // 1. Wire the Omi memory MCP into config.yaml (idempotent).
@@ -644,7 +649,8 @@ enum MemoryBankConnector {
       let nextTopLevelIndex =
         lines[(sectionIndex + 1)...]
         .firstIndex(where: { !$0.isEmpty && !$0.hasPrefix(" ") && !$0.hasPrefix("\t") }) ?? lines.endIndex
-      if let existingIndex = lines[(sectionIndex + 1)..<nextTopLevelIndex].firstIndex(where: { $0 == "  omi-memory:" }) {
+      if let existingIndex = lines[(sectionIndex + 1)..<nextTopLevelIndex].firstIndex(where: { $0 == "  omi-memory:" })
+      {
         var endIndex = existingIndex + 1
         while endIndex < nextTopLevelIndex {
           let line = lines[endIndex]
@@ -665,7 +671,8 @@ enum MemoryBankConnector {
 
     if lines.contains(where: { $0.trimmingCharacters(in: .whitespaces).hasPrefix("mcp_servers:") }) {
       throw ConnectError.invalidConfig(
-        "Hermes config has an indented mcp_servers section; expected top-level mcp_servers in \(displayPath(for: configURL)).")
+        "Hermes config has an indented mcp_servers section; expected top-level mcp_servers in \(displayPath(for: configURL))."
+      )
     }
 
     var updated = content
@@ -682,8 +689,8 @@ enum MemoryBankConnector {
   }
 }
 
-private extension String {
-  var nilIfEmpty: String? {
+extension String {
+  fileprivate var nilIfEmpty: String? {
     isEmpty ? nil : self
   }
 }

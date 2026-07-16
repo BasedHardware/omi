@@ -2,6 +2,7 @@ import AppKit
 import CoreGraphics
 import CryptoKit
 import Foundation
+import VoiceTurnDomain
 
 /// The in-memory, single-turn source of truth for a PTT current-screen answer.
 ///
@@ -350,16 +351,18 @@ enum RealtimeScreenGroundingPolicy {
     }
     let evidence = receipt.descriptor
     guard evidence.canVerifyCurrentScreen else { return .transportNotDispatched }
-    guard receipt.isCurrent(
-      sourceObjectID: sourceObjectID,
-      activeTurnID: activeTurnID,
-      activeResponseID: activeResponseID,
-      currentTurnEpoch: currentTurnEpoch)
+    guard
+      receipt.isCurrent(
+        sourceObjectID: sourceObjectID,
+        activeTurnID: activeTurnID,
+        activeResponseID: activeResponseID,
+        currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
     guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard !observationClaimsDifferentApplication(
-      observation,
-      frontmostApp: evidence.frontmostApp ?? "")
+    guard
+      !observationClaimsDifferentApplication(
+        observation,
+        frontmostApp: evidence.frontmostApp ?? "")
     else { return .contradictoryApplication }
     return .accepted
   }
@@ -380,9 +383,10 @@ enum RealtimeScreenGroundingPolicy {
     // The frozen descriptor is the only app identity that belongs to this receipt.
     // Sampling the current process list here made a valid capture depend on a later
     // focus change, which is the same ambient-state leak this protocol exists to avoid.
-    let candidates = Set(commonDesktopApps
-      .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
-      .filter { !$0.isEmpty && $0 != normalizedFrontmost })
+    let candidates = Set(
+      commonDesktopApps
+        .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
+        .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description
     // naturally says things such as "application windows" or can mention an app visible inside
     // content; neither statement contradicts the native frontmost-app fact. This guard protects
@@ -471,8 +475,9 @@ enum RealtimeScreenEvidenceCapture {
   /// block the first turn. The compositor's front-to-back list is enough to identify the
   /// frontmost on-screen window for the already-known foreground process.
   private static func frontmostOnScreenWindowID(ownedBy pid: pid_t) -> CGWindowID? {
-    guard let windows = CGWindowListCopyWindowInfo(
-      [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
+    guard
+      let windows = CGWindowListCopyWindowInfo(
+        [.optionOnScreenOnly, .excludeDesktopElements], kCGNullWindowID) as? [[String: Any]]
     else { return nil }
     for window in windows {
       guard let ownerPID = window[kCGWindowOwnerPID as String] as? NSNumber,

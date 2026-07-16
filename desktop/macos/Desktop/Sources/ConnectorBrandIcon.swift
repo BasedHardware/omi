@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 enum ConnectorBrand: String, Sendable {
   case calendar

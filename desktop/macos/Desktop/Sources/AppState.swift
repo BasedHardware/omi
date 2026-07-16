@@ -1,7 +1,7 @@
 import AVFoundation
 import Combine
-import OmiSupport
 @preconcurrency import ObjectiveC
+import OmiSupport
 import SwiftUI
 import UserNotifications
 
@@ -42,13 +42,13 @@ struct SegmentTranslation: Identifiable {
 struct SpeakerSegment: Identifiable {
   /// Stable identity — uses backend segment ID when available, otherwise speaker + start time
   var id: String { segmentId ?? "\(speaker)-\(start)" }
-  var segmentId: String?   // Backend-assigned UUID
+  var segmentId: String?  // Backend-assigned UUID
   var speaker: Int
   var text: String
   var start: Double
   var end: Double
   var isUser: Bool = false
-  var personId: String?    // Backend-assigned person ID from speaker identification
+  var personId: String?  // Backend-assigned person ID from speaker identification
   var translations: [SegmentTranslation] = []
 }
 
@@ -140,11 +140,11 @@ enum DesktopConversationMatchPolicy {
   ) -> Bool {
     guard lifecycleVersion != nil || lifecycleSequence != nil else { return true }
     guard lifecycleVersion == 1,
-          let recordingSessionId,
-          !recordingSessionId.isEmpty,
-          lifecyclePhase == expectedLifecyclePhase,
-          let lifecycleSequence,
-          lifecycleSequence >= 0
+      let recordingSessionId,
+      !recordingSessionId.isEmpty,
+      lifecyclePhase == expectedLifecyclePhase,
+      let lifecycleSequence,
+      lifecycleSequence >= 0
     else { return false }
     if let expectedBackendId, !expectedBackendId.isEmpty {
       guard recordingSessionId == expectedBackendId, conversationId == expectedBackendId else { return false }

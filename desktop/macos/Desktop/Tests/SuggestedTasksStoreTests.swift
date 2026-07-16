@@ -761,8 +761,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient {
     return result
   }
 
-  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord]
-  {
+  func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord] {
     if let listError { throw listError }
     return Array(records.prefix(limit))
   }

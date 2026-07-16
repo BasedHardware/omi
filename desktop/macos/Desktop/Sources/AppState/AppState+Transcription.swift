@@ -138,42 +138,42 @@ extension AppState {
           await self?.startAudioCapture(source: effectiveSource)
         }
       } else {
-      transcriptionService?.start(
-        onSegments: { [weak self] segments in
-          Task { @MainActor in
-            self?.handleBackendSegments(segments)
+        transcriptionService?.start(
+          onSegments: { [weak self] segments in
+            Task { @MainActor in
+              self?.handleBackendSegments(segments)
+            }
+          },
+          onEvent: { [weak self] event in
+            Task { @MainActor in
+              self?.handleListenEvent(event)
+            }
+          },
+          onError: { [weak self] error in
+            Task { @MainActor in
+              logError("Transcription error", error: error)
+              AnalyticsManager.shared.recordingError(
+                error: error.localizedDescription,
+                reason: "cloud_stt_error",
+                source: self?.currentConversationSource.rawValue,
+                stage: "streaming"
+              )
+              // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
+              // instead of dropping it. Falls through to stopTranscription if not possible.
+              self?.handleCloudSTTReconnectFailure()
+            }
+          },
+          onConnected: { [weak self] in
+            Task { @MainActor in
+              log("Transcription: Connected to Python backend")
+              // Start audio capture once connected
+              await self?.startAudioCapture(source: effectiveSource)
+            }
+          },
+          onDisconnected: {
+            log("Transcription: Disconnected from Python backend")
           }
-        },
-        onEvent: { [weak self] event in
-          Task { @MainActor in
-            self?.handleListenEvent(event)
-          }
-        },
-        onError: { [weak self] error in
-          Task { @MainActor in
-            logError("Transcription error", error: error)
-            AnalyticsManager.shared.recordingError(
-              error: error.localizedDescription,
-              reason: "cloud_stt_error",
-              source: self?.currentConversationSource.rawValue,
-              stage: "streaming"
-            )
-            // Cloud WS gave up (reconnects exhausted) → try to keep recording on-device
-            // instead of dropping it. Falls through to stopTranscription if not possible.
-            self?.handleCloudSTTReconnectFailure()
-          }
-        },
-        onConnected: { [weak self] in
-          Task { @MainActor in
-            log("Transcription: Connected to Python backend")
-            // Start audio capture once connected
-            await self?.startAudioCapture(source: effectiveSource)
-          }
-        },
-        onDisconnected: {
-          log("Transcription: Disconnected from Python backend")
-        }
-      )
+        )
       }
 
       isTranscribing = true
@@ -554,13 +554,15 @@ extension AppState {
       log("Transcription: Meeting ended — finishing conversation and waiting for the next meeting")
       Task { @MainActor in
         defer { self.meetingEndFinalizationInProgress = false }
-        guard MeetingConversationBoundaryPolicy.shouldFinishConversation(
-          mode: self.effectiveSystemAudioMode,
-          meetingStateReady: self.meetingDetector?.hasObservedState == true,
-          shouldCapture: self.meetingDetector?.isMeetingActive == true,
-          segmentCount: self.totalSegmentCount,
-          hasSpeakerSegments: !self.speakerSegments.isEmpty
-        ) else {
+        guard
+          MeetingConversationBoundaryPolicy.shouldFinishConversation(
+            mode: self.effectiveSystemAudioMode,
+            meetingStateReady: self.meetingDetector?.hasObservedState == true,
+            shouldCapture: self.meetingDetector?.isMeetingActive == true,
+            segmentCount: self.totalSegmentCount,
+            hasSpeakerSegments: !self.speakerSegments.isEmpty
+          )
+        else {
           log("Transcription: skipped meeting-ended finalization because meeting state changed")
           return
         }
@@ -839,11 +841,13 @@ extension AppState {
   /// or we've already tried this once this session.
   @MainActor
   func handleCloudSTTReconnectFailure() {
-    guard sttSession.canBeginCloudToLocalFallback(
-      isTranscribing: isTranscribing,
-      audioSource: audioSource,
-      isAppleSilicon: Self.isAppleSilicon
-    ) else {
+    guard
+      sttSession.canBeginCloudToLocalFallback(
+        isTranscribing: isTranscribing,
+        audioSource: audioSource,
+        isAppleSilicon: Self.isAppleSilicon
+      )
+    else {
       stopTranscription()
       return
     }
@@ -952,8 +956,7 @@ extension AppState {
 
     // Restart the 4-hour max recording timer
     maxRecordingTimer?.invalidate()
-    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false)
-    { [weak self] _ in
+    maxRecordingTimer = Timer.scheduledTimer(withTimeInterval: maxRecordingDuration, repeats: false) { [weak self] _ in
       Task { @MainActor in
         guard let self = self, self.isTranscribing else { return }
         log("Transcription: 4-hour limit reached — stopping and restarting")

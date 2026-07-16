@@ -157,10 +157,13 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
     let transcript = conversation.transcript
 
     // isUser=true speaker 1 should show "You", not "Speaker 1"
-    XCTAssertTrue(transcript.contains("You: Hello from user"), "User segment should use 'You' label based on isUser, not speaker ID")
+    XCTAssertTrue(
+      transcript.contains("You: Hello from user"), "User segment should use 'You' label based on isUser, not speaker ID"
+    )
 
     // isUser=false speaker 0 should show "Speaker 0", not "You"
-    XCTAssertTrue(transcript.contains("Speaker 0: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
+    XCTAssertTrue(
+      transcript.contains("Speaker 0: Hello from other"), "Non-user segment with speaker 0 should NOT use 'You' label")
   }
 
   // MARK: - Translation Tests
@@ -209,7 +212,7 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
   func testSpeakerSegmentTranslationsPreserved() {
     let translations = [
       SegmentTranslation(lang: "en", text: "Hello"),
-      SegmentTranslation(lang: "fr", text: "Bonjour")
+      SegmentTranslation(lang: "fr", text: "Bonjour"),
     ]
     let segment = SpeakerSegment(
       speaker: 0,
@@ -239,7 +242,7 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
       end: 1,
       translations: [
         TranscriptTranslation(lang: "en", text: "Hello"),
-        TranscriptTranslation(lang: "fr", text: "Bonjour")
+        TranscriptTranslation(lang: "fr", text: "Bonjour"),
       ]
     )
 
@@ -389,7 +392,7 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
       end: 1,
       isUser: false,
       translations: [
-        SegmentTranslation(lang: "en", text: "Original text translated"),
+        SegmentTranslation(lang: "en", text: "Original text translated")
       ]
     )
 
@@ -426,7 +429,7 @@ final class TranscriptSpeakerAssignmentTests: XCTestCase {
       end: 1,
       isUser: false,
       translations: [
-        SegmentTranslation(lang: "en", text: "Old translation"),
+        SegmentTranslation(lang: "en", text: "Old translation")
       ]
     )
 

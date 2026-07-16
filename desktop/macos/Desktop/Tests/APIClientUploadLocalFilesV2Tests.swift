@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class APIClientUploadLocalFilesV2Tests: XCTestCase {
@@ -11,8 +12,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 202,
       body: """
-      {"job_id":"job-123","status":"queued","total_files":1,"total_segments":0,"poll_after_ms":1000}
-      """.data(using: .utf8)!
+        {"job_id":"job-123","status":"queued","total_files":1,"total_segments":0,"poll_after_ms":1000}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())
@@ -29,8 +30,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 200,
       body: """
-      {"new_memories":["c1"],"updated_memories":[],"failed_segments":0,"total_segments":1,"errors":[]}
-      """.data(using: .utf8)!
+        {"new_memories":["c1"],"updated_memories":[],"failed_segments":0,"total_segments":1,"errors":[]}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())
@@ -48,8 +49,8 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
     SyncUploadURLProtocol.setResponse(
       statusCode: 200,
       body: """
-      {"new_memories":["c1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":[]}
-      """.data(using: .utf8)!
+        {"new_memories":["c1"],"updated_memories":[],"failed_segments":1,"total_segments":2,"errors":[]}
+        """.data(using: .utf8)!
     )
 
     let client = APIClient(session: makeSession())

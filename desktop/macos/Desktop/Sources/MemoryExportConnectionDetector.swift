@@ -206,15 +206,16 @@ enum MemoryExportConnectionDetector {
     }
 
     let nsRange = NSRange(body.startIndex..<body.endIndex, in: body)
-    return Set(regex.matches(in: body, options: [], range: nsRange).compactMap { match in
-      guard
-        match.numberOfRanges > 1,
-        let range = Range(match.range(at: 1), in: body)
-      else {
-        return nil
-      }
-      return String(body[range])
-    })
+    return Set(
+      regex.matches(in: body, options: [], range: nsRange).compactMap { match in
+        guard
+          match.numberOfRanges > 1,
+          let range = Range(match.range(at: 1), in: body)
+        else {
+          return nil
+        }
+        return String(body[range])
+      })
   }
 
   private static func normalizedKey(_ key: String?) -> String? {

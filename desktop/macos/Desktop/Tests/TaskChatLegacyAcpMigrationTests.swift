@@ -32,7 +32,9 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testTaskChatFailureKeepsVisibleAssistantMessage() throws {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
-    XCTAssertTrue(source.contains("Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
+    XCTAssertTrue(
+      source.contains(
+        "Self.applyFailureTextIfNeeded(to: &messages[index], errorDescription: error.localizedDescription)"))
     XCTAssertTrue(source.contains("try await terminalizeJournalMessage("))
     XCTAssertFalse(source.contains("persistMessage("))
     XCTAssertTrue(source.contains("observeRuntimeProjectionFailures()"))
@@ -109,9 +111,10 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertEqual(message.text, "Partial answer\n\nFailed: OpenClaw failed")
     XCTAssertEqual(message.contentBlocks.count, 4)
     guard case .text(_, "Partial ") = message.contentBlocks[0],
-          case .thinking(_, "Looking up context") = message.contentBlocks[1],
-          case .text(_, "answer") = message.contentBlocks[2],
-          case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[3] else {
+      case .thinking(_, "Looking up context") = message.contentBlocks[1],
+      case .text(_, "answer") = message.contentBlocks[2],
+      case .text(_, "Failed: OpenClaw failed") = message.contentBlocks[3]
+    else {
       return XCTFail("Expected split partial text to stay in place with only failure text appended")
     }
   }
@@ -138,7 +141,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertFalse(source.contains("isFollowUp"))
     XCTAssertFalse(source.contains("sendFollowUp"))
     guard let tokenRange = source.range(of: "localSendToken = LocalSendToken"),
-          let recordRange = source.range(of: "recordJournalExchangeOperation(") else {
+      let recordRange = source.range(of: "recordJournalExchangeOperation(")
+    else {
       return XCTFail("Expected task chat sends to atomically admit both canonical rows")
     }
     XCTAssertLessThan(recordRange.lowerBound, tokenRange.lowerBound)
@@ -175,7 +179,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
       "OpenClaw failed: OpenAI API error: upstream unavailable"
     )
     XCTAssertEqual(
-      AgentFailureTranscriptFormatter.transcriptText(for: AgentFailureTranscriptFormatter.errorText(for: projection) ?? ""),
+      AgentFailureTranscriptFormatter.transcriptText(
+        for: AgentFailureTranscriptFormatter.errorText(for: projection) ?? ""),
       "Failed: OpenClaw failed: OpenAI API error: upstream unavailable"
     )
   }
@@ -205,7 +210,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     XCTAssertTrue(body.contains("requestJournalRefreshForRuntimeFailure("))
     XCTAssertFalse(body.contains("scheduleJournalUpdate("))
     XCTAssertFalse(source.contains("bindActive("), "surface-only projections must not bind run authority")
-    XCTAssertFalse(source.contains("TaskChatRuntime.recordJournalMessage(\n                    workstreamId: self.workstreamId"))
+    XCTAssertFalse(
+      source.contains("TaskChatRuntime.recordJournalMessage(\n                    workstreamId: self.workstreamId"))
   }
 
   func testTerminalFailureFinalizeDoesNotPersistFailureTranscriptTwice() throws {
@@ -230,7 +236,8 @@ final class TaskChatKernelIdentityTests: XCTestCase {
     let source = try sourceFile("ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
 
     XCTAssertTrue(
-      source.contains("private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
+      source.contains(
+        "private func completeRemainingToolCalls(messageId: String, terminalStatus: ToolCallStatus = .completed)")
     )
     XCTAssertTrue(
       source.contains("streamingBuffer.completeRemainingToolCalls(")
@@ -245,22 +252,25 @@ final class TaskChatKernelIdentityTests: XCTestCase {
   func testDelayedEarlierRunFailureCannotTerminalizeCurrentProducingTurn() {
     var producing = TaskChatProducingRunProjection()
     producing.begin(assistantMessageID: "assistant-r2")
-    XCTAssertTrue(producing.bindResult(
-      assistantMessageID: "assistant-r2",
-      runID: "run-r2",
-      attemptID: "attempt-r2"))
+    XCTAssertTrue(
+      producing.bindResult(
+        assistantMessageID: "assistant-r2",
+        runID: "run-r2",
+        attemptID: "attempt-r2"))
 
     XCTAssertNil(
-      producing.terminalMessageID(for: projection(
-        runID: "run-r1",
-        attemptID: "attempt-r1",
-        status: .failed)),
+      producing.terminalMessageID(
+        for: projection(
+          runID: "run-r1",
+          attemptID: "attempt-r1",
+          status: .failed)),
       "a delayed R1 terminal projection on the same surface must leave R2 untouched")
     XCTAssertEqual(
-      producing.terminalMessageID(for: projection(
-        runID: "run-r2",
-        attemptID: "attempt-r2",
-        status: .failed)),
+      producing.terminalMessageID(
+        for: projection(
+          runID: "run-r2",
+          attemptID: "attempt-r2",
+          status: .failed)),
       "assistant-r2")
   }
 

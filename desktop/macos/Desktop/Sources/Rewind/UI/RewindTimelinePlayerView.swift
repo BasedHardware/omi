@@ -1,506 +1,509 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// A full-screen timeline player view with playback controls
 /// Similar to screenpipe's timeline view - shows the current frame with a timeline slider
 struct RewindTimelinePlayerView: View {
-    @StateObject private var viewModel: TimelinePlayerViewModel
-    @Environment(\.dismiss) private var dismiss
+  @StateObject private var viewModel: TimelinePlayerViewModel
+  @Environment(\.dismiss) private var dismiss
 
-    init(screenshots: [Screenshot], initialIndex: Int = 0) {
-        _viewModel = StateObject(wrappedValue: TimelinePlayerViewModel(
-            screenshots: screenshots,
-            initialIndex: initialIndex
-        ))
+  init(screenshots: [Screenshot], initialIndex: Int = 0) {
+    _viewModel = StateObject(
+      wrappedValue: TimelinePlayerViewModel(
+        screenshots: screenshots,
+        initialIndex: initialIndex
+      ))
+  }
+
+  var body: some View {
+    ZStack {
+      // Background
+      Color.black.ignoresSafeArea()
+
+      // Main content
+      VStack(spacing: 0) {
+        // Top bar with close button and info
+        topBar
+
+        // Current frame display
+        Spacer()
+        frameDisplay
+        Spacer()
+
+        // Timeline and controls at bottom
+        VStack(spacing: OmiSpacing.md) {
+          // Timeline slider
+          timelineSlider
+
+          // Playback controls
+          playbackControls
+
+          // Time and app info
+          frameInfo
+        }
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.bottom, OmiSpacing.xxl)
+        .background(
+          LinearGradient(
+            colors: [.clear, .black.opacity(0.8)],
+            startPoint: .top,
+            endPoint: .bottom
+          )
+          .frame(height: 200)
+          .offset(y: -50)
+        )
+      }
     }
-
-    var body: some View {
-        ZStack {
-            // Background
-            Color.black.ignoresSafeArea()
-
-            // Main content
-            VStack(spacing: 0) {
-                // Top bar with close button and info
-                topBar
-
-                // Current frame display
-                Spacer()
-                frameDisplay
-                Spacer()
-
-                // Timeline and controls at bottom
-                VStack(spacing: OmiSpacing.md) {
-                    // Timeline slider
-                    timelineSlider
-
-                    // Playback controls
-                    playbackControls
-
-                    // Time and app info
-                    frameInfo
-                }
-                .padding(.horizontal, OmiSpacing.xxl)
-                .padding(.bottom, OmiSpacing.xxl)
-                .background(
-                    LinearGradient(
-                        colors: [.clear, .black.opacity(0.8)],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                    .frame(height: 200)
-                    .offset(y: -50)
-                )
-            }
-        }
-        .onKeyPress(.escape) {
-            dismiss()
-            return .handled
-        }
-        .onKeyPress(.space) {
-            viewModel.togglePlayback()
-            return .handled
-        }
-        .onKeyPress(.leftArrow) {
-            viewModel.previousFrame()
-            return .handled
-        }
-        .onKeyPress(.rightArrow) {
-            viewModel.nextFrame()
-            return .handled
-        }
+    .onKeyPress(.escape) {
+      dismiss()
+      return .handled
     }
-
-    // MARK: - Top Bar
-
-    private var topBar: some View {
-        HStack {
-            Button {
-                dismiss()
-            } label: {
-                Image(systemName: "xmark")
-                    .scaledFont(size: OmiType.subheading, weight: .semibold)
-                    .foregroundColor(.white)
-                    .frame(width: 32, height: 32)
-                    .background(Color.white.opacity(0.2))
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            Spacer()
-
-            // Screenshot count
-            Text("\(viewModel.currentIndex + 1) / \(viewModel.screenshots.count)")
-                .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
-                .foregroundColor(.white.opacity(0.8))
-
-            Spacer()
-
-            // Playback speed
-            Menu {
-                ForEach([0.5, 1.0, 2.0, 4.0, 8.0], id: \.self) { speed in
-                    Button {
-                        viewModel.playbackSpeed = speed
-                    } label: {
-                        HStack {
-                            Text("\(speed, specifier: "%.1f")x")
-                            if viewModel.playbackSpeed == speed {
-                                Image(systemName: "checkmark")
-                            }
-                        }
-                    }
-                }
-            } label: {
-                HStack(spacing: OmiSpacing.xxs) {
-                    Image(systemName: "speedometer")
-                    Text("\(viewModel.playbackSpeed, specifier: "%.1f")x")
-                }
-                .scaledFont(size: OmiType.caption, weight: .medium)
-                .foregroundColor(.white.opacity(0.8))
-                .padding(.horizontal, OmiSpacing.sm)
-                .padding(.vertical, OmiSpacing.xs)
-                .background(Color.white.opacity(0.2))
-                .cornerRadius(OmiChrome.elementRadius)
-            }
-            .buttonStyle(.plain)
-        }
-        .padding(.horizontal, OmiSpacing.xl)
-        .padding(.top, OmiSpacing.lg)
+    .onKeyPress(.space) {
+      viewModel.togglePlayback()
+      return .handled
     }
-
-    // MARK: - Frame Display
-
-    private var frameDisplay: some View {
-        Group {
-            if viewModel.isLoading {
-                ProgressView()
-                    .progressViewStyle(.circular)
-                    .scaleEffect(1.5)
-                    .tint(.white)
-            } else if let image = viewModel.currentImage {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
-                    .cornerRadius(OmiChrome.elementRadius)
-                    .shadow(color: .black.opacity(0.5), radius: 20)
-            } else {
-                VStack(spacing: OmiSpacing.md) {
-                    Image(systemName: "photo")
-                        .scaledFont(size: 48)
-                        .foregroundColor(.white.opacity(0.5))
-                    Text("Failed to load frame")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(.white.opacity(0.5))
-                }
-            }
-        }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
-        .padding(.horizontal, OmiSpacing.page)
+    .onKeyPress(.leftArrow) {
+      viewModel.previousFrame()
+      return .handled
     }
-
-    // MARK: - Timeline Slider
-
-    private var timelineSlider: some View {
-        VStack(spacing: OmiSpacing.sm) {
-            // App activity visualization
-            GeometryReader { geometry in
-                HStack(spacing: 1) {
-                    ForEach(Array(viewModel.appSegments.enumerated()), id: \.offset) { index, segment in
-                        Rectangle()
-                            .fill(segment.color)
-                            .frame(width: max(2, geometry.size.width * segment.widthRatio))
-                            .opacity(isInCurrentSegment(index) ? 1.0 : 0.6)
-                    }
-                }
-            }
-            .frame(height: 8)
-            .cornerRadius(OmiChrome.stripRadius)
-
-            // Slider
-            Slider(
-                value: Binding(
-                    get: { Double(viewModel.currentIndex) },
-                    set: { viewModel.seekToIndex(Int($0)) }
-                ),
-                in: 0...Double(max(0, viewModel.screenshots.count - 1)),
-                step: 1
-            )
-            .tint(OmiColors.accent)
-        }
+    .onKeyPress(.rightArrow) {
+      viewModel.nextFrame()
+      return .handled
     }
+  }
 
-    private func isInCurrentSegment(_ segmentIndex: Int) -> Bool {
-        var startIndex = 0
-        for (index, segment) in viewModel.appSegments.enumerated() {
-            let endIndex = startIndex + segment.count - 1
-            if index == segmentIndex {
-                return viewModel.currentIndex >= startIndex && viewModel.currentIndex <= endIndex
+  // MARK: - Top Bar
+
+  private var topBar: some View {
+    HStack {
+      Button {
+        dismiss()
+      } label: {
+        Image(systemName: "xmark")
+          .scaledFont(size: OmiType.subheading, weight: .semibold)
+          .foregroundColor(.white)
+          .frame(width: 32, height: 32)
+          .background(Color.white.opacity(0.2))
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+
+      Spacer()
+
+      // Screenshot count
+      Text("\(viewModel.currentIndex + 1) / \(viewModel.screenshots.count)")
+        .scaledFont(size: OmiType.body, weight: .medium, design: .monospaced)
+        .foregroundColor(.white.opacity(0.8))
+
+      Spacer()
+
+      // Playback speed
+      Menu {
+        ForEach([0.5, 1.0, 2.0, 4.0, 8.0], id: \.self) { speed in
+          Button {
+            viewModel.playbackSpeed = speed
+          } label: {
+            HStack {
+              Text("\(speed, specifier: "%.1f")x")
+              if viewModel.playbackSpeed == speed {
+                Image(systemName: "checkmark")
+              }
             }
-            startIndex = endIndex + 1
+          }
         }
-        return false
-    }
-
-    // MARK: - Playback Controls
-
-    private var playbackControls: some View {
-        HStack(spacing: OmiSpacing.xxl) {
-            // Skip to start
-            Button {
-                viewModel.seekToIndex(0)
-            } label: {
-                Image(systemName: "backward.end.fill")
-                    .scaledFont(size: OmiType.heading)
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.currentIndex == 0)
-            .opacity(viewModel.currentIndex == 0 ? 0.5 : 1.0)
-
-            // Previous frame
-            Button {
-                viewModel.previousFrame()
-            } label: {
-                Image(systemName: "backward.frame.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.currentIndex == 0)
-            .opacity(viewModel.currentIndex == 0 ? 0.5 : 1.0)
-
-            // Play/Pause
-            Button {
-                viewModel.togglePlayback()
-            } label: {
-                Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
-                    .scaledFont(size: 32)
-                    .foregroundColor(OmiColors.textPrimary)
-                    .frame(width: 64, height: 64)
-                    .background(Color.white)
-                    .clipShape(Circle())
-            }
-            .buttonStyle(.plain)
-
-            // Next frame
-            Button {
-                viewModel.nextFrame()
-            } label: {
-                Image(systemName: "forward.frame.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
-            .opacity(viewModel.currentIndex >= viewModel.screenshots.count - 1 ? 0.5 : 1.0)
-
-            // Skip to end
-            Button {
-                viewModel.seekToIndex(viewModel.screenshots.count - 1)
-            } label: {
-                Image(systemName: "forward.end.fill")
-                    .scaledFont(size: OmiType.heading)
-                    .foregroundColor(.white)
-            }
-            .buttonStyle(.plain)
-            .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
-            .opacity(viewModel.currentIndex >= viewModel.screenshots.count - 1 ? 0.5 : 1.0)
+      } label: {
+        HStack(spacing: OmiSpacing.xxs) {
+          Image(systemName: "speedometer")
+          Text("\(viewModel.playbackSpeed, specifier: "%.1f")x")
         }
+        .scaledFont(size: OmiType.caption, weight: .medium)
+        .foregroundColor(.white.opacity(0.8))
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
+        .background(Color.white.opacity(0.2))
+        .cornerRadius(OmiChrome.elementRadius)
+      }
+      .buttonStyle(.plain)
     }
+    .padding(.horizontal, OmiSpacing.xl)
+    .padding(.top, OmiSpacing.lg)
+  }
 
-    // MARK: - Frame Info
+  // MARK: - Frame Display
 
-    private var frameInfo: some View {
-        HStack {
-            if let screenshot = viewModel.currentScreenshot {
-                // App icon and name
-                HStack(spacing: OmiSpacing.sm) {
-                    AppIconView(appName: screenshot.appName, size: 20)
-                    Text(screenshot.appName)
-                        .scaledFont(size: OmiType.body, weight: .medium)
-                        .foregroundColor(.white)
-                }
-
-                Spacer()
-
-                // Timestamp
-                Text(screenshot.formattedDate)
-                    .scaledFont(size: OmiType.body, design: .monospaced)
-                    .foregroundColor(.white.opacity(0.8))
-            }
+  private var frameDisplay: some View {
+    Group {
+      if viewModel.isLoading {
+        ProgressView()
+          .progressViewStyle(.circular)
+          .scaleEffect(1.5)
+          .tint(.white)
+      } else if let image = viewModel.currentImage {
+        Image(nsImage: image)
+          .resizable()
+          .aspectRatio(contentMode: .fit)
+          .cornerRadius(OmiChrome.elementRadius)
+          .shadow(color: .black.opacity(0.5), radius: 20)
+      } else {
+        VStack(spacing: OmiSpacing.md) {
+          Image(systemName: "photo")
+            .scaledFont(size: 48)
+            .foregroundColor(.white.opacity(0.5))
+          Text("Failed to load frame")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(.white.opacity(0.5))
         }
+      }
     }
+    .frame(maxWidth: .infinity, maxHeight: .infinity)
+    .padding(.horizontal, OmiSpacing.page)
+  }
+
+  // MARK: - Timeline Slider
+
+  private var timelineSlider: some View {
+    VStack(spacing: OmiSpacing.sm) {
+      // App activity visualization
+      GeometryReader { geometry in
+        HStack(spacing: 1) {
+          ForEach(Array(viewModel.appSegments.enumerated()), id: \.offset) { index, segment in
+            Rectangle()
+              .fill(segment.color)
+              .frame(width: max(2, geometry.size.width * segment.widthRatio))
+              .opacity(isInCurrentSegment(index) ? 1.0 : 0.6)
+          }
+        }
+      }
+      .frame(height: 8)
+      .cornerRadius(OmiChrome.stripRadius)
+
+      // Slider
+      Slider(
+        value: Binding(
+          get: { Double(viewModel.currentIndex) },
+          set: { viewModel.seekToIndex(Int($0)) }
+        ),
+        in: 0...Double(max(0, viewModel.screenshots.count - 1)),
+        step: 1
+      )
+      .tint(OmiColors.accent)
+    }
+  }
+
+  private func isInCurrentSegment(_ segmentIndex: Int) -> Bool {
+    var startIndex = 0
+    for (index, segment) in viewModel.appSegments.enumerated() {
+      let endIndex = startIndex + segment.count - 1
+      if index == segmentIndex {
+        return viewModel.currentIndex >= startIndex && viewModel.currentIndex <= endIndex
+      }
+      startIndex = endIndex + 1
+    }
+    return false
+  }
+
+  // MARK: - Playback Controls
+
+  private var playbackControls: some View {
+    HStack(spacing: OmiSpacing.xxl) {
+      // Skip to start
+      Button {
+        viewModel.seekToIndex(0)
+      } label: {
+        Image(systemName: "backward.end.fill")
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(.white)
+      }
+      .buttonStyle(.plain)
+      .disabled(viewModel.currentIndex == 0)
+      .opacity(viewModel.currentIndex == 0 ? 0.5 : 1.0)
+
+      // Previous frame
+      Button {
+        viewModel.previousFrame()
+      } label: {
+        Image(systemName: "backward.frame.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(.white)
+      }
+      .buttonStyle(.plain)
+      .disabled(viewModel.currentIndex == 0)
+      .opacity(viewModel.currentIndex == 0 ? 0.5 : 1.0)
+
+      // Play/Pause
+      Button {
+        viewModel.togglePlayback()
+      } label: {
+        Image(systemName: viewModel.isPlaying ? "pause.fill" : "play.fill")
+          .scaledFont(size: 32)
+          .foregroundColor(OmiColors.textPrimary)
+          .frame(width: 64, height: 64)
+          .background(Color.white)
+          .clipShape(Circle())
+      }
+      .buttonStyle(.plain)
+
+      // Next frame
+      Button {
+        viewModel.nextFrame()
+      } label: {
+        Image(systemName: "forward.frame.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(.white)
+      }
+      .buttonStyle(.plain)
+      .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
+      .opacity(viewModel.currentIndex >= viewModel.screenshots.count - 1 ? 0.5 : 1.0)
+
+      // Skip to end
+      Button {
+        viewModel.seekToIndex(viewModel.screenshots.count - 1)
+      } label: {
+        Image(systemName: "forward.end.fill")
+          .scaledFont(size: OmiType.heading)
+          .foregroundColor(.white)
+      }
+      .buttonStyle(.plain)
+      .disabled(viewModel.currentIndex >= viewModel.screenshots.count - 1)
+      .opacity(viewModel.currentIndex >= viewModel.screenshots.count - 1 ? 0.5 : 1.0)
+    }
+  }
+
+  // MARK: - Frame Info
+
+  private var frameInfo: some View {
+    HStack {
+      if let screenshot = viewModel.currentScreenshot {
+        // App icon and name
+        HStack(spacing: OmiSpacing.sm) {
+          AppIconView(appName: screenshot.appName, size: 20)
+          Text(screenshot.appName)
+            .scaledFont(size: OmiType.body, weight: .medium)
+            .foregroundColor(.white)
+        }
+
+        Spacer()
+
+        // Timestamp
+        Text(screenshot.formattedDate)
+          .scaledFont(size: OmiType.body, design: .monospaced)
+          .foregroundColor(.white.opacity(0.8))
+      }
+    }
+  }
 }
 
 // MARK: - View Model
 
 @MainActor
 class TimelinePlayerViewModel: ObservableObject {
-    let screenshots: [Screenshot]
+  let screenshots: [Screenshot]
 
-    @Published var currentIndex: Int
-    @Published var currentImage: NSImage?
-    @Published var isLoading = false
-    @Published var isPlaying = false
-    @Published var playbackSpeed: Double = 1.0
+  @Published var currentIndex: Int
+  @Published var currentImage: NSImage?
+  @Published var isLoading = false
+  @Published var isPlaying = false
+  @Published var playbackSpeed: Double = 1.0
 
-    private var playbackTimer: Timer?
+  private var playbackTimer: Timer?
 
-    // App segments for timeline visualization
-    struct AppSegment {
-        let appName: String
-        let color: Color
-        let count: Int
-        let widthRatio: CGFloat
-    }
+  // App segments for timeline visualization
+  struct AppSegment {
+    let appName: String
+    let color: Color
+    let count: Int
+    let widthRatio: CGFloat
+  }
 
-    var appSegments: [AppSegment] {
-        guard let first = screenshots.first else { return [] }
+  var appSegments: [AppSegment] {
+    guard let first = screenshots.first else { return [] }
 
-        var segments: [AppSegment] = []
-        var currentApp = first.appName
-        var currentCount = 0
+    var segments: [AppSegment] = []
+    var currentApp = first.appName
+    var currentCount = 0
 
-        for screenshot in screenshots {
-            if screenshot.appName == currentApp {
-                currentCount += 1
-            } else {
-                segments.append(AppSegment(
-                    appName: currentApp,
-                    color: colorForApp(currentApp),
-                    count: currentCount,
-                    widthRatio: CGFloat(currentCount) / CGFloat(screenshots.count)
-                ))
-                currentApp = screenshot.appName
-                currentCount = 1
-            }
-        }
-
-        // Add final segment
-        segments.append(AppSegment(
+    for screenshot in screenshots {
+      if screenshot.appName == currentApp {
+        currentCount += 1
+      } else {
+        segments.append(
+          AppSegment(
             appName: currentApp,
             color: colorForApp(currentApp),
             count: currentCount,
             widthRatio: CGFloat(currentCount) / CGFloat(screenshots.count)
-        ))
-
-        return segments
+          ))
+        currentApp = screenshot.appName
+        currentCount = 1
+      }
     }
 
-    var currentScreenshot: Screenshot? {
-        guard currentIndex >= 0 && currentIndex < screenshots.count else { return nil }
-        return screenshots[currentIndex]
+    // Add final segment
+    segments.append(
+      AppSegment(
+        appName: currentApp,
+        color: colorForApp(currentApp),
+        count: currentCount,
+        widthRatio: CGFloat(currentCount) / CGFloat(screenshots.count)
+      ))
+
+    return segments
+  }
+
+  var currentScreenshot: Screenshot? {
+    guard currentIndex >= 0 && currentIndex < screenshots.count else { return nil }
+    return screenshots[currentIndex]
+  }
+
+  init(screenshots: [Screenshot], initialIndex: Int) {
+    self.screenshots = screenshots
+    self.currentIndex = min(initialIndex, screenshots.count - 1)
+
+    Task {
+      await loadCurrentFrameOrFindValid()
+    }
+  }
+
+  /// Load the current frame, or if it fails, find the first valid frame
+  func loadCurrentFrameOrFindValid() async {
+    guard !screenshots.isEmpty else { return }
+
+    isLoading = true
+
+    // Try to load current frame
+    if let image = await tryLoadFrame(at: currentIndex) {
+      currentImage = image
+      isLoading = false
+      return
     }
 
-    init(screenshots: [Screenshot], initialIndex: Int) {
-        self.screenshots = screenshots
-        self.currentIndex = min(initialIndex, screenshots.count - 1)
-
-        Task {
-            await loadCurrentFrameOrFindValid()
+    // Current frame failed - search for first valid frame
+    // Search forward first, then backward
+    for offset in 1..<screenshots.count {
+      // Try forward
+      let forwardIndex = currentIndex + offset
+      if forwardIndex < screenshots.count {
+        if let image = await tryLoadFrame(at: forwardIndex) {
+          currentIndex = forwardIndex
+          currentImage = image
+          isLoading = false
+          log("TimelinePlayer: Skipped to valid frame at index \(forwardIndex)")
+          return
         }
-    }
+      }
 
-    /// Load the current frame, or if it fails, find the first valid frame
-    func loadCurrentFrameOrFindValid() async {
-        guard !screenshots.isEmpty else { return }
-
-        isLoading = true
-
-        // Try to load current frame
-        if let image = await tryLoadFrame(at: currentIndex) {
-            currentImage = image
-            isLoading = false
-            return
+      // Try backward
+      let backwardIndex = currentIndex - offset
+      if backwardIndex >= 0 {
+        if let image = await tryLoadFrame(at: backwardIndex) {
+          currentIndex = backwardIndex
+          currentImage = image
+          isLoading = false
+          log("TimelinePlayer: Skipped to valid frame at index \(backwardIndex)")
+          return
         }
-
-        // Current frame failed - search for first valid frame
-        // Search forward first, then backward
-        for offset in 1..<screenshots.count {
-            // Try forward
-            let forwardIndex = currentIndex + offset
-            if forwardIndex < screenshots.count {
-                if let image = await tryLoadFrame(at: forwardIndex) {
-                    currentIndex = forwardIndex
-                    currentImage = image
-                    isLoading = false
-                    log("TimelinePlayer: Skipped to valid frame at index \(forwardIndex)")
-                    return
-                }
-            }
-
-            // Try backward
-            let backwardIndex = currentIndex - offset
-            if backwardIndex >= 0 {
-                if let image = await tryLoadFrame(at: backwardIndex) {
-                    currentIndex = backwardIndex
-                    currentImage = image
-                    isLoading = false
-                    log("TimelinePlayer: Skipped to valid frame at index \(backwardIndex)")
-                    return
-                }
-            }
-        }
-
-        // No valid frames found
-        currentImage = nil
-        isLoading = false
-        logError("TimelinePlayer: No valid frames found in timeline")
+      }
     }
 
-    /// Try to load a frame at a specific index, returns nil if failed
-    private func tryLoadFrame(at index: Int) async -> NSImage? {
-        guard index >= 0 && index < screenshots.count else { return nil }
-        let screenshot = screenshots[index]
+    // No valid frames found
+    currentImage = nil
+    isLoading = false
+    logError("TimelinePlayer: No valid frames found in timeline")
+  }
 
-        do {
-            return try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
-        } catch {
-            // Don't log errors during search - only log when we find a valid frame or give up
-            return nil
-        }
+  /// Try to load a frame at a specific index, returns nil if failed
+  private func tryLoadFrame(at index: Int) async -> NSImage? {
+    guard index >= 0 && index < screenshots.count else { return nil }
+    let screenshot = screenshots[index]
+
+    do {
+      return try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+    } catch {
+      // Don't log errors during search - only log when we find a valid frame or give up
+      return nil
+    }
+  }
+
+  func loadCurrentFrame() async {
+    guard let screenshot = currentScreenshot else { return }
+
+    isLoading = true
+
+    do {
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
+      currentImage = image
+    } catch {
+      logError("TimelinePlayer: Failed to load frame: \(error)")
+      currentImage = nil
     }
 
-    func loadCurrentFrame() async {
-        guard let screenshot = currentScreenshot else { return }
+    isLoading = false
+  }
 
-        isLoading = true
+  func seekToIndex(_ index: Int) {
+    let newIndex = max(0, min(index, screenshots.count - 1))
+    guard newIndex != currentIndex else { return }
 
-        do {
-            let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
-            currentImage = image
-        } catch {
-            logError("TimelinePlayer: Failed to load frame: \(error)")
-            currentImage = nil
-        }
-
-        isLoading = false
+    currentIndex = newIndex
+    Task {
+      await loadCurrentFrame()
     }
+  }
 
-    func seekToIndex(_ index: Int) {
-        let newIndex = max(0, min(index, screenshots.count - 1))
-        guard newIndex != currentIndex else { return }
+  func nextFrame() {
+    seekToIndex(currentIndex + 1)
+  }
 
-        currentIndex = newIndex
-        Task {
-            await loadCurrentFrame()
-        }
+  func previousFrame() {
+    seekToIndex(currentIndex - 1)
+  }
+
+  func togglePlayback() {
+    if isPlaying {
+      stopPlayback()
+    } else {
+      startPlayback()
     }
+  }
 
-    func nextFrame() {
-        seekToIndex(currentIndex + 1)
-    }
+  func startPlayback() {
+    guard !isPlaying else { return }
+    isPlaying = true
 
-    func previousFrame() {
-        seekToIndex(currentIndex - 1)
-    }
+    // Calculate interval based on speed (base is 1 second per frame at 1x)
+    let interval = 1.0 / playbackSpeed
 
-    func togglePlayback() {
-        if isPlaying {
-            stopPlayback()
+    playbackTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
+      Task { @MainActor in
+        guard let self = self else { return }
+
+        if self.currentIndex < self.screenshots.count - 1 {
+          self.nextFrame()
         } else {
-            startPlayback()
+          // Reached end, stop playback
+          self.stopPlayback()
         }
+      }
     }
+  }
 
-    func startPlayback() {
-        guard !isPlaying else { return }
-        isPlaying = true
+  func stopPlayback() {
+    isPlaying = false
+    playbackTimer?.invalidate()
+    playbackTimer = nil
+  }
 
-        // Calculate interval based on speed (base is 1 second per frame at 1x)
-        let interval = 1.0 / playbackSpeed
-
-        playbackTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
-            Task { @MainActor in
-                guard let self = self else { return }
-
-                if self.currentIndex < self.screenshots.count - 1 {
-                    self.nextFrame()
-                } else {
-                    // Reached end, stop playback
-                    self.stopPlayback()
-                }
-            }
-        }
-    }
-
-    func stopPlayback() {
-        isPlaying = false
-        playbackTimer?.invalidate()
-        playbackTimer = nil
-    }
-
-    private func colorForApp(_ appName: String) -> Color {
-        // Generate a consistent color for each app
-        let hash = appName.hashValue
-        let hue = Double(abs(hash) % 360) / 360.0
-        return Color(hue: hue, saturation: 0.6, brightness: 0.8)
-    }
+  private func colorForApp(_ appName: String) -> Color {
+    // Generate a consistent color for each app
+    let hash = appName.hashValue
+    let hue = Double(abs(hash) % 360) / 360.0
+    return Color(hue: hue, saturation: 0.6, brightness: 0.8)
+  }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
+  #Preview {
     RewindTimelinePlayerView(screenshots: [], initialIndex: 0)
-        .frame(width: 1200, height: 800)
-}
+      .frame(width: 1200, height: 800)
+  }
 #endif

@@ -92,8 +92,7 @@ extension AppState {
   }
 
   /// Create a new folder
-  func createFolder(name: String, description: String? = nil, color: String? = nil) async -> Folder?
-  {
+  func createFolder(name: String, description: String? = nil, color: String? = nil) async -> Folder? {
     do {
       let folder = try await APIClient.shared.createFolder(
         name: name, description: description, color: color)
@@ -236,7 +235,7 @@ extension AppState {
       let idSet = Set(segmentIds)
       if let idx = conversations.firstIndex(where: { $0.id == conversationId }) {
         for segIdx in conversations[idx].transcriptSegments.indices
-          where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
+        where idSet.contains(conversations[idx].transcriptSegments[segIdx].id) {
           let old = conversations[idx].transcriptSegments[segIdx]
           conversations[idx].transcriptSegments[segIdx] = TranscriptSegment(
             id: old.id,

@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - NSHostingView sizingOptions access
 
@@ -457,13 +457,11 @@ struct DesktopHomeView: View {
     .onChange(of: authState.isSignedIn) { _, _ in reportAutomationState() }
     .onChange(of: authState.isRestoringAuth) { _, _ in reportAutomationState() }
     .onChange(of: appState.hasCompletedOnboarding) { _, _ in reportAutomationState() }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       enforceMainWindowMinimumSize()
       reportAutomationState()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didResignActiveNotification)) { _ in
       reportAutomationState()
     }
     .onReceive(NotificationCenter.default.publisher(for: .desktopAutomationNavigateRequested)) {
@@ -803,9 +801,9 @@ struct DesktopHomeView: View {
       log("DesktopHomeView: Running delayed background file scan for existing user")
       await FileIndexerService.shared.backgroundRescan()
       guard !Task.isCancelled,
-            sessionScope.matches(
-              currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
-              isSignedIn: AuthState.shared.isSignedIn)
+        sessionScope.matches(
+          currentUserId: UserDefaults.standard.string(forKey: "auth_userId"),
+          isSignedIn: AuthState.shared.isSignedIn)
       else {
         initialFileIndexingBackfill.releaseReservation()
         return
@@ -1226,8 +1224,8 @@ private struct ConversationsPageHost: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  DesktopHomeView()
-    .environmentObject(AppState())
-}
+  #Preview {
+    DesktopHomeView()
+      .environmentObject(AppState())
+  }
 #endif

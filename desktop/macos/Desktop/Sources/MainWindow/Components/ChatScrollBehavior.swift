@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Detects scroll position changes by observing the underlying NSScrollView.
 struct ScrollPositionDetector: NSViewRepresentable {
@@ -134,7 +134,8 @@ struct UserScrollDetector: NSViewRepresentable {
       }
       let targetScrollView = scrollView
 
-      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown]) {
+      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown])
+      {
         [weak self] event in
         guard let self, let targetScrollView else { return event }
         guard event.window == targetScrollView.window else { return event }

@@ -1,5 +1,5 @@
-import AppKit
 import AVFoundation
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -46,7 +46,8 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
 
   func testLoadVideoFrameUsesSampleOrdinalForLowCadenceChunks() async throws {
     let relativePath = "2026-07-04/chunk_low_cadence_frame_selection.mp4"
-    let fullPath = try await createChunk(relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 1.0 / 3.0)
+    let fullPath = try await createChunk(
+      relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 1.0 / 3.0)
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: fullPath.path), "precondition: MP4 chunk written")
 
@@ -188,15 +189,17 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
     writer.shouldOptimizeForNetworkUse = true
 
-    let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-      AVVideoCodecKey: AVVideoCodecType.hevc,
-      AVVideoWidthKey: width,
-      AVVideoHeightKey: height,
-      AVVideoCompressionPropertiesKey: [
-        AVVideoExpectedSourceFrameRateKey: expectedSourceFrameRate,
-        AVVideoAllowFrameReorderingKey: false,
-      ],
-    ])
+    let input = AVAssetWriterInput(
+      mediaType: .video,
+      outputSettings: [
+        AVVideoCodecKey: AVVideoCodecType.hevc,
+        AVVideoWidthKey: width,
+        AVVideoHeightKey: height,
+        AVVideoCompressionPropertiesKey: [
+          AVVideoExpectedSourceFrameRateKey: expectedSourceFrameRate,
+          AVVideoAllowFrameReorderingKey: false,
+        ],
+      ])
     input.expectsMediaDataInRealTime = true
 
     guard writer.canAdd(input) else {
@@ -232,7 +235,8 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
       )
       let time = CMTime(seconds: presentationTimes[index], preferredTimescale: 600)
       guard adaptor.append(pixelBuffer, withPresentationTime: time) else {
-        throw RewindError.storageError("Failed to append test frame: \(writer.error?.localizedDescription ?? "unknown")")
+        throw RewindError.storageError(
+          "Failed to append test frame: \(writer.error?.localizedDescription ?? "unknown")")
       }
     }
 
@@ -290,15 +294,16 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     CVPixelBufferLockBaseAddress(buffer, [])
     defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
 
-    let context = try XCTUnwrap(CGContext(
-      data: CVPixelBufferGetBaseAddress(buffer),
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-    ))
+    let context = try XCTUnwrap(
+      CGContext(
+        data: CVPixelBufferGetBaseAddress(buffer),
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+      ))
 
     context.setFillColor(color.cgColor)
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))

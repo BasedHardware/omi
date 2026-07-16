@@ -140,7 +140,8 @@ enum ChatTelemetryDimension {
     } else {
       withoutMCPPrefix = rawValue
     }
-    let base = withoutMCPPrefix
+    let base =
+      withoutMCPPrefix
       .split(separator: ":", maxSplits: 1)
       .first
       .map(String.init)?
@@ -333,7 +334,8 @@ final class ChatQueryTelemetryAttempt {
       let startedAt = ContinuousClock.now
       self.elapsedMilliseconds = {
         let components = (ContinuousClock.now - startedAt).components
-        let milliseconds = Int(components.seconds) * 1_000
+        let milliseconds =
+          Int(components.seconds) * 1_000
           + Int(components.attoseconds / 1_000_000_000_000_000)
         return max(0, milliseconds)
       }

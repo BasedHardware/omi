@@ -302,7 +302,8 @@ enum ScreenContextToolTelemetry {
       )
     }
 
-    let normalizedOutput = output
+    let normalizedOutput =
+      output
       .replacingOccurrences(of: "EXECUTION_PRECONDITION_FAILED: ", with: "")
       .replacingOccurrences(of: "POLICY_DENIED: ", with: "")
       .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
@@ -343,7 +344,8 @@ enum ScreenContextToolTelemetry {
   }
 
   private static func permissionErrorHasNextTool(_ output: String) -> Bool {
-    let normalizedOutput = output
+    let normalizedOutput =
+      output
       .replacingOccurrences(of: "PERMISSION_REQUIRED: ", with: "")
     guard
       let data = normalizedOutput.data(using: .utf8),
@@ -483,20 +485,20 @@ enum ScreenContextWorkContextBuilder {
       return permissionDeniedPayload(windowMinutes: minutes)
     }
 
-	    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
-	      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
-	        return [
-	          "ok": true,
-	          "name": "get_work_context",
-	          "window_minutes": minutes,
-	          "screen_now": fresh,
-	          "timeline": [],
-	          "latest_capture_age_seconds": 0,
-	          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
-	          "guidance":
-	            "The local Rewind timeline database is unavailable, but a fresh live screen capture succeeded. Use capture_screen if raw pixels are necessary.",
-	        ]
-	      }
+    guard await RewindDatabase.shared.getDatabaseQueue() != nil else {
+      if let fresh = freshScreenCapturePayload(now: now, formatter: formatter) {
+        return [
+          "ok": true,
+          "name": "get_work_context",
+          "window_minutes": minutes,
+          "screen_now": fresh,
+          "timeline": [],
+          "latest_capture_age_seconds": 0,
+          "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
+          "guidance":
+            "The local Rewind timeline database is unavailable, but a fresh live screen capture succeeded. Use capture_screen if raw pixels are necessary.",
+        ]
+      }
       return [
         "ok": false,
         "name": "get_work_context",
@@ -692,7 +694,9 @@ enum ScreenContextWorkContextBuilder {
     }
     if let screenNow = payload["screen_now"] as? [String: Any] {
       var compactScreen: [String: Any] = [:]
-      for key in ["available", "app_name", "window_title", "captured_at", "age_seconds", "latest_capture_age_seconds", "source"] {
+      for key in [
+        "available", "app_name", "window_title", "captured_at", "age_seconds", "latest_capture_age_seconds", "source",
+      ] {
         if let value = screenNow[key] {
           compactScreen[key] = value
         }
@@ -713,7 +717,8 @@ enum ScreenContextWorkContextBuilder {
     let screenNowAvailable = screenNow?["available"] as? Bool
     let failureRaw = (payload["failure_code"] as? String) ?? (screenNow?["failure_code"] as? String)
     let timelineCount = (payload["timeline"] as? [[String: Any]])?.count
-    let latestAge = (screenNow?["latest_capture_age_seconds"] as? Int) ?? (payload["latest_capture_age_seconds"] as? Int)
+    let latestAge =
+      (screenNow?["latest_capture_age_seconds"] as? Int) ?? (payload["latest_capture_age_seconds"] as? Int)
     let ocr = screenNow?["ocr_preview"] as? String
     return (
       ok: (payload["ok"] as? Bool) == true,

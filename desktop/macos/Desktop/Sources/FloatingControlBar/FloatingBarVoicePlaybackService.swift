@@ -2,6 +2,7 @@ import AVFoundation
 import CryptoKit
 import Foundation
 import OmiSupport
+import VoiceTurnDomain
 
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
@@ -532,7 +533,8 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
       player.enableRate = true
       player.rate = playbackRate
       player.prepareToPlay()
-      let started = !UserDefaults.standard.bool(forKey: .forceTTSPlaybackStartFalse)
+      let started =
+        !UserDefaults.standard.bool(forKey: .forceTTSPlaybackStartFalse)
         && player.play()
       guard VoicePlaybackStartPolicy.accepts(started: started) else {
         throw NSError(
@@ -603,16 +605,18 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   /// The delegate callback is not a global "speech stopped" signal: AVFoundation
   /// may deliver it after `stopSpeaking` or after another utterance began.
   private func completeSystemSpeechIfCurrent(_ utterance: AVSpeechUtterance) -> Bool {
-    guard SystemSpeechCallbackPolicy.matchesCurrentUtterance(
-      callbackUtterance: utterance,
-      currentToken: activeSystemSpeechToken,
-      playbackGeneration: playbackGeneration)
+    guard
+      SystemSpeechCallbackPolicy.matchesCurrentUtterance(
+        callbackUtterance: utterance,
+        currentToken: activeSystemSpeechToken,
+        playbackGeneration: playbackGeneration)
     else { return false }
-    guard SystemSpeechCallbackPolicy.accepts(
-      callbackUtterance: utterance,
-      currentToken: activeSystemSpeechToken,
-      playbackGeneration: playbackGeneration,
-      activeLeaseID: activePTTLease?.id)
+    guard
+      SystemSpeechCallbackPolicy.accepts(
+        callbackUtterance: utterance,
+        currentToken: activeSystemSpeechToken,
+        playbackGeneration: playbackGeneration,
+        activeLeaseID: activePTTLease?.id)
     else {
       // This exact utterance finished after its lease was superseded. Clear
       // only its physical marker; never let it drain the replacement lease.
@@ -627,7 +631,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
     guard !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
       if let lease = activePTTLease {
         activePTTLease = nil
-        VoiceTurnCoordinator.shared.send(
+        VoiceTurnCoordinator.shared.publish(
           .playbackFailedScoped(
             turnID: lease.turnID,
             identity: lease.identity,
@@ -723,7 +727,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
 
   private func setFloatingPillResponseGlow(_ active: Bool) {
     if let lease = activePTTLease {
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .responseActiveChanged(turnID: lease.turnID, active: active))
       return
     }
@@ -753,7 +757,7 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
         activePTTLease = nil
         return nil
       }
-      VoiceTurnCoordinator.shared.send(
+      VoiceTurnCoordinator.shared.publish(
         .providerResponseStartedScoped(
           turnID: turnID,
           identity: providerIdentity,
@@ -1071,10 +1075,11 @@ enum SystemSpeechCallbackPolicy {
     playbackGeneration: UInt64,
     activeLeaseID: VoiceLeaseID?
   ) -> Bool {
-    guard matchesCurrentUtterance(
-      callbackUtterance: callbackUtterance,
-      currentToken: currentToken,
-      playbackGeneration: playbackGeneration)
+    guard
+      matchesCurrentUtterance(
+        callbackUtterance: callbackUtterance,
+        currentToken: currentToken,
+        playbackGeneration: playbackGeneration)
     else { return false }
     return currentToken?.leaseID == activeLeaseID
   }

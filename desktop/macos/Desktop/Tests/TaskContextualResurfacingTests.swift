@@ -1,5 +1,6 @@
 import Foundation
 import XCTest
+
 @testable import Omi_Computer
 
 final class MemoryTaskInterruptionLedger: TaskInterruptionLedgerPersisting {
@@ -212,24 +213,27 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
   func testNormalizationHashesRawContextAndCoalescesRapidSwitchesByWorkstream() throws {
     let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: "workstream-1")
-    let first = try XCTUnwrap(TaskLocalContextEvent.appWindow(
-      appName: "Slack",
-      windowTitle: "Sarah — Project Atlas (3)",
-      subject: subject,
-      occurredAt: baseDate
-    ))
-    let cosmeticDuplicate = try XCTUnwrap(TaskLocalContextEvent.appWindow(
-      appName: "Slack",
-      windowTitle: "Sarah — Project Atlas (9)",
-      subject: subject,
-      occurredAt: baseDate.addingTimeInterval(1)
-    ))
-    let document = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Project Atlas launch brief",
-      subject: subject,
-      occurredAt: baseDate.addingTimeInterval(2)
-    ))
+    let first = try XCTUnwrap(
+      TaskLocalContextEvent.appWindow(
+        appName: "Slack",
+        windowTitle: "Sarah — Project Atlas (3)",
+        subject: subject,
+        occurredAt: baseDate
+      ))
+    let cosmeticDuplicate = try XCTUnwrap(
+      TaskLocalContextEvent.appWindow(
+        appName: "Slack",
+        windowTitle: "Sarah — Project Atlas (9)",
+        subject: subject,
+        occurredAt: baseDate.addingTimeInterval(1)
+      ))
+    let document = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Project Atlas launch brief",
+        subject: subject,
+        occurredAt: baseDate.addingTimeInterval(2)
+      ))
     var accumulator = TaskContextEventAccumulator()
     accumulator.insert(first, now: baseDate)
     accumulator.insert(cosmeticDuplicate, now: baseDate)
@@ -255,12 +259,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
       (.person, "Sarah"),
       (.document, "Atlas brief"),
     ] {
-      let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-        kind: kind,
-        rawReference: reference,
-        subject: subject,
-        occurredAt: baseDate
-      ))
+      let event = try XCTUnwrap(
+        TaskLocalContextEvent.normalized(
+          kind: kind,
+          rawReference: reference,
+          subject: subject,
+          occurredAt: baseDate
+        ))
       await service.observe(event)
     }
 
@@ -283,12 +288,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
       (.person, "Sarah"),
       (.document, "Atlas brief"),
     ] {
-      let repeated = try XCTUnwrap(TaskLocalContextEvent.normalized(
-        kind: kind,
-        rawReference: reference,
-        subject: subject,
-        occurredAt: baseDate
-      ))
+      let repeated = try XCTUnwrap(
+        TaskLocalContextEvent.normalized(
+          kind: kind,
+          rawReference: reference,
+          subject: subject,
+          occurredAt: baseDate
+        ))
       await service.observe(repeated)
     }
     await service.flush()
@@ -302,16 +308,18 @@ final class TaskContextualResurfacingTests: XCTestCase {
       debounceInterval: 60,
       ownerIDProvider: { "owner-1" }
     )
-    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .appWindow,
-      rawReference: "Unmatched window one",
-      occurredAt: baseDate
-    ))
-    let second = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Different unmatched document",
-      occurredAt: baseDate.addingTimeInterval(1)
-    ))
+    let first = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .appWindow,
+        rawReference: "Unmatched window one",
+        occurredAt: baseDate
+      ))
+    let second = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Different unmatched document",
+        occurredAt: baseDate.addingTimeInterval(1)
+      ))
 
     await service.observe(first)
     await service.flush()
@@ -331,17 +339,19 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { "owner-1" }
     )
     let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: nil)
-    let matched = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .appWindow,
-      rawReference: "Matched window",
-      subject: subject,
-      occurredAt: baseDate
-    ))
-    let unmatched = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Unmatched document",
-      occurredAt: baseDate.addingTimeInterval(1)
-    ))
+    let matched = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .appWindow,
+        rawReference: "Matched window",
+        subject: subject,
+        occurredAt: baseDate
+      ))
+    let unmatched = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Unmatched document",
+        occurredAt: baseDate.addingTimeInterval(1)
+      ))
 
     await service.observe(matched)
     await service.flush()
@@ -362,18 +372,20 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { "owner-1" }
     )
     let subject = TaskContextSubject(kind: .task, id: "task-1", workstreamID: nil)
-    let app = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .appWindow,
-      rawReference: "Matched app",
-      subject: subject,
-      occurredAt: baseDate
-    ))
-    let document = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched document",
-      subject: subject,
-      occurredAt: baseDate.addingTimeInterval(1)
-    ))
+    let app = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .appWindow,
+        rawReference: "Matched app",
+        subject: subject,
+        occurredAt: baseDate
+      ))
+    let document = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched document",
+        subject: subject,
+        occurredAt: baseDate.addingTimeInterval(1)
+      ))
 
     await service.observe(app)
     await service.flush()
@@ -397,18 +409,20 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { "owner-1" },
       sendInterruption: { interruptions.append($0) }
     )
-    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched urgent document",
-      subject: subject,
-      urgency: .canWait
-    ))
-    let urgent = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched urgent document",
-      subject: subject,
-      urgency: .timeSensitive
-    ))
+    let first = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched urgent document",
+        subject: subject,
+        urgency: .canWait
+      ))
+    let urgent = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched urgent document",
+        subject: subject,
+        urgency: .timeSensitive
+      ))
 
     await service.observe(first)
     await service.flush()
@@ -438,18 +452,20 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { "owner-1" },
       sendInterruption: { interruptions.append($0) }
     )
-    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched gated document",
-      subject: subject,
-      urgency: .canWait
-    ))
-    let urgent = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched gated document",
-      subject: subject,
-      urgency: .timeSensitive
-    ))
+    let first = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched gated document",
+        subject: subject,
+        urgency: .canWait
+      ))
+    let urgent = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched gated document",
+        subject: subject,
+        urgency: .timeSensitive
+      ))
 
     await service.observe(first)
     await service.flush()
@@ -472,11 +488,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
       debounceInterval: 60,
       ownerIDProvider: { ownerID }
     )
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Matched owner-scoped document",
-      subject: subject
-    ))
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Matched owner-scoped document",
+        subject: subject
+      ))
 
     await service.observe(event)
     await service.flush()
@@ -497,16 +514,18 @@ final class TaskContextualResurfacingTests: XCTestCase {
       debounceInterval: 60,
       ownerIDProvider: { ownerID }
     )
-    let ownerAEvent = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner A document",
-      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil)
-    ))
-    let ownerBEvent = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner B document",
-      subject: TaskContextSubject(kind: .task, id: "task-owner-b", workstreamID: nil)
-    ))
+    let ownerAEvent = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner A document",
+        subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil)
+      ))
+    let ownerBEvent = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner B document",
+        subject: TaskContextSubject(kind: .task, id: "task-owner-b", workstreamID: nil)
+      ))
 
     await service.observe(ownerAEvent)
     ownerID = "owner-b"
@@ -530,12 +549,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { ownerID },
       sendInterruption: { interruptions.append($0) }
     )
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner A urgent document",
-      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
-      urgency: .timeSensitive
-    ))
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner A urgent document",
+        subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
+        urgency: .timeSensitive
+      ))
 
     await service.observe(event)
     await service.flush()
@@ -559,12 +579,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ownerIDProvider: { ownerID },
       sendInterruption: { interruptions.append($0) }
     )
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner A urgent document",
-      subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
-      urgency: .timeSensitive
-    ))
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner A urgent document",
+        subject: TaskContextSubject(kind: .task, id: "task-owner-a", workstreamID: nil),
+        urgency: .timeSensitive
+      ))
 
     await service.observe(event)
     await service.flush()
@@ -584,15 +605,16 @@ final class TaskContextualResurfacingTests: XCTestCase {
       completed: false,
       createdAt: baseDate
     )
-    let service = TaskPromotionService(operations: .init(
-      legacyPromotionEnabled: { _ in true },
-      promote: { _ in
-        PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
-      },
-      insertLocal: { _, authorization in
-        try await insert.insert(authorization: authorization)
-      }
-    ))
+    let service = TaskPromotionService(
+      operations: .init(
+        legacyPromotionEnabled: { _ in true },
+        promote: { _ in
+          PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
+        },
+        insertLocal: { _, authorization in
+          try await insert.insert(authorization: authorization)
+        }
+      ))
 
     let promotion = Task {
       await service.promoteIfNeeded(bypassDebounce: true)
@@ -618,14 +640,15 @@ final class TaskContextualResurfacingTests: XCTestCase {
       createdAt: baseDate
     )
     let recorder = PromotionCallRecorder()
-    let service = TaskPromotionService(operations: .init(
-      legacyPromotionEnabled: { _ in true },
-      promote: { _ in
-        await recorder.record()
-        return PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
-      },
-      insertLocal: { _, authorization in try authorization.require() }
-    ))
+    let service = TaskPromotionService(
+      operations: .init(
+        legacyPromotionEnabled: { _ in true },
+        promote: { _ in
+          await recorder.record()
+          return PromoteResponse(promoted: true, reason: nil, promotedTask: promotedTask)
+        },
+        insertLocal: { _, authorization in try authorization.require() }
+      ))
 
     await transitionContextTestOwner(to: "promotion-observer-owner-b")
     let first = await service.promoteIfNeeded(bypassDebounce: true)
@@ -657,11 +680,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
       debounceInterval: 60
     )
     await transitionContextTestOwner(to: "delayed-observer-owner-b")
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner B current document",
-      occurredAt: baseDate
-    ))
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner B current document",
+        occurredAt: baseDate
+      ))
     await service.observe(event)
 
     // Models an A→B notification that was queued before B admission but whose
@@ -688,11 +712,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
     let priorFrequency = UserDefaults.standard.object(
       forKey: NotificationService.frequencyDefaultsKey)
     UserDefaults.standard.set(3, forKey: NotificationService.frequencyDefaultsKey)
-    XCTAssertTrue(service.allowProactiveNotificationForTesting(
-      assistantId: "task",
-      authorizationSnapshot: ownerASnapshot,
-      now: baseDate
-    ))
+    XCTAssertTrue(
+      service.allowProactiveNotificationForTesting(
+        assistantId: "task",
+        authorizationSnapshot: ownerASnapshot,
+        now: baseDate
+      ))
 
     await transitionContextTestOwner(to: "notification-owner-b")
     let ownerBSnapshot = try XCTUnwrap(RuntimeOwnerIdentity.captureAuthorizationSnapshot())
@@ -706,11 +731,12 @@ final class TaskContextualResurfacingTests: XCTestCase {
     XCTAssertEqual(staleTrace.reason, .staleOwner)
     XCTAssertEqual(persistence.ledger.sentAt, [sentinelDate])
     XCTAssertFalse(service.hasCurrentNotificationMetadataForTesting(id: "owner-a-notification"))
-    XCTAssertTrue(service.allowProactiveNotificationForTesting(
-      assistantId: "task",
-      authorizationSnapshot: ownerBSnapshot,
-      now: baseDate.addingTimeInterval(1)
-    ))
+    XCTAssertTrue(
+      service.allowProactiveNotificationForTesting(
+        assistantId: "task",
+        authorizationSnapshot: ownerBSnapshot,
+        now: baseDate.addingTimeInterval(1)
+      ))
 
     if let priorFrequency {
       UserDefaults.standard.set(priorFrequency, forKey: NotificationService.frequencyDefaultsKey)
@@ -726,12 +752,13 @@ final class TaskContextualResurfacingTests: XCTestCase {
     await transitionContextTestOwner(to: "context-owner-a")
     let client = SuspendedContextClient(pausePoint: pausePoint)
     let service = TaskContextualResurfacingService(client: client, debounceInterval: 60)
-    let event = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: "Owner A confidential document",
-      subject: TaskContextSubject(kind: .task, id: "owner-a-task", workstreamID: "owner-a-workstream"),
-      occurredAt: baseDate
-    ))
+    let event = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: "Owner A confidential document",
+        subject: TaskContextSubject(kind: .task, id: "owner-a-task", workstreamID: "owner-a-workstream"),
+        occurredAt: baseDate
+      ))
     await service.observe(event)
     let flush = Task { await service.flush() }
     await client.waitUntilStarted()
@@ -760,17 +787,19 @@ final class TaskContextualResurfacingTests: XCTestCase {
     let matcher = TaskContextSubjectMatcher(defaults: defaults, ownerID: "owner-1")
     let raw = "Sarah — confidential Slack thread"
     let unrelatedRaw = "Unrelated document tab"
-    let unrelated = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: unrelatedRaw,
-      occurredAt: baseDate.addingTimeInterval(-1)
-    ))
+    let unrelated = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: unrelatedRaw,
+        occurredAt: baseDate.addingTimeInterval(-1)
+      ))
     XCTAssertNil(matcher.resolve(unrelated, now: baseDate).subject)
-    let first = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .appWindow,
-      rawReference: raw,
-      occurredAt: baseDate
-    ))
+    let first = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .appWindow,
+        rawReference: raw,
+        occurredAt: baseDate
+      ))
     XCTAssertNil(matcher.resolve(first, now: baseDate).subject)
 
     let subject = TaskContextSubject(kind: .workstream, id: "workstream-1", workstreamID: "workstream-1")
@@ -779,17 +808,19 @@ final class TaskContextualResurfacingTests: XCTestCase {
       to: TaskContextSubject(kind: .workstream, id: "workstream-2", workstreamID: "workstream-2"),
       now: baseDate.addingTimeInterval(1)
     )
-    let reopened = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .appWindow,
-      rawReference: raw,
-      occurredAt: baseDate.addingTimeInterval(2)
-    ))
+    let reopened = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .appWindow,
+        rawReference: raw,
+        occurredAt: baseDate.addingTimeInterval(2)
+      ))
     XCTAssertEqual(matcher.resolve(reopened, now: baseDate.addingTimeInterval(2)).subject, subject)
-    let unrelatedReopened = try XCTUnwrap(TaskLocalContextEvent.normalized(
-      kind: .document,
-      rawReference: unrelatedRaw,
-      occurredAt: baseDate.addingTimeInterval(2)
-    ))
+    let unrelatedReopened = try XCTUnwrap(
+      TaskLocalContextEvent.normalized(
+        kind: .document,
+        rawReference: unrelatedRaw,
+        occurredAt: baseDate.addingTimeInterval(2)
+      ))
     XCTAssertNil(matcher.resolve(unrelatedReopened, now: baseDate.addingTimeInterval(2)).subject)
     XCTAssertEqual(matcher.resolve(reopened, now: baseDate.addingTimeInterval(4)).subject, subject)
 
@@ -889,31 +920,36 @@ final class TaskContextualResurfacingTests: XCTestCase {
     let gate = ProactiveTaskInterruptionGate(persistence: persistence)
     let config = configuration(dailyLimit: 2, spacing: 90 * 60)
 
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "one", dedupe: "one"),
-      configuration: config,
-      environment: environment()
-    ).reason, .allowed)
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "repeat", dedupe: "one"),
-      configuration: config,
-      environment: environment(now: baseDate.addingTimeInterval(90 * 60))
-    ).reason, .duplicate)
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "two", dedupe: "two"),
-      configuration: config,
-      environment: environment(now: baseDate.addingTimeInterval(60))
-    ).reason, .minimumSpacing)
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "two", dedupe: "two"),
-      configuration: config,
-      environment: environment(now: baseDate.addingTimeInterval(90 * 60))
-    ).reason, .allowed)
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "three", dedupe: "three"),
-      configuration: config,
-      environment: environment(now: baseDate.addingTimeInterval(3 * 60 * 60))
-    ).reason, .dailyBudget)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "one", dedupe: "one"),
+        configuration: config,
+        environment: environment()
+      ).reason, .allowed)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "repeat", dedupe: "one"),
+        configuration: config,
+        environment: environment(now: baseDate.addingTimeInterval(90 * 60))
+      ).reason, .duplicate)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "two", dedupe: "two"),
+        configuration: config,
+        environment: environment(now: baseDate.addingTimeInterval(60))
+      ).reason, .minimumSpacing)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "two", dedupe: "two"),
+        configuration: config,
+        environment: environment(now: baseDate.addingTimeInterval(90 * 60))
+      ).reason, .allowed)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "three", dedupe: "three"),
+        configuration: config,
+        environment: environment(now: baseDate.addingTimeInterval(3 * 60 * 60))
+      ).reason, .dailyBudget)
   }
 
   func testDailyBudgetResetsAtLocalDayBoundaryButSpacingDoesNot() {
@@ -925,16 +961,18 @@ final class TaskContextualResurfacingTests: XCTestCase {
     let gate = ProactiveTaskInterruptionGate(persistence: persistence)
     let config = configuration(dailyLimit: 1, spacing: 90 * 60)
 
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "before", dedupe: "before", expiresAt: beforeMidnight.addingTimeInterval(300)),
-      configuration: config,
-      environment: environment(now: beforeMidnight, calendar: calendar)
-    ).reason, .allowed)
-    XCTAssertEqual(gate.evaluate(
-      candidate: candidate(id: "after", dedupe: "after", expiresAt: afterMidnight.addingTimeInterval(300)),
-      configuration: config,
-      environment: environment(now: afterMidnight, calendar: calendar)
-    ).reason, .minimumSpacing)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "before", dedupe: "before", expiresAt: beforeMidnight.addingTimeInterval(300)),
+        configuration: config,
+        environment: environment(now: beforeMidnight, calendar: calendar)
+      ).reason, .allowed)
+    XCTAssertEqual(
+      gate.evaluate(
+        candidate: candidate(id: "after", dedupe: "after", expiresAt: afterMidnight.addingTimeInterval(300)),
+        configuration: config,
+        environment: environment(now: afterMidnight, calendar: calendar)
+      ).reason, .minimumSpacing)
   }
 
   func testDogfoodAndShippedEnrollmentRemainIndependent() {
@@ -1077,14 +1115,16 @@ final class TaskContextualResurfacingTests: XCTestCase {
           "logicalKey": "investor-email",
           "version": 2,
           "supersedesArtifactId": "artifact-1",
-          "evidenceRefs": [[
-            "device_id": "device-1",
-            "excerpt_hash": "sha256:\(String(repeating: "b", count: 64))",
-            "id": "local-evidence-1",
-            "kind": "local_screen",
-            "scope": "device_local",
-            "version": "test.v1",
-          ]],
+          "evidenceRefs": [
+            [
+              "device_id": "device-1",
+              "excerpt_hash": "sha256:\(String(repeating: "b", count: 64))",
+              "id": "local-evidence-1",
+              "kind": "local_screen",
+              "scope": "device_local",
+              "version": "test.v1",
+            ]
+          ],
           "artifact": [
             "artifactId": "artifact-2",
             "kind": "email_draft",
@@ -1125,8 +1165,9 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
   func testLegacyPromotionCannotNotifyOrBypassTheCanonicalGate() throws {
     let testsDirectory = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let source = try String(contentsOf: testsDirectory.deletingLastPathComponent()
-      .appendingPathComponent("Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPromotionService.swift"))
+    let source = try String(
+      contentsOf: testsDirectory.deletingLastPathComponent()
+        .appendingPathComponent("Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskPromotionService.swift"))
     XCTAssertFalse(source.contains("New task"))
     XCTAssertFalse(source.contains("sendNotification"))
     XCTAssertFalse(source.contains("respectFrequency: false"))

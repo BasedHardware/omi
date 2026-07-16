@@ -1,6 +1,6 @@
+import Darwin
 import Foundation
 import Sentry
-import Darwin
 
 enum DesktopHealthEventName: String {
   case authTokenStorageFallback = "auth_token_storage_fallback"
@@ -39,8 +39,8 @@ struct DesktopHealthSnapshot {
   }
 }
 
-private extension ISO8601DateFormatter {
-  static let desktopDiagnostics: ISO8601DateFormatter = {
+extension ISO8601DateFormatter {
+  fileprivate static let desktopDiagnostics: ISO8601DateFormatter = {
     let formatter = ISO8601DateFormatter()
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return formatter
@@ -186,7 +186,8 @@ final class DesktopDiagnosticsManager {
   }
 
   func recordApiAuthRetry(endpoint: String, outcome: String) {
-    let fallbackOutcome: DesktopFallbackOutcome = outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
+    let fallbackOutcome: DesktopFallbackOutcome =
+      outcome == "succeeded" ? .recovered : (outcome == "retrying" ? .degraded : .exhausted)
     recordFallback(
       area: "api_auth",
       from: "expired_token",
@@ -625,13 +626,13 @@ final class DesktopDiagnosticsManager {
   }
 
   #if DEBUG
-  func resetForTests() {
-    lock.lock()
-    snapshots.removeAll()
-    consecutiveNearZeroPTTTurns = 0
-    lastPTTWatchdogIncidentAt = nil
-    lock.unlock()
-  }
+    func resetForTests() {
+      lock.lock()
+      snapshots.removeAll()
+      consecutiveNearZeroPTTTurns = 0
+      lastPTTWatchdogIncidentAt = nil
+      lock.unlock()
+    }
   #endif
 
   private func record(

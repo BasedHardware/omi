@@ -19,8 +19,7 @@ private final class MigrationAuthorizationFlag: @unchecked Sendable {
 private actor DelayedLegacyAliasImporter {
   private var entries: [LegacyMainChatSessionAliasEntry]?
   private var startedWaiter: CheckedContinuation<Void, Never>?
-  private var importContinuation:
-    CheckedContinuation<LegacyMainChatSessionImportReceipt, Error>?
+  private var importContinuation: CheckedContinuation<LegacyMainChatSessionImportReceipt, Error>?
 
   func importEntries(
     _ entries: [LegacyMainChatSessionAliasEntry]
@@ -43,10 +42,11 @@ private actor DelayedLegacyAliasImporter {
   func complete(ownerID: String) -> Bool {
     guard let entries, let importContinuation else { return false }
     self.importContinuation = nil
-    importContinuation.resume(returning: LegacyMainChatSessionImportReceipt(
-      ownerId: ownerID,
-      acceptedEntries: entries,
-      importedCount: entries.count))
+    importContinuation.resume(
+      returning: LegacyMainChatSessionImportReceipt(
+        ownerId: ownerID,
+        acceptedEntries: entries,
+        importedCount: entries.count))
     return true
   }
 }
@@ -86,10 +86,11 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
   func testDeletesOnlyAcknowledgedOwnerAliasesAfterExactKernelReceipt() async throws {
     let (defaults, suiteName) = makeDefaults()
     defer { defaults.removePersistentDomain(forName: suiteName) }
-    defaults.set([
-      "owner-a|default": "ses-a",
-      "owner-b|default": "ses-b",
-    ], forKey: defaultsKey)
+    defaults.set(
+      [
+        "owner-a|default": "ses-a",
+        "owner-b|default": "ses-b",
+      ], forKey: defaultsKey)
 
     let outcome = await LegacyMainChatSessionAliasMigration.migrate(
       ownerId: "owner-a",

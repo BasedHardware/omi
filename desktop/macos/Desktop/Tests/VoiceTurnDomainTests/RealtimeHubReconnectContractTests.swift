@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 @MainActor
 final class RealtimeHubReconnectContractTests: XCTestCase {
@@ -68,19 +69,22 @@ final class RealtimeHubReconnectContractTests: XCTestCase {
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: oldSessionID))).model
     model = reduce(model, .finalize(turnID: turnID)).model
-    model = reduce(
-      model,
-      .hubCommitAccepted(turnID: turnID, sessionID: oldSessionID, responseID: responseID)
-    ).model
+    model =
+      reduce(
+        model,
+        .hubCommitAccepted(turnID: turnID, sessionID: oldSessionID, responseID: responseID)
+      ).model
     let reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
 
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: oldSessionID)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: oldSessionID)
+      ).model
     XCTAssertEqual(
       model.turn?.providerConnection,
       .reconnecting(identity: reservation.identity, previousSessionID: oldSessionID))
@@ -91,12 +95,14 @@ final class RealtimeHubReconnectContractTests: XCTestCase {
         liveSessionID: newSessionID),
       "production boundary must fence the superseded session before reducer admission")
 
-    model = reduce(
-      model,
-      .providerReconnected(
-        turnID: turnID,
-        identity: reservation.identity,
-        sessionID: newSessionID)).model
+    model =
+      reduce(
+        model,
+        .providerReconnected(
+          turnID: turnID,
+          identity: reservation.identity,
+          sessionID: newSessionID)
+      ).model
     XCTAssertEqual(model.turn?.providerConnection, .ready)
     XCTAssertEqual(model.turn?.sessionID, newSessionID)
 
@@ -119,17 +125,20 @@ final class RealtimeHubReconnectContractTests: XCTestCase {
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: sessionID))).model
     model = reduce(model, .finalize(turnID: turnID)).model
-    model = reduce(
-      model,
-      .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: responseID)
-    ).model
+    model =
+      reduce(
+        model,
+        .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: responseID)
+      ).model
     let reservation = reserveIdentity(model, turnID: turnID)
-    model = reduce(
-      reservation.model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: sessionID)).model
+    model =
+      reduce(
+        reservation.model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: sessionID)
+      ).model
 
     let timedOut = reduce(
       model,

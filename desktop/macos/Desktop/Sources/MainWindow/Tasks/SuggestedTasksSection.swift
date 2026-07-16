@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct SuggestedTasksSection: View {
   @ObservedObject var store: SuggestedTasksStore

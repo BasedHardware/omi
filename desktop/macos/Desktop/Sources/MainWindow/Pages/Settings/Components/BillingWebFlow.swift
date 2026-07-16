@@ -1,6 +1,6 @@
+import OmiTheme
 import SwiftUI
 import WebKit
-import OmiTheme
 
 struct BillingWebFlow: Identifiable {
   let id = UUID()

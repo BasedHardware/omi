@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct WhatMattersNowSection: View {
   @ObservedObject var store: DashboardIntelligenceStore
@@ -396,8 +396,9 @@ private struct CanonicalGoalCreateSheet: View {
         .buttonStyle(.borderedProminent)
         .tint(OmiColors.textPrimary)
         .foregroundColor(.black)
-        .disabled(title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-          || desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        .disabled(
+          title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+            || desiredOutcome.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
       }
     }
     .padding(20)
@@ -405,8 +406,8 @@ private struct CanonicalGoalCreateSheet: View {
   }
 }
 
-private extension String {
-  var nilIfEmpty: String? { isEmpty ? nil : self }
+extension String {
+  fileprivate var nilIfEmpty: String? { isEmpty ? nil : self }
 }
 
 struct CanonicalGoalDetailSheet: View {

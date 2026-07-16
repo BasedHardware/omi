@@ -217,11 +217,12 @@ final class APIClientAuthRetryTests: XCTestCase {
     await client.setTestAuthHeader("Bearer id-token")
     let request = Task { () -> Result<Response, Error> in
       do {
-        return .success(try await client.get(
-          "v1/owner-bound",
-          expectedOwnerId: "same-owner",
-          authorizationSnapshot: snapshot
-        ))
+        return .success(
+          try await client.get(
+            "v1/owner-bound",
+            expectedOwnerId: "same-owner",
+            authorizationSnapshot: snapshot
+          ))
       } catch {
         return .failure(error)
       }

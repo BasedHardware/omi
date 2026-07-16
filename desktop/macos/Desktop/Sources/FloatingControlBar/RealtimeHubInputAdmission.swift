@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 /// Physical PCM held while a replacement socket authenticates. Logical turn
 /// state remains in `VoiceTurnCoordinator`.

@@ -84,6 +84,8 @@ The unit of work is the violated contract, not only the line where the symptom a
 ## Cross-Component Guidelines
 
 - **Product invariants:** read `PRODUCT.md` before changing product behavior. If your diff touches a locked invariant's path globs, name **every** matched invariant ID in the PR body (path-based, not intent-based; discover with `scripts/pr-preflight --suggest`) and update the invariant's guard test when behavior changes.
+- **No in-repo compatibility layers:** migrate every in-tree caller in the same change; do not add deprecated aliases, duplicate adapters, or fallback paths to preserve a retired shape.
+- **Compiler-first boundaries:** express ownership and mutation invariants with target dependencies, access control, and typed APIs before adding source scrapes or runtime assertions; behavioral tests still prove the permitted paths.
 - **Never use purple** anywhere in UI (icons, accents, glows, gradients) — off-brand; use white/neutral. Enforced as a no-increase ratchet (`INV-UI-1`); see `docs/product/invariants/brand-ui.md`.
 - **Fallback telemetry:** when a branch changes provider, mode, or correctness, or takes a fail-open path, call the shared `record_fallback`/`recordFallback` helper — never a new one-off counter. Full contract: `docs/agents/fallback-telemetry.md`.
 - **Logging:** never log raw sensitive data; sanitize API responses and PII (backend: `utils.log_sanitizer`).

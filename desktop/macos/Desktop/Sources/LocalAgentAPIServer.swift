@@ -341,7 +341,7 @@ final class LocalAgentAPIServer {
       guard let url = URL(string: origin), let host = url.host, let port = url.port else {
         return false
       }
-      guard (url.scheme == "http" || url.scheme == "https"), port == Int(LocalAgentAPISettings.port) else {
+      guard url.scheme == "http" || url.scheme == "https", port == Int(LocalAgentAPISettings.port) else {
         return false
       }
       guard host == "127.0.0.1" || host == "localhost" || host == "[::1]" || host == "::1" else {
@@ -517,13 +517,14 @@ final class LocalAgentAPIServer {
       failureCode: ScreenContextFailureCode(rawValue: code) ?? .unknown,
       permissionTCCGranted: CGPreflightScreenCaptureAccess()
     )
-    return jsonResponse([
-      "ok": false,
-      "error": code,
-      "reason": reason,
-      "hint": hint,
-      "screenshot_id": screenshotID,
-    ], statusCode: 422)
+    return jsonResponse(
+      [
+        "ok": false,
+        "error": code,
+        "reason": reason,
+        "hint": hint,
+        "screenshot_id": screenshotID,
+      ], statusCode: 422)
   }
 
   private func loadScreenshotDataEnsuringStorage(for screenshot: Screenshot) async throws -> Data {

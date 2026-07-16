@@ -56,6 +56,14 @@ let package = Package(
       ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
+    .target(
+      name: "VoiceTurnDomain",
+      path: "Sources/VoiceTurnDomain",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+    ),
     .executableTarget(
       name: "Omi Computer",
       dependencies: [
@@ -64,6 +72,7 @@ let package = Package(
         "OmiSupport",
         "OmiTheme",
         "OmiWAL",
+        "VoiceTurnDomain",
         .product(name: "FirebaseCore", package: "firebase-ios-sdk"),
         .product(name: "FirebaseAuth", package: "firebase-ios-sdk"),
         .product(name: "PostHog", package: "posthog-ios"),
@@ -81,6 +90,7 @@ let package = Package(
         "Theme",
         "OmiSupport",
         "OmiWAL",
+        "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
       ],
       resources: [
@@ -100,6 +110,7 @@ let package = Package(
         "OmiSupport",
         "OmiTheme",
         "OmiWAL",
+        "VoiceTurnDomain",
       ],
       path: "Tests",
       exclude: [
@@ -107,6 +118,7 @@ let package = Package(
         "SemanticFeatureSentinels",
         "OmiSupportTests",
         "OmiWALTests",
+        "VoiceTurnDomainTests",
       ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
@@ -126,6 +138,15 @@ let package = Package(
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+    ),
+    .testTarget(
+      name: "VoiceTurnDomainTests",
+      dependencies: [
+        .target(name: "Omi Computer"),
+        "VoiceTurnDomain",
+      ],
+      path: "Tests/VoiceTurnDomainTests",
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .testTarget(

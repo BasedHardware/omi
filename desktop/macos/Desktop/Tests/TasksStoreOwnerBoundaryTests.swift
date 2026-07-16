@@ -145,9 +145,11 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     let gate = TasksStorePauseGate()
 
     let operation = Task { @MainActor in
-      await store.toggleTask(task, beforeLocalMutation: {
-        await gate.pause()
-      })
+      await store.toggleTask(
+        task,
+        beforeLocalMutation: {
+          await gate.pause()
+        })
     }
     await gate.waitUntilStarted()
     illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
@@ -173,9 +175,11 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     let gate = TasksStorePauseGate()
 
     let operation = Task { @MainActor in
-      await store.deleteTask(task, beforeLocalMutation: {
-        await gate.pause()
-      })
+      await store.deleteTask(
+        task,
+        beforeLocalMutation: {
+          await gate.pause()
+        })
     }
     await gate.waitUntilStarted()
     illegallyMutateOwnerDefaults(to: "owner-b", defaults: defaults)
@@ -192,9 +196,11 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
   func testPinnedToolSnapshotCannotRecaptureSameUIDAfterSessionGenerationChanges() async {
     let store = TasksStore.shared
     await prepareOwnerBoundaryTest(store: store)
-    guard let ownerASnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: "owner-a"
-    ) else {
+    guard
+      let ownerASnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: "owner-a"
+      )
+    else {
       XCTFail("owner-a authorization snapshot was unavailable")
       return
     }
@@ -623,7 +629,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
 
   private func productionSource(_ relativePath: String) throws -> String {
     let testsURL = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
-    let sourceURL = testsURL
+    let sourceURL =
+      testsURL
       .deletingLastPathComponent()
       .appendingPathComponent("Sources")
       .appendingPathComponent(relativePath)
@@ -672,7 +679,8 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
     automationOverrideID: String?
   ) async {
     let finalOwner = normalizedOwner(automationOverrideID) ?? normalizedOwner(authOwnerID)
-    let bootstrap = finalOwner == "tasks-owner-boundary-bootstrap-a"
+    let bootstrap =
+      finalOwner == "tasks-owner-boundary-bootstrap-a"
       ? "tasks-owner-boundary-bootstrap-b"
       : "tasks-owner-boundary-bootstrap-a"
     if RuntimeOwnerIdentity.currentOwnerId(allowAutomationOverride: true) == bootstrap {

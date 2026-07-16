@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 private struct StagedScoreBatchRequest {
@@ -134,9 +135,10 @@ final class APIClientStagedScoreBatchTests: XCTestCase {
 
     let requests = StagedScoreBatchURLProtocol.capturedRequests
     XCTAssertEqual(requests.count, 2)
-    XCTAssertTrue(requests.allSatisfy {
-      $0.url.path == "/v1/staged-tasks/batch-scores" && $0.method == "PATCH"
-    })
+    XCTAssertTrue(
+      requests.allSatisfy {
+        $0.url.path == "/v1/staged-tasks/batch-scores" && $0.method == "PATCH"
+      })
 
     let batches = try requests.map { request -> [[String: Any]] in
       let body = try XCTUnwrap(request.body)

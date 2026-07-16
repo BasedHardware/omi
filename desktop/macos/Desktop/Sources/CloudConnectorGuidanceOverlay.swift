@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// One copy row on the assisted cloud-connector card. `id` must be unique across
 /// the card — never derive it from `label` alone (duplicate labels crash SwiftUI).
@@ -557,12 +557,14 @@ final class CloudConnectorGuidanceOverlay {
         || (abs(candidate.targetPoint.x - placement.targetPoint.x) <= 1
           && abs(candidate.targetPoint.y - placement.targetPoint.y) <= 1)
     }
-    let targetRect = selected?.targetRect ?? CGRect(
-      x: placement.targetPoint.x - 1,
-      y: placement.targetPoint.y - 1,
-      width: 2,
-      height: 2
-    )
+    let targetRect =
+      selected?.targetRect
+      ?? CGRect(
+        x: placement.targetPoint.x - 1,
+        y: placement.targetPoint.y - 1,
+        width: 2,
+        height: 2
+      )
     // Validate against the actually-rendered arrow apex, not just the solver intent.
     let render = SpatialOverlayRenderGeometry(placement: placement, panelSize: overlaySize)
     let issues = SpatialOverlayDogfoodOracle.issues(
@@ -644,13 +646,13 @@ private struct CloudConnectorInstructionCardView: View {
 
   var body: some View {
     CloudConnectorCardHeaderView(title: title, subtitle: subtitle, onDismiss: onDismiss)
-    .padding(.leading, OmiSpacing.lg)
-    .padding(.trailing, OmiSpacing.md)
-    .padding(.vertical, OmiSpacing.lg)
-    .frame(width: size.width, height: size.height, alignment: .topLeading)
-    .background(SpatialOverlayCardBackground())
-    .contentShape(Rectangle())
-    .onTapGesture(perform: onDismiss)
+      .padding(.leading, OmiSpacing.lg)
+      .padding(.trailing, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.lg)
+      .frame(width: size.width, height: size.height, alignment: .topLeading)
+      .background(SpatialOverlayCardBackground())
+      .contentShape(Rectangle())
+      .onTapGesture(perform: onDismiss)
   }
 }
 
@@ -753,7 +755,8 @@ final class AppBundleDragSourceNSView: NSView, NSDraggingSource {
       pointer.y - targetFrame.minY,
       targetFrame.maxY - pointer.y)
     let progress = min(max(depth / 40, 0), 1)
-    let side = fullDragIconSize.width
+    let side =
+      fullDragIconSize.width
       - (fullDragIconSize.width - compactDragIconSize.width) * progress
     return CGSize(width: side, height: side)
   }
@@ -920,7 +923,8 @@ private struct CloudConnectorFieldCopyCardView: View {
       .background(
         Capsule().fill(
           copiedFieldID == field.id
-            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12)))
+            ? OmiColors.success.opacity(0.16) : Color.white.opacity(0.12))
+      )
       .contentShape(Capsule())
     }
     .buttonStyle(.plain)

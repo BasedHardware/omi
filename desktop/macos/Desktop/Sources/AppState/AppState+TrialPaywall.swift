@@ -64,10 +64,10 @@ extension AppState {
 
   func fetchTrialMetadata() {
     #if DEBUG
-    if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
-      applyDebugTrialMode(debugMode)
-      return
-    }
+      if let debugMode = UserDefaults.standard.string(forKey: "debug_trial_mode") {
+        applyDebugTrialMode(debugMode)
+        return
+      }
     #endif
 
     Task { @MainActor in
@@ -116,56 +116,59 @@ extension AppState {
   }
 
   #if DEBUG
-  func applyDebugTrialMode(_ mode: String) {
-    let now = Int(Date().timeIntervalSince1970)
-    let features = ["unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights", "30_chat_questions_per_month"]
-    let dur = 3 * 24 * 3600
+    func applyDebugTrialMode(_ mode: String) {
+      let now = Int(Date().timeIntervalSince1970)
+      let features = [
+        "unlimited_listening", "unlimited_transcription", "unlimited_memories", "unlimited_insights",
+        "30_chat_questions_per_month",
+      ]
+      let dur = 3 * 24 * 3600
 
-    func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
-      TrialMetadataResponse(
-        trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
-        trialRemainingSeconds: remaining, trialExpired: expired,
-        trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
-      )
-    }
-
-    switch mode {
-    case "active":
-      self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
-    case "warning":
-      self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
-    case "expiring":
-      self.trialMetadata = mock(remaining: 1800, expired: false)
-    case "expired":
-      self.trialMetadata = mock(remaining: 0, expired: true)
-    case "realtime":
-      let endKey = "debug_trial_end_time"
-      let rtDur = 120
-      var endTime = UserDefaults.standard.integer(forKey: endKey)
-      if endTime == 0 {
-        endTime = now + rtDur
-        UserDefaults.standard.set(endTime, forKey: endKey)
+      func mock(remaining: Int, expired: Bool) -> TrialMetadataResponse {
+        TrialMetadataResponse(
+          trialStartedAt: now - (dur - remaining), trialEndsAt: now + remaining,
+          trialRemainingSeconds: remaining, trialExpired: expired,
+          trialDurationSeconds: dur, trialFeatures: features, planAfterTrial: "Free"
+        )
       }
-      let remaining = max(0, endTime - now)
-      self.trialMetadata = TrialMetadataResponse(
-        trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
-        trialRemainingSeconds: remaining, trialExpired: remaining == 0,
-        trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
-      )
-      if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
-    default:
-      break
+
+      switch mode {
+      case "active":
+        self.trialMetadata = mock(remaining: 2 * 24 * 3600 + 3600, expired: false)
+      case "warning":
+        self.trialMetadata = mock(remaining: 12 * 3600, expired: false)
+      case "expiring":
+        self.trialMetadata = mock(remaining: 1800, expired: false)
+      case "expired":
+        self.trialMetadata = mock(remaining: 0, expired: true)
+      case "realtime":
+        let endKey = "debug_trial_end_time"
+        let rtDur = 120
+        var endTime = UserDefaults.standard.integer(forKey: endKey)
+        if endTime == 0 {
+          endTime = now + rtDur
+          UserDefaults.standard.set(endTime, forKey: endKey)
+        }
+        let remaining = max(0, endTime - now)
+        self.trialMetadata = TrialMetadataResponse(
+          trialStartedAt: endTime - rtDur, trialEndsAt: endTime,
+          trialRemainingSeconds: remaining, trialExpired: remaining == 0,
+          trialDurationSeconds: rtDur, trialFeatures: features, planAfterTrial: "Free"
+        )
+        if remaining == 0 && !self.isPaywalled { self.isPaywalled = true }
+      default:
+        break
+      }
     }
-  }
   #endif
 
   func startTrialMetadataRefresh() {
     trialRefreshTimer?.invalidate()
     fetchTrialMetadata()
     #if DEBUG
-    let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
+      let interval: TimeInterval = UserDefaults.standard.string(forKey: "debug_trial_mode") == "realtime" ? 10 : 60
     #else
-    let interval: TimeInterval = 60
+      let interval: TimeInterval = 60
     #endif
     trialRefreshTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in
       Task { @MainActor in

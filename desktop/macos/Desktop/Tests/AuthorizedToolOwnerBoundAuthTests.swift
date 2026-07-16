@@ -1,10 +1,11 @@
 import Foundation
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
 
-private extension APIClient {
-  func setOwnerBoundTestAuthHeader(_ header: String) {
+extension APIClient {
+  fileprivate func setOwnerBoundTestAuthHeader(_ header: String) {
     testAuthHeader = header
   }
 }
@@ -236,10 +237,12 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   func testRealtimeHigherModelNeverReleasesOwnerAContextAfterMidFlightAccountSwitch() async {
     let client = await makeClient()
     let privateBody: [String: Any] = [
-      "messages": [[
-        "role": "user",
-        "content": "owner-a-private-query\nowner-a-private-about-user",
-      ]]
+      "messages": [
+        [
+          "role": "user",
+          "content": "owner-a-private-query\nowner-a-private-about-user",
+        ]
+      ]
     ]
     let operation = Task { @MainActor in
       do {
@@ -332,8 +335,9 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   func testDetachedPermissionEffectsStayRevokedAcrossSameOwnerSessionReplacement() async {
     await establishStandardOwner("owner-a")
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: "owner-a")
+    guard
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: "owner-a")
     else {
       XCTFail("owner-a authorization snapshot was not available")
       return
@@ -420,8 +424,9 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   func testSuspendedPhysicalEffectStaysRevokedAcrossSameOwnerSessionReplacement() async {
     await establishStandardOwner("owner-a")
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: "owner-a")
+    guard
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: "owner-a")
     else {
       XCTFail("owner-a authorization snapshot was not available")
       return
@@ -565,7 +570,8 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
     let authOwner = originalAuthOwner
     let ownerOverride = originalOwnerOverride
     let ownerBackup = originalOwnerBackup
-    let effectiveOwner = ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    let effectiveOwner =
+      ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
       ? ownerOverride
       : authOwner
     // Force one distinct completed generation first so even an authority that

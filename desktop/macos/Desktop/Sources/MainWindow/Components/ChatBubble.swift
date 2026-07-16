@@ -1,7 +1,7 @@
 import AppKit
 import MarkdownUI
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Chat Bubble
 
@@ -212,7 +212,8 @@ struct ChatBubble: View {
             // User attachments read as "here's what I'm sending" and belong
             // above the text; AI-generated artifacts are the result of the
             // reply and always sit below it.
-            let resourceStrip = message.displayResources.isEmpty
+            let resourceStrip =
+              message.displayResources.isEmpty
               ? nil
               : ChatResourceStrip(
                 resources: message.displayResources,
@@ -984,7 +985,7 @@ enum ContentBlockGroup: Identifiable {
           guard let pillId = call.spawnedAgentID else { return false }
           if structuredSpawnKeys.contains("pill:\(pillId.uuidString)") { return false }
           if let runId = call.spawnedAgentRunID,
-             structuredSpawnKeys.contains("run:\(runId)")
+            structuredSpawnKeys.contains("run:\(runId)")
           {
             return false
           }
@@ -1570,9 +1571,11 @@ extension ChatContentBlock {
     else { return nil }
 
     let firstAgent = (root["agents"] as? [[String: Any]])?.first
-    let session = (firstAgent?["session"] as? [String: Any])
+    let session =
+      (firstAgent?["session"] as? [String: Any])
       ?? (root["session"] as? [String: Any])
-    let run = (firstAgent?["run"] as? [String: Any])
+    let run =
+      (firstAgent?["run"] as? [String: Any])
       ?? (root["run"] as? [String: Any])
     let metadata = session?["metadata"] as? [String: Any]
 
@@ -1582,15 +1585,18 @@ extension ChatContentBlock {
       return trimmed.isEmpty ? nil : trimmed
     }
 
-    let pillRaw = string(session?["externalRefId"])
+    let pillRaw =
+      string(session?["externalRefId"])
       ?? string(metadata?["pillId"])
       ?? string(root["pillId"])
     let defaultAdapterId = string(session?["defaultAdapterId"])
-    let authoritativeProvider = ["hermes", "openclaw"].contains(defaultAdapterId ?? "")
+    let authoritativeProvider =
+      ["hermes", "openclaw"].contains(defaultAdapterId ?? "")
       ? defaultAdapterId
       : nil
     let legacyProvider = string(metadata?["provider"])
-    let provider = authoritativeProvider
+    let provider =
+      authoritativeProvider
       ?? (["hermes", "openclaw"].contains(legacyProvider ?? "") ? legacyProvider : nil)
     return (
       pillId: pillRaw.flatMap(UUID.init(uuidString:)),
