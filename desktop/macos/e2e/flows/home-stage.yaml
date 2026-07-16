@@ -1,10 +1,15 @@
 version: 2
 name: home-stage
 tier: 2
-description: Redesigned Home stage transitions (hub/chat/connect) via automation bridge
+description: Proof-first Dashboard paging, hero cascade, and real background setting
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/MainWindow/Dashboard/ProofFirstDashboard.swift
+  - desktop/macos/Desktop/Sources/MainWindow/OmiWindowChromeBar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ShortcutSettings.swift
+  - desktop/macos/Desktop/Sources/Theme/OmiTransparency.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
 preconditions:
   - automation_bridge_ready
@@ -19,43 +24,68 @@ steps:
       state.selectedTabIndex: 0
 
   - id: S2
-    name: Home starts in hub mode
-    state.expect:
-      state.homeMode: hub
+    name: Cascade resolves to one valid live tier on Home
+    bridge.action:
+      name: dashboard_snapshot
+    expect:
+      result.detail.page: home
+      result.detail.page_valid: "true"
+      result.detail.cascade_resolved: "true"
 
   - id: S3
-    name: Open inline chat
+    name: Page to canonical Connect data surface
     bridge.action:
-      name: home_open_chat
+      name: dashboard_select_page
+      params:
+        page: connectData
+    expect:
+      result.detail.selected: connectData
     wait:
-      state.homeMode: chat
+      state.proofFirstDashboardPage: connectData
 
   - id: S4
-    name: Home ask stub (no LLM wait)
+    name: Page to Features
     bridge.action:
-      name: home_ask
+      name: dashboard_select_page
       params:
-        query: "[[MARKER:home-stage-stub]]"
+        page: features
     expect:
-      result.detail.sent: "[[MARKER:home-stage-stub]]"
+      result.detail.selected: features
     wait:
-      state.homeMode: chat
+      state.proofFirstDashboardPage: features
 
   - id: S5
-    name: Toggle connect tray
+    name: Switch to the real Solid Dark preference
     bridge.action:
-      name: home_connect_toggle
+      name: dashboard_set_background_style
+      params:
+        style: solidDark
+    expect:
+      result.detail.style: solidDark
     wait:
-      state.homeMode: connect
+      state.dashboardBackgroundStyle: solidDark
 
   - id: S6
-    name: Collapse back to hub
+    name: Restore Transparent background preference
     bridge.action:
-      name: home_close_panel
+      name: dashboard_set_background_style
+      params:
+        style: transparent
+    expect:
+      result.detail.style: transparent
     wait:
-      state.homeMode: hub
+      state.dashboardBackgroundStyle: transparent
 
   - id: S7
+    name: Return directly Home
+    bridge.action:
+      name: dashboard_select_page
+      params:
+        page: home
+    wait:
+      state.proofFirstDashboardPage: home
+
+  - id: S8
     name: Logs clean
     log.expect:
       absent:

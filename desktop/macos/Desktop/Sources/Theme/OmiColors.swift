@@ -16,6 +16,13 @@ package enum OmiColors {
 
   // MARK: - Accent System (single neutral accent, INV-UI-1)
   package static let accent = Color(hex: 0xFFFFFF)
+  package static let accentHover = Color(hex: 0xE5E5E5)
+  package static let accentPressed = Color(hex: 0xCCCCCC)
+  package static let accentSubtle = Color.white.opacity(0.08)
+
+  // MARK: - Disabled States
+  package static let disabledBackground = Color.white.opacity(0.12)
+  package static let disabledForeground = Color.white.opacity(0.38)
 
   // MARK: - Text Colors
   package static let textPrimary = Color(hex: 0xFFFFFF)

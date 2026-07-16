@@ -797,7 +797,7 @@ extension Notification.Name {
   static let showTryAskingPopup = Notification.Name("showTryAskingPopup")
   /// Posted (automation bridge) to open the inline chat on the redesigned Home
   static let homeStageOpenChat = Notification.Name("homeStageOpenChat")
-  /// Posted (automation bridge) to toggle the Connect tray on the redesigned Home
+  /// Posted (automation bridge) to follow Home's Connect shortcut to the canonical Apps page
   static let homeStageToggleConnect = Notification.Name("homeStageToggleConnect")
   /// Posted (automation bridge) to collapse the redesigned Home back to the hub
   static let homeStageClose = Notification.Name("homeStageClose")
@@ -805,6 +805,10 @@ extension Notification.Name {
   static let homeStageAsk = Notification.Name("homeStageAsk")
   /// Posted (automation bridge) to stage a file in the Home ask bar. userInfo["path"] = file path.
   static let homeStageAttach = Notification.Name("homeStageAttach")
+  /// Posted (automation bridge) to select a proof-first Dashboard page. userInfo["page"] = page name.
+  static let proofFirstDashboardSelectPage = Notification.Name("proofFirstDashboardSelectPage")
+  /// Posted (automation bridge) to select a day-zero source card. userInfo["index"] = zero-based index.
+  static let proofFirstDashboardSelectDayZeroCard = Notification.Name("proofFirstDashboardSelectDayZeroCard")
   /// Posted to show the over-usage-limit popup. userInfo["reason"] = "transcription" | "chat" | "floating_bar".
   static let showUsageLimitPopup = Notification.Name("showUsageLimitPopup")
   /// Posted to navigate to Rewind settings

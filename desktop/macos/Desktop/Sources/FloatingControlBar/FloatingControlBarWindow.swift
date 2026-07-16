@@ -3335,6 +3335,23 @@ class FloatingControlBarManager {
     }
 
     /// Open AI input with a pre-filled query and auto-send (used by PTT).
+    /// Dashboard actions use the same shared timeline, but first restore the
+    /// hidden viewport with the established grow-from-notch transition.
+    func openDashboardQuery(_ query: String) {
+        guard let window else { return }
+        let shouldRevealFromNotch =
+            window.usesNotchIslandForCurrentScreen && !window.isVisible
+        if !window.isVisible {
+            window.normalizeForTemporaryShow()
+            window.makeKeyAndOrderFront(nil)
+            if shouldRevealFromNotch {
+                hasRevealedNotchThisSession = true
+                window.playNotchRevealAnimation()
+            }
+        }
+        openAIInputWithQuery(query)
+    }
+
     func openAIInputWithQuery(
         _ query: String,
         fromVoice: Bool = false,

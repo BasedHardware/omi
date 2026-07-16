@@ -131,7 +131,7 @@ struct OMIApp: App {
           log("OmiApp: Main window content appeared (mode: \(Self.launchMode.rawValue))")
         }
     }
-    .windowStyle(.titleBar)
+    .windowStyle(.hiddenTitleBar)
     .defaultSize(width: defaultWindowSize.width, height: defaultWindowSize.height)
     .commands {
       CommandGroup(after: .textFormatting) {
@@ -252,6 +252,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   private var initialSettingsSyncTask: Task<Void, Never>?
 
   func applicationWillFinishLaunching(_ notification: Notification) {
+    OmiType.registerBundledTypeface()
     if AuthStorageCanary.isRequested { return }
     // Single-instance guard: a second live copy of the same bundle id + launch mode
     // would race the first against the shared Rewind SQLite DB

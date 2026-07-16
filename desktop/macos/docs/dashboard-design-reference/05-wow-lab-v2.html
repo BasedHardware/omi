@@ -1,0 +1,138 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Omi Dashboard — Home, Connect Data, and Features V2</title>
+<link rel="stylesheet" href="dashboard.css">
+<link rel="stylesheet" href="wow-lab-v2.css">
+</head>
+<body class="wow-v2-body">
+<div class="window v2-window">
+  <div class="canvas-solid"></div>
+  <div class="v2-aura" aria-hidden="true"></div>
+  <nav class="v2-primary-tabs" role="tablist" aria-label="Dashboard destinations">
+    <button class="v2-primary-tab" type="button" role="tab" data-page-tab="home" aria-selected="true" aria-controls="v2HomePage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path>
+        <polyline points="9 22 9 12 15 12 15 22"></polyline>
+      </svg>
+      <span>Home</span>
+    </button>
+    <button class="v2-primary-tab" type="button" role="tab" data-page-tab="connect" aria-selected="false" aria-controls="v2ConnectPage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+      </svg>
+      <span>Connect data</span>
+    </button>
+    <button class="v2-primary-tab" type="button" role="tab" data-page-tab="features" aria-selected="false" aria-controls="v2FeaturesPage">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <line x1="4" y1="21" x2="4" y2="14"></line>
+        <line x1="4" y1="10" x2="4" y2="3"></line>
+        <line x1="12" y1="21" x2="12" y2="12"></line>
+        <line x1="12" y1="8" x2="12" y2="3"></line>
+        <line x1="20" y1="21" x2="20" y2="16"></line>
+        <line x1="20" y1="12" x2="20" y2="3"></line>
+        <line x1="1" y1="14" x2="7" y2="14"></line>
+        <line x1="9" y1="8" x2="15" y2="8"></line>
+        <line x1="17" y1="16" x2="23" y2="16"></line>
+      </svg>
+      <span>Features</span>
+    </button>
+  </nav>
+
+  <div class="v2-pages" id="v2Pages">
+    <section class="v2-page v2-home-page" id="v2HomePage" aria-label="Home">
+      <header class="topbar v2-topbar" aria-label="Omi status">
+        <span class="pill-status capture"><span class="v2-capture-dot" aria-hidden="true"></span>Capture</span>
+        <span class="pill-status"><span class="v2-listening-mark" aria-hidden="true"></span>Listening</span>
+        <button class="icon-btn v2-settings" type="button" aria-label="Open settings">•••</button>
+      </header>
+
+      <main class="v2-shell">
+        <div class="v2-brand" aria-label="Omi">omi.</div>
+        <section class="v2-scene" id="v2Scene" aria-live="polite"></section>
+
+        <div class="v2-composer-wrap">
+          <form class="v2-composer" id="v2Composer" role="search" aria-label="Ask Omi">
+            <svg class="v2-composer-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <circle cx="11" cy="11" r="8"></circle>
+              <line x1="21" y1="21" x2="16.65" y2="16.65"></line>
+            </svg>
+            <input
+              class="v2-composer-input"
+              id="v2ComposerInput"
+              type="text"
+              placeholder="Ask Omi anything…"
+              autocomplete="off"
+              autocorrect="off"
+              spellcheck="false"
+              aria-label="Ask Omi anything"
+            />
+            <button class="v2-composer-send" type="submit" aria-label="Send">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <line x1="5" y1="12" x2="19" y2="12"></line>
+                <polyline points="12 5 19 12 12 19"></polyline>
+              </svg>
+            </button>
+          </form>
+        </div>
+
+        <section class="v2-up-next" aria-labelledby="upNextTitle">
+          <div class="v2-up-next-heading">
+            <h2 id="upNextTitle">Up next</h2>
+            <button type="button" data-view-tasks>View tasks →</button>
+          </div>
+          <ul>
+            <li>
+              <button class="v2-task-check" type="button" data-task="Review Priya's scope doc before Friday" aria-label="Complete Review Priya's scope doc before Friday" aria-pressed="false"><span aria-hidden="true"></span></button>
+              <div><p>Review Priya's scope doc before Friday</p><small>Q3 roadmap</small></div>
+            </li>
+            <li>
+              <button class="v2-task-check" type="button" data-task="Send Lena the pricing comparison numbers" aria-label="Complete Send Lena the pricing comparison numbers" aria-pressed="false"><span aria-hidden="true"></span></button>
+              <div><p>Send Lena the pricing comparison numbers</p><small>Product sync</small></div>
+            </li>
+          </ul>
+        </section>
+      </main>
+    </section>
+
+    <section class="v2-page v2-destination-page" id="v2ConnectPage" aria-labelledby="connectPageTitle">
+      <main class="v2-destination-shell">
+        <section class="v2-destination-panel">
+          <p class="v2-eyebrow">Connect data</p>
+          <h1 class="v2-destination-title" id="connectPageTitle">Bring your context into Omi.</h1>
+          <div class="v2-destination-content" id="v2ConnectContent" aria-live="polite"></div>
+        </section>
+      </main>
+    </section>
+
+    <section class="v2-page v2-destination-page" id="v2FeaturesPage" aria-labelledby="featuresPageTitle">
+      <main class="v2-destination-shell">
+        <section class="v2-destination-panel">
+          <p class="v2-eyebrow">Features</p>
+          <h1 class="v2-destination-title" id="featuresPageTitle">Control what Omi does.</h1>
+          <div class="v2-destination-content" id="v2FeaturesContent" aria-live="polite"></div>
+        </section>
+      </main>
+    </section>
+  </div>
+</div>
+
+<div class="v2-toast" id="v2Toast" role="status" aria-live="polite"></div>
+
+<nav class="mock-nav v2-nav" aria-label="Mock navigation">
+  <div class="v2-review-switcher" role="group" aria-label="Preview Home cascade state">
+    <span>Preview</span>
+    <button type="button" data-tier="recommendation" aria-pressed="true">Recommendation</button>
+    <button type="button" data-tier="recent" aria-pressed="false">Recent</button>
+    <button type="button" data-tier="day-zero" aria-pressed="false">Day zero</button>
+  </div>
+  <a href="04-cascade-demo.html">compare V1</a>
+  <a href="index.html">index</a>
+</nav>
+
+<script src="wow-lab-v2.js"></script>
+</body>
+</html>
