@@ -1,16 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import {
-  Target,
-  Check,
-  RefreshCw,
-  Plus,
-  Trash2,
-  Loader2,
-  Trophy,
-  Sparkles,
-  Lightbulb,
-  X
-} from 'lucide-react'
+import { Target, Check, RefreshCw, Plus, Trash2, Loader2, Trophy, Lightbulb } from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
@@ -21,10 +10,7 @@ import { goalEmoji } from '../lib/goalEmoji'
 import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
 import { GoalCelebration } from '../components/goals/GoalCelebration'
 import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
-import type {
-  GoalResponse as Goal,
-  GoalSuggestionResponse as GoalSuggestion
-} from '../lib/omiApi.generated'
+import type { GoalResponse as Goal } from '../lib/omiApi.generated'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
 
@@ -80,9 +66,10 @@ export function Goals(): React.JSX.Element {
   const [draftUnit, setDraftUnit] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [suggesting, setSuggesting] = useState(false)
-  const [suggestion, setSuggestion] = useState<GoalSuggestion | null>(null)
-  const [addingSuggestion, setAddingSuggestion] = useState(false)
+  // Client-side goal generation (Wave C): the Suggest button now runs the same
+  // on-device generation as the background auto-gen (main-process `goals:generateNow`),
+  // creating the goal directly — no backend `/v1/goals/suggest` preview step.
+  const [generating, setGenerating] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
@@ -131,6 +118,10 @@ export function Goals(): React.JSX.Element {
     await load()
     setRefreshing(false)
   }
+
+  // Re-fetch whenever main reports a goal changed (background auto-gen created one,
+  // or the manual button did). Keeps an open Goals page live with the auto job.
+  useEffect(() => window.omi?.onGoalsChanged?.(() => void load()), [load])
 
   const markBusy = (id: string, on: boolean): void =>
     setBusy((s) => {
@@ -241,49 +232,38 @@ export function Goals(): React.JSX.Element {
     }
   }
 
-  // GET /v1/goals/suggest — ask the backend's goals LLM for one goal based on
-  // the user's memories, then preview it (no goal is created until they accept).
-  const getSuggestion = async (): Promise<void> => {
-    if (suggesting) return
-    setSuggesting(true)
+  // Client-side goal generation: main assembles the on-device context bundle and
+  // generates one goal via the Gemini proxy, creating it directly (Mac parity) —
+  // the same path the background auto-gen uses. No backend suggest/preview step.
+  const generateGoal = async (): Promise<void> => {
+    if (generating) return
+    setGenerating(true)
     try {
-      const res = await omiApi.get('/v1/goals/suggest')
-      const s = res.data as GoalSuggestion
-      if (!s?.suggested_title) {
-        toast('No suggestion right now', {
-          tone: 'info',
-          body: 'Omi needs a few memories before it can suggest a goal.'
-        })
+      const res = await window.omi?.goalsGenerateNow?.()
+      if (!res) {
+        toast('Could not suggest a goal', { tone: 'error', body: 'Try again in a moment.' })
         return
       }
-      setSuggestion(s)
+      if (res.status === 'created') {
+        setFilter('active')
+        await load()
+        toast('Goal added ✨', { tone: 'success', body: res.title })
+        return
+      }
+      if (res.reason === 'insufficient_context') {
+        toast('Not enough context yet', {
+          tone: 'info',
+          body: 'Omi needs a few memories, conversations, or tasks before it can suggest a goal.'
+        })
+      } else if (res.reason === 'no_session') {
+        toast('Sign in to suggest a goal', { tone: 'info' })
+      } else {
+        toast('Could not suggest a goal', { tone: 'error', body: 'Try again in a moment.' })
+      }
     } catch (e) {
-      toast('Could not get a suggestion', { tone: 'error', body: apiError(e) })
+      toast('Could not suggest a goal', { tone: 'error', body: apiError(e) })
     } finally {
-      setSuggesting(false)
-    }
-  }
-
-  // Accept the suggested goal via the normal create path. POST requires
-  // target_value (verified); the suggestion supplies one, default 1 otherwise.
-  const acceptSuggestion = async (): Promise<void> => {
-    if (!suggestion || addingSuggestion) return
-    setAddingSuggestion(true)
-    try {
-      const target =
-        typeof suggestion.suggested_target === 'number' && suggestion.suggested_target > 0
-          ? suggestion.suggested_target
-          : 1
-      const body: GoalPatch = { title: suggestion.suggested_title, target_value: target }
-      await omiApi.post('/v1/goals', body)
-      await load()
-      setSuggestion(null)
-      setFilter('active')
-      toast('Goal added ✨', { tone: 'success', body: suggestion.suggested_title })
-    } catch (e) {
-      toast('Could not add goal', { tone: 'error', body: apiError(e) })
-    } finally {
-      setAddingSuggestion(false)
+      setGenerating(false)
     }
   }
 
@@ -480,7 +460,7 @@ export function Goals(): React.JSX.Element {
                 </button>
               ))}
             </div>
-            <GenerateGoalsButton onClick={getSuggestion} loading={suggesting} label="Suggest" />
+            <GenerateGoalsButton onClick={generateGoal} loading={generating} label="Suggest" />
             <button
               onClick={() => setComposing((c) => !c)}
               className="btn-primary px-3 py-2"
@@ -501,68 +481,6 @@ export function Goals(): React.JSX.Element {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        {suggestion && (
-          <div className="mx-auto mb-5 max-w-3xl">
-            <div className="surface-card animate-fade-in border border-white/10 p-4">
-              <div className="flex items-start gap-3">
-                <div className="glass-subtle mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded-xl">
-                  <Sparkles className="h-4 w-4 text-white/70" />
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="text-[11px] font-semibold uppercase tracking-wide text-white/40">
-                    Suggested goal
-                  </p>
-                  <p className="mt-1 text-sm font-medium text-white/90">
-                    {suggestion.suggested_title}
-                  </p>
-                  {typeof suggestion.suggested_target === 'number' &&
-                    suggestion.suggested_target > 0 && (
-                      <p className="mt-1 flex items-center gap-1.5 text-xs text-white/45">
-                        <Target className="h-3.5 w-3.5" />
-                        Target {suggestion.suggested_target}
-                      </p>
-                    )}
-                  {suggestion.reasoning && (
-                    <p className="mt-2 text-xs leading-relaxed text-white/55">
-                      {suggestion.reasoning}
-                    </p>
-                  )}
-                  <div className="mt-3 flex items-center gap-2">
-                    <button
-                      onClick={acceptSuggestion}
-                      disabled={addingSuggestion}
-                      className="btn-primary px-4 py-2 disabled:opacity-40"
-                    >
-                      {addingSuggestion ? (
-                        <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      Add this goal
-                    </button>
-                    <button
-                      onClick={getSuggestion}
-                      disabled={suggesting || addingSuggestion}
-                      className="btn-ghost px-3 py-2 disabled:opacity-50"
-                      title="Suggest another"
-                    >
-                      <RefreshCw className={`h-4 w-4 ${suggesting ? 'animate-spin' : ''}`} />
-                      Another
-                    </button>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setSuggestion(null)}
-                  className="shrink-0 rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
-                  title="Dismiss"
-                  aria-label="Dismiss suggestion"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
         {composing && (
           <div className="mx-auto mb-5 max-w-3xl">
             <div className="surface-card animate-fade-in p-4">
