@@ -12,19 +12,34 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
   private func evidence(
     id: String = "evidence-1",
     app: String? = "Codex",
-    bytes: Int = 900_000
+    bytes: Int = 900_000,
+    target: RealtimeScreenEvidenceTarget = .frontmostDisplay,
+    captureFailure: RealtimeScreenEvidenceCaptureFailure? = nil
   ) -> RealtimeScreenEvidenceDescriptor {
     RealtimeScreenEvidenceDescriptor(
       evidenceID: id,
       turnID: turnID,
       capturedAt: Date(timeIntervalSince1970: 1_000),
-      target: .frontmostDisplay,
+      target: target,
       frontmostApp: app,
       frontmostBundleID: "com.openai.codex",
       windowID: 7,
       displayID: 3,
       imageByteCount: bytes,
-      imageDigest: bytes > 0 ? "digest" : nil)
+      imageDigest: bytes > 0 ? "digest" : nil,
+      captureFailure: captureFailure)
+  }
+
+  func testScreenRecordingDenialIsNotTreatedAsAVisualObservation() {
+    let denied = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .screenRecordingPermissionRequired)
+
+    XCTAssertFalse(denied.canVerifyCurrentScreen)
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureText(for: denied),
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request.")
   }
 
   private func request(

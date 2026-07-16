@@ -42,11 +42,13 @@ extension RealtimeHubController {
   }
 
   func screenshotToolResultTextForCurrentProvider(
-    attachment: RealtimeScreenEvidenceAttachment?
+    attachment: RealtimeScreenEvidenceAttachment?,
+    unavailableEvidence: RealtimeScreenEvidenceDescriptor? = nil
   ) -> String {
     RealtimeHubTools.screenshotToolResult(
       capturedBytes: attachment?.jpeg.count,
-      frontmostApplication: attachment?.descriptor.frontmostApp)
+      frontmostApplication: attachment?.descriptor.frontmostApp,
+      captureFailure: unavailableEvidence?.captureFailure)
   }
 
   func resetScreenGrounding(for turnID: VoiceTurnID) {
@@ -164,6 +166,7 @@ extension RealtimeHubController {
     let turn = String(evidence.turnID.rawValue.uuidString.prefix(8))
     let image = evidence.imageDigest.map { String($0.prefix(12)) } ?? ""
     let tokens = imageTokenCount.map(String.init) ?? ""
+    let captureFailure = evidence.captureFailure?.rawValue ?? ""
     let transcriptSeen = lastInputTranscriptUpdateAt != nil
     let message =
       "RealtimeHub: ptt_screen_evidence stage=\(stage) evidence=\(evidence.opaqueID) "
@@ -172,6 +175,7 @@ extension RealtimeHubController {
       + "capture_age=\(ageBucket) bytes=\(bytesBucket) "
       + "app=\(evidence.opaqueAppID ?? "") has_window=\(evidence.windowID != nil) "
       + "has_display=\(evidence.displayID != nil) image=\(image) "
+      + "capture_failure=\(captureFailure) "
       + "call=\(callHash.prefix(12)) image_tokens=\(tokens)"
     log(message)
   }
@@ -195,7 +199,7 @@ extension RealtimeHubController {
       extra: ["screen_evidence_reason": reason, "user_visible": true])
     let completion = completeScreenEvidenceFailure(
       token,
-      failure: RealtimeScreenGroundingPolicy.failureText)
+      failure: RealtimeScreenGroundingPolicy.failureText(for: evidence))
     guard completion != .completed else { return }
 
     // A screenshot tool is intentionally held pending until this protocol reaches a local
