@@ -419,8 +419,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       if (this.processIsExternal && proc.pid) {
         // shell:true means proc.pid is cmd.exe — kill the whole tree or the
         // real adapter process is orphaned. taskkill is the Windows analog of
-        // the POSIX process-group SIGTERM below.
-        execFile('taskkill', ['/pid', String(proc.pid), '/t', '/f'], () => {
+        // the POSIX process-group SIGTERM below. windowsHide so the console-
+        // subsystem taskkill.exe never flashes a window on teardown.
+        execFile('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true }, () => {
           // Best-effort: if taskkill itself failed (already exited, access
           // denied), fall back to killing the direct child.
           proc.kill()
