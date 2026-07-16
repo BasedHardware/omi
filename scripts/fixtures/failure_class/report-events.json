@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "events": [
+    {
+      "number": 9494,
+      "merged_at": "2026-07-01T00:00:00Z",
+      "body": "Failure-Class: FC-malformed-doc-read\n"
+    },
+    {
+      "number": 9288,
+      "merged_at": "2026-07-10T00:00:00Z",
+      "body": "Failure-Class: FC-trapping-dict-merge\n"
+    }
+  ]
+}

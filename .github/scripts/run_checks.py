@@ -22,6 +22,7 @@ class Check:
     triggers: tuple[str, ...]
     lanes: tuple[str, ...]
     reason: str
+    requires_pr_body: bool = False
 
 
 @dataclass(frozen=True)
@@ -81,6 +82,7 @@ def load_manifest(path: Path) -> Manifest:
             triggers=tuple(item.get("triggers", ())),
             lanes=tuple(item.get("lanes", ())),
             reason=str(item.get("reason", "")),
+            requires_pr_body=item.get("requires_pr_body", False),
         )
         for item in raw.get("checks", [])
     )
@@ -121,6 +123,8 @@ def validate_manifest(manifest: Manifest, root: Path) -> list[str]:
             errors.append(f"{check.id}: missing required lanes: {', '.join(missing_lanes)}")
         if not check.reason:
             errors.append(f"{check.id}: reason must not be empty")
+        if not isinstance(check.requires_pr_body, bool):
+            errors.append(f"{check.id}: requires_pr_body must be a boolean")
     for exemption in manifest.exempt:
         if not exemption.path or not exemption.reason:
             errors.append("exempt entries require non-empty path and reason")
@@ -164,11 +168,18 @@ def trigger_matches(pattern: str, path: str) -> bool:
     return False
 
 
-def resolve_checks(manifest: Manifest, files: list[str], lane: str) -> list[Check]:
+def resolve_checks(
+    manifest: Manifest,
+    files: list[str],
+    lane: str,
+    *,
+    include_pr_body_checks: bool = True,
+) -> list[Check]:
     return [
         check
         for check in manifest.checks
         if lane in check.lanes
+        and (include_pr_body_checks or not check.requires_pr_body)
         and (
             "all" in check.triggers
             or any(trigger_matches(pattern, path) for pattern in check.triggers for path in files)
@@ -244,6 +255,11 @@ def parse_args() -> argparse.Namespace:
     parser.add_argument("--manifest", type=Path)
     parser.add_argument("--changed-files", type=Path)
     parser.add_argument("--pr-body-file", type=Path)
+    parser.add_argument(
+        "--skip-pr-body-checks",
+        action="store_true",
+        help="Exclude checks declared as requiring pull-request metadata.",
+    )
     parser.add_argument("--skip-changelog", action="store_true")
     parser.add_argument("--list", action="store_true")
     parser.add_argument("--root", type=Path)
@@ -268,7 +284,12 @@ def main() -> int:
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
-    checks = resolve_checks(manifest, files, args.lane)
+    checks = resolve_checks(
+        manifest,
+        files,
+        args.lane,
+        include_pr_body_checks=not args.skip_pr_body_checks,
+    )
     print(f"Check manifest: lane={args.lane} base={resolved_base[:12]} head={args.head} files={len(files)}")
     for check in checks:
         print(f"  SELECTED {check.id}: {check.reason}")
