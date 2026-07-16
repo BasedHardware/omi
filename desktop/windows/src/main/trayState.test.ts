@@ -78,7 +78,7 @@ describe('buildTrayMenuTemplate', () => {
       noopActions()
     ) as Item[]
     expect(labels(items)).toEqual([
-      'Screen Capture',
+      'Screen Analysis',
       'Open Omi',
       'Pause listening',
       'Settings',
@@ -96,13 +96,13 @@ describe('buildTrayMenuTemplate', () => {
     expect(labels(items)).not.toContain('Pause listening')
   })
 
-  it('renders Screen Capture as a checkbox reflecting the enabled state', () => {
+  it('renders Screen Analysis as a checkbox reflecting the enabled state', () => {
     const on = byLabel(
       buildTrayMenuTemplate(
         { toggleLabel: 'Pause listening', screenCaptureEnabled: true },
         noopActions()
       ) as Item[],
-      'Screen Capture'
+      'Screen Analysis'
     )
     expect(on.type).toBe('checkbox')
     expect(on.checked).toBe(true)
@@ -112,7 +112,7 @@ describe('buildTrayMenuTemplate', () => {
         { toggleLabel: 'Pause listening', screenCaptureEnabled: false },
         noopActions()
       ) as Item[],
-      'Screen Capture'
+      'Screen Analysis'
     )
     expect(off.type).toBe('checkbox')
     expect(off.checked).toBe(false)
@@ -124,7 +124,7 @@ describe('buildTrayMenuTemplate', () => {
       { toggleLabel: 'Pause listening', screenCaptureEnabled: true },
       actions
     ) as Item[]
-    byLabel(items, 'Screen Capture').click?.()
+    byLabel(items, 'Screen Analysis').click?.()
     byLabel(items, 'Open Omi').click?.()
     byLabel(items, 'Pause listening').click?.()
     byLabel(items, 'Settings').click?.()

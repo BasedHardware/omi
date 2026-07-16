@@ -22,7 +22,7 @@ export interface TrayDeps {
   openSettings: () => void
   /** "Check for Updates" — run a manual update check (see updater.ts). */
   checkForUpdates: () => void
-  /** "Screen Capture" checkbox — flip the screenAnalysisEnabled master. The tray
+  /** "Screen Analysis" checkbox — flip the screenAnalysisEnabled master. The tray
    *  checkbox is refreshed from the persisted value via setTrayScreenCapture, so
    *  this only writes the setting (the coordinator re-syncs off that write). */
   toggleScreenCapture: () => void
@@ -34,7 +34,7 @@ let tray: Tray | null = null
 let deps: TrayDeps | null = null
 let currentState: TrayState = 'idle'
 let updateReady = false
-// Reflects screenAnalysisEnabled for the "Screen Capture" checkbox. Pushed in via
+// Reflects screenAnalysisEnabled for the "Screen Analysis" checkbox. Pushed in via
 // setTrayScreenCapture (mirroring updateReady/setTrayUpdateReady) so the tray
 // tracks the setting wherever it changes from — the menu toggle, a backend sync,
 // or a future Settings switch. Seeded at createTray.
@@ -97,7 +97,7 @@ export function setTrayUpdateReady(ready: boolean): void {
   render()
 }
 
-/** Reflect the current screenAnalysisEnabled value in the "Screen Capture"
+/** Reflect the current screenAnalysisEnabled value in the "Screen Analysis"
  *  checkbox. Called on startup (seed) and on every settings write, so the tray
  *  stays in sync no matter where the setting changes from. */
 export function setTrayScreenCapture(enabled: boolean): void {

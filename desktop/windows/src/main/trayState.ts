@@ -55,7 +55,9 @@ export interface TrayMenuActions {
   openSettings: () => void
   /** Run a manual update check (Mac's "Check for Updates…"). */
   checkForUpdates: () => void
-  /** Flip the screen-analysis master (Mac's "Screen Capture" menu-bar toggle). */
+  /** Flip the screen-analysis master. Labeled "Screen Analysis" on Windows: Mac's
+   *  menu bar calls it "Screen Capture", but Windows already uses that label for the
+   *  Rewind capture toggle (a different setting), so we disambiguate. */
   toggleScreenCapture: () => void
   /** Quit for real. */
   quit: () => void
@@ -65,7 +67,7 @@ export interface TrayMenuActions {
  * The tray context-menu template. Pure (returns plain descriptors) so it is
  * unit-tested without an Electron runtime; tray.ts feeds the result to
  * Menu.buildFromTemplate. Layout mirrors Mac's menu bar (OmiApp.swift): the
- * Screen Capture toggle sits at the top and Check for Updates sits just before
+ * Screen Analysis toggle sits at the top and Check for Updates sits just before
  * Quit. `screenCaptureEnabled` drives the checkbox; `toggleLabel` is the
  * pause/resume label from describeTray.
  */
@@ -76,7 +78,7 @@ export function buildTrayMenuTemplate(
   return [
     {
       type: 'checkbox',
-      label: 'Screen Capture',
+      label: 'Screen Analysis',
       checked: opts.screenCaptureEnabled,
       click: () => actions.toggleScreenCapture()
     },

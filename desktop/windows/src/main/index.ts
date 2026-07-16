@@ -925,7 +925,7 @@ app.whenReady().then(async () => {
     checkForUpdates: () => {
       void checkForUpdatesNow().then((r) => console.log('[tray] update check:', r.status))
     },
-    // "Screen Capture" toggle → flip the screenAnalysisEnabled master. Writing the
+    // "Screen Analysis" toggle → flip the screenAnalysisEnabled master. Writing the
     // setting is the whole action: the proactive coordinator subscribes to
     // onAppSettingsChanged and starts/stops its screen-analysis loop off that write
     // (assistants/core/coordinator.ts), and the onAppSettingsChanged hook below
