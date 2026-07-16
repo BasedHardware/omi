@@ -146,6 +146,7 @@
             "workdir": "/app",
             "entrypoints": ["main"],
             "image_import_smoke": false,
+            "smoke_python": "python3",
             "dependency_probe_smoke": true,
             "pull_request_smoke": false
         },

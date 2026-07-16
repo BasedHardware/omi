@@ -153,6 +153,20 @@ def test_image_smoke_is_network_isolated_and_uses_registered_entrypoint(contract
     )
 
 
+def test_image_smoke_uses_registered_python_executable(contracts_module, monkeypatch):
+    calls = []
+
+    class Result:
+        returncode = 0
+
+    monkeypatch.setattr(contracts_module, 'third_party_dependency_modules', lambda _: ('torch',))
+    monkeypatch.setattr(contracts_module.subprocess, 'run', lambda command, check: calls.append(command) or Result())
+
+    assert contracts_module.smoke_image('omi-nllb:test', [_contract(contracts_module, 'nllb-translation')]) == 0
+
+    assert calls[0][:6] == ['docker', 'run', '--rm', '--network=none', '--entrypoint', 'python3']
+
+
 def test_build_smoke_uses_the_registered_dockerfile_and_context(contracts_module, monkeypatch):
     calls = []
 

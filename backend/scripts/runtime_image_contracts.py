@@ -43,6 +43,7 @@ class ImageContract:
     workdir: PurePosixPath
     entrypoints: tuple[str, ...]
     image_import_smoke: bool
+    smoke_python: str
     smoke_environment: tuple[tuple[str, str], ...]
     smoke_entrypoints: tuple[str, ...]
     smoke_prelude: str
@@ -94,6 +95,9 @@ def load_contracts(registry_path: Path = REGISTRY_PATH) -> list[ImageContract]:
             raise ContractError(f"{entry['name']}: entrypoints must be a non-empty list of module names")
         if not isinstance(entry.get("image_import_smoke"), bool):
             raise ContractError(f"{entry['name']}: image_import_smoke must be boolean")
+        smoke_python = entry.get("smoke_python", "python")
+        if not isinstance(smoke_python, str) or not smoke_python:
+            raise ContractError(f"{entry['name']}: smoke_python must be a non-empty string")
         smoke_entrypoints_raw = entry.get("smoke_entrypoints", entrypoints_raw)
         if (
             not isinstance(smoke_entrypoints_raw, list)
@@ -156,6 +160,7 @@ def load_contracts(registry_path: Path = REGISTRY_PATH) -> list[ImageContract]:
                 workdir=PurePosixPath(entry["workdir"]),
                 entrypoints=tuple(entrypoints_raw),
                 image_import_smoke=entry["image_import_smoke"],
+                smoke_python=smoke_python,
                 smoke_environment=tuple(sorted(smoke_environment_raw.items())),
                 smoke_entrypoints=tuple(smoke_entrypoints_raw),
                 smoke_prelude=smoke_prelude,
@@ -481,7 +486,7 @@ def _docker_run_command(contract: ImageContract, image: str, code: str) -> list[
         "--rm",
         "--network=none",
         "--entrypoint",
-        "python",
+        contract.smoke_python,
         *(item for key, value in contract.smoke_environment for item in ("--env", f"{key}={value}")),
         image,
         "-I",
