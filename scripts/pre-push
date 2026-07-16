@@ -253,16 +253,8 @@ check_backend_typecheck_if_needed() {
     return
   fi
 
-  if ! changed_matches \
-    'backend/*.py' \
-    'backend/**/*.py' \
-    'backend/pyrightconfig.json' \
-    'backend/scripts/typecheck.sh' \
-    'backend/requirements.txt' \
-    'backend/pylock*.toml' \
-    '.github/workflows/backend-unit-tests.yml' \
-    'scripts/pre-push'
-  then
+  if ! printf '%s\n' "${CHANGED_FILES[@]}" | backend/scripts/needs-typecheck.sh; then
+    echo "Skipping backend type check: changed paths do not affect the typed boundary."
     return
   fi
 
