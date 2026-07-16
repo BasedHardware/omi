@@ -282,6 +282,24 @@ export function BarApp(): React.JSX.Element {
     []
   )
 
+  // Test-only PTT drive seam (OMI_E2E=1 only; NEVER attached in production) —
+  // mirrors how `window.__omiVoice` (lib/voice/e2eHook.ts) exposes the voice
+  // controller. The real-audio voice→agent→tool→voice gauntlet
+  // (scripts/agent-voice-gauntlet.mjs) drives a deterministic mic-captured PTT
+  // hold from CDP without the global summon-hotkey or synthetic keyboard events
+  // (the OS-blur backstop and >350ms hold timing make key injection flaky under
+  // machine load). Calls the SAME beginHold/endHold the summon-hotkey IPC uses.
+  useEffect(() => {
+    if (window.omi?.e2e !== true) return
+    ;(globalThis as unknown as { __omiPtt?: Record<string, unknown> }).__omiPtt = {
+      beginHold: () => beginHoldRef.current(),
+      endHold: () => endHoldRef.current()
+    }
+    return () => {
+      delete (globalThis as unknown as { __omiPtt?: unknown }).__omiPtt
+    }
+  }, [])
+
   // Report ready ONCE the real content can render — flushes a deferred first
   // show in main (never flashes an empty frame).
   const ready = !loading && authReady
