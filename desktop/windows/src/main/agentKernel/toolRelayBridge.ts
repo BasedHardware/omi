@@ -48,7 +48,7 @@ import {
 } from './controlTools'
 import { productManifestEntry, type OmiToolTimeoutClass } from './omiToolManifest'
 import { createCaptureScreenExecutor } from './captureScreenExecutor'
-import { tierAProductToolExecutors } from './productToolExecutors'
+import { tierAProductToolExecutors, tierBProductToolExecutors } from './productToolExecutors'
 
 /** A single frame may not exceed this. Hostile input must not exhaust main's heap. */
 const MAX_FRAME_BYTES = 1024 * 1024
@@ -105,6 +105,11 @@ export type ProductToolExecutor = (
  * `complete_task`, `delete_task`. `load_skill` needs no host executor — the pi-mono
  * extension answers it in-process (node-tools.ts), never over this relay.
  *
+ * The Tier-B bundle (PR-4..7) adds `execute_sql` (read-only, table-allowlisted),
+ * the backend-backed `get_memories` / `search_memories` / `get_conversations` /
+ * `search_conversations`, the local composition tools `get_work_context` /
+ * `get_daily_recap`, and `save_knowledge_graph`.
+ *
  * Every still-unmapped product tool degrades cleanly (the "not available on Windows
  * yet" path) with fallback telemetry — macOS services those by handing them to Swift
  * over a second process boundary Windows does not have; later PRs port the rest.
@@ -112,7 +117,11 @@ export type ProductToolExecutor = (
 export const defaultProductToolExecutors: ReadonlyMap<string, ProductToolExecutor> = new Map<
   string,
   ProductToolExecutor
->([['capture_screen', createCaptureScreenExecutor()], ...tierAProductToolExecutors()])
+>([
+  ['capture_screen', createCaptureScreenExecutor()],
+  ...tierAProductToolExecutors(),
+  ...tierBProductToolExecutors()
+])
 
 /** The advertised-serviceable allowlist, derived from the default registry so the
  *  two can never drift. Consumed by the extension's projection layer. */
