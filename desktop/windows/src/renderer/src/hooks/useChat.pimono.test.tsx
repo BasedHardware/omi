@@ -33,9 +33,16 @@ vi.mock('../lib/agentTask', () => ({
   detectAgentTask: () => null, // never an agent task → falls through to the engine
   resolveTaskCwd: vi.fn(async () => '/tmp/cwd')
 }))
+// Mutable prefs holder so a single test can flip chatHistoryMode to 'infinite' (the
+// real default) to exercise persistChat's async-read + post-read stillValid branch.
+// Defaults to 'per-launch' → transparent to every other test. vi.hoisted lets the
+// vi.mock factory (hoisted above imports) read it.
+const prefsState = vi.hoisted(() => ({
+  chatHistoryMode: 'per-launch' as 'per-launch' | 'infinite'
+}))
 vi.mock('../lib/preferences', () => ({
   getPreferences: () => ({
-    chatHistoryMode: 'per-launch',
+    chatHistoryMode: prefsState.chatHistoryMode,
     automationConsentedAt: null,
     agentCommands: {}
   })
@@ -52,7 +59,13 @@ vi.mock('../lib/desktopChatMessages', () => ({
   saveDesktopMessage: (req: Record<string, unknown>) => saveSpy(req)
 }))
 
-import { useChat, CHAT_NOT_READY_INTERIM, CHAT_NOT_READY_FINAL } from './useChat'
+import {
+  useChat,
+  CHAT_NOT_READY_INTERIM,
+  CHAT_NOT_READY_FINAL,
+  CHAT_STREAM_TIMEOUT_MS,
+  CHAT_STREAM_TIMEOUT_COPY
+} from './useChat'
 import { clearAttachments } from '../lib/chatAttachments'
 
 let persisted: ChatMessage[][] = []
@@ -474,6 +487,200 @@ describe('useChat — first-chat not ready (retry once)', () => {
       )
       expect(anyZombie).toBe(false)
     } finally {
+      vi.useRealTimers()
+    }
+  })
+})
+
+// PR-E per-turn watchdog (pi_mono). The kernel IPC (mainChatSend) has no abort
+// primitive and resolves only on the run's terminal event, so a hung run/bridge
+// would strand the spinner forever. On the CHAT_STREAM_TIMEOUT_MS deadline the
+// watchdog recovers the bubble, unlatches `sending`, best-effort cancels the run,
+// and INVALIDATES the turn so a late resolve can't zombie over the recovered state.
+// Fake timers drive the 180s deadline instantly.
+describe('useChat — pi_mono per-turn watchdog', () => {
+  // Mount and flush the mount effect (engineRef → 'pi_mono') under fake timers.
+  async function mountFake(): Promise<
+    ReturnType<typeof renderHook<ReturnType<typeof useChat>, unknown>>['result']
+  > {
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1)
+    })
+    return result
+  }
+
+  // Advance 1ms at a time (never crossing the 180s deadline) until mainChatSend has
+  // been issued — i.e. context-gathering resolved and the attempt is awaiting the IPC.
+  async function pumpToSend(): Promise<void> {
+    for (let k = 0; k < 50 && !sendArgs; k++) await vi.advanceTimersByTimeAsync(1)
+    if (!sendArgs) throw new Error('mainChatSend was never called')
+  }
+
+  it('HANG → TIMEOUT: recovers the bubble, unlatches sending, and cancels the run', async () => {
+    vi.useFakeTimers()
+    try {
+      // The default beforeEach mainChatSend returns a promise that never settles —
+      // exactly a hung run. We never call sendResolve, so the await never returns.
+      const result = await mountFake()
+      await act(async () => {
+        void result.current.send('hello')
+        await pumpToSend()
+        // Run WAS accepted (server ack'd) then the terminal event never comes.
+        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-hang' })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      // Pre-deadline: spinner latched, no reply.
+      expect(result.current.sending).toBe(true)
+
+      // Cross the 180s deadline → the watchdog fires.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS + 10)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_STREAM_TIMEOUT_COPY)
+      expect(result.current.sending).toBe(false) // spinner unlatched (the whole point)
+      expect(cancelSpy).toHaveBeenCalledWith('run-hang') // best-effort server cancel
+      // The timeout line is a local recovery, NOT a real reply — only the human@start
+      // save fired; it is never written to the shared thread (INV-CHAT-1).
+      expect(saveSpy).toHaveBeenCalledTimes(1)
+      expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+      expect(speakSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('LATE-RESOLVE-AFTER-TIMEOUT: a resolve after the deadline cannot zombie the turn', async () => {
+    vi.useFakeTimers()
+    try {
+      const result = await mountFake()
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hello')
+        await pumpToSend()
+        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-late' })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS + 10)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_STREAM_TIMEOUT_COPY)
+      expect(result.current.sending).toBe(false)
+      const savesAtTimeout = saveSpy.mock.calls.length // 1 (human@start)
+
+      // The abandoned send resolves LATE with a success + emits a late delta. The
+      // turn was invalidated, so none of this may land.
+      await act(async () => {
+        emit({
+          type: 'text_delta',
+          requestId: sendArgs!.requestId,
+          runId: 'run-late',
+          text: 'late reply'
+        })
+        sendResolve!({
+          runId: 'run-late',
+          requestId: sendArgs!.requestId,
+          ok: true,
+          text: 'late reply',
+          terminalStatus: 'succeeded'
+        })
+        await p
+      })
+      // Timeout copy stands — NOT 'late reply'.
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_STREAM_TIMEOUT_COPY)
+      // No second setBusy latch flip, no ai-completion save, no zombie persist.
+      expect(result.current.sending).toBe(false)
+      expect(saveSpy).toHaveBeenCalledTimes(savesAtTimeout)
+      expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
+      const anyZombie = persisted.some((t) => t.some((m) => /late reply/.test(m.content)))
+      expect(anyZombie).toBe(false)
+      expect(speakSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('NO-TIMEOUT REGRESSION: a fast success is unchanged and the watchdog is cleared', async () => {
+    vi.useFakeTimers()
+    try {
+      const result = await mountFake()
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hello')
+        await pumpToSend()
+        const rid = sendArgs!.requestId
+        emit({ type: 'accepted', requestId: rid, runId: 'run-fast' })
+        emit({ type: 'text_delta', requestId: rid, runId: 'run-fast', text: 'Hi there' })
+        sendResolve!({
+          runId: 'run-fast',
+          requestId: rid,
+          ok: true,
+          text: 'Hi there',
+          terminalStatus: 'succeeded'
+        })
+        await p
+      })
+      // Normal completion: reply rendered, both INV-CHAT-1 saves fired.
+      expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+      expect(result.current.sending).toBe(false)
+      expect(saveSpy).toHaveBeenCalledTimes(2)
+      const savesBefore = saveSpy.mock.calls.length
+
+      // The watchdog was cleared on completion — crossing the deadline is a no-op:
+      // the reply is not overwritten with the timeout copy and no extra saves fire.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS + 10)
+      })
+      expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
+      expect(saveSpy).toHaveBeenCalledTimes(savesBefore)
+      expect(result.current.sending).toBe(false)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  // INFINITE-mode is the real default (getPreferences() → 'infinite'). It is the ONLY
+  // mode where the crux bites: persistChat does `await getLocalConversation(...)` before
+  // its SECOND stillValid() re-check, so the watchdog's own `++genRef.current` would flip
+  // an `isCurrent`-based validator false AFTER the await and silently drop the write —
+  // shipping an empty persisted bubble that resurfaces on reload. Validating the persist
+  // against the captured `invalidated` gen (not isCurrent) is what keeps it durable. This
+  // test locks that in: it FAILS loudly if the validator regresses to `isCurrent`.
+  it('INFINITE-MODE PERSIST: the timeout line is durably persisted (survives the own-turn gen bump)', async () => {
+    vi.useFakeTimers()
+    prefsState.chatHistoryMode = 'infinite'
+    // A prior stored conversation forces the infinite-mode branch (async read +
+    // mergeChatMessages + the post-read re-check that per-launch skips).
+    ;(window as unknown as { omi: { getLocalConversation: unknown } }).omi.getLocalConversation =
+      async () => ({ startedAt: 1000, messages: [] })
+    try {
+      const result = await mountFake()
+      await act(async () => {
+        void result.current.send('hello')
+        await pumpToSend()
+        emit({ type: 'accepted', requestId: sendArgs!.requestId, runId: 'run-inf' })
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      // Cross the deadline → watchdog recovers the bubble, invalidates the turn, and
+      // persists the timeout line locally. Drain the persist's async read + insert.
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(CHAT_STREAM_TIMEOUT_MS + 10)
+        await vi.advanceTimersByTimeAsync(1)
+      })
+      const rendered = [...result.current.history].reverse().find((m) => m.role === 'assistant')
+      expect(rendered?.content).toBe(CHAT_STREAM_TIMEOUT_COPY)
+      const assistantId = rendered?.id
+      expect(assistantId).toBeTruthy()
+      // CRUX: the timeout line landed in storage under THIS turn's assistant id — it
+      // survived the watchdog's own genRef bump. Regressing the validator to `isCurrent`
+      // makes persistChat bail at its post-await re-check, so `persisted` would never
+      // contain the timeout copy and this assertion would fail.
+      const persistedTimeout = persisted.some((thread) =>
+        thread.some((m) => m.id === assistantId && m.content === CHAT_STREAM_TIMEOUT_COPY)
+      )
+      expect(persistedTimeout).toBe(true)
+    } finally {
+      prefsState.chatHistoryMode = 'per-launch'
       vi.useRealTimers()
     }
   })
