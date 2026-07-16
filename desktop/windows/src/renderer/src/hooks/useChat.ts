@@ -705,11 +705,19 @@ export function useChat(): UseChat {
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
 
-      let result = await attempt(crypto.randomUUID(), textToSend)
+      // One requestId for the WHOLE turn (both attempts). Main's recordSurfaceTurn
+      // records the kernel human turn keyed by this requestId and dedups on it, so
+      // the not-ready retry below MUST reuse the same id — a fresh id per attempt
+      // would defeat that dedup and append the user turn a second time on the kernel
+      // transcript (polluting the per-session context tail). Reuse is safe: run
+      // correlation uses a separate per-send clientId, and attempt 1 fully awaits +
+      // unsubscribes before the retry subscribes, so there is no stream cross-talk.
+      const requestId = crypto.randomUUID()
+      let result = await attempt(requestId, textToSend)
       // First-chat not-ready recovery (#123): right after sign-in the owner/adapter
       // relay may not have reached main yet, so the FIRST send fails not-ready. Show
-      // the interim copy, wait briefly, and retry ONCE with a FRESH requestId. Only
-      // the precise not-ready markers qualify (never a generic model error), so a
+      // the interim copy, wait briefly, and retry ONCE (same requestId — see above).
+      // Only the precise not-ready markers qualify (never a generic model error), so a
       // real failure surfaces immediately with no spurious retry. Guarded by
       // isCurrent() so a reset() during attempt 1 skips the retry. The delay's
       // setTimeout is NOT cancelled on reset(); instead the post-await isCurrent()
@@ -720,7 +728,7 @@ export function useChat(): UseChat {
         writeAssistant(CHAT_NOT_READY_INTERIM)
         await new Promise<void>((resolve) => setTimeout(resolve, NOT_READY_RETRY_DELAY_MS))
         if (!isCurrent()) return
-        result = await attempt(crypto.randomUUID(), textToSend)
+        result = await attempt(requestId, textToSend)
       }
 
       if (result.ok) {
@@ -733,11 +741,16 @@ export function useChat(): UseChat {
         errorLine = CHAT_NOT_READY_FINAL
       } else {
         // Any other kernel failure: friendly, plain-English copy — never a raw
-        // `Error: <technical string>` bubble (chat error taxonomy, Mac parity).
+        // `Error: <technical string>` bubble (chat error taxonomy, Mac parity). Log
+        // the RAW error first: the friendly copy reads as transient ("try again"),
+        // so a deterministic contract/logic failure (e.g. a 400) would otherwise be
+        // invisible in logs/Sentry. The bubble stays friendly; the log stays raw.
+        console.error('[chat] kernel turn failed:', result.error)
         errored = true
         errorLine = friendlyChatError(result.error ?? '')
       }
     } catch (e) {
+      console.error('[chat] kernel turn threw:', e)
       errored = true
       errorLine = friendlyChatError((e as Error).message)
     } finally {

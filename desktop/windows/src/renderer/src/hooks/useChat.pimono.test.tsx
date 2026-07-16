@@ -335,10 +335,12 @@ describe('useChat — first-chat not ready (retry once)', () => {
           await vi.advanceTimersByTimeAsync(2000) // fire the retry delay → attempt 2
           await p
         })
-        // Retried exactly once (two sends total), with a FRESH requestId, and the
-        // real reply won — never an `Error:` line.
+        // Retried exactly once (two sends total), reusing the SAME requestId so
+        // main's recordSurfaceTurn dedups the kernel human-turn record (a fresh id
+        // per attempt would double-record it), and the real reply won — never an
+        // `Error:` line.
         expect(sendMock).toHaveBeenCalledTimes(2)
-        expect(sendMock.mock.calls[0][0].requestId).not.toBe(sendMock.mock.calls[1][0].requestId)
+        expect(sendMock.mock.calls[0][0].requestId).toBe(sendMock.mock.calls[1][0].requestId)
         expect(lastAssistant(result.current.history)?.content).toBe('Hi there')
         // INV-CHAT-1: human saved once@start, ai once@completion — the retry did NOT
         // double-save the human turn (the whole point of keeping the user-save out of
