@@ -28,6 +28,7 @@ import { resolveChatId, mergeChatMessages } from '../lib/chatConversation'
 import { parseDoneMessage, type DoneMessage } from '../lib/messagesSse'
 import { speakText } from '../lib/voice/voiceController'
 import { withByokHeadersIfActive } from '../lib/byokKeys'
+import { friendlyChatError } from '../lib/chat/chatErrorCopy'
 
 export type ChatMsg = {
   id?: string
@@ -688,12 +689,14 @@ export function useChat(): UseChat {
         errored = true
         errorLine = CHAT_NOT_READY_FINAL
       } else {
+        // Any other kernel failure: friendly, plain-English copy — never a raw
+        // `Error: <technical string>` bubble (chat error taxonomy, Mac parity).
         errored = true
-        errorLine = `Error: ${result.error ?? 'the chat engine could not answer.'}`
+        errorLine = friendlyChatError(result.error ?? '')
       }
     } catch (e) {
       errored = true
-      errorLine = `Error: ${(e as Error).message}`
+      errorLine = friendlyChatError((e as Error).message)
     } finally {
       // Terminal handling runs exactly once, after the FINAL attempt (each attempt
       // already released its own run handle + listener in its own finally). State
@@ -1055,9 +1058,12 @@ export function useChat(): UseChat {
       // timeout aborts the SAME generation, so it stays current and surfaces the
       // macOS-parity timeout copy instead of the raw "aborted" error.
       if (isCurrent()) {
+        // The thrown message is `HTTP <status>` (from the !res.ok throw) or a
+        // transport error ("Failed to fetch") when offline — map it to friendly,
+        // plain-English copy instead of surfacing the raw string in a bubble.
         assistantText = timedOut
           ? 'Response took too long. Try again.'
-          : `Error: ${(e as Error).message}`
+          : friendlyChatError((e as Error).message)
         finalMsg = assistantMsg(assistantText)
         renderAssistant(finalMsg)
       }
