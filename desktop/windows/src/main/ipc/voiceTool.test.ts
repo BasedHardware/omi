@@ -67,7 +67,7 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
     // The command mechanism + a read control tool.
     expect(n).toContain('spawn_agent')
     expect(n).toContain('list_agent_sessions')
-    // The one product tool serviceable on Windows today.
+    // A voice-surfaced serviceable product tool (see the VT1 gate test below).
     expect(n).toContain('capture_screen')
     // Every entry is a well-formed provider-neutral declaration.
     for (const t of catalog) {
@@ -88,11 +88,33 @@ describe('buildVoiceHubToolCatalog — host-derived, role-gated (INV-AGENT)', ()
     expect(leaf).toContain('capture_screen')
   })
 
-  it('omits non-serviceable product tools (advertise-then-degrade avoided)', () => {
+  it('gates product tools by the realtime_voice surface (VT1) — raw/admin stay off voice', () => {
     const n = names('coordinator')
-    // execute_sql / get_memories have no Windows executor → never advertised to voice.
+    // VT1: serviceable-but-desktop_chat-only product tools must NEVER reach voice.
+    // execute_sql is a raw SQL door and save_knowledge_graph is a graph-admin write;
+    // Mac does not voice-expose either. They remain available to the TYPED chat path
+    // (WINDOWS_SERVICEABLE_PRODUCT_TOOLS) — this only narrows the voice catalog.
     expect(n).not.toContain('execute_sql')
-    expect(n).not.toContain('get_memories')
+    expect(n).not.toContain('save_knowledge_graph')
+    // The voice-appropriate product tools (natural spoken requests) ARE advertised.
+    for (const name of [
+      'get_action_items',
+      'create_action_item',
+      'update_action_item',
+      'search_tasks',
+      'complete_task',
+      'delete_task',
+      'get_memories',
+      'search_memories',
+      'get_conversations',
+      'search_conversations',
+      'semantic_search',
+      'get_daily_recap',
+      'get_work_context',
+      'capture_screen'
+    ]) {
+      expect(n).toContain(name)
+    }
   })
 
   it('uses the voice realtimeDescription + schemaOverride when present', () => {

@@ -84,8 +84,17 @@ function parseToolArgs(argumentsJSON: string): Record<string, unknown> {
 /**
  * Build the provider-neutral voice tool catalog for a given HOST-derived execution
  * role. The serviceable surface is: the voice-surfaced control tools (role-gated —
- * coordinator-only tools are withheld from a leaf) plus every serviceable product
- * tool (`WINDOWS_SERVICEABLE_PRODUCT_TOOLS` = capture_screen + the Tier-A set).
+ * coordinator-only tools are withheld from a leaf) plus the serviceable product
+ * tools that the manifest ALSO marks as exposed on the `realtime_voice` surface.
+ *
+ * VT1 GATE. A product tool being serviceable (`WINDOWS_SERVICEABLE_PRODUCT_TOOLS`)
+ * is necessary but NOT sufficient for voice: it must also declare `realtime_voice`
+ * in `surfaces`, exactly like control tools do. This keeps raw/admin product tools
+ * (`execute_sql`, `save_knowledge_graph`) OFF the voice surface — Mac does not voice-
+ * expose them either — so a spoken request can never invoke them. They remain fully
+ * available to the TYPED chat path via `WINDOWS_SERVICEABLE_PRODUCT_TOOLS`; this
+ * only narrows what a warm voice session advertises.
+ *
  * Non-serviceable manifest tools are omitted rather than advertised-then-degraded.
  * Pure + role-parameterized so it is unit-testable without a kernel.
  */
@@ -97,14 +106,17 @@ export function buildVoiceHubToolCatalog(
     const isControl = isAgentControlToolName(entry.name)
     const serviceable = isControl || WINDOWS_SERVICEABLE_PRODUCT_TOOLS.has(entry.name)
     if (!serviceable) continue
+    // Every voice-advertised tool — control OR product — must be exposed on the
+    // realtime_voice surface (the VT1 gate). This is where execute_sql /
+    // save_knowledge_graph fall out: serviceable but desktop_chat-only.
+    if (!entry.surfaces.includes('realtime_voice')) continue
     // An explicit voice opt-out (realtimeExpose:false) is honored for either kind.
     if (entry.voice?.realtimeExpose === false) continue
-    if (isControl) {
-      // Control tools must be voice-surfaced AND pass the coordinator/leaf role gate.
-      // The dispatch layer (handleAgentControlToolCall's leaf guard) re-enforces this;
-      // the catalog simply never advertises what the role can't run.
-      if (!entry.surfaces.includes('realtime_voice')) continue
-      if (!isToolAvailableForContext(entry.adapters['pi-mono'], { executionRole })) continue
+    // Control tools must ALSO pass the coordinator/leaf role gate. The dispatch layer
+    // (handleAgentControlToolCall's leaf guard) re-enforces this; the catalog simply
+    // never advertises what the role can't run.
+    if (isControl && !isToolAvailableForContext(entry.adapters['pi-mono'], { executionRole })) {
+      continue
     }
     out.push({
       name: entry.name,
