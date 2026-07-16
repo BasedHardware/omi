@@ -12,9 +12,10 @@ import Foundation
 ///
 /// This is the auth slice of the migration. New keys should be added here and
 /// read/written through the typed `UserDefaults` accessors below rather than as
-/// inline literals. `desktop/macos/scripts/check-userdefaults-key-ratchet.py` is
-/// a CI/pre-push gate that prevents new raw inline `forKey:` string literals from being
-/// introduced elsewhere (the count may only shrink).
+/// inline literals. The SwiftLint `omi_inline_userdefaults_key` custom rule
+/// (in `Desktop/.swiftlint.yml`) is a CI gate that prevents new raw inline
+/// `forKey:` string literals from being introduced elsewhere (the baseline
+/// may only shrink).
 enum DefaultsKey: String {
     case authIsSignedIn = "auth_isSignedIn"
     case authUserEmail = "auth_userEmail"
