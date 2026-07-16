@@ -126,6 +126,7 @@ import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
 import { isHideWindowShortcut } from './windowShortcuts'
 import { shouldBlockNavigation } from './navigationGuard'
+import { disableApplicationMenu } from './appMenu'
 import {
   createTray,
   updateTrayState,
@@ -632,6 +633,12 @@ app.whenReady().then(async () => {
   app.on('browser-window-created', (_, window) => {
     optimizer.watchWindowShortcuts(window)
   })
+
+  // Remove Electron's stock application menu before any window is created, so a
+  // packaged-build user can't press Alt to reach Reload / Force Reload / Toggle
+  // DevTools. Dev DevTools stays on the F12 shortcut above (that's not the menu).
+  // See appMenu.ts for why removing it breaks no edit/app shortcuts.
+  disableApplicationMenu()
 
   // Omi's API doesn't advertise the renderer's localhost origin as CORS-allowed.
   // We used to work around this by disabling webSecurity on every window; that's
