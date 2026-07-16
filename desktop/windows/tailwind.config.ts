@@ -114,6 +114,13 @@ export default {
         modalOverlayIn: {
           '0%': { opacity: '0' },
           '100%': { opacity: '1' }
+        },
+        // Anchored popover (ui/Popover.tsx) entrance — scales up from 0.98 +
+        // fades from the anchored transform-origin Radix sets. Keyed off Radix
+        // Popover data-state=open.
+        popoverIn: {
+          '0%': { opacity: '0', transform: 'scale(0.98)' },
+          '100%': { opacity: '1', transform: 'scale(1)' }
         }
       },
       animation: {
@@ -121,7 +128,8 @@ export default {
         shimmer: 'shimmer 2s ease-in-out infinite',
         'pulse-ring': 'pulseRing 2s ease-in-out infinite',
         'modal-in': 'modalIn 140ms var(--ease-out)',
-        'modal-overlay-in': 'modalOverlayIn 140ms var(--ease-out)'
+        'modal-overlay-in': 'modalOverlayIn 140ms var(--ease-out)',
+        'popover-in': 'popoverIn 120ms var(--ease-out)'
       }
     }
   },

@@ -26,6 +26,7 @@ uniform float u_morph;       // 0 disc .. 1 rounded rect
 uniform vec2 u_rectHalf;     // rounded-rect half extents (disc units)
 uniform float u_rectCorner;  // rounded-rect corner radius (disc units)
 uniform float u_genesis;     // scale 0..~1 (spring can overshoot slightly)
+uniform float u_poseOffset;  // global horizontal shift of the whole pose (short-axis units)
 uniform float u_noiseTime;   // seconds
 uniform float u_noiseAmp;    // wobble amplitude at full merge (disc units)
 uniform float u_noiseFreq;   // wobble spatial frequency
@@ -97,6 +98,9 @@ void main() {
   // below a visibility floor so frame 0 is truly nothing.
   float g = max(u_genesis, 1e-4);
   vec2 q = p / g;
+  // Global horizontal shake (the fail tremor). Shifting the sample point moves the
+  // whole rendered pose — disc, dots, and pool together. 0 in steady operation.
+  q.x -= u_poseOffset;
 
   // Surface: disc ↔ rounded rect, one continuous SDF.
   float dSurf = mix(sdCircle(q, u_disc), sdRoundBox(q, u_rectHalf, u_rectCorner), u_morph);

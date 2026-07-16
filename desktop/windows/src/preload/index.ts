@@ -49,7 +49,11 @@ import type {
   LiveNote,
   GoalGenerateResult,
   GoalCandidateResult,
-  GoalCandidate
+  GoalCandidate,
+  XConnectorSession,
+  XStatus,
+  XSyncResult,
+  XRunState
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -174,6 +178,22 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  // --- X (Twitter) connector. Session ({apiBase, token}) is relayed per call; the
+  // connect run lives in main and streams progress via onXProgress. ---
+  xStatus: (session: XConnectorSession): Promise<XStatus> =>
+    ipcRenderer.invoke('integrations:x:status', session),
+  xConnect: (session: XConnectorSession): Promise<XRunState> =>
+    ipcRenderer.invoke('integrations:x:connect', session),
+  xRunState: (): Promise<XRunState> => ipcRenderer.invoke('integrations:x:runState'),
+  xSync: (session: XConnectorSession): Promise<XSyncResult> =>
+    ipcRenderer.invoke('integrations:x:sync', session),
+  xDisconnect: (session: XConnectorSession): Promise<{ success: boolean }> =>
+    ipcRenderer.invoke('integrations:x:disconnect', session),
+  onXProgress: (cb: (state: XRunState) => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, state: XRunState): void => cb(state)
+    ipcRenderer.on('integrations:x:progress', listener)
+    return () => ipcRenderer.removeListener('integrations:x:progress', listener)
+  },
   // --- Track 3 (AI user profile) ---
   aiProfileSetSession: (
     session: { apiBase: string; desktopApiBase: string; token: string } | null

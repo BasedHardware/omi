@@ -81,6 +81,7 @@ import { registerMeetingHandlers } from './ipc/meeting'
 import { startMeetingMonitor, stopMeetingMonitor, meetingDebug } from './meeting/meetingMonitor'
 import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
+import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
 import { registerMainChatHandlers } from './ipc/mainChat'
 import { registerByokHandlers } from './ipc/byok'
 import { registerAuthStoreHandlers } from './ipc/authStore'
@@ -812,6 +813,11 @@ app.whenReady().then(async () => {
   // Screen-activity synthesis IPC (cheap handler registration; the renderer drives
   // cadence). Rewind handlers/services are already registered/deferred above + below.
   registerScreenSynthHandlers()
+  // Isolate the Claude coding agent's credentials from the user's real ~/.claude
+  // by pinning CLAUDE_CONFIG_DIR to an Omi-owned dir BEFORE the coding-agent IPC
+  // (sign-in / sign-out) or any agent spawn can touch it. userData is already
+  // final here (sandbox override runs at module load, before whenReady).
+  initClaudeAgentConfigDir(app.getPath('userData'))
   // Coding-agent task IPC (cheap handler registration; adapter subprocesses spawn
   // only when a task actually runs).
   registerCodingAgentHandlers()

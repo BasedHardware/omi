@@ -32,6 +32,7 @@ import type {
   RuntimeAdapter
 } from '../codingAgent/interface'
 import type { MainChatEvent } from '../../shared/types'
+import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
 import { projectKernelEvent, runMainChatTurn } from './mainChat'
 
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
@@ -415,6 +416,57 @@ describe('runMainChatTurn', () => {
     expect(adapter.calls.executeAttempt).toHaveLength(1)
   })
 
+  it('injects the prior-turn tail as <conversation_history> on the next turn (per-session memory)', async () => {
+    const dispatched: string[] = []
+    const adapter = fakeAdapter({
+      reply: (prompt) => `reply-to:${prompt.slice(-40)}`,
+      stream: (prompt) => {
+        dispatched.push(prompt)
+        return []
+      }
+    })
+    const kernel = newKernel(adapter)
+
+    // Turn 1 on chat-x: the conversation is empty, so NO tail is prepended — the
+    // adapter gets exactly the prompt.
+    await runMainChatTurn(
+      {
+        requestId: 'req-1',
+        prompt: 'what is the capital of france',
+        cleanUserText: 'q1',
+        chatId: 'chat-x'
+      },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
+    expect(dispatched[0]).toBe('what is the capital of france')
+    expect(dispatched[0]).not.toContain('<conversation_history>')
+
+    // Turn 2 on the SAME chat-x: turn 1's user + assistant turns are now in the
+    // transcript, so they are prepended as a <conversation_history> block, and the
+    // current message is NOT duplicated into that block (read happens before record).
+    await runMainChatTurn(
+      { requestId: 'req-2', prompt: 'and its population', cleanUserText: 'q2', chatId: 'chat-x' },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
+    const second = dispatched[1]
+    expect(second).toContain('<conversation_history>')
+    expect(second).toContain('q1') // turn-1 clean user text
+    expect(second).toContain('reply-to') // turn-1 assistant text
+    expect(second).not.toContain('q2') // current turn is NOT in the injected tail
+    expect(second.endsWith('and its population')).toBe(true) // prompt appended after the tail
+
+    // A DIFFERENT chat gets no cross-session leak — its tail is empty.
+    await runMainChatTurn(
+      { requestId: 'req-3', prompt: 'unrelated question', cleanUserText: 'q3', chatId: 'chat-y' },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
+    expect(dispatched[2]).toBe('unrelated question')
+    expect(dispatched[2]).not.toContain('<conversation_history>')
+  })
+
   it('isolates concurrent runs — one run’s events never leak into another’s stream', async () => {
     const gates = new Map<string, Gate>([
       ['PROMPT_A', makeGate()],
@@ -532,5 +584,37 @@ describe('runMainChatTurn', () => {
     const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
     expect(terminal.status).toBe('failed')
     expect(terminal.error).toBe('the model exploded')
+  })
+
+  it('cold-start gate: refuses under the default owner without touching the kernel', async () => {
+    // Before the auth relay wires the signed-in uid the owner is the shared
+    // DEFAULT_LOCAL_OWNER_ID constant. A turn here must fail closed — never reach
+    // resolveSurfaceSession, which would key a session under that constant and
+    // collide across accounts. Use a kernel whose every method throws, proving the
+    // gate refuses before any kernel call.
+    const exploding = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('kernel must not be touched under an unknown owner')
+        }
+      }
+    ) as unknown as AgentRuntimeKernel
+    const events: MainChatEvent[] = []
+
+    const result = await runMainChatTurn(
+      { requestId: 'req-cold', prompt: 'hi', cleanUserText: 'hi' },
+      (e) => events.push(e),
+      { kernel: exploding, ownerId: DEFAULT_LOCAL_OWNER_ID }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.terminalStatus).toBe('failed')
+    expect(result.error).toMatch(/sign-in has not completed/i)
+    // No session was ever accepted — the gate fired before dispatch.
+    expect(events.some((e) => e.type === 'accepted')).toBe(false)
+    const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
+    expect(terminal.status).toBe('failed')
+    expect(terminal.error).toMatch(/sign-in has not completed/i)
   })
 })

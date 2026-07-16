@@ -476,7 +476,24 @@ export class HubController {
   private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
     if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) this.reconnectStrikes = 0
     if (consumesStrike(category)) {
-      if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) return
+      if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) {
+        // Budget spent: the re-warm circuit is now OPEN and we stop rebuilding a dead
+        // endpoint. This is the silent post-commit death — the warm socket is gone for
+        // good (until an explicit summon `warm()` or sign-out+in resets the budget), so
+        // every subsequent PTT press falls to the batch cascade, which still returns a
+        // valid reply and is therefore INDISTINGUISHABLE from a hub turn. Surfacing it is
+        // mandatory (AGENTS.md: silent UX healing is fine, silent ops is not). One shared
+        // fallback event, closed enums, no new counter — emitted once as the circuit trips
+        // (re-warm has stopped, so no new close can re-emit until the next summon episode).
+        trackEvent('fallback_triggered', {
+          component: 'ptt_cascade',
+          from: 'hub',
+          to: 'none',
+          reason: 'circuit_open',
+          outcome: 'exhausted'
+        })
+        return
+      }
       this.reconnectStrikes += 1
     }
     this.scheduleReWarm()

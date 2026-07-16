@@ -120,11 +120,10 @@ export type AppSettings = {
   /** Track 3 (Task): minimum confidence an extracted task must clear to be
    *  staged, Mac's `minConfidence`. Default 0.75. */
   taskMinConfidence: number
-  /** Which engine renders default typed chat. `'legacy_sse'` = today's
+  /** Which engine renders default typed chat. `'legacy_sse'` = the legacy
    *  `fetch('/v2/messages')` path; `'pi_mono'` = the kernel main_chat → pi-mono
-   *  adapter path (PR-E). Default `'legacy_sse'` until pi-mono is proven end to
-   *  end. INERT in PR-D1: no consumer reads it yet — PR-E's main_chat routing
-   *  does. */
+   *  adapter path. Default `'pi_mono'` now that pi-mono is proven end to end;
+   *  `'legacy_sse'` is the explicit opt-out. */
   chatEngine: 'legacy_sse' | 'pi_mono'
   /** "Screen Sharing in Chat" (Mac's `chatScreenshotSharingEnabled`). Default ON.
    *  The consent gate for the model-invoked `capture_screen` tool: when on, the
@@ -290,9 +289,9 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     // Task's floor is 0.75 (vs Memory's 0.7) — pass it as the junk/absent fallback.
     taskMinConfidence: sanitizeMinConfidence(r.taskMinConfidence, 0.75),
     taskExcludedApps: sanitizeExcludedApps(r.taskExcludedApps),
-    // Only the explicit 'pi_mono' opt-in flips this; anything else (junk, unset)
-    // is the safe legacy path.
-    chatEngine: r.chatEngine === 'pi_mono' ? 'pi_mono' : 'legacy_sse',
+    // pi_mono is the default engine now. Only an explicit 'legacy_sse' opt-out
+    // selects the legacy path; anything else (junk, unset) is pi_mono.
+    chatEngine: r.chatEngine === 'legacy_sse' ? 'legacy_sse' : 'pi_mono',
     // Default ON (opt-out): only an explicit false turns Screen Sharing in Chat
     // off. Matches Mac's absent-key-means-enabled default.
     chatScreenshotSharingEnabled: r.chatScreenshotSharingEnabled !== false,

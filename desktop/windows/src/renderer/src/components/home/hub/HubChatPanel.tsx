@@ -13,9 +13,12 @@ import type { ChatMsg } from '../../../hooks/useChat'
 export function HubChatPanel(props: {
   messages: ChatMsg[]
   sending: boolean
+  // Optional row rendered above the scroll area (the multi-chat header). Renders
+  // nothing when omitted, so the default single-thread panel is unchanged.
+  header?: React.ReactNode
   children: React.ReactNode
 }): React.JSX.Element {
-  const { messages, sending, children } = props
+  const { messages, sending, header, children } = props
   const scrollRef = useRef<HTMLDivElement>(null)
   const contentRef = useRef<HTMLDivElement>(null)
 
@@ -45,6 +48,7 @@ export function HubChatPanel(props: {
         boxShadow: '0 18px 44px rgb(0 0 0 / 0.42)'
       }}
     >
+      {header}
       <div ref={scrollRef} className="min-h-0 flex-1 overflow-y-auto">
         <div ref={contentRef} className="flex min-h-full flex-col gap-3">
           {messages.length === 0 && !sending ? (

@@ -15,6 +15,7 @@ import type {
   ChatAttachment
 } from '../../../shared/types'
 import { saveDesktopMessage } from '../lib/desktopChatMessages'
+import { getMessages as getSessionMessages } from '../lib/chatSessionsClient'
 import {
   awaitUploadsSettled,
   clearAttachments,
@@ -82,6 +83,15 @@ export type UseChat = {
    *  (the hub already produced and spoke the reply). INV-CHAT-1: the spoken turn
    *  lands in the one shared timeline. Empty user/assistant is ignored. */
   recordVoiceTurn: (userText: string, assistantText: string) => void
+  /** Re-thread the live engine onto a chat session (multi-chat, pi_mono only).
+   *  `id` = a server chat-session id → routes the kernel turn to that session's
+   *  per-chatId conversation AND scopes shared-thread persistence to it; `null`
+   *  returns to the default shared thread (continuity: session_id omitted). Aborts
+   *  any in-flight generation, then loads that thread's transcript into `history`.
+   *  The UI pairs this with `useChatSessions.selectSession(id)` for the highlight. */
+  switchThread: (id: string | null) => void
+  /** The active server chat-session id, or `null` on the default shared thread. */
+  currentThreadId: string | null
 }
 
 /**
@@ -125,8 +135,10 @@ export function useChat(): UseChat {
   // 'infinite' shares one stable id across launches AND across the main/overlay
   // windows (stored in localStorage); 'per-launch' is fresh per mount.
   const chatIdRef = useRef<string | null>(null)
-  if (chatIdRef.current === null) {
-    chatIdRef.current = resolveChatId(
+  // Resolve the DEFAULT shared thread's chat id (infinite: the stored stable id;
+  // per-launch: a fresh mint). Reused by switchThread(null) to return to it.
+  const resolveDefaultChatId = (): string =>
+    resolveChatId(
       mode,
       {
         get: () => localStorage.getItem(CHAT_INFINITE_ID_KEY),
@@ -140,7 +152,19 @@ export function useChat(): UseChat {
       },
       () => `chat-${crypto.randomUUID()}`
     )
+  if (chatIdRef.current === null) {
+    chatIdRef.current = resolveDefaultChatId()
   }
+  // The selected server chat-session id, or `null` on the default shared thread.
+  // Distinct from chatIdRef: for a session the two are unified (D5 — session id ==
+  // kernel chatId == saveDesktopMessage session_id), but for the DEFAULT thread
+  // chatIdRef is a local uuid that must NEVER be sent as a session_id (continuity).
+  // So this ref, not chatIdRef, gates whether saves carry a session_id.
+  const sessionIdRef = useRef<string | null>(null)
+  // Reactive projection of sessionIdRef for the UI (the header reads it; the async
+  // save path reads the ref so it stays correct inside closures). Moved together in
+  // switchThread. null = default shared thread.
+  const [currentThreadId, setCurrentThreadId] = useState<string | null>(null)
   const startedAtRef = useRef<number>(0)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
@@ -188,13 +212,18 @@ export function useChat(): UseChat {
   useEffect(() => {
     if (mode !== 'infinite' || !chatIdRef.current) return
     let cancelled = false
+    // Capture the generation so a switchThread()/reset() that lands before this
+    // async default-thread read resolves cancels the write — otherwise a slow
+    // default load could overwrite a thread the user has since switched to (C5
+    // symmetry with the send/agent/kernel paths).
+    const myGen = genRef.current
     void window.omi
       .getLocalConversation(chatIdRef.current)
       .then((c) => {
         // Skip if a send already started before this async load resolved —
         // otherwise we'd overwrite the in-flight bubble (sendingRef is set
         // synchronously at the top of send()).
-        if (cancelled || sendingRef.current || !c?.messages) return
+        if (cancelled || sendingRef.current || genRef.current !== myGen || !c?.messages) return
         startedAtRef.current = c.startedAt || Date.now()
         setHistory(
           c.messages.map((m) => ({
@@ -502,14 +531,19 @@ export function useChat(): UseChat {
     let myRunId: string | null = null
     let assistantText = ''
 
-    // INV-CHAT-1 site 1: persist the RAW user message to the shared thread at turn
-    // start (never the context-prepended prompt). Fire-and-forget; session_id is
-    // OMITTED (Windows default typed chat is always the default shared chat).
+    // INV-CHAT-1 site 1: persist the RAW user message at turn start (never the
+    // context-prepended prompt). Fire-and-forget. session_id is OMITTED on the
+    // default shared thread (sessionIdRef null → mobile/web continuity) and PASSED
+    // when a chat session is selected (multi-chat), targeting that desktop-local
+    // thread. saveDesktopMessage drops the field when undefined.
     void saveDesktopMessage({
       text: userMsg.content,
       sender: 'human',
       clientMessageId: userMsg.id,
-      messageSource: 'desktop_chat'
+      messageSource: 'desktop_chat',
+      // Include session_id ONLY for a selected session; the default thread omits
+      // the key entirely (mobile/web continuity guard).
+      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
     })
 
     const writeAssistant = (content: string): void => {
@@ -616,7 +650,8 @@ export function useChat(): UseChat {
             text: assistantText,
             sender: 'ai',
             clientMessageId: assistantId,
-            messageSource: 'desktop_chat'
+            messageSource: 'desktop_chat',
+            ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
           })
         }
         if (!errored && hasRealText) maybeSpeak(assistantText, fromVoice)
@@ -684,16 +719,12 @@ export function useChat(): UseChat {
     // planner and normal chat; tryAgentTask owns the latch when it handles one.
     if (await tryAgentTask(text, baseHistory, userMsg)) return
 
-    // pi_mono engine (DARK by default; the flag ships 'legacy_sse'): route default
-    // chat through the kernel instead of the legacy /v2/messages block below. A
-    // single early return — with the flag OFF this whole branch is skipped and the
-    // legacy path runs byte-identically. Attachment sends fall through to legacy:
-    // the kernel prompt has no PromptBlock/file_ids equivalent yet (§6 out of scope),
-    // so a message carrying attachments keeps using /v2/messages.
-    if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
-      return tryKernelChat(baseHistory, userMsg, fromVoice)
-    }
-
+    // Desktop automation planner runs BEFORE the pi_mono engine branch: with
+    // pi_mono the default chat engine, a keyword-action message ("just do X in
+    // the app") must still be caught by tryPlan and NOT silently routed to the
+    // kernel. tryPlan no-ops (returns {kind:'chat'}) when automation isn't
+    // enabled/consented or the text doesn't look like an action, so a plain
+    // message falls straight through to the pi_mono branch below.
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
       // Consent + execution happen in a NATIVE Windows dialog (main process), so
@@ -728,6 +759,19 @@ export function useChat(): UseChat {
       setBusy(false)
       return
     }
+
+    // pi_mono engine (now the default): route plain chat through the kernel
+    // instead of the legacy /v2/messages block below. A single early return —
+    // reached only for a {kind:'chat'} verdict, so a planned/errored automation
+    // message never lands here. With the engine set to 'legacy_sse' this branch
+    // is skipped and the legacy path runs byte-identically. Attachment sends fall
+    // through to legacy: the kernel prompt has no PromptBlock/file_ids equivalent
+    // yet (§6 out of scope), so a message carrying attachments keeps using
+    // /v2/messages.
+    if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
+      return tryKernelChat(baseHistory, userMsg, fromVoice)
+    }
+
     const assistantId = crypto.randomUUID()
     const assistantMsg = (content: string): ChatMsg => ({
       id: assistantId,
@@ -991,5 +1035,87 @@ export function useChat(): UseChat {
     void persistChat([...base, userMsg, assistantMsg], isCurrent)
   }
 
-  return { history, sending, speaking, agentActive, send, reset, recordVoiceTurn }
+  // Re-thread the live engine onto a chat session (multi-chat, pi_mono). Aborts any
+  // in-flight generation exactly like reset(), repoints chatIdRef + sessionIdRef at
+  // the target, then loads that thread's transcript into `history`.
+  const switchThread = (id: string | null): void => {
+    // Same in-flight teardown as reset(): a dismissed reply from the previous thread
+    // must not write into the new one or steal the busy latch.
+    genRef.current++
+    abortRef.current?.abort()
+    abortRef.current = null
+    if (activeAgentTaskRef.current) {
+      void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
+      activeAgentTaskRef.current = null
+    }
+    if (activeKernelRunRef.current) {
+      void window.omi.mainChatCancel(activeKernelRunRef.current).catch(() => {})
+      activeKernelRunRef.current = null
+    }
+    setBusy(false)
+    setAgentActive(false)
+
+    // Point the engine at the target thread. For a session, unify the ids (D5:
+    // session id == kernel chatId == saveDesktopMessage session_id). For null,
+    // return to the default shared thread (session_id omitted on saves).
+    sessionIdRef.current = id
+    setCurrentThreadId(id)
+    chatIdRef.current = id ?? resolveDefaultChatId()
+    startedAtRef.current = 0
+
+    // Load the target's transcript. Capture the generation so a slower load a newer
+    // switch/reset supersedes never paints stale history over the current thread.
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+    setHistory([])
+    if (id === null) {
+      // Default thread: the local conversation (as the mount loader reads it).
+      const localId = chatIdRef.current
+      void window.omi
+        .getLocalConversation(localId)
+        .then((c) => {
+          if (!isCurrent() || !c?.messages) return
+          startedAtRef.current = c.startedAt || Date.now()
+          setHistory(
+            c.messages.map((m) => ({
+              id: m.id ?? crypto.randomUUID(),
+              role: m.role,
+              content: m.content
+            }))
+          )
+        })
+        .catch(() => {
+          /* no prior conversation — start empty */
+        })
+    } else {
+      // A session: durable SERVER messages (cross-device, Mac parity) — NOT local
+      // SQLite, which has no rows for a session created on mobile / another install.
+      void getSessionMessages({ sessionId: id })
+        .then((msgs) => {
+          if (!isCurrent()) return
+          setHistory(
+            msgs.map((m) => ({
+              id: m.id,
+              role: m.sender === 'ai' ? 'assistant' : 'user',
+              content: m.text
+            }))
+          )
+        })
+        .catch(() => {
+          /* leave the thread empty on a load failure */
+        })
+    }
+  }
+
+  return {
+    history,
+    sending,
+    speaking,
+    agentActive,
+    send,
+    reset,
+    recordVoiceTurn,
+    switchThread,
+    currentThreadId
+  }
 }

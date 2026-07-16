@@ -880,6 +880,13 @@ export type OmiBridgeApi = {
   googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
+  // X (Twitter) connector — main runs the poll; the renderer relays the session.
+  xStatus: (session: XConnectorSession) => Promise<XStatus>
+  xConnect: (session: XConnectorSession) => Promise<XRunState>
+  xRunState: () => Promise<XRunState>
+  xSync: (session: XConnectorSession) => Promise<XSyncResult>
+  xDisconnect: (session: XConnectorSession) => Promise<{ success: boolean }>
+  onXProgress: (cb: (state: XRunState) => void) => () => void
   rewindFrames: (from: number, to: number) => Promise<RewindFrame[]>
   /** A day's frames, evenly down-sampled to ~500 (macOS parity). The day-scoped
    *  timeline loads through this; `rewindFrames` stays the unsampled primitive for
@@ -1633,6 +1640,38 @@ export type CalendarItem = {
 export type FetchNewResult<T> = {
   ok: boolean
   items: T[]
+  error?: string
+}
+
+// --- X (Twitter) connector (main runs the flow; renderer relays the session) ---
+
+/** { apiBase, token } the renderer passes with each X IPC call (main has neither). */
+export type XConnectorSession = { apiBase: string; token: string }
+
+export type XStatus = {
+  connected: boolean
+  handle?: string
+  postCount: number
+  memoryCount: number
+  syncing: boolean
+  lastSyncedAt?: string
+}
+
+export type XSyncResult = {
+  success: boolean
+  newPosts: number
+  memoriesCreated: number
+  error?: string
+}
+
+export type XRunPhase = 'idle' | 'connecting' | 'syncing' | 'succeeded' | 'failed'
+
+/** Live state of the (single) X import run, streamed over integrations:x:progress. */
+export type XRunState = {
+  phase: XRunPhase
+  postCount: number
+  memoryCount: number
+  handle?: string
   error?: string
 }
 

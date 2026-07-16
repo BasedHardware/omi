@@ -11,12 +11,18 @@
 import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
+import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
+import { formatTranscriptTail } from '../agentKernel/turnContext'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
 import type { MainChatEvent, MainChatResult, MainChatSendArgs } from '../../shared/types'
 
 /** The main_chat surface the kernel resolves a turn against. */
 const MAIN_CHAT_ADAPTER_ID = 'pi-mono'
+
+/** How many prior transcript turns to inject as the per-session context tail.
+ *  Matches getMainChatTurnTail's default (kernelSessions.ts). */
+const MAIN_CHAT_TAIL_LIMIT = 8
 
 /** Kernel run-lifecycle event types that mean the turn is over. */
 const TERMINAL_RUN_EVENT_TYPES = new Set(['run.succeeded', 'run.failed', 'run.cancelled'])
@@ -163,6 +169,15 @@ export async function runMainChatTurn(
   let unsubscribe: () => void = () => {}
 
   try {
+    // Cold-start gate: refuse before the auth relay has wired the signed-in owner.
+    // pi-mono managed cloud requires a Firebase session anyway, so ownerId still at
+    // the shared DEFAULT_LOCAL_OWNER_ID means either not-signed-in or the relay has
+    // not arrived yet. Resolving a surface session here would key it under that
+    // shared constant — the exact cross-account collision the owner wiring closes —
+    // and it would never migrate to the real uid. Fail closed instead.
+    if (ownerId === DEFAULT_LOCAL_OWNER_ID) {
+      throw new Error('Sign-in has not completed yet — try again in a moment.')
+    }
     const surfaceRef = {
       surfaceKind: 'main_chat',
       externalRefKind: 'chat',
@@ -176,6 +191,32 @@ export async function runMainChatTurn(
       surfaceRef,
       defaultAdapterId: MAIN_CHAT_ADAPTER_ID
     })
+
+    // Per-session memory (Approach B): pi-mono's run does NOT thread a surfaceRef
+    // through assembleTurnContext, so it never gets the per-chatId
+    // <conversation_history> tail. And a pi subprocess has no native resume
+    // (resumeFidelity:'none') — a restart drops its in-memory conversation. So we
+    // inject the tail here: read THIS chatId's prior turns and prepend them to the
+    // prompt. The read happens BEFORE recordSurfaceTurn below so the just-sent user
+    // turn is not in the tail (no duplication). On a session's first turn the
+    // conversation is empty → no tail → prompt unchanged. Keyed by chatId + read
+    // from SQLite, so it is per-session and cross-restart durable, with no
+    // kernel-core edit. (Verified live: chat A→B→A — B never sees A's context, A
+    // recalls after the detour; matches macOS's shipped multichat behavior.)
+    //
+    // Cross-session isolation holds because pi-mono is requiresPinnedWorker:true —
+    // each chatId pins its OWN worker+subprocess (workerPool.ts), so a live pi
+    // conversation is never shared between chats. KNOWN EDGE (not fixed here,
+    // shared latent with macOS): under pin-EVICTION — when concurrently-active
+    // pinned pi chats exceed the worker-pool cap — an evicted worker reassigned to a
+    // new chat keeps its still-alive subprocess (its old chat's turns), a narrow
+    // same-user context bleed. The tail injection does not address it (the bleed is
+    // pi's native in-memory accumulation on subprocess reuse); eviction hardening
+    // (new_session on pinned-worker reassignment + a small pi-mono maxWorkers cap)
+    // is a separable follow-up owned outside this PR.
+    const tail = kernel.getMainChatTurnTail(ownerId, MAIN_CHAT_TAIL_LIMIT, chatId)
+    const history = formatTranscriptTail(tail.turns)
+    const effectivePrompt = history ? `${history}\n\n${args.prompt}` : args.prompt
 
     // Record the clean user turn on the kernel transcript (empty assistant text →
     // only the user turn is appended; the run appends the assistant turn at
@@ -209,7 +250,7 @@ export async function runMainChatTurn(
       ownerId,
       clientId,
       requestId,
-      prompt: args.prompt,
+      prompt: effectivePrompt,
       adapterId: MAIN_CHAT_ADAPTER_ID
     })
 

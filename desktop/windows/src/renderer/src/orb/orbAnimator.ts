@@ -25,6 +25,7 @@ import {
   waveMixFor,
   SPIN_EASE_TAU,
   FLOW_EASE_TAU,
+  FAIL_GESTURE_MS,
   DEFAULT_ORB_PARAMS,
   type OrbParams,
   type OrbState
@@ -72,6 +73,10 @@ export class OrbAnimator {
    *  current state's target so the crossover is smooth (busy states glide). */
   private flow = 0
   private summonedAt: number | null = null
+  /** Animator-clock time the fail tremor was stamped (null = none has played, or
+   *  the last one long since settled). Held after settle — isActive() only counts
+   *  it live within the FAIL_GESTURE_MS window. */
+  private failedAt: number | null = null
   private morphTarget = 0
   private morph = 0
   /** Raw live level target (from the mic pipeline) and its smoothed envelope. */
@@ -186,6 +191,14 @@ export class OrbAnimator {
     this.kick()
   }
 
+  /** Play the "failed voice turn" gesture — a brief damped horizontal tremor of
+   *  the whole orb (see choreography.failTremorOffset). Re-stamps on each call so
+   *  a repeated failure replays from the top. */
+  failGesture(): void {
+    this.failedAt = this.now()
+    this.kick()
+  }
+
   /** Drive the disc↔rounded-rect morph (0 = disc, 1 = expanded rect). */
   setMorphTarget(target: 0 | 1, rect: OrbRect = DEFAULT_MORPH_RECT): void {
     this.morphTarget = target
@@ -206,6 +219,11 @@ export class OrbAnimator {
     if (this.speechActive || this.speechMerge > 0) return true
     if (this.morph !== this.morphTarget) return true
     if (this.summonedAt !== null && !genesisSettled(this.now() - this.summonedAt, this.params)) {
+      return true
+    }
+    // The fail tremor is a fixed-length one-shot: keep the loop at 60fps until it
+    // settles (u>=1), the same way genesis holds the loop while its spring rings.
+    if (this.failedAt !== null && this.now() - this.failedAt < FAIL_GESTURE_MS / 1000) {
       return true
     }
     // A state change's settle is still animating: the merge cross-fade (e.g. the
@@ -301,6 +319,7 @@ export class OrbAnimator {
       orbitTime: this.orbitTime,
       flow: this.flow,
       genesisTime: this.summonedAt === null ? Infinity : t - this.summonedAt,
+      failedAt: this.failedAt ?? undefined,
       // Linear progress internally; eased at the point of use so the shape
       // change reads as one smooth motion in both directions.
       morph: easeInOut(this.morph),
