@@ -511,7 +511,7 @@ export class KernelCore {
         ? `voice:${externalTurnId.toLowerCase()}`
         : `agent_spawn:${input.invocationId}`,
       pillId,
-      ...(producerTurnId ? { producerTurnId } : {}),
+      ...(producerTurnId ? { producerRunId: run.runId, producerTurnId } : {}),
       userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
       assistantText: "I started a background agent for that.",
       objective,

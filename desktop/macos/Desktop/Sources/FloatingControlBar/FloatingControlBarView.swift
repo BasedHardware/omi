@@ -398,6 +398,8 @@ struct FloatingControlBarView: View {
     .onHover(perform: handleBarHover)
     .onChange(of: shouldShowNotchHoverMenu) { _, visible in
       if state.isVoicePresentationActive {
+        // A PTT transition replaces the idle hover surface with a separately sized panel. Do not
+        // let an in-flight hover spring keep changing the black surface after voice takes over.
         var transaction = Transaction()
         transaction.animation = nil
         withTransaction(transaction) {
@@ -420,6 +422,8 @@ struct FloatingControlBarView: View {
     }
     .onChange(of: state.isVoicePresentationActive) { _, active in
       guard active else { return }
+      // These view-local values otherwise remain true until pointer exit and can paint stale
+      // hover chrome over the voice presentation.
       var transaction = Transaction()
       transaction.animation = nil
       withTransaction(transaction) {
@@ -460,8 +464,7 @@ struct FloatingControlBarView: View {
       usesNotchIsland: state.usesNotchIsland,
       showingAIConversation: state.showingAIConversation,
       isVoicePresentationActive: state.isVoicePresentationActive,
-      isShowingNotification: state.isShowingNotification
-    )
+      isShowingNotification: state.isShowingNotification)
     if notchHoverLifecycle {
       let openWidth = max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
       return CGSize(
@@ -2264,10 +2267,6 @@ private struct AgentMainChatView: View {
     guard !trimmed.isEmpty || !staged.isEmpty else { return }
     followUpText = ""
     attachments = []
-    // This composer belongs to a leaf agent. It can only continue its own
-    // canonical session; nested/sibling creation stays on the top-level
-    // resolver path so questions about existing agents never become side
-    // effects.
     manager.continueAgent(from: pill, text: trimmed, attachments: staged)
   }
 

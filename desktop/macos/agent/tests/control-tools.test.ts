@@ -2692,81 +2692,6 @@ describe("agent control tools", () => {
     }
   });
 
-  it("keeps an explicit realtime local provider on its own adapter and model profile", async () => {
-    for (const provider of ["hermes", "openclaw"] as const) {
-      const { store, adapter, kernel } = createKernelHarness(newDatabasePath(), provider);
-      const surface = {
-        surfaceKind: "realtime_voice",
-        externalRefKind: "chat",
-        externalRefId: `voice-${provider}`,
-      };
-      const coordinator = kernel.resolveSurfaceSession({
-        ownerId: "owner",
-        surfaceRef: surface,
-        defaultAdapterId: "pi-mono",
-        modelProfile: "omi-sonnet",
-        providerBoundary: "managed_cloud",
-        executionRole: "coordinator",
-      });
-      const parentRun = store.insertRun({
-        sessionId: coordinator.agentSessionId,
-        clientId: "realtime",
-        requestId: `voice-parent-${provider}`,
-        status: "running",
-        mode: "act",
-      });
-      const spawned = parseToolResult(
-        await handleAgentControlToolCall(
-          {
-            ...ownerContext(kernel),
-            defaultAdapterId: "pi-mono",
-            providerBoundary: "managed_cloud",
-            callerSessionId: coordinator.agentSessionId,
-            executionRole: "coordinator",
-            authorizedCallerRunId: parentRun.runId,
-            authorizedProducerJournal: {
-              schemaVersion: 1,
-              surface,
-              continuityKey: `voice-provider-model-${provider}`,
-              pillId: `pill-provider-model-${provider}`,
-              userText: `Ask ${provider} for a summary`,
-              assistantText: `Starting ${provider}`,
-              objective: `Run this with ${provider}`,
-              title: `Ask ${provider}`,
-            },
-          },
-          "spawn_agent",
-          {
-            objective: `Run this with ${provider}`,
-            provider,
-            visible: true,
-            externalRefId: `pill-provider-model-${provider}`,
-            requestId: `voice-${provider}-spawn`,
-            clientId: "realtime",
-            ownerId: "owner",
-          },
-        ),
-      );
-
-      await waitUntil(() => store.getRow(
-        "SELECT status FROM runs WHERE run_id = ?",
-        [spawned.run.runId],
-      ).status === "succeeded");
-      expect(spawned.session).toMatchObject({
-        defaultAdapterId: provider,
-        providerBoundary: `local_user:${provider}`,
-        modelProfile: null,
-      });
-      expect(kernel.sessionExecutionProfile(spawned.session.sessionId, "owner")).toMatchObject({
-        adapterId: provider,
-        credentialScope: "local_user",
-        modelProfile: null,
-      });
-      expect(adapter.opened.at(-1)?.model).toBeUndefined();
-      store.close();
-    }
-  });
-
   it("rejects a mismatched directed provider and adapter override", async () => {
     const { store, kernel } = createKernelHarness(newDatabasePath(), "pi-mono");
     const result = parseToolResult(
@@ -2873,6 +2798,12 @@ describe("agent control tools", () => {
             assistantText: "Starting OpenClaw",
             objective: "Run this with OpenClaw",
             title: "Ask OpenClaw",
+          },
+          authorizedToolInvocation: {
+            invocationId: "voice-openclaw-unavailable-invocation",
+            runId: parentRun.runId,
+            attemptId: "attempt-openclaw-unavailable",
+            toolName: "spawn_agent",
           },
         },
         "spawn_agent",

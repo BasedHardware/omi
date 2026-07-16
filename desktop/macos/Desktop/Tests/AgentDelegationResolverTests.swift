@@ -3,38 +3,11 @@ import XCTest
 @testable import Omi_Computer
 
 final class AgentDelegationBoundaryTests: XCTestCase {
-  func testBriefValidatorRejectsVagueDelegationBriefs() {
-    XCTAssertFalse(
-      DelegationBriefValidator.isStructurallyAcceptable(
-        brief: "Perform a new search for the user.",
-        rawIntent: "another search"))
-    XCTAssertFalse(
-      DelegationBriefValidator.isStructurallyAcceptable(
-        brief: "another search",
-        rawIntent: "another search"))
-    XCTAssertFalse(
-      DelegationBriefValidator.isStructurallyAcceptable(
-        brief: "do that",
-        rawIntent: "do that"))
-  }
-
-  func testBriefValidatorAcceptsSelfContainedDelegationBrief() {
-    XCTAssertTrue(
-      DelegationBriefValidator.isStructurallyAcceptable(
-        brief: "Using OpenClaw, search for current AI trends on X and summarize the newest notable findings.",
-        rawIntent: "do another search"))
-    XCTAssertTrue(
-      DelegationBriefValidator.isStructurallyAcceptable(
-        brief: "Search local database",
-        rawIntent: nil))
-  }
-
-  func testKernelControlPlaneIsOnlyProductionSpawnBoundaryForTopLevelSurfaces() throws {
-    // omi-test-quality: source-inspection -- static contract: no Swift semantic router or pre-loop spawn boundary may return
-    let realtime = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
+  func testKernelControlPlaneIsOnlyProductionProviderSpawnBoundary() throws {
+    // omi-test-quality: source-inspection -- static contract: no Swift semantic router may interpret user wording into a provider spawn.
+    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
-    let executor = try sourceFile("FloatingControlBar/AgentDelegationExecutor.swift")
     let coordinator = try sourceFile("Chat/DesktopCoordinatorService.swift")
 
     XCTAssertFalse(realtime.contains("AgentPillsManager.shared.spawnFromUserQuery("))
@@ -44,9 +17,8 @@ final class AgentDelegationBoundaryTests: XCTestCase {
     XCTAssertFalse(pills.contains("static func classify("))
     XCTAssertFalse(realtime.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
     XCTAssertTrue(realtime.contains("invokeExternallyAuthorizedTool("))
-    XCTAssertTrue(floating.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation"))
-    XCTAssertFalse(executor.contains("AgentPillsManager.shared.spawnFromUserQuery("))
-    XCTAssertTrue(executor.contains("AgentPillsManager.shared.spawn("))
+    XCTAssertFalse(floating.contains("providerDirective"))
+    XCTAssertFalse(floating.contains("resolveDelegationAndDispatch"))
     XCTAssertTrue(pills.contains("DesktopCoordinatorService.shared.spawnAgent("))
     XCTAssertTrue(coordinator.contains(#"static let spawnAgent = "spawn_agent""#))
   }
@@ -60,6 +32,12 @@ final class AgentDelegationBoundaryTests: XCTestCase {
     XCTAssertFalse(
       FileManager.default.fileExists(
         atPath: sourcesRoot.appendingPathComponent("AgentDelegationResolver.swift").path))
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: sourcesRoot.appendingPathComponent("AgentDelegationExecutor.swift").path))
+    XCTAssertFalse(
+      FileManager.default.fileExists(
+        atPath: sourcesRoot.appendingPathComponent("DelegationBriefValidator.swift").path))
   }
 
   private func sourceFile(_ relativePath: String) throws -> String {
