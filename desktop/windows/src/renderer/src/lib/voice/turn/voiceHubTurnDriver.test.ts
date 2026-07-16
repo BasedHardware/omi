@@ -57,12 +57,16 @@ function makeFakeHub() {
     didTerminate: [] as VoiceTurnID[],
     ensureWarm: 0
   }
+  let warmError: unknown = null
   const hub = {
     isWarm: () => warm,
     isAvailable: () => available,
     requiredInputSampleRate: () => (warm || available ? 24000 : null),
     ensureWarm: () => {
       calls.ensureWarm++
+      // A rejected warm (mint failure / teardown-during-warm abort) — the driver's
+      // fire-and-forget warm() must swallow it (no unhandled rejection).
+      if (warmError !== null) return Promise.reject(warmError)
       return Promise.resolve('sess' as VoiceSessionID)
     },
     beginTurn: (turnID: VoiceTurnID, opts: { interrupting?: boolean } = {}) =>
@@ -84,6 +88,9 @@ function makeFakeHub() {
     setAvailability: (w: boolean, a: boolean = w) => {
       warm = w
       available = a
+    },
+    failNextWarm: (e: unknown) => {
+      warmError = e
     },
     calls
   }
@@ -176,6 +183,18 @@ describe('kill-switch (flag off)', () => {
     const h = makeDriver({ pttHubEnabled: false })
     h.driver.warm()
     expect(h.hub.calls.ensureWarm).toBe(0)
+  })
+
+  it('warm() swallows a rejected ensureWarm (no unhandled rejection)', async () => {
+    // Eager warm is fire-and-forget; a mint failure (both providers down) or a
+    // teardown-during-warm abort (HubWarmAbortedError) must not leak. If warm()
+    // floated the rejection, vitest would fail this test with an unhandled rejection.
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.failNextWarm(new Error('mint failed / warm aborted'))
+    h.driver.warm()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(h.hub.calls.ensureWarm).toBe(1)
   })
 })
 
