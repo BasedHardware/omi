@@ -24,10 +24,12 @@ const LAST_UID_KEY = 'omi.lastSignedInUid'
 
 const wipeUserData = vi.fn(async () => {})
 const byokClearAll = vi.fn(async () => {})
+const mcpClearKey = vi.fn(async () => {})
 
 beforeEach(() => {
   wipeUserData.mockClear()
   byokClearAll.mockClear()
+  mcpClearKey.mockClear()
   h.invalidateConversationsCache.mockClear()
   h.clearPendingConversations.mockClear()
   h.clearUserScopedPreferences.mockClear()
@@ -35,6 +37,7 @@ beforeEach(() => {
   ;(globalThis as { window: { omi: unknown } }).window.omi = {
     wipeUserData,
     byokClearAll,
+    mcpClearKey,
     byokGetAll: vi.fn(async () => ({}))
   }
   localStorage.setItem('omi-chat-infinite-id', 'chat-123')
@@ -50,6 +53,8 @@ describe('teardownUserData', () => {
     expect(wipeUserData).toHaveBeenCalledTimes(1)
     // BYOK keys must be cleared so a second account can't send them (leak fix).
     expect(byokClearAll).toHaveBeenCalledTimes(1)
+    // Hosted MCP export key likewise — cleared on sign-out / account switch.
+    expect(mcpClearKey).toHaveBeenCalledTimes(1)
     expect(h.invalidateConversationsCache).toHaveBeenCalledTimes(1)
     expect(h.clearPendingConversations).toHaveBeenCalledTimes(1)
     expect(h.clearMemoryCache).toHaveBeenCalledTimes(1)

@@ -21,6 +21,7 @@ import {
 import { captureError } from '../sentry'
 import { wipeUserDataOn } from './dbWipe'
 import { ByokKeyStore } from '../agentKernel/byokStore'
+import { McpKeyStore } from '../mcp/mcpKeyStore'
 import {
   insertVoiceTurnOn,
   listPendingVoiceTurnsOn,
@@ -984,6 +985,15 @@ export function wipeUserData(): void {
     new ByokKeyStore().clearAll()
   } catch {
     /* best-effort — the renderer teardown also clears the store */
+  }
+  // The hosted MCP export key is likewise user-scoped and lives in its own
+  // encrypted file: drop it on an account wipe so a different account never
+  // inherits a key minted under the prior user (owner-uid guard is belt; this is
+  // braces — the key file should not linger at all after sign-out).
+  try {
+    new McpKeyStore().clearAll()
+  } catch {
+    /* best-effort */
   }
 }
 

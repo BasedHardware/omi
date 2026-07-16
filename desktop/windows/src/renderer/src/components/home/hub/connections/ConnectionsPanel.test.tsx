@@ -110,18 +110,20 @@ describe('ConnectionsPanel tray (top level)', () => {
     }
   })
 
-  it('routes the right-column Claude tile to the Exports (memory-pack) view', async () => {
+  it('drills the right-column Claude tile into its export connector detail', async () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-claude-claude-code'))
-    await waitFor(() => expect(screen.getByText('Exports')).toBeTruthy())
+    // The Claude / Claude Code destination detail (with the Claude Code
+    // config-write connector row) is shown, with a Back affordance.
+    await waitFor(() => expect(screen.getByTestId('connections-back')).toBeTruthy())
+    expect(screen.getByTestId('connector-claude-claude-code')).toBeTruthy()
   })
 
-  it('shows a clean "coming soon" detail for OpenClaw / Hermes', async () => {
+  it('drills OpenClaw into its export connector detail (no dead "coming soon")', async () => {
     renderPanel()
     fireEvent.click(screen.getByTestId('tray-tile-openclaw'))
-    await waitFor(() =>
-      expect(screen.getByText('Live connection setup is coming soon.')).toBeTruthy()
-    )
+    await waitFor(() => expect(screen.getByTestId('connections-back')).toBeTruthy())
+    expect(screen.getByTestId('connector-openclaw')).toBeTruthy()
   })
 
   it('opens the omi.me device page (no drill-in) for Omi Device', () => {

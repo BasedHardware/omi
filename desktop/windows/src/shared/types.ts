@@ -1,5 +1,11 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
+import type {
+  McpConnectorId,
+  McpExportsSnapshot,
+  McpConnectResult,
+  McpCloudConnectorInfo
+} from './mcpExports'
 
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
@@ -1169,6 +1175,39 @@ export type OmiBridgeApi = {
   /** Fires when the BYOK key set or activation changed (any window). Returns an
    *  unsubscribe fn. Carries no key material — reload via byokGetAll. */
   onByokChanged: (cb: () => void) => () => void
+  // --- "Use omi memory anywhere" MCP export connectors ---
+  /** Current status of every export connector (detected / connected / requires),
+   *  plus whether this account has a hosted MCP key. `ownerUserId` is the caller's
+   *  Firebase uid (owner-uid guard on the key). */
+  mcpStatus: (ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Mint-or-reuse the hosted key and write the connector's MCP config. The
+   *  Firebase token + uid are relayed from the renderer; the key stays in main.
+   *  Returns the fresh snapshot plus a manual setup card when CLI automation
+   *  failed and the user should run the copy-command instead. */
+  mcpConnect: (
+    connectorId: McpConnectorId,
+    token: string,
+    ownerUserId: string
+  ) => Promise<McpConnectResult>
+  /** Remove the connector's MCP config entry. */
+  mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Rotate the hosted key and rewrite any already-connected configs. */
+  mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Fires when any connector's status changed. Returns an unsubscribe fn. */
+  onMcpChanged: (cb: () => void) => () => void
+  /** Sign-out / account-switch: wipe the hosted MCP key (belt-and-suspenders with
+   *  the clear inside wipeUserData). Best-effort. */
+  mcpClearKey: () => Promise<void>
+  /** ChatGPT/Claude assisted-connector cards (static field values, no secret). */
+  mcpCloudInfo: () => Promise<McpCloudConnectorInfo[]>
+  /** Open a cloud connector's provider connector page (assisted "open & guide"). */
+  mcpOpenCloudConnector: (url: string) => Promise<void>
+  /** Memory-PACK variant: format the pack, copy to clipboard, open the provider
+   *  chat. Returns the opened URL. */
+  mcpMemoryPack: (
+    provider: 'gemini' | 'chatgpt' | 'claude',
+    memories: ExportMemory[]
+  ) => Promise<string>
   // --- Encrypted-at-rest Firebase auth persistence ---
   /** Main-process encrypted store (safeStorage/DPAPI) backing a custom Firebase
    *  Persistence, so ID/refresh tokens never sit in plaintext localStorage. Keyed

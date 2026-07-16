@@ -42,6 +42,15 @@ export async function teardownUserData(): Promise<void> {
     console.warn('[auth-teardown] byokClearAll failed:', (e as Error).message)
   }
   resetByokKeys()
+  // 2b. Hosted MCP export key: same rationale as BYOK — it lives in its own
+  //     encrypted store outside SQLite. Belt-and-suspenders with the clear inside
+  //     wipeUserData, so an early wipeUserData failure can't leave the prior
+  //     account's key on disk for a second account on this install.
+  try {
+    await window.omi?.mcpClearKey?.()
+  } catch (e) {
+    console.warn('[auth-teardown] mcpClearKey failed:', (e as Error).message)
+  }
   // 3. In-memory module caches so the current window reflects the wipe without a
   //    relaunch (the Conversations list, pending placeholders, the chat-grounding
   //    memory cache).

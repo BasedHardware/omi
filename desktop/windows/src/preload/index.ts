@@ -56,6 +56,12 @@ import type {
   XRunState
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
+import type {
+  McpConnectorId,
+  McpExportsSnapshot,
+  McpConnectResult,
+  McpCloudConnectorInfo
+} from '../shared/mcpExports'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
 
 const omi: OmiBridgeApi = {
@@ -356,6 +362,39 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('byok:changed', listener)
     return () => ipcRenderer.removeListener('byok:changed', listener)
   },
+  // --- "Use omi memory anywhere" MCP export connectors ---
+  // The renderer relays its Firebase token + uid; main mints/reads the hosted key
+  // and writes the tool's config itself (the key never crosses to the renderer).
+  mcpStatus: (ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:status', ownerUserId),
+  mcpConnect: (
+    connectorId: McpConnectorId,
+    token: string,
+    ownerUserId: string
+  ): Promise<McpConnectResult> =>
+    ipcRenderer.invoke('mcp:connect', connectorId, token, ownerUserId),
+  mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:disconnect', connectorId, ownerUserId),
+  mcpRotateKey: (token: string, ownerUserId: string): Promise<McpExportsSnapshot> =>
+    ipcRenderer.invoke('mcp:rotateKey', token, ownerUserId),
+  onMcpChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('mcp:changed', listener)
+    return () => ipcRenderer.removeListener('mcp:changed', listener)
+  },
+  // Sign-out / account-switch: wipe the hosted MCP key (belt-and-suspenders with
+  // the clear inside wipeUserData). Best-effort.
+  mcpClearKey: (): Promise<void> => ipcRenderer.invoke('mcp:clearKey'),
+  // Cloud (OAuth) connector cards — static field values (no secret, no key).
+  mcpCloudInfo: (): Promise<McpCloudConnectorInfo[]> => ipcRenderer.invoke('mcp:cloudInfo'),
+  mcpOpenCloudConnector: (url: string): Promise<void> =>
+    ipcRenderer.invoke('mcp:openCloudConnector', url),
+  // Memory-PACK variant: main formats the pack, copies it to the clipboard, and
+  // opens the provider chat. Returns the opened URL.
+  mcpMemoryPack: (
+    provider: 'gemini' | 'chatgpt' | 'claude',
+    memories: ExportMemory[]
+  ): Promise<string> => ipcRenderer.invoke('mcp:memoryPack', provider, memories),
   // Encrypted-at-rest Firebase auth persistence (main-process safeStorage/DPAPI).
   // Backs lib/encryptedAuthPersistence — Firebase drives the read/write/migrate
   // lifecycle over these channels; token values never touch plaintext localStorage.

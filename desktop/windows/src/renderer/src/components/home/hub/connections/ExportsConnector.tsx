@@ -6,6 +6,7 @@ import { runMemoryExport } from '../../../../lib/memoryExport'
 import type { ExportMemory } from '../../../../../../shared/types'
 import { ConnectorRow, PillButton } from './ConnectorRow'
 import { ConnectorBrandMark } from './ConnectorBrandMark'
+import { MemoryPackRow } from './MemoryPackRow'
 
 // Memory export destinations — Obsidian, a plain Markdown file, or Notion. These
 // are Windows' shipped one-shot writers (main/memoryExport/*), reused verbatim via
@@ -119,6 +120,10 @@ export function ExportsConnector(): React.JSX.Element {
           </PillButton>
         }
       />
+
+      {/* Gemini has no tray tile of its own — its memory-pack lives here in the
+          full Exports list (copy a prompt + pack, open Gemini). */}
+      <MemoryPackRow provider="gemini" />
     </>
   )
 }
