@@ -19,6 +19,11 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/PTTContextVocabularyProvider.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionDelegate.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+SessionLifecycle.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+Tools.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubControllerSupport.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubResumeOnceGate.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
@@ -33,6 +38,7 @@ covers:
   - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceWaveformBars.swift
+  - desktop/macos/Desktop/Sources/Services/APIClient/APIClient+Tools.swift
 preconditions:
   - automation_bridge_ready
 

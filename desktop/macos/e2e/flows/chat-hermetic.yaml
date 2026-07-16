@@ -55,7 +55,12 @@ covers:
   - desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift
   - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
   - desktop/macos/Desktop/Sources/Diagnostics/DesktopStressDiagnostics.swift
-  - desktop/macos/Backend-Rust/src/routes/chat_completions.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/mod.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/request_translation.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/route.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/sse.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/streaming.rs
+  - desktop/macos/Backend-Rust/src/routes/chat/transport.rs
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatScrollBehavior.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/ChatSessionsSidebar.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/AgentConnectPickerSheet.swift

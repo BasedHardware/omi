@@ -65,52 +65,54 @@ def fair_use() -> Iterator[ModuleType]:
         yield load_module_fresh('utils.fair_use', str(BACKEND_DIR / 'utils' / 'fair_use.py'))
 
 
-def _read_transcribe_source():
-    path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'transcribe.py')
+def _read_listen_source(module: str):
+    path = os.path.join(os.path.dirname(__file__), '..', '..', 'routers', 'listen', f'{module}.py')
     with open(path, 'r', encoding='utf-8') as f:
         return f.read()
 
 
 class TestDgUsageBatchingStructure:
-    """Verify transcribe.py uses local accumulator instead of per-chunk Redis writes."""
+    """Verify listen components use a local accumulator instead of per-chunk Redis writes."""
 
     def test_no_per_chunk_redis_calls(self):
         """record_dg_usage_ms should only be called at flush points, not per chunk."""
-        source = _read_transcribe_source()
-        calls = re.findall(r'^\s+record_dg_usage_ms\(', source, re.MULTILINE)
-        # Only 2 calls: periodic flush + session-end flush
-        assert len(calls) == 2, f'Expected 2 record_dg_usage_ms calls (flush only), found {len(calls)}'
+        source = _read_listen_source('runtime')
+        calls = re.findall(r'record_dg_usage_ms, self\.request\.uid, self\.state\.dg_usage_ms_pending', source)
+        # Periodic and final flushes use one shared persistence boundary.
+        assert len(calls) == 1, f'Expected one shared record_dg_usage_ms flush, found {len(calls)}'
 
     def test_accumulation_covers_all_stt_providers(self):
         """All STT provider paths accumulate locally via session.dg_usage_ms_pending +=."""
-        source = _read_transcribe_source()
-        accum = re.findall(r'^\s+session\.dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
+        source = _read_listen_source('receiver')
+        accum = re.findall(r'^\s+self\.host\.state\.dg_usage_ms_pending\s*\+=', source, re.MULTILINE)
         # DG single-channel + multi-channel
         assert len(accum) == 2, f'Expected 2 accumulation points, found {len(accum)}'
 
     def test_accumulator_lives_in_session_state(self):
         """The DG accumulator is explicit session state, not closure nonlocal state."""
-        source = _read_transcribe_source()
+        source = _read_listen_source('contracts')
         assert 'dg_usage_ms_pending: int = 0' in source
         assert not re.findall(r'nonlocal.*dg_usage_ms_pending', source)
 
     def test_flush_resets_accumulator(self):
         """Each flush point resets dg_usage_ms_pending to 0."""
-        source = _read_transcribe_source()
+        source = _read_listen_source('runtime')
         lines = source.split('\n')
         resets = []
         for i, line in enumerate(lines, 1):
             stripped = line.strip()
-            if stripped == 'session.dg_usage_ms_pending = 0':
+            if stripped == 'self.state.dg_usage_ms_pending = 0':
                 resets.append(i)
-        # periodic flush + session-end flush
-        assert len(resets) == 2, f'Expected 2 reset points, found {len(resets)}'
+        assert len(resets) == 1, f'Expected one shared reset point, found {len(resets)}'
 
     def test_flush_before_custom_stt_guard(self):
         """DG flush must happen before use_custom_stt:continue guard."""
-        source = _read_transcribe_source()
-        flush_pos = source.find('record_dg_usage_ms(uid, session.dg_usage_ms_pending)')
-        guard_pos = source.find('if use_custom_stt:\n')
+        source = _read_listen_source('runtime')
+        flush_start = source.find('async def _flush_usage(')
+        flush_end = source.find('    async def _start_pusher', flush_start)
+        flush_body = source[flush_start:flush_end]
+        flush_pos = flush_body.find('record_dg_usage_ms, self.request.uid, self.state.dg_usage_ms_pending')
+        guard_pos = flush_body.find('if self.use_custom_stt or not self.state.last_usage_record_timestamp:')
         assert flush_pos != -1, 'DG flush call not found'
         assert guard_pos != -1, 'use_custom_stt guard not found'
         assert flush_pos < guard_pos, 'DG flush must be before use_custom_stt guard'

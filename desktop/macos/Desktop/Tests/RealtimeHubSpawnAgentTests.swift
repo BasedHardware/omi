@@ -374,7 +374,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("private var toolEffectIdentityByTransportKey"))
+    XCTAssertTrue(source.contains("var toolEffectIdentityByTransportKey"))
     // The screen-receipt extension shares this epoch fence after the visual receipt refactor.
     XCTAssertTrue(source.contains("var realtimeToolTurnEpoch = 0"))
     XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
@@ -385,7 +385,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
     XCTAssertTrue(source.contains("waiting for provider tool delivery"))
     XCTAssertTrue(source.contains("authorizedRealtimeInvocations"))
-    XCTAssertTrue(source.contains("private func clearRealtimeToolTracking()"))
+    XCTAssertTrue(source.contains("func clearRealtimeToolTracking()"))
     XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))
     XCTAssertGreaterThanOrEqual(
       source.components(separatedBy: "clearRealtimeToolTracking()").count - 1, 4)
@@ -398,7 +398,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
 
     XCTAssertTrue(source.contains("RealtimeAuthorizedToolOwnership.accepts("))
     XCTAssertTrue(source.contains("RealtimeToolTurnOwnership.accepts("))
-    XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
+    XCTAssertTrue(source.contains("func isCurrentToolTurn("))
     XCTAssertTrue(
       source.contains(
         "activeToolIdentity: VoiceTurnCoordinator.shared.activeTurn?.toolEffectIdentities[callID]"
@@ -483,12 +483,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   }
 
   private func realtimeHubControllerSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
-    return try String(contentsOf: sourceURL, encoding: .utf8)
+    try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
   }
 
   private func realtimeToolAuthoritySource() throws -> String {

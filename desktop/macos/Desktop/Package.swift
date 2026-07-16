@@ -87,6 +87,7 @@ let package = Package(
         "OmiWAL",
         "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
+        "FloatingControlBar/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),
