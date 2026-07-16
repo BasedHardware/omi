@@ -124,6 +124,12 @@ export function formatMemoryDate(created_at: string, now: number = Date.now()): 
   return rel ? `${rel} · ${abs}` : abs
 }
 
+// Tags worth showing the user — drops internal `omi-*` provenance tags (and any
+// empty entries). Shared by the card tooltip and the detail sheet.
+export function displayTags(m: Memory): string[] {
+  return (m.tags ?? []).filter((t) => t && !t.startsWith('omi-'))
+}
+
 export type MemoryFilters = {
   search: string
   // Empty set = all categories. Multi-select, matching Mac's category popover.

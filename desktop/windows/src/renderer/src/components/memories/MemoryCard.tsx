@@ -4,6 +4,7 @@ import type { Memory } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
   categoryOf,
+  displayTags,
   formatMemoryDate,
   isNewMemory,
   isProtectedContent,
@@ -25,7 +26,7 @@ function InfoRows({ memory }: { memory: Memory }): React.JSX.Element {
   if (memory.app_id) rows.push(['App', memory.app_id])
   if (memory.conversation_id) rows.push(['Source', 'Conversation'])
   rows.push(['Created', formatMemoryDate(memory.created_at)])
-  const tags = (memory.tags ?? []).filter((t) => t && !t.startsWith('omi-'))
+  const tags = displayTags(memory)
   return (
     <div className="space-y-1.5">
       {rows.map(([k, v]) => (

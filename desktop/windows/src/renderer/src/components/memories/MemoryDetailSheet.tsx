@@ -5,6 +5,7 @@ import type { Memory } from '../../hooks/useMemories'
 import {
   CATEGORY_LABEL,
   categoryOf,
+  displayTags,
   formatMemoryDate,
   isProtectedContent,
   layerLabel
@@ -57,6 +58,7 @@ export function MemoryDetailSheet({
   const protectedMem = isProtectedContent(memory.content)
   const layer = layerLabel(memory)
   const isPublic = memory.visibility === 'public'
+  const tags = displayTags(memory)
 
   const saveEdit = async (): Promise<void> => {
     const text = draft.trim()
@@ -193,21 +195,19 @@ export function MemoryDetailSheet({
                   <MetaRow label="Device" value={memory.primary_capture_device} />
                 )}
                 <MetaRow label="Created" value={formatMemoryDate(memory.created_at)} />
-                {(memory.tags ?? []).filter((t) => t && !t.startsWith('omi-')).length > 0 && (
+                {tags.length > 0 && (
                   <MetaRow
                     label="Tags"
                     value={
                       <span className="flex flex-wrap gap-1">
-                        {(memory.tags ?? [])
-                          .filter((t) => t && !t.startsWith('omi-'))
-                          .map((t) => (
-                            <span
-                              key={t}
-                              className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-white/70"
-                            >
-                              {t}
-                            </span>
-                          ))}
+                        {tags.map((t) => (
+                          <span
+                            key={t}
+                            className="rounded bg-white/10 px-1.5 py-0.5 text-[11px] text-white/70"
+                          >
+                            {t}
+                          </span>
+                        ))}
                       </span>
                     }
                   />
