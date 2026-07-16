@@ -28,8 +28,8 @@ fi
 export ENCRYPTION_SECRET="omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv"
 export OPENAI_API_KEY="test-openai-key-not-real"
 export BACKEND_PYTEST_TIMING_SUMMARY="${BACKEND_PYTEST_TIMING_SUMMARY:-1}"
-# Keep the local pre-push path strict; CI deliberately overrides only the blocking
-# ceiling so cross-machine CPU differences do not make pull requests flaky.
+# Direct focused runs keep the strict default. The shared pre-push/CI runner supplies
+# the same 1.0-second ceiling so cross-machine CPU differences do not create a second policy.
 export BACKEND_FAST_UNIT_WARN_SECONDS="${BACKEND_FAST_UNIT_WARN_SECONDS:-0.1}"
 export BACKEND_FAST_UNIT_FAIL_SECONDS="${BACKEND_FAST_UNIT_FAIL_SECONDS:-0.12}"
 

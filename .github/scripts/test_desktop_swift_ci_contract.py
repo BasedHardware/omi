@@ -15,6 +15,8 @@ from pathlib import Path
 
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
+RUNNER_PATH = REPO_ROOT / "desktop/macos/scripts/run-swift-ci.sh"
+PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
@@ -24,6 +26,10 @@ JOBS = ["desktop-swift", "desktop-swift-release-compile"]
 
 def _workflow_text() -> str:
     return WORKFLOW_PATH.read_text(encoding="utf-8")
+
+
+def _runner_text() -> str:
+    return RUNNER_PATH.read_text(encoding="utf-8")
 
 
 def _job_text(workflow_text: str, job_id: str) -> str:
@@ -40,24 +46,6 @@ def _load_workflow() -> dict:
     return {"jobs": {job_id: _job_text(text, job_id) for job_id in JOBS}}
 
 
-def _steps(job_def: dict) -> list[dict]:
-    if isinstance(job_def, str):
-        return []
-    return job_def.get("steps", [])
-
-
-def _run_texts(job_def: dict) -> list[str]:
-    """Return the concatenated ``run`` body of every step that has one."""
-    if isinstance(job_def, str):
-        return [job_def]
-    texts: list[str] = []
-    for step in _steps(job_def):
-        run = step.get("run")
-        if run:
-            texts.append(run if isinstance(run, str) else "\n".join(run))
-    return texts
-
-
 class DesktopSwiftCIContractTests(unittest.TestCase):
     """Verify toolchain pinning, version logging, and cache-key completeness."""
 
@@ -68,82 +56,39 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     # --- per-job assertions ------------------------------------------------
 
-    def test_both_jobs_select_pinned_xcode(self):
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                job = self.jobs[job_id]
-                combined = "\n".join(_run_texts(job))
-                self.assertIn(
-                    EXPECTED_XCODE_APP,
-                    combined,
-                    f"{job_id}: must reference the pinned Xcode app path",
-                )
-                self.assertIn(
-                    "DEVELOPER_DIR",
-                    combined,
-                    f"{job_id}: must set DEVELOPER_DIR to the pinned Xcode",
-                )
+    def test_both_jobs_call_the_canonical_pinned_toolchain_runner(self):
+        debug_job = self.jobs["desktop-swift"]
+        release_job = self.jobs["desktop-swift-release-compile"]
 
-    def test_both_jobs_fail_closed_on_missing_xcode(self):
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                job = self.jobs[job_id]
-                combined = "\n".join(_run_texts(job))
-                self.assertIn(
-                    "exit 1",
-                    combined,
-                    f"{job_id}: must exit non-zero when pinned Xcode is absent",
-                )
-                # The fail-closed check must test for the directory's existence.
-                dir_check = re.search(r"if\s*\[\s*!\s*-d\s+\"\$?XCODE_APP", combined)
-                self.assertIsNotNone(
-                    dir_check,
-                    f"{job_id}: must test for the Xcode directory existence",
-                )
+        self.assertIn("run-swift-ci.sh --select-toolchain", debug_job)
+        self.assertIn("run-swift-ci.sh --test", debug_job)
+        self.assertIn("run-swift-ci.sh --select-toolchain", release_job)
+        self.assertIn("run-swift-ci.sh --release-compile", release_job)
 
-    def test_both_jobs_print_toolchain_versions(self):
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                job = self.jobs[job_id]
-                combined = "\n".join(_run_texts(job))
-                self.assertIn(
-                    "xcodebuild -version",
-                    combined,
-                    f"{job_id}: must print xcodebuild -version before Swift actions",
-                )
-                self.assertIn(
-                    "xcrun swift --version",
-                    combined,
-                    f"{job_id}: must print xcrun swift --version before Swift actions",
-                )
+    def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
+        runner = _runner_text()
 
-    def test_both_jobs_assert_expected_version_and_build(self):
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                job = self.jobs[job_id]
-                combined = "\n".join(_run_texts(job))
-                self.assertIn(
-                    f'"Xcode {EXPECTED_XCODE_VERSION}"',
-                    combined,
-                    f"{job_id}: must assert the expected Xcode version string",
-                )
-                self.assertIn(
-                    f'"{EXPECTED_XCODE_BUILD}"',
-                    combined,
-                    f"{job_id}: must assert the expected Xcode build number",
-                )
+        self.assertIn(EXPECTED_XCODE_APP, runner)
+        self.assertIn("DEVELOPER_DIR", runner)
+        self.assertIn("exit 1", runner)
+        self.assertRegex(runner, r"if\s*\[\s*!\s*-d\s+\"\$XCODE_APP")
+        self.assertIn("xcodebuild -version", runner)
+        self.assertIn("xcrun swift --version", runner)
+        self.assertIn(f'"Xcode $EXPECTED_XCODE_VERSION"', runner)
+        self.assertIn(f'"$EXPECTED_XCODE_BUILD"', runner)
 
-    def test_both_jobs_use_same_toolchain(self):
-        """Both debug and release paths must select the same pinned Xcode."""
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                job = self.jobs[job_id]
-                combined = "\n".join(_run_texts(job))
-                self.assertIn(
-                    EXPECTED_XCODE_APP,
-                    combined,
-                    f"{job_id}: must use the same toolchain as the other job",
-                )
+    def test_canonical_runner_exports_the_selected_toolchain_for_ci_steps(self):
+        runner = _runner_text()
+
+        self.assertIn('printf \'DEVELOPER_DIR=%s\\n\' "$DEVELOPER_DIR" >> "$GITHUB_ENV"', runner)
+
+    def test_pre_push_uses_the_same_desktop_swift_contract_as_ci(self):
+        """#9440: local push readiness must not downgrade CI's Swift gate."""
+        pre_push = PRE_PUSH_PATH.read_text(encoding="utf-8")
+
+        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --test", pre_push)
+        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --release-compile", pre_push)
+        self.assertNotIn("xcrun swift build -c debug --package-path Desktop", pre_push)
 
     # --- cache-key assertions ----------------------------------------------
 
@@ -202,7 +147,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """Release compile must trigger when Package.resolved changes, even on
         a PR where the manifest source is unchanged."""
         job = self.jobs["desktop-swift-release-compile"]
-        combined = "\n".join(_run_texts(job))
+        combined = job
         # The variable must be wired into the SHOULD_RUN conditional, not just
         # declared or logged — removing the gate while keeping other references
         # must fail this test.
@@ -223,29 +168,19 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_xcode_version_probe_does_not_close_its_pipe_early(self):
         """head(1) aborts Xcode 16.4 under pipefail; sed reads the full output."""
-        for job_id in JOBS:
-            with self.subTest(job=job_id):
-                combined = "\n".join(_run_texts(self.jobs[job_id]))
-                self.assertNotIn("xcodebuild -version | head -1", combined)
-                self.assertIn("xcodebuild -version | sed -n '1p'", combined)
+        runner = _runner_text()
+
+        self.assertNotIn("xcodebuild -version | head -1", runner)
+        self.assertIn("sed -n '1p'", runner)
 
     # --- adversarial: removing any guard must fail -------------------------
 
-    def test_adversarial_remove_xcode_step_detected(self):
-        """A workflow without the Xcode selection must fail the above checks."""
+    def test_adversarial_remove_runner_mode_detected(self):
+        """The workflow must not retain a toolchain setup while bypassing the shared runner."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
-        # Remove the Xcode selection step entirely from the first job.
-        tampered = re.sub(
-            r"      - name: Select and assert pinned Xcode 16\.4\n"
-            r"        if:.*\n"
-            r"        run: \|.*?(?=\n      - name: )",
-            "",
-            wf_text,
-            count=1,
-            flags=re.DOTALL,
-        )
+        tampered = wf_text.replace("run-swift-ci.sh --test", "swift-test-suites.sh", 1)
         combined = _job_text(tampered, "desktop-swift")
-        self.assertNotIn("DEVELOPER_DIR", combined)
+        self.assertNotIn("run-swift-ci.sh --test", combined)
 
     def test_adversarial_cache_key_weakening_detected(self):
         """A cache key without Package.resolved or toolchain identity is caught."""

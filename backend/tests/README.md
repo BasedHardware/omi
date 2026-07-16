@@ -34,10 +34,15 @@ temporary repositories cannot accidentally mutate or inspect the outer worktree 
 When a file fails, the runner prints a copyable command to rerun only the failed files with the same environment
 and timing guard. Use that command instead of a bare `pytest` rerun when investigating a timing failure.
 
+`scripts/run-unit-ci.sh` is the authoritative pre-push and GitHub Actions entrypoint. It runs the same preflight,
+type-check, selector, and isolated test runner with the same 1.0-second blocking CPU-time ceiling. Use `bash test.sh`
+or a focused `pytest` invocation while iterating; the push hook is the full selected acceptance gate.
+
 ### Per-test duration guard
 
 `BACKEND_FAST_UNIT_WARN_SECONDS=<seconds>` (default `0.1`) is the per-test CPU-time target.
-`BACKEND_FAST_UNIT_FAIL_SECONDS=<seconds>` (default `0.12` locally) is the blocking budget. The guard measures
+`BACKEND_FAST_UNIT_FAIL_SECONDS=<seconds>` (default `0.12` for direct local `test.sh` use; `1.0` in the shared
+pre-push/CI contract) is the blocking budget. The guard measures
 **CPU time of the call phase only** (`time.process_time`), not wall-clock: wall-clock inflates unpredictably
 under parallel contention and makes a hard limit flake. Native numerical pools are capped as described above so
 aggregate process CPU remains comparable regardless of `BACKEND_PYTEST_WORKERS`. GitHub Actions keeps the same 100ms warning target but uses a higher
