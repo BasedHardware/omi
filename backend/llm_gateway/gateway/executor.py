@@ -23,6 +23,7 @@ from llm_gateway.gateway.providers import (
     GENERIC_PROVIDER_FAILURE_MESSAGE,
     ProviderFailure,
 )
+from llm_gateway.gateway.output_budget import OutputBudgetDecision, apply_output_budget
 from llm_gateway.gateway.resolver import ResolvedRoute, is_lkg_eligible, select_lkg_route_for_failure
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef, RolloutStage, RouteArtifact
 from llm_gateway.gateway.validator import ValidatedChatCompletionRequest
@@ -41,6 +42,7 @@ class ExecutorResult:
     fallback_used: bool
     fallback_reason: FailureClass | None
     used_lkg: bool
+    output_budget: OutputBudgetDecision
 
 
 class ProviderRegistry:
@@ -140,6 +142,13 @@ def selected_serving_route(resolved_route: ResolvedRoute) -> RouteArtifact:
 
 def provider_request_for(resolved_route: ResolvedRoute, provider_ref: ProviderRef) -> dict[str, Any]:
     return _provider_request(resolved_route, provider_ref)
+
+
+def output_budget_for(resolved_route: ResolvedRoute, route: RouteArtifact | None = None) -> OutputBudgetDecision:
+    selected_route = route or selected_serving_route(resolved_route)
+    request = _provider_request(resolved_route, selected_route.primary, route=selected_route, apply_budget=False)
+    _, decision = apply_output_budget(request, selected_route.output_budget)
+    return decision
 
 
 def _is_route_eligible_to_serve(route: RouteArtifact, validated_request: ValidatedChatCompletionRequest) -> bool:
@@ -277,6 +286,7 @@ def _provider_request(
     provider_ref: ProviderRef,
     *,
     route: RouteArtifact | None = None,
+    apply_budget: bool = True,
 ) -> dict[str, Any]:
     route = route or selected_serving_route(resolved_route)
     provider_request: dict[str, Any] = {
@@ -288,6 +298,8 @@ def _provider_request(
     if resolved_route.validated_request.response_format is not None:
         provider_request['response_format'] = dict(resolved_route.validated_request.response_format)
     provider_request.update(dict(resolved_route.validated_request.forwarded_params))
+    if apply_budget:
+        provider_request, _ = apply_output_budget(provider_request, route.output_budget)
     return provider_request
 
 
@@ -351,6 +363,7 @@ def _executor_result(
         fallback_used=fallback_used,
         fallback_reason=fallback_reason,
         used_lkg=used_lkg,
+        output_budget=output_budget_for(resolved_route, route),
     )
 
 

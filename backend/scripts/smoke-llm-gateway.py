@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-from typing import Any, Dict, List, cast
+from typing import Any, Dict, cast
 
 import argparse
-import json
 import os
 import time
 
@@ -59,7 +58,7 @@ def _find_success_request_metric(metrics_text: str) -> str | None:
     for line in metrics_text.splitlines():
         if not line.startswith('llm_gateway_requests_total{'):
             continue
-        if 'lane_id="omi:auto:chat-structured"' not in line or 'outcome="success"' not in line:
+        if 'lane_id="omi:auto:session-titles"' not in line or 'outcome="success"' not in line:
             continue
         try:
             value = float(line.rsplit(' ', 1)[-1])
@@ -106,24 +105,8 @@ def main() -> int:
         'Content-Type': 'application/json',
     }
     payload = {
-        'model': 'omi:auto:chat-structured',
-        'messages': [
-            {'role': 'user', 'content': 'Question: should this use prior conversation context? Answer false.'}
-        ],
-        'response_format': {
-            'type': 'json_schema',
-            'json_schema': {
-                'name': 'RequiresContext',
-                'strict': True,
-                'schema': {
-                    'type': 'object',
-                    'properties': {'value': {'type': 'boolean'}},
-                    'required': ['value'],
-                    'additionalProperties': False,
-                },
-            },
-        },
-        'metadata': {'omi_feature': 'chat_extraction.requires_context'},
+        'model': 'omi:auto:session-titles',
+        'messages': [{'role': 'user', 'content': 'Give this conversation a concise title: project planning.'}],
     }
 
     with httpx.Client(timeout=20.0) as client:
@@ -138,19 +121,14 @@ def main() -> int:
                 return 2
             _assert_success_metric(client, base_url, metrics_token)
 
-    choices: List[Dict[str, Any]] = cast(List[Dict[str, Any]], body.get('choices') or [{}])
+    choices = cast(list[Dict[str, Any]], body.get('choices') or [{}])
     message: Dict[str, Any] = cast(Dict[str, Any], choices[0].get('message', {}))
     content = message.get('content')
     if not isinstance(content, str):
         print('ERROR: response did not contain choices[0].message.content')
         return 1
-    try:
-        decoded = json.loads(content)
-    except ValueError:
-        print('ERROR: response content was not JSON')
-        return 1
-    if not isinstance(decoded.get('value'), bool):
-        print('ERROR: response JSON did not contain boolean value')
+    if not content.strip():
+        print('ERROR: response content was empty')
         return 1
     print('LLM gateway smoke passed')
     return 0

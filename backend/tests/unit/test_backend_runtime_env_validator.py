@@ -59,7 +59,9 @@ def with_memory_env(payload: str) -> str:
         {"name": "MEMORY_CANONICAL_PROMOTION_FAST_TRACK_ENABLED", "value": "true"},'''
     return payload.replace(
         '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
-        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n' + memory_env,
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "GCP_LOCATION", "value": "us-central1"},\n'
+        '        {"name": "USE_VERTEX_AI", "value": "true"},\n' + memory_env,
     )
 
 
