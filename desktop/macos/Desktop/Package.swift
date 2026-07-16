@@ -48,6 +48,9 @@ let package = Package(
     .target(
       name: "OmiWAL",
       path: "Sources/OmiWAL",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .executableTarget(
@@ -100,6 +103,7 @@ let package = Package(
         "fixtures",
         "SemanticFeatureSentinels",
         "OmiSupportTests",
+        "OmiWALTests",
       ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
@@ -107,6 +111,15 @@ let package = Package(
       name: "OmiSupportTests",
       dependencies: ["OmiSupport"],
       path: "Tests/OmiSupportTests",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+    ),
+    .testTarget(
+      name: "OmiWALTests",
+      dependencies: ["OmiWAL"],
+      path: "Tests/OmiWALTests",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ],
