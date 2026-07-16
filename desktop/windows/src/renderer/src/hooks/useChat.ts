@@ -211,13 +211,18 @@ export function useChat(): UseChat {
   useEffect(() => {
     if (mode !== 'infinite' || !chatIdRef.current) return
     let cancelled = false
+    // Capture the generation so a switchThread()/reset() that lands before this
+    // async default-thread read resolves cancels the write — otherwise a slow
+    // default load could overwrite a thread the user has since switched to (C5
+    // symmetry with the send/agent/kernel paths).
+    const myGen = genRef.current
     void window.omi
       .getLocalConversation(chatIdRef.current)
       .then((c) => {
         // Skip if a send already started before this async load resolved —
         // otherwise we'd overwrite the in-flight bubble (sendingRef is set
         // synchronously at the top of send()).
-        if (cancelled || sendingRef.current || !c?.messages) return
+        if (cancelled || sendingRef.current || genRef.current !== myGen || !c?.messages) return
         startedAtRef.current = c.startedAt || Date.now()
         setHistory(
           c.messages.map((m) => ({
