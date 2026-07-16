@@ -102,6 +102,11 @@ checks:
     triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
     lanes: ["local", "ci"]
     reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: telegram-deployment-notifier
+    command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
+    triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "optional Telegram deployment notifications must not fail deploy workflows when credentials are absent"
   - id: opentofu-foundation-boundary
     command: ["python3", ".github/scripts/check_opentofu_foundation.py"]
     triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
