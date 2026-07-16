@@ -20,7 +20,7 @@
     "desktop/macos/Desktop/Sources/APIClient.swift": 6502,
     "desktop/macos/Desktop/Sources/AuthService.swift": 3224,
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2072,
-    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4207,
+    "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4206,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1681,
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": 4157,
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": 2453,
