@@ -19,9 +19,9 @@ custom_rules:
     message: "Prefer signal-driven transitions over DispatchQueue.asyncAfter in FloatingControlBar"
     severity: warning
   omi_inline_userdefaults_key:
-    regex: '\bforKey:\s*"'
+    regex: '(?<!removeValue\()forKey:\s*"'
     excluded:
-      - "Sources/OmiSupport/DefaultsKey.swift"
+      - "Sources/DefaultsKey.swift"
     message: "Use DefaultsKey.swift for typed UserDefaults keys"
     severity: warning
 
