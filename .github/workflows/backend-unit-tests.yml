@@ -101,43 +101,12 @@ jobs:
           uv pip sync pylock.toml --python .venv/bin/python
           echo "$PWD/.venv/bin" >> "$GITHUB_PATH"
 
-      - name: Run preflight
-        working-directory: backend
-        run: bash test-preflight.sh
-
-      - name: Type-check backend typed boundary
-        working-directory: backend
-        run: bash scripts/typecheck.sh
-
-      - name: Select backend unit tests
-        id: select-tests
+      - name: Run authoritative backend unit contract
         working-directory: backend
         run: |
           if [[ "${{ github.event_name }}" == "pull_request" ]]; then
             ../scripts/changed-files "${{ github.event.pull_request.base.sha }}"...HEAD > /tmp/backend-changed-files.txt
-            python scripts/select_backend_unit_tests.py \
-              --changed-files /tmp/backend-changed-files.txt \
-              --output /tmp/backend-unit-tests.txt \
-              --reason-output /tmp/backend-unit-tests-reason.txt
+            bash scripts/run-unit-ci.sh --changed-files /tmp/backend-changed-files.txt
           else
-            python scripts/select_backend_unit_tests.py \
-              --all \
-              --output /tmp/backend-unit-tests.txt \
-              --reason-output /tmp/backend-unit-tests-reason.txt
+            bash scripts/run-unit-ci.sh --all
           fi
-          echo "reason=$(cat /tmp/backend-unit-tests-reason.txt)" >> "$GITHUB_OUTPUT"
-          echo "count=$(wc -l < /tmp/backend-unit-tests.txt | tr -d ' ')" >> "$GITHUB_OUTPUT"
-
-      - name: Run backend unit suite
-        working-directory: backend
-        env:
-          BACKEND_UNIT_TEST_FILE_LIST: /tmp/backend-unit-tests.txt
-          BACKEND_FAST_UNIT_WARN_SECONDS: "0.1"
-          BACKEND_FAST_UNIT_FAIL_SECONDS: "1.0"
-          BACKEND_PYTEST_FILE_ISOLATION: "1"
-          BACKEND_PYTEST_MARK_EXPR: "not integration and not slow"
-          BACKEND_PYTEST_XDIST: auto
-          BACKEND_PYTEST_WORKERS: auto
-        run: |
-          echo "Selected ${{ steps.select-tests.outputs.count }} backend unit test files: ${{ steps.select-tests.outputs.reason }}"
-          bash test.sh
