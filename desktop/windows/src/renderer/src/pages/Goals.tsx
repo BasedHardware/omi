@@ -24,6 +24,7 @@ import { GoalCelebration } from '../components/goals/GoalCelebration'
 import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
 import type { GoalResponse as Goal } from '../lib/omiApi.generated'
 import { cache, writeCache, hydrateGoalsFromDisk } from '../lib/goalsCache'
+import { getCacheUid } from '../lib/persistentCache'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
 
@@ -43,12 +44,17 @@ function asList(data: unknown): Goal[] {
 // /v1/goals/all returns both active and completed goals; we split them by
 // is_active locally. (There is no /v1/goals/completed GET endpoint.)
 async function fetchAll(): Promise<Goal[]> {
+  const originUid = getCacheUid()
   const res = await omiApi.get('/v1/goals/all')
   const list = asList(res.data)
-  // writeCache mirrors the list to the per-uid cold-start snapshot; loaded is set
-  // here (only a successful fetch is authoritative, not an optimistic writeCache).
-  writeCache(list)
-  cache.loaded = true
+  // Account-switch guard: if the account changed while this fetch was in flight,
+  // don't cache/persist — writeCache would land under the new account's uid.
+  if (getCacheUid() === originUid) {
+    // writeCache mirrors the list to the per-uid cold-start snapshot; loaded is set
+    // here (only a successful fetch is authoritative, not an optimistic writeCache).
+    writeCache(list)
+    cache.loaded = true
+  }
   return list
 }
 
@@ -146,6 +152,7 @@ export function Goals(): React.JSX.Element {
 
   // Optimistic PATCH /v1/goals/{id}. On failure restore the prior list.
   const updateGoal = async (id: string, patch: GoalPatch): Promise<void> => {
+    const originUid = getCacheUid()
     const prev = goals
     const next = prev.map((g) => (g.id === id ? { ...g, ...patch } : g))
     setGoals(next)
@@ -155,7 +162,9 @@ export function Goals(): React.JSX.Element {
       await omiApi.patch(`/v1/goals/${id}`, patch)
     } catch (e) {
       setGoals(prev)
-      writeCache(prev)
+      // Don't persist the restore under a different account if the user switched
+      // while the request was in flight (see fetchAll's account-switch guard).
+      if (getCacheUid() === originUid) writeCache(prev)
       toast('Could not update goal', { tone: 'error', body: apiError(e) })
     } finally {
       markBusy(id, false)
@@ -167,6 +176,7 @@ export function Goals(): React.JSX.Element {
   // toggleComplete) and fires the full-screen celebration overlay. Reopening a
   // goal (value below target) never celebrates.
   const updateProgress = async (g: Goal, value: number): Promise<void> => {
+    const originUid = getCacheUid()
     const prev = goals
     const reachedTarget =
       (g.target_value ?? 0) > 0 && value >= (g.target_value as number) && !isCompleted(g)
@@ -179,7 +189,7 @@ export function Goals(): React.JSX.Element {
       if (reachedTarget) setCelebrating({ ...g, current_value: value })
     } catch (e) {
       setGoals(prev)
-      writeCache(prev)
+      if (getCacheUid() === originUid) writeCache(prev)
       toast('Could not update progress', { tone: 'error', body: apiError(e) })
     } finally {
       markBusy(g.id, false)
@@ -203,6 +213,7 @@ export function Goals(): React.JSX.Element {
   }
 
   const deleteGoal = async (id: string): Promise<void> => {
+    const originUid = getCacheUid()
     const prev = goals
     const next = prev.filter((g) => g.id !== id)
     setGoals(next)
@@ -211,7 +222,7 @@ export function Goals(): React.JSX.Element {
       await omiApi.delete(`/v1/goals/${id}`)
     } catch (e) {
       setGoals(prev)
-      writeCache(prev)
+      if (getCacheUid() === originUid) writeCache(prev)
       toast('Could not delete goal', { tone: 'error', body: apiError(e) })
     }
   }

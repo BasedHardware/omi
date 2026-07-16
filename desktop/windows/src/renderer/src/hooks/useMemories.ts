@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
 import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
+import { getCacheUid } from '../lib/persistentCache'
 
 export type Memory = {
   id: string
@@ -116,10 +117,14 @@ export function useMemories(): {
     if (cache.loaded) return
 
     let cancelled = false
+    const originUid = getCacheUid()
     ;(async () => {
       try {
         const list = await fetchMemories()
-        if (!cancelled) {
+        // Account-switch guard (belt-and-suspenders alongside `cancelled`): drop the
+        // publish if the account changed while the fetch was in flight, so it can't
+        // write A's memories under B's uid on a future in-place switch.
+        if (!cancelled && getCacheUid() === originUid) {
           cache.error = null
           publish(list)
         }
@@ -133,7 +138,11 @@ export function useMemories(): {
         }
       } finally {
         if (!cancelled) {
-          cache.loaded = true
+          // Only mark the module cache "loaded" if this fetch still belongs to the
+          // current account. Otherwise a stale fetch would leave loaded=true with
+          // list=null (reset by teardown), so account B would skip its own
+          // revalidation (if (cache.loaded) return) and show an empty list.
+          if (getCacheUid() === originUid) cache.loaded = true
           setLoading(false)
         }
       }

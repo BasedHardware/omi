@@ -64,4 +64,19 @@ describe('Apps — cache-first failure path', () => {
     // The grid is not shown when there's genuinely nothing cached.
     expect(screen.queryByPlaceholderText('Search apps…')).toBeNull()
   })
+
+  it('does not persist the catalog cross-account when the account switches mid-fetch', async () => {
+    localStorage.setItem('omi.lastSignedInUid', 'userA')
+    // The catalog fetch resolves AFTER a switch to userB (teardown already ran).
+    getMock.mockImplementation(async () => {
+      localStorage.setItem('omi.lastSignedInUid', 'userB')
+      return { data: { groups: [] } }
+    })
+    await renderApps()
+    await waitFor(() => expect(getMock).toHaveBeenCalled())
+
+    // A's catalog must NOT be written under B's uid (nor re-created under A's).
+    expect(localStorage.getItem('omi.cache.apps.userB')).toBeNull()
+    expect(localStorage.getItem('omi.cache.apps.userA')).toBeNull()
+  })
 })
