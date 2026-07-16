@@ -1,5 +1,13 @@
 import { describe, it, expect, beforeEach, afterAll } from 'vitest'
-import { mkdtempSync, rmSync, writeFileSync, readFileSync, readdirSync, existsSync, mkdirSync } from 'fs'
+import {
+  mkdtempSync,
+  rmSync,
+  writeFileSync,
+  readFileSync,
+  readdirSync,
+  existsSync,
+  mkdirSync
+} from 'fs'
 import { tmpdir } from 'os'
 import { join } from 'path'
 import {
@@ -28,8 +36,17 @@ beforeEach(() => {
   path = join(dir, '.claude.json')
 })
 
-function read(): Record<string, unknown> {
-  return JSON.parse(readFileSync(path, 'utf8'))
+// The raw config read back for assertions. A permissive shape keeps the
+// `.mcpServers[key].url` / sibling-key checks terse without per-access casts.
+type McpEntry = {
+  type?: string
+  url?: string
+  headers?: { Authorization?: string }
+  command?: string
+}
+type ReadConfig = { mcpServers: Record<string, McpEntry> } & Record<string, unknown>
+function read(): ReadConfig {
+  return JSON.parse(readFileSync(path, 'utf8')) as ReadConfig
 }
 
 function backupCount(): number {
@@ -71,7 +88,7 @@ describe('writeClaudeMcpEntry', () => {
     expect(cfg.theme).toBe('dark')
     expect(cfg.numStartups).toBe(7)
     expect(cfg.mcpServers.other).toEqual({ type: 'stdio', command: 'x' })
-    expect(cfg.mcpServers[MCP_SERVER_KEY].url).toBe(mcpServerUrl(API))
+    expect(cfg.mcpServers[MCP_SERVER_KEY]?.url).toBe(mcpServerUrl(API))
   })
 
   it('backs up the prior config before a changing write', () => {
@@ -100,7 +117,7 @@ describe('writeClaudeMcpEntry', () => {
     writeClaudeMcpEntry(API, 'old-key', path)
     const r = writeClaudeMcpEntry(API, 'new-key', path)
     expect(r.changed).toBe(true)
-    expect(read().mcpServers[MCP_SERVER_KEY].headers.Authorization).toBe('Bearer new-key')
+    expect(read().mcpServers[MCP_SERVER_KEY]?.headers?.Authorization).toBe('Bearer new-key')
   })
 })
 

@@ -70,8 +70,20 @@ export const MCP_CONFIG_CONNECTORS: readonly McpConfigConnector[] = [
     tool: 'Claude Code',
     alwaysAvailable: true
   },
-  { id: 'codex', title: 'ChatGPT / Codex', brand: 'chatgpt', tool: 'Codex', alwaysAvailable: false },
-  { id: 'openclaw', title: 'OpenClaw', brand: 'openclaw', tool: 'OpenClaw', alwaysAvailable: false },
+  {
+    id: 'codex',
+    title: 'ChatGPT / Codex',
+    brand: 'chatgpt',
+    tool: 'Codex',
+    alwaysAvailable: false
+  },
+  {
+    id: 'openclaw',
+    title: 'OpenClaw',
+    brand: 'openclaw',
+    tool: 'OpenClaw',
+    alwaysAvailable: false
+  },
   { id: 'hermes', title: 'Hermes', brand: 'hermes', tool: 'Hermes', alwaysAvailable: false }
 ]
 
@@ -86,4 +98,40 @@ export interface McpConnectorStatus {
   kind: McpConnectorStatusKind
   /** Where the config lives / would be written (for the connected-state detail). */
   configPath?: string
+}
+
+/** The full export-connector snapshot the renderer renders from. */
+export interface McpExportsSnapshot {
+  /** True when this account already has a hosted MCP key minted + stored. */
+  hasKey: boolean
+  connectors: McpConnectorStatus[]
+}
+
+// --- Cloud (OAuth) connectors -----------------------------------------------
+// ChatGPT and Claude connect to Omi's hosted MCP via the provider's OWN OAuth
+// flow against public OAuth clients (no hosted key). Omi can't drive the
+// provider's form, so the assisted flow ("open & guide me") opens the connector
+// URL and shows an on-screen card of copy-rows the user pastes into it.
+
+export type McpCloudConnectorId = 'chatgpt' | 'claude'
+
+export interface McpCloudCopyRow {
+  label: string
+  value: string
+  /** A blank required field (e.g. client secret) — shown as "leave blank". */
+  blank?: boolean
+}
+
+export interface McpCloudConnectorInfo {
+  id: McpCloudConnectorId
+  title: string
+  /** The provider connector page the assisted flow opens. */
+  connectorUrl: string
+  /** The copy-rows shown on the guide card (Name, server URL, client id, …). */
+  rows: McpCloudCopyRow[]
+  /**
+   * Set when the backend OAuth client for this provider is NOT known to be
+   * registered — the UI shows a "needs backend setup" notice instead of a guide.
+   */
+  needsBackendRegistration?: boolean
 }

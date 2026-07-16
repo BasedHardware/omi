@@ -1,5 +1,6 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
+import type { McpConnectorId, McpExportsSnapshot } from './mcpExports'
 
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
@@ -1157,6 +1158,24 @@ export type OmiBridgeApi = {
   /** Fires when the BYOK key set or activation changed (any window). Returns an
    *  unsubscribe fn. Carries no key material — reload via byokGetAll. */
   onByokChanged: (cb: () => void) => () => void
+  // --- "Use omi memory anywhere" MCP export connectors ---
+  /** Current status of every export connector (detected / connected / requires),
+   *  plus whether this account has a hosted MCP key. `ownerUserId` is the caller's
+   *  Firebase uid (owner-uid guard on the key). */
+  mcpStatus: (ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Mint-or-reuse the hosted key and write the connector's MCP config. The
+   *  Firebase token + uid are relayed from the renderer; the key stays in main. */
+  mcpConnect: (
+    connectorId: McpConnectorId,
+    token: string,
+    ownerUserId: string
+  ) => Promise<McpExportsSnapshot>
+  /** Remove the connector's MCP config entry. */
+  mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Rotate the hosted key and rewrite any already-connected configs. */
+  mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
+  /** Fires when any connector's status changed. Returns an unsubscribe fn. */
+  onMcpChanged: (cb: () => void) => () => void
   // --- Encrypted-at-rest Firebase auth persistence ---
   /** Main-process encrypted store (safeStorage/DPAPI) backing a custom Firebase
    *  Persistence, so ID/refresh tokens never sit in plaintext localStorage. Keyed

@@ -67,7 +67,8 @@ function readConfig(path: string): ClaudeConfig {
   if (text.trim() === '') return {}
   try {
     const parsed = JSON.parse(text) as unknown
-    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) return parsed as ClaudeConfig
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed))
+      return parsed as ClaudeConfig
     throw new CorruptConfigError()
   } catch (e) {
     if (e instanceof CorruptConfigError) throw e
@@ -176,7 +177,11 @@ export function removeClaudeMcpEntry(path = claudeConfigPath()): boolean {
   backupConfig(path)
   const nextServers = { ...servers }
   delete nextServers[MCP_SERVER_KEY]
-  writeFileSync(path, `${JSON.stringify({ ...config, mcpServers: nextServers }, null, 2)}\n`, 'utf8')
+  writeFileSync(
+    path,
+    `${JSON.stringify({ ...config, mcpServers: nextServers }, null, 2)}\n`,
+    'utf8'
+  )
   return true
 }
 

@@ -83,6 +83,7 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { registerMainChatHandlers } from './ipc/mainChat'
 import { registerByokHandlers } from './ipc/byok'
+import { registerMcpExportsHandlers } from './ipc/mcpExports'
 import { registerAuthStoreHandlers } from './ipc/authStore'
 import { registerPiMonoHandlers } from './ipc/pimono'
 import { probeAgentStoreRuntimeAtStartup } from './agentKernel/startup'
@@ -819,6 +820,8 @@ app.whenReady().then(async () => {
   registerMainChatHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
+  // "Use omi memory anywhere" MCP export connectors (hosted key + config writers).
+  registerMcpExportsHandlers()
   // Firebase auth token store IPC (encrypted-at-rest ID/refresh tokens). Backs the
   // renderer's custom Firebase Persistence so the session never sits in plaintext
   // localStorage. Cheap handler registration; the store is constructed lazily.

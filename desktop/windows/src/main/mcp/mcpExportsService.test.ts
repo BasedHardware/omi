@@ -73,7 +73,12 @@ describe('McpExportsService.rotateKey', () => {
     const fetchImpl = vi.fn(async (url: string, init: { method: string }) => {
       calls.push({ method: init.method, url })
       if (init.method === 'POST') return mintResponse('new', 'newsecret')
-      return { ok: true, status: 204, json: async () => ({}), text: async () => '' } as unknown as Response
+      return {
+        ok: true,
+        status: 204,
+        json: async () => ({}),
+        text: async () => ''
+      } as unknown as Response
     })
     const svc = new McpExportsService(store, fetchImpl as unknown as typeof fetch)
 
@@ -87,12 +92,15 @@ describe('McpExportsService.rotateKey', () => {
   it('keeps the existing key when the mint fails (mint-first safety)', async () => {
     const store = fakeStore()
     store.write('uid-A', { id: 'old', name: 'Omi Desktop', key: 'oldsecret' })
-    const fetchImpl = vi.fn(async () => ({
-      ok: false,
-      status: 500,
-      json: async () => ({}),
-      text: async () => 'boom'
-    }) as unknown as Response)
+    const fetchImpl = vi.fn(
+      async () =>
+        ({
+          ok: false,
+          status: 500,
+          json: async () => ({}),
+          text: async () => 'boom'
+        }) as unknown as Response
+    )
     const svc = new McpExportsService(store, fetchImpl as unknown as typeof fetch)
 
     await expect(svc.rotateKey('uid-A', TOKEN, API)).rejects.toThrow('500')

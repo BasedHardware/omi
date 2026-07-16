@@ -15,8 +15,11 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 describe('mintMcpKey', () => {
   it('POSTs {name} to /v1/mcp/keys with a bearer token and returns the raw key', async () => {
-    const fetchImpl = vi.fn(async () =>
-      jsonResponse({ id: 'k1', name: 'Omi Desktop', key: 'mcp_secret' })
+    const fetchImpl = vi.fn(
+      async (
+        _url: string,
+        _init: { method: string; headers: Record<string, string>; body: string }
+      ) => jsonResponse({ id: 'k1', name: 'Omi Desktop', key: 'mcp_secret' })
     )
     const r = await mintMcpKey(API, TOKEN, 'Omi Desktop', fetchImpl as unknown as typeof fetch)
     expect(r).toEqual({ id: 'k1', name: 'Omi Desktop', key: 'mcp_secret' })
@@ -45,10 +48,16 @@ describe('mintMcpKey', () => {
 describe('listMcpKeys', () => {
   it('parses a bare array', async () => {
     const fetchImpl = vi.fn(async () =>
-      jsonResponse([{ id: 'a', name: 'one' }, { id: 'b', name: 'two' }])
+      jsonResponse([
+        { id: 'a', name: 'one' },
+        { id: 'b', name: 'two' }
+      ])
     )
     const r = await listMcpKeys(API, TOKEN, fetchImpl as unknown as typeof fetch)
-    expect(r).toEqual([{ id: 'a', name: 'one' }, { id: 'b', name: 'two' }])
+    expect(r).toEqual([
+      { id: 'a', name: 'one' },
+      { id: 'b', name: 'two' }
+    ])
   })
 
   it('parses a {keys:[…]} envelope and skips rows without ids', async () => {
@@ -62,7 +71,9 @@ describe('listMcpKeys', () => {
 
 describe('deleteMcpKey', () => {
   it('DELETEs /v1/mcp/keys/{id}', async () => {
-    const fetchImpl = vi.fn(async () => jsonResponse({}, 204))
+    const fetchImpl = vi.fn(async (_url: string, _init: { method: string }) =>
+      jsonResponse({}, 204)
+    )
     await deleteMcpKey(API, TOKEN, 'k1', fetchImpl as unknown as typeof fetch)
     const [url, init] = fetchImpl.mock.calls[0]
     expect(url).toBe('https://api.omi.me/v1/mcp/keys/k1')
