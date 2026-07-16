@@ -509,8 +509,8 @@ class TestRouterWiring(unittest.TestCase):
 
     def test_chat_router_has_rate_limits(self):
         matches = self._grep_file("routers/chat.py", r"with_rate_limit.*(?:chat:|voice:|file:)")
-        # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2) = 7
-        self.assertEqual(len(matches), 7, f"chat.py expected 7 rate limits, got {len(matches)}")
+        # send_message, initial(x2), voice_message, voice_transcribe, file_upload(v1+v2), reply_draft = 8
+        self.assertEqual(len(matches), 8, f"chat.py expected 8 rate limits, got {len(matches)}")
 
     def test_legacy_file_upload_rate_limited(self):
         """Legacy v1/files must also be rate limited to prevent bypass."""

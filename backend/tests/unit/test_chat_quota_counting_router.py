@@ -195,6 +195,11 @@ def _make_chat_client():
 
     usage_tracker.Features = Features
 
+    # chat.py imports create_reply_draft at module load; stub it so exec_module does not pull in the
+    # real reply_draft -> clients -> providers -> usage_tracker chain (which this test only partially mocks).
+    reply_draft = _install_module('utils.llm.reply_draft', ModuleType('utils.llm.reply_draft'))
+    reply_draft.create_reply_draft = MagicMock()
+
     graph = _install_module('utils.retrieval.graph', ModuleType('utils.retrieval.graph'))
 
     async def fake_execute_chat_stream(*args, **kwargs):

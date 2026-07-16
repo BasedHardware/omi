@@ -565,6 +565,7 @@ struct DesktopHomeView: View {
 
     var visibleRawValues: Set<Int> = [
       SidebarNavItem.dashboard.rawValue, SidebarNavItem.rewind.rawValue,
+      SidebarNavItem.aiClone.rawValue,
     ]
     if currentTierLevel >= 2 { visibleRawValues.insert(SidebarNavItem.memories.rawValue) }
     if currentTierLevel >= 3 { visibleRawValues.insert(SidebarNavItem.tasks.rawValue) }
@@ -1192,6 +1193,8 @@ private struct PageContentView: View {
         )
       case 10:
         PermissionsPage(appState: appState)
+      case 11:
+        AICloneScreen()
       case 12:
         HelpPage()
       default:

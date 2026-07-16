@@ -1,0 +1,54 @@
+version: 2
+name: ai-clone
+tier: manual
+description: AI Clone screen — open the review inbox from the sidebar, switch to Test mode, and run the clone benchmark
+app: non-prod
+covers:
+  - desktop/macos/Desktop/Sources/MainWindow/SidebarView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/DesktopHomeView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/AICloneScreen.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/CloneTestView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/CloneTestModels.swift
+preconditions:
+  - auth_ready
+
+steps:
+  - id: S1
+    name: Navigate to AI Clone from the sidebar
+    do: "Click the AI Clone sidebar item (identifier: sidebar_ai_clone) to open the AI Clone screen. Verify the header shows 'AI Clone' with the subtitle about reviewing replies drafted for WhatsApp, Telegram and iMessage, and that the Inbox / Test mode picker is visible."
+    expect:
+      interactive_count: { min: 3 }
+      text_visible:
+        - AI Clone
+
+  - id: S2
+    name: Review inbox loads
+    do: "Stay on the Inbox mode. Verify the review inbox renders its list of drafted replies (empty-state text when there are none), with per-item Send and Discard controls when items exist."
+    expect:
+      interactive_count: { min: 1 }
+
+  - id: S3
+    name: Switch to Test mode
+    do: "Select 'Test' in the mode picker to show the CloneTestView. Verify the 'Test your clone' area appears with the personal-question field and the benchmark sample editor."
+    expect:
+      interactive_count: { min: 3 }
+
+  - id: S4
+    name: Run the clone benchmark
+    do: "Add at least one benchmark sample (an incoming message plus the reply you actually sent), then trigger the benchmark run. Verify a loading state appears and then either a benchmark result or a friendly error message is shown (no raw error)."
+    expect:
+      interactive_count: { min: 2 }
+
+  - id: S5
+    name: Return to Dashboard
+    do: "Click the Dashboard sidebar icon (identifier: sidebar_dashboard) to leave the AI Clone screen. Verify the Dashboard page is shown again."
+    expect:
+      interactive_count: { min: 5 }
+      text_visible:
+        - Dashboard
+
+  - id: S6
+    name: Logs clean
+    log.expect:
+      absent:
+        - "DesktopAutomationBridge: failed"

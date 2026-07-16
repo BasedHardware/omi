@@ -54,6 +54,7 @@ model_config_features:
       - conv_app_select
       - external_structure
       - proactive_notification
+      - reply_draft
       - trends
       - what_matters_now
     streaming:

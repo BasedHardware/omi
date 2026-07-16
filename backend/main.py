@@ -19,6 +19,7 @@ prepare_google_credentials()
 
 from routers import (
     chat,
+    clone,
     firmware,
     transcribe,
     omni_relay,
@@ -123,6 +124,7 @@ app.include_router(integrations.router)
 app.include_router(x_connector.router)
 app.include_router(memories.router)
 app.include_router(chat.router)
+app.include_router(clone.router)
 app.include_router(speech_profile.router)
 # app.include_router(screenpipe.router)
 app.include_router(notifications.router)
