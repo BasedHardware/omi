@@ -15,10 +15,10 @@ struct OnboardingTrustStepView: View {
       graphViewModel: graphViewModel,
       stepIndex: stepIndex,
       totalSteps: totalSteps,
-      eyebrow: "Before we continue",
+      eyebrow: "Before I continue",
       title: "I’m going to ask for a few permissions.",
       description:
-        "Omi is open source and private by design. During setup, we’ll ask for these permissions to understand your work and help in the right places:",
+        "Omi is open source and private by design. During setup, I’ll ask for these permissions to understand your work and help in the right places:",
       layoutMode: .centered,
       onForceComplete: onForceComplete
     ) {
