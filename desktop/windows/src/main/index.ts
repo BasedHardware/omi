@@ -107,6 +107,7 @@ import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
+import { startTaskPromotionService } from './assistants/tasks/promotionService'
 import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
@@ -1107,6 +1108,12 @@ app.whenReady().then(async () => {
     // PR-A primitives were shipped but never wired until now.
     registerTaskAssistant()
     bringUpTaskEmbeddingIndex()
+    // Start the promotion safety net (startup promote + 60s bypass-debounce timer),
+    // the Windows port of Mac's TaskPromotionService.start(). This drains staged
+    // tasks the inline post-extraction promote leaves behind (a frame stages N tasks
+    // but the 30s debounce only promotes task 1) and promotes app-closed backlog on
+    // sign-in. Unconditional (not taskEnabled-gated), matching Mac.
+    startTaskPromotionService()
     // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
     // peer — it's a time-triggered job (no screen frames). Registers the manual
     // Suggest IPC and starts the periodic scheduler; both no-op until a session is

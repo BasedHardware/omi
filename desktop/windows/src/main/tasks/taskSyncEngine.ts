@@ -57,6 +57,10 @@ import type {
   TaskDashboardSlices,
   TaskUpdateFields
 } from '../../shared/types'
+// Event-driven promotion (Mac's TasksStore complete/delete triggers). Import is
+// cycle-safe: create.ts imports only ipc/db, taskEmbeddingService, core/session,
+// electron, and shared types — none of which import this engine.
+import { promoteIfNeeded } from '../assistants/tasks/create'
 
 // --- Tunables ---------------------------------------------------------------
 const REQUEST_TIMEOUT_MS = 15_000
@@ -515,6 +519,15 @@ export function toggleTask(backendId: string, completed: boolean): void {
   updateCompletionStatus(backendId, completed, Date.now())
   broadcastTasksChanged()
   void pushToggle(backendId, completed, getSessionEpoch())
+  // Event-driven promote (Mac TasksStore.swift:1225): completing a task vacates a
+  // slot, so pull the top staged task up. ONLY on complete (not un-complete), like
+  // Mac. Deviation: UNGATED — Mac gates on `source contains "screenshot"`, but the
+  // Windows call site has only `backendId` (`source` isn't hydrated from the backend
+  // LIST), and the gate only skips one debounced POST that returns {promoted:false}
+  // when nothing is staged. Fire-and-forget (`void`): cannot slow or fail the
+  // toggle, cannot regress the revert-on-failure path (promoteIfNeeded is internally
+  // error-guarded and never rejects).
+  if (completed) void promoteIfNeeded()
 }
 
 async function pushToggle(backendId: string, completed: boolean, epoch: number): Promise<void> {
@@ -587,6 +600,9 @@ export function deleteTask(backendId: string): void {
   emitDeletions(deletedIds)
   broadcastTasksChanged()
   void pushDelete(backendId, getSessionEpoch())
+  // Event-driven promote (Mac TasksStore.swift:1410): a delete frees a slot — pull
+  // the top staged task up. Ungated + fire-and-forget, same rationale as toggleTask.
+  void promoteIfNeeded()
 }
 
 async function pushDelete(backendId: string, epoch: number): Promise<void> {
