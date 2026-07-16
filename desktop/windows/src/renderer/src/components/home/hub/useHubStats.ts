@@ -61,7 +61,10 @@ export function useHubStats(): HubStatCounts {
       live = false
       unsub?.()
     }
-  }, [])
+    // Keyed on uid so the count re-reads under the new account after a switch (and
+    // the old in-flight read is discarded via `live`). Paired with the render-time
+    // reset below, which zeroes the cell synchronously in the meantime.
+  }, [uid])
 
   // Screenshots: a real COUNT(*) over the rewind frames table. NOT useRewind() —
   // that loads full frame rows for a 24h window and re-polls every second, so its
@@ -78,13 +81,32 @@ export function useHubStats(): HubStatCounts {
     return () => {
       live = false
     }
-  }, [])
+    // Keyed on uid for the same reason as the tasks read above.
+  }, [uid])
 
   // Conversations: OBSERVE the Conversations page's cache instead of firing a second
   // identical request. That page is a kept-alive panel, so it hydrates and fills the
   // cache shortly after launch.
   const [rows, setRows] = useState<ConversationRow[] | null>(() => conversationsCache.rows)
   useEffect(() => subscribeConversationsCache(setRows), [])
+
+  // SELF-SAFETY against an in-place account switch (A→B without this hook
+  // remounting). `tasks`/`screenshots` hold live state fed by a fetch effect, so on
+  // a uid change they would otherwise keep A's numbers until B's fetch lands — and
+  // in that window B could DISPLAY them and the persist effect could STAMP them
+  // under B (the cross-account-leak class). Reset those cells the instant the
+  // account changes, during render (React's reset-state-on-change pattern), so the
+  // reset lands BEFORE paint and before the persist effect runs — no frame of A's
+  // numbers, nothing of A's stamped under B. The effects above then re-fetch under
+  // B. (`memories`/`conversations` re-scope through their own caches.) Today every
+  // switch also unmounts the shell, so this is belt-and-suspenders — it keeps the
+  // hook correct even if a future refactor keeps it mounted across the swap.
+  const [liveUid, setLiveUid] = useState(uid)
+  if (uid !== liveUid) {
+    setLiveUid(uid)
+    setTasks(null)
+    setScreenshots(null)
+  }
 
   const cloudRows = rows?.filter((r) => r.source === 'cloud').length ?? 0
 
@@ -104,6 +126,8 @@ export function useHubStats(): HubStatCounts {
   }
 
   // Persist each known cell so the NEXT cold launch starts from these (per-uid).
+  // Only current-uid values reach here: the reset above nulls A's live cells the
+  // moment the account changes, so persistHubStats never stamps A's counts under B.
   useEffect(() => {
     persistHubStats(uid, live)
     // Depend on the primitive count fields, not the `live` object (rebuilt every
