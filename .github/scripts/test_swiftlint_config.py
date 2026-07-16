@@ -113,10 +113,12 @@ class SwiftLintConfigTests(unittest.TestCase):
     # Plugin must be on Swift targets
     for target in ["OmiSupport", "OmiTheme", "OmiWAL"]:
       self.assertIn(f'name: "{target}"', content)
-    # Count plugin attachments: existing first-party targets plus VoiceTurnDomain
-    # and its dedicated test target.
+    # Count plugin attachments: strict extracted packages and focused test
+    # bundles should be linted by SwiftPM builds. The legacy app/test targets
+    # remain enforced by the explicit CI SwiftLint lane so ordinary builds and
+    # semantic sentinel compilations are not blocked by baseline debt.
     count = content.count("SwiftLintBuildToolPlugin")
-    self.assertEqual(count, 10, f"expected 10 plugin attachments, got {count}")
+    self.assertEqual(count, 6, f"expected 6 plugin attachments, got {count}")
 
   def test_package_swift_excludes_objc_and_cwebp(self):
     content = PACKAGE_PATH.read_text(encoding="utf-8")
