@@ -345,6 +345,43 @@ describe('useChat — blank-reply guard', () => {
   })
 })
 
+// PR-C error taxonomy: a non-OK HTTP response makes the legacy_sse path throw
+// `HTTP <status>`; the catch must render friendly, plain-English copy instead of
+// an `Error: HTTP <status>` bubble. No stream opens on an error response, so we
+// just await the send.
+describe('useChat — legacy_sse error taxonomy (friendly copy, never raw)', () => {
+  const respondWithStatus = (status: number): void => {
+    global.fetch = vi.fn(
+      async () => ({ ok: false, status }) as unknown as Response
+    ) as unknown as typeof fetch
+  }
+
+  it('shows the friendly 5xx copy for an HTTP 500 — never `Error: HTTP 500`', async () => {
+    respondWithStatus(500)
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('hello')
+      await flush()
+    })
+    const content = lastAssistant(result.current.history)?.content
+    expect(content).toBe('Omi couldn’t answer right now. Try again.')
+    expect(content).not.toContain('HTTP 500')
+    expect(content).not.toMatch(/^Error:/)
+  })
+
+  it('shows the sign-in copy for an HTTP 401 — never `Error: HTTP 401`', async () => {
+    respondWithStatus(401)
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      await result.current.send('hello')
+      await flush()
+    })
+    const content = lastAssistant(result.current.history)?.content
+    expect(content).toBe('Please sign in to continue.')
+    expect(content).not.toMatch(/^Error:/)
+  })
+})
+
 describe('useChat — C5 abort on reset', () => {
   it('aborts the fetch and never persists/renders a dismissed reply; a new send is unaffected', async () => {
     const { result } = renderHook(() => useChat())

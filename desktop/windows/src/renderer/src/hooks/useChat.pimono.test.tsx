@@ -159,7 +159,7 @@ describe('useChat — pi_mono engine', () => {
     expect('sessionId' in aiReq).toBe(false)
   })
 
-  it('surfaces the error on a failed turn and does NOT write an error line to the shared thread', async () => {
+  it('surfaces FRIENDLY copy on a failed turn (never the raw error) and does NOT write an error line to the shared thread', async () => {
     const result = await mountPiMono()
     await act(async () => {
       const p = result.current.send('boom')
@@ -183,7 +183,12 @@ describe('useChat — pi_mono engine', () => {
       })
       await p
     })
-    expect(lastAssistant(result.current.history)?.content).toBe('Error: the model exploded')
+    // PR-C: the raw kernel error ("the model exploded") is mapped to the friendly
+    // generic copy — never `Error: <raw>` in the bubble.
+    expect(lastAssistant(result.current.history)?.content).toBe(
+      'Omi couldn’t answer right now. Try again.'
+    )
+    expect(lastAssistant(result.current.history)?.content).not.toContain('the model exploded')
     // Only the human turn is persisted to the shared thread — never the error line.
     expect(saveSpy).toHaveBeenCalledTimes(1)
     expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
@@ -404,9 +409,13 @@ describe('useChat — first-chat not ready (retry once)', () => {
         await vi.advanceTimersByTimeAsync(2000) // ample time for any (wrong) retry to fire
         await p
       })
-      // Exactly one send, raw error surfaced verbatim, no retry.
+      // Exactly one send (generic ≠ not-ready → no retry); the raw error is mapped
+      // to the friendly generic copy, never surfaced verbatim.
       expect(sendMock).toHaveBeenCalledTimes(1)
-      expect(lastAssistant(result.current.history)?.content).toBe('Error: the model exploded')
+      expect(lastAssistant(result.current.history)?.content).toBe(
+        'Omi couldn’t answer right now. Try again.'
+      )
+      expect(lastAssistant(result.current.history)?.content).not.toContain('the model exploded')
       expect(saveSpy).toHaveBeenCalledTimes(1)
       expect(saveSpy.mock.calls[0][0]).toMatchObject({ sender: 'human' })
     } finally {
