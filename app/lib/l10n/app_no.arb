@@ -3233,5 +3233,6 @@
     "appDisabledOn": "Deaktivert {date}.",
     "appDisabledLastError": "Siste feil: {error}.",
     "prerecordedTranscript": "Forhåndsinnspilt",
-    "pendantRecordingSyncBlocked": "Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt."
+    "pendantRecordingSyncBlocked": "Pendant tar fortsatt opp, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt.",
+    "pendantFullSyncBlocked": "Lagringen på Pendant er full, og den er fortsatt i opptaksmodus, så den lagrede lyden kan ikke overføres. Trykk på knappen på Pendant for å stoppe opptaket, og synkroniser på nytt."
 }

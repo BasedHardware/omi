@@ -632,6 +632,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
         // nothing synced.
         DebugLogManager.logWarning('SyncProvider: $context stalled — pendant appears to be recording');
         _updateSyncState(_syncState.toError(message: _pendantRecordingMessage()));
+      } else if (checkFlashStall && _walService.getSyncs().flashStallReason == FlashSyncStallReason.deviceFull) {
+        // The pendant's flash is full: it halts recording (red LED flash) but
+        // stays armed in recording mode and serves no pages in that state, so
+        // the drain starves with the newest-page pointer frozen. Stopping
+        // recording via the hardware button is what unfreezes the firmware.
+        DebugLogManager.logWarning('SyncProvider: $context stalled — pendant storage is full');
+        _updateSyncState(_syncState.toError(message: _pendantFullMessage()));
       } else if ((result?.localUploadFailures ?? 0) == 0) {
         DebugLogManager.logInfo('SyncProvider: $context completed with no new conversations');
         _updateSyncState(_syncState.toCompleted(conversations: []));
@@ -697,6 +704,13 @@ class SyncProvider extends ChangeNotifier implements IWalServiceListener, IWalSy
     return l10n?.pendantRecordingSyncBlocked ??
         'Your Pendant is still recording, so its stored audio can\'t be transferred. '
             'Press the Pendant\'s button to stop recording, then sync again.';
+  }
+
+  String _pendantFullMessage() {
+    final l10n = globalNavigatorKey.currentContext?.l10n;
+    return l10n?.pendantFullSyncBlocked ??
+        'Your Pendant\'s storage is full and it\'s still in recording mode, so its stored audio '
+            'can\'t be transferred. Press the Pendant\'s button to stop recording, then sync again.';
   }
 
   String _formatSyncError(dynamic error, Wal? wal) {

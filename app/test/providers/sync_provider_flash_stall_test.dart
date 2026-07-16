@@ -73,6 +73,21 @@ void main() {
     provider.dispose();
   });
 
+  test('flash drain stalled by a full pendant surfaces an error, not silent success', () async {
+    final walService = _FakeWalService();
+    walService.syncs.flashStallReason = FlashSyncStallReason.deviceFull;
+
+    final provider = SyncProvider(walService: walService, uploadGate: _hermeticGate(), startBackgroundSync: false);
+    await provider.initialized;
+
+    await provider.syncWals();
+
+    expect(provider.syncState.hasError, isTrue, reason: 'stall on a full pendant must not report success');
+    expect(provider.syncError, isNotNull);
+    expect(provider.syncError!.toLowerCase(), contains('full'));
+    provider.dispose();
+  });
+
   test('flash sync with no stall and no new conversations still completes normally', () async {
     final walService = _FakeWalService();
     walService.syncs.flashStallReason = FlashSyncStallReason.none;

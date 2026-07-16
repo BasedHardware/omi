@@ -56,14 +56,27 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
 
   /// Classifies a drain stall. [statusAfterStall] is the device status read
   /// after the stall fired; [endPageAtEnumeration] is the newest flash page
-  /// the device reported when the pass was enumerated. If the device minted
-  /// pages beyond that while serving none to the drain, it is recording — the
-  /// protocol cannot drain flash during an open recording session.
+  /// the device reported when the pass was enumerated.
+  ///
+  /// `deviceFull`: zero free capture pages. A full pendant halts recording
+  /// (red LED flash) but stays armed in recording mode, and in that state the
+  /// firmware serves no flash pages — the drain starves until the user presses
+  /// the button to leave recording mode. A full pendant cannot mint new pages,
+  /// so this case never shows up as newest-page movement; it must be detected
+  /// from the free-page counter.
+  ///
+  /// `recordingSuspected`: the device minted pages beyond the enumerated end
+  /// while serving none to the drain — an open recording session is starving
+  /// the drain.
   @visibleForTesting
   static FlashSyncStallReason classifyStall({
     required int endPageAtEnumeration,
     required Map<String, int>? statusAfterStall,
   }) {
+    final freeAfter = statusAfterStall?['free_capture_pages'];
+    if (freeAfter != null && freeAfter <= 0) {
+      return FlashSyncStallReason.deviceFull;
+    }
     final newestAfter = statusAfterStall?['newest_flash_page'];
     if (newestAfter != null && newestAfter > endPageAtEnumeration) {
       return FlashSyncStallReason.recordingSuspected;

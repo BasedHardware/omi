@@ -3238,5 +3238,6 @@
     "appDisabledOn": "Đã vô hiệu hoá vào {date}.",
     "appDisabledLastError": "Lỗi gần nhất: {error}.",
     "prerecordedTranscript": "Đã ghi sẵn",
-    "pendantRecordingSyncBlocked": "Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại."
+    "pendantRecordingSyncBlocked": "Pendant vẫn đang ghi âm nên không thể chuyển âm thanh đã lưu. Nhấn nút trên Pendant để dừng ghi âm, sau đó đồng bộ lại.",
+    "pendantFullSyncBlocked": "Bộ nhớ của Pendant đã đầy và nó vẫn đang ở chế độ ghi âm, nên không thể chuyển âm thanh đã lưu. Nhấn nút của Pendant để dừng ghi âm, sau đó đồng bộ lại."
 }

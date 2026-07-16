@@ -118,10 +118,12 @@ abstract class RingStorageSync implements IWalSync {
 }
 
 /// Why the most recent flash-page drain pass stopped before reaching the
-/// newest page enumerated from the device. The Limitless protocol has no mode
-/// that drains flash while a recording session is being written, so a stall
-/// with the newest-page pointer still advancing means the pendant is recording.
-enum FlashSyncStallReason { none, recordingSuspected, unknown }
+/// newest page enumerated from the device. A stall with the newest-page
+/// pointer still advancing means the pendant is recording (an open recording
+/// session starves the drain). A stall with zero free capture pages means the
+/// pendant is full: it halts recording but stays armed in recording mode, and
+/// serves no flash pages until the user presses the button to stop recording.
+enum FlashSyncStallReason { none, recordingSuspected, deviceFull, unknown }
 
 abstract class FlashPageWalSync implements IWalSync {
   void setDevice(BtDevice? device);

@@ -3233,5 +3233,6 @@
     "appDisabledOn": "Disattivata il {date}.",
     "appDisabledLastError": "Ultimo errore: {error}.",
     "prerecordedTranscript": "Preregistrato",
-    "pendantRecordingSyncBlocked": "Il Pendant sta ancora registrando, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo."
+    "pendantRecordingSyncBlocked": "Il Pendant sta ancora registrando, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo.",
+    "pendantFullSyncBlocked": "La memoria del Pendant è piena ed è ancora in modalità registrazione, quindi l'audio memorizzato non può essere trasferito. Premi il pulsante del Pendant per interrompere la registrazione, poi sincronizza di nuovo."
 }
