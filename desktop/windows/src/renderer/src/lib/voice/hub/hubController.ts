@@ -43,7 +43,7 @@ import {
 } from '../autoModelSelector'
 import { getAboutUserCard, refreshAboutUserCard } from '../aboutUser'
 import { buildVoiceSystemInstruction } from '../systemInstruction'
-import { mintRealtimeToken } from '../tokenMint'
+import { mintRealtimeToken, MintError } from '../tokenMint'
 import type { VoiceProvider } from '../sessionMachine'
 import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
 import { GeminiHubSession } from './geminiHubSession'
@@ -152,6 +152,18 @@ export class HubController {
   private reconnectPending = false
   private reconnectHandle: unknown = null
 
+  // A7c cross-provider failover (item D — ported from macOS RealtimeHubController) ---
+  /** Failover chain: when the effective (primary) provider's ephemeral-token mint
+   *  fails in a provider-scoped way (unconfigured / quota / auth / outage), warm the
+   *  OTHER realtime provider once before giving up to the batch cascade. `null` = on
+   *  the primary; non-null = the provider we failed over TO (Mac `fallbackProvider`).
+   *  Reset back to the primary only on a proven-good signal — a socket that survives
+   *  past the idle window (Mac :3585), NOT on every connect or completed turn. */
+  private fallbackProvider: VoiceProvider | null = null
+  /** Reason recorded on the failover switch; cleared once the alternate connects
+   *  (recovered) so the recovered event fires exactly once (Mac `pendingFailoverReason`). */
+  private pendingFailoverReason: string | null = null
+
   // Per-turn state (all reset by voiceTurnDidTerminate) ------------------------
   private activeTurnID: VoiceTurnID | null = null
   /** Non-null ⇒ we are in the reducer's warm-wait and withholding PCM from the
@@ -207,7 +219,7 @@ export class HubController {
    *  the same provider, and coalesces with an in-flight warm. */
   ensureWarm(): Promise<VoiceSessionID> {
     if (this.warming) return this.warming
-    const provider = this.resolveProvider()
+    const provider = this.effectiveProvider()
     if (
       this.session &&
       this.sessionProvider === provider &&
@@ -218,6 +230,12 @@ export class HubController {
     }
     this.warming = this.createAndWarm(provider)
     return this.warming
+  }
+
+  /** The realtime provider to actually warm: the failover pick if we've switched to
+   *  it, otherwise the user/Auto-resolved one (Mac `effectiveProvider`). */
+  private effectiveProvider(): VoiceProvider {
+    return this.fallbackProvider ?? this.resolveProvider()
   }
 
   private async createAndWarm(provider: VoiceProvider): Promise<VoiceSessionID> {
@@ -236,16 +254,31 @@ export class HubController {
         stale.teardown()
       }
 
-      const token = await this.mintToken(provider)
+      // Mint for the effective provider; on a provider-scoped mint failure, fail over
+      // to the OTHER provider once before giving up (Mac mintAndConnect :1176-1234).
+      // The loop runs at most twice: `failoverOnMintFailure` returns a provider only on
+      // the null→alternate transition, so the once-per-chain guard bounds it.
+      let activeProvider = provider
+      let token: string
+      for (;;) {
+        try {
+          token = await this.mintToken(activeProvider)
+          break
+        } catch (e) {
+          const alternate = this.failoverOnMintFailure(e, activeProvider)
+          if (alternate === null) throw e // not provider-scoped, or already failed over
+          activeProvider = alternate
+        }
+      }
       const instructions = this.buildInstructions()
       const session = this.createSession({
-        provider,
+        provider: activeProvider,
         token,
         instructions,
         events: this.sessionEvents()
       })
       this.session = session
-      this.sessionProvider = provider
+      this.sessionProvider = activeProvider
 
       // A turn that began before the session existed (cold press, no summon) now
       // gets its provider begin frames.
@@ -263,6 +296,41 @@ export class HubController {
     } finally {
       this.warming = null
     }
+  }
+
+  /** Decide the failover response to a mint failure (Mac `failoverToAlternateProvider`
+   *  gated by the mint-failure classification). Returns the alternate provider to warm
+   *  next, or `null` to give up (the error surfaces → the host drops this turn to the
+   *  batch cascade, exactly as today). Once-per-chain: emits `degraded` on the switch
+   *  to the alternate, and `exhausted` when the alternate ALSO fails (both down). */
+  private failoverOnMintFailure(e: unknown, from: VoiceProvider): VoiceProvider | null {
+    const failure = e instanceof MintError ? e.failure : null
+    // Only a provider-scoped failure (unconfigured / quota / auth / outage) is worth the
+    // other lane; a session-wide failure (401/402/403) surfaces unchanged.
+    if (!failure?.tryOtherProvider) return null
+    const alternate: VoiceProvider = from === 'openai' ? 'gemini' : 'openai'
+    if (this.fallbackProvider !== null) {
+      // Already failed over once this chain → the alternate is down too. Give up to the
+      // cascade (Mac's guard-fail branch). One shared fallback event, closed enums.
+      trackEvent('fallback_triggered', {
+        component: 'realtime_hub',
+        from: this.fallbackProvider,
+        to: 'none',
+        reason: 'provider_unavailable',
+        outcome: 'exhausted'
+      })
+      return null
+    }
+    this.fallbackProvider = alternate
+    this.pendingFailoverReason = 'provider_unavailable'
+    trackEvent('fallback_triggered', {
+      component: 'realtime_hub',
+      from,
+      to: alternate,
+      reason: 'provider_unavailable',
+      outcome: 'degraded'
+    })
+    return alternate
   }
 
   isWarm(): boolean {
@@ -425,6 +493,24 @@ export class HubController {
     // completed turn, or a socket that survives past the idle window). A socket that
     // connects then dies fast repeatedly must still exhaust its budget and stop.
     this.cancelReconnect()
+    // A7c failover recovered: the alternate provider connected → the failover restored
+    // full realtime UX. Fire the shared `recovered` event exactly once (clear the reason,
+    // Mac :2553-2564). `fallbackProvider` itself stays set until a proven-good idle-close
+    // (Mac :3585), so we don't flap back to a still-broken primary after every connect.
+    if (
+      this.fallbackProvider !== null &&
+      this.pendingFailoverReason !== null &&
+      this.sessionProvider === this.fallbackProvider
+    ) {
+      trackEvent('fallback_triggered', {
+        component: 'realtime_hub',
+        from: this.resolveProvider(),
+        to: this.fallbackProvider,
+        reason: this.pendingFailoverReason,
+        outcome: 'recovered'
+      })
+      this.pendingFailoverReason = null
+    }
     // Flush any PCM withheld during warm-wait into the now-ready session, in order,
     // then replay a deferred commit. The hub won the race.
     if (this.warmBuffer !== null && this.session) {
@@ -474,7 +560,16 @@ export class HubController {
    *  is the belt-and-suspenders path for a true 1008 idle close; it is rarely hit in
    *  practice. Both routes keep the idle user warm. */
   private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
-    if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) this.reconnectStrikes = 0
+    if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) {
+      this.reconnectStrikes = 0
+      // A socket that survived past the idle window proved the endpoint works — return
+      // to the Auto/primary provider on the next warm and clear any pending failover
+      // (Mac RealtimeHubController :3583-3586). Only this proven-good signal resets the
+      // failover; a completed turn or a bare connect does NOT (we stay on the working
+      // alternate rather than flap back to a still-broken primary every turn).
+      this.fallbackProvider = null
+      this.pendingFailoverReason = null
+    }
     if (consumesStrike(category)) {
       if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) {
         // Budget spent: the re-warm circuit is now OPEN and we stop rebuilding a dead

@@ -16,8 +16,17 @@ vi.mock('../pcmPlayer', () => ({
 vi.mock('../../analytics', () => ({ trackEvent: vi.fn() }))
 
 import { trackEvent } from '../../analytics'
+import { MintError } from '../tokenMint'
 import { HubController, type HubControllerEvents } from './hubController'
 import { HUB_IDLE_TEARDOWN_THRESHOLD_MS } from './hubClose'
+
+/** A provider-scoped mint failure (unconfigured / quota / auth / outage) — the class
+ *  that warrants trying the OTHER realtime provider. */
+const providerDownMint = (message = 'provider down'): MintError =>
+  new MintError({ message, retryable: true, tryOtherProvider: true })
+/** A session-wide mint failure (401/402/403) — must NOT trigger cross-provider failover. */
+const sessionWideMint = (message = 'sign in'): MintError =>
+  new MintError({ message, retryable: false, tryOtherProvider: false })
 
 // A fake provider session: records every frame-level call and lets the test drive
 // the connect / error edges deterministically. Buffering is the controller's job,
@@ -112,7 +121,11 @@ type Harness = {
   fireReconnect: () => void
 }
 
-function harness(opts?: { provider?: VoiceProvider; instructions?: string }): Harness {
+function harness(opts?: {
+  provider?: VoiceProvider
+  instructions?: string
+  mintToken?: (provider: VoiceProvider) => Promise<string>
+}): Harness {
   const events = {
     onConnected: vi.fn(),
     onError: vi.fn(),
@@ -125,7 +138,7 @@ function harness(opts?: { provider?: VoiceProvider; instructions?: string }): Ha
     onCascadeHandoff: vi.fn()
   }
   let session: FakeSession | undefined
-  const mintToken = vi.fn(async (_p: VoiceProvider) => 'ek_token')
+  const mintToken = vi.fn(opts?.mintToken ?? (async (_p: VoiceProvider) => 'ek_token'))
   const createSession = vi.fn((spec: { provider: VoiceProvider; events: HubSessionEvents }) => {
     session = new FakeSession(SID, spec.events)
     return session
@@ -599,5 +612,120 @@ describe('HubController — A7c reconnect policy (C: idle-teardown survival)', (
       reWarms++
     }
     expect(reWarms).toBe(5)
+  })
+})
+
+describe('HubController — A7c cross-provider failover (D: mint-based)', () => {
+  /** A mint that rejects for `openai` (provider-scoped) but succeeds for `gemini`. */
+  const openaiDownMint = (): ((p: VoiceProvider) => Promise<string>) =>
+    vi.fn(async (p: VoiceProvider) => {
+      if (p === 'openai') throw providerDownMint('openai down')
+      return 'ek_gemini'
+    })
+
+  it('fails over to the alternate provider when the primary mint fails provider-scoped', async () => {
+    const h = harness({ provider: 'openai', mintToken: openaiDownMint() })
+    const p = h.controller.ensureWarm()
+    await tick() // primary mint rejects → failover → alternate mint resolves → session created
+    h.getSession().connect()
+    const sid = await p
+
+    expect(sid).toBe(SID)
+    // The effective provider flipped: primary minted first, then the alternate warmed.
+    expect(h.mintToken).toHaveBeenNthCalledWith(1, 'openai')
+    expect(h.mintToken).toHaveBeenNthCalledWith(2, 'gemini')
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+    expect(h.createSession).toHaveBeenCalledTimes(1)
+    expect(h.createSession.mock.calls[0][0].provider).toBe('gemini')
+    expect(h.controller.isWarm()).toBe(true)
+  })
+
+  it('records degraded on the switch and recovered when the alternate connects', async () => {
+    const h = harness({ provider: 'openai', mintToken: openaiDownMint() })
+    const p = h.controller.ensureWarm()
+    await tick()
+    // No telemetry until the alternate actually connects beyond the degraded switch.
+    expect(trackEvent).toHaveBeenCalledExactlyOnceWith('fallback_triggered', {
+      component: 'realtime_hub',
+      from: 'openai',
+      to: 'gemini',
+      reason: 'provider_unavailable',
+      outcome: 'degraded'
+    })
+    h.getSession().connect()
+    await p
+
+    expect(trackEvent).toHaveBeenCalledTimes(2)
+    expect(trackEvent).toHaveBeenLastCalledWith('fallback_triggered', {
+      component: 'realtime_hub',
+      from: 'openai',
+      to: 'gemini',
+      reason: 'provider_unavailable',
+      outcome: 'recovered'
+    })
+  })
+
+  it('surfaces the error when BOTH providers fail to mint (once-per-chain, no loop)', async () => {
+    const bothDown = vi.fn(async (_p: VoiceProvider) => {
+      throw providerDownMint('all providers down')
+    })
+    const h = harness({ provider: 'openai', mintToken: bothDown })
+
+    await expect(h.controller.ensureWarm()).rejects.toThrow('all providers down')
+    // Exactly two mint attempts — the primary, then the ONE alternate — never a loop.
+    expect(bothDown).toHaveBeenCalledTimes(2)
+    expect(bothDown).toHaveBeenNthCalledWith(1, 'openai')
+    expect(bothDown).toHaveBeenNthCalledWith(2, 'gemini')
+    // degraded on the switch, then exhausted when the alternate is down too.
+    expect(trackEvent).toHaveBeenNthCalledWith(1, 'fallback_triggered', {
+      component: 'realtime_hub',
+      from: 'openai',
+      to: 'gemini',
+      reason: 'provider_unavailable',
+      outcome: 'degraded'
+    })
+    expect(trackEvent).toHaveBeenNthCalledWith(2, 'fallback_triggered', {
+      component: 'realtime_hub',
+      from: 'gemini',
+      to: 'none',
+      reason: 'provider_unavailable',
+      outcome: 'exhausted'
+    })
+    expect(trackEvent).toHaveBeenCalledTimes(2)
+  })
+
+  it('does NOT fail over for a session-wide mint failure (401/402/403) — surfaces unchanged', async () => {
+    const sessionWide = vi.fn(async (_p: VoiceProvider) => {
+      throw sessionWideMint('sign in to use voice')
+    })
+    const h = harness({ provider: 'openai', mintToken: sessionWide })
+
+    await expect(h.controller.ensureWarm()).rejects.toThrow('sign in to use voice')
+    // No alternate attempt, no fallback telemetry — this is the cascade drop, unchanged.
+    expect(sessionWide).toHaveBeenCalledExactlyOnceWith('openai')
+    expect(trackEvent).not.toHaveBeenCalled()
+  })
+
+  it('resets the failover on a long-lived socket close so the next chain starts on the primary', async () => {
+    const mint = openaiDownMint()
+    const h = harness({ provider: 'openai', mintToken: mint })
+    // Warm → primary down → fail over to the alternate → connect.
+    const p = h.controller.ensureWarm()
+    await tick()
+    h.getSession().connect() // connectedAt = now (1000), provider = gemini
+    await p
+    expect(h.mintToken).toHaveBeenLastCalledWith('gemini')
+
+    // The primary recovers; the alternate socket survives past the idle window, then
+    // closes → the proven-good signal returns us to the primary on the next warm.
+    vi.mocked(mint).mockImplementation(async (_p: VoiceProvider) => 'ek_ok')
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS + 1
+    h.getSession().fail('websocket closed (1008)', true, 1008)
+    expect(h.pendingReconnect()).toBe(true)
+
+    // The proactive re-warm now mints the PRIMARY (openai) again, not the alternate.
+    h.fireReconnect()
+    await tick()
+    expect(h.mintToken).toHaveBeenLastCalledWith('openai')
   })
 })
