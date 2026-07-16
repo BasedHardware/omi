@@ -136,7 +136,7 @@ final class AgentPill: ObservableObject, Identifiable {
   }
 }
 
-enum AgentOwnerBoundSpawnResult<Value> {
+enum AgentOwnerBoundSpawnResult<Value: Sendable>: Sendable {
   case rejectedBeforeDispatch
   case staleReceipt(Value)
   case accepted(Value)
@@ -370,7 +370,7 @@ final class AgentPillsManager: ObservableObject {
     }
   }
 
-  static func performOwnerBoundSpawn<Value>(
+  static func performOwnerBoundSpawn<Value: Sendable>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()

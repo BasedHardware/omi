@@ -105,7 +105,7 @@ enum LocalAgentAPISettings {
   }
 }
 
-struct LocalAgentTool {
+struct LocalAgentTool: @unchecked Sendable {
   let name: String
   let description: String
   let properties: [String: Any]
@@ -559,7 +559,7 @@ final class LocalAgentAPIServer: @unchecked Sendable {
     ]
   }
 
-  private nonisolated(unsafe) static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
+  private static let tools: [LocalAgentTool] = OmiToolManifest.localAgentAPITools
 
   private func toolJSON(_ tool: LocalAgentTool) -> [String: Any] {
     [

@@ -4111,7 +4111,9 @@ class ChatProvider: ObservableObject {
               imageAttached: effectiveImageData != nil
             )
           } else {
-            let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(arguments: ["minutes": 10])
+            let rawScreenContextPayload = await ScreenContextWorkContextBuilder.payload(
+              arguments: RuntimeJSONPayloadBox(["minutes": 10])
+            )
             screenContextPayload = ScreenContextWorkContextBuilder.ambientPayload(from: rawScreenContextPayload)
           }
           screenPayload = [

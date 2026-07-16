@@ -5,6 +5,7 @@ import OmiSupport
 import OmiTheme
 import SwiftUI
 import UniformTypeIdentifiers
+
 /// Holds a non-Sendable value so the `@Sendable` NotificationCenter/Timer
 /// closures (all run on `.main`) can capture it. Access is main-thread-only.
 private final class MainSendableBox<Value>: @unchecked Sendable {

@@ -64,7 +64,6 @@ extension AgentBridge {
   #endif
 }
 
-
 /// Shared agent bridge for task-backed workstream surfaces. Session identity and
 /// execution truth live in the kernel; this bridge is transport only.
 @MainActor
@@ -404,7 +403,8 @@ enum TaskChatRuntime {
   #if DEBUG
     static func debugAutomationControlTool(name: String, input: [String: Any]) async throws -> String {
       let bridge = try await sharedBridge()
-      return try await bridge.debugAutomationControlTool(name: name, input: TaskToolInputBox(input), ownerId: "scenario-13-automation-owner")
+      return try await bridge.debugAutomationControlTool(
+        name: name, input: TaskToolInputBox(input), ownerId: "scenario-13-automation-owner")
     }
 
     static func debugImportLegacyTurn(taskId: String) async throws {

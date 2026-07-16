@@ -283,9 +283,9 @@ enum BrowserAutomationTargetResolver {
       workspace.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
         if let error {
           log("BrowserAutomationTargetResolver: Failed opening \(url) in \(target.name): \(error)")
-        _ = MainActor.assumeIsolated {
-          NSWorkspace.shared.open(url)
-        }
+          _ = MainActor.assumeIsolated {
+            NSWorkspace.shared.open(url)
+          }
         }
       }
       return

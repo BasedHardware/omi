@@ -1,7 +1,6 @@
 import Foundation
 import OmiSupport
 
-
 /// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
 /// isolation boundaries. The dictionary is parsed once and treated as immutable
 /// thereafter, so unchecked Sendable conformance is safe.

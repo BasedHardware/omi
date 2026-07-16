@@ -1,5 +1,6 @@
 @preconcurrency import AVFoundation
 import Foundation
+
 /// `AVAudioPCMBuffer` is not Sendable; this box lets a scheduled-buffer
 /// completion carry the buffer across to the main-actor bookkeeping hop.
 private struct PCMBufferBox: @unchecked Sendable {

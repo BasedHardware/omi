@@ -141,7 +141,7 @@ struct ScreenCandidateDecision {
   }
 }
 
-struct CanonicalScreenCandidateState {
+struct CanonicalScreenCandidateState: @unchecked Sendable {
   let candidateID: String
   let status: OmiAPI.CandidateStatus
   let taskID: String?

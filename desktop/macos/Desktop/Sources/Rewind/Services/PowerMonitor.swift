@@ -1,5 +1,5 @@
-import Foundation
 @preconcurrency import CoreFoundation
+import Foundation
 import IOKit.ps
 
 /// Monitors the Mac's power source (battery vs AC) and publishes state changes.

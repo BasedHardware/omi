@@ -9,6 +9,10 @@ enum SyncQueryArg: Equatable {
   case text(String)
 }
 
+private struct AgentSyncRowsPayload: @unchecked Sendable {
+  let rows: [[String: Any]]
+}
+
 /// Polls the local GRDB database every 3 seconds for new/changed rows and
 /// POSTs them to the cloud agent VM's `/sync` endpoint.
 ///
@@ -392,7 +396,7 @@ actor AgentSyncService {
     do {
       let selectCols = columns.map { "\"\($0)\"" }.joined(separator: ", ")
       let batchSize = self.batchSize
-      let rows: [[String: Any]] = try await dbPool.read { db in
+      let rowsPayload: AgentSyncRowsPayload = try await dbPool.read { db in
         let (sql, queryArgs) = Self.buildBatchQuery(
           tableName: spec.name,
           selectCols: selectCols,
@@ -410,7 +414,7 @@ actor AgentSyncService {
 
         let dbRows = try Row.fetchAll(db, sql: sql, arguments: StatementArguments(args))
 
-        return dbRows.map { row in
+        let rows = dbRows.map { row in
           var dict: [String: Any] = [:]
           for col in columns {
             let dbValue = row[col] as DatabaseValue
@@ -431,7 +435,9 @@ actor AgentSyncService {
           }
           return dict
         }
+        return AgentSyncRowsPayload(rows: rows)
       }
+      let rows = rowsPayload.rows
 
       guard syncGeneration == generation else { return 0 }
 

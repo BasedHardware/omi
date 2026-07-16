@@ -2,7 +2,7 @@ import Foundation
 
 /// `@unchecked Sendable` carrier for the non-Sendable `[String: Any]` event
 /// payload captured by a `@MainActor` `Task` in `processFrame`.
-fileprivate struct TaskAssistantEventPayloadBox: @unchecked Sendable {
+private struct TaskAssistantEventPayloadBox: @unchecked Sendable {
   let value: [String: Any]
   init(_ value: [String: Any]) { self.value = value }
 }

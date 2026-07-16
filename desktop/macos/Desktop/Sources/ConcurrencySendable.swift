@@ -1,9 +1,9 @@
+import Foundation
+
 // KeyPath is an immutable reference type that is safe to share across concurrency
 // domains. The standard library does not declare it Sendable, which blocks
 // AttributedString attribute-scope key paths under strict concurrency.
 extension KeyPath: @retroactive @unchecked Sendable {}
-
-import Foundation
 
 // Strict-concurrency bridge: the types below are wire DTOs (OpenAPI-generated) or
 // immutable domain value records that are decoded once and then passed across actor

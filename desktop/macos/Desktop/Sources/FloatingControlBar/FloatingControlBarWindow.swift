@@ -1,9 +1,10 @@
 import Cocoa
-@preconcurrency import ObjectiveC
 import Combine
+@preconcurrency import ObjectiveC
 import OmiTheme
 import SwiftUI
 import VoiceTurnDomain
+
 /// Boxes a non-Sendable completion closure so NSAnimationContext's
 /// `@Sendable` completion handler can carry it across to the main actor.
 private struct AnimationCompletionBox: @unchecked Sendable {
@@ -2456,7 +2457,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
 
 // MARK: - FloatingControlBarManager
 
-enum VoiceOwnerBoundDispatch<Value> {
+enum VoiceOwnerBoundDispatch<Value: Sendable>: Sendable {
   case rejectedOwnerChange
   case dispatched(Value)
 }
@@ -2509,7 +2510,7 @@ class FloatingControlBarManager {
   /// checked both before asynchronous preparation and immediately before the
   /// provider dispatch, so an account switch while queued can never submit the
   /// old transcript under the new account.
-  static func performOwnerBoundVoiceDispatch<Value>(
+  static func performOwnerBoundVoiceDispatch<Value: Sendable>(
     turnID: VoiceTurnID,
     coordinator: VoiceTurnCoordinator? = nil,
     prepare: () async -> Void = {},
@@ -2749,7 +2750,7 @@ class FloatingControlBarManager {
     )
   }
 
-  static func performOwnerBoundNotificationAdmission<Value>(
+  static func performOwnerBoundNotificationAdmission<Value: Sendable>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()
@@ -4252,7 +4253,7 @@ class FloatingControlBarManager {
     return true
   }
 
-  static func performOwnerBoundPillTerminalAdmission<Value>(
+  static func performOwnerBoundPillTerminalAdmission<Value: Sendable>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()

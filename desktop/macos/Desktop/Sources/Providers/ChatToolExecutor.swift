@@ -457,7 +457,7 @@ class ChatToolExecutor {
   }
 
   @MainActor
-  static func performOwnerBoundPhysicalEffect<T>(
+  static func performOwnerBoundPhysicalEffect<T: Sendable>(
     expectedOwnerID: String?,
     ownerIsCurrent: (String?) -> Bool = { isExpectedOwnerCurrent($0) },
     effect: () -> T
@@ -467,7 +467,7 @@ class ChatToolExecutor {
   }
 
   @MainActor
-  static func performOwnerBoundAsyncPhysicalEffect<T>(
+  static func performOwnerBoundAsyncPhysicalEffect<T: Sendable>(
     expectedOwnerID: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     ownerIsCurrent: ((String?) -> Bool)? = nil,
@@ -890,51 +890,53 @@ class ChatToolExecutor {
     }
 
     let query = finalQuery
-    let rows = try await dbQueue.read { db in
-      try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
+    let formatted = try await dbQueue.read { db -> (text: String, count: Int) in
+      let rows = try Row.fetchAll(db, sql: query, arguments: StatementArguments(parameters))
+
+      if rows.isEmpty {
+        return ("No results", 0)
+      }
+
+      // Get column names from first row
+      let columns = Array(rows[0].columnNames)
+      var lines: [String] = []
+
+      // Header
+      lines.append(columns.joined(separator: " | "))
+      lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
+
+      // Rows (max 200) — Row is RandomAccessCollection of (String, DatabaseValue)
+      for row in rows.prefix(200) {
+        let values = row.map { (_, dbValue) -> String in
+          let value: String
+          switch dbValue.storage {
+          case .null:
+            value = "NULL"
+          case .int64(let i):
+            value = String(i)
+          case .double(let d):
+            value = String(d)
+          case .string(let s):
+            value = s
+          case .blob(let data):
+            value = "<\(data.count) bytes>"
+          }
+          // Truncate long cell values
+          if value.count > 500 {
+            return String(value.prefix(500)) + "..."
+          }
+          return value
+        }
+        lines.append(values.joined(separator: " | "))
+      }
+
+      lines.append("\n\(rows.count) row(s)")
+      return (lines.joined(separator: "\n"), rows.count)
     }
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
 
-    if rows.isEmpty {
-      return "No results"
-    }
-
-    // Get column names from first row
-    let columns = Array(rows[0].columnNames)
-    var lines: [String] = []
-
-    // Header
-    lines.append(columns.joined(separator: " | "))
-    lines.append(String(repeating: "-", count: min(columns.count * 20, 120)))
-
-    // Rows (max 200) — Row is RandomAccessCollection of (String, DatabaseValue)
-    for row in rows.prefix(200) {
-      let values = row.map { (_, dbValue) -> String in
-        let value: String
-        switch dbValue.storage {
-        case .null:
-          value = "NULL"
-        case .int64(let i):
-          value = String(i)
-        case .double(let d):
-          value = String(d)
-        case .string(let s):
-          value = s
-        case .blob(let data):
-          value = "<\(data.count) bytes>"
-        }
-        // Truncate long cell values
-        if value.count > 500 {
-          return String(value.prefix(500)) + "..."
-        }
-        return value
-      }
-      lines.append(values.joined(separator: " | "))
-    }
-
-    lines.append("\n\(rows.count) row(s)")
-    log("Tool execute_sql returned \(rows.count) rows")
-    return lines.joined(separator: "\n")
+    log("Tool execute_sql returned \(formatted.count) rows")
+    return formatted.text
   }
 
   /// Execute a write (INSERT/UPDATE/DELETE) query

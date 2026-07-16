@@ -342,11 +342,13 @@ class TasksViewModel: ObservableObject {
   typealias SortOrderUpdate = (id: String, sortOrder: Int, indentLevel: Int)
 
   struct SortOrderSyncOperations: Sendable {
-    let updateStorage: @Sendable (_ updates: [SortOrderUpdate], _ authorization: LocalMutationAuthorization) async throws -> Void
-    let updateBackend: @Sendable (
-      _ updates: [SortOrderUpdate],
-      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-    ) async throws -> Void
+    let updateStorage:
+      @Sendable (_ updates: [SortOrderUpdate], _ authorization: LocalMutationAuthorization) async throws -> Void
+    let updateBackend:
+      @Sendable (
+        _ updates: [SortOrderUpdate],
+        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+      ) async throws -> Void
 
     static let live = SortOrderSyncOperations(
       updateStorage: { updates, authorization in

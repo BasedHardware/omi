@@ -1,5 +1,5 @@
-@preconcurrency import Foundation
 import AppKit
+@preconcurrency import Foundation
 import OmiTheme
 @preconcurrency import SwiftUI
 
