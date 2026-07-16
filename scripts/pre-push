@@ -31,9 +31,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running authoritative pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
-  echo "Running authoritative pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
 fi
 
 declare -a CHANGED_FILES=()
@@ -75,7 +75,10 @@ if [ "${PRE_PUSH_DEBUG:-}" = "1" ] && [ "${#CHANGED_FILES[@]}" -gt 0 ]; then
 fi
 
 CHANGED_FILES_LIST=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-changed-files.XXXXXX")
-trap 'rm -f "$CHANGED_FILES_LIST"' EXIT
+SELECTED_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests.XXXXXX")
+SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tests-reason.XXXXXX")
+FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
+trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
 BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
 
@@ -244,7 +247,39 @@ check_backend_runtime_env_if_needed() {
   "$BACKEND_PYTHON" backend/scripts/validate-backend-runtime-env.py --env prod
 }
 
+check_backend_typecheck_if_needed() {
+  if [ "${PRE_PUSH_SKIP_BACKEND_TYPECHECK:-}" = "1" ]; then
+    echo "Skipping backend type check because PRE_PUSH_SKIP_BACKEND_TYPECHECK=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/pyrightconfig.json' \
+    'backend/scripts/typecheck.sh' \
+    'backend/requirements.txt' \
+    'backend/pylock*.toml' \
+    '.github/workflows/backend-unit-tests.yml' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+  require_backend_python
+  (
+    cd backend
+    bash scripts/typecheck.sh
+  )
+}
+
 check_backend_unit_tests_if_needed() {
+  local selected_count
+  local original_selected_count
+  local max_pre_push_tests
+  local reason
+  local file
+
   if [ "${PRE_PUSH_SKIP_BACKEND_UNIT_TESTS:-}" = "1" ]; then
     echo "Skipping backend unit tests because PRE_PUSH_SKIP_BACKEND_UNIT_TESTS=1."
     return
@@ -252,40 +287,79 @@ check_backend_unit_tests_if_needed() {
 
   if ! changed_matches \
     '.gitignore' \
-    'backend/**' \
-    'config/deployment-setting-classification.json' \
-    'firestore.indexes.json' \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/*.yaml' \
+    'backend/**/*.yaml' \
+    'backend/*.yml' \
+    'backend/**/*.yml' \
     '.github/actions/detect-changes/*' \
     '.github/actions/detect-changes/**/*' \
-    '.github/actions/transcription-release-candidate-probe/*' \
-    '.github/actions/transcription-release-candidate-probe/**/*' \
     '.github/workflows/backend-checks.yml' \
     '.github/workflows/backend-unit-tests.yml' \
     '.github/workflows/desktop-checks.yml' \
     '.github/workflows/desktop-swift-ci.yml' \
-    '.github/workflows/desktop_backend_auto_dev.yml' \
     '.github/workflows/repo-checks.yml' \
     '.github/workflows/desktop_promote_beta.yml' \
     '.github/workflows/desktop_promote_prod.yml' \
-    '.github/workflows/gcp_backend.yml' \
-    '.github/workflows/gcp_backend_auto_dev.yml' \
     '.github/workflows/gcp_backend*.yml' \
-    '.github/workflows/gcp_llm_gateway.yml' \
     '.github/workflows/gcp_memory_maintenance_job.yml' \
     '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml' \
     '.github/workflows/gcp_notifications_job.yml' \
-    '.github/workflows/sync_ledger_fence_cutover.yml' \
     'scripts/changed-files' \
     'scripts/install-git-hooks.sh' \
     'scripts/pre-push' \
-    'scripts/pre-push-singleflight' \
-    'scripts/voice-provider-probe.sh'
+    'scripts/pre-push-singleflight'
   then
     return
   fi
 
   require_backend_python
-  PYTHON="$BACKEND_PYTHON" backend/scripts/run-unit-ci.sh --changed-files "$CHANGED_FILES_LIST"
+  "$BACKEND_PYTHON" backend/scripts/select_backend_unit_tests.py \
+    --changed-files "$CHANGED_FILES_LIST" \
+    --output "$SELECTED_BACKEND_TESTS" \
+    --reason-output "$SELECTED_BACKEND_TESTS_REASON"
+
+  selected_count=$(wc -l < "$SELECTED_BACKEND_TESTS" | tr -d ' ')
+  original_selected_count="$selected_count"
+  reason=$(cat "$SELECTED_BACKEND_TESTS_REASON")
+  if [ "$selected_count" -eq 0 ]; then
+    echo "No backend unit tests selected: $reason"
+    return
+  fi
+
+  # #9440: pre-push is intentionally a bounded local-feedback gate, not a CI clone.
+  # Keep this cap: a broad selector must not turn ordinary pushes into the full suite.
+  max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
+  if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
+    : > "$FAST_BACKEND_TESTS"
+    for file in "${CHANGED_FILES[@]}"; do
+      case "$file" in
+        backend/tests/*.py|backend/tests/**/*.py)
+          if [ -f "$file" ]; then
+            printf '%s\n' "${file#backend/}" >> "$FAST_BACKEND_TESTS"
+          fi
+          ;;
+      esac
+    done
+    if [ -s "$FAST_BACKEND_TESTS" ]; then
+      sort -u "$FAST_BACKEND_TESTS" -o "$FAST_BACKEND_TESTS"
+      selected_count=$(wc -l < "$FAST_BACKEND_TESTS" | tr -d ' ')
+      echo "Selector requested $reason ($original_selected_count files; running $selected_count changed backend test file(s) instead; cap is $max_pre_push_tests)."
+      cp "$FAST_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS"
+    else
+      echo "Skipping broad backend unit suite in pre-push: $reason ($selected_count files; cap is $max_pre_push_tests)."
+      echo "Run cd backend && bash test.sh for the full suite, or rely on CI."
+      return
+    fi
+  fi
+
+  echo "Selected $selected_count backend unit test file(s): $reason"
+  (
+    cd backend
+    PYTHON="$BACKEND_PYTHON" bash test-preflight.sh
+    BACKEND_UNIT_TEST_FILE_LIST="$SELECTED_BACKEND_TESTS" PYTHON="$BACKEND_PYTHON" bash test.sh
+  )
 }
 
 check_runtime_image_source_closure_if_needed() {
@@ -398,47 +472,32 @@ check_workflows_if_needed() {
 
 check_desktop_swift_if_needed() {
   if [ "${PRE_PUSH_SKIP_DESKTOP_SWIFT:-}" = "1" ]; then
-    echo "Skipping desktop Swift CI suite because PRE_PUSH_SKIP_DESKTOP_SWIFT=1."
+    echo "Skipping desktop Swift compile because PRE_PUSH_SKIP_DESKTOP_SWIFT=1."
     return
   fi
 
   if ! changed_matches \
-    'desktop/macos/Desktop/*' \
-    'desktop/macos/Desktop/**/*' \
-    'desktop/macos/test.sh' \
-    'desktop/macos/scripts/*' \
-    'desktop/macos/scripts/**/*' \
-    'desktop/macos/tests/*' \
-    'desktop/macos/tests/**/*' \
-    'desktop/macos/e2e/flows/*' \
-    'desktop/macos/e2e/flows/**/*' \
-    '.github/workflows/desktop-swift-ci.yml' \
-    '.github/checks-manifest.yaml' \
-    '.github/scripts/run_checks.py' \
-    '.github/scripts/test_desktop_manifest_routes.py' \
-    '.github/scripts/test_desktop_swift_ci_contract.py' \
+    'desktop/macos/Desktop/*.swift' \
+    'desktop/macos/Desktop/**/*.swift' \
+    'desktop/macos/Desktop/Package.swift' \
+    'desktop/macos/Desktop/Package.resolved' \
     'scripts/pre-push'
   then
     return
   fi
 
-  desktop/macos/scripts/run-swift-ci.sh --test
-}
-
-check_desktop_swift_release_compile_if_needed() {
-  if [ "${PRE_PUSH_SKIP_DESKTOP_SWIFT_RELEASE_COMPILE:-}" = "1" ]; then
-    echo "Skipping desktop Swift release compile because PRE_PUSH_SKIP_DESKTOP_SWIFT_RELEASE_COMPILE=1."
-    return
+  if ! command -v xcrun >/dev/null 2>&1; then
+    echo "FAIL: xcrun is required to compile the desktop Swift package for changed desktop files." >&2
+    echo "Push from macOS with Xcode command line tools installed, or deliberately skip with PRE_PUSH_SKIP_DESKTOP_SWIFT=1 git push." >&2
+    return 1
   fi
 
-  if ! changed_matches \
-    'desktop/macos/Desktop/Package.swift' \
-    'desktop/macos/Desktop/Package.resolved'
-  then
-    return
-  fi
-
-  desktop/macos/scripts/run-swift-ci.sh --release-compile
+  # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
+  # release compile belong to CI; adding them here causes push-time budget bloat.
+  (
+    cd desktop/macos
+    xcrun swift build -c debug --package-path Desktop
+  )
 }
 
 check_desktop_rust_if_needed() {
@@ -528,16 +587,16 @@ run_step python3 .github/scripts/check-desktop-prod-promotion-policy.py
 run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
 run_step python3 .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
+run_step check_backend_typecheck_if_needed
 run_step check_runtime_image_source_closure_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
 run_step check_desktop_swift_if_needed
-run_step check_desktop_swift_release_compile_if_needed
 run_step check_desktop_rust_if_needed
 run_step check_desktop_launcher_tests_if_needed
 run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
-echo "Authoritative pre-push gate passed."
+echo "Bounded pre-push gate passed; CI remains the full test authority."

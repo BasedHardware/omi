@@ -82,13 +82,15 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
         self.assertIn('printf \'DEVELOPER_DIR=%s\\n\' "$DEVELOPER_DIR" >> "$GITHUB_ENV"', runner)
 
-    def test_pre_push_uses_the_same_desktop_swift_contract_as_ci(self):
-        """#9440: local push readiness must not downgrade CI's Swift gate."""
+    def test_pre_push_keeps_desktop_feedback_budget_bounded(self):
+        """#9440: the full pinned Swift suite belongs to CI, not the push hook."""
         pre_push = PRE_PUSH_PATH.read_text(encoding="utf-8")
 
-        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --test", pre_push)
-        self.assertIn("desktop/macos/scripts/run-swift-ci.sh --release-compile", pre_push)
-        self.assertNotIn("xcrun swift build -c debug --package-path Desktop", pre_push)
+        self.assertIn("xcrun swift build -c debug --package-path Desktop", pre_push)
+        self.assertIn("pre-push is intentionally a bounded local-feedback gate", pre_push)
+        self.assertIn("push-time budget bloat", pre_push)
+        self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --test", pre_push)
+        self.assertNotIn("desktop/macos/scripts/run-swift-ci.sh --release-compile", pre_push)
 
     # --- cache-key assertions ----------------------------------------------
 
