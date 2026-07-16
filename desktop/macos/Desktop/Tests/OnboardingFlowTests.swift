@@ -353,6 +353,12 @@ final class OnboardingFlowTests: XCTestCase {
   func testHowDidYouHearKeepsOtherLast() {
     XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")
     XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "YouTube" })?.glyph,
+      .youtube)
+    XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.first(where: { $0.name == "Product Hunt" })?.glyph,
+      .productHunt)
+    XCTAssertEqual(
       OnboardingHowDidYouHearStepView.sources.count,
       Set(OnboardingHowDidYouHearStepView.sources.map(\.name)).count,
       "duplicate chips would break selection")

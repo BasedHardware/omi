@@ -15,19 +15,25 @@ struct OnboardingHowDidYouHearStepView: View {
   @State private var hadSelectionOnAppear = false
   @State private var advanceTask: Task<Void, Never>?
 
-  static let sources: [(name: String, icon: String)] = [
-    ("Social media", "bubble.left.and.bubble.right"),
-    ("YouTube", "play.rectangle"),
-    ("Friend", "person"),
-    ("Search engine", "magnifyingglass"),
-    ("AI chat", "sparkles"),
-    ("Podcast", "waveform"),
-    ("Colleague", "person.2"),
-    ("Article", "newspaper"),
-    ("Product Hunt", "arrowtriangle.up.circle"),
-    ("Newsletter", "envelope"),
-    ("Event", "calendar"),
-    ("Other", "ellipsis"),
+  enum SourceGlyph: Equatable {
+    case emoji(String)
+    case youtube
+    case productHunt
+  }
+
+  static let sources: [(name: String, glyph: SourceGlyph)] = [
+    ("Social media", .emoji("📱")),
+    ("YouTube", .youtube),
+    ("Friend", .emoji("👋")),
+    ("Search engine", .emoji("🔍")),
+    ("AI chat", .emoji("🤖")),
+    ("Podcast", .emoji("🎙️")),
+    ("Colleague", .emoji("💼")),
+    ("Article", .emoji("📰")),
+    ("Product Hunt", .productHunt),
+    ("Newsletter", .emoji("📧")),
+    ("Event", .emoji("📅")),
+    ("Other", .emoji("💬")),
   ]
 
   var body: some View {
@@ -45,7 +51,7 @@ struct OnboardingHowDidYouHearStepView: View {
           ForEach(Self.sources, id: \.name) { source in
             OnboardingSelectableChip(
               title: source.name,
-              icon: source.icon,
+              leading: AnyView(glyphView(source.glyph)),
               isSelected: selectedSource == source.name
             ) {
               selectedSource = source.name
@@ -81,6 +87,33 @@ struct OnboardingHowDidYouHearStepView: View {
       }
       .onDisappear {
         advanceTask?.cancel()
+      }
+    }
+  }
+
+  @ViewBuilder
+  private func glyphView(_ glyph: SourceGlyph) -> some View {
+    switch glyph {
+    case .emoji(let emoji):
+      Text(emoji)
+        .font(.system(size: 13))
+    case .youtube:
+      ZStack {
+        RoundedRectangle(cornerRadius: 3.5, style: .continuous)
+          .fill(Color(red: 1, green: 0, blue: 0))
+          .frame(width: 16, height: 12)
+        Image(systemName: "play.fill")
+          .font(.system(size: 6))
+          .foregroundColor(.white)
+      }
+    case .productHunt:
+      ZStack {
+        Circle()
+          .fill(Color(red: 0xDA / 255, green: 0x55 / 255, blue: 0x2F / 255))
+          .frame(width: 14, height: 14)
+        Text("P")
+          .font(.system(size: 9, weight: .bold, design: .rounded))
+          .foregroundColor(.white)
       }
     }
   }

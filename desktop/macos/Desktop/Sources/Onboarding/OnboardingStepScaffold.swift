@@ -577,21 +577,18 @@ struct OnboardingInsightCard: View {
 
 struct OnboardingSelectableChip: View {
   let title: String
-  var icon: String? = nil
+  var leading: AnyView? = nil
   let isSelected: Bool
   let action: () -> Void
 
   var body: some View {
     Button(action: action) {
-      HStack(spacing: 6) {
-        if let icon {
-          Image(systemName: icon)
-            .font(.system(size: 12, weight: .semibold))
-        }
+      HStack(spacing: 7) {
+        if let leading { leading }
         Text(title)
           .font(.system(size: 14, weight: .semibold))
+          .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
       }
-        .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
         .padding(.horizontal, OmiSpacing.lg)
         .padding(.vertical, OmiSpacing.sm)
         .background(
