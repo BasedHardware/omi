@@ -80,7 +80,8 @@ checks:
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
     lanes: ["local", "ci"]
-    reason: "desktop Swift sources changed"
+    platforms: ["macos"]
+    reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
   - id: brand-ui
     command: ["python3", ".github/scripts/check_brand_ui.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]
@@ -196,16 +197,64 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/check_conversation_lifecycle_writes.py"]
     lanes: ["local", "ci"]
     reason: "conversation lifecycle has one mutation owner"
-  - id: desktop-userdefaults-ratchet
-    command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
+  - id: desktop-swift-ci-contract
+    command: ["python3", ".github/scripts/test_desktop_swift_ci_contract.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/scripts/test_desktop_swift_ci_contract.py"]
     lanes: ["local", "ci"]
-    reason: "desktop Swift defaults surfaces changed"
-  - id: desktop-async-after-ratchet
-    command: ["python3", "desktop/macos/scripts/check-async-after-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
+    reason: "#9843 Rung-0: desktop Swift CI must pin its toolchain and cache on Package.resolved"
+  - id: desktop-manifest-routes
+    command: ["python3", ".github/scripts/test_desktop_manifest_routes.py"]
+    triggers: [".github/workflows/desktop-swift-ci.yml", ".github/checks-manifest.yaml", ".github/scripts/run_checks.py", ".github/scripts/test_desktop_manifest_routes.py"]
     lanes: ["local", "ci"]
-    reason: "floating control bar timing surfaces changed"
+    reason: "#9843 Ticket 02: macOS-only manifest checks must have an executable CI route"
+  - id: desktop-swift-format-wrapper
+    command: ["bash", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 02: pinned swift-format bootstrap wrapper provenance contract"
+  - id: desktop-main-actor-xctest-hooks
+    command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "Xcode 16.4 rejects non-Sendable XCTestCase transfers from @MainActor async lifecycle hooks; fail before the full Swift test build"
+  - id: desktop-main-actor-xctest-hooks-fixtures
+    command: ["python3", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
+  - id: desktop-swift-format-lint
+    command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
+    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 05: enforce pinned swift-format lint on all first-party Swift"
+  - id: desktop-swiftlint-config
+    command: ["python3", ".github/scripts/test_swiftlint_config.py"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh", ".github/scripts/test_swiftlint_config.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
+  - id: desktop-swiftlint
+    command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 06: pinned SwiftLint must reject new safety violations outside the committed baseline"
+  - id: desktop-swiftlint-baseline
+    command: ["python3", "desktop/macos/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: SwiftLint baseline is down-only; swiftlint:disable requires named rule + reason"
+  - id: desktop-swiftlint-baseline-fixtures
+    command: ["python3", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    triggers: ["desktop/macos/scripts/check-swiftlint-baseline.py", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
+  - id: desktop-feature-sentinels
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
