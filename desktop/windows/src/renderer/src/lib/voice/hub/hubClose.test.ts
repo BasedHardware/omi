@@ -1,10 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import {
-  classifyHubClose,
-  consumesStrike,
-  shouldLogCloseError,
-  HUB_IDLE_TEARDOWN_THRESHOLD_MS
-} from './hubClose'
+import { classifyHubClose, consumesStrike, HUB_IDLE_TEARDOWN_THRESHOLD_MS } from './hubClose'
 
 describe('classifyHubClose', () => {
   it('classifies a long-lived 1008 with no active turn as the expected provider idle teardown', () => {
@@ -74,16 +69,14 @@ describe('classifyHubClose', () => {
   })
 })
 
-describe('consumesStrike / shouldLogCloseError', () => {
-  it('an expected idle teardown neither spends a strike nor logs as a fault', () => {
+describe('consumesStrike', () => {
+  it('an expected idle teardown does not spend a strike', () => {
     expect(consumesStrike('expected_idle_teardown')).toBe(false)
-    expect(shouldLogCloseError('expected_idle_teardown')).toBe(false)
   })
 
-  it('genuine failures spend a strike and log', () => {
+  it('genuine failures spend a strike', () => {
     for (const category of ['policy_fast', 'transient'] as const) {
       expect(consumesStrike(category)).toBe(true)
-      expect(shouldLogCloseError(category)).toBe(true)
     }
   })
 })

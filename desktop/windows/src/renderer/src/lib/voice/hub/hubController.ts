@@ -463,10 +463,16 @@ export class HubController {
   /** Decide whether/how to re-warm after a socket close. A socket that survived past
    *  the idle window proved the endpoint works, so it refreshes the strike budget
    *  (Mac: aliveFor>60 → strikes=0). A genuine FAILURE re-warms bounded by the budget
-   *  so a dead endpoint (revoked token, provider outage) isn't hammered (item B). An
-   *  EXPECTED idle teardown (Gemini ~2.5 min 1008 with no active turn) re-warms WITHOUT
-   *  spending a strike — an idle user's socket keeps coming back warm so the next press
-   *  takes the warm lane (`hubWarmWait`), not a cold cascade (item C). */
+   *  so a dead endpoint (revoked token, provider outage) isn't hammered (item B).
+   *
+   *  Item C (keep an idle user warm): what actually does the work for real Gemini is
+   *  the aliveFor>60 RESET above. Live traffic shows Gemini idle-closes at ~117 s with
+   *  a NON-1008 code → classified `transient` (consumes a strike), but because the
+   *  socket lived >60 s the budget is reset to 0 first, so strikes just oscillate 0↔1
+   *  and the hub re-warms indefinitely — the next press takes the warm lane
+   *  (`hubWarmWait`), not a cold cascade. The `expected_idle_teardown` strike-exemption
+   *  is the belt-and-suspenders path for a true 1008 idle close; it is rarely hit in
+   *  practice. Both routes keep the idle user warm. */
   private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
     if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) this.reconnectStrikes = 0
     if (consumesStrike(category)) {

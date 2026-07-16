@@ -65,8 +65,8 @@ export function consumesStrike(category: HubCloseCategory): boolean {
   return category !== 'expected_idle_teardown'
 }
 
-/** Whether an error of this category should be logged as a genuine fault. An expected
- *  idle teardown is routine (Mac suppresses it from Sentry, `shouldReportToSentry` :62). */
-export function shouldLogCloseError(category: HubCloseCategory): boolean {
-  return category !== 'expected_idle_teardown'
-}
+// NOTE: Mac's classifier also gates Sentry reporting per category
+// (`shouldReportToSentry` :62). Windows has no Sentry path on these closes — an idle
+// close's `onError` no-ops at the driver (turnID is null) — so no logging-suppression
+// helper is wired here. Add one (classify-gated) only if a real close-logging path is
+// introduced; an unused mirror of Mac would just mislead.
