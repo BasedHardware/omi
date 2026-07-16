@@ -26,13 +26,13 @@ struct OnboardingHowDidYouHearStepView: View {
     ("YouTube", .youtube),
     ("Friend", .emoji("👋")),
     ("Search engine", .emoji("🔍")),
-    ("AI chat", .emoji("🤖")),
+    ("AI chat", .emoji("✨")),
     ("Podcast", .emoji("🎙️")),
-    ("Colleague", .emoji("💼")),
-    ("Article", .emoji("📰")),
+    ("Colleague", .emoji("🧑‍💻")),
+    ("Article", .emoji("📝")),
     ("Product Hunt", .productHunt),
-    ("Newsletter", .emoji("📧")),
-    ("Event", .emoji("📅")),
+    ("Newsletter", .emoji("📬")),
+    ("Event", .emoji("🎟️")),
     ("Other", .emoji("💬")),
   ]
 
