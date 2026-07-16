@@ -80,3 +80,23 @@ def test_create_conversation_rolls_back_admission_when_processing_raises(monkeyp
         conversations_router.process_in_progress_conversation(request=None, uid='uid1')
 
     assert conversation_state['status'] == ConversationStatus.in_progress.value
+
+
+def test_rollback_error_does_not_mask_the_original_processing_exception(monkeypatch, conversation_state):
+    # A conversation deleted mid-processing makes the rollback CAS raise
+    # NotFound; the caller must still see the original processor error.
+    conversation = _in_progress_conversation()
+    monkeypatch.setattr(conversations_router, 'retrieve_in_progress_conversation', lambda uid: {'id': conversation.id})
+    _patch_request_seams(monkeypatch, conversation)
+
+    admission_claim = lifecycle_service.conversations_db.claim_conversation_status
+
+    def raise_on_rollback(uid, conversation_id, expected, claimed, extra_updates=None):
+        if claimed == ConversationStatus.in_progress:
+            raise LookupError('conversation deleted mid-processing')
+        return admission_claim(uid, conversation_id, expected, claimed, extra_updates)
+
+    monkeypatch.setattr(lifecycle_service.conversations_db, 'claim_conversation_status', raise_on_rollback)
+
+    with pytest.raises(RuntimeError, match='processor crashed'):
+        conversations_router.process_in_progress_conversation(request=None, uid='uid1')

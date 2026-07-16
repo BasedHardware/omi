@@ -205,7 +205,7 @@ def process_in_progress_conversation(
         # so a processing failure must return the admission to in_progress —
         # otherwise the conversation is stranded on "processing" forever and the
         # client shows a stuck Processing card it can never resolve.
-        rolled_back = lifecycle_service.rollback_processing_admission(uid, conversation.id)
+        rolled_back = _rollback_processing_admission_safely(uid, conversation.id)
         logger.exception(
             'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
             uid,
@@ -219,6 +219,16 @@ def process_in_progress_conversation(
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
+
+
+def _rollback_processing_admission_safely(uid: str, conversation_id: str) -> bool:
+    """Roll back without letting a rollback error (e.g. the conversation was
+    deleted mid-processing) replace the original processing exception."""
+    try:
+        return lifecycle_service.rollback_processing_admission(uid, conversation_id)
+    except Exception:
+        logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+        return False
 
 
 @router.post(
@@ -285,7 +295,7 @@ def finalize_conversation(
     except Exception:
         # Same recovery as POST /v1/conversations: undo the just-claimed
         # admission so a processing failure cannot strand the conversation.
-        rolled_back = lifecycle_service.rollback_processing_admission(uid, conversation_id)
+        rolled_back = _rollback_processing_admission_safely(uid, conversation_id)
         logger.exception(
             'synchronous conversation finalization failed uid=%s conversation=%s rolled_back=%s',
             uid,
