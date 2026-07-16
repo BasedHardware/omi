@@ -245,3 +245,83 @@ describe('Cold-start cache-first — Conversations renders from the persisted sn
     await app.close()
   })
 })
+
+// ── Apps / Marketplace ───────────────────────────────────────────────────────
+const APPS_SNAPSHOT_KEY = `omi.cache.apps.${TEST_UID}`
+// Minimal /v2/apps catalog: one 'popular' group with a distinctively named app.
+const APPS_CATALOG = {
+  groups: [
+    {
+      capability: { id: 'popular', title: 'Popular' },
+      data: [{ id: 'coldstart-app', name: 'COLDSTART-APP-ALPHA', category: 'other' }]
+    }
+  ]
+}
+
+const openApps = (page) =>
+  page.evaluate(() => {
+    window.location.hash = '#/apps'
+  })
+
+const isAppsCatalog = (url) => url.pathname.replace(/\/+$/, '') === '/v2/apps'
+const isAppsList = (url) => url.pathname.replace(/\/+$/, '') === '/v1/apps'
+const isAppsEnabled = (url) => url.pathname.replace(/\/+$/, '') === '/v1/apps/enabled'
+
+describe('Cold-start cache-first — Apps renders from the persisted snapshot', () => {
+  test('launch 1 persists; launch 2 keeps the cached grid with the catalog down', async (t) => {
+    mkdirSync(shotsDir, { recursive: true })
+    const userDataDir = mkdtempSync(path.join(tmpdir(), 'omi-coldstart-apps-e2e-'))
+    t.after(() => {
+      try {
+        rmSync(userDataDir, { recursive: true, force: true })
+      } catch {
+        /* best-effort */
+      }
+    })
+
+    // ── Launch 1: populate + persist ─────────────────────────────────────────
+    let app = await launch(userDataDir)
+    {
+      const page = await mainPage(app)
+      await page.setViewportSize({ width: 1280, height: 800 })
+      await page.evaluate((uid) => localStorage.setItem('omi.lastSignedInUid', uid), TEST_UID)
+      await page.route(isAppsCatalog, (route) => json(route, APPS_CATALOG))
+      await page.route(isAppsList, (route) => json(route, []))
+      await page.route(isAppsEnabled, (route) => json(route, []))
+
+      await openApps(page)
+      await page
+        .getByText(/COLDSTART-APP-ALPHA/)
+        .waitFor({ state: 'visible', timeout: 20000 })
+
+      const snapshot = await page.evaluate((k) => localStorage.getItem(k), APPS_SNAPSHOT_KEY)
+      assert.ok(snapshot, `launch 1 must persist the snapshot under ${APPS_SNAPSHOT_KEY}`)
+      const names = JSON.parse(snapshot).allApps.map((a) => a.name)
+      assert.ok(names.includes('COLDSTART-APP-ALPHA'), 'snapshot must hold the fetched apps')
+      await page.screenshot({ path: path.join(shotsDir, '05-apps-launch1-populated.png') })
+    }
+    await app.close()
+
+    // ── Launch 2: catalog down, must render the cached grid ───────────────────
+    app = await launch(userDataDir)
+    {
+      const page = await mainPage(app)
+      await page.setViewportSize({ width: 1280, height: 800 })
+      // Abort the catalog fetch (the one call load() doesn't .catch) so the load
+      // fails; the cached grid must stay on screen (load only overwrites on success).
+      await page.route(isAppsCatalog, (route) => route.abort())
+
+      await openApps(page)
+      await page
+        .getByText(/COLDSTART-APP-ALPHA/)
+        .waitFor({ state: 'visible', timeout: 20000 })
+      await page.waitForTimeout(1200)
+      assert.ok(
+        await page.getByText(/COLDSTART-APP-ALPHA/).isVisible(),
+        'cached app must stay on screen after a failed catalog fetch'
+      )
+      await page.screenshot({ path: path.join(shotsDir, '06-apps-launch2-from-cache.png') })
+    }
+    await app.close()
+  })
+})

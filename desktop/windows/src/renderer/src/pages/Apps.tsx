@@ -30,10 +30,24 @@ import type {
   AppCatalogResponse,
   AppSearchResponse
 } from '../lib/omiApi.generated'
+import { readPersistedValue, writePersistedValue } from '../lib/persistentCache'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
 const SEARCH_LIMIT = 60
+
+// Per-uid cold-start snapshot for the Apps page. Unlike the other surfaces the
+// Apps page keeps no in-memory module cache (all component state), so it refetches
+// + spins on every open; mirroring the last successful load to localStorage lets a
+// cold start paint the grid instantly, then revalidate. `enabled` is a Set at
+// runtime, persisted as an array.
+type AppsSnapshot = {
+  sections: CatalogSection[]
+  allApps: AppCatalogItem[]
+  installedPool: AppCatalogItem[]
+  enabled: string[]
+}
+const APPS_SURFACE = 'apps'
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -157,14 +171,32 @@ function AppGrid({
 }
 
 export function Apps(): React.JSX.Element {
-  const [allApps, setAllApps] = useState<AppCatalogItem[]>([])
+  // Cold-start snapshot: read once (before initial state) so the grid paints the
+  // last-known catalog immediately on app restart instead of a spinner. The
+  // revalidating load() below still runs and overwrites with fresh data.
+  const [snapshot] = useState<AppsSnapshot | null>(() => {
+    const s = readPersistedValue<AppsSnapshot>(APPS_SURFACE)
+    if (!s) return null
+    // Coerce each field to an array so a malformed snapshot can never seed a
+    // non-array into state (which would crash allApps.filter(...) downstream).
+    return {
+      sections: Array.isArray(s.sections) ? s.sections : [],
+      allApps: Array.isArray(s.allApps) ? s.allApps : [],
+      installedPool: Array.isArray(s.installedPool) ? s.installedPool : [],
+      enabled: Array.isArray(s.enabled) ? s.enabled : []
+    }
+  })
+  const [allApps, setAllApps] = useState<AppCatalogItem[]>(() => snapshot?.allApps ?? [])
   // Merged v2-union + per-user v1 /apps pool, deduped (v1 wins). Backs the Installed
   // view + count so a user's private/unapproved/tester apps (absent from the
   // approved-only v2 catalog) still render.
-  const [installedPool, setInstalledPool] = useState<AppCatalogItem[]>([])
-  const [sections, setSections] = useState<CatalogSection[]>([])
-  const [enabled, setEnabled] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+  const [installedPool, setInstalledPool] = useState<AppCatalogItem[]>(
+    () => snapshot?.installedPool ?? []
+  )
+  const [sections, setSections] = useState<CatalogSection[]>(() => snapshot?.sections ?? [])
+  const [enabled, setEnabled] = useState<Set<string>>(() => new Set(snapshot?.enabled ?? []))
+  // No spinner when a snapshot already paints the grid; load() revalidates silently.
+  const [loading, setLoading] = useState(() => !snapshot)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
@@ -207,10 +239,19 @@ export function Apps(): React.JSX.Element {
         }
       }
       const v1Apps = Array.isArray(v1Res.data) ? v1Res.data : []
+      const nextInstalledPool = mergeAppPool(nextApps, v1Apps)
+      const nextEnabled = Array.isArray(enabledRes.data) ? enabledRes.data : []
       setSections(nextSections)
       setAllApps(nextApps)
-      setInstalledPool(mergeAppPool(nextApps, v1Apps))
-      setEnabled(new Set(Array.isArray(enabledRes.data) ? enabledRes.data : []))
+      setInstalledPool(nextInstalledPool)
+      setEnabled(new Set(nextEnabled))
+      // Mirror the successful load to the per-uid cold-start snapshot for next launch.
+      writePersistedValue<AppsSnapshot>(APPS_SURFACE, {
+        sections: nextSections,
+        allApps: nextApps,
+        installedPool: nextInstalledPool,
+        enabled: nextEnabled
+      })
     } catch (e) {
       setError((e as Error).message)
     } finally {
@@ -406,9 +447,24 @@ export function Apps(): React.JSX.Element {
       return { kind: 'grid', apps: allApps.filter(catFilter) }
     }
     return { kind: 'sections' }
-  }, [tab, allApps, installedApps, isSearching, debouncedQuery, selectedCats, catFilter, searchResults])
+  }, [
+    tab,
+    allApps,
+    installedApps,
+    isSearching,
+    debouncedQuery,
+    selectedCats,
+    catFilter,
+    searchResults
+  ])
 
   const showSearchSpinner = tab === 'all' && isSearching && searchLoading && searchResults === null
+
+  // Cache-first: when a snapshot (or a prior load) has already painted the grid, a
+  // FAILED revalidation must not replace it with the full-page "Couldn't load apps"
+  // screen. Show that screen only when there's genuinely nothing cached to display;
+  // otherwise keep the grid on screen even while `error` is set (silent failure).
+  const hasCachedData = sections.length > 0 || allApps.length > 0 || installedPool.length > 0
 
   return (
     <div className="flex h-full flex-col">
@@ -473,7 +529,7 @@ export function Apps(): React.JSX.Element {
             ))}
           </div>
         )}
-        {!loading && error && (
+        {!loading && error && !hasCachedData && (
           <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
               <AlertTriangle className="h-5 w-5 text-white/60" />
@@ -498,7 +554,7 @@ export function Apps(): React.JSX.Element {
             </button>
           </div>
         )}
-        {!loading && !error && (
+        {!loading && (!error || hasCachedData) && (
           <div className="mx-auto max-w-5xl space-y-5">
             <div className="flex items-center gap-2">
               <div className="glass-subtle flex flex-1 items-center gap-2 px-4 py-2.5">
@@ -638,8 +694,8 @@ export function Apps(): React.JSX.Element {
                     />
                     {view.apps.length > SEARCH_LIMIT && (
                       <p className="mt-3 text-center text-xs text-white/45">
-                        Showing the first {SEARCH_LIMIT} of {view.apps.length}. Narrow with search or
-                        filters.
+                        Showing the first {SEARCH_LIMIT} of {view.apps.length}. Narrow with search
+                        or filters.
                       </p>
                     )}
                   </>
@@ -685,7 +741,8 @@ export function Apps(): React.JSX.Element {
                     />
                     {isExpanded && section.truncated && (
                       <p className="text-xs text-white/45">
-                        Showing {section.apps.length} of {section.total}. Use search to find the rest.
+                        Showing {section.apps.length} of {section.total}. Use search to find the
+                        rest.
                       </p>
                     )}
                   </div>

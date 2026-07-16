@@ -62,6 +62,35 @@ export function writePersistedCache<T>(surface: string, rows: T[]): void {
   }
 }
 
+// Object variant of read/writePersistedCache, for surfaces whose cold-start
+// snapshot is a record of several fields rather than a single list (e.g. the Apps
+// page persists { sections, allApps, installedPool, enabled }). Same per-uid
+// scoping, best-effort semantics, and teardown purge (clearAllPersistedCaches
+// covers every omi.cache.* key regardless of shape). readPersistedValue returns
+// null unless the payload is a non-null, non-array object.
+export function readPersistedValue<T>(surface: string): T | null {
+  const uid = currentUid()
+  if (!uid) return null
+  try {
+    const raw = localStorage.getItem(keyFor(surface, uid))
+    if (!raw) return null
+    const parsed = JSON.parse(raw)
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed) ? (parsed as T) : null
+  } catch {
+    return null
+  }
+}
+
+export function writePersistedValue<T>(surface: string, value: T): void {
+  const uid = currentUid()
+  if (!uid) return
+  try {
+    localStorage.setItem(keyFor(surface, uid), JSON.stringify(value))
+  } catch {
+    /* quota / privacy mode — cache-first is best-effort */
+  }
+}
+
 // Purge every persisted page cache (all surfaces, all uids). Called from the
 // sign-out teardown so a second account on the same machine never reads the prior
 // user's cached data. Only touches keys under the PREFIX namespace; device- and
