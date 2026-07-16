@@ -15,8 +15,9 @@
 //     key: "<base64 safeStorage ciphertext>" }
 
 import { app, safeStorage } from 'electron'
-import { existsSync, readFileSync, writeFileSync, rmSync } from 'fs'
+import { existsSync, readFileSync, rmSync } from 'fs'
 import { join } from 'path'
+import { atomicWriteFileSync } from './atomicWrite'
 
 /** A decrypted hosted MCP key plus the metadata needed to rotate/revoke it. */
 export interface McpKeyRecord {
@@ -100,7 +101,7 @@ export class McpKeyStore {
       name: record.name,
       key: safeStorage.encryptString(record.key).toString('base64')
     }
-    writeFileSync(this.filePath, JSON.stringify(data), 'utf8')
+    atomicWriteFileSync(this.filePath, JSON.stringify(data))
   }
 
   /** The backend key id of the stored record (any owner), for revoke-on-rotate. */

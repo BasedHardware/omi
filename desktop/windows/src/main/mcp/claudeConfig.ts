@@ -15,18 +15,11 @@
 // The hosted key is a credential: it lives inside this file's headers, so nothing
 // here is ever logged.
 
-import {
-  existsSync,
-  readFileSync,
-  writeFileSync,
-  copyFileSync,
-  readdirSync,
-  rmSync,
-  mkdirSync
-} from 'fs'
+import { existsSync, readFileSync, copyFileSync, readdirSync, rmSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { randomUUID } from 'crypto'
 import { join, dirname } from 'path'
+import { atomicWriteFileSync } from './atomicWrite'
 import {
   MCP_SERVER_KEY,
   buildHttpServerEntry,
@@ -155,7 +148,7 @@ export function writeClaudeMcpEntry(
     ...config,
     mcpServers: { ...servers, [MCP_SERVER_KEY]: target }
   }
-  writeFileSync(path, `${JSON.stringify(next, null, 2)}\n`, 'utf8')
+  atomicWriteFileSync(path, `${JSON.stringify(next, null, 2)}\n`)
 
   // Verify-after-write: re-read and confirm the entry landed intact.
   const verify = readConfig(path)
@@ -203,11 +196,7 @@ export function removeClaudeMcpEntry(path = claudeConfigPath()): boolean {
   backupConfig(path)
   const nextServers = { ...servers }
   delete nextServers[MCP_SERVER_KEY]
-  writeFileSync(
-    path,
-    `${JSON.stringify({ ...config, mcpServers: nextServers }, null, 2)}\n`,
-    'utf8'
-  )
+  atomicWriteFileSync(path, `${JSON.stringify({ ...config, mcpServers: nextServers }, null, 2)}\n`)
   return true
 }
 

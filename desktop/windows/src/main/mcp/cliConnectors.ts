@@ -15,12 +15,13 @@
 // token is scrubbed from any surfaced error.
 
 import { execFile } from 'child_process'
-import { existsSync, readFileSync, writeFileSync, appendFileSync, mkdirSync } from 'fs'
+import { existsSync, readFileSync, appendFileSync, mkdirSync } from 'fs'
 import { homedir } from 'os'
 import { dirname, join } from 'path'
 import { promisify } from 'util'
 import { MCP_SERVER_KEY, mcpServerUrl, type McpSetupCard } from '../../shared/mcpExports'
 import { commandOnPath, fileExists } from './cliPresence'
+import { atomicWriteFileSync } from './atomicWrite'
 
 const execFileAsync = promisify(execFile)
 const CLI_TIMEOUT_MS = 20_000
@@ -231,7 +232,7 @@ export function upsertHermesConfig(path: string, url: string, key: string): void
   const topIdx = lines.findIndex((l) => /^mcp_servers:\s*$/.test(l))
   if (topIdx < 0) {
     const sep = text.length && !text.endsWith('\n') ? '\n' : ''
-    writeFileSync(path, `${text}${sep}mcp_servers:\n${block}\n`, 'utf8')
+    atomicWriteFileSync(path, `${text}${sep}mcp_servers:\n${block}\n`)
     return
   }
 
@@ -239,7 +240,7 @@ export function upsertHermesConfig(path: string, url: string, key: string): void
   const startIdx = lines.findIndex((l, i) => i > topIdx && l.startsWith(`  ${MCP_SERVER_KEY}:`))
   if (startIdx < 0) {
     lines.splice(topIdx + 1, 0, block)
-    writeFileSync(path, lines.join('\n'), 'utf8')
+    atomicWriteFileSync(path, lines.join('\n'))
     return
   }
   let endIdx = startIdx + 1
@@ -250,5 +251,5 @@ export function upsertHermesConfig(path: string, url: string, key: string): void
     endIdx++
   }
   lines.splice(startIdx, endIdx - startIdx, block)
-  writeFileSync(path, lines.join('\n'), 'utf8')
+  atomicWriteFileSync(path, lines.join('\n'))
 }
