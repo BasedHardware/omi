@@ -1,6 +1,8 @@
 import { useEffect, useState } from 'react'
 import { Navigate, useLocation } from 'react-router-dom'
 import { panelRoutes, resolveRoute } from '../../routes/manifest'
+import { ErrorBoundary } from '../ui/ErrorBoundary'
+import { PanelErrorFallback } from '../ui/PanelErrorFallback'
 
 // Content-area router. Every route — redirects, full-screen "exclusive" routes,
 // and the mounted-but-hidden panel grid — is declared in routes/manifest.ts. This
@@ -60,7 +62,16 @@ export function MainViews(): React.JSX.Element {
         const active = entry.id === activeId
         return (
           <div key={entry.id} className={panelClass(active)}>
-            {Component && (active || hydrateAll) && <Component />}
+            {/* Per-panel net: one page's render throw degrades to a small card
+                while the sidebar/shell and the other mounted-hidden panels survive.
+                Inert until it throws (renders <Component /> directly, no extra DOM
+                node), and the mount condition is unchanged, so hydration timing and
+                the manifest's panel memoization are untouched. */}
+            {Component && (active || hydrateAll) && (
+              <ErrorBoundary label={`panel:${entry.id}`} fallback={<PanelErrorFallback />}>
+                <Component />
+              </ErrorBoundary>
+            )}
           </div>
         )
       })}
