@@ -1,0 +1,166 @@
+{
+    "schema_version": 1,
+    "images": [
+        {
+            "name": "backend",
+            "dockerfile": "backend/Dockerfile",
+            "deployment_workflows": [
+                ".github/workflows/gcp_backend_auto_dev.yml",
+                ".github/workflows/gcp_backend.yml",
+                ".github/workflows/gcp_llm_gateway_auto_dev.yml",
+                ".github/workflows/gcp_llm_gateway.yml",
+                ".github/workflows/gcp_backend_pusher.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["main", "llm_gateway.main"],
+            "image_import_smoke": false,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; backend images use its built-in fallback."
+            }
+        },
+        {
+            "name": "pusher",
+            "dockerfile": "backend/pusher/Dockerfile",
+            "deployment_workflows": [
+                ".github/workflows/gcp_backend_pusher_auto_deploy.yml",
+                ".github/workflows/gcp_backend_pusher.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "workdir": "/app",
+            "entrypoints": ["pusher.main"],
+            "image_import_smoke": true,
+            "smoke_entrypoints": ["routers.pusher"],
+            "smoke_prelude": "import tiktoken; tiktoken.encoding_for_model = lambda _: None",
+            "smoke_environment": {
+                "ENCRYPTION_SECRET": "0123456789abcdef0123456789abcdef",
+                "OPENAI_API_KEY": "sk-runtime-image-contract-test"
+            },
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; pusher images use its built-in fallback."
+            }
+        },
+        {
+            "name": "agent-proxy",
+            "dockerfile": "backend/agent-proxy/Dockerfile",
+            "deployment_workflows": [
+                ".github/workflows/gcp_backend_agent_proxy_auto_deploy.yml",
+                ".github/workflows/gcp_backend_agent_proxy.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/agent-proxy",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": true,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true
+        },
+        {
+            "name": "models",
+            "dockerfile": "backend/modal/Dockerfile",
+            "deployment_workflows": [".github/workflows/gcp_models.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/modal",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": false,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": false,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
+            }
+        },
+        {
+            "name": "memory-maintenance-job",
+            "dockerfile": "backend/modal/Dockerfile.memory_maintenance_job",
+            "deployment_workflows": [
+                ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
+                ".github/workflows/gcp_memory_maintenance_job.yml"
+            ],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/modal",
+            "workdir": "/app",
+            "entrypoints": ["memory_maintenance_job"],
+            "image_import_smoke": true,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
+            }
+        },
+        {
+            "name": "notifications-job",
+            "dockerfile": "backend/modal/Dockerfile.notifications_job",
+            "deployment_workflows": [".github/workflows/gcp_notifications_job.yml"],
+            "build_context": ".",
+            "source_root": "backend",
+            "entrypoint_source_root": "backend/modal",
+            "workdir": "/app",
+            "entrypoints": ["job"],
+            "image_import_smoke": true,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true,
+            "dependency_probe_exclusions": {
+                "omi_plugin_sdk": "models.structured imports the SDK only when a full checkout is present; job images use its built-in fallback."
+            }
+        },
+        {
+            "name": "diarizer",
+            "dockerfile": "backend/diarizer/Dockerfile",
+            "deployment_workflows": [".github/workflows/gcp_diarizer.yml"],
+            "build_context": ".",
+            "source_root": "backend/diarizer",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": false,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": false
+        },
+        {
+            "name": "parakeet",
+            "dockerfile": "backend/parakeet/Dockerfile",
+            "deployment_workflows": [".github/workflows/gcp_parakeet.yml"],
+            "build_context": ".",
+            "source_root": "backend/parakeet",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": false,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": false
+        },
+        {
+            "name": "nllb-translation",
+            "dockerfile": "backend/nllb_translation/Dockerfile",
+            "deployment_workflows": [".github/workflows/gcp_nllb_translation.yml"],
+            "build_context": "backend/nllb_translation",
+            "source_root": "backend/nllb_translation",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": false,
+            "smoke_python": "python3",
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": false
+        },
+        {
+            "name": "plugins",
+            "dockerfile": "plugins/Dockerfile",
+            "deployment_workflows": [".github/workflows/gcp_plugins.yml"],
+            "build_context": ".",
+            "source_root": "plugins",
+            "workdir": "/app",
+            "entrypoints": ["main"],
+            "image_import_smoke": true,
+            "dependency_probe_smoke": true,
+            "pull_request_smoke": true
+        }
+    ]
+}

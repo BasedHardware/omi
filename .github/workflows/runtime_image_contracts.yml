@@ -1,0 +1,68 @@
+name: Runtime Image Contracts
+
+on:
+  pull_request:
+    paths:
+      - 'backend/**'
+      - 'plugins/**'
+      - 'Makefile'
+      - '.github/workflows/runtime_image_contracts.yml'
+      - '.github/workflows/gcp_*.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  source-closure:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Check final-image first-party source closures
+        run: make runtime-image-source-closure
+      - id: matrix
+        name: Resolve registered PR image-smoke matrix
+        run: echo "matrix=$(python3 backend/scripts/runtime_image_contracts.py pull-request-matrix)" >> "$GITHUB_OUTPUT"
+    outputs:
+      matrix: ${{ steps.matrix.outputs.matrix }}
+
+  image-smoke:
+    needs: source-closure
+    # Fork PRs never receive the GCR credential. They still run source-closure;
+    # maintainer/dispatch runs smoke exact private-base images when the credential
+    # is configured, and otherwise skip the optional image probe without failing
+    # the source-closure contract.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest
+    env:
+      GCP_CREDENTIALS_AVAILABLE: ${{ secrets.GCP_CREDENTIALS != '' }}
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.source-closure.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Skip image smoke when GCP credentials are unavailable
+        if: env.GCP_CREDENTIALS_AVAILABLE != 'true'
+        run: >-
+          echo "Skipping ${{ matrix.service }} image smoke because GCP_CREDENTIALS is not available to this run."
+      - name: Authenticate to GCP
+        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
+        uses: google-github-actions/auth@v2
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+      - uses: google-github-actions/setup-gcloud@v2
+        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
+      - name: Configure Docker for GCR
+        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
+        run: gcloud auth configure-docker --quiet
+      - name: Build and smoke the registered image
+        if: env.GCP_CREDENTIALS_AVAILABLE == 'true'
+        run: >-
+          make runtime-image-smoke
+          SERVICE=${{ matrix.service }}
+          IMAGE=omi-runtime-contract-${{ matrix.service }}:${{ github.sha }}

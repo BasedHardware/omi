@@ -14,6 +14,9 @@
 # per-test fresh module reload) are marked `slow`/`integration` and are NOT listed here.
 # Renders all eight first-party charts in dev and prod; still hermetic and required in the unit lane.
 tests/unit/test_rendered_deployment_contract.py::test_repository_charts_render_the_full_contract_when_helm_is_available
+tests/unit/test_runtime_image_contracts.py::test_registered_runtime_image_sources_are_closed
+tests/unit/test_runtime_image_contracts.py::test_pusher_contract_rejects_omitted_shared_package
+tests/unit/test_runtime_image_contracts.py::test_pusher_dependency_probe_includes_jsonschema
 tests/unit/test_app_client_schema_inventory.py::test_inventory_ignores_static_base_url_field_routes
 tests/unit/test_app_client_schema_inventory.py::test_inventory_normalizes_interpolated_dart_route_segments
 tests/unit/test_app_client_schema_inventory.py::test_inventory_openapi_route_response_decode_migration_complete
