@@ -14,7 +14,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from pr_metadata import PullRequestMetadata, load_from_api, load_from_gh
-from run_checks import load_manifest, resolve_checks
+from run_checks import detect_platform, load_manifest, resolve_checks
 
 
 @dataclass(frozen=True)
@@ -36,14 +36,24 @@ def run_git(root: Path, *args: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str) -> list[str]:
-    output = run_git(root, "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}")
+    output = run_git(
+        root,
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=ACMRTD",
+        f"{base}...{head}",
+    )
     return [line for line in output.splitlines() if line]
 
 
-def select_checks(files: list[str], lane: str = "ci") -> list[Check]:
+def select_checks(files: list[str], lane: str = "ci", platform: str | None = None) -> list[Check]:
     root = Path(__file__).resolve().parents[2]
     manifest = load_manifest(root / ".github/checks-manifest.yaml")
-    return [Check(check.id, check.reason) for check in resolve_checks(manifest, files, lane)]
+    return [
+        Check(check.id, check.reason)
+        for check in resolve_checks(manifest, files, lane, platform=platform or detect_platform())
+    ]
 
 
 def format_failure_class_suggest(payload: dict) -> str:

@@ -8,6 +8,7 @@ import os
 import re
 import subprocess
 import sys
+from collections import Counter
 from pathlib import Path
 
 MARKERS = ("TO" "DO", "FIX" "ME", "HA" "CK")
@@ -76,18 +77,24 @@ def parse_args() -> argparse.Namespace:
 
 
 def added_lines(base: str, path: str) -> list[tuple[int, str]]:
-    exists_at_base = subprocess.run(
-        ["git", "cat-file", "-e", f"{base}:{path}"],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    ).returncode == 0
-    tracked = subprocess.run(
-        ["git", "ls-files", "--error-unmatch", path],
-        check=False,
-        stdout=subprocess.DEVNULL,
-        stderr=subprocess.DEVNULL,
-    ).returncode == 0
+    exists_at_base = (
+        subprocess.run(
+            ["git", "cat-file", "-e", f"{base}:{path}"],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
+    tracked = (
+        subprocess.run(
+            ["git", "ls-files", "--error-unmatch", path],
+            check=False,
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+        ).returncode
+        == 0
+    )
     if not exists_at_base and not tracked:
         try:
             return list(enumerate(Path(path).read_text(encoding="utf-8").splitlines(), start=1))
@@ -119,6 +126,73 @@ def added_lines(base: str, path: str) -> list[tuple[int, str]]:
     return additions
 
 
+def comment_fragment(line: str) -> str | None:
+    """Return the comment portion of a line without treating strings as comments."""
+    quote: str | None = None
+    escaped = False
+    index = 0
+    while index < len(line):
+        character = line[index]
+        if quote:
+            if escaped:
+                escaped = False
+            elif character == "\\":
+                escaped = True
+            elif character == quote:
+                quote = None
+            index += 1
+            continue
+        if character in {"'", '"'}:
+            quote = character
+            index += 1
+            continue
+        for marker in ("<!--", "//", "#", "/*", "--"):
+            if line.startswith(marker, index):
+                return line[index + len(marker) :]
+        index += 1
+
+    stripped = line.lstrip()
+    if MARKER_RE.match(stripped) or stripped.startswith("*"):
+        return stripped
+    return None
+
+
+def marker_signature(line: str) -> str | None:
+    """Return a whitespace-insensitive signature for an explicit deferred-work comment."""
+    fragment = comment_fragment(line)
+    if fragment is None or not MARKER_RE.search(fragment):
+        return None
+    return re.sub(r"\s+", " ", fragment.strip()).casefold()
+
+
+def marker_counts_at_base(base: str, path: str) -> Counter[str]:
+    result = subprocess.run(
+        ["git", "show", f"{base}:{path}"],
+        check=False,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+    )
+    if result.returncode:
+        return Counter()
+    return Counter(signature for line in result.stdout.splitlines() if (signature := marker_signature(line)))
+
+
+def new_marker_violations(additions: list[tuple[int, str]], existing_markers: Counter[str]) -> list[tuple[int, str]]:
+    """Return added unowned markers after accounting for whitespace-only rewrites."""
+    existing = Counter(existing_markers)
+    violations: list[tuple[int, str]] = []
+    for lineno, line in additions:
+        signature = marker_signature(line)
+        if signature is None or TRACKING_ISSUE_RE.search(line):
+            continue
+        if existing[signature]:
+            existing[signature] -= 1
+            continue
+        violations.append((lineno, line))
+    return violations
+
+
 def check_new_markers(base: str, changed_files_path: Path) -> int:
     violations: list[str] = []
     for path in changed_files_path.read_text(encoding="utf-8").splitlines():
@@ -129,9 +203,11 @@ def check_new_markers(base: str, changed_files_path: Path) -> int:
         except RuntimeError as exc:
             print(f"FAIL: {exc}", file=sys.stderr)
             return 1
-        for lineno, line in additions:
-            if MARKER_RE.search(line) and not TRACKING_ISSUE_RE.search(line):
-                violations.append(f"{path}:{lineno}: {line.strip()}")
+        if not any(marker_signature(line) is not None for _, line in additions):
+            continue
+        existing_markers = marker_counts_at_base(base, path)
+        for lineno, line in new_marker_violations(additions, existing_markers):
+            violations.append(f"{path}:{lineno}: {line.strip()}")
     if violations:
         print("FAIL: new deferred-work markers must reference a tracking issue (#123 or GitHub URL).")
         for violation in violations:
