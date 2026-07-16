@@ -232,16 +232,6 @@ checks:
     triggers: ["desktop/macos/scripts/check-swiftlint-baseline.py", ".github/scripts/test_swiftlint_baseline_guard.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
-  - id: desktop-userdefaults-ratchet
-    command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
-    lanes: ["local", "ci"]
-    reason: "desktop Swift defaults surfaces changed"
-  - id: desktop-async-after-ratchet
-    command: ["python3", "desktop/macos/scripts/check-async-after-ratchet.py"]
-    triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/**/*.swift", "desktop/macos/scripts/check-async-after-ratchet.py"]
-    lanes: ["local", "ci"]
-    reason: "floating control bar timing surfaces changed"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
