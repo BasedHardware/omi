@@ -464,6 +464,70 @@ export function executeSql(
   return formatRows(result.columns, result.rows)
 }
 
+/**
+ * The agent-kernel execute_sql backend: the SAME read-only safety stack Insight
+ * uses (single-statement, read-only SELECT/WITH gate, LIMIT 200 auto-append,
+ * 200-row / 500-char caps) but over a CALLER-SUPPLIED table allowlist instead of
+ * Insight's rewind-frames-only one. The agent tool needs a wider surface (app
+ * usage, tasks, conversations, memories, aggregations — see
+ * productToolExecutors.ts's AGENT_SQL_TABLE_ALLOWLIST), so the allowlist is a
+ * parameter; it is still a CLOSED allowlist (anything not listed is refused), so
+ * meta/kv/embedding/credential-shaped tables stay unreachable.
+ *
+ * No denylist-shadow path here (that is an Insight-privacy feature): the agent
+ * scope has no per-app denylist. Returns the string that becomes the tool_result —
+ * an `Error: …` string (never a throw) on any rejection so the tool loop continues.
+ *
+ * Write support is deliberately NOT ported: v1 is read-only on Windows (Mac's
+ * ask-mode write rules become moot), so INSERT/UPDATE/DELETE/DDL/PRAGMA/ATTACH are
+ * all rejected by isReadOnlySql before a query ever reaches the DB.
+ */
+export function executeReadOnlySql(
+  rawQuery: unknown,
+  runQuery: QueryRunner,
+  allowlist: ReadonlySet<string>
+): string {
+  const query = typeof rawQuery === 'string' ? rawQuery.trim() : ''
+  if (!query) return 'Error: query is required'
+
+  // Single statement only (Mac splits on ';' and rejects >1 non-empty).
+  const statements = query
+    .split(';')
+    .map((s) => s.trim())
+    .filter(Boolean)
+  if (statements.length > 1) {
+    return 'Error: multi-statement queries are not allowed. Send one statement at a time.'
+  }
+  const single = statements[0] ?? query
+
+  // Read-only gate: SELECT/WITH prefix AND no write/DDL keyword anywhere. This is
+  // what rejects INSERT/UPDATE/DELETE/DROP/ALTER/CREATE/PRAGMA/ATTACH/DETACH/
+  // VACUUM/REINDEX/TRUNCATE/REPLACE (isReadOnlySql's blocklist).
+  if (!isReadOnlySql(single)) {
+    return 'Error: this SQL surface is read-only. Use SELECT or read-only WITH queries.'
+  }
+
+  // Even a valid read-only SELECT may only touch allowlisted tables — a closed
+  // allowlist so meta/embedding/credential-shaped tables can never be read.
+  if (!tablesAllowed(single, allowlist)) {
+    return (
+      'Error: that query references a table that is not queryable. Allowed tables: ' +
+      [...allowlist].sort().join(', ')
+    )
+  }
+
+  const limited = appendLimit(single, MAX_ROWS)
+  let result: { columns: string[]; rows: unknown[][] }
+  try {
+    result = runQuery(limited)
+  } catch (e) {
+    // Message only — a better-sqlite3 error names columns/syntax, never row
+    // contents. Safe to surface to the model; do not log it here.
+    return `Error: ${e instanceof Error ? e.message : 'query failed'}`
+  }
+  return formatRows(result.columns, result.rows)
+}
+
 /** request_screenshot backend: resolve a frame id to its JPEG bytes, base64. null
  *  when the id isn't in the DB or its image was swept off disk — Phase 2 aborts.
  *  Windows stores per-frame JPEGs (no Mac video-chunk "still being written" guard
