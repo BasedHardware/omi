@@ -7,11 +7,14 @@
 // RPC event loop, generation/pending-request correlation, required-control-tool
 // tracking, model mapping, and deferred-restart lifecycle are unchanged.
 //
-// As of PR-D the adapter IS in ADAPTER_CAPABILITY_MATRIX and IS registered into
-// the kernel registry on session relay (agentKernel/controlPlane.ts), but it
-// stays DARK: nothing ever invokes it (openBinding/executeAttempt) — default chat
-// still routes through /v2/messages, and control-tool spawns explicitly refuse
-// managed-cloud adapters. Deliberate main_chat routing arrives in PR-E.
+// The adapter is in ADAPTER_CAPABILITY_MATRIX and registered into the kernel
+// registry on session relay (agentKernel/controlPlane.ts). It is now the LIVE
+// default chat path: chatEngine defaults to 'pi_mono' (appSettings.ts) and
+// mainChat.ts routes each turn through kernel.sendAgentMessage -> executeAttempt.
+// executeAttempt carries this turn's host tool-relay pipe/token in the per-turn
+// context file so the pi extension can reach the product/control tool plane
+// (the toolplane wire, this PR). Control-tool spawns still refuse managed-cloud
+// adapters (pi-mono is never a control-spawn target).
 //
 // Windows deviations from the macOS source, each load-bearing:
 //   - Subprocess spawn: macOS spawns pi's `dist/cli.js` directly; Windows spawns
