@@ -769,6 +769,11 @@ export type OmiBridgeApi = {
   openCheckout: (url: string) => Promise<CheckoutOutcome>
   /** Open a web URL (e.g. the Stripe customer portal) in the system browser. */
   openExternalUrl: (url: string) => Promise<boolean>
+  /** Poll an external-integration developer's setup-completed webhook from the
+   *  main process (the renderer can't — CORS). https-only, side-effect-free GET;
+   *  resolves true only when the webhook returns `is_setup_completed: true`, false
+   *  on any failure. Faithful port of macOS's URLSession isAppSetupCompleted. */
+  checkAppSetup: (args: { url: string; uid: string }) => Promise<boolean>
   // Bulk-delete memories from the main process (survives renderer navigation /
   // reload; paced + backed-off). Renderer supplies the API base, a fresh token,
   // and the ids; progress streams via onMemoriesDeleteProgress.
