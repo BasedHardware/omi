@@ -47,6 +47,9 @@ LOCK_CONTRACTS = {
     "gcp_backend.yml": LockContract(
         "deploy-backend-stack-${{ github.event.inputs.environment }}"
     ),
+    "gcp_firestore_indexes.yml": LockContract(
+        "deploy-backend-stack-${{ github.event.inputs.environment }}"
+    ),
     "gcp_backend_agent_proxy.yml": LockContract(
         "deploy-gke-agent-proxy-${{ github.event.inputs.environment }}"
     ),
@@ -104,6 +107,10 @@ LOCK_CONTRACTS = {
 RUN_SCOPED_EXEMPTIONS = {
     "parakeet_gpu_tests.yml": "JOB_NAME: parakeet-gpu-test-${{ github.run_id }}",
 }
+
+# Firestore index creation is a schema migration, not ordinary deploy work.
+# Keep a single auditable writer so backend readiness can stay read-only.
+FIRESTORE_SCHEMA_WRITERS = frozenset({"gcp_firestore_indexes.yml"})
 
 # The manual pusher workflow routes its default pusher service and its
 # llm-gateway compatibility mode to different lock domains. The default pusher
@@ -276,6 +283,25 @@ def has_firestore_index_writer(text: str) -> bool:
     return False
 
 
+def validate_firestore_schema_writers(workflow_text: dict[str, str]) -> list[str]:
+    """Require every detected Firestore schema writer to be explicitly owned."""
+
+    detected = {
+        name
+        for name, text in workflow_text.items()
+        if has_firestore_index_writer(text)
+    }
+    errors: list[str] = []
+    for name in sorted(detected - FIRESTORE_SCHEMA_WRITERS):
+        errors.append(
+            f"{name}: Firestore schema writes are owned only by "
+            f"{', '.join(sorted(FIRESTORE_SCHEMA_WRITERS))}"
+        )
+    for name in sorted(FIRESTORE_SCHEMA_WRITERS - detected):
+        errors.append(f"{name}: canonical Firestore schema writer is missing")
+    return errors
+
+
 def pusher_preflight_step_is_valid(name: str, step: list[str]) -> bool:
     """Return whether a deploy step performs an allowed pusher preflight."""
 
@@ -370,6 +396,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 
     family_pairs = (
         ("gcp_backend.yml", "gcp_backend_auto_dev.yml"),
+        ("gcp_firestore_indexes.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_backend_listen_helm.yml", "gcp_backend_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_llm_gateway_auto_dev.yml"),
         ("gcp_llm_gateway.yml", "gcp_backend_auto_dev.yml"),
@@ -386,6 +413,7 @@ def validate_shared_families(groups: dict[str, str]) -> list[str]:
 
     environment_scoped = (
         "gcp_backend.yml",
+        "gcp_firestore_indexes.yml",
         "gcp_backend_agent_proxy.yml",
         "gcp_backend_listen_helm.yml",
         "gcp_diarizer.yml",
@@ -415,6 +443,7 @@ def check_repository() -> list[str]:
         for pattern in ("*.yml", "*.yaml")
         for path in WORKFLOWS.glob(pattern)
     }
+    errors.extend(validate_firestore_schema_writers(workflow_text))
 
     detected = {
         name for name, text in workflow_text.items() if is_persistent_writer(text)
@@ -562,6 +591,24 @@ jobs:
     )
     if is_persistent_writer(gcloud_list):
         raise PolicyError("a read-only gcloud index list was classified as a writer")
+
+    canonical_firestore_writer = {"gcp_firestore_indexes.yml": direct_firebase_writer}
+    if validate_firestore_schema_writers(canonical_firestore_writer):
+        raise PolicyError("the canonical Firestore schema writer was rejected")
+    duplicate_firestore_writer = {
+        **canonical_firestore_writer,
+        "gcp_backend_auto_dev.yml": direct_firebase_writer,
+    }
+    if not any(
+        "gcp_backend_auto_dev.yml" in error
+        for error in validate_firestore_schema_writers(duplicate_firestore_writer)
+    ):
+        raise PolicyError("an unapproved Firestore schema writer bypassed ownership enforcement")
+    if not any(
+        "canonical Firestore schema writer is missing" in error
+        for error in validate_firestore_schema_writers({})
+    ):
+        raise PolicyError("a missing canonical Firestore schema writer bypassed ownership enforcement")
 
     good = """name: fixture
 concurrency:
