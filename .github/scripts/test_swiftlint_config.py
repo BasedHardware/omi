@@ -115,7 +115,7 @@ class SwiftLintConfigTests(unittest.TestCase):
       self.assertIn(f'name: "{target}"', content)
     # Count plugin attachments (should be 5: 3 library + executable + test)
     count = content.count("SwiftLintBuildToolPlugin")
-    self.assertEqual(count, 6, f"expected 6 plugin attachments, got {count}")
+    self.assertEqual(count, 7, f"expected 7 plugin attachments, got {count}")
 
   def test_package_swift_excludes_objc_and_cwebp(self):
     content = PACKAGE_PATH.read_text(encoding="utf-8")
