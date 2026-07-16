@@ -57,6 +57,8 @@ class _Document:
         return _Collection(self._database, (*self._path, name))
 
     def get(self, transaction=None):
+        if transaction is not None:
+            raise AssertionError('fixture state must be read before opening its write-only transaction')
         return _Snapshot(self._database, self._path)
 
 
@@ -77,7 +79,7 @@ class _Collection:
         ]
 
 
-class _Transaction:
+class _WriteBatch:
     def __init__(self, database):
         self._database = database
         self._operations = []
@@ -108,8 +110,8 @@ class _Firestore:
     def collection(self, name):
         return _Collection(self, (name,))
 
-    def transaction(self):
-        return _Transaction(self)
+    def batch(self):
+        return _WriteBatch(self)
 
 
 @pytest.fixture
