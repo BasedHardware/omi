@@ -174,9 +174,18 @@ export function Apps(): React.JSX.Element {
   // Cold-start snapshot: read once (before initial state) so the grid paints the
   // last-known catalog immediately on app restart instead of a spinner. The
   // revalidating load() below still runs and overwrites with fresh data.
-  const [snapshot] = useState<AppsSnapshot | null>(() =>
-    readPersistedValue<AppsSnapshot>(APPS_SURFACE)
-  )
+  const [snapshot] = useState<AppsSnapshot | null>(() => {
+    const s = readPersistedValue<AppsSnapshot>(APPS_SURFACE)
+    if (!s) return null
+    // Coerce each field to an array so a malformed snapshot can never seed a
+    // non-array into state (which would crash allApps.filter(...) downstream).
+    return {
+      sections: Array.isArray(s.sections) ? s.sections : [],
+      allApps: Array.isArray(s.allApps) ? s.allApps : [],
+      installedPool: Array.isArray(s.installedPool) ? s.installedPool : [],
+      enabled: Array.isArray(s.enabled) ? s.enabled : []
+    }
+  })
   const [allApps, setAllApps] = useState<AppCatalogItem[]>(() => snapshot?.allApps ?? [])
   // Merged v2-union + per-user v1 /apps pool, deduped (v1 wins). Backs the Installed
   // view + count so a user's private/unapproved/tester apps (absent from the
@@ -451,6 +460,12 @@ export function Apps(): React.JSX.Element {
 
   const showSearchSpinner = tab === 'all' && isSearching && searchLoading && searchResults === null
 
+  // Cache-first: when a snapshot (or a prior load) has already painted the grid, a
+  // FAILED revalidation must not replace it with the full-page "Couldn't load apps"
+  // screen. Show that screen only when there's genuinely nothing cached to display;
+  // otherwise keep the grid on screen even while `error` is set (silent failure).
+  const hasCachedData = sections.length > 0 || allApps.length > 0 || installedPool.length > 0
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader
@@ -514,7 +529,7 @@ export function Apps(): React.JSX.Element {
             ))}
           </div>
         )}
-        {!loading && error && (
+        {!loading && error && !hasCachedData && (
           <div className="mx-auto flex max-w-md flex-col items-center gap-4 py-16 text-center">
             <div className="flex h-12 w-12 items-center justify-center rounded-2xl border border-white/10 bg-white/5">
               <AlertTriangle className="h-5 w-5 text-white/60" />
@@ -539,7 +554,7 @@ export function Apps(): React.JSX.Element {
             </button>
           </div>
         )}
-        {!loading && !error && (
+        {!loading && (!error || hasCachedData) && (
           <div className="mx-auto max-w-5xl space-y-5">
             <div className="flex items-center gap-2">
               <div className="glass-subtle flex flex-1 items-center gap-2 px-4 py-2.5">
