@@ -44,6 +44,13 @@ export type Preferences = {
   // (default, original behavior); 'infinite' = one ongoing conversation shared
   // by the main window and the overlay.
   chatHistoryMode: 'per-launch' | 'infinite'
+  // Multi-chat sessions (macOS @AppStorage("multiChatEnabled")). Default OFF:
+  // the Hub shows the single Synced Chat thread, byte-identical to today. When ON
+  // *and* the chat engine is pi_mono, the Hub chat panel gains the multi-chat
+  // header (session switcher + new-chat + history). Undefined ⇒ OFF; the header
+  // reads it as `=== true`. It does NOT flip the engine — the two flags are
+  // independent (the header simply stays hidden under the legacy engine).
+  multiChatEnabled?: boolean
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.

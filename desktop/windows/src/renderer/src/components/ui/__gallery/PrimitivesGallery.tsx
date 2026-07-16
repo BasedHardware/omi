@@ -6,6 +6,7 @@ import { Toggle } from '../Toggle'
 import { Badge } from '../Badge'
 import { Pill } from '../Pill'
 import { Modal } from '../Modal'
+import { Popover, PopoverContent, PopoverTrigger } from '../Popover'
 
 // Dev-only visual harness (mounted at #/__ui-gallery, DEV-gated in App.tsx). Not
 // a shipped surface — it renders every ui/* primitive across its states so a
@@ -158,6 +159,23 @@ export function PrimitivesGallery(): React.JSX.Element {
             <Button variant="danger" onClick={() => setBlockingOpen(true)}>
               Open blocking
             </Button>
+          </Row>
+        </Section>
+
+        <Section title="Popover">
+          <Row label="anchored below-end (side=bottom align=end)">
+            <Popover>
+              <PopoverTrigger asChild>
+                <Button variant="ghost">Open popover</Button>
+              </PopoverTrigger>
+              <PopoverContent className="p-4">
+                <p className="text-sm font-medium text-white">Anchored panel</p>
+                <p className="mt-1 text-[13px] text-white/45">
+                  Portaled + anchored to the trigger. Esc / outside-click dismiss. Scales in from
+                  the anchored transform-origin.
+                </p>
+              </PopoverContent>
+            </Popover>
           </Row>
         </Section>
       </div>

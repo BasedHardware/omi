@@ -8,6 +8,7 @@ import { getPendingAttachments } from '../../../lib/chatAttachments'
 import { HubSuggestions } from './HubSuggestions'
 import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
+import { HubChatHeader } from '../../chat/HubChatHeader'
 import { HubConnectPanel } from './HubConnectPanel'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
@@ -181,7 +182,11 @@ export function HomeHub(): React.JSX.Element {
           {isPanelMode(mode) ? (
             <StagePanel key={mode}>
               {mode === 'chat' ? (
-                <HubChatPanel messages={chat.history} sending={chat.sending}>
+                <HubChatPanel
+                  messages={chat.history}
+                  sending={chat.sending}
+                  header={<HubChatHeader />}
+                >
                   {askBar}
                 </HubChatPanel>
               ) : (
