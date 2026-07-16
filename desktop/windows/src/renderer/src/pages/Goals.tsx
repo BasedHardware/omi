@@ -1,15 +1,28 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Target, Check, RefreshCw, Plus, Trash2, Loader2, Trophy, Sparkles, X } from 'lucide-react'
+import {
+  Target,
+  Check,
+  RefreshCw,
+  Plus,
+  Trash2,
+  Loader2,
+  Trophy,
+  Lightbulb,
+  Sparkles,
+  X
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
+import type { GoalCandidate } from '../../../shared/types'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { GenerateGoalsButton } from '../components/ui/GenerateGoalsButton'
 import { toast } from '../lib/toast'
-import type {
-  GoalResponse as Goal,
-  GoalSuggestionResponse as GoalSuggestion
-} from '../lib/omiApi.generated'
+import { goalEmoji } from '../lib/goalEmoji'
+import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
+import { GoalCelebration } from '../components/goals/GoalCelebration'
+import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
+import type { GoalResponse as Goal } from '../lib/omiApi.generated'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
 
@@ -46,33 +59,11 @@ async function fetchAll(): Promise<Goal[]> {
   return list
 }
 
-// A goal is complete when the server has archived it (is_active === false) or
-// its progress has reached the target. The backend exposes no write path for
-// is_active/status (verified: PATCH 400s, no /complete route), so progress is
-// the only completion signal we can both read and drive.
-function isCompleted(g: Goal): boolean {
-  if (g.is_active === false) return true
-  const target = g.target_value ?? 0
-  return target > 0 && (g.current_value ?? 0) >= target
-}
-
-// 0–100 progress percentage. With a target, it's current/target clamped; with
-// no target, a goal is either done (100) or not started (0).
-function progressPct(g: Goal): number {
-  if (isCompleted(g)) return 100
-  const target = g.target_value ?? 0
-  const current = g.current_value ?? 0
-  if (target > 0) return Math.max(0, Math.min(100, Math.round((current / target) * 100)))
-  return 0
-}
-
-function progressLabel(g: Goal): string {
-  const target = g.target_value ?? 0
-  const current = g.current_value ?? 0
-  const unit = g.unit ? ` ${g.unit}` : ''
-  if (target > 0) return `${current} / ${target}${unit}`
-  return `${progressPct(g)}%`
-}
+// Completion + progress math (isCompleted / progressPct / progressLabel) and the
+// progress-bar color ramp now live in ../lib/goalVisuals so the Home goals widget
+// shares one source. The is_active/progress completion model is documented there:
+// the backend has no write path for is_active/status (PATCH 400s, no /complete
+// route), so progress reaching the target is the only completion signal.
 
 export function Goals(): React.JSX.Element {
   const [goals, setGoals] = useState<Goal[]>(cache.goals ?? [])
@@ -87,15 +78,25 @@ export function Goals(): React.JSX.Element {
   const [draftUnit, setDraftUnit] = useState('')
   const [saving, setSaving] = useState(false)
 
-  const [suggesting, setSuggesting] = useState(false)
-  const [suggestion, setSuggestion] = useState<GoalSuggestion | null>(null)
-  const [addingSuggestion, setAddingSuggestion] = useState(false)
+  // Client-side goal generation (Wave C): the Suggest button runs the same
+  // on-device generation as the background auto-gen (main-process
+  // goals:generateCandidate), but — unlike the auto job and unlike Mac — it
+  // PREVIEWS the candidate so the user reviews before an AI goal joins the list.
+  const [generating, setGenerating] = useState(false)
+  const [candidate, setCandidate] = useState<GoalCandidate | null>(null)
+  const [accepting, setAccepting] = useState(false)
 
   const [editingId, setEditingId] = useState<string | null>(null)
   const [editDraft, setEditDraft] = useState('')
   const [progressId, setProgressId] = useState<string | null>(null)
   const [progressDraft, setProgressDraft] = useState('')
   const [busy, setBusy] = useState<Set<string>>(new Set())
+  // The goal whose completion is currently being celebrated (full-screen
+  // confetti overlay). Set when progress reaches the target; cleared when the
+  // celebration finishes.
+  const [celebrating, setCelebrating] = useState<Goal | null>(null)
+  // The goal whose "Goal Insight" panel is open (per-card lightbulb button).
+  const [insightGoal, setInsightGoal] = useState<Goal | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setError(null)
@@ -133,6 +134,10 @@ export function Goals(): React.JSX.Element {
     setRefreshing(false)
   }
 
+  // Re-fetch whenever main reports a goal changed (background auto-gen created one,
+  // or the manual button did). Keeps an open Goals page live with the auto job.
+  useEffect(() => window.omi?.onGoalsChanged?.(() => void load()), [load])
+
   const markBusy = (id: string, on: boolean): void =>
     setBusy((s) => {
       const next = new Set(s)
@@ -161,17 +166,19 @@ export function Goals(): React.JSX.Element {
 
   // PATCH /v1/goals/{id}/progress?current_value={n}. Optimistic. Reaching the
   // target marks the goal complete (completion is derived from progress — see
-  // toggleComplete) and fires a celebration toast.
+  // toggleComplete) and fires the full-screen celebration overlay. Reopening a
+  // goal (value below target) never celebrates.
   const updateProgress = async (g: Goal, value: number): Promise<void> => {
     const prev = goals
-    const reachedTarget = (g.target_value ?? 0) > 0 && value >= (g.target_value as number)
+    const reachedTarget =
+      (g.target_value ?? 0) > 0 && value >= (g.target_value as number) && !isCompleted(g)
     const next = prev.map((x) => (x.id === g.id ? { ...x, current_value: value } : x))
     setGoals(next)
     writeCache(next)
     markBusy(g.id, true)
     try {
       await omiApi.patch(`/v1/goals/${g.id}/progress`, null, { params: { current_value: value } })
-      if (reachedTarget) toast('Goal complete 🎉', { tone: 'success', body: g.title })
+      if (reachedTarget) setCelebrating({ ...g, current_value: value })
     } catch (e) {
       setGoals(prev)
       writeCache(prev)
@@ -240,49 +247,58 @@ export function Goals(): React.JSX.Element {
     }
   }
 
-  // GET /v1/goals/suggest — ask the backend's goals LLM for one goal based on
-  // the user's memories, then preview it (no goal is created until they accept).
-  const getSuggestion = async (): Promise<void> => {
-    if (suggesting) return
-    setSuggesting(true)
+  // Phase 1: main assembles the on-device context bundle and generates ONE
+  // candidate goal via the Gemini proxy — without creating it. We preview it below
+  // (the Windows review step Mac lacks). Accept → phase 2 (acceptCandidate).
+  const generateGoal = async (): Promise<void> => {
+    if (generating) return
+    setGenerating(true)
     try {
-      const res = await omiApi.get('/v1/goals/suggest')
-      const s = res.data as GoalSuggestion
-      if (!s?.suggested_title) {
-        toast('No suggestion right now', {
-          tone: 'info',
-          body: 'Omi needs a few memories before it can suggest a goal.'
-        })
+      const res = await window.omi?.goalsGenerateCandidate?.()
+      if (!res) {
+        toast('Could not suggest a goal', { tone: 'error', body: 'Try again in a moment.' })
         return
       }
-      setSuggestion(s)
+      if (res.status === 'candidate') {
+        setCandidate(res.candidate)
+        return
+      }
+      if (res.reason === 'insufficient_context') {
+        toast('Not enough context yet', {
+          tone: 'info',
+          body: 'Omi needs a few memories, conversations, or tasks before it can suggest a goal.'
+        })
+      } else if (res.reason === 'no_session') {
+        toast('Sign in to suggest a goal', { tone: 'info' })
+      } else {
+        toast('Could not suggest a goal', { tone: 'error', body: 'Try again in a moment.' })
+      }
     } catch (e) {
-      toast('Could not get a suggestion', { tone: 'error', body: apiError(e) })
+      toast('Could not suggest a goal', { tone: 'error', body: apiError(e) })
     } finally {
-      setSuggesting(false)
+      setGenerating(false)
     }
   }
 
-  // Accept the suggested goal via the normal create path. POST requires
-  // target_value (verified); the suggestion supplies one, default 1 otherwise.
-  const acceptSuggestion = async (): Promise<void> => {
-    if (!suggestion || addingSuggestion) return
-    setAddingSuggestion(true)
+  // Phase 2: the user accepted the previewed candidate → main creates it directly
+  // (POST /v1/goals + the "New Goal" notification), then we refresh.
+  const acceptCandidate = async (): Promise<void> => {
+    if (!candidate || accepting) return
+    setAccepting(true)
     try {
-      const target =
-        typeof suggestion.suggested_target === 'number' && suggestion.suggested_target > 0
-          ? suggestion.suggested_target
-          : 1
-      const body: GoalPatch = { title: suggestion.suggested_title, target_value: target }
-      await omiApi.post('/v1/goals', body)
-      await load()
-      setSuggestion(null)
-      setFilter('active')
-      toast('Goal added ✨', { tone: 'success', body: suggestion.suggested_title })
+      const res = await window.omi?.goalsCreateCandidate?.(candidate)
+      if (res?.status === 'created') {
+        setCandidate(null)
+        setFilter('active')
+        await load()
+        toast('Goal added ✨', { tone: 'success', body: res.title })
+      } else {
+        toast('Could not add goal', { tone: 'error', body: 'Try again in a moment.' })
+      }
     } catch (e) {
       toast('Could not add goal', { tone: 'error', body: apiError(e) })
     } finally {
-      setAddingSuggestion(false)
+      setAccepting(false)
     }
   }
 
@@ -341,11 +357,23 @@ export function Goals(): React.JSX.Element {
             disabled={isBusy}
             aria-label={done ? 'Reopen goal' : 'Mark as complete'}
             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
-              done ? 'border-white/30 bg-white/15 text-white' : 'border-white/20 hover:border-white/45'
+              done
+                ? 'border-white/30 bg-white/15 text-white'
+                : 'border-white/20 hover:border-white/45'
             } ${isBusy ? 'opacity-50' : ''}`}
           >
             {done && <Check className="h-3.5 w-3.5" />}
           </button>
+
+          {/* Category glyph auto-derived from the title (shared with the Home widget). */}
+          <div
+            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[18px] leading-none ${
+              done ? 'opacity-50' : ''
+            }`}
+            aria-hidden="true"
+          >
+            {goalEmoji(g.title)}
+          </div>
 
           <div className="min-w-0 flex-1">
             {editingId === g.id ? (
@@ -379,10 +407,8 @@ export function Goals(): React.JSX.Element {
             <div className="mt-2.5">
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    done ? 'bg-emerald-400/70' : 'bg-white/45'
-                  }`}
-                  style={{ width: `${pct}%` }}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, backgroundColor: progressColor(pct / 100) }}
                 />
               </div>
               <div className="mt-1.5 flex items-center gap-2 text-[11px] text-white/45">
@@ -417,14 +443,28 @@ export function Goals(): React.JSX.Element {
             </div>
           </div>
 
-          <button
-            onClick={() => void deleteGoal(g.id)}
-            className="mt-0.5 shrink-0 rounded-md p-1 text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-rose-300/80 group-hover:opacity-100"
-            title="Delete goal"
-            aria-label="Delete goal"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Insight is only worthwhile on goals with a real target; a 0-target
+                yes/no goal has little for the advice model to reason about. */}
+            {(g.target_value ?? 0) > 0 && (
+              <button
+                onClick={() => setInsightGoal(g)}
+                className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
+                title="Get goal insight"
+                aria-label="Get goal insight"
+              >
+                <Lightbulb className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={() => void deleteGoal(g.id)}
+              className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-rose-300/80"
+              title="Delete goal"
+              aria-label="Delete goal"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </li>
     )
@@ -455,7 +495,7 @@ export function Goals(): React.JSX.Element {
                 </button>
               ))}
             </div>
-            <GenerateGoalsButton onClick={getSuggestion} loading={suggesting} label="Suggest" />
+            <GenerateGoalsButton onClick={generateGoal} loading={generating} label="Suggest" />
             <button
               onClick={() => setComposing((c) => !c)}
               className="btn-primary px-3 py-2"
@@ -476,7 +516,7 @@ export function Goals(): React.JSX.Element {
         }
       />
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        {suggestion && (
+        {candidate && (
           <div className="mx-auto mb-5 max-w-3xl">
             <div className="surface-card animate-fade-in border border-white/10 p-4">
               <div className="flex items-start gap-3">
@@ -488,27 +528,26 @@ export function Goals(): React.JSX.Element {
                     Suggested goal
                   </p>
                   <p className="mt-1 text-sm font-medium text-white/90">
-                    {suggestion.suggested_title}
+                    {candidate.suggestion.title}
                   </p>
-                  {typeof suggestion.suggested_target === 'number' &&
-                    suggestion.suggested_target > 0 && (
-                      <p className="mt-1 flex items-center gap-1.5 text-xs text-white/45">
-                        <Target className="h-3.5 w-3.5" />
-                        Target {suggestion.suggested_target}
-                      </p>
-                    )}
-                  {suggestion.reasoning && (
+                  {candidate.suggestion.target > 0 && (
+                    <p className="mt-1 flex items-center gap-1.5 text-xs text-white/45">
+                      <Target className="h-3.5 w-3.5" />
+                      Target {candidate.suggestion.target}
+                    </p>
+                  )}
+                  {candidate.suggestion.reasoning && (
                     <p className="mt-2 text-xs leading-relaxed text-white/55">
-                      {suggestion.reasoning}
+                      {candidate.suggestion.reasoning}
                     </p>
                   )}
                   <div className="mt-3 flex items-center gap-2">
                     <button
-                      onClick={acceptSuggestion}
-                      disabled={addingSuggestion}
+                      onClick={acceptCandidate}
+                      disabled={accepting}
                       className="btn-primary px-4 py-2 disabled:opacity-40"
                     >
-                      {addingSuggestion ? (
+                      {accepting ? (
                         <Loader2 className="h-4 w-4 animate-spin" />
                       ) : (
                         <Plus className="h-4 w-4" />
@@ -516,18 +555,18 @@ export function Goals(): React.JSX.Element {
                       Add this goal
                     </button>
                     <button
-                      onClick={getSuggestion}
-                      disabled={suggesting || addingSuggestion}
+                      onClick={generateGoal}
+                      disabled={generating || accepting}
                       className="btn-ghost px-3 py-2 disabled:opacity-50"
                       title="Suggest another"
                     >
-                      <RefreshCw className={`h-4 w-4 ${suggesting ? 'animate-spin' : ''}`} />
+                      <RefreshCw className={`h-4 w-4 ${generating ? 'animate-spin' : ''}`} />
                       Another
                     </button>
                   </div>
                 </div>
                 <button
-                  onClick={() => setSuggestion(null)}
+                  onClick={() => setCandidate(null)}
                   className="shrink-0 rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
                   title="Dismiss"
                   aria-label="Dismiss suggestion"
@@ -657,6 +696,9 @@ export function Goals(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {celebrating && <GoalCelebration goal={celebrating} onDone={() => setCelebrating(null)} />}
+      {insightGoal && <GoalInsightPanel goal={insightGoal} onClose={() => setInsightGoal(null)} />}
     </div>
   )
 }

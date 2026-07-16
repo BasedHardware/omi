@@ -47,6 +47,9 @@ import type {
   TaskUpdateFields,
   TaskDashboardSlices,
   LiveNote,
+  GoalGenerateResult,
+  GoalCandidateResult,
+  GoalCandidate,
   XConnectorSession,
   XStatus,
   XSyncResult,
@@ -218,12 +221,26 @@ const omi: OmiBridgeApi = {
     ipcRenderer.invoke('tasks:toggle', args) as Promise<void>,
   tasksUpdate: (args: { backendId: string; fields: TaskUpdateFields }) =>
     ipcRenderer.invoke('tasks:update', args) as Promise<void>,
-  tasksDelete: (args: { backendId: string }) => ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
+  tasksDelete: (args: { backendId: string }) =>
+    ipcRenderer.invoke('tasks:delete', args) as Promise<void>,
   tasksReconcile: () => ipcRenderer.invoke('tasks:reconcile') as Promise<void>,
   onTasksChanged: (cb: () => void) => {
     const listener = (): void => cb()
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  goalsGenerateCandidate: () =>
+    ipcRenderer.invoke('goals:generateCandidate') as Promise<GoalCandidateResult>,
+  goalsCreateCandidate: (candidate: GoalCandidate) =>
+    ipcRenderer.invoke('goals:createCandidate', candidate) as Promise<GoalGenerateResult>,
+  goalsGetAutoGeneration: () =>
+    ipcRenderer.invoke('goals:getAutoGenerationEnabled') as Promise<boolean>,
+  goalsSetAutoGeneration: (enabled: boolean) =>
+    ipcRenderer.invoke('goals:setAutoGenerationEnabled', enabled) as Promise<boolean>,
+  onGoalsChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('goals:changed', listener)
+    return () => ipcRenderer.removeListener('goals:changed', listener)
   },
   // Dev/QA only (handler registered on dev builds): force one Focus analysis of
   // the latest captured frame, so the pipeline + halo can be exercised without

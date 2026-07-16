@@ -795,6 +795,18 @@ export type OmiBridgeApi = {
   /** main → renderer: the local task store changed (optimistic write or a
    *  background sync landed). Returns an unsubscribe fn. */
   onTasksChanged: (cb: () => void) => () => void
+  /** Manual goal generation phase 1 (the Goals "Suggest" button). Client-side:
+   *  assembles the on-device context bundle and generates ONE candidate goal via
+   *  the Gemini proxy — WITHOUT creating it. The renderer previews the candidate;
+   *  on accept it calls goalsCreateCandidate. Returns the candidate or a skip. */
+  goalsGenerateCandidate: () => Promise<GoalCandidateResult>
+  /** Manual phase 2: create the goal the user accepted from the preview. */
+  goalsCreateCandidate: (candidate: GoalCandidate) => Promise<GoalGenerateResult>
+  /** The "Automatically suggest goals" setting (Settings → Proactive insights). */
+  goalsGetAutoGeneration: () => Promise<boolean>
+  goalsSetAutoGeneration: (enabled: boolean) => Promise<boolean>
+  /** main → renderer: a goal was created/removed (auto-gen or manual). Re-fetch. */
+  onGoalsChanged: (cb: () => void) => () => void
   /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
@@ -2178,6 +2190,40 @@ export type WhatsNewPayload = {
   version: string
   changes: string[]
 }
+
+// A generated-but-not-yet-created goal, previewed before the user accepts it
+// (D2 — Windows is ahead of Mac's blind-create). Mirrors the main-side
+// GoalCandidate (assistants/goals/generate.ts) across the IPC boundary.
+export type GoalSuggestionCandidate = {
+  title: string
+  description: string
+  type: 'boolean' | 'scale' | 'numeric'
+  target: number
+  min: number
+  max: number
+  reasoning: string
+  linkedTaskIds: string[]
+}
+export type GoalCandidate = {
+  suggestion: GoalSuggestionCandidate
+  /** linked_task_ids intersected with the fetched bundle (currently unused —
+   *  task→goal linking has no backend field yet). */
+  linkedTaskIds: string[]
+}
+
+// Outcome of manual phase 1 (goals:generateCandidate).
+export type GoalCandidateResult =
+  | { status: 'candidate'; candidate: GoalCandidate }
+  | { status: 'skipped'; reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' }
+
+// Outcome of a goal create (goals:createCandidate). Mirrors the main-side
+// GenerateResult (assistants/goals/generate.ts) across the IPC boundary.
+export type GoalGenerateResult =
+  | { status: 'created'; goalId: string; title: string }
+  | {
+      status: 'skipped'
+      reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' | 'stale' | 'error'
+    }
 
 export type InsightSettings = {
   enabled: boolean // default ON
