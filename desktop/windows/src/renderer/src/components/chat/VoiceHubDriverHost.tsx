@@ -61,7 +61,10 @@ export function VoiceHubDriverHost(): null {
             // Seed a realtime session with the shared thread's recent turns (PR-B).
             // Reads the SAME conversation the typed tail reads, via the chat hook so
             // the chatId stays encapsulated.
-            fetchSeed: () => getSeedRef.current()
+            fetchSeed: () => getSeedRef.current(),
+            // Advertise the host-built voice tool catalog (PR-C). Role is host-derived
+            // main-side (never model/renderer-claimed); empty until signed in.
+            fetchTools: () => window.omi?.voiceHubToolCatalog?.() ?? Promise.resolve([])
           }),
         interruptPlayback: (leaseID) => interruptCurrentResponse(leaseID),
         publishState: (state) => window.omi?.publishVoiceHubState?.(state),
@@ -78,6 +81,12 @@ export function VoiceHubDriverHost(): null {
         // kernel dedupe key).
         onRecordTurn: (userText, assistantText, interrupted, turnId) =>
           recordVoiceTurnRef.current(userText, assistantText, interrupted, turnId),
+        // Dispatch a spoken tool request IN-PROCESS via the shared host executor
+        // registry (PR-C). Authority is host-derived main-side; the model supplies
+        // only the name + arguments. Never throws — main returns "Error: …" strings.
+        executeTool: (name, argumentsJSON) =>
+          window.omi?.voiceToolExecute?.({ name, argumentsJSON }) ??
+          Promise.resolve('Error: tools are not available'),
         muteForCapture: muteSystemAudioForHubCapture
       })
   )

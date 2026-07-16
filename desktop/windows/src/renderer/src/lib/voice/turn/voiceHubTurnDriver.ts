@@ -46,15 +46,13 @@ import type { VoiceHubBarState } from '../../../../../shared/types'
 import type { HubController, HubControllerEvents } from '../hub/hubController'
 import { VoiceOutputCoordinator } from './voiceOutputCoordinator'
 import { selectPttRoute, VoiceTurnHost, type VoiceTurnHostDeps } from './voiceTurnHost'
-import {
-  VoiceTurnCoordinator,
-  type VoiceTurnDeadlineScheduling
-} from './voiceTurnCoordinator'
+import { VoiceTurnCoordinator, type VoiceTurnDeadlineScheduling } from './voiceTurnCoordinator'
 import {
   IDLE_PROJECTION,
   type VoiceCaptureID,
   type VoiceLeaseID,
   type VoiceSessionID,
+  type VoiceToolCallID,
   type VoiceTurnEvent,
   type VoiceTurnID,
   type VoiceTurnRoute,
@@ -105,6 +103,13 @@ export type VoiceHubTurnDriverDeps = {
     interrupted: boolean,
     turnId?: string
   ) => void
+  /** Execute one voice-requested tool IN-PROCESS via the SAME host executor registry
+   *  the typed path uses (PR-C). Production wraps `window.omi.voiceToolExecute` →
+   *  main `executeHostTool` (authority host-derived). Never rejects in practice
+   *  (main returns `"Error: …"` strings); the driver still guards a rejection so a
+   *  transport failure can't wedge the turn. Absent ⇒ no tool loop (today's behavior:
+   *  a provider tool call would hang until the reducer's 30 s `pendingTools` deadline). */
+  executeTool?: (name: string, argumentsJSON: string) => Promise<string>
   /** Pref-gated system-audio duck at capture start (defaults to the shipped A4 call). */
   muteForCapture?: () => void
   /** Unconditional, idempotent system-audio restore (defaults to shipped). */
@@ -167,7 +172,8 @@ export class VoiceHubTurnDriver {
     // VoiceCaptureID is a branded NUMBER — a per-driver monotonic counter (this id
     // is only a reducer fencing token; it shares no namespace with the capture
     // window's own string captureId).
-    this.mintCaptureID = deps.mintCaptureID ?? (() => ++this.captureSeq as unknown as VoiceCaptureID)
+    this.mintCaptureID =
+      deps.mintCaptureID ?? (() => ++this.captureSeq as unknown as VoiceCaptureID)
     this.output = deps.output ?? new VoiceOutputCoordinator()
 
     // The controller is constructed with the driver's event wiring so provider /
@@ -355,7 +361,8 @@ export class VoiceHubTurnDriver {
     // Feed the hub (buffered internally during warm-wait; inert after handoff).
     if (isHubRoute(this.route) && !this.handedOff) {
       const rate = this.hub.requiredInputSampleRate()
-      const frame = rate && rate !== CAPTURE_SAMPLE_RATE ? resamplePcm16(pcm, CAPTURE_SAMPLE_RATE, rate) : pcm
+      const frame =
+        rate && rate !== CAPTURE_SAMPLE_RATE ? resamplePcm16(pcm, CAPTURE_SAMPLE_RATE, rate) : pcm
       this.hub.appendAudio(turnID, pcm16ToBytes(frame))
     }
   }
@@ -467,6 +474,27 @@ export class VoiceHubTurnDriver {
         // what we accumulated, or the turn records with no assistant text.
         if (text) this.assistantText = isFinal ? text : this.assistantText + text
       },
+      // The model requested a tool (PR-C). Dispatch it IN-PROCESS via the shared host
+      // executor registry (control tools + serviceable product tools + spawn_agent),
+      // then relay the result back to the provider so it can finish speaking. Parallel
+      // calls each register in the reducer's pending set; the turn completes only once
+      // every pending call resolves (or the 30 s pendingTools deadline fires).
+      onToolRequest: (call) => {
+        const turnID = this.turnID
+        if (turnID === null) return
+        if (!this.deps.executeTool) {
+          // No executor wired (older host): satisfy the provider so its turn doesn't
+          // hang, without entering awaitingTools (there is nothing to await).
+          this.hub.sendToolResult(call.callId, call.name, 'Error: tools are not available')
+          return
+        }
+        this.dispatch({
+          type: 'toolStarted',
+          turnID,
+          callID: call.callId as unknown as VoiceToolCallID
+        })
+        this.executeVoiceTool(turnID, call)
+      },
       // The warm-wait buffer lost the 1 s race — the reducer already moved the
       // route to deepgramBatch and kept the turn alive. Transcribe on the cascade.
       onCascadeHandoff: ({ frames, committed }) => {
@@ -481,6 +509,32 @@ export class VoiceHubTurnDriver {
         if (committed) this.runCascadeTranscription(turnID)
       }
     }
+  }
+
+  /** Run one voice tool call and relay its result to the provider (PR-C). The
+   *  execution authority is entirely HOST-side (`executeHostTool` derives role/owner
+   *  from the surface session); this driver only shuttles the request and the result.
+   *  Never rejects the turn: a transport failure resolves the pending call with an
+   *  `"Error: …"` string the model can recover from. */
+  private executeVoiceTool(
+    turnID: VoiceTurnID,
+    call: { name: string; callId: string; argumentsJSON: string }
+  ): void {
+    const execute = this.deps.executeTool
+    if (!execute) return
+    const callID = call.callId as unknown as VoiceToolCallID
+    const settle = (output: string): void => {
+      // Turn-epoch gate: a barge-in / cancel superseded this turn while the tool ran.
+      // Drop the stale result — never feed it to the now-different provider turn, and
+      // don't dispatch toolFinished (the reducer already tore the old turn down; a
+      // toolFinished for its callID would be a no-op `stale` anyway).
+      if (this.turnID !== turnID) return
+      this.hub.sendToolResult(call.callId, call.name, output)
+      this.dispatch({ type: 'toolFinished', turnID, callID })
+    }
+    void execute(call.name, call.argumentsJSON).then(settle, (err: unknown) =>
+      settle(`Error: ${err instanceof Error ? err.message : String(err)}`)
+    )
   }
 
   private seedCascadeFromFrames(frames: readonly Uint8Array[]): void {

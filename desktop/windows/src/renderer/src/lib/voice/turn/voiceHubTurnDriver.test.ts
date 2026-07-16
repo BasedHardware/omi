@@ -57,7 +57,8 @@ function makeFakeHub() {
     didTerminate: [] as VoiceTurnID[],
     seedProduced: [] as string[],
     seedRefresh: 0,
-    ensureWarm: 0
+    ensureWarm: 0,
+    sendToolResult: [] as { callId: string; name: string; output: string }[]
   }
   let warmError: unknown = null
   const hub = {
@@ -83,7 +84,9 @@ function makeFakeHub() {
     markSeedKeyProduced: (key: string) => calls.seedProduced.push(key),
     refreshSeedContext: () => {
       calls.seedRefresh++
-    }
+    },
+    sendToolResult: (callId: string, name: string, output: string) =>
+      calls.sendToolResult.push({ callId, name, output })
   }
   return {
     factory: (e: HubControllerEvents): HubController => {
@@ -133,7 +136,13 @@ type Harness = {
   }
 }
 
-function makeDriver(opts: { pttHubEnabled?: boolean; transcript?: string } = {}): Harness {
+function makeDriver(
+  opts: {
+    pttHubEnabled?: boolean
+    transcript?: string
+    executeTool?: (name: string, argumentsJSON: string) => Promise<string>
+  } = {}
+): Harness {
   const hub = makeFakeHub()
   const capture = makeFakeCapture()
   const scheduler = new ManualScheduler()
@@ -160,6 +169,7 @@ function makeDriver(opts: { pttHubEnabled?: boolean; transcript?: string } = {})
     muteForCapture: spies.muteForCapture,
     restoreSystemAudio: spies.restoreSystemAudio,
     trackEvent: spies.trackEvent,
+    executeTool: opts.executeTool,
     prefs: () => ({ pttHubEnabled: opts.pttHubEnabled }),
     scheduler,
     mintTurnID: () => `turn-${++turnSeq}` as VoiceTurnID,
@@ -539,5 +549,104 @@ describe('post-commit provider death (A7c follow-up #1)', () => {
 
     h.scheduler.fire('hintVisibility')
     expect(h.states.at(-1)!.hint).toBe('')
+  })
+})
+
+// ---- (e) PR-C: the hub tool loop ------------------------------------------
+//
+// A spoken tool request is dispatched IN-PROCESS via the injected executeTool seam
+// (production = the shared executeHostTool over IPC) and its result relayed back to
+// the provider keyed by callId, gated by the turn epoch so a superseded turn's late
+// result is dropped. Parallel calls each register; the turn defers until all resolve.
+
+/** Drive a warm-hub turn to the point the provider can request a tool (awaitingResponse
+ *  after end() → hubCommitDeferred, exactly as the success-terminal test does). */
+async function driveToAwaitingResponse(h: Harness): Promise<void> {
+  h.hub.setAvailability(true)
+  h.driver.begin({ backfillMs: 0 })
+  await flush()
+  h.capture.feed(loud())
+  h.driver.end()
+}
+
+describe('hub tool loop (PR-C)', () => {
+  it('dispatches a spoken tool request in-process and relays the result keyed by callId', async () => {
+    let resolveTool!: (out: string) => void
+    const executeTool = vi.fn(
+      (_name: string, _args: string) => new Promise<string>((r) => (resolveTool = r))
+    )
+    const h = makeDriver({ pttHubEnabled: true, executeTool })
+    await driveToAwaitingResponse(h)
+
+    h.hub
+      .events()
+      .onToolRequest?.({ name: 'list_agent_sessions', callId: 'call-1', argumentsJSON: '{}' }, null)
+    // The name + raw args string are forwarded verbatim to the host dispatcher.
+    expect(executeTool).toHaveBeenCalledWith('list_agent_sessions', '{}')
+    // Nothing is relayed until the tool resolves.
+    expect(h.hub.calls.sendToolResult).toHaveLength(0)
+
+    resolveTool('{"ok":true,"sessions":[]}')
+    await flush()
+    expect(h.hub.calls.sendToolResult).toEqual([
+      { callId: 'call-1', name: 'list_agent_sessions', output: '{"ok":true,"sessions":[]}' }
+    ])
+
+    // After the tool, the model speaks and the turn completes normally.
+    const ev = h.hub.events()
+    ev.onSpeakingStart?.()
+    ev.onTurnDone?.(null)
+    ev.onSpeakingEnd?.()
+    expect(h.hub.calls.didTerminate).toHaveLength(1)
+  })
+
+  it('drops a stale tool result when the turn was superseded (turn-epoch gate)', async () => {
+    let resolveTool!: (out: string) => void
+    const executeTool = vi.fn(() => new Promise<string>((r) => (resolveTool = r)))
+    const h = makeDriver({ pttHubEnabled: true, executeTool })
+    await driveToAwaitingResponse(h)
+
+    h.hub
+      .events()
+      .onToolRequest?.({ name: 'list_agent_sessions', callId: 'call-1', argumentsJSON: '{}' }, null)
+    // Barge-in: a new hold supersedes the turn while the tool is still running.
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+
+    resolveTool('{"ok":true}')
+    await flush()
+    // The stale result is neither relayed to the provider nor dispatched to the reducer.
+    expect(h.hub.calls.sendToolResult).toHaveLength(0)
+  })
+
+  it('supports parallel tool calls — each result relayed by its own callId', async () => {
+    const resolvers = new Map<string, (out: string) => void>()
+    const executeTool = vi.fn((name: string) => new Promise<string>((r) => resolvers.set(name, r)))
+    const h = makeDriver({ pttHubEnabled: true, executeTool })
+    await driveToAwaitingResponse(h)
+
+    const ev = h.hub.events()
+    ev.onToolRequest?.({ name: 'list_agent_sessions', callId: 'c1', argumentsJSON: '{}' }, null)
+    ev.onToolRequest?.(
+      { name: 'get_agent_run', callId: 'c2', argumentsJSON: '{"runId":"r"}' },
+      null
+    )
+    expect(executeTool).toHaveBeenCalledTimes(2)
+
+    resolvers.get('get_agent_run')!('{"ok":true,"run":{}}')
+    resolvers.get('list_agent_sessions')!('{"ok":true}')
+    await flush()
+
+    expect(h.hub.calls.sendToolResult).toHaveLength(2)
+    expect(h.hub.calls.sendToolResult.map((c) => c.callId).sort()).toEqual(['c1', 'c2'])
+  })
+
+  it('with no executor wired, satisfies the provider so the turn cannot hang', async () => {
+    const h = makeDriver({ pttHubEnabled: true }) // no executeTool
+    await driveToAwaitingResponse(h)
+
+    h.hub.events().onToolRequest?.({ name: 'x', callId: 'c1', argumentsJSON: '{}' }, null)
+    expect(h.hub.calls.sendToolResult).toHaveLength(1)
+    expect(h.hub.calls.sendToolResult[0].output).toMatch(/^Error:/)
   })
 })

@@ -1195,6 +1195,18 @@ export type OmiBridgeApi = {
   /** Read-only continuity seed for the voice session — the recent turns of the
    *  same main_chat conversation, source-tagged [live:voice]/[live:typed]. */
   voiceHubGetSeedContext: (args?: VoiceHubSeedContextArgs) => Promise<VoiceHubSeedContext>
+  // --- realtime-hub tool loop (INV-AGENT) ---
+  /** The per-provider-neutral tool declarations the warm voice session advertises.
+   *  Built HOST-SIDE from the shared manifest with a host-derived execution role
+   *  (never model/renderer-claimed) so a leaf voice session can't be handed
+   *  coordinator tools. Empty until a signed-in owner exists. */
+  voiceHubToolCatalog: () => Promise<VoiceToolDeclaration[]>
+  /** Execute one voice-requested tool IN-PROCESS via the SAME host executor registry
+   *  the typed chat path uses (`executeHostTool`) — control tools + serviceable
+   *  product tools + spawn_agent. Authority is HOST-derived from the main_chat
+   *  surface session; the model never supplies trust/role. Never throws — a failure
+   *  is returned as an `"Error: …"` string the model can recover from. */
+  voiceToolExecute: (args: VoiceToolExecuteArgs) => Promise<string>
   // --- pi-mono managed-cloud chat session relay ---
   /** Push the renderer's Firebase session (token + desktop API base) to the
    *  main-side pi-mono session store on sign-in and on every id-token refresh;
@@ -1445,6 +1457,23 @@ export type VoiceHubSeedContext = {
   /** Idempotency keys of the complete user turns included, so the caller can tell
    *  whether the warm session already reflects them (avoids reconnect thrash). */
   idempotencyKeys: string[]
+}
+
+/** A provider-neutral realtime tool declaration. Each hub session subclass projects
+ *  it to its wire shape (Gemini `functionDeclarations` entry = this shape as-is;
+ *  OpenAI realtime wraps it as `{ type:'function', ... }`). `parameters` is a JSON
+ *  Schema object (`{ type:'object', properties, required? }`). */
+export type VoiceToolDeclaration = {
+  name: string
+  description: string
+  parameters: Record<string, unknown>
+}
+
+export type VoiceToolExecuteArgs = {
+  /** The tool name the model requested (control or product tool). */
+  name: string
+  /** The raw JSON arguments string from the provider tool call (parsed host-side). */
+  argumentsJSON: string
 }
 
 export type MainChatEvent =

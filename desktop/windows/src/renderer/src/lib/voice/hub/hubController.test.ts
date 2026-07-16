@@ -125,6 +125,9 @@ function harness(opts?: {
   provider?: VoiceProvider
   instructions?: string
   mintToken?: (provider: VoiceProvider) => Promise<string>
+  fetchTools?: () => Promise<
+    { name: string; description: string; parameters: Record<string, unknown> }[]
+  >
 }): Harness {
   const events = {
     onConnected: vi.fn(),
@@ -154,6 +157,7 @@ function harness(opts?: {
     resolveProvider: () => opts?.provider ?? 'openai',
     buildInstructions: () => opts?.instructions ?? 'INSTRUCTIONS+CARD',
     mintToken,
+    fetchTools: opts?.fetchTools,
     createSession,
     now: () => now.value,
     setTimer: (_ms, fire) => {
@@ -867,5 +871,49 @@ describe('HubController — A7c cross-provider failover (D: mint-based)', () => 
     h.fireReconnect()
     await tick()
     expect(h.mintToken).toHaveBeenLastCalledWith('openai')
+  })
+})
+
+describe('HubController — tool loop (PR-C)', () => {
+  it('passes the fetched catalog into the session it builds', async () => {
+    const tools = [
+      {
+        name: 'list_agent_sessions',
+        description: 'list',
+        parameters: { type: 'object', properties: {} }
+      }
+    ]
+    const h = harness({ fetchTools: () => Promise.resolve(tools) })
+    await warmed(h)
+    const spec = h.createSession.mock.calls[0][0] as { tools?: unknown[] }
+    expect(spec.tools).toEqual(tools)
+  })
+
+  it('warms tool-less when no fetchTools seam is wired', async () => {
+    const h = harness()
+    await warmed(h)
+    const spec = h.createSession.mock.calls[0][0] as { tools?: unknown[] }
+    expect(spec.tools).toEqual([])
+  })
+
+  it('warms tool-less (does not fail the session) when the catalog fetch rejects', async () => {
+    const h = harness({ fetchTools: () => Promise.reject(new Error('ipc down')) })
+    await warmed(h)
+    expect(h.controller.isWarm()).toBe(true)
+    const spec = h.createSession.mock.calls[0][0] as { tools?: unknown[] }
+    expect(spec.tools).toEqual([])
+  })
+
+  it('relays a tool result to the warm session keyed by callId', async () => {
+    const h = harness()
+    await warmed(h)
+    h.controller.sendToolResult('call-1', 'list_agent_sessions', '{"ok":true}')
+    expect(h.getSession().toolResults).toEqual([{ callId: 'call-1', output: '{"ok":true}' }])
+  })
+
+  it('sendToolResult is a no-op with no warm session (torn-down / barged-in turn)', () => {
+    const h = harness()
+    // Never warmed → no session; must not throw.
+    expect(() => h.controller.sendToolResult('c', 'n', 'o')).not.toThrow()
   })
 })

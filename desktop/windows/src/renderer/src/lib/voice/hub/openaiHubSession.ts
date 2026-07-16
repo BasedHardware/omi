@@ -83,7 +83,13 @@ export class OpenAiHubSession extends BaseHubSession {
           },
           output: { format: { type: 'audio/pcm', rate: 24000 }, voice: 'marin' }
         },
-        tools: this.tools,
+        // Project the provider-neutral catalog to the GA realtime function-tool shape.
+        tools: this.tools.map((t) => ({
+          type: 'function',
+          name: t.name,
+          description: t.description,
+          parameters: t.parameters
+        })),
         tool_choice: 'auto'
       }
     }
