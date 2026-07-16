@@ -1,7 +1,6 @@
 from concurrent.futures import ThreadPoolExecutor
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
-from threading import RLock
 import json
 from pathlib import Path
 
@@ -10,76 +9,13 @@ from pydantic import ValidationError
 
 import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateStatus
+from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.task_intelligence import candidate_service
-
-
-class FakeSnapshot:
-    def __init__(self, data=None):
-        self._data = deepcopy(data)
-        self.exists = data is not None
-
-    def to_dict(self):
-        return deepcopy(self._data)
-
-
-class FakeRef:
-    def __init__(self, database, path):
-        self.database = database
-        self.path = path
-
-    def collection(self, name):
-        return FakeCollection(self.database, (*self.path, name))
-
-    def get(self, transaction=None):
-        if transaction is not None and transaction.write_started:
-            raise AssertionError('Firestore transactions must complete all reads before the first write')
-        return FakeSnapshot(self.database.rows.get(self.path))
-
-    def update(self, patch):
-        self.database.rows[self.path].update(deepcopy(patch))
-
-
-class FakeCollection:
-    def __init__(self, database, path):
-        self.database = database
-        self.path = path
-
-    def document(self, name):
-        return FakeRef(self.database, (*self.path, name))
-
-
-class FakeTransaction:
-    def __init__(self, database):
-        self.database = database
-        self.lock = database.lock
-        self.write_started = False
-
-    def set(self, ref, data):
-        self.write_started = True
-        self.database.rows[ref.path] = deepcopy(data)
-
-    def update(self, ref, patch):
-        self.write_started = True
-        if ref.path not in self.database.rows:
-            raise RuntimeError('missing row')
-        self.database.rows[ref.path].update(deepcopy(patch))
-
-
-class FakeDB:
-    def __init__(self):
-        self.rows = {}
-        self.lock = RLock()
-
-    def collection(self, name):
-        return FakeCollection(self, (name,))
-
-    def transaction(self):
-        return FakeTransaction(self)
 
 
 @pytest.fixture
 def fake_db(monkeypatch):
-    database = FakeDB()
+    database = StrictFirestore()
     database.rows[('users', 'user-1', 'task_intelligence_control', 'state')] = {
         'workflow_mode': 'read',
         'account_generation': 3,

@@ -222,6 +222,8 @@ npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention 
 
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
 
+**Firestore transaction fakes** — a fake at this service boundary must enforce its ordering and constraint semantics. Use `tests.unit.fixtures.strict_firestore_transaction.StrictFirestore` for transaction tests that need document-reference reads plus `set`/`update`: it rejects reads after the first write, the production rule that #9739's lenient fake missed. If an incident requires queries, deletes, retry, or contention behavior, first cover it with the Firestore emulator; extend the fixture only for a proven hermetic guard.
+
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
 
 ### Memory continuity gauntlet gates
