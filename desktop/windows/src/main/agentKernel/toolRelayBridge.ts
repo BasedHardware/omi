@@ -48,6 +48,7 @@ import {
 } from './controlTools'
 import { productManifestEntry, type OmiToolTimeoutClass } from './omiToolManifest'
 import { createCaptureScreenExecutor } from './captureScreenExecutor'
+import { tierAProductToolExecutors } from './productToolExecutors'
 
 /** A single frame may not exceed this. Hostile input must not exhaust main's heap. */
 const MAX_FRAME_BYTES = 1024 * 1024
@@ -94,20 +95,24 @@ export type ProductToolExecutor = (
  * tool-registration projection should advertise only these to pi so the model does
  * not waste turns on tools that will only degrade.
  *
- * `capture_screen` is the FIRST serviceable product tool (PR-F). It captures the
- * screen locally and returns a file PATH, mirroring macOS' capture tool; its own
- * "Screen Sharing in Chat" consent gate lives inside the executor (see
- * captureScreenExecutor.ts), enforced here at dispatch. Every other product tool
- * still degrades cleanly (the "not available on Windows yet" path) with fallback
- * telemetry — macOS services those by handing them to Swift over a second process
- * boundary that Windows does not have, and building new backends is out of scope.
- * DARK: this map only decides what the relay WOULD dispatch; nothing connects a pi
- * client to the relay in production yet (see the file header).
+ * `capture_screen` (PR-F) captures the screen locally and returns a file PATH,
+ * mirroring macOS' capture tool; its "Screen Sharing in Chat" consent gate lives
+ * inside the executor (captureScreenExecutor.ts), enforced here at dispatch.
+ *
+ * The Tier-A bundle (PR-3, productToolExecutors.ts) adds the thin tasks + screen-
+ * search executors whose data layer already exists on Windows: `semantic_search`,
+ * `search_tasks`, `get_action_items`, `create_action_item`, `update_action_item`,
+ * `complete_task`, `delete_task`. `load_skill` needs no host executor — the pi-mono
+ * extension answers it in-process (node-tools.ts), never over this relay.
+ *
+ * Every still-unmapped product tool degrades cleanly (the "not available on Windows
+ * yet" path) with fallback telemetry — macOS services those by handing them to Swift
+ * over a second process boundary Windows does not have; later PRs port the rest.
  */
 export const defaultProductToolExecutors: ReadonlyMap<string, ProductToolExecutor> = new Map<
   string,
   ProductToolExecutor
->([['capture_screen', createCaptureScreenExecutor()]])
+>([['capture_screen', createCaptureScreenExecutor()], ...tierAProductToolExecutors()])
 
 /** The advertised-serviceable allowlist, derived from the default registry so the
  *  two can never drift. Consumed by the extension's projection layer. */
