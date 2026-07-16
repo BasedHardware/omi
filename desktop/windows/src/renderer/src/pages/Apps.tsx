@@ -174,7 +174,9 @@ export function Apps(): React.JSX.Element {
   // Cold-start snapshot: read once (before initial state) so the grid paints the
   // last-known catalog immediately on app restart instead of a spinner. The
   // revalidating load() below still runs and overwrites with fresh data.
-  const [snapshot] = useState<AppsSnapshot | null>(() => readPersistedValue<AppsSnapshot>(APPS_SURFACE))
+  const [snapshot] = useState<AppsSnapshot | null>(() =>
+    readPersistedValue<AppsSnapshot>(APPS_SURFACE)
+  )
   const [allApps, setAllApps] = useState<AppCatalogItem[]>(() => snapshot?.allApps ?? [])
   // Merged v2-union + per-user v1 /apps pool, deduped (v1 wins). Backs the Installed
   // view + count so a user's private/unapproved/tester apps (absent from the
@@ -436,7 +438,16 @@ export function Apps(): React.JSX.Element {
       return { kind: 'grid', apps: allApps.filter(catFilter) }
     }
     return { kind: 'sections' }
-  }, [tab, allApps, installedApps, isSearching, debouncedQuery, selectedCats, catFilter, searchResults])
+  }, [
+    tab,
+    allApps,
+    installedApps,
+    isSearching,
+    debouncedQuery,
+    selectedCats,
+    catFilter,
+    searchResults
+  ])
 
   const showSearchSpinner = tab === 'all' && isSearching && searchLoading && searchResults === null
 
@@ -668,8 +679,8 @@ export function Apps(): React.JSX.Element {
                     />
                     {view.apps.length > SEARCH_LIMIT && (
                       <p className="mt-3 text-center text-xs text-white/45">
-                        Showing the first {SEARCH_LIMIT} of {view.apps.length}. Narrow with search or
-                        filters.
+                        Showing the first {SEARCH_LIMIT} of {view.apps.length}. Narrow with search
+                        or filters.
                       </p>
                     )}
                   </>
@@ -715,7 +726,8 @@ export function Apps(): React.JSX.Element {
                     />
                     {isExpanded && section.truncated && (
                       <p className="text-xs text-white/45">
-                        Showing {section.apps.length} of {section.total}. Use search to find the rest.
+                        Showing {section.apps.length} of {section.total}. Use search to find the
+                        rest.
                       </p>
                     )}
                   </div>
