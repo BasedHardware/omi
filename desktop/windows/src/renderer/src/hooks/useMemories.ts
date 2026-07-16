@@ -70,12 +70,15 @@ async function patchMemoryOptimistic(
   value: string,
   apply: (m: Memory) => Memory
 ): Promise<void> {
+  const originUid = getCacheUid()
   const prev = cache.list ?? []
   publish(prev.map((m) => (m.id === id ? apply(m) : m)))
   try {
     await omiApi.patch(urlPath, null, { params: { value } })
   } catch (e) {
-    publish(prev)
+    // Revert only if still the same account — a switch mid-request already reset
+    // A's cache, so re-publishing A's `prev` list would stamp it under B.
+    if (getCacheUid() === originUid) publish(prev)
     throw e
   }
 }
@@ -158,8 +161,12 @@ export function useMemories(): {
   const createMemory = async (content: string, extra?: CreateMemoryExtra): Promise<void> => {
     const text = content.trim()
     if (!text) return
+    const originUid = getCacheUid()
     await omiApi.post('/v3/memories', { content: text, ...extra })
-    publish(await fetchMemories())
+    const list = await fetchMemories()
+    // Drop the publish if the account switched while the request was in flight
+    // (same guard as the revalidation effect) — never write A's memories under B.
+    if (getCacheUid() === originUid) publish(list)
   }
 
   // Edit a memory's content.
@@ -186,12 +193,14 @@ export function useMemories(): {
   // the time this fires the delete is committed — there's no server call to
   // walk back, only the local list to restore if the request errors.
   const deleteMemory = async (id: string): Promise<void> => {
+    const originUid = getCacheUid()
     const prev = cache.list ?? []
     publish(prev.filter((m) => m.id !== id))
     try {
       await omiApi.delete(`/v3/memories/${id}`)
     } catch (e) {
-      publish(prev)
+      // Same-account revert only — see patchMemoryOptimistic.
+      if (getCacheUid() === originUid) publish(prev)
       throw e
     }
   }
@@ -199,7 +208,9 @@ export function useMemories(): {
   // Re-pull the server list and broadcast to all mounts. Used after a bulk
   // import so the Memories page and export count reflect the new memories.
   const refresh = async (): Promise<void> => {
-    publish(await fetchMemories())
+    const originUid = getCacheUid()
+    const list = await fetchMemories()
+    if (getCacheUid() === originUid) publish(list)
   }
 
   return {

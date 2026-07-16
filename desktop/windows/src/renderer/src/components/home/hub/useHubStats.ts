@@ -91,14 +91,17 @@ export function useHubStats(): HubStatCounts {
   useEffect(() => subscribeConversationsCache(setRows), [])
 
   // SELF-SAFETY against an in-place account switch (A→B without this hook
-  // remounting). `tasks`/`screenshots` hold live state fed by a fetch effect, so on
-  // a uid change they would otherwise keep A's numbers until B's fetch lands — and
-  // in that window B could DISPLAY them and the persist effect could STAMP them
-  // under B (the cross-account-leak class). Reset those cells the instant the
-  // account changes, during render (React's reset-state-on-change pattern), so the
-  // reset lands BEFORE paint and before the persist effect runs — no frame of A's
-  // numbers, nothing of A's stamped under B. The effects above then re-fetch under
-  // B. (`memories`/`conversations` re-scope through their own caches.) Today every
+  // remounting). `tasks`/`screenshots`/`rows` hold live state that would otherwise
+  // keep A's numbers until B's data lands — and in that window B could DISPLAY them
+  // and the persist effect could STAMP them under B (the cross-account-leak class).
+  // Reset every live cell the instant the account changes, during render (React's
+  // reset-state-on-change pattern), so the reset lands BEFORE paint and before the
+  // persist effect runs — no frame of A's numbers, nothing of A's stamped under B.
+  // The effects above then re-fetch under B. `memories` re-scopes through its own
+  // cache (teardown's resetMemoriesCache broadcasts []). `rows` must be nulled HERE:
+  // teardown calls invalidateConversationsCache, which notifies pageCache's
+  // `subscribers` set — NOT the `cacheSubscribers` set feeding this hook's `rows` via
+  // subscribeConversationsCache — so `rows` is never reset by teardown. Today every
   // switch also unmounts the shell, so this is belt-and-suspenders — it keeps the
   // hook correct even if a future refactor keeps it mounted across the swap.
   const [liveUid, setLiveUid] = useState(uid)
@@ -106,6 +109,7 @@ export function useHubStats(): HubStatCounts {
     setLiveUid(uid)
     setTasks(null)
     setScreenshots(null)
+    setRows(null)
   }
 
   const cloudRows = rows?.filter((r) => r.source === 'cloud').length ?? 0

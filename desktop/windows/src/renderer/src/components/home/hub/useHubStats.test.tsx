@@ -40,7 +40,7 @@ vi.mock('../../../lib/actionItems', () => ({
   fetchAllActionItems: () => Promise.resolve(h.tasks)
 }))
 
-import { invalidateConversationsCache } from '../../../lib/pageCache'
+import { invalidateConversationsCache, publishConversationsCache } from '../../../lib/pageCache'
 import { getCachedHubStats } from './hubStatsCache'
 import { useHubStats } from './useHubStats'
 
@@ -91,5 +91,28 @@ describe('useHubStats — in-place account switch (no remount)', () => {
     expect(getCachedHubStats('B')).toMatchObject({ tasks: 1, screenshots: 9 })
     // A's blob was overwritten by B's write (the uid stamp discards the prior owner).
     expect(getCachedHubStats('A').tasks).toBeNull()
+  })
+
+  it('resets the conversations count too on an A→B swap (not just tasks/screenshots)', async () => {
+    // A's conversations feed the hub's `rows` cell (2 cloud rows). This is the cell
+    // that slipped the original reset: teardown's invalidateConversationsCache does
+    // NOT notify subscribeConversationsCache's observers, so only the hook's own
+    // in-render reset can clear it. (No teardown is wired in this hook test, which is
+    // exactly why it isolates the hook's self-reset.)
+    publishConversationsCache([
+      { id: 'c1', source: 'cloud' },
+      { id: 'c2', source: 'cloud' }
+    ] as unknown as Parameters<typeof publishConversationsCache>[0])
+    const { result } = renderHook(() => useHubStats())
+    await waitFor(() => expect(result.current.conversations).toBe(2))
+
+    // B signs in on the SAME mount.
+    h.currentUser = { uid: 'B' }
+    act(() => h.cb?.({ uid: 'B' }))
+
+    // The conversation count must reset to unknown (null) — never stay at A's 2 —
+    // and A's 2 must not be stamped under B.
+    expect(result.current.conversations).toBeNull()
+    expect(getCachedHubStats('B').conversations).toBeNull()
   })
 })
