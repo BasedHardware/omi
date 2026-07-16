@@ -101,7 +101,13 @@ function bucketOf(t: ActionItemRecord): Bucket {
   const due = startOfDay(t.dueAt)
   const today = startOfDay(Date.now())
   if (due <= today) return 'today' // overdue + today
-  if (due === today + DAY) return 'tomorrow'
+  // Tomorrow's local start-of-day via Date.setDate (which handles DST shifts and
+  // month/year boundaries). A fixed `today + DAY` offset is 23h/25h wrong on the
+  // two DST-transition days each year, which would mis-bucket a "due tomorrow"
+  // task into Later.
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (due === startOfDay(tomorrow.getTime())) return 'tomorrow'
   return 'later'
 }
 
