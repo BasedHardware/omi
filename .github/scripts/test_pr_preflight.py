@@ -6,19 +6,24 @@ from __future__ import annotations
 import io
 import json
 import os
+import signal
 import subprocess
 import sys
 import tempfile
 import time
 import unittest
+from unittest import mock
 from pathlib import Path
 
+import preflight_runner
 from pr_metadata import load_from_api
 from pr_preflight import format_failure_class_suggest, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
 REPO_ROOT = SCRIPT_DIR.parents[1]
+PRE_PUSH_SINGLEFLIGHT = REPO_ROOT / "scripts" / "pre-push-singleflight"
+PRE_PUSH = REPO_ROOT / "scripts" / "pre-push"
 
 
 class FakeResponse(io.BytesIO):
@@ -59,6 +64,20 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_pre_push_wrapper_reuses_current_bash_interpreter(self) -> None:
+        wrapper = PRE_PUSH_SINGLEFLIGHT.read_text(encoding="utf-8")
+        self.assertIn("export PYTHONUTF8=1\nexec python3 ", wrapper)
+        self.assertIn(' -- "$BASH" scripts/pre-push "$@"', wrapper)
+
+    def test_pre_push_accepts_and_propagates_windows_backend_python(self) -> None:
+        pre_push = PRE_PUSH.read_text(encoding="utf-8")
+        setup_prefix = pre_push[: pre_push.index("require_backend_python()")]
+
+        self.assertIn('BACKEND_PYTHON="${BACKEND_PYTHON:-}"', setup_prefix)
+        self.assertIn('"$PWD/backend/.venv/bin/python"', setup_prefix)
+        self.assertIn('"$PWD/backend/.venv/Scripts/python.exe"', setup_prefix)
+        self.assertIn('PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh', pre_push)
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -70,7 +89,7 @@ class SelectionTests(unittest.TestCase):
         )
         self.assertEqual(result.returncode, 0, result.stdout)
         self.assertIn(
-            "python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
+            "PYTHONUTF8=1 python3 .github/scripts/pr_preflight.py --lane local --base origin/main",
             result.stdout,
         )
 
@@ -217,13 +236,57 @@ class SelectionTests(unittest.TestCase):
             self.assertIn(str(body.resolve()), result.stdout)
 
 
+class SignalCompatibilityTests(unittest.TestCase):
+    def test_process_exists_uses_windows_probe_without_os_kill(self) -> None:
+        with (
+            mock.patch.object(preflight_runner.os, "name", "nt"),
+            mock.patch.object(preflight_runner, "windows_process_exists", return_value=True) as windows_probe,
+            mock.patch.object(preflight_runner.os, "kill") as kill,
+        ):
+            self.assertTrue(preflight_runner.process_exists(4321))
+
+        windows_probe.assert_called_once_with(4321)
+        kill.assert_not_called()
+
+    def test_supported_forward_signals_skip_unavailable_members(self) -> None:
+        with mock.patch.object(preflight_runner.signal, "SIGHUP", None, create=True):
+            self.assertEqual(
+                preflight_runner.supported_forward_signals(),
+                (signal.SIGINT, signal.SIGTERM),
+            )
+
+    def test_forward_signal_uses_child_api_without_killpg(self) -> None:
+        child = mock.Mock(pid=4321)
+        child.poll.return_value = None
+
+        with mock.patch.object(preflight_runner.os, "killpg", None, create=True):
+            preflight_runner.forward_signal_to_child(child, signal.SIGTERM)
+
+        child.send_signal.assert_called_once_with(signal.SIGTERM)
+
+    def test_forward_signal_keeps_posix_process_group_behavior(self) -> None:
+        child = mock.Mock(pid=4321)
+        child.poll.return_value = None
+        killpg = mock.Mock()
+
+        with mock.patch.object(preflight_runner.os, "killpg", killpg, create=True):
+            preflight_runner.forward_signal_to_child(child, signal.SIGTERM)
+
+        killpg.assert_called_once_with(4321, signal.SIGTERM)
+        child.send_signal.assert_not_called()
+
+
 class SingleFlightTests(unittest.TestCase):
     def run_runner(
         self,
         state_root: Path,
         command: list[str],
     ) -> subprocess.Popen[str]:
-        env = {**os.environ, "OMI_PREFLIGHT_STATE_DIR": str(state_root)}
+        env = {
+            **os.environ,
+            "OMI_PREFLIGHT_STATE_DIR": str(state_root),
+            "PYTHONUTF8": "1",
+        }
         return subprocess.Popen(
             [sys.executable, str(RUNNER), "--name", "test", "--", *command],
             cwd=REPO_ROOT,
@@ -233,6 +296,26 @@ class SingleFlightTests(unittest.TestCase):
             stderr=subprocess.STDOUT,
             text=True,
         )
+
+    def test_invalid_utf8_child_output_is_escaped_without_aborting(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            temp = Path(tmp)
+            command = [
+                sys.executable,
+                "-c",
+                "import sys; sys.stdout.buffer.write(b'bad:\\xa1\\n'); sys.stdout.buffer.flush()",
+            ]
+            runner = self.run_runner(temp, command)
+            assert runner.stdin is not None
+            runner.stdin.close()
+            output = runner.stdout.read() if runner.stdout else ""
+
+            self.assertEqual(runner.wait(), 0, output)
+            if runner.stdout:
+                runner.stdout.close()
+            self.assertIn(r"bad:\xa1", output)
+            log = (temp / "test" / "preflight.log").read_text(encoding="utf-8")
+            self.assertIn(r"bad:\xa1", log)
 
     def wait_for_lock(self, state_root: Path) -> None:
         lock = state_root / "test" / "lock" / "owner.json"

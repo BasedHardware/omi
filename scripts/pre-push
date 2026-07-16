@@ -80,14 +80,22 @@ SELECTED_BACKEND_TESTS_REASON=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-backend-tes
 FAST_BACKEND_TESTS=$(mktemp "${TMPDIR:-/tmp}/omi-pre-push-fast-backend-tests.XXXXXX")
 trap 'rm -f "$CHANGED_FILES_LIST" "$SELECTED_BACKEND_TESTS" "$SELECTED_BACKEND_TESTS_REASON" "$FAST_BACKEND_TESTS"' EXIT
 printf '%s\n' "${CHANGED_FILES[@]}" > "$CHANGED_FILES_LIST"
-BACKEND_PYTHON="$PWD/backend/.venv/bin/python"
+BACKEND_PYTHON="${BACKEND_PYTHON:-}"
+if [[ -z "$BACKEND_PYTHON" ]]; then
+  for backend_python_candidate in "$PWD/backend/.venv/bin/python" "$PWD/backend/.venv/Scripts/python.exe"; do
+    if [[ -x "$backend_python_candidate" ]]; then
+      BACKEND_PYTHON="$backend_python_candidate"
+      break
+    fi
+  done
+fi
 
 require_backend_python() {
-  if [[ -x "$BACKEND_PYTHON" ]]; then
+  if [[ -n "$BACKEND_PYTHON" && -x "$BACKEND_PYTHON" ]]; then
     return 0
   fi
-  echo "FAIL: a selected backend check requires backend/.venv/bin/python, but it was not found." >&2
-  echo "      Create it with: cd backend && bash scripts/sync-python-deps.sh" >&2
+  echo "FAIL: a selected backend check requires a usable backend Python." >&2
+  echo "      Set BACKEND_PYTHON or run: cd backend && bash scripts/sync-python-deps.sh" >&2
   return 1
 }
 
@@ -269,7 +277,7 @@ check_backend_typecheck_if_needed() {
   require_backend_python
   (
     cd backend
-    bash scripts/typecheck.sh
+    PYRIGHT_PYTHON="$BACKEND_PYTHON" bash scripts/typecheck.sh
   )
 }
 

@@ -16,6 +16,24 @@ from pathlib import Path
 
 POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
+FORWARD_SIGNAL_NAMES = ("SIGINT", "SIGTERM", "SIGHUP")
+
+
+def supported_forward_signals() -> tuple[int, ...]:
+    return tuple(signum for name in FORWARD_SIGNAL_NAMES if isinstance((signum := getattr(signal, name, None)), int))
+
+
+def forward_signal_to_child(child: subprocess.Popen[str], signum: int) -> None:
+    if child.poll() is not None:
+        return
+    try:
+        kill_process_group = getattr(os, "killpg", None)
+        if callable(kill_process_group):
+            kill_process_group(child.pid, signum)
+        else:
+            child.send_signal(signum)
+    except ProcessLookupError:
+        pass
 
 
 def atomic_json(path: Path, value: dict) -> None:
@@ -32,9 +50,41 @@ def read_json(path: Path) -> dict:
         return {}
 
 
+def windows_process_exists(pid: int) -> bool:
+    import ctypes
+    from ctypes import wintypes
+
+    process_query_limited_information = 0x1000
+    error_access_denied = 5
+    still_active = 259
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.OpenProcess.argtypes = (wintypes.DWORD, wintypes.BOOL, wintypes.DWORD)
+    kernel32.OpenProcess.restype = wintypes.HANDLE
+    kernel32.GetExitCodeProcess.argtypes = (
+        wintypes.HANDLE,
+        ctypes.POINTER(wintypes.DWORD),
+    )
+    kernel32.GetExitCodeProcess.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = (wintypes.HANDLE,)
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    handle = kernel32.OpenProcess(process_query_limited_information, False, pid)
+    if not handle:
+        return ctypes.get_last_error() == error_access_denied
+    try:
+        exit_code = wintypes.DWORD()
+        if not kernel32.GetExitCodeProcess(handle, ctypes.byref(exit_code)):
+            return True
+        return exit_code.value == still_active
+    finally:
+        kernel32.CloseHandle(handle)
+
+
 def process_exists(pid: int) -> bool:
     if pid <= 0:
         return False
+    if os.name == "nt":
+        return windows_process_exists(pid)
     try:
         os.kill(pid, 0)
         return True
@@ -173,15 +223,10 @@ def run_owned(
         )
 
     def forward_signal(signum: int, _frame: object) -> None:
-        if child is not None and child.poll() is None:
-            try:
-                os.killpg(child.pid, signum)
-            except ProcessLookupError:
-                pass
+        if child is not None:
+            forward_signal_to_child(child, signum)
 
-    previous_handlers = {
-        signum: signal.signal(signum, forward_signal) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    }
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in supported_forward_signals()}
     exit_code = 1
     try:
         print(f"Pre-push single-flight log: {log_path}")
@@ -195,6 +240,8 @@ def run_owned(
             stdout=subprocess.PIPE,
             stderr=subprocess.STDOUT,
             text=True,
+            encoding="utf-8",
+            errors="backslashreplace",
             bufsize=1,
             start_new_session=True,
         )
