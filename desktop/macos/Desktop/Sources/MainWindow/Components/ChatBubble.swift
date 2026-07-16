@@ -137,7 +137,7 @@ struct ChatBubble: View {
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
   }
-  
+
   @ViewBuilder
   private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
     if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
@@ -243,7 +243,7 @@ struct ChatBubble: View {
       messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
     }
   }
-  
+
   private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
     guard hasAgentOpenAction else { return nil }
     return openAgent(ref:completion:)
