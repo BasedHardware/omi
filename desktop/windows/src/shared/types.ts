@@ -1183,6 +1183,9 @@ export type OmiBridgeApi = {
   mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Fires when any connector's status changed. Returns an unsubscribe fn. */
   onMcpChanged: (cb: () => void) => () => void
+  /** Sign-out / account-switch: wipe the hosted MCP key (belt-and-suspenders with
+   *  the clear inside wipeUserData). Best-effort. */
+  mcpClearKey: () => Promise<void>
   /** ChatGPT/Claude assisted-connector cards (static field values, no secret). */
   mcpCloudInfo: () => Promise<McpCloudConnectorInfo[]>
   /** Open a cloud connector's provider connector page (assisted "open & guide"). */

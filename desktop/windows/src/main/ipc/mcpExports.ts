@@ -186,6 +186,12 @@ function openCloudConnector(url: string): void {
 
 export function registerMcpExportsHandlers(): void {
   ipcMain.handle('mcp:status', (_e, ownerUserId: string) => snapshot(ownerUserId))
+  // Sign-out / account-switch: wipe the hosted key. Belt-and-suspenders with the
+  // clear inside db.ts wipeUserData — the renderer teardown calls this too, so an
+  // early wipeUserData failure can't leave the prior account's key on disk.
+  ipcMain.handle('mcp:clearKey', () => {
+    new McpKeyStore().clearAll()
+  })
   ipcMain.handle('mcp:cloudInfo', () => cloudInfo())
   ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))
   ipcMain.handle('mcp:memoryPack', (_e, provider: MemoryPackProvider, memories: ExportMemory[]) =>

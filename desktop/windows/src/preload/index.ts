@@ -366,6 +366,9 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('mcp:changed', listener)
     return () => ipcRenderer.removeListener('mcp:changed', listener)
   },
+  // Sign-out / account-switch: wipe the hosted MCP key (belt-and-suspenders with
+  // the clear inside wipeUserData). Best-effort.
+  mcpClearKey: (): Promise<void> => ipcRenderer.invoke('mcp:clearKey'),
   // Cloud (OAuth) connector cards — static field values (no secret, no key).
   mcpCloudInfo: (): Promise<McpCloudConnectorInfo[]> => ipcRenderer.invoke('mcp:cloudInfo'),
   mcpOpenCloudConnector: (url: string): Promise<void> =>
