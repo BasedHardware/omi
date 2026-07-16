@@ -16,6 +16,7 @@ let package = Package(
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
     .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.8"),
+    .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", exact: "0.65.0"),
   ],
   targets: [
     .target(
@@ -33,15 +34,18 @@ let package = Package(
     ),
     .target(
       name: "OmiSupport",
-      path: "Sources/OmiSupport"
+      path: "Sources/OmiSupport",
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .target(
       name: "OmiTheme",
-      path: "Sources/Theme"
+      path: "Sources/Theme",
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .target(
       name: "OmiWAL",
-      path: "Sources/OmiWAL"
+      path: "Sources/OmiWAL",
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .executableTarget(
       name: "Omi Computer",
@@ -77,7 +81,8 @@ let package = Package(
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
         .process("Resources"),
-      ]
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .testTarget(
       name: "Omi ComputerTests",
@@ -90,7 +95,8 @@ let package = Package(
       path: "Tests",
       exclude: [
         "fixtures"
-      ]
+      ],
+      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
   ]
 )

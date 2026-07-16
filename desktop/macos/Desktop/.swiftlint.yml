@@ -1,0 +1,30 @@
+# SwiftLint safety configuration (#9843 Ticket 06).
+# Safety-only rules via only_rules — no style or architecture lint.
+# Custom rules absorb the two proven regex ratchets (asyncAfter, UserDefaults).
+only_rules:
+  - custom_rules
+  - fatal_error_message
+  - force_cast
+  - force_try
+  - force_unwrapping
+  - implicitly_unwrapped_optional
+  - legacy_random
+  - weak_delegate
+
+custom_rules:
+  omi_floating_control_bar_async_after:
+    regex: '\.asyncAfter\s*\('
+    included:
+      - "Sources/FloatingControlBar"
+    message: "Prefer signal-driven transitions over DispatchQueue.asyncAfter in FloatingControlBar"
+    severity: warning
+  omi_inline_userdefaults_key:
+    regex: '\bforKey:\s*"'
+    excluded:
+      - "Sources/OmiSupport/DefaultsKey.swift"
+    message: "Use DefaultsKey.swift for typed UserDefaults keys"
+    severity: warning
+
+# Baseline captures existing violations (843); new violations are flagged.
+# Generated with SwiftLint 0.65.0 (SimplyDanny/SwiftLintPlugins 0.65.0).
+baseline: .swiftlint-baseline.json
