@@ -13,7 +13,7 @@ vi.mock('../lib/apiClient', () => ({
 }))
 
 import { useMemories } from './useMemories'
-import { resetMemoriesCache } from '../lib/memoriesCache'
+import { cache as memoriesCacheState, resetMemoriesCache } from '../lib/memoriesCache'
 
 const LAST_UID_KEY = 'omi.lastSignedInUid'
 const KEY_A = 'omi.cache.memories.userA'
@@ -111,5 +111,8 @@ describe('useMemories — cold-start cache-first', () => {
     // A's memories must NOT be written under B's uid (nor re-created under A's).
     expect(localStorage.getItem('omi.cache.memories.userB')).toBeNull()
     expect(localStorage.getItem('omi.cache.memories.userA')).toBeNull()
+    // And `loaded` must stay false so account B still revalidates (doesn't skip
+    // the fetch and show an empty list).
+    expect(memoriesCacheState.loaded).toBe(false)
   })
 })

@@ -345,9 +345,14 @@ export function Conversations(): React.JSX.Element {
   // cloud rows — no extra cloud fetch — so the list updates in real time.
   useEffect(() => {
     return subscribeConversations(() => {
+      // The account this refresh belongs to (teardown fires this same channel via
+      // invalidateConversationsCache, so guard it too — otherwise a switch would
+      // merge A's still-in-state cloud rows and persist them under B).
+      const originUid = getCacheUid()
       window.omi
         .listLocalConversations()
         .then((freshLocals) => {
+          if (getCacheUid() !== originUid) return
           setLocals(freshLocals)
           setRows((prev) => {
             const cloud = prev.filter((r) => r.source === 'cloud' && !r.pending)

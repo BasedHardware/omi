@@ -138,7 +138,11 @@ export function useMemories(): {
         }
       } finally {
         if (!cancelled) {
-          cache.loaded = true
+          // Only mark the module cache "loaded" if this fetch still belongs to the
+          // current account. Otherwise a stale fetch would leave loaded=true with
+          // list=null (reset by teardown), so account B would skip its own
+          // revalidation (if (cache.loaded) return) and show an empty list.
+          if (getCacheUid() === originUid) cache.loaded = true
           setLoading(false)
         }
       }
