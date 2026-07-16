@@ -104,7 +104,11 @@ export default {
     oneClick: false,
     perMachine: false,
     allowToChangeInstallationDirectory: true,
-    artifactName: '${productName}-Setup-${version}.${ext}',
+    // No spaces in the artifact name: electron-updater downloads the installer by
+    // the exact url recorded in latest.yml, and a spaced productName ("Omi for
+    // Windows") url-encodes to a path that no longer matches the uploaded asset —
+    // every auto-update would 404. Keep this literal and space-free.
+    artifactName: 'Omi-for-Windows-Setup-${version}.${ext}',
     shortcutName: '${productName}',
     uninstallDisplayName: '${productName}',
     createDesktopShortcut: 'always'
