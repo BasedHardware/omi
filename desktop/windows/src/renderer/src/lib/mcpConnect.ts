@@ -17,11 +17,15 @@ async function creds(): Promise<{ token: string; uid: string } | null> {
   return { token: await user.getIdToken(), uid: user.uid }
 }
 
-/** Current connector status for the signed-in account, or null when signed out. */
+/**
+ * Current connector status. Install/detection states (Connect vs Requires) need
+ * no account, so this ALWAYS resolves to a terminal snapshot — a signed-out or
+ * uid-less caller still gets real install states (with hasKey=false and no
+ * key-aware "connected"), never a perpetual "Checking…". The uid only scopes the
+ * hosted-key ownership + the connected re-scan.
+ */
 export async function getMcpStatus(): Promise<McpExportsSnapshot | null> {
-  const uid = auth.currentUser?.uid
-  if (!uid) return null
-  return window.omi.mcpStatus(uid)
+  return window.omi.mcpStatus(auth.currentUser?.uid ?? '')
 }
 
 /** Mint-or-reuse the hosted key and write this connector's MCP config. Returns

@@ -10,9 +10,9 @@ function fakeStore(): McpKeyStoreLike & { _rec: { uid: string; rec: McpKeyRecord
   return {
     _rec: null as { uid: string; rec: McpKeyRecord } | null,
     read(uid) {
-      if (this._rec && this._rec.uid === uid) return this._rec.rec
-      if (this._rec && this._rec.uid !== uid) this._rec = null // guard: clear foreign
-      return null
+      // Structural guard: serve only when the owner matches; a mismatch returns
+      // null WITHOUT destroying the record (matches the real store).
+      return this._rec && this._rec.uid === uid ? this._rec.rec : null
     },
     write(uid, rec) {
       this._rec = { uid, rec }

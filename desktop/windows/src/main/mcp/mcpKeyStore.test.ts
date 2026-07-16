@@ -35,13 +35,16 @@ describe('McpKeyStore', () => {
     expect(store.read('uid-A')).toEqual(REC)
   })
 
-  it('OWNER-UID GUARD: never serves account A key to account B (and clears it)', () => {
+  it('OWNER-UID GUARD: never serves account A key to account B or an empty uid', () => {
     store.write('uid-A', REC)
-    // Account B reads: must get nothing, and the foreign record must be dropped.
+    // Account B (and an unauthenticated empty uid) get nothing.
     expect(store.read('uid-B')).toBeNull()
-    // Even account A can no longer read it — the mismatch cleared the record.
-    expect(store.read('uid-A')).toBeNull()
-    expect(store.has('uid-A')).toBe(false)
+    expect(store.read('')).toBeNull()
+    expect(store.has('uid-B')).toBe(false)
+    // But a mismatched read must NOT destroy the real owner's key — a status poll
+    // with a different/empty uid can't nuke it. Account A still reads its key.
+    expect(store.read('uid-A')).toEqual(REC)
+    expect(store.has('uid-A')).toBe(true)
   })
 
   it('has() is true only for the exact owner', () => {

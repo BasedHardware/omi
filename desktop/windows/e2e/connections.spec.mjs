@@ -77,6 +77,19 @@ const hasText = (page, t) =>
     t
   )
 
+// Wait until a connector row has RESOLVED out of the transient "Checking…" state
+// to a terminal one (Connect / Disconnect / Requires …). Guards against the
+// "stuck on Checking…" bug the UI review caught.
+const waitResolved = (page, testid) =>
+  page.waitForFunction(
+    (t) => {
+      const el = document.querySelector(`[data-testid="${t}"]`)
+      return !!el && !/Checking/.test(el.textContent || '')
+    },
+    testid,
+    { timeout: 10000 }
+  )
+
 describe('Connections panel', () => {
   test('Connect stage renders the two-column tray and drills in', async () => {
     const { app, cleanup } = await launch()
@@ -185,7 +198,14 @@ describe('Connections panel', () => {
         )
         assert.ok(present, `Claude detail shows row ${id}`)
       }
-      await new Promise((r) => setTimeout(r, 400))
+      // The Claude Code config row must resolve to a terminal state (Claude Code
+      // is installed here → "Connect"), never stay on "Checking…".
+      await waitResolved(page, 'connector-claude-claude-code')
+      assert.ok(
+        await hasText(page, 'Connect'),
+        'Claude Code row resolved to a Connect affordance (installed)'
+      )
+      await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-03-claude-detail.png') })
 
       // Expand the assisted Claude OAuth card to reveal the copy-rows guide.
@@ -205,7 +225,9 @@ describe('Connections panel', () => {
         () => document.querySelector('[data-testid="connections-detail"]'),
         { timeout: 10000 }
       )
-      await new Promise((r) => setTimeout(r, 400))
+      // Codex is installed here → its row must resolve to "Connect".
+      await waitResolved(page, 'connector-chatgpt-codex')
+      await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-05-chatgpt-detail.png') })
 
       // Back, then OpenClaw — a gated CLI connector: "Requires OpenClaw", no dead button.
@@ -215,6 +237,13 @@ describe('Connections panel', () => {
       await page.waitForFunction(
         () => document.querySelector('[data-testid="connector-openclaw"]'),
         { timeout: 10000 }
+      )
+      // OpenClaw is NOT installed → the row must resolve to a self-explaining
+      // "Requires OpenClaw" terminal state (never a perpetual "Checking…").
+      await waitResolved(page, 'connector-openclaw')
+      assert.ok(
+        await hasText(page, 'Requires OpenClaw'),
+        'OpenClaw row resolved to the gated "Requires OpenClaw" state'
       )
       await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-06-openclaw-gated.png') })

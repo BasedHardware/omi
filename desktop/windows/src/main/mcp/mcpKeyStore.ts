@@ -75,8 +75,10 @@ export class McpKeyStore {
     const stored = this.readFile()
     if (!stored) return null
     if (stored.ownerUserId !== ownerUserId) {
-      // Foreign key on this install — drop it rather than serve it.
-      this.clearAll()
+      // Foreign owner (or an unauthenticated/empty uid): TREAT AS ABSENT — never
+      // serve another account's key. Do NOT delete here: a status read with a
+      // different/empty uid must not destroy the real owner's key (Mac's guard is
+      // structural "return only if owner matches"; removal happens on sign-out).
       return null
     }
     try {
