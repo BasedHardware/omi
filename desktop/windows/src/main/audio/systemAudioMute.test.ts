@@ -135,6 +135,9 @@ describe('systemAudioMuteBridge — live helper', () => {
     await systemAudioMuteBridge.restoreSystemAudio()
 
     expect(spawnMock).toHaveBeenCalledTimes(1) // one persistent child, not one per hold
+    // The helper is a console-subsystem exe; without windowsHide it flashes a
+    // stray console window in the taskbar when launched from GUI Electron main.
+    expect(spawnMock.mock.calls[0][2]).toMatchObject({ windowsHide: true })
     expect(opcodes).toEqual([OP_HELLO, OP_MUTE, OP_RESTORE])
   })
 

@@ -58,7 +58,11 @@ class SystemAudioMuteBridge {
   private ensureStarted(): void {
     if (this.child || this.unavailable || this.disposed) return
     const exe = resolveAudioHelperPath()
-    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'] })
+    // windowsHide: the helper is a console-subsystem .NET exe (OutputType=Exe).
+    // Electron main is a GUI process with no console, so without CREATE_NO_WINDOW
+    // the child allocates a NEW visible console — a stray taskbar window. Its
+    // stdio is piped, so hiding the console loses nothing.
+    const child = spawn(exe, [], { stdio: ['pipe', 'pipe', 'pipe'], windowsHide: true })
     this.child = child
 
     const decoder = new FrameDecoder((json) => {
