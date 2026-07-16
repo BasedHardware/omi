@@ -201,4 +201,17 @@ enum OnboardingFlow {
       defaults.removeObject(forKey: key)
     }
   }
+
+  /// What pressing Continue does on a granted permission step. Granting alone
+  /// never navigates: the user stays on the page until they explicitly
+  /// continue. The restart-carrying step offers the deferred "Reopen Omi"
+  /// prompt instead of advancing directly (one restart applies every grant).
+  enum PermissionContinueAction: Equatable {
+    case advance
+    case offerReopen
+  }
+
+  static func permissionContinueAction(requiresRestart: Bool) -> PermissionContinueAction {
+    requiresRestart ? .offerReopen : .advance
+  }
 }

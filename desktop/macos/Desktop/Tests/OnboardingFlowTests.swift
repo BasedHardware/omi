@@ -300,10 +300,12 @@ final class OnboardingFlowTests: XCTestCase {
   /// Task and cancels it in .onDisappear — an uncancellable asyncAfter here
   /// yanks the user forward after they pressed Back (free-navigation regression).
   func testDeferredStepAdvanceCallbacksAreCancellableAndCancelledOnDisappear() throws {
+    // OnboardingPermissionStepView is intentionally absent: it no longer defers
+    // advance at all (granting stays on the page until the user presses
+    // Continue) — covered by testPermissionStepNeverAutoAdvancesOnGrant.
     let sites: [(file: String, task: String)] = [
       ("OnboardingGoalStepView.swift", "saveTask"),
       ("OnboardingHowDidYouHearStepView.swift", "advanceTask"),
-      ("OnboardingPermissionStepView.swift", "advanceTask"),
     ]
     for site in sites {
       let source = try onboardingSourceFile(site.file)
@@ -318,6 +320,33 @@ final class OnboardingFlowTests: XCTestCase {
       XCTAssertFalse(
         source.contains("asyncAfter"),
         "\(site.file): asyncAfter is uncancellable — use a stored Task")
+    }
+  }
+
+  func testPermissionContinueAdvancesWithoutPendingRestart() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(requiresRestart: false), .advance)
+  }
+
+  func testPermissionContinueOffersReopenForRestartCarryingStep() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(requiresRestart: true), .offerReopen)
+  }
+
+  func testPermissionStepNeverAutoAdvancesOnGrant() throws {
+    // omi-test-quality: source-inspection -- static contract: SwiftUI navigation-on-grant
+    // cannot be exercised hermetically; the review-blocked pattern (navigating when
+    // isGranted flips) must stay out — grant stays on the page until Continue.
+    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
+    XCTAssertFalse(
+      source.contains("scheduleAutoAdvance"),
+      "granting a permission must not schedule an auto-advance")
+    if let grantChange = source.range(of: "onChange(of: isGranted)") {
+      let handler = source[grantChange.upperBound...].prefix(300)
+      XCTAssertFalse(
+        handler.contains("onContinue()"),
+        "granting must not navigate — only the explicit Continue button advances")
+      XCTAssertFalse(
+        handler.contains("showReopenPrompt = true"),
+        "granting must not pop the reopen prompt — Continue raises it")
     }
   }
 

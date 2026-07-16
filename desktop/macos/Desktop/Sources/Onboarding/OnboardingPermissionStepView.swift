@@ -25,8 +25,6 @@ struct OnboardingPermissionStepView: View {
 
   @State private var isRequesting = false
   @State private var showReopenPrompt = false
-  @State private var hasAutoAdvanced = false
-  @State private var advanceTask: Task<Void, Never>?
   @State private var screenRecordingRefreshTask: Task<Void, Never>?
   private let timer = Timer.publish(every: 1.0, on: .main, in: .common).autoconnect()
 
@@ -103,9 +101,16 @@ struct OnboardingPermissionStepView: View {
           OnboardingBackButton()
 
           if isGranted {
-            Button("Continue", action: onContinue)
-              .buttonStyle(OmiButtonStyle(.primary))
-              .keyboardShortcut(.defaultAction)
+            Button("Continue") {
+              switch OnboardingFlow.permissionContinueAction(requiresRestart: requiresRestart) {
+              case .offerReopen:
+                showReopenPrompt = true
+              case .advance:
+                onContinue()
+              }
+            }
+            .buttonStyle(OmiButtonStyle(.primary))
+            .keyboardShortcut(.defaultAction)
           } else {
             Button(isRequesting ? "Waiting for macOS…" : primaryActionLabel) {
               Task {
@@ -130,7 +135,9 @@ struct OnboardingPermissionStepView: View {
       }
       .onChange(of: isGranted) { _, granted in
         if granted {
-          scheduleAutoAdvance()
+          // Cleanup only — granting never navigates. The user stays on the
+          // page (status flips to "Granted") until they press Continue.
+          PermissionDragGuidance.dismiss()
         }
       }
       .alert("Reopen Omi to finish", isPresented: $showReopenPrompt) {
@@ -140,12 +147,9 @@ struct OnboardingPermissionStepView: View {
         Text("Omi needs to reopen to apply the permissions you just granted.")
       }
       .onDisappear {
-        advanceTask?.cancel()
         screenRecordingRefreshTask?.cancel()
       }
       .onAppear {
-        hasAutoAdvanced = false
-        advanceTask?.cancel()
         screenRecordingRefreshTask?.cancel()
         coordinator.clearLastActionError()
         refreshPermissionState()
@@ -165,27 +169,6 @@ struct OnboardingPermissionStepView: View {
       return "Waiting for macOS..."
     }
     return "Not granted yet"
-  }
-
-  private func scheduleAutoAdvance() {
-    guard !hasAutoAdvanced else { return }
-    hasAutoAdvanced = true
-    advanceTask?.cancel()
-    advanceTask = Task {
-      try? await Task.sleep(nanoseconds: 350_000_000)
-      guard !Task.isCancelled else { return }
-      await MainActor.run {
-        // The restart-carrying step (the last drag permission) offers the re-open
-        // once granted, instead of silently advancing — one restart applies every
-        // deferred grant. Other steps just continue.
-        if requiresRestart {
-          PermissionDragGuidance.dismiss()
-          showReopenPrompt = true
-        } else {
-          onContinue()
-        }
-      }
-    }
   }
 
   private func refreshPermissionState() {
