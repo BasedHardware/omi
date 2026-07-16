@@ -2492,7 +2492,7 @@ struct AppDetailSheet: View {
     case hidden  // enabled non-external → no primary action (disable is the trash button)
   }
 
-  static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
+  nonisolated static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
     if !isEnabled { return .install }
     return worksExternally ? .open : .hidden
   }
