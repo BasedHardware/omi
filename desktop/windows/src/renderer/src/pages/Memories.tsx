@@ -77,6 +77,12 @@ export function Memories(): React.JSX.Element {
   // the real delete; undo just clears the pending state. Only one delete is
   // pending at a time — starting a second commits the first immediately.
   const [pendingDelete, setPendingDelete] = useState<Memory | null>(null)
+  // Ids whose server delete has already been committed, so a given memory fires
+  // DELETE /v3/memories/<id> at most once. Guards two double-fire paths: the
+  // undo toast's countdown elapsing within ~100ms of the user clicking its X
+  // (both call onCommit), and StrictMode double-invoking dev code. Cleared on
+  // failure so a failed delete can still be retried.
+  const committedDeleteIds = useRef<Set<string>>(new Set())
 
   // Manage mode: load ALL memories, multi-select, and delete the selection.
   const [manage, setManage] = useState(false)
@@ -111,6 +117,10 @@ export function Memories(): React.JSX.Element {
   const onEdit = async (id: string, content: string): Promise<void> => {
     try {
       await editMemory(id, content)
+      // Reflect the new content in the open sheet without a refetch — otherwise
+      // the sheet keeps rendering the stale detailMemory prop and the edit looks
+      // like it reverted. Mirrors onToggleVisibility below.
+      setDetailMemory((cur) => (cur && cur.id === id ? { ...cur, content } : cur))
     } catch (e) {
       toast('Could not update memory', { tone: 'error', body: (e as Error).message })
       throw e
@@ -135,24 +145,29 @@ export function Memories(): React.JSX.Element {
     }
   }
 
-  // Commit a held delete to the server. Clears the pending slot if it still
-  // points at this memory. Failures revert inside deleteMemory + surface a toast.
+  // Commit a held delete to the server. Idempotent per id (see
+  // committedDeleteIds). Clears the pending slot if it still points at this
+  // memory. Failures revert inside deleteMemory + surface a toast, and release
+  // the id so the delete can be retried.
   const commitDelete = async (m: Memory): Promise<void> => {
+    if (committedDeleteIds.current.has(m.id)) return
+    committedDeleteIds.current.add(m.id)
     setPendingDelete((cur) => (cur?.id === m.id ? null : cur))
     try {
       await deleteMemory(m.id)
     } catch (e) {
+      committedDeleteIds.current.delete(m.id)
       toast('Could not delete memory', { tone: 'error', body: (e as Error).message })
     }
   }
 
   const requestDelete = (m: Memory): void => {
     setDetailMemory(null)
-    // Starting a new delete commits any already-pending one right away.
-    setPendingDelete((prev) => {
-      if (prev && prev.id !== m.id) void commitDelete(prev)
-      return m
-    })
+    // Starting a new delete commits any already-pending one right away. Commit
+    // OUTSIDE the state updater — an updater must be pure, and StrictMode
+    // double-invokes it in dev, which would fire the delete twice.
+    if (pendingDelete && pendingDelete.id !== m.id) void commitDelete(pendingDelete)
+    setPendingDelete(m)
   }
 
   const undoDelete = (): void => setPendingDelete(null)
