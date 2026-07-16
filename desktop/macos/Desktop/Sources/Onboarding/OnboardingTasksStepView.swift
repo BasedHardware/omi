@@ -22,11 +22,22 @@ struct OnboardingTasksStepView: View {
     ("Task 3", "Getting started", true),
   ]
 
-  /// Real onboarding-created tasks when present, otherwise the placeholder.
+  /// Real tasks when present, otherwise the placeholder. Always ends on a "done"
+  /// card (a real completed task when there is one, otherwise the last row shown
+  /// as complete) so the task-done treatment stays part of the screen.
   private var displayTasks: [(String, String, Bool)] {
-    let real = tasksStore.incompleteTasks.prefix(3)
-    guard !real.isEmpty else { return placeholderTasks }
-    return real.map { ($0.description, taskSubtitle(for: $0), $0.completed) }
+    let open = tasksStore.incompleteTasks
+    guard !open.isEmpty || !tasksStore.completedTasks.isEmpty else { return placeholderTasks }
+
+    if let done = tasksStore.completedTasks.first {
+      let openRows = open.prefix(2).map { ($0.description, taskSubtitle(for: $0), false) }
+      return openRows + [(done.description, taskSubtitle(for: done), true)]
+    }
+
+    // No completed task yet: render the last open row as the done illustration.
+    var rows = open.prefix(3).map { ($0.description, taskSubtitle(for: $0), false) }
+    if rows.count > 1 { rows[rows.count - 1].2 = true }
+    return rows
   }
 
   private func taskSubtitle(for task: TaskActionItem) -> String {
@@ -142,8 +153,10 @@ struct OnboardingTasksStepView: View {
     }
     .task {
       // Pull the tasks onboarding synthesis just created (Gmail/Calendar follow-ups)
-      // so the cards show the user's real tasks instead of the placeholder.
+      // so the cards show the user's real tasks instead of the placeholder, plus a
+      // completed one to keep the task-done card.
       await tasksStore.loadTasksIfNeeded()
+      await tasksStore.loadCompletedTasks()
     }
   }
 
