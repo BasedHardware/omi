@@ -93,4 +93,22 @@ if grep -qE 'Killing existing instances|Starting Cloudflare|Starting Rust backen
   exit 1
 fi
 
+# The documented environment form must have exactly the same detached-launch
+# contract as --no-wait. This lets agent-driven loops avoid a lingering
+# launcher after the named bundle is ready for manual QA.
+no_wait_env_output="$TMP_ROOT/no-wait-env-launcher.log"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="omi-no-wait-env-contract-$$" OMI_SKIP_BACKEND=1 NO_WAIT=1 \
+  "$MACOS_DIR/run.sh" --fast-only >"$no_wait_env_output" 2>&1; then
+  echo "NO_WAIT=1 unexpectedly accepted a launcher-owned tunnel" >&2
+  exit 1
+else
+  no_wait_env_status=$?
+fi
+test "$no_wait_env_status" = "2"
+grep -q 'requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1' "$no_wait_env_output"
+if grep -qE 'Killing existing instances|Starting Cloudflare|Starting Rust backend' "$no_wait_env_output"; then
+  echo "NO_WAIT=1 performed launch side effects before rejecting its tunnel lifecycle" >&2
+  exit 1
+fi
+
 echo "fast-dev-bundle fingerprint tests passed"

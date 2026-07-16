@@ -10,7 +10,7 @@ export LC_NUMERIC=C
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
 FAST_ONLY=0
-NO_WAIT=0
+NO_WAIT="${NO_WAIT:-0}"
 SHOW_HELP=0
 for arg in "$@"; do
     case "$arg" in
