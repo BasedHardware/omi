@@ -4342,10 +4342,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard RealtimeProviderOutputPresentationPolicy.decide(
-      screenGroundingState: screenGroundingState,
-      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    ) == .present else { return }
+    guard
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: screenGroundingState,
+        reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+      ) == .present
+    else { return }
     guard let lease = acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") else { return }
     if let voiceSessionID {
       guard let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
@@ -4413,10 +4415,12 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard RealtimeProviderOutputPresentationPolicy.decide(
-      screenGroundingState: screenGroundingState,
-      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    ) == .present else { return }
+    guard
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: screenGroundingState,
+        reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+      ) == .present
+    else { return }
     if !text.isEmpty {
       assistantText += text
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,

@@ -153,11 +153,15 @@ enum RealtimeHubTools {
   }
 
   static func openAITools(availableDirectedProviders: [String]) -> [[String: Any]] {
-    let providerProperty: [String: Any]? = availableDirectedProviders.isEmpty ? nil : [
-      "type": "string",
-      "enum": availableDirectedProviders,
-      "description": "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
-    ]
+    let providerProperty: [String: Any]? =
+      availableDirectedProviders.isEmpty
+      ? nil
+      : [
+        "type": "string",
+        "enum": availableDirectedProviders,
+        "description":
+          "Optional local provider override only when the current user explicitly names it; omit for a regular Omi agent.",
+      ]
     return GeneratedRealtimeTools.baseOpenAITools(providerProperty: providerProperty)
   }
 

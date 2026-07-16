@@ -904,7 +904,7 @@ struct RewindPage: View {
     let screenshot = screenshots[index]
 
     do {
-      let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       // Validate image dimensions
       if image.size.width <= 0 || image.size.height <= 0 {
         logError(
@@ -1617,7 +1617,7 @@ struct SearchResultListItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       await MainActor.run {
         thumbnail = image
       }
@@ -1779,7 +1779,7 @@ struct SearchResultGroupItem: View {
 
   private func loadThumbnail() async {
     do {
-      let image = (try await RewindStorage.shared.loadScreenshotImage(for: group.representativeScreenshot)).image
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: group.representativeScreenshot)
       await MainActor.run {
         thumbnail = image
       }

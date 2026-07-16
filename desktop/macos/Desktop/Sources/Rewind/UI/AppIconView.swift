@@ -31,14 +31,15 @@ struct AppIconView: View {
       }
     }
     .task {
-      icon = (await AppIconCache.shared.getIcon(for: appName, size: size)).image
+      icon = AppIconCache.shared.getIcon(for: appName, size: size)
     }
   }
 }
 
 /// Cache for app icons to avoid repeated lookups
 /// Uses NSCache for automatic memory management under pressure
-actor AppIconCache {
+@MainActor
+final class AppIconCache {
   static let shared = AppIconCache()
 
   private let cache: NSCache<NSString, NSImage> = {
@@ -48,25 +49,25 @@ actor AppIconCache {
     return cache
   }()
 
-  func getIcon(for appName: String, size: CGFloat) async -> OptionalRewindImageBox {
+  func getIcon(for appName: String, size: CGFloat) -> NSImage? {
     let cacheKey = appName as NSString
 
     // Check cache first
     if let cached = cache.object(forKey: cacheKey) {
-      return OptionalRewindImageBox(image: cached)
+      return cached
     }
 
     // Try to find the app and get its icon
-    let icon = await loadIcon(for: appName)
+    let icon = loadIcon(for: appName)
 
     if let icon = icon {
       // Resize to requested size
       let resized = resizeIcon(icon, to: CGFloat(size * 2))  // 2x for retina
       cache.setObject(resized, forKey: cacheKey)
-      return OptionalRewindImageBox(image: resized)
+      return resized
     }
 
-    return OptionalRewindImageBox(image: nil)
+    return nil
   }
 
   /// System apps that were renamed across macOS versions — stored names may
@@ -75,7 +76,7 @@ actor AppIconCache {
     "System Preferences": "System Settings"
   ]
 
-  private func loadIcon(for appName: String) async -> NSImage? {
+  private func loadIcon(for appName: String) -> NSImage? {
     // Try to find the app by name
     let workspace = NSWorkspace.shared
     let appName = Self.renamedApps[appName] ?? appName

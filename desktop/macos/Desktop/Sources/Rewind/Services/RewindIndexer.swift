@@ -602,8 +602,8 @@ actor RewindIndexer {
           guard let id = screenshot.id else { continue }
 
           do {
-            let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
-            guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+            let imageData = try await RewindStorage.shared.loadScreenshotData(for: screenshot)
+            guard let cgImage = NSImage(data: imageData)?.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
               continue
             }
 

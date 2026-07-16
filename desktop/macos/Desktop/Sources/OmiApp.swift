@@ -1431,7 +1431,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked S
         return
       }
 
-      let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: "hasCompletedOnboarding")
+      let hasCompletedOnboarding = UserDefaults.standard.bool(forKey: DefaultsKey.hasCompletedOnboarding.rawValue)
 
       if hasCompletedOnboarding {
         guard relaunchOnLoginSuppressedForOnboarding else { return }

@@ -55,9 +55,9 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
         reducerOutputSuppressed: false),
       .present)
     XCTAssertEqual(
-        RealtimeProviderTurnDoneDisposition.decide(
-          pendingToolCount: 0,
-          postToolContinuationRequired: true),
+      RealtimeProviderTurnDoneDisposition.decide(
+        pendingToolCount: 0,
+        postToolContinuationRequired: true),
       .requestPostToolContinuation)
   }
 

@@ -132,6 +132,15 @@ Generated sources under `Desktop/Sources/Generated/` are excluded from the
 formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
 Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
 
+### SwiftLint
+
+SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins
+SwiftLint 0.65.0 from source and caches the verified build under
+`~/.cache/omi-swiftlint`; use `./scripts/swiftlint-wrapper.sh lint` to run the
+full configured scope. Generated sources and test fixtures remain excluded and
+the committed baseline is down-only.
+
 ### Synchronous state-machine callbacks
 
 - A reducer transition is atomic through model assignment, effect delivery, UI

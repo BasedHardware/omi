@@ -133,6 +133,7 @@ final class HubSystemInstructionTests: XCTestCase {
     let provider = properties?["provider"] as? [String: Any]
 
     XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
+    XCTAssertTrue((provider?["description"] as? String ?? "").contains("current user explicitly names it"))
   }
 
   func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {
@@ -266,105 +267,4 @@ final class HubSystemInstructionTests: XCTestCase {
     XCTAssertNil(inspectParameters?["anyOf"])
   }
 
-  func testRealtimeSpawnAgentProviderEnumOnlyAdvertisesAvailableProviders() {
-    let tools = RealtimeHubTools.openAITools(availableDirectedProviders: ["openclaw"])
-    let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
-    let parameters = spawnAgent?["parameters"] as? [String: Any]
-    let properties = parameters?["properties"] as? [String: Any]
-    let provider = properties?["provider"] as? [String: Any]
-
-    XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
-    XCTAssertTrue((provider?["description"] as? String ?? "").contains("current user explicitly names it"))
-  }
-
-  func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {
-    let tools = RealtimeHubTools.openAITools(availableDirectedProviders: [])
-    let spawnAgent = tools.first { ($0["name"] as? String) == HubTool.spawnAgent.rawValue }
-    let parameters = spawnAgent?["parameters"] as? [String: Any]
-    let properties = parameters?["properties"] as? [String: Any]
-
-    XCTAssertNil(properties?["provider"])
-    XCTAssertNotNil(properties?["brief"])
-  }
-
-  func testRealtimeListAgentSessionsToolIsExposed() {
-    let tools = RealtimeHubTools.openAITools
-    let listTool = tools.first { ($0["name"] as? String) == HubTool.listAgentSessions.rawValue }
-    XCTAssertNotNil(listTool)
-    XCTAssertTrue((listTool?["description"] as? String ?? "").contains("subagents"))
-    XCTAssertTrue((listTool?["description"] as? String ?? "").contains("floating"))
-  }
-
-  func testRealtimeAttentionOverrideToolIsExposed() {
-    let tools = RealtimeHubTools.openAITools
-    let overrideTool = tools.first { ($0["name"] as? String) == HubTool.setDesktopAttentionOverride.rawValue }
-    XCTAssertNotNil(overrideTool)
-    XCTAssertTrue((overrideTool?["description"] as? String ?? "").contains("dismiss"))
-  }
-
-  func testRealtimeCreateCalendarEventToolIsExposedWithRequiredArguments() {
-    let tools = RealtimeHubTools.openAITools
-    let calendarTool = tools.first { ($0["name"] as? String) == HubTool.createCalendarEvent.rawValue }
-    XCTAssertNotNil(calendarTool)
-    XCTAssertTrue((calendarTool?["description"] as? String ?? "").contains("Google Calendar"))
-
-    let parameters = calendarTool?["parameters"] as? [String: Any]
-    let properties = parameters?["properties"] as? [String: Any]
-    XCTAssertNotNil(properties?["title"])
-    XCTAssertNotNil(properties?["start_time"])
-    XCTAssertNotNil(properties?["end_time"])
-    XCTAssertNotNil(properties?["attendees"])
-    XCTAssertEqual(parameters?["required"] as? [String], ["title", "start_time", "end_time"])
-  }
-
-  func testRealtimePermissionToolsAreExposedForDirectHandling() {
-    let tools = RealtimeHubTools.openAITools
-    let names = Set(tools.compactMap { $0["name"] as? String })
-    XCTAssertTrue(names.contains(HubTool.checkPermissionStatus.rawValue))
-    XCTAssertTrue(names.contains(HubTool.requestPermission.rawValue))
-
-    let request = tools.first { ($0["name"] as? String) == HubTool.requestPermission.rawValue }
-    let parameters = request?["parameters"] as? [String: Any]
-    let properties = parameters?["properties"] as? [String: Any]
-    XCTAssertNotNil(properties?["type"])
-    XCTAssertTrue(
-      (request?["description"] as? String ?? "").contains("kernel-authorized native executor")
-    )
-    XCTAssertFalse((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
-  }
-
-  func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {
-    let declarations = RealtimeHubTools.geminiFunctionDeclarations
-    XCTAssertFalse(declarations.isEmpty)
-
-    func assertGeminiSchemaClean(_ schema: [String: Any], path: String) {
-      for key in schema.keys {
-        XCTAssertFalse(
-          ["additionalProperties", "$schema", "const"].contains(key),
-          "unsupported key \(key) at \(path)")
-      }
-      if let type = schema["type"] as? String {
-        XCTAssertEqual(type, type.uppercased(), "type must be uppercase at \(path)")
-      }
-      if let properties = schema["properties"] as? [String: Any] {
-        for (name, value) in properties {
-          if let nested = value as? [String: Any] {
-            assertGeminiSchemaClean(nested, path: "\(path).properties.\(name)")
-          }
-        }
-      }
-      if let items = schema["items"] as? [String: Any] {
-        assertGeminiSchemaClean(items, path: "\(path).items")
-      }
-    }
-
-    for declaration in declarations {
-      let name = declaration["name"] as? String ?? "<unknown>"
-      guard let parameters = declaration["parameters"] as? [String: Any] else {
-        XCTFail("missing parameters for \(name)")
-        continue
-      }
-      assertGeminiSchemaClean(parameters, path: name)
-    }
-  }
 }

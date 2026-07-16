@@ -884,7 +884,7 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
 
 private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient {
   nonisolated(unsafe) var workflowMode = OmiAPI.TaskWorkflowMode.read
-  nonisolated(unsafe) var projection: OmiAPI.WhatMattersNowProjection!
+  nonisolated(unsafe) var projection: OmiAPI.WhatMattersNowProjection
   nonisolated(unsafe) var goals: [OmiAPI.GoalResponse] = []
   nonisolated(unsafe) var detail: OmiAPI.GoalDetailProjection?
   nonisolated(unsafe) var projectionLoads = 0
@@ -929,7 +929,7 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
     projectionLoads += 1
     lastDeviceID = deviceID
-    let result = projection!
+    let result = projection
     let resultError = projectionError
     if projectionSuspensionsRemaining > 0 {
       projectionSuspensionsRemaining -= 1

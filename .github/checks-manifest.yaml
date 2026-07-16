@@ -223,6 +223,12 @@ checks:
     triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", ".github/scripts/test_swiftlint_config.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
+  - id: desktop-swiftlint
+    command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/swiftlint-wrapper.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 06: pinned SwiftLint must reject new safety violations outside the committed baseline"
   - id: desktop-swiftlint-baseline
     command: ["python3", "desktop/macos/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-swiftlint-baseline.py"]

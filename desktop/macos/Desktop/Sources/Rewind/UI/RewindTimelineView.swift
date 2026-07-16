@@ -383,7 +383,7 @@ struct HoverPreviewTooltip: View {
 
   private func loadThumbnail() async {
     do {
-      let fullImage = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
+      let fullImage = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       let thumbnailSize = NSSize(width: 320, height: 200)
       thumbnailImage = resizeImage(fullImage, to: thumbnailSize)
     } catch {
@@ -648,7 +648,7 @@ struct ScreenshotPreviewView: View {
   private func loadFullImage() async {
     isLoading = true
     do {
-      let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       fullImage = image
     } catch {
       logError("ScreenshotPreviewView: Failed to load image: \(error)")

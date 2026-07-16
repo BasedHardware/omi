@@ -28,6 +28,7 @@ jobs:
           else
             DIFF_BASE="HEAD~1"
           fi
+          echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"
           FILES=$(scripts/changed-files "$DIFF_BASE"...HEAD)
           echo "$FILES"
           if echo "$FILES" | grep -qE '^desktop/macos/Desktop/|^desktop/macos/test\.sh$|^desktop/macos/scripts/|^desktop/macos/tests/|^desktop/macos/e2e/flows/|^\.github/workflows/desktop-swift-ci\.yml$|^\.github/checks-manifest\.yaml$|^\.github/scripts/run_checks\.py$|^\.github/scripts/test_desktop_manifest_routes\.py$|^\.github/scripts/test_desktop_swift_ci_contract\.py$'; then
@@ -51,7 +52,7 @@ jobs:
           xcodebuild -version
           echo "=== xcrun swift --version ==="
           xcrun swift --version
-          ACTUAL_VERSION="$(xcodebuild -version | head -1)"
+          ACTUAL_VERSION="$(xcodebuild -version | sed -n '1p')"
           ACTUAL_BUILD="$(xcodebuild -version | sed -n '2p' | awk '{print $NF}')"
           if [ "$ACTUAL_VERSION" != "Xcode 16.4" ]; then
             echo "::error::Expected 'Xcode 16.4', got: '$ACTUAL_VERSION'"
@@ -70,7 +71,9 @@ jobs:
           path: |
             ~/Library/Caches/org.swift.swiftpm
             desktop/macos/Desktop/.build
-          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}
+            ~/.cache/omi-swift-format
+            ~/.cache/omi-swiftlint
+          key: ${{ runner.os }}-desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved', 'desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}
           restore-keys: |
             ${{ runner.os }}-desktop-swift-xcode164-
 
@@ -96,7 +99,7 @@ jobs:
       - name: Run macOS-scoped manifest checks
         if: steps.changed.outputs.should_run == 'true'
         run: |
-          python3 .github/scripts/run_checks.py --lane ci --platform macos --base origin/main --skip-pr-body-checks
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ steps.changed.outputs.diff_base }}" --skip-pr-body-checks
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not
@@ -167,7 +170,7 @@ jobs:
           xcodebuild -version
           echo "=== xcrun swift --version ==="
           xcrun swift --version
-          ACTUAL_VERSION="$(xcodebuild -version | head -1)"
+          ACTUAL_VERSION="$(xcodebuild -version | sed -n '1p')"
           ACTUAL_BUILD="$(xcodebuild -version | sed -n '2p' | awk '{print $NF}')"
           if [ "$ACTUAL_VERSION" != "Xcode 16.4" ]; then
             echo "::error::Expected 'Xcode 16.4', got: '$ACTUAL_VERSION'"

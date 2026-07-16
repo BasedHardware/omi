@@ -133,13 +133,14 @@ actor RewindStorage {
     return fullPath
   }
 
-  /// Load screenshot as NSImage (legacy JPEG path)
-  func loadScreenshotImage(relativePath: String) async throws -> RewindImageBox {
+  /// Load a legacy JPEG on the main actor so AppKit stays on its owning executor.
+  @MainActor
+  func loadScreenshotImage(relativePath: String) async throws -> NSImage {
     let data = try await loadScreenshot(relativePath: relativePath)
     guard let image = NSImage(data: data) else {
       throw RewindError.invalidImage
     }
-    return RewindImageBox(image: image)
+    return image
   }
 
   // MARK: - Video Frame Loading
@@ -439,18 +440,15 @@ actor RewindStorage {
     return "ffmpeg"
   }
 
-  /// Unified loading interface - loads from either JPEG or video storage
-  func loadScreenshotImage(for screenshot: Screenshot) async throws -> RewindImageBox {
-    if screenshot.usesVideoStorage,
-      let videoPath = screenshot.videoChunkPath,
-      let offset = screenshot.frameOffset
-    {
-      return RewindImageBox(image: try await loadVideoFrame(videoPath: videoPath, frameOffset: offset))
-    } else if let imagePath = screenshot.imagePath, !imagePath.isEmpty {
-      return try await loadScreenshotImage(relativePath: imagePath)
-    } else {
-      throw RewindError.screenshotNotFound
+  /// Unified AppKit loading interface for UI callers. Storage keeps its image work
+  /// actor-local; the image itself is constructed only after hopping to MainActor.
+  @MainActor
+  func loadScreenshotImage(for screenshot: Screenshot) async throws -> NSImage {
+    let data = try await loadScreenshotData(for: screenshot)
+    guard let image = NSImage(data: data) else {
+      throw RewindError.invalidImage
     }
+    return image
   }
 
   /// Get raw image data for a screenshot (for OCR processing)

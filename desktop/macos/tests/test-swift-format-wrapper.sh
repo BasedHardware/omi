@@ -33,6 +33,7 @@ WRAPPER_TEXT="$(cat "$WRAPPER")"
 assert_contains "$WRAPPER_TEXT" 'SWIFT_FORMAT_VERSION="602.0.0"' "version pinned to 602.0.0"
 assert_contains "$WRAPPER_TEXT" 'SWIFT_FORMAT_COMMIT="62eaad2822b865407b8cde56c36386c00800f7ec"' "commit pinned to 62eaad2"
 assert_contains "$WRAPPER_TEXT" 'swiftlang/swift-format.git' "uses swiftlang org repo"
+assert_contains "$WRAPPER_TEXT" '--depth 1 --branch "$SWIFT_FORMAT_VERSION"' "uses a depth-one pinned tag clone"
 
 # --- digest subcommand (no build required) ---
 DIGEST="$("$WRAPPER" digest)"

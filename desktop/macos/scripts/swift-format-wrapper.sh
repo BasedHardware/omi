@@ -64,7 +64,7 @@ bootstrap() {
   mkdir -p "$BUILD_DIR"
 
   # Clone at exact depth-1 commit for reproducibility and minimal fetch.
-  git clone --quiet --no-checkout "$SWIFT_FORMAT_REPO" "$BUILD_DIR"
+  git clone --quiet --depth 1 --branch "$SWIFT_FORMAT_VERSION" --no-checkout "$SWIFT_FORMAT_REPO" "$BUILD_DIR"
   (
     cd "$BUILD_DIR"
     git checkout --quiet "$SWIFT_FORMAT_COMMIT"

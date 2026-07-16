@@ -1,4 +1,3 @@
-@preconcurrency import AppKit
 import Foundation
 
 // KeyPath is an immutable reference type that is safe to share across concurrency
@@ -15,14 +14,6 @@ extension KeyPath: @retroactive @unchecked Sendable {}
 extension TaskActionItem: @unchecked Sendable {}
 extension ToolChatResult: @unchecked Sendable {}
 extension ServerConversation: @unchecked Sendable {}
-
-struct RewindImageBox: @unchecked Sendable {
-  let image: NSImage
-}
-
-struct OptionalRewindImageBox: @unchecked Sendable {
-  let image: NSImage?
-}
 
 extension OmiAPI.EvidenceRef: @unchecked Sendable {}
 extension OmiAPI.TaskWorkflowControl: @unchecked Sendable {}

@@ -182,7 +182,7 @@ struct ScreenshotThumbnailView: View {
   private func loadThumbnail() async {
     isLoading = true
     do {
-      let image = (try await RewindStorage.shared.loadScreenshotImage(for: screenshot)).image
+      let image = try await RewindStorage.shared.loadScreenshotImage(for: screenshot)
       // Create thumbnail
       let thumbnailSize = NSSize(width: 300, height: 200)
       thumbnailImage = resizeImage(image, to: thumbnailSize)

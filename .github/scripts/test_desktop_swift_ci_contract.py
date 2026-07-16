@@ -172,6 +172,18 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             key,
             "cache key must include Package.resolved hashFiles",
         )
+        self.assertIn(
+            "swift-format-wrapper.sh",
+            key,
+            "cache key must invalidate when the pinned formatter provenance changes",
+        )
+        self.assertIn(
+            "swiftlint-wrapper.sh",
+            key,
+            "cache key must invalidate when the pinned linter provenance changes",
+        )
+        self.assertIn("~/.cache/omi-swift-format", job)
+        self.assertIn("~/.cache/omi-swiftlint", job)
 
     # --- changed-file gate assertions --------------------------------------
 
@@ -187,6 +199,24 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             re.search(r'"\$PACKAGE_RESOLVED"\s*=\s*"true"', combined),
             "release-compile job must gate SHOULD_RUN on PACKAGE_RESOLVED=true",
         )
+
+    def test_manifest_checks_use_the_changed_diff_base_on_pushes(self):
+        """Pushes must lint the just-pushed diff, not checkout's origin/main HEAD."""
+        job = self.jobs["desktop-swift"]
+        self.assertIn('echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"', job)
+        self.assertIn(
+            '--base "${{ steps.changed.outputs.diff_base }}"',
+            job,
+            "manifest checks must use HEAD~1 on main pushes and the PR base on pull requests",
+        )
+
+    def test_xcode_version_probe_does_not_close_its_pipe_early(self):
+        """head(1) aborts Xcode 16.4 under pipefail; sed reads the full output."""
+        for job_id in JOBS:
+            with self.subTest(job=job_id):
+                combined = "\n".join(_run_texts(self.jobs[job_id]))
+                self.assertNotIn("xcodebuild -version | head -1", combined)
+                self.assertIn("xcodebuild -version | sed -n '1p'", combined)
 
     # --- adversarial: removing any guard must fail -------------------------
 
@@ -210,7 +240,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """A cache key without Package.resolved or toolchain identity is caught."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace(
-            "desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
+            "desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved', 'desktop/macos/scripts/swift-format-wrapper.sh', 'desktop/macos/scripts/swiftlint-wrapper.sh') }}",
             "desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
         )
         job = _job_text(tampered, "desktop-swift")

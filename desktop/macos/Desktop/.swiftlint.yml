@@ -11,6 +11,15 @@ only_rules:
   - legacy_random
   - weak_delegate
 
+# Generated OpenAPI and agent-surface outputs are verified by their generators,
+# not retroactively linted as handwritten source.
+included:
+  - Sources
+  - Tests
+excluded:
+  - Sources/Generated
+  - Tests/fixtures
+
 custom_rules:
   omi_floating_control_bar_async_after:
     regex: '\.asyncAfter\s*\('

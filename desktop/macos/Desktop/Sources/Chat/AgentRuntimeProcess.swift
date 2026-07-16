@@ -2686,13 +2686,9 @@ actor AgentRuntimeProcess {
     }
 
     let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
-    let trustedPathDirs = [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -2772,6 +2768,12 @@ actor AgentRuntimeProcess {
     home: String,
     fileManager: FileManager = .default
   ) -> [String] {
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.local/bin",
+    ]
     let managedNodeRoots = [
       "\(home)/.nvm/versions/node",
       "\(home)/.fnm/node-versions",
@@ -2784,7 +2786,11 @@ actor AgentRuntimeProcess {
       adapterPathDirs
         + managedNodeRoots.flatMap {
           Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
-        })
+        }
+        + [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+        ])
   }
 
   private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
