@@ -477,6 +477,28 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
         omiManaged: true,
         originalUri: `file://${desktopPath}`,
       });
+
+      adapter.nextText = "**`cool_cat_facts.html`** was built on the Desktop at /Users/tester/Desktop/cool_cat_facts.html.";
+      const passiveDesktop = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-passive-desktop-artifact`,
+        cwd: artifactRoot,
+      });
+      const passiveDesktopArtifacts = kernel.inspectArtifacts({ runId: passiveDesktop.run.runId });
+      expect(passiveDesktopArtifacts).toEqual([
+        expect.objectContaining({
+          sessionId: passiveDesktop.session.sessionId,
+          runId: passiveDesktop.run.runId,
+          attemptId: passiveDesktop.attempt.attemptId,
+          displayName: "cool_cat_facts.html",
+          kind: "html",
+          role: "result",
+          mimeType: "text/html",
+        }),
+      ]);
+      expect(readFileSync(new URL(passiveDesktopArtifacts[0]!.uri), "utf8")).toBe("<h1>Cat facts</h1>");
       store.close();
     }
   });

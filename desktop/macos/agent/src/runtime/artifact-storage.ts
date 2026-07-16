@@ -170,8 +170,9 @@ export class OmiArtifactStorage {
    *
    * Absolute paths are eligible only under a temporary directory, covering
    * providers that do not honor Omi's managed working directory convention.
-   * Desktop uses its own stricter "I built file.html on your Desktop" grammar,
-   * which resolves only a simple filename beneath the signed-in user's Desktop.
+   * Desktop uses its own stricter delivery grammar ("I built file.html on your
+   * Desktop" or "file.html was built on the Desktop"), which resolves only a
+   * simple filename beneath the signed-in user's Desktop.
    * Neither path lets a completion import arbitrary user files merely because
    * it names their paths.
    */
@@ -285,14 +286,18 @@ const MAX_REPORTED_TERMINAL_TEXT_CHARS = 64 * 1024;
 const MAX_REPORTED_TERMINAL_ARTIFACTS = 8;
 const EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE = /(?:\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b[^\n]{0,120}\b(?:lives?|saved|written|created|generated|produced|ready|available|located)\b|\b(?:saved|written|created|generated|produced)\b[^\n]{0,120}\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b|\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b\s*:)/i;
 const REPORTED_LOCAL_FILE_CANDIDATE = /file:\/\/[^\s`<>"']+|\/(?:[^\s`<>"']+)/g;
-const REPORTED_DESKTOP_FILE_CANDIDATE = /\b(?:built|created|generated|saved|wrote)\b[^\n]{0,120}?\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+on\s+your\s+desktop\b/gi;
+const REPORTED_DESKTOP_FILE_CANDIDATE = /\b(?:built|created|generated|saved|wrote)\b[^\n]{0,120}?\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+on\s+(?:your|the)\s+desktop\b/gi;
+const REPORTED_DESKTOP_PASSIVE_FILE_CANDIDATE = /\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+(?:was\s+)?(?:built|created|generated|saved|written)\s+on\s+(?:your|the)\s+desktop\b/gi;
 
 function reportedLocalFileCandidates(line: string): string[] {
   return line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [];
 }
 
 function reportedDesktopFileCandidates(line: string, desktopRoots: readonly string[]): string[] {
-  return [...line.matchAll(REPORTED_DESKTOP_FILE_CANDIDATE)].flatMap((match) => {
+  return [
+    ...line.matchAll(REPORTED_DESKTOP_FILE_CANDIDATE),
+    ...line.matchAll(REPORTED_DESKTOP_PASSIVE_FILE_CANDIDATE),
+  ].flatMap((match) => {
     const fileName = match[1];
     return fileName ? desktopRoots.map((root) => join(root, fileName)) : [];
   });
