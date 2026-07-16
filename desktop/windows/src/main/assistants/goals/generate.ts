@@ -255,13 +255,31 @@ export type GenerateResult =
   | { status: 'created'; goalId: string; title: string }
   | { status: 'skipped'; reason: GenerateSkipReason }
 
-/** Injected side-effects, so the flow is unit-testable without network/Electron.
- *  `realGenerateDeps()` binds these to the live session + notify + broadcast. */
-export type GenerateDeps = {
+/** A generated-but-not-yet-created goal. Split out (D2) so the manual Suggest
+ *  button can PREVIEW it before the user accepts — Windows is ahead of Mac here,
+ *  which blind-creates. `linkedTaskIds` are already validated against the bundle
+ *  at generation time; the auto path creates directly from this without preview. */
+export type GoalCandidate = {
+  suggestion: GoalSuggestion
+  /** linked_task_ids intersected with the fetched bundle's task ids. */
+  linkedTaskIds: string[]
+}
+
+export type CandidateResult =
+  | { status: 'candidate'; candidate: GoalCandidate }
+  | { status: 'skipped'; reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' }
+
+/** Phase-1 (READ-ONLY) side-effects: assemble context + run the model. No write,
+ *  so no epoch guard is needed here — the guard lives at create time. */
+export type CandidateDeps = {
   /** Assemble the context bundle, or null when there is no session. */
   getContext: () => Promise<GoalContextData | null>
   /** Run the structured model call for the filled prompt → raw JSON text. */
   generate: (prompt: string) => Promise<string>
+}
+
+/** Phase-2 (WRITE) side-effects: create the goal + surface it. */
+export type CreateDeps = {
   /** POST /v1/goals with the built body → the created goal id. */
   createGoal: (body: Record<string, unknown>) => Promise<string>
   /** Persist the created goal id into the local attribution record. */
@@ -272,19 +290,19 @@ export type GenerateDeps = {
   notify: (title: string, reasoning: string) => void
   /** Broadcast so an open Goals page refreshes. */
   broadcastChanged: () => void
-  /** Session epoch at entry; a change means sign-out/switch → discard the run. */
+  /** Session epoch at entry; a change means sign-out/switch → discard the write. */
   epochAtEntry: number
   /** Read the live epoch (compared to `epochAtEntry` before the write). */
   currentEpoch: () => number
 }
 
 /**
- * Run one generation end to end with injected side-effects. Returns a
- * `GenerateResult`. Skips (never throws) on: no session, insufficient context, an
- * unparseable/invalid model response, or a session change mid-run (epoch guard,
- * checked before the create so a departed user's goal is never written).
+ * Phase 1 — generate a candidate goal (NO write). Returns the candidate to
+ * preview/create, or a skip: no session, insufficient context, or an
+ * unparseable/invalid model response. A transport failure in `generate` throws
+ * (the caller — schedule.generateGoalCandidateNow — retries).
  */
-export async function runGoalGenerationWith(deps: GenerateDeps): Promise<GenerateResult> {
+export async function buildCandidateWith(deps: CandidateDeps): Promise<CandidateResult> {
   const context = await deps.getContext()
   if (!context) return { status: 'skipped', reason: 'no_session' }
 
@@ -296,20 +314,33 @@ export async function runGoalGenerationWith(deps: GenerateDeps): Promise<Generat
   const suggestion = parseGoalSuggestion(text)
   if (!suggestion) return { status: 'skipped', reason: 'invalid_suggestion' }
 
+  const linkedTaskIds = validateLinkedTaskIds(
+    suggestion,
+    context.tasks.map((t) => t.id)
+  )
+  return { status: 'candidate', candidate: { suggestion, linkedTaskIds } }
+}
+
+/**
+ * Phase 2 — create a goal from a candidate (the WRITE). Skips (never throws) when
+ * the session changed since entry (epoch guard — a departed user's goal must never
+ * be written). Records attribution, best-effort links tasks, notifies, broadcasts.
+ */
+export async function createCandidateWith(
+  deps: CreateDeps,
+  candidate: GoalCandidate
+): Promise<GenerateResult> {
   // Epoch guard: a sign-out or user switch since entry means this goal would land
   // in the wrong (or wiped) account — discard rather than create.
   if (deps.currentEpoch() !== deps.epochAtEntry) return { status: 'skipped', reason: 'stale' }
 
+  const { suggestion } = candidate
   const goalId = await deps.createGoal(buildCreateBody(suggestion))
   deps.recordAttribution(goalId)
 
-  const linked = validateLinkedTaskIds(
-    suggestion,
-    context.tasks.map((t) => t.id)
-  )
-  if (linked.length > 0) {
+  if (candidate.linkedTaskIds.length > 0) {
     // Best-effort: never let a link failure undo the created goal.
-    await deps.linkTasks(goalId, linked).catch((e) => {
+    await deps.linkTasks(goalId, candidate.linkedTaskIds).catch((e) => {
       console.warn('[goals] task linking failed:', e instanceof Error ? e.name : 'Error')
     })
   }
@@ -388,20 +419,26 @@ function broadcastGoalsChanged(): void {
   }
 }
 
-/** Build the production side-effects. Pins the session + epoch at entry; a null
- *  session makes getContext a soft no-op (→ skipped 'no_session'). `manual` only
- *  affects the notification's throttle policy. */
-export function realGenerateDeps(opts: { manual: boolean }): GenerateDeps {
+/** Phase-1 real deps: assemble context + run the model against the live session. */
+export function realCandidateDeps(): CandidateDeps {
+  const session = getBackendSession()
+  return {
+    getContext: fetchGoalContext,
+    generate: (prompt) => generateSuggestionText(session as BackendSession, prompt)
+  }
+}
+
+/** Phase-2 real deps. Pins the session + epoch at entry (the create's staleness
+ *  guard). `manual` only selects the notification's throttle policy. */
+export function realCreateDeps(opts: { manual: boolean }): CreateDeps {
   const session = getBackendSession()
   const epochAtEntry = getSessionEpoch()
   return {
-    getContext: fetchGoalContext,
-    generate: (prompt) => generateSuggestionText(session as BackendSession, prompt),
     createGoal: (body) => createGoalOnBackend(session as BackendSession, body),
     recordAttribution,
     // Documented no-op: the live backend has no action-item goal_id field. The
-    // ids are still validated (runGoalGenerationWith) so a future backend link
-    // endpoint drops straight in here.
+    // ids are still validated (buildCandidateWith) so a future backend link
+    // endpoint drops straight in here. Task→goal linking is deferred pending that.
     linkTasks: async () => {},
     notify: (title, reasoning) => notifyNewGoal(title, reasoning, opts.manual),
     broadcastChanged: broadcastGoalsChanged,
@@ -410,8 +447,18 @@ export function realGenerateDeps(opts: { manual: boolean }): GenerateDeps {
   }
 }
 
-/** Production one-shot: assemble real deps + run. `manual` selects the toast
- *  throttle policy (see notifyNewGoal). */
-export function runGoalGeneration(opts: { manual: boolean }): Promise<GenerateResult> {
-  return runGoalGenerationWith(realGenerateDeps(opts))
+/** Phase 1 (production): generate a candidate for preview/create. */
+export function generateGoalCandidate(): Promise<CandidateResult> {
+  return buildCandidateWith(realCandidateDeps())
+}
+
+/** Phase 2 (production): create a goal from a candidate. A null session (e.g. a
+ *  sign-out during preview) short-circuits to a skip rather than POSTing with a
+ *  dead token. `manual` selects the toast throttle policy (see notifyNewGoal). */
+export function createGoalFromCandidate(
+  candidate: GoalCandidate,
+  opts: { manual: boolean }
+): Promise<GenerateResult> {
+  if (!getBackendSession()) return Promise.resolve({ status: 'skipped', reason: 'no_session' })
+  return createCandidateWith(realCreateDeps(opts), candidate)
 }

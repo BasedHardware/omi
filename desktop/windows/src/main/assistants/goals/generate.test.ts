@@ -18,9 +18,12 @@ vi.mock('../../appSettings', () => ({
 import {
   buildCreateBody,
   parseGoalSuggestion,
-  runGoalGenerationWith,
+  buildCandidateWith,
+  createCandidateWith,
   validateLinkedTaskIds,
-  type GenerateDeps,
+  type CandidateDeps,
+  type CreateDeps,
+  type GoalCandidate,
   type GoalSuggestion
 } from './generate'
 import type { GoalContextData } from './context'
@@ -133,11 +136,64 @@ describe('validateLinkedTaskIds', () => {
   })
 })
 
-describe('runGoalGenerationWith', () => {
-  function deps(over: Partial<GenerateDeps> = {}): GenerateDeps {
+describe('buildCandidateWith (phase 1 — generate, no write)', () => {
+  function deps(over: Partial<CandidateDeps> = {}): CandidateDeps {
     return {
       getContext: async () => context(),
       generate: async () => JSON.stringify({ suggested_title: 'G', suggested_target: 5 }),
+      ...over
+    }
+  }
+
+  it('skips when there is no session (null context)', async () => {
+    expect(await buildCandidateWith(deps({ getContext: async () => null }))).toEqual({
+      status: 'skipped',
+      reason: 'no_session'
+    })
+  })
+
+  it('skips on insufficient context', async () => {
+    expect(
+      await buildCandidateWith(
+        deps({ getContext: async () => context({ memories: [], conversations: [], tasks: [] }) })
+      )
+    ).toEqual({ status: 'skipped', reason: 'insufficient_context' })
+  })
+
+  it('skips on an unparseable model response', async () => {
+    expect(await buildCandidateWith(deps({ generate: async () => 'garbage' }))).toEqual({
+      status: 'skipped',
+      reason: 'invalid_suggestion'
+    })
+  })
+
+  it('returns a candidate with linked ids validated against the bundle', async () => {
+    const res = await buildCandidateWith(
+      deps({
+        getContext: async () => context({ tasks: [{ id: 'a1', description: 'real' }] }),
+        generate: async () =>
+          JSON.stringify({
+            suggested_title: 'G',
+            suggested_target: 5,
+            linked_task_ids: ['a1', 'ghost']
+          })
+      })
+    )
+    expect(res.status).toBe('candidate')
+    if (res.status === 'candidate') {
+      expect(res.candidate.suggestion.title).toBe('G')
+      expect(res.candidate.linkedTaskIds).toEqual(['a1']) // ghost dropped
+    }
+  })
+})
+
+describe('createCandidateWith (phase 2 — write)', () => {
+  const candidate: GoalCandidate = {
+    suggestion: suggestion({ title: 'G', target: 5 }),
+    linkedTaskIds: []
+  }
+  function deps(over: Partial<CreateDeps> = {}): CreateDeps {
+    return {
       createGoal: vi.fn(async () => 'goal_new'),
       recordAttribution: vi.fn(),
       linkTasks: vi.fn(async () => {}),
@@ -149,41 +205,15 @@ describe('runGoalGenerationWith', () => {
     }
   }
 
-  it('skips when there is no session (null context)', async () => {
-    const d = deps({ getContext: async () => null })
-    expect(await runGoalGenerationWith(d)).toEqual({ status: 'skipped', reason: 'no_session' })
-    expect(d.createGoal).not.toHaveBeenCalled()
-  })
-
-  it('skips on insufficient context', async () => {
-    const d = deps({
-      getContext: async () => context({ memories: [], conversations: [], tasks: [] })
-    })
-    expect(await runGoalGenerationWith(d)).toEqual({
-      status: 'skipped',
-      reason: 'insufficient_context'
-    })
-    expect(d.createGoal).not.toHaveBeenCalled()
-  })
-
-  it('skips on an unparseable model response', async () => {
-    const d = deps({ generate: async () => 'garbage' })
-    expect(await runGoalGenerationWith(d)).toEqual({
-      status: 'skipped',
-      reason: 'invalid_suggestion'
-    })
-    expect(d.createGoal).not.toHaveBeenCalled()
-  })
-
-  it('discards the run (never creates) when the session epoch changed', async () => {
+  it('discards the write (never creates) when the session epoch changed', async () => {
     const d = deps({ epochAtEntry: 1, currentEpoch: () => 2 })
-    expect(await runGoalGenerationWith(d)).toEqual({ status: 'skipped', reason: 'stale' })
+    expect(await createCandidateWith(d, candidate)).toEqual({ status: 'skipped', reason: 'stale' })
     expect(d.createGoal).not.toHaveBeenCalled()
   })
 
   it('creates the goal, records attribution, notifies, and broadcasts', async () => {
     const d = deps()
-    const result = await runGoalGenerationWith(d)
+    const result = await createCandidateWith(d, candidate)
     expect(result).toEqual({ status: 'created', goalId: 'goal_new', title: 'G' })
     // 422-guard: the POST body always carries target_value.
     expect((d.createGoal as ReturnType<typeof vi.fn>).mock.calls[0][0]).toMatchObject({
@@ -196,38 +226,30 @@ describe('runGoalGenerationWith', () => {
     expect(d.broadcastChanged).toHaveBeenCalled()
   })
 
-  it('only links task ids that exist in the bundle', async () => {
-    const d = deps({
-      getContext: async () => context({ tasks: [{ id: 'a1', description: 'real' }] }),
-      generate: async () =>
-        JSON.stringify({
-          suggested_title: 'G',
-          suggested_target: 5,
-          linked_task_ids: ['a1', 'ghost']
-        })
-    })
-    await runGoalGenerationWith(d)
-    expect(d.linkTasks).toHaveBeenCalledWith('goal_new', ['a1'])
-  })
+  it('links the candidate task ids (and does not link when empty)', async () => {
+    const withLinks: GoalCandidate = {
+      suggestion: suggestion({ title: 'G' }),
+      linkedTaskIds: ['a1']
+    }
+    const d1 = deps()
+    await createCandidateWith(d1, withLinks)
+    expect(d1.linkTasks).toHaveBeenCalledWith('goal_new', ['a1'])
 
-  it('does not link when no valid ids remain', async () => {
-    const d = deps({
-      generate: async () =>
-        JSON.stringify({ suggested_title: 'G', suggested_target: 5, linked_task_ids: ['ghost'] })
-    })
-    await runGoalGenerationWith(d)
-    expect(d.linkTasks).not.toHaveBeenCalled()
+    const d2 = deps()
+    await createCandidateWith(d2, candidate) // linkedTaskIds: []
+    expect(d2.linkTasks).not.toHaveBeenCalled()
   })
 
   it('still succeeds when linking throws', async () => {
+    const withLinks: GoalCandidate = {
+      suggestion: suggestion({ title: 'G' }),
+      linkedTaskIds: ['a1']
+    }
     const d = deps({
-      getContext: async () => context({ tasks: [{ id: 'a1', description: 'real' }] }),
-      generate: async () =>
-        JSON.stringify({ suggested_title: 'G', suggested_target: 5, linked_task_ids: ['a1'] }),
       linkTasks: vi.fn(async () => {
         throw new Error('no endpoint')
       })
     })
-    expect((await runGoalGenerationWith(d)).status).toBe('created')
+    expect((await createCandidateWith(d, withLinks)).status).toBe('created')
   })
 })

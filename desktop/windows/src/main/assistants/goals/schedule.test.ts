@@ -1,9 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import type { GoalContextData } from './context'
+import type { GoalCandidate } from './generate'
 
 // The scheduler reads the appSettings + session singletons and delegates the
 // heavy work to generate/context/staleCleanup — all stubbed so the tests exercise
-// only the GATE logic (toggle / session / once-per-day / <3-active).
+// only the GATE logic (toggle / session / once-per-day / <3-active) and the
+// generate→create split for the manual path.
 const h = vi.hoisted(() => ({
   settings: {
     goalAutoGenerationEnabled: false,
@@ -13,8 +15,12 @@ const h = vi.hoisted(() => ({
   session: null as unknown,
   fetchGoalContext: vi.fn(),
   removeStaleGoals: vi.fn(async () => ({ deleted: [] })),
-  runGoalGenerationWith: vi.fn(),
-  realGenerateDeps: vi.fn(() => ({}))
+  buildCandidateWith: vi.fn(),
+  createCandidateWith: vi.fn(),
+  realCandidateDeps: vi.fn(() => ({})),
+  realCreateDeps: vi.fn(() => ({})),
+  generateGoalCandidate: vi.fn(),
+  createGoalFromCandidate: vi.fn()
 }))
 
 vi.mock('../../appSettings', () => ({
@@ -24,12 +30,21 @@ vi.mock('../../appSettings', () => ({
 vi.mock('../core/session', () => ({ getBackendSession: () => h.session }))
 vi.mock('./context', () => ({ fetchGoalContext: h.fetchGoalContext }))
 vi.mock('./generate', () => ({
-  realGenerateDeps: h.realGenerateDeps,
-  runGoalGenerationWith: h.runGoalGenerationWith
+  buildCandidateWith: h.buildCandidateWith,
+  createCandidateWith: h.createCandidateWith,
+  realCandidateDeps: h.realCandidateDeps,
+  realCreateDeps: h.realCreateDeps,
+  generateGoalCandidate: h.generateGoalCandidate,
+  createGoalFromCandidate: h.createGoalFromCandidate
 }))
 vi.mock('./staleCleanup', () => ({ removeStaleGoals: h.removeStaleGoals }))
 
-import { runGoalGenerationIfDue, generateGoalNow, localDateString } from './schedule'
+import {
+  runGoalGenerationIfDue,
+  generateGoalCandidateNow,
+  acceptGoalCandidate,
+  localDateString
+} from './schedule'
 
 const ctx = (over: Partial<GoalContextData> = {}): GoalContextData => ({
   persona: null,
@@ -41,6 +56,20 @@ const ctx = (over: Partial<GoalContextData> = {}): GoalContextData => ({
   activeGoalCount: 0,
   ...over
 })
+
+const candidate: GoalCandidate = {
+  suggestion: {
+    title: 'G',
+    description: '',
+    type: 'numeric',
+    target: 5,
+    min: 0,
+    max: 5,
+    reasoning: '',
+    linkedTaskIds: []
+  },
+  linkedTaskIds: []
+}
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -60,7 +89,7 @@ describe('localDateString', () => {
   })
 })
 
-describe('runGoalGenerationIfDue gates', () => {
+describe('runGoalGenerationIfDue gates (auto path)', () => {
   it('does nothing when the toggle is off (default)', async () => {
     h.session = { token: 't' }
     await runGoalGenerationIfDue()
@@ -90,67 +119,86 @@ describe('runGoalGenerationIfDue gates', () => {
     h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 3 }))
     await runGoalGenerationIfDue()
     expect(h.removeStaleGoals).toHaveBeenCalled()
-    expect(h.runGoalGenerationWith).not.toHaveBeenCalled()
+    expect(h.buildCandidateWith).not.toHaveBeenCalled()
   })
 
-  it('generates when due and stamps the day on success', async () => {
+  it('generates + creates when due and stamps the day on success', async () => {
     h.settings.goalAutoGenerationEnabled = true
     h.session = { token: 't' }
     h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 1 }))
-    h.runGoalGenerationWith.mockResolvedValue({ status: 'created', goalId: 'g1', title: 'G' })
+    h.buildCandidateWith.mockResolvedValue({ status: 'candidate', candidate })
+    h.createCandidateWith.mockResolvedValue({ status: 'created', goalId: 'g1', title: 'G' })
     await runGoalGenerationIfDue()
     expect(h.removeStaleGoals).toHaveBeenCalled()
-    expect(h.runGoalGenerationWith).toHaveBeenCalled()
+    expect(h.createCandidateWith).toHaveBeenCalled()
     expect(h.settings.goalGenerationLastDate).toBe(localDateString())
   })
 
-  it('does not stamp the day when generation skips', async () => {
+  it('does not create (nor stamp the day) when generation skips', async () => {
     h.settings.goalAutoGenerationEnabled = true
     h.session = { token: 't' }
     h.fetchGoalContext.mockResolvedValue(ctx({ activeGoalCount: 1 }))
-    h.runGoalGenerationWith.mockResolvedValue({ status: 'skipped', reason: 'insufficient_context' })
+    h.buildCandidateWith.mockResolvedValue({ status: 'skipped', reason: 'insufficient_context' })
     await runGoalGenerationIfDue()
+    expect(h.createCandidateWith).not.toHaveBeenCalled()
     expect(h.settings.goalGenerationLastDate).toBeNull()
   })
 })
 
-describe('generateGoalNow (manual)', () => {
-  it('creates directly, bypassing the day + count gates, and stamps the day', async () => {
+describe('generateGoalCandidateNow (manual phase 1 — no write)', () => {
+  it('returns the candidate, bypassing the day + count gates', async () => {
     h.session = { token: 't' } // toggle OFF, lastDate today — both ignored by manual
     h.settings.goalGenerationLastDate = localDateString()
-    h.runGoalGenerationWith.mockResolvedValue({ status: 'created', goalId: 'g1', title: 'G' })
-    const result = await generateGoalNow()
-    expect(result).toEqual({ status: 'created', goalId: 'g1', title: 'G' })
-    expect(h.runGoalGenerationWith).toHaveBeenCalledTimes(1)
+    h.generateGoalCandidate.mockResolvedValue({ status: 'candidate', candidate })
+    expect(await generateGoalCandidateNow()).toEqual({ status: 'candidate', candidate })
+    expect(h.generateGoalCandidate).toHaveBeenCalledTimes(1)
   })
 
   it('returns a skip without retrying when context is insufficient', async () => {
     h.session = { token: 't' }
-    h.runGoalGenerationWith.mockResolvedValue({ status: 'skipped', reason: 'insufficient_context' })
-    const result = await generateGoalNow()
-    expect(result).toEqual({ status: 'skipped', reason: 'insufficient_context' })
-    expect(h.runGoalGenerationWith).toHaveBeenCalledTimes(1) // no retry on a skip
+    h.generateGoalCandidate.mockResolvedValue({ status: 'skipped', reason: 'insufficient_context' })
+    expect(await generateGoalCandidateNow()).toEqual({
+      status: 'skipped',
+      reason: 'insufficient_context'
+    })
+    expect(h.generateGoalCandidate).toHaveBeenCalledTimes(1) // no retry on a skip
   })
 
   it('gives up with no_session after the prereq wait', async () => {
     vi.useFakeTimers()
     h.session = null
-    const p = generateGoalNow()
+    const p = generateGoalCandidateNow()
     await vi.advanceTimersByTimeAsync(11_000)
     expect(await p).toEqual({ status: 'skipped', reason: 'no_session' })
-    expect(h.runGoalGenerationWith).not.toHaveBeenCalled()
+    expect(h.generateGoalCandidate).not.toHaveBeenCalled()
     vi.useRealTimers()
   })
 
-  it('retries a transport throw up to 3× then reports error', async () => {
+  it('retries a transport throw up to 3× then reports invalid_suggestion', async () => {
     vi.useFakeTimers()
     h.session = { token: 't' }
-    h.runGoalGenerationWith.mockRejectedValue(new Error('HTTP 500'))
-    const p = generateGoalNow()
+    h.generateGoalCandidate.mockRejectedValue(new Error('HTTP 500'))
+    const p = generateGoalCandidateNow()
     await vi.advanceTimersByTimeAsync(11_000)
-    expect(await p).toEqual({ status: 'skipped', reason: 'error' })
-    expect(h.runGoalGenerationWith).toHaveBeenCalledTimes(3)
+    expect(await p).toEqual({ status: 'skipped', reason: 'invalid_suggestion' })
+    expect(h.generateGoalCandidate).toHaveBeenCalledTimes(3)
     vi.useRealTimers()
+  })
+})
+
+describe('acceptGoalCandidate (manual phase 2 — create)', () => {
+  it('creates the accepted candidate and stamps the day', async () => {
+    h.createGoalFromCandidate.mockResolvedValue({ status: 'created', goalId: 'g1', title: 'G' })
+    const result = await acceptGoalCandidate(candidate)
+    expect(result).toEqual({ status: 'created', goalId: 'g1', title: 'G' })
+    expect(h.createGoalFromCandidate).toHaveBeenCalledWith(candidate, { manual: true })
+    expect(h.settings.goalGenerationLastDate).toBe(localDateString())
+  })
+
+  it('does not stamp the day when the create is skipped', async () => {
+    h.createGoalFromCandidate.mockResolvedValue({ status: 'skipped', reason: 'stale' })
+    await acceptGoalCandidate(candidate)
+    expect(h.settings.goalGenerationLastDate).toBeNull()
   })
 })
 

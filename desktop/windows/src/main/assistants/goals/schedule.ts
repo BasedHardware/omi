@@ -1,22 +1,30 @@
 // The periodic trigger + gates for client-side goal generation, plus the manual
-// `generateGoalNow()` the Suggest button calls. Windows main has no
-// conversation-created signal (Mac's per-conversation hook), so the AUTO path is
-// a time-driven job: check on app-ready (once a session exists) and every few
-// hours after, gated by [toggle ON] + [<3 active goals] + [a new calendar day
+// two-phase (generate→preview→create) path the Suggest button calls. Windows main
+// has no conversation-created signal (Mac's per-conversation hook), so the AUTO
+// path is a time-driven job: check on app-ready (once a session exists) and every
+// few hours after, gated by [toggle ON] + [<3 active goals] + [a new calendar day
 // since the last generation]. Stale cleanup runs first so aged auto-goals can't
-// clog the `<3` gate forever.
+// clog the `<3` gate forever. The auto path generates AND creates directly (no
+// preview possible in a background job — the "New Goal" notification surfaces it).
 //
-// The MANUAL path bypasses the day + count gates (the user explicitly asked) but
-// still requires a signed-in session and sufficient context; it retries a
-// transport failure up to 3× with a 5s backoff (Mac's generateNow cadence).
+// The MANUAL path is split (D2 — Windows is ahead of Mac here): the button
+// GENERATES a candidate (bypassing the day + count gates — the user asked), the
+// renderer previews it, and on accept the renderer CREATES it. Generation waits
+// briefly for a session and retries a transport failure up to 3× / 5s (Mac's
+// generateNow cadence); create stamps the day so the auto timer won't also fire.
 import { getAppSettings, setAppSettings } from '../../appSettings'
 import { getBackendSession } from '../core/session'
 import { fetchGoalContext } from './context'
 import {
-  realGenerateDeps,
-  runGoalGenerationWith,
-  type GenerateDeps,
-  type GenerateResult
+  buildCandidateWith,
+  createCandidateWith,
+  createGoalFromCandidate,
+  generateGoalCandidate,
+  realCandidateDeps,
+  realCreateDeps,
+  type CandidateResult,
+  type GenerateResult,
+  type GoalCandidate
 } from './generate'
 import { removeStaleGoals } from './staleCleanup'
 
@@ -86,12 +94,17 @@ export async function runGoalGenerationIfDue(): Promise<void> {
     if (!context) return // session vanished mid-run
     if (context.activeGoalCount >= MAX_ACTIVE_GOALS) return
 
-    // Reuse the fetched context (skip generate.ts's own fetch) via an override.
-    const deps: GenerateDeps = {
-      ...realGenerateDeps({ manual: false }),
+    // Generate reusing the already-fetched context (no double fetch), then create
+    // directly — a background job has no preview surface.
+    const candResult = await buildCandidateWith({
+      ...realCandidateDeps(),
       getContext: async () => context
-    }
-    const result = await runGoalGenerationWith(deps)
+    })
+    if (candResult.status !== 'candidate') return
+    const result = await createCandidateWith(
+      realCreateDeps({ manual: false }),
+      candResult.candidate
+    )
     if (result.status === 'created') markGeneratedToday()
   } catch (e) {
     console.warn('[goals] auto generation failed:', e instanceof Error ? e.name : 'Error')
@@ -101,41 +114,45 @@ export async function runGoalGenerationIfDue(): Promise<void> {
 }
 
 /**
- * The manual path (Suggest button IPC). Bypasses the day + count gates — the user
- * asked directly — but waits briefly for a session and retries a transport failure
- * 3× / 5s. Returns the outcome for the renderer to toast. On a created goal it
- * also stamps the day so the auto timer won't add a second one today.
+ * Manual phase 1 (Suggest button IPC): GENERATE a candidate for the renderer to
+ * preview. Bypasses the day + count gates — the user asked directly — but waits
+ * briefly for a session and retries a transport failure 3× / 5s. Does NOT create
+ * the goal (that is `acceptGoalCandidate`, after the user accepts the preview).
  */
-export async function generateGoalNow(): Promise<GenerateResult> {
+export async function generateGoalCandidateNow(): Promise<CandidateResult> {
   // Prereq wait: a signed-in session within ~10s, else give up cleanly.
   const deadline = Date.now() + MANUAL_SESSION_WAIT_MS
   while (!getBackendSession() && Date.now() < deadline) await sleep(MANUAL_SESSION_POLL_MS)
   if (!getBackendSession()) return { status: 'skipped', reason: 'no_session' }
 
-  if (isGenerating) return { status: 'skipped', reason: 'error' } // an auto run holds the lock
-  isGenerating = true
-  try {
-    let lastError: unknown
-    for (let attempt = 0; attempt < MANUAL_MAX_ATTEMPTS; attempt++) {
-      try {
-        const result = await runGoalGenerationWith(realGenerateDeps({ manual: true }))
-        // A skip (insufficient context / invalid model output) won't change in 5s —
-        // return it rather than burn retries. Only transport throws are retried.
-        if (result.status === 'created') markGeneratedToday()
-        return result
-      } catch (e) {
-        lastError = e
-        if (attempt < MANUAL_MAX_ATTEMPTS - 1) await sleep(MANUAL_BACKOFF_MS)
-      }
+  let lastError: unknown
+  for (let attempt = 0; attempt < MANUAL_MAX_ATTEMPTS; attempt++) {
+    try {
+      // A skip (insufficient context / invalid model output) won't change in 5s —
+      // return it rather than burn retries. Only transport throws are retried.
+      return await generateGoalCandidate()
+    } catch (e) {
+      lastError = e
+      if (attempt < MANUAL_MAX_ATTEMPTS - 1) await sleep(MANUAL_BACKOFF_MS)
     }
-    console.warn(
-      '[goals] manual generation failed after retries:',
-      lastError instanceof Error ? lastError.name : 'Error'
-    )
-    return { status: 'skipped', reason: 'error' }
-  } finally {
-    isGenerating = false
   }
+  console.warn(
+    '[goals] manual generation failed after retries:',
+    lastError instanceof Error ? lastError.name : 'Error'
+  )
+  // No CandidateResult reason for transport error — surface as invalid_suggestion
+  // (the renderer toasts a generic "try again"); the log carries the real cause.
+  return { status: 'skipped', reason: 'invalid_suggestion' }
+}
+
+/**
+ * Manual phase 2: CREATE the goal the user accepted from the preview. Stamps the
+ * day on success so the auto timer won't add a second one today.
+ */
+export async function acceptGoalCandidate(candidate: GoalCandidate): Promise<GenerateResult> {
+  const result = await createGoalFromCandidate(candidate, { manual: true })
+  if (result.status === 'created') markGeneratedToday()
+  return result
 }
 
 /**
