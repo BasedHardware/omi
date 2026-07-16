@@ -1,9 +1,11 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useMemories } from '../../../hooks/useMemories'
 import { fetchAllActionItems } from '../../../lib/actionItems'
+import { auth, onAuthStateChanged } from '../../../lib/firebase'
 import { conversationsCache, subscribeConversationsCache } from '../../../lib/pageCache'
 import type { ConversationRow } from '../../../lib/pageCache'
 import type { HubStatCounts } from './HubStatRibbon'
+import { getCachedHubStats, overlay, persistHubStats } from './hubStatsCache'
 
 // The stat ribbon's four counts. The app has no count-only API, so each number is
 // sourced from the same place its destination page gets its data — never a second,
@@ -11,6 +13,13 @@ import type { HubStatCounts } from './HubStatRibbon'
 //
 // A count stays null until it is KNOWN, and null renders as an em-dash: a 0 is a
 // claim about the user's data, and we don't make a claim we can't back.
+//
+// COLD START: each source is an async fetch with no synchronous seed, so a fresh
+// launch would show four em-dashes for the second or two until they resolve. To
+// avoid that, the last-known counts are cached per-account (hubStatsCache) and
+// rendered IMMEDIATELY; the live fetches then overwrite each cell as they land
+// (stale-while-revalidate). The cache is uid-stamped, so a different account on
+// the same machine never inherits the previous user's numbers.
 
 // The Conversations page fetches exactly ONE cloud page (limit 100, no paging) and
 // merges local + pending rows on top, so its cloud slice is a page, not a total — a
@@ -21,6 +30,15 @@ import type { HubStatCounts } from './HubStatRibbon'
 const CLOUD_PAGE_SIZE = 100
 
 export function useHubStats(): HubStatCounts {
+  // The account the cache is scoped to. Read synchronously so the FIRST render
+  // already resolves the right blob (no em-dash flash), and track auth changes so
+  // an in-place account switch re-reads under the new uid (the cross-account
+  // guard). This is a pure read-only subscription — no teardown/reconcile side
+  // effects (that lives in useAuth); several listeners on `auth` are fine.
+  const [uid, setUid] = useState<string | null>(() => auth.currentUser?.uid ?? null)
+  useEffect(() => onAuthStateChanged(auth, (u) => setUid(u?.uid ?? null)), [])
+  const cached = useMemo(() => getCachedHubStats(uid), [uid])
+
   const { memories, loading: memoriesLoading, error: memoriesError } = useMemories()
 
   // Tasks: the SAME local-first read the Tasks page uses (incomplete + completed
@@ -70,7 +88,9 @@ export function useHubStats(): HubStatCounts {
 
   const cloudRows = rows?.filter((r) => r.source === 'cloud').length ?? 0
 
-  return {
+  // The freshly-fetched counts (null = still unknown this session), exactly as
+  // before caching existed.
+  const live: HubStatCounts = {
     conversations: rows ? rows.length : null,
     conversationsAtLeast: cloudRows >= CLOUD_PAGE_SIZE,
     tasks,
@@ -82,4 +102,23 @@ export function useHubStats(): HubStatCounts {
     memories: memoriesLoading || memoriesError ? null : memories.length,
     screenshots
   }
+
+  // Persist each known cell so the NEXT cold launch starts from these (per-uid).
+  useEffect(() => {
+    persistHubStats(uid, live)
+    // Depend on the primitive count fields, not the `live` object (rebuilt every
+    // render) — the effect must fire only when a value actually changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [
+    uid,
+    live.conversations,
+    live.conversationsAtLeast,
+    live.tasks,
+    live.memories,
+    live.screenshots
+  ])
+
+  // Stale-while-revalidate: the cached values fill any cell the live fetch hasn't
+  // resolved yet, so the ribbon shows numbers from the first paint.
+  return overlay(cached, live)
 }
