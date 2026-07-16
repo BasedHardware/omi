@@ -1,5 +1,6 @@
 import { createElement, Suspense } from 'react'
 import { getHubConnectContent } from './hubConnectSlot'
+import { ErrorBoundary } from '../../ui/ErrorBoundary'
 
 // The Connect stage — the slide-down panel the ask bar's "Connect" toggle reveals.
 //
@@ -43,7 +44,11 @@ export function HubConnectPanel({ onDismiss }: { onDismiss: () => void }): React
         // The registered content is a React.lazy component (registered via a dynamic
         // import in connections/register.ts), so it must render under a Suspense
         // boundary. A plain component registered directly (tests) renders fine too.
-        <Suspense fallback={<RestingState />}>{createElement(content, { onDismiss })}</Suspense>
+        // The ErrorBoundary contains a failed chunk load (or a throw inside the
+        // connections tree) to the resting state instead of white-screening the app.
+        <ErrorBoundary label="HubConnectPanel" fallback={<RestingState />}>
+          <Suspense fallback={<RestingState />}>{createElement(content, { onDismiss })}</Suspense>
+        </ErrorBoundary>
       ) : (
         <RestingState />
       )}
