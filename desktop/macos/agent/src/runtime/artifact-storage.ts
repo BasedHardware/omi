@@ -1,7 +1,7 @@
 import { createHash } from "node:crypto";
-import { copyFileSync, cpSync, existsSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
-import { homedir } from "node:os";
-import { basename, dirname, join, relative, resolve } from "node:path";
+import { copyFileSync, cpSync, existsSync, lstatSync, mkdirSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { homedir, tmpdir } from "node:os";
+import { basename, dirname, isAbsolute, join, relative, resolve } from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
 
 import type { AdapterArtifactReference } from "../adapters/interface.js";
@@ -152,6 +152,63 @@ export class OmiArtifactStorage {
     return discovered;
   }
 
+  /**
+   * Some ACP providers report a finished local deliverable only in their final
+   * prose; they do not emit the structured artifact event used by the normal
+   * adapter path. Recover that narrow, user-visible case without treating every
+   * pathname mentioned in model text as an artifact.
+   *
+   * We accept only a file that is both explicitly presented as a deliverable
+   * and present in a temporary directory. The latter is where providers that
+   * do not honor Omi's managed working directory convention place generated
+   * files, and keeps an untrusted completion from importing arbitrary user
+   * files merely because it names their paths.
+   */
+  discoverReportedTerminalArtifacts(
+    finalText: string,
+    existingArtifacts: readonly Pick<AdapterArtifactReference, "uri">[] = []
+  ): AdapterArtifactReference[] {
+    const existingUris = new Set(existingArtifacts.map((artifact) => artifact.uri));
+    const discovered: AdapterArtifactReference[] = [];
+    const seenPaths = new Set<string>();
+
+    for (const line of finalText.slice(0, MAX_REPORTED_TERMINAL_TEXT_CHARS).split(/\r?\n/)) {
+      if (!EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(line)) continue;
+
+      for (const candidate of reportedLocalFileCandidates(line)) {
+        const path = localPathFromReportedCandidate(candidate);
+        if (!path || !isTemporaryArtifactPath(path) || seenPaths.has(path)) continue;
+        seenPaths.add(path);
+
+        const uri = pathToFileURL(path).toString();
+        if (existingUris.has(uri)) continue;
+
+        try {
+          const stat = lstatSync(path);
+          if ((!stat.isFile() && !stat.isDirectory()) || stat.isSymbolicLink()) continue;
+          const displayName = basename(path);
+          if (!displayName || isDeniedManagedRunArtifactBasename(displayName)) continue;
+          discovered.push({
+            kind: stat.isDirectory() ? "directory" : kindForFileName(displayName),
+            role: "result",
+            uri,
+            displayName,
+            mimeType: stat.isDirectory() ? "inode/directory" : mimeTypeForFileName(displayName),
+            contentHash: stat.isDirectory() ? null : fileHash(path),
+            sizeBytes: stat.isDirectory() ? null : stat.size,
+            metadata: { discoveredFromTerminalReport: true },
+          });
+        } catch {
+          // A terminal report is advisory. Skip files that disappeared or cannot
+          // be read between the provider's completion and kernel finalization.
+        }
+
+        if (discovered.length >= MAX_REPORTED_TERMINAL_ARTIFACTS) return discovered;
+      }
+    }
+    return discovered;
+  }
+
   directoryFor(scope: ArtifactStorageScope): string {
     return join(
       this.rootDir,
@@ -196,6 +253,32 @@ function shouldKeepExternalLocation(artifact: AdapterArtifactReference): boolean
   return metadata.userSpecifiedPath === true
     || metadata.keepExternalLocation === true
     || metadata.omiManaged === false;
+}
+
+const MAX_REPORTED_TERMINAL_TEXT_CHARS = 64 * 1024;
+const MAX_REPORTED_TERMINAL_ARTIFACTS = 8;
+const EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE = /(?:\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b[^\n]{0,120}\b(?:lives?|saved|written|created|generated|produced|ready|available|located)\b|\b(?:saved|written|created|generated|produced)\b[^\n]{0,120}\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b|\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b\s*:)/i;
+const REPORTED_LOCAL_FILE_CANDIDATE = /file:\/\/[^\s`<>"']+|\/(?:[^\s`<>"']+)/g;
+
+function reportedLocalFileCandidates(line: string): string[] {
+  return line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [];
+}
+
+function localPathFromReportedCandidate(candidate: string): string | null {
+  const trimmed = candidate.replace(/[),.;:!?\]}]+$/g, "");
+  try {
+    const path = trimmed.startsWith("file://") ? fileURLToPath(trimmed) : trimmed;
+    return isAbsolute(path) ? resolve(path) : null;
+  } catch {
+    return null;
+  }
+}
+
+function isTemporaryArtifactPath(path: string): boolean {
+  return ["/tmp", "/private/tmp", tmpdir()].some((root) => {
+    const resolvedRoot = resolve(root);
+    return path !== resolvedRoot && isInside(path, resolvedRoot);
+  });
 }
 
 function sanitizePathComponent(value: string): string {
