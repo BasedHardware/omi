@@ -404,9 +404,9 @@ actor VideoChunkEncoder {
 
     try await waitForWriterInputReady(input)
 
-    let pixelBuffer: CVPixelBuffer = try autoreleasepool {
-      try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
-    }
+    // Keep this actor-isolated: autoreleasepool's closure is treated as a sending
+    // boundary by Swift 6, which cannot safely retain the AVFoundation adaptor.
+    let pixelBuffer = try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
 
     // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
     // incremented in addFrame only AFTER this write succeeds (so a failed write does
