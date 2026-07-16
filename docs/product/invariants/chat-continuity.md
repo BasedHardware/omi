@@ -32,6 +32,13 @@ is one shared chat mind across surfaces — not per-surface product histories.
   a second authoritative transcript store and per-surface history APIs
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
+- `desktop/windows/src/main/ipc/voiceHub.test.ts` — Windows voice path: a hub turn
+  records into the one main_chat conversation (typed-tail visible), and a hub record
+  + a cascade `mainChat:send` sharing one turnId record the human turn EXACTLY ONCE
+  (the Windows equivalent of the pi-mono `saveSpy=2` double-record assertion).
+- `desktop/windows/src/renderer/src/hooks/useChat.test.tsx` — recordVoiceTurn writes
+  the one kernel conversation + the shared/mobile echo, once, and never for an empty
+  turn.
 
 ## Path globs
 
@@ -45,6 +52,12 @@ is one shared chat mind across surfaces — not per-surface product histories.
 - `desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift`
 - `desktop/macos/Desktop/Sources/Rewind/Core/TaskChatMessageStorage.swift`
 - `desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskAgent/**`
+- `desktop/windows/src/main/agentKernel/**`
+- `desktop/windows/src/main/ipc/voiceHub*`
+- `desktop/windows/src/main/ipc/mainChat.ts`
+- `desktop/windows/src/renderer/src/hooks/useChat.ts`
+- `desktop/windows/src/renderer/src/lib/voice/**`
+- `desktop/windows/src/renderer/src/components/chat/VoiceHubDriverHost.tsx`
 
 ## PR rule
 

@@ -57,6 +57,12 @@ const sessionMocks = vi.hoisted(() => ({
 vi.mock('../lib/chatSessionsClient', () => ({ getMessages: sessionMocks.getMessages }))
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
+// Shared-thread continuity is best-effort HTTP; stub it so recordVoiceTurn's
+// backend echo is hermetic (and assertable).
+const saveDesktopMessageSpy = vi.fn(async (_r: unknown) => null)
+vi.mock('../lib/desktopChatMessages', () => ({
+  saveDesktopMessage: (r: unknown) => saveDesktopMessageSpy(r)
+}))
 
 import {
   useChat,
@@ -133,6 +139,7 @@ let agentEventCb: ((e: CodingAgentEvent) => void) | null = null
 let agentRunTaskId: string | null = null
 let agentRunResolve: ((r: { ok: boolean; text?: string; error?: string }) => void) | null = null
 const codingAgentCancelSpy = vi.fn(async () => {})
+const voiceHubRecordTurnSpy = vi.fn(async () => ({ recorded: true, duplicate: false }))
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -183,8 +190,12 @@ beforeEach(() => {
     },
     codingAgentCancel: codingAgentCancelSpy,
     kgSearchFiles: async () => [],
-    kgExecuteSql: async () => ({ columns: [], rows: [] })
+    kgExecuteSql: async () => ({ columns: [], rows: [] }),
+    voiceHubRecordTurn: voiceHubRecordTurnSpy,
+    voiceHubGetSeedContext: async () => ({ context: '', idempotencyKeys: [] })
   }
+  saveDesktopMessageSpy.mockClear()
+  voiceHubRecordTurnSpy.mockClear()
 })
 afterEach(() => cleanup())
 
@@ -606,11 +617,42 @@ describe('useChat — recordVoiceTurn (native hub turn → one timeline, no LLM/
     expect(global.fetch).not.toHaveBeenCalled()
   })
 
-  it('ignores an empty turn (missing user or assistant text)', () => {
+  it('records the turn to the ONE kernel conversation (origin realtime_voice, turnId key)', async () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('remember teal', 'noted', false, 'turn-xyz'))
+    await act(async () => {
+      await flush()
+    })
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledTimes(1)
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userText: 'remember teal',
+        assistantText: 'noted',
+        interrupted: false,
+        idempotencyKey: 'turn-xyz'
+      })
+    )
+  })
+
+  it('echoes both messages to the shared/mobile thread (messageSource realtime_voice)', async () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('hi omi', 'hello', false, 'turn-1'))
+    await act(async () => {
+      await flush()
+    })
+    const sources = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { messageSource: string }).messageSource)
+    expect(sources).toEqual(['realtime_voice', 'realtime_voice'])
+    const senders = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { sender: string }).sender)
+    expect(senders).toEqual(['human', 'ai'])
+  })
+
+  it('ignores an empty turn (missing user or assistant text) — nothing recorded anywhere', () => {
     const { result } = renderHook(() => useChat())
     act(() => result.current.recordVoiceTurn('', 'orphan'))
     act(() => result.current.recordVoiceTurn('orphan', '   '))
     expect(result.current.history).toHaveLength(0)
+    expect(voiceHubRecordTurnSpy).not.toHaveBeenCalled()
+    expect(saveDesktopMessageSpy).not.toHaveBeenCalled()
   })
 })
 

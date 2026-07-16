@@ -220,15 +220,18 @@ export async function runMainChatTurn(
 
     // Record the clean user turn on the kernel transcript (empty assistant text →
     // only the user turn is appended; the run appends the assistant turn at
-    // completion). Idempotency-keyed on requestId so a retried send with the same
-    // id never double-appends.
+    // completion). Idempotency-keyed on `idempotencyKey ?? requestId`: a retried
+    // send with the same id never double-appends, AND a voice CASCADE turn threads
+    // its per-press turnId here so its user-turn record shares the key a hub-native
+    // record would use — the belt-and-suspenders half of the INV-CHAT-1
+    // double-record fix (primary guarantee: hub XOR cascade per press).
     kernel.recordSurfaceTurn({
       ownerId,
       surfaceRef,
       userText: args.cleanUserText,
       assistantText: '',
       origin: 'main_chat',
-      idempotencyKey: requestId
+      idempotencyKey: args.idempotencyKey?.trim() || requestId
     })
 
     unsubscribe = kernel.subscribe((event) => {

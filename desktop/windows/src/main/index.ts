@@ -85,6 +85,7 @@ import { registerAutomationHandlers } from './ipc/automation'
 import { registerCodingAgentHandlers } from './ipc/codingAgent'
 import { initClaudeAgentConfigDir } from './codingAgent/agentConfigDir'
 import { registerMainChatHandlers } from './ipc/mainChat'
+import { registerVoiceHubHandlers } from './ipc/voiceHub'
 import { registerByokHandlers } from './ipc/byok'
 import { registerMcpExportsHandlers } from './ipc/mcpExports'
 import { registerAuthStoreHandlers } from './ipc/authStore'
@@ -868,6 +869,9 @@ app.whenReady().then(async () => {
   // Main-chat (kernel-routed pi-mono) IPC. DARK: the door exists but nothing in the
   // renderer calls it yet; default typed chat still routes through /v2/messages.
   registerMainChatHandlers()
+  // Realtime-hub voice turns → the one kernel transcript (INV-CHAT-1): record a
+  // completed hub turn into the typed conversation + read the continuity seed back.
+  registerVoiceHubHandlers()
   // BYOK key management IPC (encrypted-at-rest provider keys for Settings).
   registerByokHandlers()
   // "Use omi memory anywhere" MCP export connectors (hosted key + config writers).
