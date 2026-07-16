@@ -30,10 +30,24 @@ import type {
   AppCatalogResponse,
   AppSearchResponse
 } from '../lib/omiApi.generated'
+import { readPersistedValue, writePersistedValue } from '../lib/persistentCache'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
 const SEARCH_LIMIT = 60
+
+// Per-uid cold-start snapshot for the Apps page. Unlike the other surfaces the
+// Apps page keeps no in-memory module cache (all component state), so it refetches
+// + spins on every open; mirroring the last successful load to localStorage lets a
+// cold start paint the grid instantly, then revalidate. `enabled` is a Set at
+// runtime, persisted as an array.
+type AppsSnapshot = {
+  sections: CatalogSection[]
+  allApps: AppCatalogItem[]
+  installedPool: AppCatalogItem[]
+  enabled: string[]
+}
+const APPS_SURFACE = 'apps'
 
 // Turns raw API categories like "chat-assistants" into "Chat Assistants".
 function formatCategory(raw: string): string {
@@ -157,14 +171,21 @@ function AppGrid({
 }
 
 export function Apps(): React.JSX.Element {
-  const [allApps, setAllApps] = useState<AppCatalogItem[]>([])
+  // Cold-start snapshot: read once (before initial state) so the grid paints the
+  // last-known catalog immediately on app restart instead of a spinner. The
+  // revalidating load() below still runs and overwrites with fresh data.
+  const [snapshot] = useState<AppsSnapshot | null>(() => readPersistedValue<AppsSnapshot>(APPS_SURFACE))
+  const [allApps, setAllApps] = useState<AppCatalogItem[]>(() => snapshot?.allApps ?? [])
   // Merged v2-union + per-user v1 /apps pool, deduped (v1 wins). Backs the Installed
   // view + count so a user's private/unapproved/tester apps (absent from the
   // approved-only v2 catalog) still render.
-  const [installedPool, setInstalledPool] = useState<AppCatalogItem[]>([])
-  const [sections, setSections] = useState<CatalogSection[]>([])
-  const [enabled, setEnabled] = useState<Set<string>>(new Set())
-  const [loading, setLoading] = useState(true)
+  const [installedPool, setInstalledPool] = useState<AppCatalogItem[]>(
+    () => snapshot?.installedPool ?? []
+  )
+  const [sections, setSections] = useState<CatalogSection[]>(() => snapshot?.sections ?? [])
+  const [enabled, setEnabled] = useState<Set<string>>(() => new Set(snapshot?.enabled ?? []))
+  // No spinner when a snapshot already paints the grid; load() revalidates silently.
+  const [loading, setLoading] = useState(() => !snapshot)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [query, setQuery] = useState('')
@@ -207,10 +228,19 @@ export function Apps(): React.JSX.Element {
         }
       }
       const v1Apps = Array.isArray(v1Res.data) ? v1Res.data : []
+      const nextInstalledPool = mergeAppPool(nextApps, v1Apps)
+      const nextEnabled = Array.isArray(enabledRes.data) ? enabledRes.data : []
       setSections(nextSections)
       setAllApps(nextApps)
-      setInstalledPool(mergeAppPool(nextApps, v1Apps))
-      setEnabled(new Set(Array.isArray(enabledRes.data) ? enabledRes.data : []))
+      setInstalledPool(nextInstalledPool)
+      setEnabled(new Set(nextEnabled))
+      // Mirror the successful load to the per-uid cold-start snapshot for next launch.
+      writePersistedValue<AppsSnapshot>(APPS_SURFACE, {
+        sections: nextSections,
+        allApps: nextApps,
+        installedPool: nextInstalledPool,
+        enabled: nextEnabled
+      })
     } catch (e) {
       setError((e as Error).message)
     } finally {

@@ -1,6 +1,12 @@
 // @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { clearAllPersistedCaches, readPersistedCache, writePersistedCache } from './persistentCache'
+import {
+  clearAllPersistedCaches,
+  readPersistedCache,
+  readPersistedValue,
+  writePersistedCache,
+  writePersistedValue
+} from './persistentCache'
 
 const LAST_UID_KEY = 'omi.lastSignedInUid'
 
@@ -65,5 +71,36 @@ describe('persistentCache (per-uid cold-start cache)', () => {
     expect(localStorage.getItem('omi.some-device-setting')).toBe('keep-me')
     // The uid pointer itself is not a cache key and survives.
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
+  })
+
+  it('read/writePersistedValue round-trips an object payload scoped to the uid', () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    const snap = { sections: [{ id: 's1' }], enabled: ['a', 'b'] }
+    writePersistedValue('apps', snap)
+    expect(readPersistedValue('apps')).toEqual(snap)
+  })
+
+  it('readPersistedValue does not leak another account (per-uid isolation)', () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    writePersistedValue('apps', { enabled: ['secret'] })
+    localStorage.setItem(LAST_UID_KEY, 'userB')
+    expect(readPersistedValue('apps')).toBeNull()
+  })
+
+  it('readPersistedValue returns null when signed out and on an array payload', () => {
+    // Signed out: no uid.
+    writePersistedValue('apps', { a: 1 })
+    expect(readPersistedValue('apps')).toBeNull()
+    // An array payload is not a value object (guards against surface-key reuse).
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    localStorage.setItem('omi.cache.apps.userA', JSON.stringify([1, 2, 3]))
+    expect(readPersistedValue('apps')).toBeNull()
+  })
+
+  it('clearAllPersistedCaches also purges value-shaped snapshots', () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    writePersistedValue('apps', { enabled: ['x'] })
+    clearAllPersistedCaches()
+    expect(readPersistedValue('apps')).toBeNull()
   })
 })
