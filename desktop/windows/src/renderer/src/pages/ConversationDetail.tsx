@@ -34,6 +34,7 @@ import { TranscriptDrawer } from '../components/conversations/TranscriptDrawer'
 import { fetchPeople } from '../lib/conversations/people'
 import { fetchFolders } from '../lib/conversations/folders'
 import { friendlyConversationError } from '../lib/conversations/detailErrors'
+import { buildTranscriptText } from '../lib/conversations/transcript'
 import {
   getConversationShareLink,
   moveConversationToFolder,
@@ -330,9 +331,7 @@ function ConversationDetailView({ conversationId }: { conversationId: string }):
 
   const transcriptText = useMemo(() => {
     if (local) return local.transcript ?? ''
-    return segments
-      .map((s) => `${s.is_user ? 'You' : (s.speaker ?? 'Speaker')}: ${s.text}`)
-      .join('\n')
+    return buildTranscriptText(segments)
   }, [local, segments])
 
   const flash = (what: 'link' | 'transcript'): void => {
