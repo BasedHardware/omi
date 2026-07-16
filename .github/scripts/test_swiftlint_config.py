@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Validate the SwiftLint safety configuration (#9843 Ticket 06).
 
-Checks that .swiftlint.yml has exactly the 7 safety rules in only_rules plus
-custom_rules, that the custom_rules have proven regex patterns, that the
-baseline exists and is valid JSON, and that Package.swift attaches the plugin
-to all first-party Swift targets (and NOT to ObjCExceptionCatcher or CWebP).
+Checks that .swiftlint.yml has exactly the safety-only rules and generated-code
+policy, that the baseline exists and is valid JSON, and that the explicit macOS
+CI runner has pinned SwiftLint provenance and fails on warnings.
 """
 
 from __future__ import annotations
@@ -19,6 +18,8 @@ DESKTOP = REPO_ROOT / "desktop/macos/Desktop"
 CONFIG_PATH = DESKTOP / ".swiftlint.yml"
 BASELINE_PATH = DESKTOP / ".swiftlint-baseline.json"
 PACKAGE_PATH = DESKTOP / "Package.swift"
+WRAPPER_PATH = REPO_ROOT / "desktop/macos/scripts/swiftlint-wrapper.sh"
+MANIFEST_PATH = REPO_ROOT / ".github/checks-manifest.yaml"
 
 EXPECTED_ONLY_RULES = {
   "custom_rules",
@@ -128,6 +129,19 @@ class SwiftLintConfigTests(unittest.TestCase):
     cwebp_section = re.search(r'name: "CWebP".*?(?=\n    \),)', content, re.DOTALL)
     if cwebp_section:
       self.assertNotIn("SwiftLintBuildToolPlugin", cwebp_section.group())
+
+  def test_pinned_runner_is_the_macos_manifest_producer(self):
+    wrapper = WRAPPER_PATH.read_text(encoding="utf-8")
+    self.assertIn('SWIFTLINT_VERSION="0.65.0"', wrapper)
+    self.assertIn('SWIFTLINT_COMMIT="fd768ba9a0e8a4f96d550d98de6c4cf2af565cf1"', wrapper)
+    self.assertIn("github.com/realm/SwiftLint.git", wrapper)
+    self.assertIn("--strict --config", wrapper)
+    self.assertIn("--depth 1 --branch", wrapper)
+
+    manifest = MANIFEST_PATH.read_text(encoding="utf-8")
+    self.assertIn("- id: desktop-swiftlint\n", manifest)
+    self.assertIn('command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]', manifest)
+    self.assertIn('platforms: ["macos"]', manifest[manifest.index("- id: desktop-swiftlint\n"):])
 
 
 if __name__ == "__main__":
