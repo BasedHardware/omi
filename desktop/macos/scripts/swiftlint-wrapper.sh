@@ -23,6 +23,8 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 DESKTOP_DIR="$MACOS_DIR/Desktop"
 CONFIG_FILE="$DESKTOP_DIR/.swiftlint.yml"
+BASELINE_FILE="$DESKTOP_DIR/.swiftlint-baseline.json"
+BASELINE_PREPARER="$SCRIPT_DIR/prepare-swiftlint-baseline.py"
 
 die() { echo "FATAL(swiftlint-wrapper): $*" >&2; exit 1; }
 
@@ -114,8 +116,18 @@ case "${1:-}" in
   lint)
     shift
     bootstrap >&2
+    command -v python3 >/dev/null 2>&1 || die "python3 not found"
+    [ -f "$BASELINE_PREPARER" ] || die "baseline preparer not found: $BASELINE_PREPARER"
+    local_baseline_dir="$(mktemp -d "${TMPDIR:-/tmp}/omi-swiftlint-baseline.XXXXXX")"
+    trap 'rm -rf "$local_baseline_dir"' EXIT
+    if ! python3 "$BASELINE_PREPARER" \
+      --input "$BASELINE_FILE" \
+      --desktop-dir "$DESKTOP_DIR" \
+      --output "$local_baseline_dir/baseline.json"; then
+      die "failed to prepare a portable SwiftLint baseline"
+    fi
     cd "$DESKTOP_DIR"
-    exec "$BINARY" lint --strict --config "$CONFIG_FILE" "$@"
+    "$BINARY" lint --strict --config "$CONFIG_FILE" --baseline "$local_baseline_dir/baseline.json" "$@"
     ;;
   *)
     die "usage: $0 {bootstrap|version|digest|lint}"

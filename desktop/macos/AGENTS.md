@@ -140,7 +140,9 @@ upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
 verified binary under `~/.cache/omi-swiftlint`; use
 `./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
 Generated sources and test fixtures remain excluded and the committed baseline
-is down-only.
+is down-only. SwiftLint baseline locations are absolute, so the wrapper
+materializes a temporary baseline rooted at the current checkout before linting;
+do not hand-edit those paths to match a specific machine.
 
 ### Synchronous state-machine callbacks
 
