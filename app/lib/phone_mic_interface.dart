@@ -1,7 +1,7 @@
 import 'package:pigeon/pigeon.dart';
 
-// Dedicated contract for the native iOS phone-mic capture module. Kept separate
-// from pigeon_interfaces.dart so the module owns its generated files end to end.
+// Dedicated contract for the native phone-mic capture modules (iOS and Android).
+// Kept separate from pigeon_interfaces.dart so the module owns its generated files end to end.
 // Regenerate with: dart run pigeon --input lib/phone_mic_interface.dart
 @ConfigurePigeon(
   PigeonOptions(
@@ -11,6 +11,10 @@ import 'package:pigeon/pigeon.dart';
     // The shared PigeonCommunicator.g.swift already defines `PigeonError`; a
     // second generated file with the default error class name would collide.
     swiftOptions: SwiftOptions(errorClassName: 'PhoneMicPigeonError'),
+    kotlinOut: 'android/app/src/main/kotlin/com/friend/ios/phonemic/PhoneMicPigeon.g.kt',
+    // PigeonCommunicator.g.kt (package com.friend.ios) already declares the default
+    // FlutterError; an own package + error class keeps the two generated files disjoint.
+    kotlinOptions: KotlinOptions(package: 'com.friend.ios.phonemic', errorClassName: 'PhoneMicPigeonError'),
     dartPackageName: 'omi_phone_mic',
   ),
 )
