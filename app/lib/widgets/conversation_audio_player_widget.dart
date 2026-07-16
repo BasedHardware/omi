@@ -396,7 +396,7 @@ class _ConversationAudioPlayerWidgetState extends State<ConversationAudioPlayerW
                                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
                                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 14),
                                 // Dense MP3 has no gaps on its timeline — plain track.
-                                trackShape: _GapAwareTrackShape(const []),
+                                trackShape: const _GapAwareTrackShape([]),
                               ),
                               child: Slider(
                                 value: combinedPosition.inMilliseconds.toDouble().clamp(
