@@ -222,6 +222,16 @@ checks:
     triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", ".github/scripts/test_swiftlint_config.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
+  - id: desktop-swiftlint-baseline
+    command: ["python3", "desktop/macos/scripts/check-swiftlint-baseline.py", "--base", "{base}"]
+    triggers: ["desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-swiftlint-baseline.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: SwiftLint baseline is down-only; swiftlint:disable requires named rule + reason"
+  - id: desktop-swiftlint-baseline-fixtures
+    command: ["python3", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    triggers: ["desktop/macos/scripts/check-swiftlint-baseline.py", ".github/scripts/test_swiftlint_baseline_guard.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
