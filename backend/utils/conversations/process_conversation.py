@@ -75,6 +75,7 @@ from utils.llm.conversation_folder import assign_conversation_to_folder
 from utils.analytics import record_usage
 from utils.llm.usage_tracker import track_usage, Features
 from utils.llm.memories import extract_memories_from_text, new_memories_extractor
+from utils.llm.temporal import date_in_tz
 from utils.llm.external_integrations import summarize_experience_text
 from utils.llm.goals import extract_and_update_goal_progress
 from utils.llm.knowledge_graph import extract_knowledge_from_memory
@@ -609,16 +610,29 @@ def _extract_memories_legacy(uid: str, conversation: Conversation) -> None:
     language = users_db.get_user_language_preference(uid)
     new_memories: List[Memory] = []
 
+    # Ground extraction in the date the content was captured, not the processing time, so
+    # relative dates in delayed or backfilled content resolve correctly (cubic on #8501).
+    content_date = None
+    if getattr(conversation, 'started_at', None):
+        try:
+            content_date = date_in_tz(conversation.started_at, notification_db.get_user_time_zone(uid))
+        except Exception as e:
+            logger.warning(f"_extract_memories_inner content_date_failed uid={uid}: {e}")
+
     # Extract memories based on conversation source
     if conversation.source == ConversationSource.external_integration:
         ext_data = conversation.external_data or {}
         text_content = ext_data.get('text')
         if text_content and len(text_content) > 0:
             text_source = ext_data.get('text_source', 'other')
-            new_memories = extract_memories_from_text(uid, text_content, text_source, language=language)
+            new_memories = extract_memories_from_text(
+                uid, text_content, text_source, language=language, content_date=content_date
+            )
     else:
         # For regular conversations with transcript segments
-        new_memories = new_memories_extractor(uid, conversation.transcript_segments, language=language)
+        new_memories = new_memories_extractor(
+            uid, conversation.transcript_segments, language=language, content_date=content_date
+        )
 
     is_locked = conversation.is_locked
     parsed_memories: List[MemoryDB] = []

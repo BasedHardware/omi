@@ -62,7 +62,6 @@ EXTRACTED_TYPE_NAMES: frozenset[str] = frozenset(
         "RealtimeHubErrorOwnership",
         "RealtimeHubBargeInAction",
         "RealtimeLocalProfileTurnPlan",
-        "RealtimeAcceptedSpawnPresentationPolicy",
         "RealtimeProviderOutputPresentationPolicy",
         "RealtimeProviderTurnDoneDisposition",
         "RealtimePostToolContinuationControllerAction",

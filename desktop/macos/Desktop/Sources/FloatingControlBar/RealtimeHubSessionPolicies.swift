@@ -57,20 +57,6 @@ struct RealtimeLocalProfileTurnPlan: Equatable {
 }
 #endif
 
-/// A canonical spawn receipt proves that the child exists, but it does not
-/// authorize the realtime provider to narrate the child's eventual outcome.
-/// Provider continuations remain necessary for transport completion, but are
-/// not presented to the user for that turn.
-enum RealtimeAcceptedSpawnPresentationPolicy {
-  static func suppressesProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
-    hasCanonicalSpawnReceipt
-  }
-
-  static func requiresProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
-    !hasCanonicalSpawnReceipt
-  }
-}
-
 /// Audio and text are two transports for the same response. Keeping every
 /// presentation gate here prevents one transport from exposing output the other
 /// correctly withheld.
@@ -78,22 +64,15 @@ enum RealtimeProviderOutputPresentationPolicy {
   enum Disposition: Equatable {
     case present
     case suppressScreenGrounding
-    case suppressCanonicalLocalResult
     case suppressReducerOwnedOutput
   }
 
   static func decide(
     screenGroundingState: RealtimeScreenGroundingState,
-    hasCanonicalSpawnReceipt: Bool,
     reducerOutputSuppressed: Bool
   ) -> Disposition {
     if screenGroundingState.suppressesProviderOutput {
       return .suppressScreenGrounding
-    }
-    if RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
-      hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
-    {
-      return .suppressCanonicalLocalResult
     }
     return reducerOutputSuppressed ? .suppressReducerOwnedOutput : .present
   }

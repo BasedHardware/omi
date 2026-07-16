@@ -132,6 +132,7 @@ final class HubSystemInstructionTests: XCTestCase {
         let provider = properties?["provider"] as? [String: Any]
 
         XCTAssertEqual(provider?["enum"] as? [String], ["openclaw"])
+        XCTAssertTrue((provider?["description"] as? String ?? "").contains("current user explicitly names it"))
     }
 
     func testRealtimeSpawnAgentOmitsProviderWhenNoLocalProvidersAreAvailable() {

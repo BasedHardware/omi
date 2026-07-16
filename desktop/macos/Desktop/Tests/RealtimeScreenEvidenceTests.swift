@@ -75,26 +75,23 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: .awaitingReport(receipt()),
-        hasCanonicalSpawnReceipt: false,
         reducerOutputSuppressed: false),
       .suppressScreenGrounding)
     XCTAssertEqual(
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: .accepted(receipt()),
-        hasCanonicalSpawnReceipt: false,
         reducerOutputSuppressed: false),
       .present,
       "the verified continuation must reach both native audio and text presentation")
     XCTAssertEqual(
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: .inactive,
-        hasCanonicalSpawnReceipt: true,
         reducerOutputSuppressed: false),
-      .suppressCanonicalLocalResult)
+      .present,
+      "a durable spawn receipt does not preempt native realtime audio")
     XCTAssertEqual(
       RealtimeProviderOutputPresentationPolicy.decide(
         screenGroundingState: .inactive,
-        hasCanonicalSpawnReceipt: false,
         reducerOutputSuppressed: true),
       .suppressReducerOwnedOutput)
   }

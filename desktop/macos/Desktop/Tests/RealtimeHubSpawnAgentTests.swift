@@ -47,26 +47,17 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(recall.assistantText.contains("GAUNTLET-OLD"))
   }
 
-  func testCanonicalSpawnReceiptSuppressesProviderContinuationPresentation() {
-    XCTAssertTrue(
-      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
-        hasCanonicalSpawnReceipt: true))
-    XCTAssertFalse(
-      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
-        hasCanonicalSpawnReceipt: false))
-    XCTAssertFalse(
-      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
-        hasCanonicalSpawnReceipt: true))
-    XCTAssertTrue(
-      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
-        hasCanonicalSpawnReceipt: false))
+  func testCanonicalSpawnReceiptKeepsProviderContinuationInNativeVoiceLane() {
     XCTAssertEqual(
-      RealtimeProviderTurnDoneDisposition.decide(
-        pendingToolCount: 0,
-        postToolContinuationRequired:
-          RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
-            hasCanonicalSpawnReceipt: true)),
-      .finalizeLogicalTurn)
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        reducerOutputSuppressed: false),
+      .present)
+    XCTAssertEqual(
+        RealtimeProviderTurnDoneDisposition.decide(
+          pendingToolCount: 0,
+          postToolContinuationRequired: true),
+      .requestPostToolContinuation)
   }
 
   func testCanonicalSpawnReceiptNeverRedrivesAfterExpectedSessionRefresh() {
@@ -327,6 +318,8 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
   }
 
   func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
+    // omi-test-quality: source-inspection -- static contract: the realtime controller must not
+    // reintroduce a local TTS takeover for an accepted background-agent receipt.
     let source = try realtimeHubControllerSource()
 
     XCTAssertFalse(source.contains("AVSpeechSynthesizer"))
@@ -340,13 +333,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertTrue(
       source.contains(
         "acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
-    // omi-test-quality: source-inspection -- static wiring contract for the
-    // behavioral policy tested above and the shared deterministic-ack lease.
-    XCTAssertTrue(source.contains("playCanonicalSpawnAcknowledgement(receipt.assistantText)"))
-    XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck"))
-    XCTAssertTrue(source.contains(".authoritativeLocalResultAcceptedScoped("))
+    // The spawn receipt persists the canonical lifecycle fact, but only the
+    // native provider continuation may answer the same PTT turn aloud.
+    XCTAssertTrue(source.contains("preserving native provider continuation"))
+    XCTAssertFalse(source.contains("playCanonicalSpawnAcknowledgement"))
+    XCTAssertFalse(source.contains("kind: .spawnReceipt"))
     XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
-    XCTAssertTrue(source.contains("requiresProviderContinuation("))
+    XCTAssertTrue(source.contains("postToolContinuationRequired"))
   }
 
   func testRealtimeHubAudibleOutputIsLeaseGated() throws {

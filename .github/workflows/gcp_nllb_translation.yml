@@ -68,6 +68,9 @@ jobs:
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }} -f backend/${{ env.SERVICE_UNDERSCORE }}/Dockerfile backend/${{ env.SERVICE_UNDERSCORE }}/
+          python3 backend/scripts/runtime_image_contracts.py smoke \
+            --dockerfile backend/nllb_translation/Dockerfile \
+            --image gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.vars.outputs.short_sha }}
 
       - name: Get GKE credentials

@@ -693,12 +693,12 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertEqual(acceptJournal(continuation).model.turn?.phase, .terminal(.success))
   }
 
-  func testCanonicalSpawnReceiptCompletesWithoutProviderContinuation() throws {
+  func testCanonicalSpawnReceiptKeepsProviderContinuationForNativeVoiceOutput() throws {
     let (startingModel, turnID, sessionID, responseID) = awaitingHubResponse()
     let reservation = reserveIdentity(startingModel, turnID: turnID)
     let toolIdentity = reservation.identity
     let callID = VoiceToolCallID("spawn-agent")
-    var model = reduce(
+    let model = reduce(
       reservation.model,
       .toolStartedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
     ).model
@@ -707,26 +707,43 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(model.turn?.deadlines.contains(.pendingTools) == true)
     XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
 
-    model = reduce(
-      model,
-      .authoritativeLocalResultAcceptedScoped(
-        turnID: turnID,
-        identity: toolIdentity,
-        callID: callID,
-        kind: .spawnReceipt)
-    ).model
-
-    XCTAssertTrue(model.turn?.providerFinished == true)
-    XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
-    guard case .writing = model.turn?.journalFinalization else {
-      return XCTFail("the canonical receipt must open the journal fence")
-    }
-
     let finished = reduce(
       model,
       .toolFinishedScoped(turnID: turnID, identity: toolIdentity, callID: callID)
     ).model
-    let accepted = acceptJournal(finished)
+    XCTAssertFalse(finished.turn?.providerFinished == true)
+    XCTAssertTrue(finished.turn?.postToolContinuationRequired == true)
+    XCTAssertEqual(finished.turn?.journalFinalization, .pending)
+
+    let providerIdentity = try XCTUnwrap(finished.turn?.providerEffectIdentity)
+    let toolOnlyCycleFinished = reduce(
+      finished,
+      .providerTurnFinishedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: sessionID,
+        responseID: responseID)
+    ).model
+    XCTAssertEqual(toolOnlyCycleFinished.turn?.phase, .awaitingResponse)
+    XCTAssertTrue(toolOnlyCycleFinished.turn?.postToolContinuationRequired == true)
+
+    let continuation = reduce(
+      toolOnlyCycleFinished,
+      .providerResponseStartedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: sessionID,
+        responseID: responseID)
+    ).model
+    let completed = reduce(
+      continuation,
+      .providerTurnFinishedScoped(
+        turnID: turnID,
+        identity: providerIdentity,
+        sessionID: sessionID,
+        responseID: responseID)
+    ).model
+    let accepted = acceptJournal(completed)
     XCTAssertEqual(accepted.model.turn?.phase, .terminal(.success))
     XCTAssertEqual(accepted.model.lastTerminal?.reason, .success)
     XCTAssertEqual(accepted.model.lastTerminal?.route, .hub(sessionID: sessionID))

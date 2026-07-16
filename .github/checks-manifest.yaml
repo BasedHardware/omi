@@ -176,6 +176,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/tests/.import_time_side_effects_legacy_allowlist"]
     lanes: ["local", "ci"]
     reason: "backend production Python or its allowlist changed"
+  - id: backend-runtime-image-source-closure
+    command: ["python3", "backend/scripts/runtime_image_contracts.py", "check"]
+    triggers: ["backend/**/*.py", "backend/**/Dockerfile*", "backend/runtime_images.json", "backend/scripts/runtime_image_contracts.py", ".github/workflows/runtime_image_contracts.yml", ".github/workflows/gcp_backend*.yml", ".github/workflows/gcp_diarizer.yml", ".github/workflows/gcp_models.yml", ".github/workflows/gcp_parakeet.yml", ".github/workflows/gcp_nllb_translation.yml", ".github/workflows/gcp_memory_maintenance_job*.yml", ".github/workflows/gcp_notifications_job.yml", ".github/workflows/gcp_plugins.yml", "plugins/**/*.py", "plugins/Dockerfile"]
+    lanes: ["local", "ci"]
+    reason: "#9857: deployable Python images must contain the transitive first-party imports of their runtime entrypoints"
   - id: backend-module-isolation
     command: ["python3", "backend/scripts/check_module_stub_pollution.py", "--files", "{changed_files}", "--check-allowlist-monotonic", "{base}"]
     triggers: ["backend/tests/**/*.py", "backend/testing/**/*.py", "backend/tests/.module_stub_legacy_allowlist", "backend/scripts/check_module_stub_pollution.py"]

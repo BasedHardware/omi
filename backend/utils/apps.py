@@ -1609,7 +1609,7 @@ def _validate_tool_definition(tool: Dict[str, Any]) -> Dict[str, Any] | None:
         'name': name.strip(),
         'description': description.strip(),
         'endpoint': endpoint.strip(),
-        'method': typed_tool.get('method', 'POST').upper(),
+        'method': (typed_tool.get('method') or 'POST').upper(),
         'auth_required': typed_tool.get('auth_required', True),
     }
 

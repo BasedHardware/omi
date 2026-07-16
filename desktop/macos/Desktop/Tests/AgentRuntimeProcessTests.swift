@@ -932,6 +932,11 @@ final class AgentRuntimeProcessTests: XCTestCase {
     let discovered = AgentRuntimeProcess.firstExecutable(named: "openclaw", in: directories)
 
     XCTAssertEqual(discovered, openClaw.path)
+    XCTAssertLessThan(
+      try XCTUnwrap(directories.firstIndex(of: openClaw.deletingLastPathComponent().path)),
+      try XCTUnwrap(directories.firstIndex(of: "/opt/homebrew/bin")),
+      "A home-scoped FNM installation must take precedence over machine-wide Homebrew."
+    )
   }
 
   func testStdoutReaderIsEventDrivenInsteadOfDetachedAvailableDataLoop() throws {
