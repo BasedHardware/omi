@@ -6,6 +6,9 @@ import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
 import { EmptyState } from '../components/ui/EmptyState'
 import { GenerateGoalsButton } from '../components/ui/GenerateGoalsButton'
 import { toast } from '../lib/toast'
+import { goalEmoji } from '../lib/goalEmoji'
+import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
+import { GoalCelebration } from '../components/goals/GoalCelebration'
 import type {
   GoalResponse as Goal,
   GoalSuggestionResponse as GoalSuggestion
@@ -46,33 +49,11 @@ async function fetchAll(): Promise<Goal[]> {
   return list
 }
 
-// A goal is complete when the server has archived it (is_active === false) or
-// its progress has reached the target. The backend exposes no write path for
-// is_active/status (verified: PATCH 400s, no /complete route), so progress is
-// the only completion signal we can both read and drive.
-function isCompleted(g: Goal): boolean {
-  if (g.is_active === false) return true
-  const target = g.target_value ?? 0
-  return target > 0 && (g.current_value ?? 0) >= target
-}
-
-// 0–100 progress percentage. With a target, it's current/target clamped; with
-// no target, a goal is either done (100) or not started (0).
-function progressPct(g: Goal): number {
-  if (isCompleted(g)) return 100
-  const target = g.target_value ?? 0
-  const current = g.current_value ?? 0
-  if (target > 0) return Math.max(0, Math.min(100, Math.round((current / target) * 100)))
-  return 0
-}
-
-function progressLabel(g: Goal): string {
-  const target = g.target_value ?? 0
-  const current = g.current_value ?? 0
-  const unit = g.unit ? ` ${g.unit}` : ''
-  if (target > 0) return `${current} / ${target}${unit}`
-  return `${progressPct(g)}%`
-}
+// Completion + progress math (isCompleted / progressPct / progressLabel) and the
+// progress-bar color ramp now live in ../lib/goalVisuals so the Home goals widget
+// shares one source. The is_active/progress completion model is documented there:
+// the backend has no write path for is_active/status (PATCH 400s, no /complete
+// route), so progress reaching the target is the only completion signal.
 
 export function Goals(): React.JSX.Element {
   const [goals, setGoals] = useState<Goal[]>(cache.goals ?? [])
@@ -96,6 +77,10 @@ export function Goals(): React.JSX.Element {
   const [progressId, setProgressId] = useState<string | null>(null)
   const [progressDraft, setProgressDraft] = useState('')
   const [busy, setBusy] = useState<Set<string>>(new Set())
+  // The goal whose completion is currently being celebrated (full-screen
+  // confetti overlay). Set when progress reaches the target; cleared when the
+  // celebration finishes.
+  const [celebrating, setCelebrating] = useState<Goal | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setError(null)
@@ -161,17 +146,19 @@ export function Goals(): React.JSX.Element {
 
   // PATCH /v1/goals/{id}/progress?current_value={n}. Optimistic. Reaching the
   // target marks the goal complete (completion is derived from progress — see
-  // toggleComplete) and fires a celebration toast.
+  // toggleComplete) and fires the full-screen celebration overlay. Reopening a
+  // goal (value below target) never celebrates.
   const updateProgress = async (g: Goal, value: number): Promise<void> => {
     const prev = goals
-    const reachedTarget = (g.target_value ?? 0) > 0 && value >= (g.target_value as number)
+    const reachedTarget =
+      (g.target_value ?? 0) > 0 && value >= (g.target_value as number) && !isCompleted(g)
     const next = prev.map((x) => (x.id === g.id ? { ...x, current_value: value } : x))
     setGoals(next)
     writeCache(next)
     markBusy(g.id, true)
     try {
       await omiApi.patch(`/v1/goals/${g.id}/progress`, null, { params: { current_value: value } })
-      if (reachedTarget) toast('Goal complete 🎉', { tone: 'success', body: g.title })
+      if (reachedTarget) setCelebrating({ ...g, current_value: value })
     } catch (e) {
       setGoals(prev)
       writeCache(prev)
@@ -341,11 +328,23 @@ export function Goals(): React.JSX.Element {
             disabled={isBusy}
             aria-label={done ? 'Reopen goal' : 'Mark as complete'}
             className={`mt-0.5 flex h-5 w-5 shrink-0 items-center justify-center rounded-md border transition-all duration-200 ${
-              done ? 'border-white/30 bg-white/15 text-white' : 'border-white/20 hover:border-white/45'
+              done
+                ? 'border-white/30 bg-white/15 text-white'
+                : 'border-white/20 hover:border-white/45'
             } ${isBusy ? 'opacity-50' : ''}`}
           >
             {done && <Check className="h-3.5 w-3.5" />}
           </button>
+
+          {/* Category glyph auto-derived from the title (shared with the Home widget). */}
+          <div
+            className={`mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-white/10 text-[18px] leading-none ${
+              done ? 'opacity-50' : ''
+            }`}
+            aria-hidden="true"
+          >
+            {goalEmoji(g.title)}
+          </div>
 
           <div className="min-w-0 flex-1">
             {editingId === g.id ? (
@@ -379,10 +378,8 @@ export function Goals(): React.JSX.Element {
             <div className="mt-2.5">
               <div className="h-1.5 w-full overflow-hidden rounded-full bg-white/10">
                 <div
-                  className={`h-full rounded-full transition-all duration-500 ${
-                    done ? 'bg-emerald-400/70' : 'bg-white/45'
-                  }`}
-                  style={{ width: `${pct}%` }}
+                  className="h-full rounded-full transition-all duration-500"
+                  style={{ width: `${pct}%`, backgroundColor: progressColor(pct / 100) }}
                 />
               </div>
               <div className="mt-1.5 flex items-center gap-2 text-[11px] text-white/45">
@@ -657,6 +654,8 @@ export function Goals(): React.JSX.Element {
           </div>
         )}
       </div>
+
+      {celebrating && <GoalCelebration goal={celebrating} onDone={() => setCelebrating(null)} />}
     </div>
   )
 }
