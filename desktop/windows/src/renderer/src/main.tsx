@@ -18,6 +18,11 @@ import '@fontsource-variable/jetbrains-mono/wght-italic.css'
 // dead weight in the bundle (font-synthesis:none only bites where italics are used).
 import '@fontsource-variable/newsreader/opsz.css'
 import './styles/globals.css'
+// Side-effect: registers the Connections panel as the Hub's Connect-stage content.
+// The register module is tiny and registers a React.lazy factory, so the connections
+// component graph is only fetched when the main window first opens Connect — never
+// in secondary windows. Runs before createRoot; the registration itself is cheap.
+import './components/home/hub/connections/register'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
