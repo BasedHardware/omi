@@ -15,6 +15,7 @@ covers:
   - desktop/Desktop/Sources/AIClone/AIPlugin.swift
   - desktop/Desktop/Sources/AIClone/PluginDiscovery.swift
   - desktop/Desktop/Sources/APIClient.swift
+  - desktop/Desktop/Sources/APIClient+Persona.swift
   - desktop/Desktop/Sources/MainWindow/Components/AIClone/ConnectSheet.swift
   - desktop/Desktop/Sources/MainWindow/Components/AIClone/PluginCard.swift
   - desktop/Desktop/Sources/MainWindow/Components/AIClone/PluginURLCard.swift
