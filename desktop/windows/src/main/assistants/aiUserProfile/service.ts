@@ -359,6 +359,13 @@ export function getLatestProfileText(): string | null {
   return latestAiUserProfile()?.profileText ?? null
 }
 
+/** The latest stored profile RECORD (for the Settings preview/edit UI, which
+ *  needs the id/date/sources the text-only getter drops). Grounding paths keep
+ *  using getLatestProfileText(). */
+export function getLatestProfileRecord(): AiUserProfileRecord | null {
+  return latestAiUserProfile()
+}
+
 /** Edit a stored profile's text, then fire-and-forget re-sync to the backend
  *  (using the cached session, if any). */
 export async function editProfileText(id: number, text: string): Promise<void> {

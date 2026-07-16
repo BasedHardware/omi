@@ -781,7 +781,7 @@ export type OmiBridgeApi = {
     desktopApiBase: string
     token: string
   }) => Promise<AiUserProfileRecord>
-  aiProfileGetLatest: () => Promise<string | null>
+  aiProfileGetLatest: () => Promise<AiUserProfileRecord | null>
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
