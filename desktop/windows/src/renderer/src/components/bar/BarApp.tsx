@@ -60,7 +60,8 @@ const HUB_ORB_IDLE: VoiceHubBarState = {
   isListening: false,
   isThinking: false,
   isResponseActive: false,
-  orbLevel: 0
+  orbLevel: 0,
+  hint: ''
 }
 
 function SignedOutContent(): React.JSX.Element {

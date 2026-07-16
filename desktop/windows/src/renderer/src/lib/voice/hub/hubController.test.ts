@@ -17,6 +17,7 @@ vi.mock('../../analytics', () => ({ trackEvent: vi.fn() }))
 
 import { trackEvent } from '../../analytics'
 import { HubController, type HubControllerEvents } from './hubController'
+import { HUB_IDLE_TEARDOWN_THRESHOLD_MS } from './hubClose'
 
 // A fake provider session: records every frame-level call and lets the test drive
 // the connect / error edges deterministically. Buffering is the controller's job,
@@ -35,6 +36,7 @@ class FakeSession implements HubSession {
   toreDown = 0
   toolResults: { callId: string; output: string }[] = []
   private resolveWarm: (() => void) | null = null
+  private rejectWarm: ((e: Error) => void) | null = null
 
   constructor(
     readonly sessionID: VoiceSessionID,
@@ -43,8 +45,9 @@ class FakeSession implements HubSession {
 
   ensureWarm(): Promise<void> {
     if (this.warm) return Promise.resolve()
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       this.resolveWarm = resolve
+      this.rejectWarm = reject
     })
   }
   /** Test-only: mark ready, fire onConnected (controller flushes here), resolve. */
@@ -53,11 +56,18 @@ class FakeSession implements HubSession {
     this.events.onConnected?.(this.sessionID)
     this.resolveWarm?.()
     this.resolveWarm = null
+    this.rejectWarm = null
   }
-  /** Test-only: a fatal mid-session error. */
-  fail(message: string, retryable = true): void {
+  /** Test-only: a fatal mid-session error. `closeCode` mirrors a real WS close code
+   *  (BaseHubSession threads it through), so the A7c classifier sees a genuine 1008.
+   *  Rejects the pending warm promise exactly like BaseHubSession.handleError, so the
+   *  controller's in-flight `warming` clears and a re-warm can rebuild. */
+  fail(message: string, retryable = true, closeCode?: number): void {
     this.warm = false
-    this.events.onError?.(message, retryable)
+    this.events.onError?.(message, retryable, closeCode)
+    this.rejectWarm?.(new Error(message))
+    this.rejectWarm = null
+    this.resolveWarm = null
   }
   isWarm(): boolean {
     return this.warm
@@ -96,6 +106,10 @@ type Harness = {
   createSession: ReturnType<typeof vi.fn>
   getSession: () => FakeSession
   now: { value: number }
+  /** True while a reconnect backoff is armed (the injected fake timer is pending). */
+  pendingReconnect: () => boolean
+  /** Fire the pending reconnect backoff (drives the controller's self re-warm). */
+  fireReconnect: () => void
 }
 
 function harness(opts?: { provider?: VoiceProvider; instructions?: string }): Harness {
@@ -117,13 +131,26 @@ function harness(opts?: { provider?: VoiceProvider; instructions?: string }): Ha
     return session
   })
   const now = { value: 1_000 }
+  // Injected fake timer for the A7c reconnect backoff — never auto-fires, so tests are
+  // deterministic and no real timer leaks between cases. scheduleReWarm coalesces on
+  // `reconnectPending`, so at most one is armed at a time.
+  const timers = new Map<number, () => void>()
+  let timerSeq = 0
   const controller = new HubController({
     events,
     resolveProvider: () => opts?.provider ?? 'openai',
     buildInstructions: () => opts?.instructions ?? 'INSTRUCTIONS+CARD',
     mintToken,
     createSession,
-    now: () => now.value
+    now: () => now.value,
+    setTimer: (_ms, fire) => {
+      const id = ++timerSeq
+      timers.set(id, fire)
+      return id
+    },
+    clearTimer: (h) => {
+      timers.delete(h as number)
+    }
   })
   return {
     controller,
@@ -134,7 +161,14 @@ function harness(opts?: { provider?: VoiceProvider; instructions?: string }): Ha
       if (!session) throw new Error('session not created yet')
       return session
     },
-    now
+    now,
+    pendingReconnect: () => timers.size > 0,
+    fireReconnect: () => {
+      const entry = [...timers.entries()][0]
+      if (entry === undefined) throw new Error('no pending reconnect timer')
+      timers.delete(entry[0])
+      entry[1]()
+    }
   }
 }
 
@@ -144,6 +178,13 @@ async function warmed(h: Harness): Promise<void> {
   await tick() // past the mint await → session created
   h.getSession().connect()
   await p
+}
+
+/** Fail the in-flight (connecting, never-connected) warm attempt and let the reject
+ *  settle so the controller's `warming` clears before the next re-warm fires. */
+async function failBeforeConnect(h: Harness, closeCode = 1008): Promise<void> {
+  h.getSession().fail(`websocket closed (${closeCode})`, true, closeCode)
+  await tick()
 }
 
 beforeEach(() => {
@@ -359,5 +400,152 @@ describe('HubController — connect/error surface (A7c seam)', () => {
     await p
     expect(h.mintToken).toHaveBeenCalledTimes(2)
     expect(h.createSession).toHaveBeenCalledTimes(2)
+  })
+})
+
+describe('HubController — A7c reconnect policy (B: strike-bounded re-warm)', () => {
+  it('a genuine failure arms a backoff and re-warms itself so the NEXT press is warm', async () => {
+    const h = harness()
+    await warmed(h) // connected at now=1000
+    h.now.value = 5_000 // alive 4 s (< idle window) → a real failure, not an idle close
+
+    h.getSession().fail('websocket closed (1011)', true, 1011)
+    expect(h.controller.isAvailable()).toBe(false)
+    expect(h.pendingReconnect()).toBe(true)
+
+    // The backoff elapses → the controller re-warms itself with NO user press.
+    h.fireReconnect()
+    await tick()
+    h.getSession().connect()
+    expect(h.controller.isWarm()).toBe(true)
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+  })
+
+  it('caps re-warm attempts at the strike budget when the socket keeps failing before it connects', async () => {
+    const h = harness()
+    const p = h.controller.ensureWarm()
+    p.catch(() => {}) // each attempt rejects when it fails before connecting
+    await tick() // first session connecting
+
+    let reWarms = 0
+    for (let i = 0; i < 12; i++) {
+      await failBeforeConnect(h) // never connected → aliveForMs 0 → a policy_fast strike
+      if (!h.pendingReconnect()) break
+      h.fireReconnect()
+      await tick()
+      reWarms++
+    }
+    // MAX_RECONNECT_STRIKES = 5 re-warms allowed, then a dead endpoint stops being hammered.
+    expect(reWarms).toBe(5)
+    expect(h.pendingReconnect()).toBe(false)
+  })
+
+  it('a completed turn resets the strike budget (a bare connect does NOT)', async () => {
+    const h = harness()
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick()
+
+    // Bank 4 strikes via fail-before-connect.
+    for (let i = 0; i < 4; i++) {
+      await failBeforeConnect(h)
+      h.fireReconnect()
+      await tick()
+    }
+    // Connecting alone must NOT refresh the budget; a completed turn must.
+    h.getSession().connect()
+    h.getSession().events.onTurnDone?.(null)
+
+    // Budget refreshed → a fresh failure run gets the full 5 re-warms again (would be
+    // only 1 if the 4 banked strikes had survived).
+    let reWarms = 0
+    for (let i = 0; i < 12; i++) {
+      await failBeforeConnect(h)
+      if (!h.pendingReconnect()) break
+      h.fireReconnect()
+      await tick()
+      reWarms++
+    }
+    expect(reWarms).toBe(5)
+  })
+
+  it('a socket that survives past the idle window refreshes the strike budget', async () => {
+    const h = harness()
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick()
+    // Bank 4 strikes.
+    for (let i = 0; i < 4; i++) {
+      await failBeforeConnect(h)
+      h.fireReconnect()
+      await tick()
+    }
+    // This attempt CONNECTS and survives past the idle window before failing → the
+    // long-lived socket proved the endpoint works, so the budget resets (then spends 1).
+    h.getSession().connect() // connectedAt = now (1000)
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS + 1
+    h.getSession().fail('websocket closed (1011)', true, 1011)
+    if (h.pendingReconnect()) {
+      h.fireReconnect()
+      await tick()
+    }
+    // 4 more re-warms remain (a full budget of 5 minus the 1 just spent). Without the
+    // survival reset the 4 banked strikes would have capped this immediately (0 more).
+    let reWarms = 0
+    for (let i = 0; i < 12; i++) {
+      await failBeforeConnect(h)
+      if (!h.pendingReconnect()) break
+      h.fireReconnect()
+      await tick()
+      reWarms++
+    }
+    expect(reWarms).toBe(4)
+  })
+})
+
+describe('HubController — A7c reconnect policy (C: idle-teardown survival)', () => {
+  it('an expected idle-close proactively re-warms so isAvailable() is true BEFORE the next press', async () => {
+    const h = harness()
+    await warmed(h) // connected at now=1000
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS + 1 // long-lived, no active turn
+    h.getSession().fail('websocket closed (1008)', true, 1008) // → expected_idle_teardown
+
+    // The socket is gone, but the controller has armed a proactive re-warm (no press).
+    expect(h.controller.isAvailable()).toBe(false)
+    expect(h.pendingReconnect()).toBe(true)
+
+    h.fireReconnect()
+    await tick()
+    // A session object now exists again BEFORE any press → selectPttRoute will pick the
+    // warm lane (hubWarmWait), not a cold cascade.
+    expect(h.controller.isAvailable()).toBe(true)
+    h.getSession().connect()
+    expect(h.controller.isWarm()).toBe(true)
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+  })
+
+  it('an idle teardown re-warms WITHOUT spending a strike (the failure budget stays full)', async () => {
+    const h = harness()
+    await warmed(h) // connected at now=1000
+    // aliveFor EXACTLY the threshold: an idle teardown (classify uses >=), but the
+    // >60 s strike RESET (uses strict >) does NOT fire — so this isolates "idle spends
+    // no strike" from "a long-lived socket resets the budget".
+    h.now.value = 1_000 + HUB_IDLE_TEARDOWN_THRESHOLD_MS
+    h.getSession().fail('websocket closed (1008)', true, 1008)
+    expect(h.pendingReconnect()).toBe(true)
+    h.fireReconnect()
+    await tick() // session connecting (never connected → no reset)
+
+    // The idle close spent no strike, so the full failure budget of 5 remains — 5 fast
+    // failures each still re-warm (would be only 4 if the idle close had taken a strike).
+    let reWarms = 0
+    for (let i = 0; i < 12; i++) {
+      await failBeforeConnect(h)
+      if (!h.pendingReconnect()) break
+      h.fireReconnect()
+      await tick()
+      reWarms++
+    }
+    expect(reWarms).toBe(5)
   })
 })

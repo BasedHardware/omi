@@ -66,8 +66,11 @@ export type HubSessionEvents = {
   ) => void
   /** The model finished this turn (spoken reply complete). */
   onTurnDone?: (identity: HubEventIdentity | null) => void
-  /** The session cannot continue (handshake failed or a fatal mid-session drop). */
-  onError?: (message: string, retryable: boolean) => void
+  /** The session cannot continue (handshake failed or a fatal mid-session drop).
+   *  `closeCode` is the WS close code when the drop came from a socket close (so the
+   *  hub controller can classify a Gemini 1008 idle-teardown vs a fast fault); absent
+   *  for non-close faults (an OpenAI error frame, an audio-init failure). */
+  onError?: (message: string, retryable: boolean, closeCode?: number) => void
 }
 
 /** The four per-turn primitives (plus warm/teardown) both providers implement. */
@@ -311,7 +314,7 @@ export abstract class BaseHubSession implements HubSession {
       protocols: spec.protocols,
       onOpen: () => this.onSocketOpen(),
       onMessage: (d) => this.onSocketMessage(d),
-      onClose: (c, r) => this.handleError(`websocket closed (${c})${r ? ` ${r}` : ''}`, true),
+      onClose: (c, r) => this.handleError(`websocket closed (${c})${r ? ` ${r}` : ''}`, true, c),
       onError: (m) => this.handleError(m, true)
     })
   }
@@ -501,14 +504,14 @@ export abstract class BaseHubSession implements HubSession {
     this.events.onTurnDone?.(identity ?? this.activeIdentity)
   }
 
-  protected handleError(message: string, retryable: boolean): void {
+  protected handleError(message: string, retryable: boolean, closeCode?: number): void {
     if (this.errored) return
     this.errored = true
     const reject = this.warmReject
     this.warmReject = null
     this.warmResolve = null
     this.warmPromise = null
-    this.events.onError?.(message, retryable)
+    this.events.onError?.(message, retryable, closeCode)
     // teardown() closes the socket/player; guard against re-entrant error.
     this.teardown()
     reject?.(new Error(message))
