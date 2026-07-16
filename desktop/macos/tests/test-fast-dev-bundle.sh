@@ -75,4 +75,22 @@ if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Star
   exit 1
 fi
 
+# A detached launcher cannot own a tunnel: cleanup would terminate it as the
+# script exits, leaving the relaunched app with a dead endpoint. Reject this
+# configuration before probing or starting anything.
+no_wait_output="$TMP_ROOT/no-wait-launcher.log"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="omi-no-wait-contract-$$" OMI_SKIP_BACKEND=1 \
+  "$MACOS_DIR/run.sh" --fast-only --no-wait >"$no_wait_output" 2>&1; then
+  echo "--no-wait unexpectedly accepted a launcher-owned tunnel" >&2
+  exit 1
+else
+  no_wait_status=$?
+fi
+test "$no_wait_status" = "2"
+grep -q 'requires OMI_SKIP_BACKEND=1 and OMI_SKIP_TUNNEL=1' "$no_wait_output"
+if grep -qE 'Killing existing instances|Starting Cloudflare|Starting Rust backend' "$no_wait_output"; then
+  echo "--no-wait performed launch side effects before rejecting its tunnel lifecycle" >&2
+  exit 1
+fi
+
 echo "fast-dev-bundle fingerprint tests passed"

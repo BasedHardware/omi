@@ -2751,14 +2751,6 @@ actor AgentRuntimeProcess {
     home: String,
     fileManager: FileManager = .default
   ) -> [String] {
-    let adapterPathDirs = [
-      "\(home)/.hermes/hermes-agent/venv/bin",
-      "\(home)/.hermes/node/bin",
-      "\(home)/.hermes/hermes-agent",
-      "\(home)/.local/bin",
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
     let managedNodeRoots = [
       "\(home)/.nvm/versions/node",
       "\(home)/.fnm/node-versions",
@@ -2766,10 +2758,17 @@ actor AgentRuntimeProcess {
       "\(home)/.nodenv/versions",
       "\(home)/.asdf/installs/nodejs",
     ]
+    // User-managed Node installations take precedence over machine-wide fallbacks.
     return Self.uniquePaths(
-      adapterPathDirs + managedNodeRoots.flatMap {
-        Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
-      })
+      [
+        "\(home)/.hermes/hermes-agent/venv/bin",
+        "\(home)/.hermes/node/bin",
+        "\(home)/.hermes/hermes-agent",
+        "\(home)/.local/bin",
+      ] + managedNodeRoots.flatMap { Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager) } + [
+        "/opt/homebrew/bin",
+        "/usr/local/bin",
+      ])
   }
 
   private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
