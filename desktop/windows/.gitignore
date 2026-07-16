@@ -74,3 +74,8 @@ resources/win-audio-helper/*.pdb
 # Orb harness artifacts (contact sheets, pixel dumps) — generated
 .orb-out/
 orb-harness/dist/
+
+# Agent tool-gauntlet run artifacts — generated per run
+tool-gauntlet-report.json
+voice-tool-gauntlet-report.json
+soak-report.json
