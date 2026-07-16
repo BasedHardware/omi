@@ -27,7 +27,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": 2769,
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarWindow.swift": 4900,
     "desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift": 2408,
-    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 5153,
+    "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": 5128,
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1572,
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": 1790,
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1915,

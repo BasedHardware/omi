@@ -2976,28 +2976,9 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return player
   }
 
-  /// Replaces the provider's post-tool narration with the kernel's durable
-  /// admission fact. A spawn receipt is not a child completion receipt, so this
-  /// is the only spoken acknowledgement for a PTT spawn turn.
-  private func playCanonicalSpawnAcknowledgement(_ text: String) {
-    let acknowledgement = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !acknowledgement.isEmpty else { return }
-
-    // A provider can begin a speculative response before its tool call returns.
-    // Once the kernel accepts the spawn, that narration can no longer make
-    // lifecycle claims. Stop it before taking the deterministic acknowledgement
-    // lease so no stale audio competes with the canonical fact.
-    takeOverVoiceOutputForAuthoritativeLocalResult()
-    guard let lease = acquireVoiceOutput(.deterministicAgentAck, reason: "canonical_spawn_receipt")
-    else { return }
-    responseGlowGate.markPlaybackActive(lease: lease)
-    FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement, lease: lease)
-  }
-
-  /// Local results such as accepted agent receipts and verified/fail-closed
-  /// screen evidence supersede any speculative provider narration for this
-  /// turn. Keep the physical preemption and reducer lease release together so
-  /// every authoritative answer can acquire its own deterministic lease.
+  /// A verified, fail-closed screen result supersedes provider narration for
+  /// this turn. Keep physical preemption and reducer lease release together so
+  /// that local error can acquire its own deterministic lease.
   func takeOverVoiceOutputForAuthoritativeLocalResult() {
     if let activeLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease {
       FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: activeLease.id)
@@ -4007,14 +3988,14 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
               "external_tool_name": name,
               "external_tool_error": "",
             ]
-            VoiceTurnCoordinator.shared.send(
-              .authoritativeLocalResultAcceptedScoped(
-                turnID: turnID,
-                identity: identity,
-                callID: VoiceToolCallID(callId),
-                kind: .spawnReceipt))
-            self.assistantText = receipt.assistantText
-            self.playCanonicalSpawnAcknowledgement(receipt.assistantText)
+            // The receipt is canonical for journal persistence, while the same
+            // realtime turn remains the sole audible response. Clearing any
+            // pre-tool speculation keeps it out of the visible reply without
+            // interrupting native provider audio or changing voices.
+            self.assistantText = ""
+            log(
+              "RealtimeHub[\(self.providerTag)]: accepted spawn receipt; preserving native provider continuation"
+            )
             if let pill = receipt.pillProjection {
               AgentPillsManager.shared.upsertSpawnedPill(
                 id: pill.pillID,
@@ -4303,7 +4284,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
     guard RealtimeProviderOutputPresentationPolicy.decide(
       screenGroundingState: screenGroundingState,
-      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil,
       reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
     ) == .present else { return }
     guard let lease = acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") else { return }
@@ -4375,7 +4355,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
     guard RealtimeProviderOutputPresentationPolicy.decide(
       screenGroundingState: screenGroundingState,
-      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil,
       reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
     ) == .present else { return }
     if !text.isEmpty {
@@ -4566,12 +4545,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
         reason: .providerNoResponse)
     }
     let pendingToolCount = VoiceTurnCoordinator.shared.activeTurn?.pendingToolCallIDs.count ?? 0
-    let hasCanonicalSpawnReceipt =
-      acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil
     let postToolContinuationRequired =
       VoiceTurnCoordinator.shared.activeTurn?.postToolContinuationRequired == true
-        && RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
-          hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
     switch RealtimeProviderTurnDoneDisposition.decide(
       pendingToolCount: pendingToolCount,
       postToolContinuationRequired: postToolContinuationRequired)

@@ -1261,7 +1261,7 @@ export async function handleAgentControlToolCall(
             effect: "spawn_agent",
             syntaxFacts: {
               parentRunId,
-              explicitProvider: adapterId,
+              explicitProvider: parsed.provider ?? null,
               requestedAgentCount: parsed.requestedAgentCount,
             },
           },

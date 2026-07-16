@@ -317,7 +317,8 @@ function openAIToolDefinition({ exposedName, tool }, { includeSpawnProvider = fa
       properties.provider = {
         type: "string",
         enum: directedProviders,
-        description: "Optional available local provider to run this background agent through.",
+        description:
+          "Optional local provider only when the current user explicitly names it; omit for a regular Omi agent.",
       };
     }
     return {
