@@ -360,6 +360,38 @@ check_backend_unit_tests_if_needed() {
   )
 }
 
+check_runtime_image_source_closure_if_needed() {
+  if [ "${PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE:-}" = "1" ]; then
+    echo "Skipping runtime-image contract check because PRE_PUSH_SKIP_RUNTIME_IMAGE_SOURCE_CLOSURE=1."
+    return
+  fi
+
+  if ! changed_matches \
+    'backend/*.py' \
+    'backend/**/*.py' \
+    'backend/**/Dockerfile*' \
+    'backend/runtime_images.json' \
+    'backend/scripts/runtime_image_contracts.py' \
+    '.github/workflows/runtime_image_contracts.yml' \
+    '.github/workflows/gcp_backend*.yml' \
+    '.github/workflows/gcp_diarizer.yml' \
+    '.github/workflows/gcp_models.yml' \
+    '.github/workflows/gcp_parakeet.yml' \
+    '.github/workflows/gcp_nllb_translation.yml' \
+    '.github/workflows/gcp_memory_maintenance_job*.yml' \
+    '.github/workflows/gcp_notifications_job.yml' \
+    '.github/workflows/gcp_plugins.yml' \
+    'plugins/*.py' \
+    'plugins/**/*.py' \
+    'plugins/Dockerfile' \
+    'scripts/pre-push'
+  then
+    return
+  fi
+
+    python3 backend/scripts/runtime_image_contracts.py check
+}
+
 check_openapi_contract_if_needed() {
   if [ "${PRE_PUSH_SKIP_OPENAPI_CONTRACT:-}" = "1" ]; then
     echo "Skipping OpenAPI contract check because PRE_PUSH_SKIP_OPENAPI_CONTRACT=1."
@@ -552,6 +584,7 @@ run_step python3 .github/scripts/check-deployment-concurrency.py --self-test
 run_step python3 .github/scripts/check-deployment-concurrency.py
 run_step check_backend_runtime_env_if_needed
 run_step check_backend_typecheck_if_needed
+run_step check_runtime_image_source_closure_if_needed
 run_step check_backend_unit_tests_if_needed
 run_step check_openapi_contract_if_needed
 run_step check_workflows_if_needed
