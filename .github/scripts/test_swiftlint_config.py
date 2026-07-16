@@ -113,9 +113,10 @@ class SwiftLintConfigTests(unittest.TestCase):
     # Plugin must be on Swift targets
     for target in ["OmiSupport", "OmiTheme", "OmiWAL"]:
       self.assertIn(f'name: "{target}"', content)
-    # Count plugin attachments (should be 5: 3 library + executable + test)
+    # Count plugin attachments: existing first-party targets plus VoiceTurnDomain
+    # and its dedicated test target.
     count = content.count("SwiftLintBuildToolPlugin")
-    self.assertEqual(count, 8, f"expected 8 plugin attachments, got {count}")
+    self.assertEqual(count, 10, f"expected 10 plugin attachments, got {count}")
 
   def test_package_swift_excludes_objc_and_cwebp(self):
     content = PACKAGE_PATH.read_text(encoding="utf-8")

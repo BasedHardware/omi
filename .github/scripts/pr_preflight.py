@@ -43,7 +43,10 @@ def changed_files(root: Path, base: str, head: str) -> list[str]:
 def select_checks(files: list[str], lane: str = "ci") -> list[Check]:
     root = Path(__file__).resolve().parents[2]
     manifest = load_manifest(root / ".github/checks-manifest.yaml")
-    return [Check(check.id, check.reason) for check in resolve_checks(manifest, files, lane, detect_platform())]
+    return [
+        Check(check.id, check.reason)
+        for check in resolve_checks(manifest, files, lane, platform=detect_platform())
+    ]
 
 
 def format_failure_class_suggest(payload: dict) -> str:
