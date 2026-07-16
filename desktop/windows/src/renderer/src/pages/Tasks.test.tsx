@@ -222,6 +222,24 @@ describe('Tasks — due-date buckets fold overdue into Today (Mac parity: 4 buck
     expect(within(todaySection).getByText('today task')).not.toBeNull()
   })
 
+  it('flags an overdue row with the rose date badge; a task due today is not flagged', async () => {
+    // The user-visible artifact of splitting isOverdue from bucketing: overdue
+    // rows live in Today but still render their date in rose (text-rose-300/90),
+    // while a task actually due today renders neutral.
+    incomplete = [
+      rec({ id: 1, backendId: 'b1', description: 'overdue task', dueAt: Date.now() - 3 * DAY }),
+      rec({ id: 2, backendId: 'b2', description: 'today task', dueAt: Date.now() })
+    ]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('overdue task')).not.toBeNull())
+
+    const overdueRow = screen.getByText('overdue task').closest('li') as HTMLElement
+    expect(within(overdueRow).getByTitle('Set due date').className).toContain('text-rose-300/90')
+
+    const todayRow = screen.getByText('today task').closest('li') as HTMLElement
+    expect(within(todayRow).getByTitle('Set due date').className).not.toContain('text-rose-300/90')
+  })
+
   it('labels the far-future bucket "Later" (not "Upcoming")', async () => {
     incomplete = [
       rec({ id: 3, backendId: 'b3', description: 'tomorrow task', dueAt: Date.now() + DAY }),
