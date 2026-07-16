@@ -6,6 +6,7 @@ import type { ConversationFolder } from '../../../../shared/types'
 import { isCloudBacked } from '../../lib/conversations/filtering'
 import { macPurple } from '../../lib/macPalette'
 import { MoveToFolderMenu } from './MoveToFolderMenu'
+import { ConversationRowContextMenu } from './ConversationRowContextMenu'
 
 // Selected-row tint (Track 4 ruling — purple ports as-is). Applied inline so it
 // beats the component-layer surface background AND the hover background, i.e. a
@@ -107,7 +108,16 @@ export function ConversationListRow({
 }): React.JSX.Element {
   const [editing, setEditing] = useState(false)
   const [draft, setDraft] = useState(row.title)
+  // Cursor position of an open right-click context menu (null = closed). Only the
+  // normal row branch opens it — never in select mode, on a pending row, or while
+  // inline-editing (each returns before this render).
+  const [menuPos, setMenuPos] = useState<{ x: number; y: number } | null>(null)
   const cloud = isCloudBacked(row)
+
+  const beginRename = (): void => {
+    setDraft(row.title)
+    setEditing(true)
+  }
 
   // --- Optimistic "Processing" placeholder (no server doc yet). ---
   if (row.pending) {
@@ -193,6 +203,15 @@ export function ConversationListRow({
   return (
     <Link
       to={`/conversations/${row.id}`}
+      onContextMenu={(e) => {
+        // Right-click opens our DOM menu at the cursor. preventDefault stops the
+        // browser default menu; stopPropagation keeps it off any ancestor. The
+        // native (main-process) menu returns [] for a row — no selectable text —
+        // so the two never both appear (main/contextMenuTemplate.ts).
+        e.preventDefault()
+        e.stopPropagation()
+        setMenuPos({ x: e.clientX, y: e.clientY })
+      }}
       className="group surface-card-interactive flex items-center gap-3 p-3"
     >
       <EmojiTile emoji={row.emoji} />
@@ -206,8 +225,7 @@ export function ConversationListRow({
           onClick={(e) => {
             e.preventDefault()
             e.stopPropagation()
-            setDraft(row.title)
-            setEditing(true)
+            beginRename()
           }}
           aria-label="Rename"
           className="rounded-md p-1.5 text-white/45 transition-colors hover:bg-white/10 hover:text-white"
@@ -252,6 +270,20 @@ export function ConversationListRow({
             fill={row.starred ? 'currentColor' : 'none'}
           />
         </button>
+      )}
+
+      {/* Right-click context menu (portaled to <body>; renders nothing in place). */}
+      {menuPos && (
+        <ConversationRowContextMenu
+          row={row}
+          folders={folders}
+          cloud={cloud}
+          position={menuPos}
+          onClose={() => setMenuPos(null)}
+          onEditTitle={beginRename}
+          onMoveToFolder={(folderId) => onMoveToFolder(row, folderId)}
+          onDelete={() => onDelete(row)}
+        />
       )}
     </Link>
   )
