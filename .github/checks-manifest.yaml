@@ -80,7 +80,8 @@ checks:
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
     lanes: ["local", "ci"]
-    reason: "desktop Swift sources changed"
+    platforms: ["macos"]
+    reason: "desktop Swift sources changed; compare against the pinned macOS formatter before requiring a flow cover"
   - id: brand-ui
     command: ["python3", ".github/scripts/check_brand_ui.py", "--changed-files", "{changed_files}", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "app/lib/**/*.dart", "web/**/*.ts", "web/**/*.tsx", "web/**/*.js", "web/**/*.jsx", "web/**/*.css"]

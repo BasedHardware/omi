@@ -187,14 +187,14 @@ class PlatformTests(unittest.TestCase):
         manifest = Manifest(checks=(
             Check(id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)),
         ), exempt=())
-        selected = resolve_checks(manifest, ["any/file"], "ci", "macos")
+        selected = resolve_checks(manifest, ["any/file"], "ci", platform="macos")
         self.assertEqual([c.id for c in selected], ["mac-only"])
 
     def test_macos_check_skipped_on_linux(self):
         manifest = Manifest(checks=(
             Check(id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)),
         ), exempt=())
-        selected = resolve_checks(manifest, ["any/file"], "ci", "linux")
+        selected = resolve_checks(manifest, ["any/file"], "ci", platform="linux")
         self.assertEqual(selected, [])
 
     def test_no_platforms_means_all_platforms(self):
@@ -202,7 +202,7 @@ class PlatformTests(unittest.TestCase):
             Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="t"),
         ), exempt=())
         for plat in ("macos", "linux"):
-            selected = resolve_checks(manifest, ["any/file"], "ci", plat)
+            selected = resolve_checks(manifest, ["any/file"], "ci", platform=plat)
             self.assertEqual([c.id for c in selected], ["portable"])
 
     def test_skipped_platform_checks_reports_macos_on_linux(self):
