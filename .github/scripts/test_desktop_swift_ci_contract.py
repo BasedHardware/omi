@@ -21,7 +21,8 @@ PRE_PUSH_PATH = REPO_ROOT / "scripts/pre-push"
 EXPECTED_XCODE_VERSION = "16.4"
 EXPECTED_XCODE_BUILD = "16F6"
 EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
-JOBS = ["desktop-swift", "desktop-swift-release-compile"]
+JOBS = ["changes", "desktop-swift", "desktop-swift-release-compile"]
+MACOS_JOBS = ["desktop-swift", "desktop-swift-release-compile"]
 
 
 def _workflow_text() -> str:
@@ -64,6 +65,30 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         self.assertIn("run-swift-ci.sh --test", debug_job)
         self.assertIn("run-swift-ci.sh --select-toolchain", release_job)
         self.assertIn("run-swift-ci.sh --release-compile", release_job)
+
+    def test_change_detection_happens_before_macos_allocation(self):
+        """#9440: non-desktop changes must not claim a costly macOS runner."""
+        changes = self.jobs["changes"]
+
+        self.assertIn("runs-on: ubuntu-latest", changes)
+        self.assertIn("should_run", changes)
+        self.assertIn("should_release_compile", changes)
+        self.assertIn("diff_base", changes)
+
+        for job_id, output in (
+            ("desktop-swift", "should_run"),
+            ("desktop-swift-release-compile", "should_release_compile"),
+        ):
+            with self.subTest(job=job_id):
+                job = self.jobs[job_id]
+                self.assertIn("needs: changes", job)
+                self.assertIn(f"needs.changes.outputs.{output}", job)
+                self.assertIn("fetch-depth: 1", job)
+                self.assertNotIn("Check changed files", job)
+
+        debug_job = self.jobs["desktop-swift"]
+        self.assertIn("Fetch manifest check base", debug_job)
+        self.assertIn("git fetch --no-tags --depth=1 origin", debug_job)
 
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()
@@ -138,8 +163,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """A retry should reuse SwiftPM's validated incremental build state."""
         job = self.jobs["desktop-swift"]
         self.assertIn("id: swiftpm-cache", job)
-        self.assertIn("uses: actions/cache/restore@v4", job)
-        self.assertIn("uses: actions/cache/save@v4", job)
+        self.assertIn("uses: actions/cache/restore@v6", job)
+        self.assertIn("uses: actions/cache/save@v6", job)
         self.assertIn("always()", job)
         self.assertIn("steps.swiftpm-cache.outputs.cache-hit != 'true'", job)
 
@@ -148,8 +173,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
     def test_release_compile_gates_on_package_resolved(self):
         """Release compile must trigger when Package.resolved changes, even on
         a PR where the manifest source is unchanged."""
-        job = self.jobs["desktop-swift-release-compile"]
-        combined = job
+        combined = self.jobs["changes"]
         # The variable must be wired into the SHOULD_RUN conditional, not just
         # declared or logged — removing the gate while keeping other references
         # must fail this test.
@@ -160,12 +184,13 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
 
     def test_manifest_checks_use_the_changed_diff_base_on_pushes(self):
         """Pushes must lint the just-pushed diff, not checkout's origin/main HEAD."""
+        changes = self.jobs["changes"]
         job = self.jobs["desktop-swift"]
-        self.assertIn('echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"', job)
+        self.assertIn('echo "diff_base=$DIFF_BASE" >> "$GITHUB_OUTPUT"', changes)
         self.assertIn(
-            '--base "${{ steps.changed.outputs.diff_base }}"',
+            '--base "${{ needs.changes.outputs.diff_base }}"',
             job,
-            "manifest checks must use HEAD~1 on main pushes and the PR base on pull requests",
+            "manifest checks must use the pushed-before SHA on main pushes and the PR base on pull requests",
         )
 
     def test_xcode_version_probe_does_not_close_its_pipe_early(self):
@@ -200,7 +225,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         other references must fail the positive gate assertion."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace('|| [ "$PACKAGE_RESOLVED" = "true" ]', "")
-        combined = _job_text(tampered, "desktop-swift-release-compile")
+        combined = _job_text(tampered, "changes")
         # PACKAGE_RESOLVED still appears (declared, detected, echoed) but the
         # gate condition is gone — the regex must fail to match.
         self.assertIn("PACKAGE_RESOLVED", combined)  # still referenced
