@@ -56,7 +56,10 @@ function fakeBackend(total: number, header?: string) {
         ? []
         : Array.from({ length: end - offset }, (_, i) => memory(`m${offset + i}`, `c${offset + i}`))
     ) as Partial<Memory>[]
-    return { data, ...(header ? { headers: { 'x-omi-memory-canonical-lifecycle-exposed': header } } : {}) }
+    return {
+      data,
+      ...(header ? { headers: { 'x-omi-memory-canonical-lifecycle-exposed': header } } : {})
+    }
   }
 }
 
@@ -138,7 +141,9 @@ describe('useMemories — pagination, capability header, delete', () => {
     expect(result.current.memories.some((m) => m.id === 'm5199')).toBe(true)
     // Proves a second page was requested at the real resume offset (5000), not
     // a naive offset=500 that would sit inside the already-collected first page.
-    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', { params: { limit: 200, offset: 5000 } })
+    expect(omiApiGet).toHaveBeenCalledWith('/v3/memories', {
+      params: { limit: 5000, offset: 5000 }
+    })
   })
 
   it('sets canonicalLifecycleExposed from the response header', async () => {

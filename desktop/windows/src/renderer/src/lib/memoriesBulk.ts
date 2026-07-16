@@ -11,14 +11,16 @@ type MemoriesResponse = { data: unknown; headers?: Record<string, unknown> }
 // and — on BOTH the legacy and canonical read paths — FORCES limit to 5000
 // whenever offset is 0, regardless of the requested limit (see
 // _legacy_get_memories and the canonical branch of get_memories in
-// backend/routers/memories.py). So the first call here can return up to 5000
-// memories even though it asks for 200. Advance `offset` by the number of
-// items actually received (not a fixed step) so the next request picks up
-// where the server really left off — a fixed +200 step would re-request
-// already-seen ids from inside that forced first page and hit the dedup guard
-// early, silently truncating anything past the account's first 5000 memories.
-// Dedupes by id and stops when a page is empty or adds nothing new — guards
-// against a server that ignores `offset` entirely.
+// backend/routers/memories.py). We request the server's max page (5000) on
+// every page so a >5000-memory account resumes in 5000-row strides instead of
+// small hops — a 12k-memory account is 3 requests, not dozens. Advance `offset`
+// by the number of items actually received (not a fixed step) so the next
+// request picks up where the server really left off — a fixed step would
+// re-request already-seen ids from inside a forced/clamped page and hit the
+// dedup guard early, silently truncating the tail. Dedupes by id and stops when
+// a page is empty or adds nothing new — guards against a server that ignores
+// `offset` entirely.
+const MEMORIES_PAGE_LIMIT = 5000
 //
 // `onResponse` fires for every raw page response so a caller (the Memories page)
 // can read capability headers off the first page — e.g.
@@ -32,7 +34,7 @@ export async function fetchAllMemoriesPaged(
   const byId = new Map<string, Memory>()
   let offset = 0
   while (offset < 100_000) {
-    const r = await omiApi.get('/v3/memories', { params: { limit: 200, offset } })
+    const r = await omiApi.get('/v3/memories', { params: { limit: MEMORIES_PAGE_LIMIT, offset } })
     onResponse?.(r)
     const page = (Array.isArray(r.data) ? r.data : (r.data?.memories ?? [])) as Memory[]
     if (page.length === 0) break
