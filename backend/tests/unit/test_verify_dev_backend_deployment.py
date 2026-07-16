@@ -329,6 +329,39 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert 'needs: firestore_readiness' in text
 
 
+def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
+    """Static guard: serving-schema writes stay outside backend deployment workflows."""
+
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_firestore_indexes.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'workflow_dispatch:' in text
+    assert 'APPLY_FIRESTORE_INDEXES' in text
+    assert "if: github.ref == 'refs/heads/main'" in text
+    assert 'group: deploy-backend-stack-${{ github.event.inputs.environment }}' in text
+    assert 'environment: ${{ github.event.inputs.environment }}' in text
+    assert 'ref: ${{ github.sha }}' in text
+    assert 'git rev-parse HEAD' in text
+    assert 'if [[ "$checked_sha" != "$GITHUB_SHA" ]]; then' in text
+    assert 'credentials_json: ${{ secrets.GCP_CREDENTIALS }}' in text
+    assert text.count('--provision-missing') == 2
+    assert text.count('--dry-run') == 1
+    assert '--check-only' not in text
+    assert 'vars.RUNTIME_GCP_PROJECT_ID' in text
+
+    plan_step = '- name: Show create-only Firestore schema plan'
+    apply_step = '- name: Apply approved Firestore schema plan and wait for readiness'
+    verification_step = '- name: Verify dispatched Firestore control plane'
+    plan = text.split(plan_step, 1)[1].split(apply_step, 1)[0]
+    apply = text.split(apply_step, 1)[1]
+    assert text.index(verification_step) < text.index(plan_step)
+    assert text.index(plan_step) < text.index(apply_step)
+    assert '--provision-missing' in plan
+    assert '--dry-run' in plan
+    assert '--dry-run' not in apply
+    assert '--timeout-seconds 3600' in apply
+
+
 def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')

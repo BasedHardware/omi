@@ -87,6 +87,7 @@ let package = Package(
         "OmiWAL",
         "VoiceTurnDomain",
         "Bluetooth/ARCHITECTURE.md",
+        "FloatingControlBar/ARCHITECTURE.md",
       ],
       resources: [
         .process("GoogleService-Info.plist"),
@@ -150,7 +151,7 @@ let package = Package(
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
-        .unsafeFlags(["-strict-concurrency=complete"])
+        .unsafeFlags(["-strict-concurrency=complete"]),
       ]
     ),
   ],

@@ -233,13 +233,7 @@ final class ScreenContextTelemetryTests: XCTestCase {
   }
 
   func testPTTDoesNotCreateAnAmbientScreenContextSideChannel() throws {
-    let hubSource = try String(
-      contentsOf: URL(fileURLWithPath: #filePath)
-        .deletingLastPathComponent()
-        .deletingLastPathComponent()
-        .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift"),
-      encoding: .utf8
-    )
+    let hubSource = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let pttSource = try String(
       contentsOf: URL(fileURLWithPath: #filePath)
         .deletingLastPathComponent()

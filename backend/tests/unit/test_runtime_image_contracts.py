@@ -43,6 +43,12 @@ def test_registered_runtime_image_workflows_smoke_their_declared_dockerfile(cont
     assert contracts_module.workflow_contract_errors(contracts_module.load_contracts()) == []
 
 
+def test_memory_maintenance_import_smoke_supplies_only_its_nonsecret_import_config(contracts_module):
+    memory_maintenance_job = _contract(contracts_module, 'memory-maintenance-job')
+
+    assert dict(memory_maintenance_job.smoke_environment) == {'ENCRYPTION_SECRET': '0123456789abcdef0123456789abcdef'}
+
+
 def test_pusher_contract_rejects_omitted_shared_package(contracts_module, tmp_path):
     pusher = _contract(contracts_module, 'pusher')
     dockerfile = _dockerfile_without(

@@ -1,7 +1,8 @@
 import hashlib
 import logging
 import os
-from typing import Any, Dict, List, Optional
+from functools import lru_cache
+from typing import Any, Callable, Dict, List, Optional
 
 import anthropic
 import httpx
@@ -195,8 +196,15 @@ class _AnthropicClientProxy:
 
     __slots__ = ('_default',)
 
-    def __init__(self, default: anthropic.AsyncAnthropic):
+    def __init__(self, default: Optional[anthropic.AsyncAnthropic] = None):
         object.__setattr__(self, '_default', default)
+
+    def _default_client(self) -> anthropic.AsyncAnthropic:
+        default = self._default
+        if default is None:
+            default = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
+            object.__setattr__(self, '_default', default)
+        return default
 
     def _resolve(self) -> anthropic.AsyncAnthropic:
         byok = get_byok_key('anthropic')
@@ -210,7 +218,7 @@ class _AnthropicClientProxy:
                 )
             return legacy
         return get_gateway_first_anthropic_client(
-            legacy_client=self._default,
+            legacy_client=self._default_client(),
             agent_model=ANTHROPIC_AGENT_MODEL,
         )
 
@@ -224,10 +232,17 @@ class _OpenAIEmbeddingsProxy:
     __slots__ = ('_model', '_default', '_ctor_kwargs')
     _METHODS_TO_WRAP = {'embed_documents', 'aembed_documents', 'embed_query', 'aembed_query'}
 
-    def __init__(self, model: str, default: OpenAIEmbeddings, ctor_kwargs: Dict[str, Any]):
+    def __init__(self, model: str, default: Optional[OpenAIEmbeddings], ctor_kwargs: Dict[str, Any]):
         object.__setattr__(self, '_model', model)
         object.__setattr__(self, '_default', default)
         object.__setattr__(self, '_ctor_kwargs', ctor_kwargs)
+
+    def _default_client(self) -> OpenAIEmbeddings:
+        default = self._default
+        if default is None:
+            default = OpenAIEmbeddings(model=self._model, **self._ctor_kwargs)
+            object.__setattr__(self, '_default', default)
+        return default
 
     def _resolve(self) -> OpenAIEmbeddings:
         byok = get_byok_key('openai')
@@ -238,7 +253,7 @@ class _OpenAIEmbeddingsProxy:
                 inst = OpenAIEmbeddings(model=self._model, api_key=byok, **self._ctor_kwargs)
                 _openai_cache[cache_key] = inst
             return inst
-        return self._default
+        return self._default_client()
 
     @staticmethod
     def _is_key_failure(e: Exception) -> bool:
@@ -276,7 +291,7 @@ class _OpenAIEmbeddingsProxy:
                 handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_query')
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                    return self._default.embed_query(text)
+                    return self._default_client().embed_query(text)
             raise
 
     def embed_documents(self, texts: List[str]) -> List[List[float]]:
@@ -288,7 +303,7 @@ class _OpenAIEmbeddingsProxy:
                 handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation='embed_documents')
                 if self._is_key_failure(e):
                     logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                    return self._default.embed_documents(texts)
+                    return self._default_client().embed_documents(texts)
             raise
 
     def __getattr__(self, name: str):
@@ -308,7 +323,7 @@ class _OpenAIEmbeddingsProxy:
                             logger.warning(
                                 "BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__
                             )
-                            return await getattr(self._default, name)(*args, **kwargs)
+                            return await getattr(self._default_client(), name)(*args, **kwargs)
                     raise
 
             return _wrapped_async
@@ -321,7 +336,7 @@ class _OpenAIEmbeddingsProxy:
                     handle_llm_error(e, 'openai', feature='embeddings', model=self._model, operation=name)
                     if self._is_key_failure(e):
                         logger.warning("BYOK OpenAI embeddings failed (%s); falling back to Omi key", type(e).__name__)
-                        return getattr(self._default, name)(*args, **kwargs)
+                        return getattr(self._default_client(), name)(*args, **kwargs)
                 raise
 
         return _wrapped
@@ -389,9 +404,10 @@ def _create_byok_client(
     return None
 
 
-# Anthropic client for chat agent (module-level, BYOK-aware)
-_default_anthropic_client = anthropic.AsyncAnthropic(timeout=120.0, max_retries=1)
-anthropic_client = _AnthropicClientProxy(_default_anthropic_client)
+# Anthropic client for chat agent (module-level, BYOK-aware).
+# The proxy constructs the provider client at its first use so importing a
+# deployable entrypoint never needs provider credentials.
+anthropic_client = _AnthropicClientProxy()
 
 
 def get_openai_chat(model: str, **kwargs) -> ChatOpenAI:
@@ -597,27 +613,62 @@ ANTHROPIC_AGENT_COMPLEX_MODEL = get_model('chat_agent')
 
 # ---------------------------------------------------------------------------
 # Legacy module-level alias (kept for test compatibility).
-# Production code should use get_llm(feature) exclusively.
+# Production code should use get_llm(feature) exclusively. The proxy preserves
+# the legacy object shape without constructing a provider client at import time.
 # ---------------------------------------------------------------------------
-llm_mini = ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
+
+
+class _LazyClientProxy:
+    """Resolve a compatibility client only when a caller first uses it."""
+
+    __slots__ = ('_factory', '_instance')
+
+    def __init__(self, factory: Callable[[], Any]):
+        object.__setattr__(self, '_factory', factory)
+        object.__setattr__(self, '_instance', None)
+
+    def _resolve(self) -> Any:
+        instance = self._instance
+        if instance is None:
+            instance = self._factory()
+            object.__setattr__(self, '_instance', instance)
+        return instance
+
+    def __getattr__(self, name: str) -> Any:
+        return getattr(self._resolve(), name)
+
+    def __or__(self, other: Any) -> Any:
+        return self._resolve() | other
+
+    def __ror__(self, other: Any) -> Any:
+        return other | self._resolve()
+
+
+def _create_legacy_llm_mini() -> ChatOpenAI:
+    return ChatOpenAI(model='gpt-4.1-mini', callbacks=[_usage_callback], request_timeout=120, max_retries=1)
+
+
+llm_mini = _LazyClientProxy(_create_legacy_llm_mini)
 
 # ---------------------------------------------------------------------------
 # Embeddings, parser, utilities
 # ---------------------------------------------------------------------------
-_embeddings_default = OpenAIEmbeddings(model="text-embedding-3-large")
 embeddings = _OpenAIEmbeddingsProxy(
     model="text-embedding-3-large",
-    default=_embeddings_default,
+    default=None,
     ctor_kwargs={},
 )
 parser = PydanticOutputParser(pydantic_object=StructuredExtraction)
 
-encoding = tiktoken.encoding_for_model('gpt-4')
+
+@lru_cache(maxsize=1)
+def _get_encoding():
+    return tiktoken.encoding_for_model('gpt-4')
 
 
 def num_tokens_from_string(string: str) -> int:
     """Returns the number of tokens in a text string."""
-    num_tokens = len(encoding.encode(string))
+    num_tokens = len(_get_encoding().encode(string))
     return num_tokens
 
 

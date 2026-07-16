@@ -8,6 +8,8 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
   private nonisolated(unsafe) static var alwaysUnauthorized = false
   private nonisolated(unsafe) static var forcedStatus: Int?
   private nonisolated(unsafe) static var forcedBody = Data()
+  private nonisolated(unsafe) static var successfulStatus = 204
+  private nonisolated(unsafe) static var successfulBody = Data()
 
   static func reset() {
     lock.lock()
@@ -15,6 +17,8 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
     alwaysUnauthorized = false
     forcedStatus = nil
     forcedBody = Data()
+    successfulStatus = 204
+    successfulBody = Data()
     lock.unlock()
   }
 
@@ -32,6 +36,13 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
     lock.unlock()
   }
 
+  static func returnSuccessAfterInitialUnauthorized(status: Int, body: String = "") {
+    lock.lock()
+    successfulStatus = status
+    successfulBody = Data(body.utf8)
+    lock.unlock()
+  }
+
   static var attempts: Int {
     lock.lock()
     defer { lock.unlock() }
@@ -45,8 +56,11 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
     Self.lock.lock()
     Self.deleteAttempts += 1
     let attempt = Self.deleteAttempts
-    let status = Self.forcedStatus ?? (Self.alwaysUnauthorized || attempt == 1 ? 401 : 204)
-    let body = Self.forcedBody
+    let status = Self.forcedStatus ?? (Self.alwaysUnauthorized || attempt == 1 ? 401 : Self.successfulStatus)
+    let body =
+      Self.forcedStatus == nil && !Self.alwaysUnauthorized && attempt > 1
+      ? Self.successfulBody
+      : Self.forcedBody
     Self.lock.unlock()
 
     let response = HTTPURLResponse(
@@ -142,37 +156,7 @@ final class APIClientAuthRetryTests: XCTestCase {
     config.protocolClasses = [AuthRetryURLStub.self]
     let client = APIClient(session: URLSession(configuration: config))
 
-    let auth = await MainActor.run { AuthService.shared }
-    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
-      usesKeychainTokenStorage: { false },
-      allowsUserDefaultsFallback: { true },
-      readKeychainString: { _, _ in nil },
-      writeKeychainString: { _, _, _ in true },
-      deleteKeychainString: { _, _ in },
-      recordsFallbackTelemetry: false
-    )
-    try auth.saveTokens(
-      idToken: "id-token",
-      refreshToken: "refresh-token",
-      expiresIn: 3600,
-      userId: "user-1"
-    )
-    UserDefaults.standard.set("user-1", forKey: .authUserId)
-
-    auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
-      dataForRequest: { _ in
-        let body = Data(
-          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
-            .utf8)
-        let response = HTTPURLResponse(
-          url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
-          statusCode: 200,
-          httpVersion: nil,
-          headerFields: nil
-        )!
-        return (body, response)
-      }
-    )
+    try configureRefreshableSession()
 
     setenv("FIREBASE_API_KEY", "test-key", 1)
     defer { unsetenv("FIREBASE_API_KEY") }
@@ -186,6 +170,53 @@ final class APIClientAuthRetryTests: XCTestCase {
     XCTAssertEqual(snapshot["area"] as? String, "api_auth")
     XCTAssertEqual(snapshot["outcome"] as? String, "recovered")
     XCTAssertEqual(snapshot["retry_outcome"] as? String, "succeeded")
+  }
+
+  func testFeatureVoidRoutesUseShared401Recovery() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [AuthRetryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    try configureRefreshableSession()
+    setenv("FIREBASE_API_KEY", "test-key", 1)
+    defer { unsetenv("FIREBASE_API_KEY") }
+
+    try await client.setConversationVisibility(id: "conversation-1")
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+
+    AuthRetryURLStub.reset()
+    try await client.assignSegmentsBulk(
+      conversationId: "conversation-1",
+      segmentIds: ["segment-1"],
+      isUser: true,
+      personId: nil
+    )
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+
+    AuthRetryURLStub.reset()
+    try await client.setRecordingPermission(enabled: true)
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+
+    AuthRetryURLStub.reset()
+    try await client.setPrivateCloudSync(enabled: true)
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+  }
+
+  func testGoalMutationsUseShared401Recovery() async throws {
+    let config = URLSessionConfiguration.ephemeral
+    config.protocolClasses = [AuthRetryURLStub.self]
+    let client = APIClient(session: URLSession(configuration: config))
+    try configureRefreshableSession()
+    setenv("FIREBASE_API_KEY", "test-key", 1)
+    defer { unsetenv("FIREBASE_API_KEY") }
+    AuthRetryURLStub.returnSuccessAfterInitialUnauthorized(status: 200, body: "{}")
+
+    _ = try await client.updateGoalProgress(goalId: "goal-1", currentValue: 2)
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
+
+    AuthRetryURLStub.reset()
+    AuthRetryURLStub.returnSuccessAfterInitialUnauthorized(status: 200, body: "{}")
+    _ = try await client.completeGoal(id: "goal-1")
+    XCTAssertEqual(AuthRetryURLStub.attempts, 2)
   }
 
   func testOwnerBoundResponseIsRejectedAfterSameUIDSessionGenerationChanges() async throws {
@@ -529,6 +560,39 @@ final class APIClientAuthRetryTests: XCTestCase {
     }
 
     XCTAssertEqual(AuthRetryURLStub.attempts, 1)
+  }
+
+  private func configureRefreshableSession() throws {
+    let auth = AuthService.shared
+    auth.tokenStorageHooks = AuthService.TokenStorageHooks(
+      usesKeychainTokenStorage: { false },
+      allowsUserDefaultsFallback: { true },
+      readKeychainString: { _, _ in nil },
+      writeKeychainString: { _, _, _ in true },
+      deleteKeychainString: { _, _ in },
+      recordsFallbackTelemetry: false
+    )
+    try auth.saveTokens(
+      idToken: "id-token",
+      refreshToken: "refresh-token",
+      expiresIn: 3600,
+      userId: "user-1"
+    )
+    UserDefaults.standard.set("user-1", forKey: .authUserId)
+    auth.tokenRefreshHooks = AuthService.TokenRefreshHooks(
+      dataForRequest: { _ in
+        let body = Data(
+          "{\"id_token\":\"new-id\",\"refresh_token\":\"new-refresh\",\"expires_in\":\"3600\",\"user_id\":\"user-1\"}"
+            .utf8)
+        let response = HTTPURLResponse(
+          url: URL(string: "https://securetoken.googleapis.com/v1/token")!,
+          statusCode: 200,
+          httpVersion: nil,
+          headerFields: nil
+        )!
+        return (body, response)
+      }
+    )
   }
 
   private func latestHealthSnapshot() throws -> [String: Any] {

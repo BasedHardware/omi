@@ -564,6 +564,43 @@ def get_action_items_by_conversation(uid: str, conversation_id: str) -> List[Dic
     return get_action_items(uid, conversation_id=conversation_id)
 
 
+def get_action_items_count_by_conversation(uid: str, conversation_id: str) -> Dict[str, int]:
+    """Return total / completed / incomplete action-item counts for one conversation.
+
+    Uses Firestore count() aggregation with the same conversation_id predicate as
+    get_action_items_by_conversation, so a client can render a task-progress badge
+    (e.g. 2 of 3 done) without paging the items. Soft-retired items (``deleted: true``)
+    are hidden from the list/read paths, so they are excluded here too; otherwise the
+    badge would drift from what the client can list. incomplete = total - completed,
+    clamped at 0 so the three values stay internally consistent.
+    """
+    base = (
+        db.collection('users')
+        .document(uid)
+        .collection(action_items_collection)
+        .where(filter=FieldFilter('conversation_id', '==', conversation_id))
+    )
+    total = int(base.count().get()[0][0].value)
+    completed = int(base.where(filter=FieldFilter('completed', '==', True)).count().get()[0][0].value)
+
+    # Exclude soft-retired items so the badge matches the visible list (get_action_items skips
+    # data.get('deleted')). Deleted items are rare, so stream just that subset and subtract, rather
+    # than requiring a filtered-aggregation composite index.
+    deleted_total = 0
+    deleted_completed = 0
+    for doc in base.where(filter=FieldFilter('deleted', '==', True)).stream():
+        deleted_total += 1
+        if (doc.to_dict() or {}).get('completed'):
+            deleted_completed += 1
+
+    total = max(0, total - deleted_total)
+    completed = max(0, completed - deleted_completed)
+    # total and completed come from separate (non-atomic) count() aggregations, so a concurrent write
+    # between them can leave completed > total. Cap it so the three values stay internally consistent.
+    completed = min(completed, total)
+    return {'total': total, 'completed': completed, 'incomplete': max(0, total - completed)}
+
+
 def get_action_items_by_ids(uid: str, action_item_ids: List[str]) -> List[Dict[str, Any]]:
     """
     Get multiple action items by their IDs in a single batch operation.

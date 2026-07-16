@@ -787,7 +787,7 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
     let taskState = try sourceFile(
       "ProactiveAssistants/Assistants/TaskAgent/TaskChatState.swift")
     let taskStorage = try sourceFile("Rewind/Core/TaskChatMessageStorage.swift")
-    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let realtime = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let runtime = try sourceFile("Chat/AgentRuntimeProcess.swift")
 
     XCTAssertFalse(provider.contains("APIClient.shared.saveMessage("))
