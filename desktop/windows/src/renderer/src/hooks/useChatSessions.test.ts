@@ -200,3 +200,44 @@ describe('useChatSessions — filter & search', () => {
     expect(fns.listSessions.mock.calls.length).toBe(callsBefore)
   })
 })
+
+describe('useChatSessions — app scoping (persona picker)', () => {
+  it('threads app_id into the session list + create when an app is selected', async () => {
+    const { client, fns } = makeClient([session({ id: '1', appId: 'persona-a' })])
+    const { result } = renderHook(() => useChatSessions({ client, appId: 'persona-a' }))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(fns.listSessions).toHaveBeenCalledWith({ appId: 'persona-a' })
+
+    await act(async () => {
+      await result.current.createNewSession()
+    })
+    expect(fns.createSession).toHaveBeenCalledWith({ appId: 'persona-a' })
+  })
+
+  it('DEFAULT (no appId) queries the plain main-chat list — byte-identical', async () => {
+    const { client, fns } = makeClient([session({ id: '1' })])
+    const { result } = renderHook(() => useChatSessions({ client }))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(fns.listSessions).toHaveBeenCalledWith({})
+
+    await act(async () => {
+      await result.current.createNewSession()
+    })
+    expect(fns.createSession).toHaveBeenCalledWith({})
+  })
+
+  it('clears the session selection when the selected app changes (Mac selectApp)', async () => {
+    const { client } = makeClient([session({ id: '1', appId: 'persona-a' })])
+    const { result, rerender } = renderHook(
+      ({ appId }: { appId: string | null }) => useChatSessions({ client, appId }),
+      { initialProps: { appId: 'persona-a' as string | null } }
+    )
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    act(() => result.current.selectSession('1'))
+    expect(result.current.currentSessionId).toBe('1')
+
+    // Switch apps → the prior session selection is dropped.
+    rerender({ appId: 'persona-b' })
+    await waitFor(() => expect(result.current.currentSessionId).toBeNull())
+  })
+})

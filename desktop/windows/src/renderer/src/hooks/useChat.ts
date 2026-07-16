@@ -109,10 +109,7 @@ export type UseChat = {
   // plan, approval + execution happen via a NATIVE Windows dialog (main process),
   // so it works identically from the main window and the bar. `fromVoice`
   // requests that the assistant's reply be spoken (TTS) once it's assembled.
-  send: (
-    text: string,
-    opts?: { fromVoice?: boolean; idempotencyKey?: string }
-  ) => Promise<void>
+  send: (text: string, opts?: { fromVoice?: boolean; idempotencyKey?: string }) => Promise<void>
   /** Clear the thread to a fresh conversation. */
   reset: () => void
   /** Record a COMPLETED native realtime-hub voice turn (user transcript + assistant
@@ -142,6 +139,14 @@ export type UseChat = {
   switchThread: (id: string | null) => void
   /** The active server chat-session id, or `null` on the default shared thread. */
   currentThreadId: string | null
+  /** Scope the chat to a specific installed app/persona, or `null` for the default
+   *  Omi assistant (Mac `ChatProvider.selectApp`). Threads `app_id` into session
+   *  fetch/create + message persistence and namespaces the kernel conversation, then
+   *  resets to that app's default chat (session cleared, transcript reloaded). `null`
+   *  returns to the plain main chat. No-op when the app is already selected. */
+  selectApp: (appId: string | null) => void
+  /** The selected chat-app/persona id, or `null` on the default Omi assistant. */
+  selectedAppId: string | null
 }
 
 /**
@@ -215,6 +220,15 @@ export function useChat(): UseChat {
   // save path reads the ref so it stays correct inside closures). Moved together in
   // switchThread. null = default shared thread.
   const [currentThreadId, setCurrentThreadId] = useState<string | null>(null)
+  // The selected chat-app/persona id, or null on the default Omi assistant (Mac
+  // ChatProvider.selectedAppId). The ref is read inside async save/send closures so
+  // it stays current; the state is the UI projection the picker reads. When null the
+  // send path threads NO app_id and is byte-identical to today. Distinct from
+  // sessionIdRef: an app scopes WHICH default chat (backend keys its default session
+  // by app_id), a session is an explicit desktop-local thread; both can be set (an
+  // app-scoped session carries both app_id and session_id, Mac parity).
+  const selectedAppIdRef = useRef<string | null>(null)
+  const [selectedAppId, setSelectedAppId] = useState<string | null>(null)
   const startedAtRef = useRef<number>(0)
   // Synchronous mirror of `sending` for the re-entrancy guard. The `sending` state
   // captured in a `send` closure can be stale (e.g. a queued/auto-sent voice
@@ -607,6 +621,9 @@ export function useChat(): UseChat {
       sender: 'human',
       clientMessageId: userMsg.id,
       messageSource: 'desktop_chat',
+      // Scope the write to the selected app (Mac saveMessage app_id) and/or session.
+      // Both omitted on the default main chat → the mobile/web continuity guard.
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
       // Include session_id ONLY for a selected session; the default thread omits
       // the key entirely (mobile/web continuity guard).
       ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
@@ -838,6 +855,7 @@ export function useChat(): UseChat {
             sender: 'ai',
             clientMessageId: assistantId,
             messageSource: 'desktop_chat',
+            ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
             ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
           })
         }
@@ -1041,7 +1059,14 @@ export function useChat(): UseChat {
       const textToSend = contextParts.length
         ? `${contextParts.join('\n\n')}\n\n${userMsg.content}`
         : userMsg.content
-      const res = await fetch(`${OMI_BASE}/v2/messages`, {
+      // Scope the send to the selected app/persona (backend keys the chat session by
+      // this app_id — the persona mechanism). Query param, exactly like Mac threads
+      // app_id; omitted when no app is selected so the URL is byte-identical to today.
+      const sendAppId = selectedAppIdRef.current
+      const messagesUrl = sendAppId
+        ? `${OMI_BASE}/v2/messages?app_id=${encodeURIComponent(sendAppId)}`
+        : `${OMI_BASE}/v2/messages`
+      const res = await fetch(messagesUrl, {
         method: 'POST',
         // BYOK: attach X-BYOK-* (all-or-none) when active so managed chat runs on
         // the user's own keys. This lane is a raw fetch, so it can't ride the
@@ -1278,6 +1303,7 @@ export function useChat(): UseChat {
       sender: 'human',
       clientMessageId: userMsg.id,
       messageSource: 'realtime_voice',
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
       ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
     })
     void saveDesktopMessage({
@@ -1285,6 +1311,7 @@ export function useChat(): UseChat {
       sender: 'ai',
       clientMessageId: assistantMsg.id,
       messageSource: 'realtime_voice',
+      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
       ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
     })
   }
@@ -1318,10 +1345,12 @@ export function useChat(): UseChat {
 
     // Point the engine at the target thread. For a session, unify the ids (D5:
     // session id == kernel chatId == saveDesktopMessage session_id). For null,
-    // return to the default shared thread (session_id omitted on saves).
+    // return to the default shared thread (session_id omitted on saves) — the app's
+    // default chat when an app is selected (namespaced kernel id), else the plain one.
     sessionIdRef.current = id
     setCurrentThreadId(id)
-    chatIdRef.current = id ?? resolveDefaultChatId()
+    const appId = selectedAppIdRef.current
+    chatIdRef.current = id ?? (appId ? `app-${appId}` : resolveDefaultChatId())
     startedAtRef.current = 0
 
     // Load the target's transcript. Capture the generation so a slower load a newer
@@ -1329,7 +1358,43 @@ export function useChat(): UseChat {
     const myGen = genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
     setHistory([])
-    if (id === null) {
+    if (id !== null) {
+      // A session: durable SERVER messages (cross-device, Mac parity) — NOT local
+      // SQLite, which has no rows for a session created on mobile / another install.
+      void getSessionMessages({ sessionId: id })
+        .then((msgs) => {
+          if (!isCurrent()) return
+          setHistory(
+            msgs.map((m) => ({
+              id: m.id,
+              role: m.sender === 'ai' ? 'assistant' : 'user',
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* leave the thread empty on a load failure */
+        })
+    } else if (appId) {
+      // The app's default chat: durable SERVER messages scoped by app_id (Mac
+      // loadDefaultChatMessages) — cross-device, like a session.
+      void getSessionMessages({ appId })
+        .then((msgs) => {
+          if (!isCurrent()) return
+          setHistory(
+            msgs.map((m) => ({
+              id: m.id,
+              role: m.sender === 'ai' ? 'assistant' : 'user',
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* leave the thread empty on a load failure */
+        })
+    } else {
       // Default thread: the local conversation (as the mount loader reads it).
       const localId = chatIdRef.current
       void window.omi
@@ -1349,10 +1414,47 @@ export function useChat(): UseChat {
         .catch(() => {
           /* no prior conversation — start empty */
         })
-    } else {
-      // A session: durable SERVER messages (cross-device, Mac parity) — NOT local
-      // SQLite, which has no rows for a session created on mobile / another install.
-      void getSessionMessages({ sessionId: id })
+    }
+  }
+
+  // Scope the chat to a specific installed app/persona, or null for the default Omi
+  // assistant (Mac ChatProvider.selectApp 5173). No-op if already selected. Otherwise:
+  // tear down any in-flight generation (like switchThread/reset), set selectedAppId,
+  // RESET the session to that app's default chat (session_id cleared — Mac clears
+  // currentSession + sets isInDefaultChat), repoint the kernel chatId at the app's
+  // namespace, and reload the app's default-chat transcript (server-scoped by app_id).
+  const selectApp = (appId: string | null): void => {
+    if (selectedAppIdRef.current === appId) return
+    // Same in-flight teardown as switchThread(): a dismissed reply from the previous
+    // app/thread must not write into the new one or steal the busy latch.
+    genRef.current++
+    abortRef.current?.abort()
+    abortRef.current = null
+    if (activeAgentTaskRef.current) {
+      void window.omi.codingAgentCancel(activeAgentTaskRef.current).catch(() => {})
+      activeAgentTaskRef.current = null
+    }
+    if (activeKernelRunRef.current) {
+      void window.omi.mainChatCancel(activeKernelRunRef.current).catch(() => {})
+      activeKernelRunRef.current = null
+    }
+    setBusy(false)
+    setAgentActive(false)
+
+    // Switch the selected app and reset to its default chat (no session).
+    selectedAppIdRef.current = appId
+    setSelectedAppId(appId)
+    sessionIdRef.current = null
+    setCurrentThreadId(null)
+    chatIdRef.current = appId ? `app-${appId}` : resolveDefaultChatId()
+    startedAtRef.current = 0
+
+    const myGen = genRef.current
+    const isCurrent = (): boolean => genRef.current === myGen
+    setHistory([])
+    if (appId) {
+      // The app's default chat: durable SERVER messages scoped by app_id.
+      void getSessionMessages({ appId })
         .then((msgs) => {
           if (!isCurrent()) return
           setHistory(
@@ -1367,6 +1469,26 @@ export function useChat(): UseChat {
         .catch(() => {
           /* leave the thread empty on a load failure */
         })
+    } else {
+      // Back to the plain default thread: the local conversation.
+      const localId = chatIdRef.current
+      void window.omi
+        .getLocalConversation(localId)
+        .then((c) => {
+          if (!isCurrent() || !c?.messages) return
+          startedAtRef.current = c.startedAt || Date.now()
+          setHistory(
+            c.messages.map((m) => ({
+              id: m.id ?? crypto.randomUUID(),
+              role: m.role,
+              content: m.content,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
+            }))
+          )
+        })
+        .catch(() => {
+          /* no prior conversation — start empty */
+        })
     }
   }
 
@@ -1380,6 +1502,8 @@ export function useChat(): UseChat {
     recordVoiceTurn,
     getVoiceSeedContext,
     switchThread,
-    currentThreadId
+    currentThreadId,
+    selectApp,
+    selectedAppId
   }
 }

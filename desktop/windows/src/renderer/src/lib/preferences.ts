@@ -51,6 +51,12 @@ export type Preferences = {
   // reads it as `=== true`. It does NOT flip the engine — the two flags are
   // independent (the header simply stays hidden under the legacy engine).
   multiChatEnabled?: boolean
+  // Chat-app / persona picker (Mac ChatPage header picker). Default OFF: the Hub
+  // chat panel shows no picker and every send stays on the default main chat,
+  // byte-identical to today. When ON *and* the user has enabled chat-capable apps,
+  // the chat panel gains a compact assistant picker; selecting an app threads its
+  // app_id into the session/message calls. Undefined ⇒ OFF; read as `=== true`.
+  chatAppPickerEnabled?: boolean
   recordingConsentedAt?: number
   // The single goal the user picked during onboarding ("Pick one goal"). Stored
   // locally and best-effort synced to the Omi goals backend.
