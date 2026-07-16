@@ -23,6 +23,10 @@ import './styles/globals.css'
 // component graph is only fetched when the main window first opens Connect — never
 // in secondary windows. Runs before createRoot; the registration itself is cheap.
 import './components/home/hub/connections/register'
+// Side-effect: registers the focused-goals chip row as the resting Hub's widget
+// row. Eager + tiny (deps already in the main bundle); the widget only fetches
+// when the main window's hub actually mounts it.
+import './components/home/hub/registerHomeWidgets'
 
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
