@@ -113,6 +113,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   /// the views render from.
   static weak var current: OnboardingPagedIntroCoordinator?
 
+  private var nameObserver: NSObjectProtocol?
+
   init() {
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -151,18 +153,50 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     // Restore the goal text so revisiting the Goal step (incl. across the
     // permission-step app restart) shows what the user already entered.
     goalDraft = defaults.string(forKey: goalDraftKey) ?? ""
+
+    // The name can arrive asynchronously — Apple only sends it on first auth, and
+    // otherwise it's fetched from the backend after sign-in. `givenName` is plain
+    // UserDefaults (not observable), so `preferredName` was a frozen snapshot that
+    // stayed "there". Refresh it when AuthService signals the name is known.
+    nameObserver = NotificationCenter.default.addObserver(
+      forName: .authNameDidUpdate, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refreshNameFromAuthIfUnedited() }
+    }
   }
 
   deinit {
+    if let nameObserver {
+      NotificationCenter.default.removeObserver(nameObserver)
+    }
     gmailTask?.cancel()
     calendarTask?.cancel()
     appleNotesTask?.cancel()
     webResearchTask?.cancel()
   }
 
+  /// Adopt a name that landed after init — but only replace the "there"
+  /// placeholder, never a value the user has typed into the name field.
+  private func refreshNameFromAuthIfUnedited() {
+    let given = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let display = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolved = given.isEmpty ? display : given
+    guard !resolved.isEmpty else { return }
+    if preferredName == "there" || preferredName.isEmpty {
+      preferredName = resolved
+    }
+    if draftName == "there" || draftName.isEmpty {
+      draftName = resolved
+    }
+  }
+
   func prepare(appState: AppState) {
     ChatToolExecutor.onboardingAppState = appState
     appState.checkAllPermissions()
+
+    // Pull the name from the backend if we don't have it locally yet; when it
+    // lands, `.authNameDidUpdate` refreshes `preferredName` (no more "there").
+    AuthService.shared.loadNameFromBackendIfNeeded()
 
     // Clear graph only on first onboarding start, not mid-onboarding restarts.
     let isResuming = OnboardingChatPersistence.isMidOnboarding
