@@ -1,39 +1,38 @@
 import XCTest
 
-/// Sentinel: proves `-strict-concurrency=complete` is active on this target.
+/// Sentinel: proves strict concurrency is active on this target.
 ///
-/// Unlike BareSlashRegexLiterals (which enables new syntax), strict concurrency
-/// only adds restrictions — there is no code that "only compiles" under it.
-/// So we verify the flag two ways:
+/// History: under Swift 5, this sentinel relied on a non-Sendable
+/// `Task.detached` capture producing a *warning* when
+/// `-strict-concurrency=complete` was set (this target has no
+/// `-warnings-as-errors`, so it still compiled). The companion shell test
+/// (`test-feature-sentinel-negative-control.sh`) rebuilt the target and grepped
+/// the build output for that warning — if the flag was silently removed, the
+/// warning vanished and the test failed.
 ///
-/// 1. This file captures a non-Sendable type across a Task.detached boundary.
-///    Under complete checking, the compiler emits a "non-Sendable" / "data race"
-///    warning. Under minimal checking, no warning is produced.
-///
-/// 2. The companion shell test (test-feature-sentinel-negative-control.sh)
-///    rebuilds this target and greps the output for the non-Sendable warning.
-///    If the flag is removed from Package.swift, the warning disappears and
-///    the test fails — catching the "fake strictness" trap.
+/// Under the Swift 6 language mode that same non-Sendable capture is a *hard
+/// compile error*: strict concurrency is no longer opt-in via a flag but
+/// inherent to the language mode itself. This file therefore cannot contain the
+/// unsafe capture and still compile — its compilation under
+/// `swiftLanguageMode(.v6)` is itself the proof that strict concurrency is
+/// enforced. The companion shell test now asserts the inverse: a deliberately
+/// unsafe capture is *rejected* by the compiler.
 final class StrictConcurrencySentinelTests: XCTestCase {
   /// A type that is NOT Sendable (no @unchecked Sendable).
   final class NonSendableBox {
     var value: Int = 0
   }
 
-  func testNonSendableCaptureIsFlaggedUnderCompleteChecking() {
-    // Under -strict-concurrency=complete, capturing NonSendableBox in a
-    // detached Task produces a warning about non-Sendable capture.
-    // The code still compiles (we do NOT use -warnings-as-errors on this
-    // target), but the warning is visible in the build output and proves
-    // the flag is active.
+  /// Exercises the compiler-approved pattern for Swift 6 strict concurrency:
+  /// copy the Sendable value out before crossing a concurrency boundary.
+  func testSendableValueCrossesTaskBoundarySafely() {
     let box = NonSendableBox()
     box.value = 42
-
-    // The capture below is intentional — it triggers the sentinel warning.
-    Task.detached {
-      _ = box.value
-    }
-
-    XCTAssertEqual(box.value, 42)
+    // `box` is non-Sendable and may NOT be captured across the boundary.
+    // Copying the Sendable `Int` out first is the pattern the compiler now
+    // requires; attempting to capture `box` directly is a compile error.
+    let snapshot = box.value
+    Task.detached { _ = snapshot }
+    XCTAssertEqual(snapshot, 42)
   }
 }

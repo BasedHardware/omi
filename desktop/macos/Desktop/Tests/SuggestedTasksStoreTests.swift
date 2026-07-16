@@ -769,7 +769,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked S
   func registerTaskIntervention(
     _ request: OmiAPI.InterventionCreate, idempotencyKey: String, accountGeneration: Int
   ) async throws -> OmiAPI.InterventionRecord {
-    onRegisterIntervention?()
+    await MainActor.run { onRegisterIntervention?() }
     if failIntervention { throw FakeError.failed }
     registeredInterventionCandidateIDs.insert(request.subjectId)
     registeredInterventionDedupeKeys.append(request.dedupeKey)
@@ -829,7 +829,7 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked S
   func acceptCanonicalCandidate(
     candidateID: String, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onAccept?()
+    await MainActor.run { onAccept?() }
     if failAccept { throw FakeError.failed }
     acceptedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .accepted, taskID: acceptedTaskID)
@@ -838,14 +838,14 @@ private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked S
   func rejectCanonicalCandidate(
     candidateID: String, reason: String?, accountGeneration: Int
   ) async throws -> OmiAPI.CandidateResolutionReceipt {
-    onReject?()
+    await MainActor.run { onReject?() }
     if failReject { throw FakeError.failed }
     rejectedCandidateIDs.append(candidateID)
     return receipt(candidateID: candidateID, status: .rejected, taskID: nil)
   }
 
   func updateSuggestedTaskDescription(id: String, description: String) async throws {
-    onUpdate?()
+    await MainActor.run { onUpdate?() }
     updatedTaskDescriptions[id] = description
   }
 

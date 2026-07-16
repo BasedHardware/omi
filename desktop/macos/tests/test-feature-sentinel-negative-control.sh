@@ -1,12 +1,18 @@
 #!/usr/bin/env bash
 # Feature sentinel tests (#9843 Ticket 09).
 #
-# Two controls:
-# 1. POSITIVE: the SemanticFeatureSentinels target build produces a non-Sendable
-#    capture warning, proving -strict-concurrency=complete is active. If the
-#    flag is removed from Package.swift, the warning disappears and this test
-#    fails — catching the "fake strictness" trap.
-# 2. NEGATIVE: SwiftPM silently accepts a fake upcoming-feature name, proving
+# Three controls (updated for the Swift 6 language-mode cutover):
+# 1. POSITIVE (mode): the package declares `swiftLanguageModes: [.v6]`. Swift 6
+#    enforces strict concurrency inherently — there is no flag to silently
+#    remove — so verifying the declared mode is the durable guard.
+# 2. POSITIVE (compile + upcoming feature): the SemanticFeatureSentinels target
+#    builds, proving BareSlashRegexLiterals is active and the target compiles
+#    under Swift 6 strict concurrency.
+# 3. POSITIVE (rejection): a deliberately unsafe non-Sendable `Task.detached`
+#    capture is *rejected* by the compiler under Swift 6 — the direct proof that
+#    strict concurrency is enforced (it was a warning under Swift 5 +
+#    `-strict-concurrency=complete`).
+# 4. NEGATIVE: SwiftPM silently accepts a fake upcoming-feature name, proving
 #    why feature verification is needed.
 set -euo pipefail
 
@@ -29,13 +35,21 @@ nok() { echo "  FAIL: $1"; FAIL=$((FAIL + 1)); }
 
 echo "== feature sentinel tests"
 
-# --- POSITIVE: strict-concurrency=complete produces a non-Sendable warning ---
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+MANIFEST="$MACOS_DIR/Desktop/Package.swift"
 SENTINEL="$MACOS_DIR/Desktop/Tests/SemanticFeatureSentinels/StrictConcurrencySentinelTests.swift"
 
-# Force recompilation to surface the warning even when the caller has already
-# warmed the package build cache.
+# --- POSITIVE (mode): package declares Swift 6 language mode ---
+if grep -q 'swiftLanguageModes: \[.v6\]' "$MANIFEST"; then
+  ok "package declares swiftLanguageModes: [.v6] (strict concurrency is inherent)"
+else
+  nok "package does not declare swiftLanguageModes: [.v6]"
+fi
+
+# --- POSITIVE (compile + upcoming feature): sentinel target builds under Swift 6 ---
+# Force recompilation so the result reflects the current source even when the
+# caller has already warmed the package build cache.
 touch "$SENTINEL"
 rm -rf \
   "$MACOS_DIR/Desktop/.build/debug/SemanticFeatureSentinels.build" \
@@ -46,17 +60,42 @@ else
   BUILD_STATUS=$?
 fi
 
-if echo "$BUILD_OUTPUT" | grep -qi "non-Sendable\|non-sendable\|data race"; then
-  ok "strict-concurrency=complete is active (non-Sendable warning produced)"
-else
-  nok "strict-concurrency=complete flag appears inactive (no non-Sendable warning in build output)"
-fi
-
 if [[ "$BUILD_STATUS" -eq 0 ]] && echo "$BUILD_OUTPUT" | grep -qi "Build of target.*complete\|Build complete"; then
-  ok "BareSlashRegexLiterals is active (sentinel target compiles)"
+  ok "BareSlashRegexLiterals is active and sentinel target compiles under Swift 6"
 else
   nok "sentinel target build failed"
   echo "$BUILD_OUTPUT" | tail -80
+fi
+
+# --- POSITIVE (rejection): Swift 6 rejects non-isolated global mutable state ---
+# Under Swift 5 this was a downgradeable warning; under Swift 6 strict
+# concurrency it is a hard compile error. A self-contained Swift 6 package with
+# non-isolated global shared mutable state must fail to build.
+TMPDIR_SENTINEL=$(mktemp -d)
+TMPDIRS+=("$TMPDIR_SENTINEL")
+mkdir -p "$TMPDIR_SENTINEL/Sources/Sentinel"
+cat > "$TMPDIR_SENTINEL/Package.swift" << 'SWIFT'
+// swift-tools-version: 6.0
+import PackageDescription
+let package = Package(
+  name: "Sentinel",
+  targets: [
+    .target(name: "Sentinel", path: "Sources/Sentinel"),
+  ],
+  swiftLanguageModes: [.v6]
+)
+SWIFT
+cat > "$TMPDIR_SENTINEL/Sources/Sentinel/sentinel.swift" << 'SWIFT'
+var counter = 0
+func trigger() { counter += 1 }
+SWIFT
+SENTINEL_BUILD_OUTPUT=$(xcrun swift build --package-path "$TMPDIR_SENTINEL" 2>&1) || true
+if echo "$SENTINEL_BUILD_OUTPUT" | grep -qi "concurrency-safe\|data race\|non-Sendable\|non-sendable" \
+  && ! xcrun swift build --package-path "$TMPDIR_SENTINEL" >/dev/null 2>&1; then
+  ok "Swift 6 rejects non-isolated global mutable state (strict concurrency enforced)"
+else
+  nok "Swift 6 did not reject non-isolated global mutable state (strict concurrency inactive)"
+  echo "$SENTINEL_BUILD_OUTPUT" | tail -40
 fi
 
 # --- NEGATIVE: SwiftPM silently accepts unknown feature names ---

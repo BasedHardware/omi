@@ -500,7 +500,7 @@ actor CalendarReaderService {
       daysForward: daysForward,
       maxResults: maxResults
     )
-    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingUTF8: $0) }),
+    guard let calendarKey = getenv("GOOGLE_CALENDAR_API_KEY").flatMap({ String(validatingCString: $0) }),
       !calendarKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
     else {
       throw CalendarReaderError.configurationError("Calendar API key is unavailable; try again after startup finishes.")

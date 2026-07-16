@@ -1,4 +1,4 @@
-// swift-tools-version: 5.9
+// swift-tools-version: 6.0
 import PackageDescription
 
 let package = Package(
@@ -150,9 +150,9 @@ let package = Package(
       dependencies: [],
       path: "Tests/SemanticFeatureSentinels",
       swiftSettings: [
-        .enableUpcomingFeature("BareSlashRegexLiterals"),
         .unsafeFlags(["-strict-concurrency=complete"]),
       ]
     ),
-  ]
+  ],
+  swiftLanguageModes: [.v6]
 )

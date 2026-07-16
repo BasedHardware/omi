@@ -876,7 +876,7 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
   }
 }
 
-private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControlling, @unchecked Sendable {
   private let responses: [String: String]
   private(set) var calledTools: [String] = []
 
@@ -895,7 +895,7 @@ private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControl
   }
 }
 
-private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeControlling {
+private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeControlling, @unchecked Sendable {
   struct Call {
     let clientId: String
     let harnessMode: String

@@ -554,7 +554,7 @@ class AuthService {
   // No hardcoded fallback — if the key isn't available, auth operations will fail
   // with a clear error instead of silently using a potentially wrong key.
   private var firebaseApiKey: String {
-    if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingUTF8: envKey), !key.isEmpty {
+    if let envKey = getenv("FIREBASE_API_KEY"), let key = String(validatingCString: envKey), !key.isEmpty {
       return key
     }
     log("AuthService: FIREBASE_API_KEY not set — auth operations will fail")

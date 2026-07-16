@@ -124,11 +124,13 @@ final class ChatDraftStore {
     let snapshots = pendingWrites.keys.map { id in (id, cache[id] ?? "") }
     pendingWrites.values.forEach { $0.cancel() }
     pendingWrites.removeAll()
-    persistenceQueue.sync {
+    let rootURL = rootURL
+    let flushWork: @Sendable () -> Void = {
       for (id, text) in snapshots {
-        Self.persist(text: text, id: id, rootURL: rootURL, fileManager: fileManager)
+        Self.persist(text: text, id: id, rootURL: rootURL)
       }
     }
+    persistenceQueue.sync(execute: flushWork)
   }
 
   /// Explicit sign-out is destructive for that account's drafts. Light auth
@@ -144,9 +146,10 @@ final class ChatDraftStore {
     }
 
     let ownerURL = rootURL.appendingPathComponent(Self.fileNameComponent(normalizedOwnerID), isDirectory: true)
-    persistenceQueue.sync {
-      try? fileManager.removeItem(at: ownerURL)
+    let removeWork: @Sendable () -> Void = {
+      try? FileManager.default.removeItem(at: ownerURL)
     }
+    persistenceQueue.sync(execute: removeWork)
   }
 
   private func storageID(for key: ChatDraftKey, ownerID: String?) -> StorageID {
@@ -167,24 +170,29 @@ final class ChatDraftStore {
     let generation = (writeGenerations[id] ?? 0) + 1
     writeGenerations[id] = generation
     let rootURL = rootURL
-    let fileManager = fileManager
-    let workItem = DispatchWorkItem { [weak self] in
-      Self.persist(text: text, id: id, rootURL: rootURL, fileManager: fileManager)
+    // The work item runs on `persistenceQueue` (not the main actor). Under Swift 6
+    // the runtime asserts executor assumptions, so the block must be a non-isolated
+    // `@Sendable` closure — an inferred `@MainActor` block dispatched off the main
+    // queue would trap (`dispatch_assert_queue_fail`). `persist` is a static call;
+    // the in-memory bookkeeping hops back to the main actor via a `Task`.
+    let block: @Sendable () -> Void = {
+      Self.persist(text: text, id: id, rootURL: rootURL)
       Task { @MainActor [weak self] in
         guard let self, self.writeGenerations[id] == generation else { return }
         self.pendingWrites[id] = nil
       }
     }
+    let workItem = DispatchWorkItem(block: block)
     pendingWrites[id] = workItem
     persistenceQueue.asyncAfter(deadline: .now() + writeDelay, execute: workItem)
   }
 
-  private static func persist(
+  private nonisolated static func persist(
     text: String,
     id: StorageID,
-    rootURL: URL,
-    fileManager: FileManager
+    rootURL: URL
   ) {
+    let fileManager = FileManager.default
     let ownerURL = rootURL.appendingPathComponent(fileNameComponent(id.ownerID), isDirectory: true)
     let key = "\(id.key.scope)\u{0}\(id.key.contextID)"
     let url = ownerURL.appendingPathComponent(fileNameComponent(key)).appendingPathExtension("json")
@@ -217,7 +225,7 @@ final class ChatDraftStore {
     return trimmed.isEmpty ? "local" : trimmed
   }
 
-  private static func fileNameComponent(_ value: String) -> String {
+  private nonisolated static func fileNameComponent(_ value: String) -> String {
     Data(value.utf8).base64EncodedString()
       .replacingOccurrences(of: "/", with: "_")
       .replacingOccurrences(of: "+", with: "-")

@@ -1,6 +1,6 @@
 import Foundation
 
-@preconcurrency protocol DesktopCoordinatorRuntimeControlling {
+protocol DesktopCoordinatorRuntimeControlling: Sendable {
   func directControlTool(
     clientId: String,
     harnessMode: String,
@@ -9,7 +9,7 @@ import Foundation
   ) async throws -> String
 }
 
-extension AgentRuntimeProcess: @preconcurrency DesktopCoordinatorRuntimeControlling {
+extension AgentRuntimeProcess: DesktopCoordinatorRuntimeControlling {
   func directControlTool(
     clientId: String,
     harnessMode: String,

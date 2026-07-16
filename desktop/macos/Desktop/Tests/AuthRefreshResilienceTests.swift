@@ -10,7 +10,7 @@ final class AuthRefreshResilienceTests: XCTestCase {
     try await super.setUp()
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingUTF8: $0) }
+    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingCString: $0) }
     setenv("FIREBASE_API_KEY", "test-firebase-api-key", 1)
   }
 

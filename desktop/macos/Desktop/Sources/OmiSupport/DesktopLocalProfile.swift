@@ -105,7 +105,7 @@ package enum DesktopLocalProfile {
   }
 
   private static func value(_ key: String) -> String? {
-    guard let raw = getenv(key), let value = String(validatingUTF8: raw) else { return nil }
+    guard let raw = getenv(key), let value = String(validatingCString: raw) else { return nil }
     return value.trimmingCharacters(in: .whitespacesAndNewlines)
   }
 

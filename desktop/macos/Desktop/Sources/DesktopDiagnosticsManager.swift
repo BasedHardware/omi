@@ -823,6 +823,8 @@ final class DesktopDiagnosticsManager {
     guard size > 0 else { return "unknown" }
     var model = [CChar](repeating: 0, count: size)
     sysctlbyname("hw.model", &model, &size, nil, 0)
-    return String(cString: model)
+    return model.withUnsafeBufferPointer { buffer in
+      buffer.baseAddress.map { String(cString: $0) } ?? "unknown"
+    }
   }
 }

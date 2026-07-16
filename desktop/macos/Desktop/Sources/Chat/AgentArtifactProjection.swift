@@ -193,15 +193,15 @@ enum AgentArtifactProjectionError: LocalizedError, Equatable {
   }
 }
 
-@preconcurrency protocol AgentArtifactProjectionLoading {
-  func controlTool(name: String, input: [String: Any]) async throws -> String
+protocol AgentArtifactProjectionLoading: Sendable {
+  func controlTool(name: String, input: RuntimeJSONPayloadBox) async throws -> String
 }
 
-extension AgentBridge: @preconcurrency AgentArtifactProjectionLoading {
-  func controlTool(name: String, input: [String: Any]) async throws -> String {
+extension AgentBridge: AgentArtifactProjectionLoading {
+  func controlTool(name: String, input: RuntimeJSONPayloadBox) async throws -> String {
     try await controlTool(
       name: name,
-      input: input,
+      input: input.value,
       authorizationSnapshot: nil)
   }
 }
@@ -234,7 +234,7 @@ final class AgentArtifactProjectionStore: ObservableObject {
     do {
       let result = try await bridge.controlTool(
         name: "inspect_agent_artifacts",
-        input: request.toolInput
+        input: RuntimeJSONPayloadBox(request.toolInput)
       )
       guard loadGeneration == generation else { return }
       artifacts = try AgentArtifactProjection.parseList(fromToolResult: result)

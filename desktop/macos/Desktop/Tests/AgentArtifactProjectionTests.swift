@@ -102,7 +102,7 @@ import XCTest
 }
 
 @MainActor
-private final class DelayedArtifactProjectionLoader: @preconcurrency AgentArtifactProjectionLoading {
+private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoading {
   private var staleStartedContinuation: CheckedContinuation<Void, Never>?
   private var staleReleaseContinuation: CheckedContinuation<Void, Never>?
   private var staleRequestStarted = false
@@ -119,8 +119,8 @@ private final class DelayedArtifactProjectionLoader: @preconcurrency AgentArtifa
     staleReleaseContinuation = nil
   }
 
-  func controlTool(name: String, input: [String: Any]) async throws -> String {
-    let sessionId = input["sessionId"] as? String ?? ""
+  func controlTool(name: String, input: RuntimeJSONPayloadBox) async throws -> String {
+    let sessionId = input.value["sessionId"] as? String ?? ""
     if sessionId == "session-stale" {
       staleRequestStarted = true
       staleStartedContinuation?.resume()

@@ -185,7 +185,7 @@ final class APIKeyService: ObservableObject {
 
   nonisolated static var currentGeminiKey: String? {
     nonEmptyStatic(UserDefaults.standard.string(forKey: "dev_gemini_api_key"))
-      ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingUTF8: $0) })
+      ?? (getenv("GEMINI_API_KEY").flatMap { String(validatingCString: $0) })
   }
 
   /// True when the app has enough configuration to start transcription and screen analysis.

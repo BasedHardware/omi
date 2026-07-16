@@ -324,8 +324,20 @@ final class PushToTalkStateMachineTests: XCTestCase {
 
   @MainActor
   private func transitionOwner(defaults: UserDefaults, to ownerID: String) async {
+    // `UserDefaults` is non-Sendable and cannot cross from the main actor into
+    // the nonisolated `performEffectiveOwnerTransition` boundary under Swift 6.
+    // Box it (mirroring the production `RuntimeOwnerDefaultsReference`) and run
+    // the transition from a nonisolated static helper so neither `defaults` nor
+    // `self` crosses an isolation boundary.
+    let boxed = OwnerDefaultsBox(value: defaults)
+    await Self.runOwnerTransition(boxed: boxed, ownerID: ownerID)
+  }
+
+  private static nonisolated func runOwnerTransition(
+    boxed: OwnerDefaultsBox, ownerID: String
+  ) async {
     await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: defaults,
+      defaults: boxed.value,
       allowAutomationOverride: false,
       plannedNextOwner: { _, _ in ownerID },
       retargetLocalStorage: { _, _ in },
@@ -359,4 +371,10 @@ final class PushToTalkStateMachineTests: XCTestCase {
     XCTAssertFalse(snapshot.hubConnected, file: file, line: line)
     XCTAssertEqual(snapshot.turnAudioByteCount, 0, file: file, line: line)
   }
+}
+
+/// Sendable carrier for a non-Sendable `UserDefaults` so it can cross the
+/// nonisolated owner-transition boundary under Swift 6 strict concurrency.
+private struct OwnerDefaultsBox: @unchecked Sendable {
+  let value: UserDefaults
 }
