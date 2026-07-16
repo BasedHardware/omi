@@ -1,6 +1,14 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
-import { render, cleanup, waitFor, fireEvent, screen, within } from '@testing-library/react'
+import {
+  render,
+  cleanup,
+  waitFor,
+  fireEvent,
+  createEvent,
+  screen,
+  within
+} from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import type { ActionItemRecord } from '../../../shared/types'
 
@@ -421,6 +429,110 @@ describe('Tasks — keyboard navigation (mac parity, flat list)', () => {
 
     expect(selectedText()).toBeNull()
     expect(tasks.tasksToggle).not.toHaveBeenCalled()
+  })
+
+  // Regression for the Major: with a row selected, Space/Enter aimed at a focused
+  // control (button/link) must not run the list action or preventDefault — the
+  // control keeps its own activation. These fail without the interactive-target guard.
+  it('Space on a focused button does not toggle the selected row (button keeps activation)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+
+    const newBtn = screen.getByRole('button', { name: 'New' })
+    const evt = createEvent.keyDown(newBtn, { key: ' ' })
+    fireEvent(newBtn, evt)
+
+    expect(tasks.tasksToggle).not.toHaveBeenCalled()
+    expect(evt.defaultPrevented).toBe(false)
+  })
+
+  it('Enter on a focused button does not open the editor (button keeps activation)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+
+    const refreshBtn = screen.getByTitle('Refresh')
+    const evt = createEvent.keyDown(refreshBtn, { key: 'Enter' })
+    fireEvent(refreshBtn, evt)
+
+    expect(screen.queryByDisplayValue('first')).toBeNull()
+    expect(evt.defaultPrevented).toBe(false)
+  })
+
+  it('clears the keyboard selection when the filter hides the selected row', async () => {
+    incomplete = [rec({ id: 1, backendId: 'b1', description: 'open row' })]
+    completed = [rec({ id: 2, backendId: 'b2', description: 'done row', completed: true })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('open row')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('open row'))
+
+    // Switch to the completed filter — the open row is no longer rendered.
+    fireEvent.click(screen.getByRole('button', { name: 'done' }))
+    await waitFor(() => expect(selectedText()).toBeNull())
+
+    // And Space no longer acts on the now-invisible task.
+    fireEvent.keyDown(document.body, { key: ' ' })
+    expect(tasks.tasksToggle).not.toHaveBeenCalled()
+  })
+
+  it('Esc with no selection does not preventDefault (lets the global Esc→Home fire)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    expect(selectedText()).toBeNull()
+    const evt = createEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent(document.body, evt)
+    expect(evt.defaultPrevented).toBe(false)
+  })
+
+  it('Esc with a selection deselects and preventDefault (consumes it)', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+
+    const evt = createEvent.keyDown(document.body, { key: 'Escape' })
+    fireEvent(document.body, evt)
+    expect(evt.defaultPrevented).toBe(true)
+    await waitFor(() => expect(selectedText()).toBeNull())
+  })
+
+  it('Ctrl+D on the last row moves selection to the previous row', async () => {
+    incomplete = twoRows()
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('first')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowUp' }) // no selection → picks last (second)
+    await waitFor(() => expect(selectedText()).toContain('second'))
+    fireEvent.keyDown(document.body, { key: 'd', ctrlKey: true })
+
+    expect(tasks.tasksDelete).toHaveBeenCalledWith({ backendId: 'b2' })
+    await waitFor(() => expect(selectedText()).toContain('first'))
+  })
+
+  it('Ctrl+D on the only row clears the selection', async () => {
+    incomplete = [rec({ id: 1, backendId: 'b1', description: 'lonely' })]
+    await renderTasks()
+    await waitFor(() => expect(screen.queryByText('lonely')).not.toBeNull())
+
+    fireEvent.keyDown(document.body, { key: 'ArrowDown' })
+    await waitFor(() => expect(selectedText()).toContain('lonely'))
+    fireEvent.keyDown(document.body, { key: 'd', ctrlKey: true })
+
+    expect(tasks.tasksDelete).toHaveBeenCalledWith({ backendId: 'b1' })
+    await waitFor(() => expect(selectedText()).toBeNull())
   })
 })
 
