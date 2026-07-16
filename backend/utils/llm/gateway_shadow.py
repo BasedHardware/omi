@@ -67,6 +67,7 @@ def maybe_wrap_dev_gateway_shadow(
         CHAT_STRUCTURED_AUTO_LANE_ID,
         streaming=False,
         options={'request_timeout': BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS},
+        feature=feature,
     )
     return GatewayShadowChatModel(
         feature=feature,

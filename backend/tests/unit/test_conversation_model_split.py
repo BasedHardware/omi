@@ -709,6 +709,7 @@ class TestPhase4RuntimeBehavior:
         import sys
         from unittest.mock import patch, MagicMock
         from models.transcript_segment import TranscriptSegment
+        from utils.llm.usage_tracker import get_current_context
 
         segments = [
             TranscriptSegment(text="Tesla stock is up", speaker="SPEAKER_00", start=0.0, end=1.0, is_user=True),
@@ -733,11 +734,16 @@ class TestPhase4RuntimeBehavior:
             trends_mod.users_db = MagicMock()
             trends_mod.users_db.get_people_by_ids.return_value = []
             trends_mod.get_user_name = MagicMock(return_value='TestUser')
-            trends_mod.llm_mini = MagicMock()
-            trends_mod.llm_mini.with_structured_output.return_value.invoke.return_value = MagicMock(items=[])
+            observed_usage_contexts = []
+            trends_mod.get_llm = MagicMock()
+            trends_mod.get_llm.return_value.with_structured_output.return_value.invoke.side_effect = lambda _prompt: (
+                observed_usage_contexts.append(get_current_context()) or MagicMock(items=[])
+            )
 
             result = trends_mod.trends_extractor('test-uid', segments, person_ids)
             assert result == []
+            assert observed_usage_contexts[0].uid == 'test-uid'
+            assert observed_usage_contexts[0].feature == trends_mod.Features.TRENDS
         finally:
             for mod_name, saved in saved_modules.items():
                 if saved is None:

@@ -26,6 +26,7 @@ from models.chat_session import (
 from models.shared import StatusResponse
 from utils.chat import initial_message_util
 from utils.llm.clients import get_llm
+from utils.llm.usage_tracker import Features, track_usage
 from utils.other import endpoints as auth
 
 logger = logging.getLogger(__name__)
@@ -297,7 +298,8 @@ def generate_session_title(
     # `BaseChatModel.invoke(...).content` is typed `str | list[str | dict]` by
     # langchain's stubs; session-title responses are plain strings, so reach
     # the response through `Any` and annotate the result as `str`.
-    response = cast(Any, get_llm('session_titles').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        response = cast(Any, get_llm('session_titles').invoke(prompt))
     title: str = response.content.strip().strip('"\'')
     if not title:
         title = 'New Chat'
