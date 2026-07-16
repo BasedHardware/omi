@@ -1,3 +1,0 @@
-{
-  "change": "Made push-to-talk keep one captured turn through a stale realtime session handoff or a fast transcript fallback instead of requiring a repeat press"
-}
