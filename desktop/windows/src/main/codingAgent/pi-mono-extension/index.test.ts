@@ -646,9 +646,48 @@ describe('summarizeInput', () => {
 // Manifest projection
 // ===========================================================================
 describe('OMI_TOOLS manifest projection', () => {
-  it('count and names match the canonical pi-mono projection', () => {
-    expect(OMI_TOOLS.length).toBe(toolNamesForAdapter('pi-mono').length)
-    expect(OMI_TOOLS.map((t) => t.name)).toEqual(toolNamesForAdapter('pi-mono'))
+  it('advertises control + load_skill but no unserviceable product tools by default', () => {
+    // OMI_TOOLS is frozen at module load; with no OMI_SERVICEABLE_PRODUCT_TOOLS in
+    // env there, the serviceable filter fails closed — every swiftTool product is
+    // dropped, and only control tools + load_skill (the in-process nodeTool) remain.
+    const names = OMI_TOOLS.map((t) => t.name)
+    expect(names).toContain('load_skill')
+    expect(names).toContain('list_agent_sessions') // control tool — always advertised
+    expect(names).toContain('spawn_agent')
+    expect(names).not.toContain('capture_screen') // product tool — filtered when unserviceable
+    expect(names).not.toContain('execute_sql')
+    // Never advertises MORE than the full manifest projection.
+    expect(OMI_TOOLS.length).toBeLessThan(toolNamesForAdapter('pi-mono').length)
+  })
+
+  it('serviceable filter: OMI_SERVICEABLE_PRODUCT_TOOLS gates product advertisement', () => {
+    process.env.OMI_SERVICEABLE_PRODUCT_TOOLS = 'capture_screen'
+    const names = omiToolsForExecutionRole('coordinator').map((t) => t.name)
+    // The one serviceable product + the in-process nodeTool are advertised…
+    expect(names).toContain('capture_screen')
+    expect(names).toContain('load_skill')
+    // …control tools are unaffected…
+    expect(names).toContain('list_agent_sessions')
+    // …and every other product tool stays hidden.
+    expect(names).not.toContain('execute_sql')
+    expect(names).not.toContain('get_memories')
+  })
+
+  it('serviceable filter fails closed to control + load_skill when the env is absent', () => {
+    delete process.env.OMI_SERVICEABLE_PRODUCT_TOOLS
+    const tools = omiToolsForExecutionRole('coordinator')
+    const names = tools.map((t) => t.name)
+    expect(names).toContain('load_skill')
+    expect(names).toContain('list_agent_sessions')
+    // No swiftTool products advertised at all.
+    for (const productName of [
+      'capture_screen',
+      'execute_sql',
+      'get_memories',
+      'semantic_search'
+    ]) {
+      expect(names).not.toContain(productName)
+    }
   })
 
   it('leaf projection omits every agent-management tool', () => {
@@ -1033,6 +1072,133 @@ describe('callSwiftTool relay wire protocol', () => {
       expect(__omiPendingCallsForTest.size).toBe(0)
     } finally {
       closeBridge(bridge)
+    }
+  })
+})
+
+// ===========================================================================
+// PR-1: lazy connect + reconnect-on-remint from the per-turn context-file target
+// ===========================================================================
+describe('callSwiftTool lazy connect (context-file bridge target)', () => {
+  async function withContextFile(): Promise<{ dir: string; ctx: string }> {
+    const dir = await mkdtemp(join(tmpdir(), 'omi-lazy-'))
+    const ctx = join(dir, 'context.json')
+    process.env.OMI_CONTEXT_FILE = ctx
+    return { dir, ctx }
+  }
+
+  it('connects lazily from the context-file target and round-trips (no pre-connect)', async () => {
+    const { dir, ctx } = await withContextFile()
+    const bridge = createMockBridge({ onToolUse: echoToolResult })
+    await listen(bridge)
+    await writeFile(
+      ctx,
+      JSON.stringify({ adapterId: 'pi-mono', bridgePipe: bridge.pipePath, bridgeToken: 'tok-lazy' })
+    )
+    try {
+      // __resetOmiPipeForTest ran in beforeEach: there is no live socket. The tool
+      // call itself must establish the connection from the context-file target.
+      const result = await __callSwiftToolForTest('execute_sql', { query: 'SELECT 1' })
+      expect(result).toBe('result-for-execute_sql')
+      expect(bridge.helloTokens).toEqual(['tok-lazy'])
+      expect(__omiPendingCallsForTest.size).toBe(0)
+    } finally {
+      closeBridge(bridge)
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('never sends the bridge pipe/token on the wire (host resolves identity from the token binding)', async () => {
+    const { dir, ctx } = await withContextFile()
+    let seen: Record<string, unknown> | undefined
+    const bridge = createMockBridge({
+      onToolUse: (msg, socket) => {
+        seen = msg
+        socket.write(
+          JSON.stringify({ type: 'tool_result', callId: msg.callId, result: 'ok' }) + '\n'
+        )
+      }
+    })
+    await listen(bridge)
+    await writeFile(
+      ctx,
+      JSON.stringify({
+        adapterId: 'pi-mono',
+        bridgePipe: bridge.pipePath,
+        bridgeToken: 'tok-secret'
+      })
+    )
+    try {
+      expect(await __callSwiftToolForTest('execute_sql', { query: 'SELECT 1' })).toBe('ok')
+      expect(seen?.bridgePipe).toBeUndefined()
+      expect(seen?.bridgeToken).toBeUndefined()
+    } finally {
+      closeBridge(bridge)
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('degrades gracefully when the turn has no bridge target and no live socket', async () => {
+    const { dir, ctx } = await withContextFile()
+    await writeFile(ctx, JSON.stringify({ adapterId: 'pi-mono' })) // no bridgePipe/bridgeToken
+    try {
+      const result = await __callSwiftToolForTest('execute_sql', { query: 'SELECT 1' })
+      expect(result).toBe('Error: not connected to Omi bridge')
+      expect(__omiPendingCallsForTest.size).toBe(0)
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reconnects with a NEW socket when the context-file token is re-minted (not a restart)', async () => {
+    const { dir, ctx } = await withContextFile()
+    const bridge = createMockBridge({ onToolUse: echoToolResult })
+    await listen(bridge)
+    try {
+      await writeFile(
+        ctx,
+        JSON.stringify({ adapterId: 'pi-mono', bridgePipe: bridge.pipePath, bridgeToken: 'tok-1' })
+      )
+      expect(await __callSwiftToolForTest('execute_sql', { query: 'SELECT 1' })).toBe(
+        'result-for-execute_sql'
+      )
+      // Pool-eviction remint: same pipe path, fresh token.
+      await writeFile(
+        ctx,
+        JSON.stringify({ adapterId: 'pi-mono', bridgePipe: bridge.pipePath, bridgeToken: 'tok-2' })
+      )
+      expect(await __callSwiftToolForTest('execute_sql', { query: 'SELECT 2' })).toBe(
+        'result-for-execute_sql'
+      )
+      // A second handshake with the new token proves a socket reconnect happened.
+      expect(bridge.helloTokens).toEqual(['tok-1', 'tok-2'])
+      expect(bridge.sockets.length).toBe(2)
+    } finally {
+      closeBridge(bridge)
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  it('reuses the socket across calls when the token is unchanged (single handshake)', async () => {
+    const { dir, ctx } = await withContextFile()
+    const bridge = createMockBridge({ onToolUse: echoToolResult })
+    await listen(bridge)
+    await writeFile(
+      ctx,
+      JSON.stringify({
+        adapterId: 'pi-mono',
+        bridgePipe: bridge.pipePath,
+        bridgeToken: 'tok-stable'
+      })
+    )
+    try {
+      await __callSwiftToolForTest('execute_sql', { query: 'SELECT 1' })
+      await __callSwiftToolForTest('semantic_search', { q: 'x' })
+      expect(bridge.helloTokens).toEqual(['tok-stable'])
+      expect(bridge.sockets.length).toBe(1)
+    } finally {
+      closeBridge(bridge)
+      await rm(dir, { recursive: true, force: true })
     }
   })
 })

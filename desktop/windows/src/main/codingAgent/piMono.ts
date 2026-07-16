@@ -42,6 +42,10 @@ import { dirname, join } from 'path'
 import { createInterface, Interface as ReadlineInterface } from 'readline'
 import { fileURLToPath } from 'url'
 import { adapterCapabilitiesFor } from './interface'
+import {
+  WINDOWS_SERVICEABLE_PRODUCT_TOOLS,
+  type ToolRelayRegistration
+} from '../agentKernel/toolRelayBridge'
 import type {
   AdapterAttemptContext,
   AdapterAttemptResult,
@@ -133,6 +137,15 @@ export enum HarnessFeature {
 
 type PiMonoConfig = HarnessConfig & {
   onRestart?: (reason: string) => void
+  /**
+   * Resolve (mint-or-reuse) this session's host tool-relay registration —
+   * `{ pipePath, token }` — so the pi subprocess can reach the product/control
+   * tool relay. Injected as a callback (not a direct import) to avoid the
+   * controlPlane → piMono import cycle: controlPlane owns the relay singleton and
+   * passes `(sessionId) => getAgentToolRelayBridge()?.register(sessionId, 'pi-mono')`.
+   * Returns null when the relay is unavailable (tools then degrade gracefully).
+   */
+  registerToolRelay?: (sessionId: string) => ToolRelayRegistration | null
 }
 
 /**
@@ -168,6 +181,14 @@ interface PiMonoRelayContext {
   attemptId: string
   adapterSessionId?: string
   disableSwiftBackedTools?: boolean
+  // The host tool-relay target for THIS turn. Written into the per-turn context
+  // file (like sessionId/runId already are), NOT the spawn env — so it survives
+  // resume + pool-eviction remint with zero subprocess restarts. Host-derived
+  // authority: the extension reads these to reach the relay; the model never
+  // asserts them. Kept OUT of the on-wire tool_use correlation (the token is a
+  // secret and the host resolves identity from the token→binding, not the frame).
+  bridgePipe?: string
+  bridgeToken?: string
 }
 
 interface PiAssistantMessageEvent {
@@ -528,8 +549,17 @@ export class PiMonoAdapter {
     env.OMI_ADAPTER_ID = 'pi-mono'
     env.OMI_EXECUTION_ROLE = this.currentExecutionRole
     env.OMI_CONTEXT_FILE = this.contextFilePath
-    // OMI_BRIDGE_PIPE is inherited from process.env when the host relay is
-    // running (PR-C); the extension registers omi-tools that forward over it.
+    // Serviceable product-tool projection (role-static, so spawn env is the right
+    // carrier — like OMI_EXECUTION_ROLE, unlike the per-turn pipe/token which ride
+    // the context file). Derived from the executor registry so the advertised set
+    // can't drift from what the relay can actually service. The extension filters
+    // its swiftTool advertisement to exactly this set (absent/empty ⇒ fail-closed
+    // to control + load_skill only). The subprocess extension must NOT import
+    // toolRelayBridge (it pulls Electron-touching modules), hence env.
+    env.OMI_SERVICEABLE_PRODUCT_TOOLS = [...WINDOWS_SERVICEABLE_PRODUCT_TOOLS].join(',')
+    // The host tool-relay pipe/token are NOT injected here: they flow per-turn
+    // through the context file (writeRelayContext), so they survive resume and
+    // pool-eviction remint with no subprocess restart. See PiMonoRelayContext.
 
     this.process = spawn(this.nodeBin, [this.piPath, ...args], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -771,6 +801,15 @@ export class PiMonoAdapter {
 
   invalidateSession(sessionKey: string): void {
     this.sessions.delete(sessionKey)
+  }
+
+  /**
+   * Resolve this kernel session's host tool-relay registration via the injected
+   * callback. Idempotent host-side (`register()` mints-or-reuses per binding), so
+   * safe to call every attempt. Returns null when no relay/callback is wired.
+   */
+  resolveToolRelay(sessionId: string): ToolRelayRegistration | null {
+    return this.config.registerToolRelay?.(sessionId) ?? null
   }
 
   hasSession(sessionId: string): boolean {
@@ -1298,6 +1337,11 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
       if (event.type === 'tool_use' || event.type === 'error') return
       sink(event)
     }
+    // Mint-or-reuse this session's host tool-relay registration and carry the
+    // pipe/token into the per-turn relay context (→ context file). Host-derived
+    // authority: the token is keyed to context.sessionId, so the relay resolves
+    // execution role/owner from the binding, never from a wire-claimed id.
+    const relay = this.harness.resolveToolRelay(context.sessionId)
     try {
       const result = await this.harness.sendPrompt(
         context.binding.adapterNativeSessionId,
@@ -1315,7 +1359,9 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
           runId: context.runId,
           attemptId: context.attemptId,
           adapterSessionId: context.binding.adapterNativeSessionId,
-          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true
+          disableSwiftBackedTools: context.metadata?.disableSwiftBackedTools === true,
+          bridgePipe: relay?.pipePath,
+          bridgeToken: relay?.token
         }
       )
 

@@ -88,6 +88,7 @@ export function stableHash(value: string | undefined): string {
 
 const REQUEST_SCOPED_MCP_ENV_KEYS = new Set([
   'OMI_BRIDGE_PIPE',
+  'OMI_BRIDGE_TOKEN',
   'OMI_CONTEXT_FILE',
   'OMI_REQUEST_ID',
   'OMI_CLIENT_ID',

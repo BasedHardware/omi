@@ -166,7 +166,13 @@ export function buildPiMonoRuntimeAdapter(): RuntimeAdapter {
     omiApiBaseUrl: piMonoManagedApiBaseUrl(session),
     authToken: session.token,
     byokEnv: getPiMonoByokEnv(),
-    onRestart: (reason) => console.log(`[pi-mono] restart: ${reason}`)
+    onRestart: (reason) => console.log(`[pi-mono] restart: ${reason}`),
+    // Lets the pi subprocess reach the product/control tool relay. Resolved per
+    // attempt (idempotent host-side) so the pipe/token ride the per-turn context
+    // file — surviving resume + pool-eviction remint with no subprocess restart.
+    // Passed as a callback to avoid a piMono → controlPlane import cycle.
+    registerToolRelay: (sessionId) =>
+      getAgentToolRelayBridge()?.register(sessionId, 'pi-mono') ?? null
   })
   registerPiMonoAdapter(harness)
   return new PiMonoRuntimeAdapter(harness)

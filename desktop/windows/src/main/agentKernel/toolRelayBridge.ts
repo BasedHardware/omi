@@ -431,20 +431,91 @@ export class AgentToolRelayBridge {
   }
 
   private contextFor(authority: BindingAuthority): AgentControlToolContext {
-    // Read fresh on every call: a session whose role or owner changed must not keep
-    // acting under the authority it had when its subprocess started.
-    const policy = this.kernel.executionPolicyForSession(authority.sessionId)
-    return {
-      kernel: this.kernel,
-      // A model is never trusted user control.
-      trustedUserControl: false,
-      executionRole: policy.executionRole,
-      providerBoundary: policy.providerBoundary,
-      defaultAdapterId: policy.defaultAdapterId,
-      // Load-bearing — see controlMcpBridge.ts note 4.
-      callerSessionId: authority.sessionId,
-      getOwnerId: () => policy.ownerId
+    return buildControlToolContext(this.kernel, authority)
+  }
+}
+
+/** Build a control-tool context with HOST-DERIVED authority. Read fresh on every
+ *  call: a session whose role or owner changed must not keep acting under the
+ *  authority it had when its subprocess started. Shared by the socket relay and
+ *  the in-process `executeHostTool` dispatcher so both enforce the identical
+ *  posture (a model is never trusted user control). */
+function buildControlToolContext(
+  kernel: AgentRuntimeKernel,
+  authority: BindingAuthority
+): AgentControlToolContext {
+  const policy = kernel.executionPolicyForSession(authority.sessionId)
+  return {
+    kernel,
+    // A model is never trusted user control.
+    trustedUserControl: false,
+    executionRole: policy.executionRole,
+    providerBoundary: policy.providerBoundary,
+    defaultAdapterId: policy.defaultAdapterId,
+    // Load-bearing — see controlMcpBridge.ts note 4.
+    callerSessionId: authority.sessionId,
+    getOwnerId: () => policy.ownerId
+  }
+}
+
+/** In-process host-tool dispatch context. Identity is HOST-DERIVED: the caller
+ *  supplies the kernel plus the sessionId/adapterId of the surface's OWN kernel
+ *  session (never a wire-claimed id), and role/owner are resolved fresh from
+ *  `executionPolicyForSession`. */
+export interface HostToolDispatchContext {
+  kernel: AgentRuntimeKernel
+  sessionId: string
+  adapterId: string
+  /** Aborted when the caller no longer wants the result (optional). */
+  signal?: AbortSignal
+  /** Serviceable product executors. Defaults to the production registry. */
+  productExecutors?: ReadonlyMap<string, ProductToolExecutor>
+}
+
+/**
+ * Dispatch one Omi tool IN-PROCESS, without the pi socket relay. This is the shared
+ * entry the voice-kernel hub dispatcher reuses so voice and chat answer from one
+ * code path (macOS parity — same executor functions, no second process hop). Same
+ * host-authoritative posture as the socket relay: control tools go through
+ * `handleAgentControlToolCall` with a `trustedUserControl:false` context whose
+ * role/owner are read fresh from the session; product tools look up the registry.
+ * Errors are RETURNED as `"Error: …"` strings, never thrown — matching the relay's
+ * `tool_result` contract.
+ *
+ * SECURITY (INV-AGENT): callers MUST pass the surface's own kernel session id and
+ * must NEVER route model-driven calls through the renderer's trusted-direct-control
+ * door (`agentControlCall`). This is that door's opposite: a model-authority
+ * dispatch that can never be trusted user control.
+ */
+export async function executeHostTool(
+  name: string,
+  input: Record<string, unknown>,
+  ctx: HostToolDispatchContext
+): Promise<string> {
+  const authority: BindingAuthority = { sessionId: ctx.sessionId, adapterId: ctx.adapterId }
+  try {
+    if (isAgentControlToolName(name)) {
+      // Leaf guard, trusted-control gate, owner guard, and Zod validation all live
+      // inside handleAgentControlToolCall — there is deliberately no second copy.
+      return await handleAgentControlToolCall(
+        buildControlToolContext(ctx.kernel, authority),
+        name,
+        input
+      )
     }
+    const registry = ctx.productExecutors ?? defaultProductToolExecutors
+    const executor = registry.get(name)
+    if (!executor) {
+      return `Error: ${name} is not available on Windows yet`
+    }
+    const result = await executor(input, {
+      sessionId: ctx.sessionId,
+      adapterId: ctx.adapterId,
+      signal: ctx.signal ?? new AbortController().signal
+    })
+    return typeof result === 'string' ? result : String(result)
+  } catch (error) {
+    return `Error: ${error instanceof Error ? error.message : String(error)}`
   }
 }
 

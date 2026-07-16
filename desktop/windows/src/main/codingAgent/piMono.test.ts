@@ -194,6 +194,53 @@ describe('PiMonoAdapter prompt correlation', () => {
     expect(existsSync(internals(adapter).contextFilePath)).toBe(false)
   })
 
+  it('carries the host tool-relay pipe/token into the per-turn context file', async () => {
+    const register = vi.fn((sessionId: string) => ({
+      pipePath: '\\\\.\\pipe\\omi-tool-relay-test',
+      token: `tok-${sessionId}`
+    }))
+    const adapter = new PiMonoAdapter(
+      { authToken: 'test-token', registerToolRelay: register },
+      { piPath: '/fake/pi', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+    )
+    internals(adapter).sendCommand = vi.fn()
+    seedSessions(adapter, 'session-1')
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+
+    const execution = runtime.executeAttempt(
+      makeAttemptContext({ sessionId: 'ses_wire' }),
+      () => {},
+      new AbortController().signal
+    )
+    const ctx = JSON.parse(readFileSync(internals(adapter).contextFilePath, 'utf8'))
+    // Token is keyed to the KERNEL session id (host-derived authority), not the
+    // adapter-native session id.
+    expect(register).toHaveBeenCalledWith('ses_wire')
+    expect(ctx.bridgePipe).toBe('\\\\.\\pipe\\omi-tool-relay-test')
+    expect(ctx.bridgeToken).toBe('tok-ses_wire')
+
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('done'))
+    await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
+  })
+
+  it('omits the bridge target when no relay is registered (graceful)', async () => {
+    const { adapter } = createAdapter() // no registerToolRelay callback
+    seedSessions(adapter, 'session-1')
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+
+    const execution = runtime.executeAttempt(
+      makeAttemptContext(),
+      () => {},
+      new AbortController().signal
+    )
+    const ctx = JSON.parse(readFileSync(internals(adapter).contextFilePath, 'utf8'))
+    expect(ctx.bridgePipe).toBeUndefined()
+    expect(ctx.bridgeToken).toBeUndefined()
+
+    internals(adapter).handleTurnEnd(makeTurnEndEvent('done'))
+    await expect(execution).resolves.toMatchObject({ terminalStatus: 'succeeded' })
+  })
+
   it('removes the runtime attempt context after adapter errors', async () => {
     const { adapter } = createAdapter()
     internals(adapter).sendCommand = vi.fn(() => {
@@ -632,6 +679,12 @@ describe('PiMonoAdapter spawn shape (behavioral, Windows)', () => {
     expect(options.env.OMI_API_BASE_URL).toBe('https://api.example/v2')
     expect(options.env.OMI_ADAPTER_ID).toBe('pi-mono')
     expect(options.env.OMI_EXECUTION_ROLE).toBe('coordinator')
+    // Serviceable product-tool projection rides the (role-static) spawn env and
+    // includes the reference serviceable executor so the extension can filter its
+    // advertisement to it. The per-turn pipe/token do NOT ride the env.
+    expect(options.env.OMI_SERVICEABLE_PRODUCT_TOOLS).toContain('capture_screen')
+    expect(options.env.OMI_BRIDGE_PIPE).toBeUndefined()
+    expect(options.env.OMI_BRIDGE_TOKEN).toBeUndefined()
     // Upstream provider secret must never reach the extension.
     expect(options.env.ANTHROPIC_API_KEY).toBeUndefined()
 
