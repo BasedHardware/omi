@@ -570,7 +570,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
                   child: provider.isLoading && provider.actionItems.isEmpty
                       ? _buildLoadingState()
                       : categorizedItems.values.every((l) => l.isEmpty)
-                          ? _buildEmptyTasksList()
+                          ? _buildEmptyTasksList(provider)
                           : _buildTasksList(categorizedItems, provider),
                 ),
               ),
@@ -592,7 +592,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
     return const Center(child: CircularProgressIndicator(color: Colors.deepPurple));
   }
 
-  Widget _buildEmptyTasksList() {
+  Widget _buildEmptyTasksList(ActionItemsProvider provider) {
     return CustomScrollView(
       controller: _scrollController,
       physics: const AlwaysScrollableScrollPhysics(),
@@ -600,12 +600,19 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
         const SliverPadding(padding: EdgeInsets.only(top: 12)),
         SliverToBoxAdapter(child: _buildGoalsRow()),
         const SliverPadding(padding: EdgeInsets.only(top: 8)),
-        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent())),
+        SliverFillRemaining(hasScrollBody: false, child: Center(child: _buildEmptyTasksContent(provider))),
       ],
     );
   }
 
-  Widget _buildEmptyTasksContent() {
+  Widget _buildEmptyTasksContent(ActionItemsProvider provider) {
+    // If the user has completed tasks hidden by the active-view filter, surface
+    // them via an inline CTA instead of silently flipping the view for them.
+    // Distinguishes "genuinely no tasks" (cold-start) from "cleared active
+    // tasks, completed still exist" (needs a hint that Completed tab has data).
+    final hasHiddenCompleted = !provider.showCompletedView &&
+        provider.incompleteItems.isEmpty &&
+        provider.completedItems.isNotEmpty;
     return Padding(
       padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
       child: Column(
@@ -654,29 +661,36 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
           ),
           const SizedBox(height: 28),
           Text(
-            context.l10n.noTasksYet,
+            hasHiddenCompleted ? context.l10n.tasksAllCaughtUpTitle : context.l10n.noTasksYet,
             style: const TextStyle(color: Colors.white, fontSize: 22, fontWeight: FontWeight.w700, letterSpacing: -0.3),
           ),
           const SizedBox(height: 10),
           ConstrainedBox(
             constraints: const BoxConstraints(maxWidth: 280),
             child: Text(
-              context.l10n.tasksEmptyStateMessage,
+              hasHiddenCompleted
+                  ? context.l10n.tasksAllCaughtUpMessage(provider.completedItems.length)
+                  : context.l10n.tasksEmptyStateMessage,
               textAlign: TextAlign.center,
               style: TextStyle(color: Colors.white.withValues(alpha: 0.55), fontSize: 15, height: 1.5),
             ),
           ),
           const SizedBox(height: 28),
-          // Primary action: open the new-task sheet so users have an obvious next step.
+          // Primary action: "See X completed" flip when the user has cleared
+          // their active list; otherwise open the new-task sheet.
           GestureDetector(
             onTap: () {
               HapticFeedback.lightImpact();
-              showModalBottomSheet(
-                context: context,
-                isScrollControlled: true,
-                backgroundColor: Colors.transparent,
-                builder: (_) => const ActionItemFormSheet(),
-              );
+              if (hasHiddenCompleted) {
+                provider.toggleShowCompletedView();
+              } else {
+                showModalBottomSheet(
+                  context: context,
+                  isScrollControlled: true,
+                  backgroundColor: Colors.transparent,
+                  builder: (_) => const ActionItemFormSheet(),
+                );
+              }
             },
             child: Container(
               padding: const EdgeInsets.symmetric(horizontal: 22, vertical: 14),
@@ -690,10 +704,16 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
               child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  const Icon(Icons.add_rounded, color: Color(0xFF1F1F25), size: 20),
+                  Icon(
+                    hasHiddenCompleted ? Icons.check_circle_outline_rounded : Icons.add_rounded,
+                    color: const Color(0xFF1F1F25),
+                    size: 20,
+                  ),
                   const SizedBox(width: 8),
                   Text(
-                    context.l10n.createActionItem,
+                    hasHiddenCompleted
+                        ? context.l10n.tasksSeeCompletedCta(provider.completedItems.length)
+                        : context.l10n.createActionItem,
                     style: const TextStyle(
                       color: Color(0xFF1F1F25),
                       fontSize: 15,
