@@ -102,6 +102,11 @@ checks:
     triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
     lanes: ["local", "ci"]
     reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: telegram-deployment-notifier
+    command: ["bash", ".github/actions/deployment-notifier/test-check-configuration.sh"]
+    triggers: [".github/actions/deployment-notifier/**", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "optional Telegram deployment notifications must not fail deploy workflows when credentials are absent"
   - id: opentofu-foundation-boundary
     command: ["python3", ".github/scripts/check_opentofu_foundation.py"]
     triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
@@ -277,7 +282,7 @@ checks:
     reason: "#9688 keeps bridge lifecycle/context decisions extracted and both historic coordinator files bounded"
   - id: desktop-agent-runtime-contract-conformance
     command: ["bash", "desktop/macos/scripts/test-tool-surfaces.sh"]
-    triggers: ["desktop/macos/agent/contracts/**", "desktop/macos/agent/src/adapters/**/*.ts", "desktop/macos/agent/src/runtime/control-tools.ts", "desktop/macos/agent/src/runtime/contract-schema.ts", "desktop/macos/agent/src/runtime/relay-tool-result.ts", "desktop/macos/agent/src/runtime/tool-result-envelope.ts", "desktop/macos/agent/tests/agent-runtime-contract-fixtures.test.ts", "desktop/macos/agent/tests/control-tools.test.ts", "desktop/macos/agent/tests/relay-tool-result.test.ts", "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts", "desktop/macos/scripts/test-tool-surfaces.sh", "desktop/macos/scripts/agent-logic-harness.sh"]
+    triggers: ["desktop/macos/agent/contracts/**", "desktop/macos/agent/src/adapters/**/*.ts", "desktop/macos/agent/src/runtime/control-tools.ts", "desktop/macos/agent/src/runtime/contract-schema.ts", "desktop/macos/agent/src/runtime/relay-tool-result.ts", "desktop/macos/agent/src/runtime/tool-result-envelope.ts", "desktop/macos/agent/tests/agent-runtime-contract-fixtures.test.ts", "desktop/macos/agent/tests/control-tools.test.ts", "desktop/macos/agent/tests/relay-tool-result.test.ts", "desktop/macos/agent/tests/runtime-adapter-contract-conformance.test.ts", "desktop/macos/scripts/test-tool-surfaces.sh", "desktop/macos/scripts/agent-logic-harness.sh", "desktop/macos/scripts/check-spawn-receipt-fixtures.sh"]
     lanes: ["local", "ci"]
     reason: "#9688 gates adapter lifecycle fixtures and artifact-backed bounded tool-result delivery"
   - id: desktop-spawn-receipt-fixtures-v1
