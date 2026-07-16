@@ -13,8 +13,6 @@ import re
 import unittest
 from pathlib import Path
 
-import yaml
-
 REPO_ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = REPO_ROOT / ".github/workflows/desktop-swift-ci.yml"
 
@@ -24,17 +22,32 @@ EXPECTED_XCODE_APP = f"/Applications/Xcode_{EXPECTED_XCODE_VERSION}.app"
 JOBS = ["desktop-swift", "desktop-swift-release-compile"]
 
 
+def _workflow_text() -> str:
+    return WORKFLOW_PATH.read_text(encoding="utf-8")
+
+
+def _job_text(workflow_text: str, job_id: str) -> str:
+    match = re.search(rf"^  {re.escape(job_id)}:\n(?P<body>.*?)(?=^  [A-Za-z0-9_-]+:\n|\Z)", workflow_text, re.MULTILINE | re.DOTALL)
+    if not match:
+        raise AssertionError(f"missing workflow job: {job_id}")
+    return match.group("body")
+
+
 def _load_workflow() -> dict:
-    with open(WORKFLOW_PATH, encoding="utf-8") as fh:
-        return yaml.safe_load(fh)
+    text = _workflow_text()
+    return {"jobs": {job_id: _job_text(text, job_id) for job_id in JOBS}}
 
 
 def _steps(job_def: dict) -> list[dict]:
+    if isinstance(job_def, str):
+        return []
     return job_def.get("steps", [])
 
 
 def _run_texts(job_def: dict) -> list[str]:
     """Return the concatenated ``run`` body of every step that has one."""
+    if isinstance(job_def, str):
+        return [job_def]
     texts: list[str] = []
     for step in _steps(job_def):
         run = step.get("run")
@@ -136,13 +149,10 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         """The SwiftPM cache key must include Package.swift, Package.resolved,
         and a toolchain identity component."""
         job = self.jobs["desktop-swift"]
-        cache_step = None
-        for step in _steps(job):
-            if step.get("uses", "").startswith("actions/cache"):
-                cache_step = step
-                break
-        self.assertIsNotNone(cache_step, "desktop-swift must have a cache step")
-        key = cache_step["with"]["key"]
+        self.assertIn("uses: actions/cache", job, "desktop-swift must have a cache step")
+        key_match = re.search(r"key:\s*([^\n]+)", job)
+        self.assertIsNotNone(key_match, "desktop-swift cache step must declare a key")
+        key = key_match.group(1)
         # Toolchain identity in the key prefix prevents a tool change from
         # silently reusing a stale cache built with a different compiler.
         self.assertIn(
@@ -193,8 +203,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             count=1,
             flags=re.DOTALL,
         )
-        tampered_wf = yaml.safe_load(tampered)
-        combined = "\n".join(_run_texts(tampered_wf["jobs"]["desktop-swift"]))
+        combined = _job_text(tampered, "desktop-swift")
         self.assertNotIn("DEVELOPER_DIR", combined)
 
     def test_adversarial_cache_key_weakening_detected(self):
@@ -204,12 +213,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
             "desktop-swift-xcode164-${{ hashFiles('desktop/macos/Desktop/Package.swift', 'desktop/macos/Desktop/Package.resolved') }}",
             "desktop-swift-${{ hashFiles('desktop/macos/Desktop/Package.swift') }}",
         )
-        tampered_wf = yaml.safe_load(tampered)
-        job = tampered_wf["jobs"]["desktop-swift"]
-        cache_step = next(
-            s for s in _steps(job) if s.get("uses", "").startswith("actions/cache")
-        )
-        key = cache_step["with"]["key"]
+        job = _job_text(tampered, "desktop-swift")
+        key = re.search(r"key:\s*([^\n]+)", job).group(1)
         self.assertNotIn("Package.resolved", key)
 
     def test_adversarial_remove_package_resolved_gate_detected(self):
@@ -217,9 +222,7 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
         other references must fail the positive gate assertion."""
         wf_text = WORKFLOW_PATH.read_text(encoding="utf-8")
         tampered = wf_text.replace('|| [ "$PACKAGE_RESOLVED" = "true" ]', "")
-        tampered_wf = yaml.safe_load(tampered)
-        job = tampered_wf["jobs"]["desktop-swift-release-compile"]
-        combined = "\n".join(_run_texts(job))
+        combined = _job_text(tampered, "desktop-swift-release-compile")
         # PACKAGE_RESOLVED still appears (declared, detected, echoed) but the
         # gate condition is gone — the regex must fail to match.
         self.assertIn("PACKAGE_RESOLVED", combined)  # still referenced
