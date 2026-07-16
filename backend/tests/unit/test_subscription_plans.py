@@ -12,6 +12,8 @@ backend/docs/test_isolation.md and testing/import_isolation.py.
 import os
 from pathlib import Path
 from types import ModuleType
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -64,3 +66,38 @@ def test_architect_is_treated_as_paid_unlimited_plan(subscription_module):
 def test_basic_plan_features_include_unlimited_memories(subscription_module):
     features = subscription_module.get_plan_features(PlanType.basic)
     assert "Unlimited memories" in features
+
+
+def test_unlimited_transcription_plan_skips_monthly_usage_scan(monkeypatch, subscription_module):
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setattr(
+        subscription_module.users_db,
+        'get_user_valid_subscription',
+        lambda uid: SimpleNamespace(plan=PlanType.architect),
+        raising=False,
+    )
+    monthly_usage = MagicMock(return_value={'transcription_seconds': 999999})
+    monkeypatch.setattr(subscription_module, 'get_monthly_usage_for_subscription', monthly_usage)
+
+    assert subscription_module.has_transcription_credits('uid') is True
+    monthly_usage.assert_not_called()
+
+
+def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeypatch, subscription_module):
+    monkeypatch.setattr(subscription_module, 'is_trial_paywalled', lambda uid, source: False)
+    monkeypatch.setattr(subscription_module.users_db, 'is_byok_active', lambda uid: False, raising=False)
+    monkeypatch.setattr(subscription_module, 'get_byok_key', lambda provider: None)
+    monkeypatch.setattr(
+        subscription_module.users_db,
+        'get_user_valid_subscription',
+        lambda uid: SimpleNamespace(plan=PlanType.basic),
+        raising=False,
+    )
+    monkeypatch.setattr(subscription_module, 'get_plan_limits', lambda plan: SimpleNamespace(transcription_seconds=60))
+    monthly_usage = MagicMock(return_value={'transcription_seconds': 60})
+    monkeypatch.setattr(subscription_module, 'get_monthly_usage_for_subscription', monthly_usage)
+
+    assert subscription_module.has_transcription_credits('uid') is False
+    monthly_usage.assert_called_once_with('uid')

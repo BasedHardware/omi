@@ -1,10 +1,11 @@
 from datetime import datetime, timezone
-from typing import Any, Dict, List, Optional, Tuple, cast
+from typing import Any, Dict, Iterable, List, Optional, Tuple, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from ._client import db
+from .firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from models.user_usage import UsageStats
 
 
@@ -214,7 +215,15 @@ def get_today_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
 
 
 def _aggregate_stats(query: Any) -> Dict[str, Any]:
-    docs = query.stream()
+    return _aggregate_stats_from_docs(query.stream())
+
+
+def _aggregate_stats_from_docs(docs: Iterable[Any]) -> Dict[str, Any]:
+    stats, _ = _aggregate_stats_with_count(docs)
+    return stats
+
+
+def _aggregate_stats_with_count(docs: Iterable[Any]) -> Tuple[Dict[str, Any], int]:
     stats: Dict[str, Any] = {
         'transcription_seconds': 0,
         'words_transcribed': 0,
@@ -222,14 +231,16 @@ def _aggregate_stats(query: Any) -> Dict[str, Any]:
         'memories_created': 0,
         'speech_seconds': 0,
     }
+    document_count = 0
     for doc in docs:
+        document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
         stats['transcription_seconds'] += data.get('transcription_seconds', 0)
         stats['words_transcribed'] += data.get('words_transcribed', 0)
         stats['insights_gained'] += data.get('insights_gained', 0)
         stats['memories_created'] += data.get('memories_created', 0)
         stats['speech_seconds'] += data.get('speech_seconds', 0)
-    return stats
+    return stats, document_count
 
 
 def get_monthly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:
@@ -255,7 +266,13 @@ def get_monthly_usage_stats_since(uid: str, date: datetime, start_date: datetime
         .where(filter=FieldFilter('month', '==', date.month))
         .where(filter=FieldFilter('id', '>=', start_doc_id))
     )
-    return _aggregate_stats(query)
+    stats, document_count = _aggregate_stats_with_count(query.stream())
+    record_firestore_read(
+        FirestoreReadFamily.LISTEN_MONTHLY_USAGE,
+        FirestoreReadMode.UNBOUNDED,
+        document_count,
+    )
+    return stats
 
 
 def get_yearly_usage_stats(uid: str, date: datetime) -> Dict[str, Any]:

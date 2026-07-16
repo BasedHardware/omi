@@ -8,6 +8,7 @@ from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
 
 from database.firestore_transaction_retry import run_with_transaction_contention_retry
+from database.firestore_read_metrics import FirestoreReadFamily, FirestoreReadMode, record_firestore_read
 from ._client import db
 
 logger = logging.getLogger(__name__)
@@ -454,13 +455,21 @@ def get_action_items(
     docs = query.stream()
 
     action_items: List[Dict[str, Any]] = []
+    document_count = 0
     for doc in docs:
+        document_count += 1
         data: Dict[str, Any] = _typed_doc(doc)
         if data.get('deleted'):
             continue
         data['id'] = doc.id
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
+
+    record_firestore_read(
+        FirestoreReadFamily.ACTION_ITEMS_LIST,
+        FirestoreReadMode.UNBOUNDED,
+        document_count,
+    )
 
     # Sort: incomplete items first, then by due_at (items without due_at come last), then
     # by created_at. Active-first is load-bearing for the default (completed=None) fetch:
