@@ -68,6 +68,15 @@ import {
   type TaskStoreDb
 } from './taskStore'
 import {
+  INSIGHTS_SCHEMA,
+  insertInsightOn,
+  recentInsightsOn,
+  dismissInsightOn,
+  dismissAllInsightsOn,
+  clearInsightsOn,
+  type InsightStoreDb
+} from './insightStore'
+import {
   LIVE_NOTES_SCHEMA,
   createTranscriptionSessionOn,
   endTranscriptionSessionOn,
@@ -489,19 +498,6 @@ function get(): Database.Database {
     CREATE INDEX IF NOT EXISTS idx_rewind_frames_ts ON rewind_frames(ts);
     CREATE INDEX IF NOT EXISTS idx_rewind_frames_indexed ON rewind_frames(indexed);
 
-    CREATE TABLE IF NOT EXISTS insights (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      ts INTEGER NOT NULL,
-      headline TEXT NOT NULL,
-      advice TEXT NOT NULL,
-      reasoning TEXT NOT NULL DEFAULT '',
-      category TEXT NOT NULL DEFAULT 'other',
-      source_app TEXT NOT NULL DEFAULT '',
-      confidence REAL NOT NULL DEFAULT 0,
-      dismissed INTEGER NOT NULL DEFAULT 0
-    );
-    CREATE INDEX IF NOT EXISTS idx_insights_ts ON insights(ts);
-
     -- --- Track 4: Rewind FTS5 (full-text search over rewind_frames) ---
     -- External-content FTS index mirroring rewind_frames(id): the triggers below
     -- keep it in sync on every write, so search reads BM25-ranked matches without
@@ -657,6 +653,9 @@ function get(): Database.Database {
   // DDL lives in liveNotesStore.ts so prod and the CRUD tests run the same SQL;
   // the drop-if-old above recreated any FK-less PR0 table before this runs.
   db.exec(LIVE_NOTES_SCHEMA)
+  // Proactive Insights history. DDL lives in insightStore.ts so prod and the
+  // node:sqlite CRUD tests run the same SQL.
+  db.exec(INSIGHTS_SCHEMA)
   // Migrate older databases that have local_conversation without these columns.
   ensureColumn(db, 'local_conversation', 'kind', "TEXT NOT NULL DEFAULT 'recording'")
   ensureColumn(db, 'local_conversation', 'messages', 'TEXT')
@@ -1791,24 +1790,30 @@ export function rewindActivityAggregate(
 }
 
 // --- Proactive Insights ---
-
-const INSIGHT_COLUMNS =
-  'id, ts, headline, advice, reasoning, category AS category, source_app AS sourceApp, confidence, dismissed'
+// Thin wrappers over the driver-agnostic CRUD in insightStore.ts (extracted so
+// the DDL + SQL are unit-testable under plain-node vitest with node:sqlite).
+function insightStoreDb(): InsightStoreDb {
+  return get() as unknown as InsightStoreDb
+}
 
 export function insertInsight(p: InsightPayload): number {
-  const info = get()
-    .prepare(
-      `INSERT INTO insights (ts, headline, advice, reasoning, category, source_app, confidence)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(Date.now(), p.headline, p.advice, p.reasoning, p.category, p.sourceApp, p.confidence)
-  return info.lastInsertRowid as number
+  return insertInsightOn(insightStoreDb(), p)
 }
 
 export function recentInsights(limit = 30): InsightRecord[] {
-  return get()
-    .prepare(`SELECT ${INSIGHT_COLUMNS} FROM insights ORDER BY ts DESC LIMIT ?`)
-    .all(limit) as InsightRecord[]
+  return recentInsightsOn(insightStoreDb(), limit)
+}
+
+export function dismissInsight(id: number): boolean {
+  return dismissInsightOn(insightStoreDb(), id)
+}
+
+export function dismissAllInsights(): number {
+  return dismissAllInsightsOn(insightStoreDb())
+}
+
+export function clearInsights(): number {
+  return clearInsightsOn(insightStoreDb())
 }
 
 // --- Track 2: Voice & PTT depth (voice turn outbox) ---

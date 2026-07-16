@@ -1,7 +1,7 @@
 import { memo, createElement } from 'react'
 import type { ComponentType, ReactElement } from 'react'
 import type { LucideIcon } from 'lucide-react'
-import { House, GanttChartSquare, ListChecks, History, LayoutGrid } from 'lucide-react'
+import { House, GanttChartSquare, ListChecks, History, LayoutGrid, Lightbulb } from 'lucide-react'
 import { Home } from '../pages/Home'
 import { Conversations } from '../pages/Conversations'
 import { Memories } from '../pages/Memories'
@@ -11,6 +11,7 @@ import { Tasks } from '../pages/Tasks'
 import { Goals } from '../pages/Goals'
 import { Apps } from '../pages/Apps'
 import { Rewind } from '../pages/Rewind'
+import { Insights } from '../pages/Insights'
 import { LiveConversation } from '../pages/LiveConversation'
 import { KnowledgeGraph } from '../pages/KnowledgeGraph'
 
@@ -76,6 +77,7 @@ const TasksPanel = memo(Tasks)
 const GoalsPanel = memo(Goals)
 const AppsPanel = memo(Apps)
 const RewindPanel = memo(Rewind)
+const InsightsPanel = memo(Insights)
 
 export const routeManifest: RouteEntry[] = [
   // Redirects: legacy/blank routes fold into Home (Home merges the old Chat and
@@ -169,6 +171,14 @@ export const routeManifest: RouteEntry[] = [
     Component: RewindPanel,
     nav: { label: 'Rewind', Icon: History, order: 3 },
     shortcut: '5',
+    escapeToHome: true
+  },
+  {
+    id: 'insights',
+    kind: 'panel',
+    path: '/insights',
+    Component: InsightsPanel,
+    nav: { label: 'Insights', Icon: Lightbulb, order: 5 },
     escapeToHome: true
   }
 ]
