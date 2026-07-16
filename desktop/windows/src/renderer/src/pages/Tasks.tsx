@@ -357,12 +357,23 @@ export function Tasks(): React.JSX.Element {
     el?.scrollIntoView({ block: 'nearest' })
   }, [keyboardSelectedTaskId])
 
+  // Switching the filter can leave the selected row unrendered while it's still in
+  // `items` (the filter just hides it), so `items.find` would keep resolving it and
+  // Space/Enter/Ctrl+D would act on a task the user can no longer see. Drop the
+  // selection on every filter change. (A sync that removes a task deletes it from
+  // `items` too, so the keyboard handlers' `items.find` already bails there.)
+  const changeFilter = (f: 'all' | 'open' | 'done'): void => {
+    setFilter(f)
+    setKeyboardSelectedTaskId(null)
+  }
+
   // Latest values the document keydown handler reads. Kept in a ref so the listener
   // registers once (no add/remove churn) yet never sees a stale closure.
   const kbd = useRef({
     navOrder,
     selectedId: keyboardSelectedTaskId,
     items,
+    busy,
     composing,
     toggleItem,
     deleteItem,
@@ -373,6 +384,7 @@ export function Tasks(): React.JSX.Element {
       navOrder,
       selectedId: keyboardSelectedTaskId,
       items,
+      busy,
       composing,
       toggleItem,
       deleteItem,
@@ -437,6 +449,9 @@ export function Tasks(): React.JSX.Element {
         return
       }
       if (e.key === ' ' || e.code === 'Space') {
+        // A focused button/link/select owns Space — don't toggle the list row and
+        // don't preventDefault, or we'd suppress that control's own activation.
+        if ((e.target as HTMLElement | null)?.closest('button, a, select, [role="button"]')) return
         if (s.selectedId == null) return
         const task = s.items.find((x) => x.id === s.selectedId)
         if (!task) return
@@ -445,10 +460,13 @@ export function Tasks(): React.JSX.Element {
         return
       }
       if (e.key === 'Enter') {
+        // Same guard as Space: a focused button/link/select owns Enter.
+        if ((e.target as HTMLElement | null)?.closest('button, a, select, [role="button"]')) return
         if (s.selectedId == null) return
         const task = s.items.find((x) => x.id === s.selectedId)
-        // Only editable once synced — matches the row's own click-to-edit gate.
-        if (!task || !task.backendId) return
+        // Only editable once synced and not mid-mutation — matches the row's own
+        // click-to-edit gate (isBusy = busy.has(id) || !backendId).
+        if (!task || !task.backendId || s.busy.has(task.id)) return
         e.preventDefault()
         s.startEdit(task)
         return
@@ -611,7 +629,7 @@ export function Tasks(): React.JSX.Element {
               {(['open', 'done', 'all'] as const).map((f) => (
                 <button
                   key={f}
-                  onClick={() => setFilter(f)}
+                  onClick={() => changeFilter(f)}
                   className={`rounded-xl px-3 py-1.5 text-xs font-medium capitalize transition-all duration-200 ${
                     filter === f
                       ? 'bg-white/15 text-white'
