@@ -8,6 +8,7 @@ import json
 import os
 import subprocess
 import sys
+import time
 import urllib.error
 import urllib.request
 from dataclasses import dataclass
@@ -45,12 +46,19 @@ def _parse_metadata(data: dict, source: str) -> PullRequestMetadata:
     )
 
 
+# A single flaky GitHub API response must not fail a required CI gate on an
+# unrelated PR, so transient failures get bounded deterministic retries.
+_API_ATTEMPTS = 3
+_TRANSIENT_HTTP_STATUSES = frozenset({500, 502, 503, 504})
+
+
 def load_from_api(
     repository: str,
     number: int,
     token: str,
     *,
     opener: Callable[..., object] = urllib.request.urlopen,
+    sleeper: Callable[[float], None] = time.sleep,
 ) -> PullRequestMetadata:
     if not token:
         raise RuntimeError("GITHUB_TOKEN is required to read current PR metadata")
@@ -64,16 +72,30 @@ def load_from_api(
             "User-Agent": "omi-pr-preflight",
         },
     )
-    try:
-        with opener(request, timeout=15) as response:  # type: ignore[attr-defined]
-            payload = json.load(response)
-    except urllib.error.HTTPError as exc:
-        raise RuntimeError(f"GitHub API returned HTTP {exc.code} while reading PR #{number}") from exc
-    except urllib.error.URLError as exc:
-        raise RuntimeError(f"GitHub API request failed while reading PR #{number}: {exc.reason}") from exc
-    if not isinstance(payload, dict):
-        raise RuntimeError(f"GitHub API returned invalid metadata for PR #{number}")
-    return _parse_metadata(payload, f"GitHub API PR #{number}")
+    for attempt in range(1, _API_ATTEMPTS + 1):
+        retryable: RuntimeError
+        try:
+            with opener(request, timeout=15) as response:  # type: ignore[attr-defined]
+                payload = json.load(response)
+        except urllib.error.HTTPError as exc:
+            error = RuntimeError(f"GitHub API returned HTTP {exc.code} while reading PR #{number}")
+            if exc.code not in _TRANSIENT_HTTP_STATUSES:
+                raise error from exc  # 4xx is permanent; retrying cannot help
+            retryable = error
+        except (urllib.error.URLError, OSError, json.JSONDecodeError) as exc:
+            # URLError covers DNS/connection failures; OSError covers socket
+            # timeouts and resets (TimeoutError is not a URLError); a
+            # JSONDecodeError here means a truncated body. All transient.
+            reason = getattr(exc, "reason", exc)
+            retryable = RuntimeError(f"GitHub API request failed while reading PR #{number}: {reason}")
+        else:
+            if not isinstance(payload, dict):
+                raise RuntimeError(f"GitHub API returned invalid metadata for PR #{number}")
+            return _parse_metadata(payload, f"GitHub API PR #{number}")
+        if attempt == _API_ATTEMPTS:
+            raise retryable
+        sleeper(2.0 * attempt)
+    raise AssertionError("unreachable")
 
 
 def load_from_gh(root: Path) -> PullRequestMetadata:
