@@ -82,18 +82,25 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
 
   // X status via the main-process xStatus (see lib/xSession + XConnector). Signed out
   // or an unconfigured backend just leaves the tile without a "Connected" label.
+  // Own cancellation ref (not the Calendar effect's) so this effect stays correct
+  // independently of it.
   const [xConnected, setXConnected] = useState(false)
+  const xCanceled = useRef(false)
   useEffect(() => {
+    xCanceled.current = false
     void (async () => {
       const session = await getXSession()
-      if (!session || canceled.current) return
+      if (!session || xCanceled.current) return
       try {
         const s: XStatus = await window.omi.xStatus(session)
-        if (!canceled.current) setXConnected(s.connected)
+        if (!xCanceled.current) setXConnected(s.connected)
       } catch {
         /* not configured / not connected — leave the label off */
       }
     })()
+    return () => {
+      xCanceled.current = true
+    }
   }, [])
 
   return (
