@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-split-mutation-authority",
+  "violated_contract": "Each mutable domain state has one authoritative owner for its state transitions.",
+  "canonical_prevention": "Converge writes and lifecycle transitions behind the canonical repository or coordinator instead of synchronizing competing owners.",
+  "evidence_prs": [9365, 9597],
+  "scope_hints": ["desktop/macos/**", "backend/**"],
+  "status": "open"
+}
