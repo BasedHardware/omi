@@ -30,6 +30,10 @@ import {
   AGENTS_WHIRL,
   genesisScale,
   genesisSettled,
+  failTremorOffset,
+  FAIL_GESTURE_MS,
+  FAIL_GESTURE_AMPLITUDE,
+  FAIL_GESTURE_OSCILLATIONS,
   computeOrbFrame
 } from './choreography'
 
@@ -862,5 +866,83 @@ describe('agents whirls on the ring, then settles into pills', () => {
       expect(d.halfLen).toBeCloseTo(P.pillHalfLen, 6)
       expect(d.x).toBeCloseTo(0, 6)
     }
+  })
+})
+
+describe('failTremorOffset (fail gesture)', () => {
+  const DUR_S = FAIL_GESTURE_MS / 1000
+
+  it('is exactly 0 at the start (u=0) and once settled (u>=1)', () => {
+    // Stamp at t=0, so t IS the elapsed time.
+    expect(failTremorOffset(0, 0, P)).toBe(0) // u = 0
+    expect(failTremorOffset(DUR_S, 0, P)).toBe(0) // u = 1
+    expect(failTremorOffset(DUR_S + 1, 0, P)).toBe(0) // u > 1
+    expect(failTremorOffset(-1, 0, P)).toBe(0) // before the stamp
+  })
+
+  it('is a real (non-zero) shake mid-gesture', () => {
+    // First swing peak (u = 1/(4·oscillations)) is the strongest.
+    const uPeak = 1 / (4 * FAIL_GESTURE_OSCILLATIONS)
+    const v = failTremorOffset(uPeak * DUR_S, 0, P)
+    expect(Math.abs(v)).toBeGreaterThan(0)
+    // Bounded by the design amplitude (fraction of orb radius), never bigger.
+    expect(Math.abs(v)).toBeLessThanOrEqual(FAIL_GESTURE_AMPLITUDE * P.discRadius + 1e-9)
+  })
+
+  it('no fail stamp (undefined / non-finite) yields no offset', () => {
+    expect(failTremorOffset(3, undefined, P)).toBe(0)
+    expect(failTremorOffset(3, Infinity, P)).toBe(0)
+    expect(failTremorOffset(3, NaN, P)).toBe(0)
+  })
+
+  it('crosses zero (shakes to BOTH sides — a true side-to-side tremor)', () => {
+    let sawPos = false
+    let sawNeg = false
+    for (let i = 0; i <= 500; i++) {
+      const v = failTremorOffset((i / 500) * DUR_S, 0, P)
+      if (v > 1e-6) sawPos = true
+      if (v < -1e-6) sawNeg = true
+    }
+    expect(sawPos).toBe(true)
+    expect(sawNeg).toBe(true)
+  })
+
+  it('damps: each successive swing peak is smaller than the last (decay)', () => {
+    // Scan the |offset| curve for local maxima (robust to the oscillation-count
+    // knob) and assert the peak magnitudes strictly decrease.
+    const N = 4000
+    const mag: number[] = []
+    for (let i = 0; i <= N; i++) {
+      mag.push(Math.abs(failTremorOffset((i / N) * DUR_S, 0, P)))
+    }
+    const peaks: number[] = []
+    for (let i = 1; i < mag.length - 1; i++) {
+      if (mag[i] > mag[i - 1] && mag[i] > mag[i + 1]) peaks.push(mag[i])
+    }
+    expect(peaks.length).toBeGreaterThanOrEqual(2)
+    for (let i = 1; i < peaks.length; i++) {
+      expect(peaks[i]).toBeLessThan(peaks[i - 1])
+    }
+  })
+})
+
+describe('computeOrbFrame — fail tremor (poseOffsetX)', () => {
+  it('a NON-fail frame has poseOffsetX === 0 (zero blast radius on every state)', () => {
+    for (const state of ['idle', 'listening', 'speaking', 'thinking', 'agents'] as const) {
+      const f = computeOrbFrame({ t: 7.3, state, stateTime: 2, amplitude: 0.8, speechMerge: 1 })
+      expect(f.poseOffsetX).toBe(0)
+    }
+  })
+
+  it('threads failedAt into poseOffsetX, matching failTremorOffset', () => {
+    const t = 0.1
+    const f = computeOrbFrame({ t, state: 'idle', stateTime: 3, failedAt: 0 })
+    expect(f.poseOffsetX).toBe(failTremorOffset(t, 0, P))
+    expect(Math.abs(f.poseOffsetX)).toBeGreaterThan(0)
+  })
+
+  it('poseOffsetX returns to 0 once the gesture settles', () => {
+    const f = computeOrbFrame({ t: FAIL_GESTURE_MS / 1000, state: 'idle', stateTime: 3, failedAt: 0 })
+    expect(f.poseOffsetX).toBe(0)
   })
 })

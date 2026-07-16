@@ -84,6 +84,7 @@ export function BarApp(): React.JSX.Element {
   const [mode, setMode] = useState<BarMode | null>(null)
   const [sliding, setSliding] = useState<'in' | 'out'>('out')
   const [genesisNonce, setGenesisNonce] = useState(0)
+  const [failNonce, setFailNonce] = useState(0)
   const [continuous, setContinuous] = useState(() => !!getPreferences().continuousRecording)
   // Speak replies to TYPED bar questions too (macOS
   // floatingBarTypedQuestionVoiceAnswersEnabled, default off). PTT/voice replies
@@ -226,6 +227,18 @@ export function BarApp(): React.JSX.Element {
       }),
     []
   )
+  // A failed hub turn (provider dies post-commit / providerNoResponse) surfaces as
+  // the reducer projection's `hint` going '' → non-empty. That is the ONLY reader
+  // of `hint` today; edge-detect the rising transition and bump failNonce so the
+  // collapsed orb plays a brief "failed" tremor instead of dropping silently to
+  // idle (indistinguishable from success). Tracks the previous hint in a ref so a
+  // hint that merely persists (or auto-dismisses back to '') never re-fires.
+  const prevHintRef = useRef('')
+  useEffect(() => {
+    const rising = prevHintRef.current === '' && hubOrb.hint !== ''
+    prevHintRef.current = hubOrb.hint
+    if (rising) setFailNonce((n) => n + 1)
+  }, [hubOrb.hint])
   // A WaveformSource fed by the projected orb level (no per-frame audio crosses
   // windows — just the coarse loudness). Stable ref so the Orb reads the latest.
   const hubWaveRef = useRef<WaveformSource>({
@@ -511,6 +524,7 @@ export function BarApp(): React.JSX.Element {
                 state={orbState}
                 amplitudeSource={amplitudeSource}
                 genesisNonce={genesisNonce}
+                failNonce={failNonce}
                 visible={mode !== null}
               />
             </div>

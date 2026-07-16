@@ -202,6 +202,10 @@ export type OrbFrame = {
   /** Vertical bars for the waveform (normalized short-axis units, centered on
    *  y=0). Empty when waveMix is 0. */
   waveBars: WaveBar[]
+  /** Global horizontal translation of the whole rendered pose (short-axis units;
+   *  the shader shifts `q.x` by it, moving disc + dots + pool together). 0 in
+   *  steady operation; the fail tremor (failTremorOffset) drives it briefly. */
+  poseOffsetX: number
   params: OrbParams
 }
 
@@ -590,6 +594,51 @@ export function genesisSettled(tSinceSummon: number, p: OrbParams = DEFAULT_ORB_
   return Math.exp(-z * w * tSinceSummon) * (1 + (z * w) / wd) < 0.01
 }
 
+// --- Fail gesture ------------------------------------------------------------
+
+/**
+ * "Failed voice turn" gesture: a brief, understated damped horizontal TREMOR of
+ * the WHOLE orb — it shakes side-to-side (a subtle "no") with decaying amplitude,
+ * then settles to idle. MOTION ONLY — no color change, no purple. A deterministic
+ * tween, never a live sim: a pure function of the injected time and the stamped
+ * `failedAt`, so it is scrubbable and reproduces identically in the app and the
+ * harness. It drives OrbFrame.poseOffsetX (→ shader u_poseOffset), a GLOBAL
+ * horizontal translation of the rendered pose, so the dark disc AND the dots
+ * shake together (offsetting only the dots would slide them inside a stationary
+ * disc — not an orb shake).
+ *
+ * Tunable feel (dialed against real frames — the orchestrator's knobs):
+ *   FAIL_GESTURE_MS           — total duration, milliseconds.
+ *   FAIL_GESTURE_AMPLITUDE    — start amplitude as a fraction of the orb radius.
+ *   FAIL_GESTURE_OSCILLATIONS — number of full side-to-side swings.
+ */
+export const FAIL_GESTURE_MS = 500
+export const FAIL_GESTURE_AMPLITUDE = 0.06
+export const FAIL_GESTURE_OSCILLATIONS = 2
+
+/**
+ * Horizontal pose offset (short-axis normalized units — the same space the shader
+ * shifts `q` by, and consistent with the dots once scaled by the disc radius) for
+ * the fail tremor at absolute time `t`, given the time the gesture was stamped
+ * (`failedAt`; omit / non-finite = no gesture). EXACTLY 0 at u=0 and at u>=1 (both
+ * the sine and the decay envelope vanish there), so it neither pops in nor leaves
+ * a residual lean. The amplitude decays across the gesture via (1 - easeInOut(u)),
+ * so the first swing is the largest and each later peak is smaller.
+ */
+export function failTremorOffset(
+  t: number,
+  failedAt: number | undefined,
+  p: OrbParams = DEFAULT_ORB_PARAMS
+): number {
+  if (failedAt === undefined || !Number.isFinite(failedAt)) return 0
+  const durS = Math.max(1e-6, FAIL_GESTURE_MS / 1000)
+  const u = Math.min(1, Math.max(0, (t - failedAt) / durS))
+  if (u <= 0 || u >= 1) return 0
+  const swing = Math.sin(2 * Math.PI * FAIL_GESTURE_OSCILLATIONS * u)
+  const decay = 1 - easeInOut(u)
+  return FAIL_GESTURE_AMPLITUDE * p.discRadius * swing * decay
+}
+
 // --- Frame assembly ----------------------------------------------------------
 
 export type OrbInputs = {
@@ -618,6 +667,10 @@ export type OrbInputs = {
   flow?: number
   /** Seconds since summon, or Infinity when long-since materialized. */
   genesisTime?: number
+  /** Absolute animation time (same clock as `t`) at which the fail tremor was
+   *  stamped; omit / non-finite when no fail gesture is playing. Drives the
+   *  deterministic horizontal shake (failTremorOffset → poseOffsetX). */
+  failedAt?: number
   /** Disc → rounded-rect morph 0..1 (expanded surface drives this). */
   morph?: number
   /** Per-slot loudness history 0..1 (oldest→newest = left→right) for the
@@ -809,6 +862,9 @@ export function computeOrbFrame(input: OrbInputs): OrbFrame {
     waveMix: unrollU,
     barMix,
     waveBars: bars,
+    // Deterministic fail tremor: a global horizontal shake of the whole pose
+    // (0 unless a fail gesture is mid-play — pure function of t and failedAt).
+    poseOffsetX: failTremorOffset(t, input.failedAt, p),
     params: p
   }
 }
