@@ -951,6 +951,12 @@ export type OmiBridgeApi = {
   insightSetSettings: (patch: Partial<InsightSettings>) => Promise<InsightSettings>
   insightAdd: (p: InsightPayload) => Promise<void>
   insightRecent: (limit: number) => Promise<InsightRecord[]>
+  /** Insights page: mark one record dismissed (read/handled). */
+  insightDismissRecord: (id: number) => Promise<boolean>
+  /** Insights page: mark all records dismissed (Mac's "Mark All Read"). */
+  insightDismissAll: () => Promise<number>
+  /** Insights page: delete all insight history (Mac's "Clear All History"). */
+  insightClearAll: () => Promise<number>
   /** Engine → main: deliver this insight in the user's chosen style. */
   insightShow: (p: InsightPayload) => void
   /** Toast renderer → main: dismiss now. */
@@ -1889,7 +1895,8 @@ export type InsightPayload = {
   confidence: number // 0..1
 }
 
-// Stored row (for dedupe; not rendered as a page in v1).
+// Stored row: powers both toast dedupe and the Insights history page. `dismissed`
+// (0/1) is the read/handled marker.
 export type InsightRecord = InsightPayload & { id: number; ts: number; dismissed: number }
 
 export type InsightNotificationStyle = 'omi' | 'native'

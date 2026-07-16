@@ -25,6 +25,7 @@ vi.mock('../../pages/Tasks', () => ({ Tasks: stub('tasks') }))
 vi.mock('../../pages/Goals', () => ({ Goals: stub('goals') }))
 vi.mock('../../pages/Apps', () => ({ Apps: stub('apps') }))
 vi.mock('../../pages/Rewind', () => ({ Rewind: stub('rewind') }))
+vi.mock('../../pages/Insights', () => ({ Insights: stub('insights') }))
 vi.mock('../../pages/LiveConversation', () => ({ LiveConversation: stub('live') }))
 vi.mock('../../pages/ConversationDetail', () => ({
   // Renders the prop, so we can assert the matched params actually reach the page.
