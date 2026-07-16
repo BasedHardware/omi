@@ -76,8 +76,11 @@ export type ConversationPayload = {
 export type ChatCitation = { id: string; title: string; emoji?: string }
 
 /** A file attached to a sent chat message, as rendered in the thread. `id` is the
- *  server file id (FileChat.id) that was passed in the message's `file_ids`. */
-export type ChatAttachment = { id: string; name: string; mimeType: string }
+ *  server file id (FileChat.id) that was passed in the message's `file_ids`.
+ *  `thumbnailUrl` is the public image URL `/v2/files` returns for image files
+ *  (FileChat.thumbnail) — images only, absent for documents — rendered directly
+ *  with an unauthenticated `<img src>` (matches Mac's `AsyncImage`). */
+export type ChatAttachment = { id: string; name: string; mimeType: string; thumbnailUrl?: string }
 
 export type ChatMessage = {
   id?: string
@@ -412,7 +415,15 @@ export type BarReveal = 'summon' | 'ptt'
 /** A single chat message projected across the bar↔main bridge. Structurally the
  *  renderer's `ChatMsg` (hooks/useChat) — kept here so the shared preload types
  *  don't import renderer code. */
-export type BarChatMessage = { id?: string; role: 'user' | 'assistant'; content: string }
+export type BarChatMessage = {
+  id?: string
+  role: 'user' | 'assistant'
+  content: string
+  /** Files attached to a (user) message. Runtime already passes these through the
+   *  structured-clone bridge; declared here so the bar's renderer type-checks and
+   *  the projection stays honest. */
+  attachments?: ChatAttachment[]
+}
 /** The bar orb's coarse activity, derived in the main window's ChatBridgeHost:
  *  'sending' while a reply streams, 'speaking' while a spoken (TTS) reply plays. */
 export type BarChatStatus = 'idle' | 'sending' | 'speaking'

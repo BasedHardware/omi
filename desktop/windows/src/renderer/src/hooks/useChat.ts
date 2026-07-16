@@ -262,7 +262,8 @@ export function useChat(): UseChat {
           c.messages.map((m) => ({
             id: m.id ?? crypto.randomUUID(),
             role: m.role,
-            content: m.content
+            content: m.content,
+            ...(m.attachments?.length ? { attachments: m.attachments } : {})
           }))
         )
       })
@@ -830,7 +831,8 @@ export function useChat(): UseChat {
       sentAttachments = uploaded.map((a) => ({
         id: a.serverId as string,
         name: a.name,
-        mimeType: a.mimeType
+        mimeType: a.mimeType,
+        ...(a.thumbnailUrl ? { thumbnailUrl: a.thumbnailUrl } : {})
       }))
       // Guard the attachment-only path: if EVERY upload failed there are no
       // file_ids, and with empty text this would POST an empty message + render a
@@ -1245,7 +1247,8 @@ export function useChat(): UseChat {
             c.messages.map((m) => ({
               id: m.id ?? crypto.randomUUID(),
               role: m.role,
-              content: m.content
+              content: m.content,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
         })
@@ -1262,7 +1265,8 @@ export function useChat(): UseChat {
             msgs.map((m) => ({
               id: m.id,
               role: m.sender === 'ai' ? 'assistant' : 'user',
-              content: m.text
+              content: m.text,
+              ...(m.attachments?.length ? { attachments: m.attachments } : {})
             }))
           )
         })

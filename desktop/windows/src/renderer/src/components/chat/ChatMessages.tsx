@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { Check, Copy } from 'lucide-react'
 import type { ChatMsg } from '../../hooks/useChat'
 import { RevealMarkdown } from './RevealMarkdown'
+import { ChatAttachmentStrip } from './ChatAttachmentStrip'
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
@@ -93,11 +94,9 @@ export function ChatMessages({
         // empty placeholder) — only once there is settled text to copy.
         const streaming = isLast && sending && m.role === 'assistant'
         const canCopy = !streaming && m.content.trim().length > 0
-        return (
-          <div
-            key={m.id ?? i}
-            className={`group/msg relative ${m.role === 'user' ? cls.user : cls.assistant}`}
-          >
+        const bubbleClass = `group/msg relative ${m.role === 'user' ? cls.user : cls.assistant}`
+        const bubbleChildren = (
+          <>
             {m.role === 'assistant' ? (
               m.content ? (
                 <RevealMarkdown text={m.content} startRevealed={!(isLast && sending)} />
@@ -112,6 +111,25 @@ export function ChatMessages({
             {canCopy ? (
               <CopyMessageButton text={m.content} role={m.role} compact={compact} />
             ) : null}
+          </>
+        )
+
+        // User attachments render as a card strip ABOVE the bubble, trailing-
+        // aligned (Mac's ChatBubble). A files-only message (attachments but no
+        // text) shows just the strip — no empty bubble. Messages with no
+        // attachments emit exactly the single bubble div as before.
+        if (m.role === 'user' && m.attachments?.length) {
+          const filesOnly = !m.content.trim()
+          return (
+            <div key={m.id ?? i} className="flex flex-col items-end gap-1.5">
+              <ChatAttachmentStrip attachments={m.attachments} compact={compact} align="end" />
+              {filesOnly ? null : <div className={bubbleClass}>{bubbleChildren}</div>}
+            </div>
+          )
+        }
+        return (
+          <div key={m.id ?? i} className={bubbleClass}>
+            {bubbleChildren}
           </div>
         )
       })}
