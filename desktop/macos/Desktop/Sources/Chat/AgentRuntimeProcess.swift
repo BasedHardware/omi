@@ -1,6 +1,14 @@
 import Foundation
 import OmiSupport
 
+
+/// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
+/// isolation boundaries. The dictionary is parsed once and treated as immutable
+/// thereafter, so unchecked Sendable conformance is safe.
+struct RuntimeJSONPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
 extension Notification.Name {
   /// Posted on MainActor after the runtime handshake makes direct control
   /// tools admissible. Carries no owner id or request content.
@@ -310,7 +318,7 @@ actor AgentRuntimeProcess {
       || lower.contains("failed to reserve virtual memory")
   }
 
-  struct RuntimeMessage {
+  struct RuntimeMessage: @unchecked Sendable {
     struct RequestKey: Hashable, Equatable, Sendable {
       let clientId: String
       let requestId: String
@@ -487,7 +495,7 @@ actor AgentRuntimeProcess {
     let expectedKind: RuntimeMessage.Kind
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
     let sentAtUptime: TimeInterval
-    let continuation: CheckedContinuation<[String: Any], Error>
+    let continuation: CheckedContinuation<RuntimeJSONPayloadBox, Error>
   }
 
   private struct TimedOutKernelContractRequest {
@@ -945,7 +953,7 @@ actor AgentRuntimeProcess {
     outcome: AgentContextSourceOutcome,
     capturedAtMs: Int,
     expiresAtMs: Int?,
-    payload: [String: Any],
+    payload: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentContextSourceUpdateReceipt {
     try assertAuthorization(authorizationSnapshot)
@@ -960,7 +968,7 @@ actor AgentRuntimeProcess {
       outcome: outcome,
       capturedAtMs: capturedAtMs,
       expiresAtMs: expiresAtMs,
-      payload: payload
+      payload: payload.value
     )
     let result = try await kernelContractRequest(
       payload: message,
@@ -1634,7 +1642,7 @@ actor AgentRuntimeProcess {
       timeoutNanoseconds
       ?? AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: operation)
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    return try await withCheckedThrowingContinuation { continuation in
+    let box = try await withCheckedThrowingContinuation { continuation in
       activeKernelContractRequests[requestKey] = ActiveKernelContractRequest(
         clientId: clientId,
         requestId: requestId,
@@ -1669,6 +1677,7 @@ actor AgentRuntimeProcess {
         request.continuation.resume(throwing: BridgeError.timeout)
       }
     }
+    return box.value
   }
 
   private func trimTimedOutKernelContractRequests() {
@@ -2097,7 +2106,7 @@ actor AgentRuntimeProcess {
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any],
+    input: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> String {
     guard
@@ -2112,7 +2121,7 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
-      input: input,
+      input: input.value,
       ownerId: ownerId,
       authorizationSnapshot: authorizationSnapshot
     )
@@ -2123,7 +2132,7 @@ actor AgentRuntimeProcess {
       clientId: String,
       harnessMode: String,
       name: String,
-      input: [String: Any],
+      input: RuntimeJSONPayloadBox,
       ownerId: String
     ) async throws -> String {
       guard AppBuild.isNonProduction else {
@@ -2133,7 +2142,7 @@ actor AgentRuntimeProcess {
         clientId: clientId,
         harnessMode: harnessMode,
         name: name,
-        input: input,
+        input: input.value,
         ownerId: ownerId,
         authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
           expectedOwnerID: ownerId)
@@ -3019,8 +3028,9 @@ actor AgentRuntimeProcess {
 
   private func handleMessage(_ message: RuntimeMessage) {
     if let request = routedRequest(for: message), let surfaceRef = request.surfaceRef {
+      let authorizationSnapshot = request.authorizationSnapshot
       Task { @MainActor in
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
           return
         }
         AgentRuntimeStatusStore.shared.ingest(message: message, surface: surfaceRef)
@@ -3216,7 +3226,7 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
-    request.continuation.resume(returning: message.payload)
+    request.continuation.resume(returning: RuntimeJSONPayloadBox(message.payload))
   }
 
   private func handleAuthorizedToolExecution(_ message: RuntimeMessage) {

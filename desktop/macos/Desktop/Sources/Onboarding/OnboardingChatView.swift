@@ -1,5 +1,5 @@
 @preconcurrency import GRDB
-import MarkdownUI
+@preconcurrency import MarkdownUI
 import OmiTheme
 import SwiftUI
 

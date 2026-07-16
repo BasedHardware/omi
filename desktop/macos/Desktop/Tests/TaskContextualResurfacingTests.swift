@@ -138,7 +138,7 @@ final class TaskInterruptionLedgerOwnerIsolationTests: XCTestCase {
   }
 }
 
-final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient {
+final class FakeTaskContextualResurfacingClient: TaskContextualResurfacingClient, @unchecked Sendable {
   var workflowMode: OmiAPI.TaskWorkflowMode = .read
   var controlRequests = 0
   var onControl: (() -> Void)?

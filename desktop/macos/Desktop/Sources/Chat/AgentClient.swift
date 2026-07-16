@@ -201,7 +201,7 @@ enum AgentClient {
       outcome: AgentContextSourceOutcome,
       capturedAtMs: Int,
       expiresAtMs: Int? = nil,
-      payload: [String: Any]
+      payload: RuntimeJSONPayloadBox
     ) async throws -> AgentContextSourceUpdateReceipt {
       try await bridge.updateContextSource(
         sessionId: sessionId,
@@ -448,7 +448,7 @@ enum AgentClient {
           sourceRevision: revision,
           outcome: outcome,
           capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
-          payload: payload
+          payload: RuntimeJSONPayloadBox(payload)
         )
         snapshot = try await bridge.getContextSnapshot(
           sessionId: session.sessionId,

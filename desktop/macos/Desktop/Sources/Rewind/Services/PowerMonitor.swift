@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import CoreFoundation
 import IOKit.ps
 
 /// Monitors the Mac's power source (battery vs AC) and publishes state changes.
@@ -15,7 +16,7 @@ class PowerMonitor: ObservableObject {
   var onACReconnected: (() -> Void)?
   var onPowerSourceChanged: ((Bool) -> Void)?
 
-  private var runLoopSource: CFRunLoopSource?
+  nonisolated(unsafe) private var runLoopSource: CFRunLoopSource?
   private let batteryStateProbe: @Sendable () -> Bool
   private var powerProbeGeneration: UInt64 = 0
 

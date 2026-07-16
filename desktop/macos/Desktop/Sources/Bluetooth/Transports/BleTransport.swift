@@ -1,4 +1,4 @@
-import Combine
+@preconcurrency import Combine
 @preconcurrency import CoreBluetooth
 import Foundation
 import os.log
@@ -39,7 +39,7 @@ final class BleTransport: NSObject, DeviceTransport {
   private var didRequestPhysicalDisconnect = false
   private var connectionLease: BluetoothConnectionLease?
 
-  private var centralEventSubscription: AnyCancellable?
+  nonisolated(unsafe) private var centralEventSubscription: AnyCancellable?
   private var centralEventContinuation: AsyncStream<BluetoothCentralEvent>.Continuation?
   private var centralEventTask: Task<Void, Never>?
 

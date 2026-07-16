@@ -50,7 +50,7 @@ struct GraphEdge3D {
 
 // MARK: - Force-Directed Layout Simulation
 
-class ForceDirectedSimulation {
+class ForceDirectedSimulation: @unchecked Sendable {
   private static let userCenterNodeId = "__user_center__"
   private static let visualBridgeEdgePrefix = "__visual_bridge__"
 

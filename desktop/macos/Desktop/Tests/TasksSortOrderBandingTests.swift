@@ -174,7 +174,7 @@ final class TasksSortOrderBandingTests: XCTestCase {
       source.contains("private let taskId: String"),
       "TaskDragItemProvider must retain the dragged task's id (BL-030)")
     XCTAssertTrue(
-      source.contains("let onEnd: (String) -> Void"),
+      source.contains("let onEnd: @Sendable (String) -> Void"),
       "TaskDragItemProvider must fire an id-carrying end callback (BL-030)")
     XCTAssertTrue(
       source.contains("DispatchQueue.main.async { cb(endedId) }"),

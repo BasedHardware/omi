@@ -1,5 +1,5 @@
 import AppKit
-import MarkdownUI
+@preconcurrency import MarkdownUI
 import OmiTheme
 import SwiftUI
 
@@ -121,163 +121,7 @@ struct ChatBubble: View {
       }
 
       VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
-          // Show typing indicator for empty streaming message
-          TypingIndicator()
-        } else if message.sender == .ai && !message.contentBlocks.isEmpty {
-          // Render structured content blocks, grouping consecutive tool calls
-          ForEach(groupedBlocks) { group in
-            switch group {
-            case .text(_, let text):
-              if !text.isEmpty {
-                SelectableMarkdown(text: text, sender: .ai)
-                  .padding(.horizontal, OmiSpacing.md)
-                  .padding(.vertical, OmiSpacing.sm)
-                  .background(OmiColors.backgroundTertiary.opacity(0.92))
-                  .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-                  .padding(.top, OmiSpacing.hairline)
-              }
-            case .toolCalls(_, let calls):
-              ToolCallsGroup(
-                calls: calls,
-                onCancel: onCancelTurn,
-                onOpenAgent: onOpenAgent,
-                onOpenAgentRef: onOpenAgentRef
-              )
-            case .thinking(_, let text):
-              ThinkingBlock(text: text)
-            case .discoveryCard(_, let title, let summary, let fullText):
-              DiscoveryCard(title: title, summary: summary, fullText: fullText)
-            case .agentSpawn(
-              _, let pillId, let sessionId, let runId, let title, let objective, let provider
-            ):
-              AgentSpawnCard(
-                title: title,
-                objective: objective,
-                provider: provider,
-                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
-              )
-            case .agentCompletion(
-              _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
-            ):
-              AgentCompletionCard(
-                title: title,
-                promptSnippet: promptSnippet,
-                output: output,
-                status: status,
-                ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
-                onOpen: hasAgentOpenAction ? openAgent(ref:completion:) : nil
-              )
-            }
-          }
-          // Show typing indicator at end if still streaming
-          // (skip only when last group is tool calls with an in-flight tool — it already has a spinner)
-          if message.isStreaming {
-            if case .toolCalls(_, let calls) = groupedBlocks.last,
-              calls.contains(where: { block in
-                if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
-                return false
-              })
-            {
-              // Tool group has a running tool — its card already shows a spinner
-            } else {
-              TypingIndicator()
-            }
-          }
-          if !message.displayResources.isEmpty {
-            ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
-          }
-        } else if isDuplicate && !isExpanded {
-          // Collapsed duplicate message
-          Button(action: { isExpanded = true }) {
-            HStack(spacing: OmiSpacing.xs) {
-              Image(systemName: "doc.on.doc")
-                .scaledFont(size: OmiType.caption)
-              Text("Duplicate message")
-                .scaledFont(size: OmiType.caption)
-              Image(systemName: "chevron.down")
-                .scaledFont(size: OmiType.micro)
-            }
-            .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, OmiSpacing.md)
-            .padding(.vertical, OmiSpacing.sm)
-            .background(OmiColors.backgroundTertiary.opacity(0.72))
-            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
-          }
-          .buttonStyle(.plain)
-        } else {
-          // User messages or AI messages without content blocks (loaded from Firestore)
-          VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xs) {
-            // User attachments read as "here's what I'm sending" and belong
-            // above the text; AI-generated artifacts are the result of the
-            // reply and always sit below it.
-            let resourceStrip =
-              message.displayResources.isEmpty
-              ? nil
-              : ChatResourceStrip(
-                resources: message.displayResources,
-                density: .full,
-                alignment: message.sender == .user ? .trailing : .leading
-              )
-
-            if message.sender == .user, let resourceStrip {
-              resourceStrip
-            }
-
-            if let backgroundAgentSummary {
-              BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
-            } else if !message.text.isEmpty {
-              SelectableMarkdown(text: displayText, sender: message.sender)
-                .padding(.horizontal, OmiSpacing.md)
-                .padding(.vertical, OmiSpacing.sm)
-                .background(
-                  message.sender == .user
-                    ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
-                )
-                .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
-                .padding(.top, OmiSpacing.hairline)
-            }
-
-            // Show more / Show less toggle for long plain-text messages.
-            // BackgroundAgentSummaryCard owns its own expand state.
-            if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
-              Button(action: { isExpanded.toggle() }) {
-                Text(isExpanded ? "Show less" : "Show more")
-                  .scaledFont(size: OmiType.caption)
-                  .foregroundColor(.white)
-              }
-              .buttonStyle(.plain)
-            }
-
-            if message.sender != .user, let resourceStrip {
-              resourceStrip
-            }
-          }
-        }
-
-        // Citation cards for AI messages with citations
-        if message.sender == .ai && !message.citations.isEmpty && !message.isStreaming {
-          CitationCardsView(citations: message.citations) { citation in
-            onCitationTap?(citation)
-          }
-          .frame(maxWidth: 280)
-        }
-
-        // Rating buttons, copy button, and message metadata
-        if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
-          Text("Couldn't save this reply")
-            .scaledFont(size: OmiType.micro, weight: .medium)
-            .foregroundColor(.orange.opacity(0.9))
-        }
-
-        if message.sender == .ai && !message.isStreaming && message.isSynced {
-          messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
-        } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
-          messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
-        } else if !message.isStreaming || !message.text.isEmpty {
-          messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
-        }
+        messageContentView(groupedBlocks)
       }
 
       if message.sender == .user {
@@ -292,6 +136,172 @@ struct ChatBubble: View {
     }
     .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
     .contentShape(Rectangle())
+  }
+  
+  @ViewBuilder
+  private func messageContentView(_ groupedBlocks: [ContentBlockGroup]) -> some View {
+    if message.isStreaming && message.text.isEmpty && message.contentBlocks.isEmpty {
+      TypingIndicator()
+    } else if message.sender == .ai && !message.contentBlocks.isEmpty {
+      ForEach(groupedBlocks) { group in
+        groupView(group)
+      }
+      if message.isStreaming {
+        if case .toolCalls(_, let calls) = groupedBlocks.last,
+          calls.contains(where: { block in
+            if case .toolCall(_, _, let status, _, _, _) = block { return status.isInFlight }
+            return false
+          })
+        {
+          // Tool group has a running tool — its card already shows a spinner
+        } else {
+          TypingIndicator()
+        }
+      }
+      if !message.displayResources.isEmpty {
+        ChatResourceStrip(resources: message.displayResources, density: .full, alignment: .leading)
+      }
+    } else if isDuplicate && !isExpanded {
+      Button(action: { isExpanded = true }) {
+        HStack(spacing: OmiSpacing.xs) {
+          Image(systemName: "doc.on.doc")
+            .scaledFont(size: OmiType.caption)
+          Text("Duplicate message")
+            .scaledFont(size: OmiType.caption)
+          Image(systemName: "chevron.down")
+            .scaledFont(size: OmiType.micro)
+        }
+        .foregroundColor(OmiColors.textTertiary)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
+        .background(OmiColors.backgroundTertiary.opacity(0.72))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.controlRadius, style: .continuous))
+      }
+      .buttonStyle(.plain)
+    } else {
+      VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xs) {
+        let resourceStrip =
+          message.displayResources.isEmpty
+          ? nil
+          : ChatResourceStrip(
+            resources: message.displayResources,
+            density: .full,
+            alignment: message.sender == .user ? .trailing : .leading
+          )
+
+        if message.sender == .user, let resourceStrip {
+          resourceStrip
+        }
+
+        if let backgroundAgentSummary {
+          BackgroundAgentSummaryCard(summary: backgroundAgentSummary, onOpenAgent: onOpenAgent)
+        } else if !message.text.isEmpty {
+          SelectableMarkdown(text: displayText, sender: message.sender)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
+            .background(
+              message.sender == .user
+                ? OmiColors.userBubble : OmiColors.backgroundTertiary.opacity(0.95)
+            )
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+            .padding(.top, OmiSpacing.hairline)
+        }
+
+        if backgroundAgentSummary == nil, message.text.count > Self.truncationThreshold {
+          Button(action: { isExpanded.toggle() }) {
+            Text(isExpanded ? "Show less" : "Show more")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(.white)
+          }
+          .buttonStyle(.plain)
+        }
+
+        if message.sender != .user, let resourceStrip {
+          resourceStrip
+        }
+      }
+    }
+
+    if message.sender == .ai && !message.citations.isEmpty && !message.isStreaming {
+      CitationCardsView(citations: message.citations) { citation in
+        onCitationTap?(citation)
+      }
+      .frame(maxWidth: 280)
+    }
+
+    if message.sender == .ai && !message.isStreaming && message.journalStatus == .failed {
+      Text("Couldn't save this reply")
+        .scaledFont(size: OmiType.micro, weight: .medium)
+        .foregroundColor(.orange.opacity(0.9))
+    }
+
+    if message.sender == .ai && !message.isStreaming && message.isSynced {
+      messageMetadataRow(includeRatingButtons: true, includeCopyButton: true)
+    } else if message.sender == .ai && !message.isStreaming && !message.copyableText.isEmpty {
+      messageMetadataRow(includeRatingButtons: false, includeCopyButton: true)
+    } else if !message.isStreaming || !message.text.isEmpty {
+      messageMetadataRow(includeRatingButtons: false, includeCopyButton: false)
+    }
+  }
+  
+  private var agentOpenClosure: ((AgentTimelineRef, @escaping (Bool) -> Void) -> Void)? {
+    guard hasAgentOpenAction else { return nil }
+    return openAgent(ref:completion:)
+  }
+
+  private func groupView(_ group: ContentBlockGroup) -> AnyView {
+    switch group {
+    case .text(_, let text):
+      if text.isEmpty {
+        return AnyView(EmptyView())
+      }
+      return AnyView(
+        SelectableMarkdown(text: text, sender: .ai)
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.sm)
+          .background(OmiColors.backgroundTertiary.opacity(0.92))
+          .clipShape(RoundedRectangle(cornerRadius: OmiChrome.sectionRadius, style: .continuous))
+          .padding(.top, OmiSpacing.hairline)
+      )
+    case .toolCalls(_, let calls):
+      return AnyView(
+        ToolCallsGroup(
+          calls: calls,
+          onCancel: onCancelTurn,
+          onOpenAgent: onOpenAgent,
+          onOpenAgentRef: onOpenAgentRef
+        )
+      )
+    case .thinking(_, let text):
+      return AnyView(ThinkingBlock(text: text))
+    case .discoveryCard(_, let title, let summary, let fullText):
+      return AnyView(DiscoveryCard(title: title, summary: summary, fullText: fullText))
+    case .agentSpawn(
+      _, let pillId, let sessionId, let runId, let title, let objective, let provider
+    ):
+      return AnyView(
+        AgentSpawnCard(
+          title: title,
+          objective: objective,
+          provider: provider,
+          ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+          onOpen: agentOpenClosure
+        )
+      )
+    case .agentCompletion(
+      _, let pillId, let sessionId, let runId, let title, let promptSnippet, let output, let status
+    ):
+      return AnyView(
+        AgentCompletionCard(
+          title: title,
+          promptSnippet: promptSnippet,
+          output: output,
+          status: status,
+          ref: AgentTimelineRef(pillId: pillId, sessionId: sessionId, runId: runId),
+          onOpen: agentOpenClosure
+        )
+      )
+    }
   }
 
   @ViewBuilder
@@ -826,7 +836,7 @@ struct AgentCompletionCard: View {
   }
 }
 
-extension ChatBubble: Equatable {
+extension ChatBubble: @preconcurrency Equatable {
   static func == (lhs: ChatBubble, rhs: ChatBubble) -> Bool {
     // Streaming messages always re-render so SwiftUI sees live updates
     guard !lhs.message.isStreaming && !rhs.message.isStreaming else { return false }

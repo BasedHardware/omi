@@ -283,7 +283,9 @@ enum BrowserAutomationTargetResolver {
       workspace.open([url], withApplicationAt: appURL, configuration: configuration) { _, error in
         if let error {
           log("BrowserAutomationTargetResolver: Failed opening \(url) in \(target.name): \(error)")
-          workspace.open(url)
+        _ = MainActor.assumeIsolated {
+          NSWorkspace.shared.open(url)
+        }
         }
       }
       return
@@ -293,7 +295,9 @@ enum BrowserAutomationTargetResolver {
       workspace.open([url], withApplicationAt: target.appURL, configuration: configuration) { _, error in
         if let error {
           log("BrowserAutomationTargetResolver: Failed opening \(url) at \(target.appPath): \(error)")
-          workspace.open(url)
+          _ = MainActor.assumeIsolated {
+            NSWorkspace.shared.open(url)
+          }
         }
       }
       return

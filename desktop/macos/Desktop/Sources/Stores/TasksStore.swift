@@ -2,6 +2,15 @@ import Combine
 import OmiSupport
 import SwiftUI
 
+/// Sendable carrier for `[String: Any]` task metadata that must cross an actor
+/// boundary into `APIClient` / `ActionItemStorage`. The wrapped dictionary is
+/// built on the main actor and only read (never mutated) by the receiving
+/// actor, so the unchecked Sendable conformance is sound.
+struct ActionItemMetadataBox: @unchecked Sendable {
+  let value: [String: Any]?
+  init(_ value: [String: Any]?) { self.value = value }
+}
+
 /// Shared store for all tasks - single source of truth
 /// Both Dashboard and Tasks tab observe this store
 ///
@@ -1935,7 +1944,7 @@ class TasksStore: ObservableObject {
           source: item.source,
           priority: item.priority,
           category: item.category,
-          metadata: metadata,
+          metadataBox: ActionItemMetadataBox(metadata),
           relevanceScore: item.relevanceScore,
           expectedOwnerId: ownerID,
           authorizationSnapshot: lease.authorizationSnapshot
@@ -2722,7 +2731,7 @@ class TasksStore: ObservableObject {
         dueAt: dueAt,
         clearDueAt: clearDueAt,
         priority: priority,
-        metadata: metadata,
+        metadataBox: ActionItemMetadataBox(metadata),
         recurrenceRule: recurrenceRule,
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
@@ -2757,7 +2766,7 @@ class TasksStore: ObservableObject {
         dueAt: dueAt,
         clearDueAt: clearDueAt,
         priority: priority,
-        metadata: metadata,
+        metadataBox: ActionItemMetadataBox(metadata),
         recurrenceRule: recurrenceRule,
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
@@ -2806,7 +2815,7 @@ class TasksStore: ObservableObject {
     do {
       try await ActionItemStorage.shared.updateActionItemFields(
         backendId: task.id,
-        metadata: metaDict,
+        metadataBox: ActionItemMetadataBox(metaDict),
         authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
       )
     } catch {
@@ -2834,7 +2843,7 @@ class TasksStore: ObservableObject {
     do {
       let apiResult = try await APIClient.shared.updateActionItem(
         id: task.id,
-        metadata: metaDict,
+        metadataBox: ActionItemMetadataBox(metaDict),
         expectedOwnerId: lease.ownerID,
         authorizationSnapshot: lease.authorizationSnapshot
       )

@@ -1,6 +1,7 @@
-import MarkdownUI
+@preconcurrency import Foundation
+@preconcurrency import MarkdownUI
 import OmiTheme
-import SwiftUI
+@preconcurrency import SwiftUI
 
 /// A markdown text view that supports text selection across paragraph breaks.
 ///

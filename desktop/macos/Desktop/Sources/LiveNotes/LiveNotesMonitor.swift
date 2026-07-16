@@ -2,7 +2,7 @@ import Combine
 import Foundation
 @preconcurrency import GRDB
 
-protocol LiveNoteGenerating {
+protocol LiveNoteGenerating: Sendable {
   func generateNote(prompt: String, systemPrompt: String) async throws -> String
 }
 
@@ -12,7 +12,7 @@ extension GeminiClient: LiveNoteGenerating {
   }
 }
 
-protocol LiveNoteStoring {
+protocol LiveNoteStoring: Sendable {
   func createNote(
     sessionId: Int64,
     text: String,

@@ -38,7 +38,7 @@ final class AgentControlService {
       clientId: "realtime-hub",
       harnessMode: Self.currentHarnessMode(),
       name: name,
-      input: input
+      input: RuntimeJSONPayloadBox(input)
     )
     return summarizeVoiceResult(name: name, raw: raw)
   }

@@ -1,6 +1,14 @@
 import Foundation
 import Network
 import VoiceTurnDomain
+/// Boxes a non-Sendable value so the session's serial-queue (`q`) and main-actor
+/// closures can capture it. All access is serialized on `q` (or the main actor),
+/// so sharing the reference is race-free — the same model the `@unchecked
+/// Sendable` class relies on.
+private struct SessionCallbackBox<T>: @unchecked Sendable {
+  let value: T
+  init(_ value: T) { self.value = value }
+}
 
 /// A provider continuation is recovery work for one already-owned physical turn. Expose why it
 /// did not start so the controller can distinguish a healthy in-flight cycle from a terminal
@@ -432,8 +440,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
 
     func receiveOpenAIEventForTesting(_ event: [String: Any]) async {
       await withCheckedContinuation { continuation in
+        // `[String: Any]` is not Sendable (`Any` isn't); box it so the session
+        // queue closure can carry it across the concurrency boundary.
+        let eventBox = SessionCallbackBox(event)
         q.async {
-          self.handleOpenAI(event)
+          self.handleOpenAI(eventBox.value)
           continuation.resume()
         }
       }
@@ -496,18 +507,21 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     identity: RealtimeHubEventIdentity,
     completion: @escaping (RealtimePostToolContinuationStartResult) -> Void
   ) {
+    // The caller's completion is non-Sendable; box it so the session queue can
+    // carry it across without forcing the caller's closure to be @Sendable.
+    let completionBox = SessionCallbackBox(completion)
     q.async { [weak self] in
       guard let self else {
-        completion(.transportUnavailable)
+        completionBox.value(.transportUnavailable)
         return
       }
 
       guard self.activeEventIdentity == identity else {
-        completion(.stale)
+        completionBox.value(.stale)
         return
       }
       guard self.isOpen else {
-        completion(.transportUnavailable)
+        completionBox.value(.transportUnavailable)
         return
       }
 
@@ -520,11 +534,11 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
           self.activityOpen || self.geminiResponsePending || !self.pendingGeminiToolCallIds.isEmpty
       }
       if self.postToolContinuationAttempted {
-        completion(providerHasResponseInFlight ? .alreadyInFlight : .exhausted)
+        completionBox.value(providerHasResponseInFlight ? .alreadyInFlight : .exhausted)
         return
       }
       guard !providerHasResponseInFlight else {
-        completion(.alreadyInFlight)
+        completionBox.value(.alreadyInFlight)
         return
       }
 
@@ -548,7 +562,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         self.geminiResponsePending = true
         log("\(self.tag): requested explicit Gemini post-tool continuation")
       }
-      completion(.started)
+      completionBox.value(.started)
     }
   }
 
@@ -757,6 +771,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     screenEvidence: RealtimeScreenEvidenceAttachment? = nil,
     onWireEnqueued: ((Bool) -> Void)? = nil
   ) {
+    // `onWireEnqueued` is caller-owned and non-Sendable; box it so the session
+    // queue can carry it across without forcing the caller's closure @Sendable.
+    let onWireEnqueuedBox = SessionCallbackBox(onWireEnqueued)
     q.async { [weak self] in
       guard let self else { return }
       switch self.provider {
@@ -775,19 +792,19 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
             ],
           ]) { [weak self] imageError in
             guard let self, imageError == nil else {
-              onWireEnqueued?(false)
+              onWireEnqueuedBox.value?(false)
               return
             }
             self.enqueueOpenAIToolResult(
               callId: callId,
               output: output,
-              onWireEnqueued: onWireEnqueued)
+              onWireEnqueued: onWireEnqueuedBox.value)
           }
         } else {
           self.enqueueOpenAIToolResult(
             callId: callId,
             output: output,
-            onWireEnqueued: onWireEnqueued)
+            onWireEnqueued: onWireEnqueuedBox.value)
         }
       case .gemini:
         self.pendingGeminiToolCallIds.remove(callId)
@@ -806,7 +823,7 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
               + "image_bytes=\(screenEvidence.jpeg.count) serialized_bytes=\(serializedBytes)")
         }
         self.send(json: wire) { error in
-          onWireEnqueued?(error == nil)
+          onWireEnqueuedBox.value?(error == nil)
         }
       }
     }
@@ -1112,9 +1129,13 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
     _ body: @escaping @MainActor (RealtimeHubSessionDelegate) -> Void
   ) {
     guard let delegate else { return }
+    // `body` (@MainActor closure) and `delegate` are non-Sendable; box both for
+    // the main hop. They are only ever used on the main actor.
+    let delegateBox = SessionCallbackBox(delegate)
+    let bodyBox = SessionCallbackBox(body)
     DispatchQueue.main.async {
       MainActor.assumeIsolated {
-        body(delegate)
+        bodyBox.value(delegateBox.value)
       }
     }
   }
@@ -1501,6 +1522,9 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
   // MARK: - Send (on q)
 
   private func send(json: [String: Any], completion: ((Error?) -> Void)? = nil) {
+    // `completion` is non-Sendable; box it so the raw-WS / URLSession completion
+    // closures can carry it across the session queue.
+    let completionBox = SessionCallbackBox(completion)
     guard let data = try? JSONSerialization.data(withJSONObject: json),
       let text = String(data: data, encoding: .utf8)
     else {
@@ -1524,9 +1548,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
         return
       }
       rawWS.sendText(text) { [weak self] error in
-        self?.q.async {
-          if let error { self?.notifyError(error.localizedDescription) }
-          completion?(error)
+        guard let self else { return }
+        self.q.async {
+          if let error { self.notifyError(error.localizedDescription) }
+          completionBox.value?(error)
         }
       }
       return
@@ -1536,9 +1561,10 @@ final class RealtimeHubSession: NSObject, @unchecked Sendable {
       return
     }
     task.send(.string(text)) { [weak self] error in
-      self?.q.async {
-        if let error { self?.notifyError(error.localizedDescription) }
-        completion?(error)
+      guard let self else { return }
+      self.q.async {
+        if let error { self.notifyError(error.localizedDescription) }
+        completionBox.value?(error)
       }
     }
   }

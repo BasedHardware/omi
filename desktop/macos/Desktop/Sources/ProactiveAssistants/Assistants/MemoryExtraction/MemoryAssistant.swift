@@ -1,5 +1,12 @@
 import Foundation
 
+/// Boxes a non-Sendable `[String: Any]` event payload so it can be sent into a
+/// `@MainActor` task. The dictionary is built once and only read on the main
+/// actor, so the unchecked Sendable conformance is sound.
+private struct EventPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+}
+
 /// Memory extraction assistant that identifies facts and wisdom from screen content
 actor MemoryAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
@@ -138,7 +145,7 @@ actor MemoryAssistant: ProactiveAssistant {
     return nil
   }
 
-  func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
+  func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
     // This method is required by protocol but we use handleResultWithScreenshot instead
     guard let memoryResult = result as? MemoryExtractionResult else { return }
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
@@ -398,8 +405,9 @@ actor MemoryAssistant: ProactiveAssistant {
         screenshotId: frame.screenshotId,
         windowTitle: frame.windowTitle
       ) { type, data in
+        let payload = EventPayloadBox(value: data)
         Task { @MainActor in
-          AssistantCoordinator.shared.sendEvent(type: type, data: data)
+          AssistantCoordinator.shared.sendEvent(type: type, data: payload.value)
         }
       }
     } catch {

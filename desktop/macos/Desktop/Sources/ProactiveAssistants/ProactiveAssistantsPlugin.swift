@@ -312,7 +312,9 @@ public class ProactiveAssistantsPlugin: NSObject {
     do {
       focusAssistant = try FocusAssistant(
         onAlert: { [weak self] message in
-          self?.sendEvent(type: "alert", data: ["message": message])
+          Task { @MainActor in
+            self?.sendEvent(type: "alert", data: ["message": message])
+          }
         },
         onStatusChange: { [weak self] status in
           Task { @MainActor in

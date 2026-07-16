@@ -483,7 +483,7 @@ private final class TimeoutRaceBox<T>: @unchecked Sendable {
     self.continuation = continuation
   }
 
-  func resume(_ value: T?) {
+  func resume(_ value: sending T?) {
     lock.lock()
     defer { lock.unlock() }
     guard !resumed else { return }
@@ -908,11 +908,12 @@ final class DesktopAutomationActionRegistry {
         throw DesktopAutomationActionError.invalidParams("context event could not be normalized")
       }
       let matched = TaskContextSubjectMatcher.shared.resolve(event)
+      let referenceHash = matched.referenceHash
       await TaskContextualResurfacingService.shared.observe(matched)
       let shouldFlush = boolParam(params["flush"], default: true)
       if shouldFlush { await TaskContextualResurfacingService.shared.flush() }
       return [
-        "reference_hash": matched.referenceHash,
+        "reference_hash": referenceHash,
         "pending_workstreams": "\(await TaskContextualResurfacingService.shared.pendingWorkstreamCount())",
         "flushed": shouldFlush ? "true" : "false",
       ]

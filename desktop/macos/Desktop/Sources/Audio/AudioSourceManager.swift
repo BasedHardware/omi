@@ -241,8 +241,8 @@ final class AudioSourceManager: ObservableObject {
 
     // Start microphone capture
     try await audioCaptureService?.startCapture(
-      onAudioChunk: { [weak self] audioData in
-        self?.audioMixer?.setMicAudio(audioData)
+      onAudioChunk: { [mixer = audioMixer] audioData in
+        mixer?.setMicAudio(audioData)
       },
       onAudioLevel: { [weak self] level in
         Task { @MainActor in
@@ -255,16 +255,16 @@ final class AudioSourceManager: ObservableObject {
     // Start system audio capture if available
     if #available(macOS 14.4, *), let systemCapture = systemAudioCaptureService as? SystemAudioCaptureService {
       do {
-        try await systemCapture.startCapture(
-          onAudioChunk: { [weak self] audioData in
-            self?.audioMixer?.setSystemAudio(audioData)
-          },
-          onAudioLevel: { level in
-            Task { @MainActor in
-              AudioLevelMonitor.shared.updateSystemLevel(level)
-            }
+      try await systemCapture.startCapture(
+        onAudioChunk: { [mixer = audioMixer] audioData in
+          mixer?.setSystemAudio(audioData)
+        },
+        onAudioLevel: { level in
+          Task { @MainActor in
+            AudioLevelMonitor.shared.updateSystemLevel(level)
           }
-        )
+        }
+      )
         await MainActor.run {
           AppState.current?.recordSystemAudioCaptureOutcome(.granted)
         }

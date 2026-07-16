@@ -1,8 +1,14 @@
 import Cocoa
+@preconcurrency import ObjectiveC
 import Combine
 import OmiTheme
 import SwiftUI
 import VoiceTurnDomain
+/// Boxes a non-Sendable completion closure so NSAnimationContext's
+/// `@Sendable` completion handler can carry it across to the main actor.
+private struct AnimationCompletionBox: @unchecked Sendable {
+  let value: () -> Void
+}
 
 private final class FloatingBarHostingView<Content: View>: NSHostingView<Content> {
   override func acceptsFirstMouse(for event: NSEvent?) -> Bool {
@@ -207,7 +213,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// the island cannot occlude its own menus. Depth-counted because nested
   /// submenus emit their own begin/end tracking notifications.
   private var menuTrackingDepth = 0
-  private var menuTrackingObservers: [NSObjectProtocol] = []
+  private nonisolated(unsafe) var menuTrackingObservers: [NSObjectProtocol] = []
 
   /// The bar adopts the notch-island presentation whenever it is actively
   /// engaged — PTT listening, thinking, or speaking a reply — on ANY display,
@@ -1705,6 +1711,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   }
 
   private func animateFrame(to frame: NSRect, duration: TimeInterval, completion: (() -> Void)? = nil) {
+    let completionBox = completion.map { AnimationCompletionBox(value: $0) }
     frameAnimationToken += 1
     let token = frameAnimationToken
     pendingFrameAnimationTarget = frame
@@ -1735,7 +1742,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
           guard let self, self.frameAnimationToken == token else { return }
           self.setFrame(frame, display: true, animate: false)
           self.pendingFrameAnimationTarget = nil
-          completion?()
+          completionBox?.value()
         }
       })
   }

@@ -3392,7 +3392,7 @@ struct OverlayModalEscapeCatcher: NSViewRepresentable {
 
     final class EscapeCatcherView: NSView {
         var onEscape: (() -> Void)?
-        private var monitor: Any?
+        private nonisolated(unsafe) var monitor: Any?
 
         override func viewDidMoveToWindow() {
             super.viewDidMoveToWindow()
@@ -3429,7 +3429,11 @@ struct OverlayModalEscapeCatcher: NSViewRepresentable {
         }
 
         deinit {
-            removeMonitor()
+            // Deinitialization is nonisolated. The monitor is main-thread-only,
+            // while NSEvent.removeMonitor is safe to invoke from this boundary.
+            if let monitor {
+                NSEvent.removeMonitor(monitor)
+            }
         }
     }
 }

@@ -2,6 +2,13 @@ import AppKit
 import Foundation
 @preconcurrency import GRDB
 
+/// Boxes a non-Sendable `[String: Any]` event payload so it can be sent into a
+/// `@MainActor` task. The dictionary is built once and only read on the main
+/// actor, so the unchecked Sendable conformance is sound.
+private struct EventPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+}
+
 /// Proactive insight assistant that provides contextual suggestions based on screen content
 actor InsightAssistant: ProactiveAssistant {
   // MARK: - ProactiveAssistant Protocol
@@ -196,7 +203,7 @@ actor InsightAssistant: ProactiveAssistant {
     return nil
   }
 
-  func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
+  func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
     // This method is required by protocol but we use handleResultWithScreenshot instead
     guard let insightResult = result as? InsightExtractionResult else { return }
     guard let ownerID = RuntimeOwnerIdentity.currentOwnerId() else { return }
@@ -533,8 +540,9 @@ actor InsightAssistant: ProactiveAssistant {
         windowTitle: frame.windowTitle,
         screenshotData: frame.jpegData
       ) { type, data in
+        let payload = EventPayloadBox(value: data)
         Task { @MainActor in
-          AssistantCoordinator.shared.sendEvent(type: type, data: data)
+          AssistantCoordinator.shared.sendEvent(type: type, data: payload.value)
         }
       }
     } catch {

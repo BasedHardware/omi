@@ -400,9 +400,15 @@ struct MicrophonePermissionSection: View {
     isResetting = true
     resetButtonText = "Resetting & Restarting..."
 
+    // Capture the main-actor `appState` reference while still on the main
+    // actor; the reset runs off-main to avoid blocking the UI during the
+    // tccutil subprocess. AppState is main-actor-isolated (hence Sendable), so
+    // the reference crosses the dispatch boundary safely, and
+    // resetMicrophonePermissionDirect is nonisolated.
+    let state = appState
     DispatchQueue.global(qos: .userInitiated).async {
       // Reset and restart the app - macOS requires restart to show permission dialog again
-      let success = appState.resetMicrophonePermissionDirect(shouldRestart: true)
+      let success = state.resetMicrophonePermissionDirect(shouldRestart: true)
 
       if !success {
         DispatchQueue.main.async {

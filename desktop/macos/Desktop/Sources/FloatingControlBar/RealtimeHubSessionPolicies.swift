@@ -830,7 +830,7 @@ enum RealtimeHubBargeInContinuity {
 
   static let maximumContextRefreshAttempts = 8
 
-  static func prepareReplacementSession(
+  @MainActor static func prepareReplacementSession(
     resolveInterruptedTurn: () async -> InterruptedTurnPayload?,
     recordInterruptedTurn: (InterruptedTurnPayload) async -> Bool,
     refreshVoiceContext: () async -> Set<String>?,

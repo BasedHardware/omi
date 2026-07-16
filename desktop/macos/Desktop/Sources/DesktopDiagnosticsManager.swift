@@ -26,7 +26,7 @@ enum DesktopFallbackOutcome: String {
   case exhausted
 }
 
-struct DesktopHealthSnapshot {
+struct DesktopHealthSnapshot: @unchecked Sendable {
   let timestamp: Date
   let event: DesktopHealthEventName
   let properties: [String: Any]

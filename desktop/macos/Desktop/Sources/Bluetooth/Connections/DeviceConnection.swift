@@ -1,4 +1,4 @@
-import Combine
+@preconcurrency import Combine
 @preconcurrency import CoreBluetooth
 import Foundation
 import os.log
@@ -236,7 +236,7 @@ class BaseDeviceConnection: DeviceConnection {
   /// Delegate for connection events
   weak var delegate: DeviceConnectionDelegate?
 
-  private var transportStateSubscription: AnyCancellable?
+  private nonisolated(unsafe) var transportStateSubscription: AnyCancellable?
   private var isReadyForCallbacks = false
   private var didStartLifecycle = false
   private var teardownTask: Task<Void, Never>?

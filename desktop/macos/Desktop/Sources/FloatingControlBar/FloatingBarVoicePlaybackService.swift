@@ -4,6 +4,13 @@ import Foundation
 import OmiSupport
 import VoiceTurnDomain
 
+/// Boxes an `AVSpeechUtterance` (non-Sendable) so it can cross the
+/// `@MainActor` task boundary from a nonisolated delegate callback.
+private final class UtteranceBox: @unchecked Sendable {
+  let value: AVSpeechUtterance
+  init(_ value: AVSpeechUtterance) { self.value = value }
+}
+
 @MainActor
 final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AVSpeechSynthesizerDelegate {
   static let shared = FloatingBarVoicePlaybackService()
@@ -674,18 +681,20 @@ final class FloatingBarVoicePlaybackService: NSObject, AVAudioPlayerDelegate, AV
   }
 
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
-    Task { @MainActor [weak self] in
+    let utteranceBox = UtteranceBox(utterance)
+    Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
-      guard self.completeSystemSpeechIfCurrent(utterance) else { return }
+      guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
       self.startPlaybackIfNeeded()
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }
 
   nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
-    Task { @MainActor [weak self] in
+    let utteranceBox = UtteranceBox(utterance)
+    Task { @MainActor [weak self, utteranceBox] in
       guard let self else { return }
-      guard self.completeSystemSpeechIfCurrent(utterance) else { return }
+      guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }
       self.clearFloatingPillResponseGlowIfIdle()
     }
   }

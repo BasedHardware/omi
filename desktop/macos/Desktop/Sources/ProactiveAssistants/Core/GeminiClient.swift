@@ -785,7 +785,7 @@ struct ToolChatResult {
 }
 
 /// A function call from the model
-struct ToolCall {
+struct ToolCall: @unchecked Sendable {
   let name: String
   let arguments: [String: Any]
   let thoughtSignature: String?

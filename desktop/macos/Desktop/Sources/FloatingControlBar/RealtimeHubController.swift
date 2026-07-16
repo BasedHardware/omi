@@ -4,6 +4,13 @@ import Foundation
 import OmiSupport
 import VoiceTurnDomain
 
+/// Boxes a `[String: Any]` tool-arguments payload so it can cross a
+/// `@Sendable` task boundary (the dictionary itself is non-Sendable).
+private struct RealtimeToolArgumentsBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+
 // MARK: - Realtime Hub Controller (Phase 1)
 //
 // Owns one persistent, warm RealtimeHubSession as the physical voice provider
@@ -3962,9 +3969,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       providerCallID: callId,
       toolName: name)
     let runTask = beginExternalRunAuthorityIfNeeded(turnID: turnID, prompt: runPrompt)
-    Task { [weak self, source] in
+    let argumentsBox = RealtimeToolArgumentsBox(arguments)
+    Task { [weak self, source, argumentsBox] in
       guard let self else { return }
       do {
+        let arguments = argumentsBox.value
         let binding = try await runTask.value
         guard
           self.isCurrentToolTurn(

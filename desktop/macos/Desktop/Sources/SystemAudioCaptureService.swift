@@ -10,10 +10,10 @@ class SystemAudioCaptureService: @unchecked Sendable {
   // MARK: - Types
 
   /// Callback for receiving audio chunks
-  typealias AudioChunkHandler = (Data) -> Void
+  typealias AudioChunkHandler = @Sendable (Data) -> Void
 
   /// Callback for receiving audio levels (0.0 - 1.0)
-  typealias AudioLevelHandler = (Float) -> Void
+  typealias AudioLevelHandler = @Sendable (Float) -> Void
 
   enum SystemAudioCaptureError: LocalizedError {
     case tapCreationFailed(OSStatus)
@@ -61,6 +61,10 @@ class SystemAudioCaptureService: @unchecked Sendable {
   private var inputFormat: AVAudioFormat?
   private var targetFormat: AVAudioFormat?
   private var sourceSampleRate: Double = 0.0
+  // Flipped exactly once per convert() call by the synchronous AVAudioConverter input
+  // block (a @Sendable closure) on the non-reentrant CoreAudio IO thread. nonisolated(unsafe)
+  // because the IOProc is serial; it is reset at the top of every handleAudioInput() call.
+  private nonisolated(unsafe) var hasConsumedInput = false
 
   // Tap UUID for identification
   private let tapUUID = UUID()
@@ -394,14 +398,14 @@ class SystemAudioCaptureService: @unchecked Sendable {
 
     // Convert using input block pattern
     var error: NSError?
-    var hasConsumedInput = false
+    hasConsumedInput = false
 
     let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-      if hasConsumedInput {
+      if self.hasConsumedInput {
         outStatus.pointee = .noDataNow
         return nil
       }
-      hasConsumedInput = true
+      self.hasConsumedInput = true
       outStatus.pointee = .haveData
       return inputBuffer
     }

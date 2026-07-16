@@ -888,7 +888,7 @@ private final class ScriptedCoordinatorRuntime: DesktopCoordinatorRuntimeControl
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String {
     calledTools.append(name)
     return responses[name] ?? "{\"ok\": true}"
@@ -914,9 +914,9 @@ private final class RecordingCoordinatorRuntime: DesktopCoordinatorRuntimeContro
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String {
-    calls.append(Call(clientId: clientId, harnessMode: harnessMode, name: name, input: input))
+    calls.append(Call(clientId: clientId, harnessMode: harnessMode, name: name, input: input.value))
     return response
   }
 }

@@ -2677,6 +2677,7 @@ extension APIClient {
     clearDueAt: Bool = false,
     priority: String? = nil,
     metadata: [String: Any]? = nil,
+    metadataBox: ActionItemMetadataBox? = nil,
     goalId: String? = nil,
     clearGoalId: Bool = false,
     workstreamId: String? = nil,
@@ -2699,7 +2700,7 @@ extension APIClient {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
     var metadataString: String? = nil
-    if let metadata = metadata {
+    if let metadata = metadataBox?.value ?? metadata {
       if let data = try? JSONSerialization.data(withJSONObject: metadata),
         let str = String(data: data, encoding: .utf8)
       {
@@ -2760,6 +2761,7 @@ extension APIClient {
     priority: String? = nil,
     category: String? = nil,
     metadata: [String: Any]? = nil,
+    metadataBox: ActionItemMetadataBox? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
     recurrenceParentId: String? = nil,
@@ -2778,7 +2780,7 @@ extension APIClient {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
     var metadataString: String? = nil
-    if let metadata = metadata {
+    if let metadata = metadataBox?.value ?? metadata {
       if let data = try? JSONSerialization.data(withJSONObject: metadata),
         let str = String(data: data, encoding: .utf8)
       {

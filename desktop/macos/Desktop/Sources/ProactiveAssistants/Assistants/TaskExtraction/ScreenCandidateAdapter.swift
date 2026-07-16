@@ -101,10 +101,10 @@ enum TaskLegacyEffect: CaseIterable {
   case destructiveDeduplication
 }
 
-struct TaskLegacyEffectGate {
-  private let modeProvider: () async -> OmiAPI.TaskWorkflowMode?
+struct TaskLegacyEffectGate: Sendable {
+  private let modeProvider: @Sendable () async -> OmiAPI.TaskWorkflowMode?
 
-  init(modeProvider: @escaping () async -> OmiAPI.TaskWorkflowMode?) {
+  init(modeProvider: @escaping @Sendable () async -> OmiAPI.TaskWorkflowMode?) {
     self.modeProvider = modeProvider
   }
 
@@ -120,11 +120,17 @@ struct TaskLegacyEffectGate {
     return try await operation()
   }
 
-  nonisolated(unsafe) static let live = TaskLegacyEffectGate {
+  static let live = TaskLegacyEffectGate {
     let control = try? await APIClient.shared.getCandidateWorkflowControl()
     return control?.workflowMode
   }
 }
+
+/// `CandidateCreate` is a generated Codable model (value type) that is only
+/// forwarded to `APIClient` for serialization, never mutated concurrently.
+/// The `@unchecked Sendable` conformance lets it cross the `APIClient` actor
+/// boundary from the (non-isolated) adapter.
+extension OmiAPI.CandidateCreate: @unchecked Sendable {}
 
 struct ScreenCandidateDecision {
   let outcome: ScreenCaptureOutcome

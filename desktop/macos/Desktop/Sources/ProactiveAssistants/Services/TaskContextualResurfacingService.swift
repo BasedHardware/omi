@@ -29,7 +29,7 @@ enum TaskContextUrgency: String, Codable {
   case timeSensitive = "time_sensitive"
 }
 
-struct TaskContextSubject: Hashable {
+struct TaskContextSubject: Hashable, Sendable {
   let kind: OmiAPI.RecommendationSubjectKind
   let id: String
   let workstreamID: String?
@@ -46,7 +46,7 @@ struct TaskContextSubject: Hashable {
 
 /// A privacy-bounded local event. Raw window titles, person names, document names,
 /// and meeting text are normalized and hashed before this value exists.
-struct TaskLocalContextEvent: Equatable {
+struct TaskLocalContextEvent: Equatable, Sendable {
   static let schemaVersion = 1
 
   let kind: TaskContextEventKind
@@ -756,7 +756,7 @@ final class KernelPreparedArtifactBridge {
   }
 }
 
-protocol TaskContextualResurfacingClient: AnyObject {
+protocol TaskContextualResurfacingClient: AnyObject, Sendable {
   func getCandidateWorkflowControl(
     expectedOwnerId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
@@ -829,7 +829,7 @@ actor TaskContextualResurfacingService {
   private let client: any TaskContextualResurfacingClient
   private let debounceInterval: TimeInterval
   private let deviceID: () -> String
-  private let ownerID: () -> String?
+  private let ownerID: @Sendable () -> String?
   private let interruptionSender:
     @MainActor @Sendable (
       _ candidate: TaskInterruptionCandidate,
@@ -852,7 +852,7 @@ actor TaskContextualResurfacingService {
     client: any TaskContextualResurfacingClient = APIClient.shared,
     debounceInterval: TimeInterval = 2,
     deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
-    ownerIDProvider: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
     interruptionSender:
       @escaping @MainActor @Sendable (
         TaskInterruptionCandidate,
@@ -875,7 +875,7 @@ actor TaskContextualResurfacingService {
     client: any TaskContextualResurfacingClient = APIClient.shared,
     debounceInterval: TimeInterval = 2,
     deviceIDProvider: @escaping () -> String = { ClientDeviceService.shared.clientDeviceId },
-    ownerIDProvider: @escaping () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
+    ownerIDProvider: @escaping @Sendable () -> String? = { RuntimeOwnerIdentity.currentOwnerId() },
     sendInterruption: @escaping @MainActor @Sendable (TaskInterruptionCandidate) -> Void
   ) {
     self.init(

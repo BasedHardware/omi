@@ -21,10 +21,10 @@ actor FocusAssistant: ProactiveAssistant {
   // MARK: - Properties
 
   private let geminiClient: GeminiClient
-  private let onAlert: (String) -> Void
-  private let onStatusChange: ((FocusStatus) -> Void)?
-  private let onRefocus: (() -> Void)?
-  private let onDistraction: (() -> Void)?
+  private let onAlert: @Sendable (String) -> Void
+  private let onStatusChange: (@Sendable (FocusStatus) -> Void)?
+  private let onRefocus: (@Sendable () -> Void)?
+  private let onDistraction: (@Sendable () -> Void)?
 
   private var isRunning = false
   private let frameStream: AsyncStream<CapturedFrame>
@@ -74,10 +74,10 @@ actor FocusAssistant: ProactiveAssistant {
 
   init(
     apiKey: String? = nil,
-    onAlert: @escaping (String) -> Void = { _ in },
-    onStatusChange: ((FocusStatus) -> Void)? = nil,
-    onRefocus: (() -> Void)? = nil,
-    onDistraction: (() -> Void)? = nil
+    onAlert: @escaping @Sendable (String) -> Void = { _ in },
+    onStatusChange: (@Sendable (FocusStatus) -> Void)? = nil,
+    onRefocus: (@Sendable () -> Void)? = nil,
+    onDistraction: (@Sendable () -> Void)? = nil
   ) throws {
     self.geminiClient = try GeminiClient(apiKey: apiKey, fallbackModel: "gemini-2.5-flash")
     self.onAlert = onAlert
@@ -255,7 +255,7 @@ actor FocusAssistant: ProactiveAssistant {
     return false
   }
 
-  func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
+  func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
     // Results are handled internally in processFrame
   }
 
@@ -325,13 +325,17 @@ actor FocusAssistant: ProactiveAssistant {
 
   nonisolated func submitFrame(jpegData: Data, appName: String) {
     Task {
-      let frame = CapturedFrame(
-        jpegData: jpegData,
-        appName: appName,
-        frameNumber: await getNextFrameNumber()
-      )
-      _ = await analyze(frame: frame)
+      await submitFrameOnActor(jpegData: jpegData, appName: appName)
     }
+  }
+
+  private func submitFrameOnActor(jpegData: Data, appName: String) async {
+    let frame = CapturedFrame(
+      jpegData: jpegData,
+      appName: appName,
+      frameNumber: getNextFrameNumber()
+    )
+    _ = await analyze(frame: frame)
   }
 
   private var frameCounter = 0

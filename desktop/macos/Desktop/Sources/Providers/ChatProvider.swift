@@ -5,6 +5,23 @@ import OmiSupport
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// Boxes a value so it can cross a `@Sendable` boundary without itself
+/// conforming to `Sendable`. Safe here because the captured JSON payloads are
+/// read straight through and never mutated after boxing.
+private struct ChatProviderSendableBox<Value>: @unchecked Sendable {
+  let value: Value
+}
+
+/// Mutable timing/usage accumulator shared between a turn's @Sendable tool
+/// callbacks and the @MainActor turn body. All access is funneled through the
+/// MainActor (callbacks run via ChatTurnCallbackQueue), matching the existing
+/// responseMetrics/pendingToolTraceInputs accumulators, so unchecked Sendable
+/// conformance is safe.
+private final class ChatToolTimingState: @unchecked Sendable {
+  var toolNames: [String] = []
+  var toolStartTimes: [String: Date] = [:]
+}
+
 struct ChatLegacyCompatibilityMetadata: Equatable {
   static let owner = "desktop-main-chat"
   static let removalCondition =
@@ -15,7 +32,7 @@ struct ChatLegacyCompatibilityMetadata: Equatable {
 
 enum ChatLegacyPageCollector {
   static func all<Element>(
-    fetchPage: (_ limit: Int, _ offset: Int) async throws -> [Element]
+    fetchPage: @Sendable (_ limit: Int, _ offset: Int) async throws -> [Element]
   ) async throws -> [Element] {
     var rows: [Element] = []
     var offset = 0
@@ -1607,8 +1624,9 @@ class ChatProvider: ObservableObject {
     // Set up global auth handlers so auth_required during warmup is handled
     await resolvedAgentClient().setGlobalAuthHandlers(
       onAuthRequired: { [weak self] methods, authUrl in
+        let methodsBox = ChatProviderSendableBox(value: methods)
         Task { @MainActor [weak self] in
-          self?.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
+          self?.handleClaudeAuthRequired(methods: methodsBox.value, authUrl: authUrl)
         }
       },
       onAuthSuccess: { [weak self] in
@@ -1850,7 +1868,7 @@ class ChatProvider: ObservableObject {
         outcome: outcome,
         capturedAtMs: capturedAtMs,
         expiresAtMs: expiresAtMs,
-        payload: payload
+        payload: RuntimeJSONPayloadBox(payload)
       )
     }
     let snapshot = try await client.getContextSnapshot(
@@ -4025,8 +4043,7 @@ class ChatProvider: ObservableObject {
     }
 
     // Analytics: track tool usage; the telemetry attempt owns wall-clock timing.
-    var toolNames: [String] = []
-    var toolStartTimes: [String: Date] = [:]
+    let toolTiming = ChatToolTimingState()
     let responseMetrics = ChatResponseMetrics()
     var completedResponseText: String?
     var screenContextEligibleForTurn = false
@@ -4159,8 +4176,10 @@ class ChatProvider: ObservableObject {
         }
       }
       let toolActivityHandler: AgentClient.ToolActivityHandler = { [weak self] name, status, toolUseId, input in
+        let inputBox = input.map { ChatProviderSendableBox(value: $0) }
         callbackQueue.submit { @MainActor [weak self] in
           guard let self else { return }
+          let input = inputBox?.value
           let nowMs = ChatProvider.monotonicNowMs()
           // Tools without a toolUseId still get tracked under a
           // synthetic key so the detector's per-tool timer fires.
@@ -4201,9 +4220,9 @@ class ChatProvider: ObservableObject {
             input: input
           )
           if toolStatus == .running {
-            toolNames.append(name)
+            toolTiming.toolNames.append(name)
             responseMetrics.recordToolRequested(name: name)
-            toolStartTimes[trackedId] = Date()
+            toolTiming.toolStartTimes[trackedId] = Date()
             if name.contains("browser") || name.contains("playwright") {
               let token = UserDefaults.standard.string(forKey: "playwrightExtensionToken") ?? ""
               if token.isEmpty {
@@ -4231,7 +4250,7 @@ class ChatProvider: ObservableObject {
                 FloatingControlBarManager.shared.showTemporarily()
               }
             }
-          } else if let startTime = toolStartTimes.removeValue(forKey: trackedId) {
+          } else if let startTime = toolTiming.toolStartTimes.removeValue(forKey: trackedId) {
             if toolStatus == .completed {
               let durationMs = Int(Date().timeIntervalSince(startTime) * 1000)
               AnalyticsManager.shared.chatToolCallCompleted(toolName: name, durationMs: durationMs)
@@ -4378,8 +4397,10 @@ class ChatProvider: ObservableObject {
           onThinkingDelta: thinkingDeltaHandler,
           onToolResultDisplay: toolResultDisplayHandler,
           onAuthRequired: { [weak self] methods, authUrl in
+            let methodsBox = ChatProviderSendableBox(value: methods)
             callbackQueue.submit { @MainActor [weak self] in
               guard let self else { return }
+              let methods = methodsBox.value
               self.handleClaudeAuthRequired(methods: methods, authUrl: authUrl)
             }
           },
@@ -4533,7 +4554,7 @@ class ChatProvider: ObservableObject {
           systemPrompt: "kernel-context:\(kernelContext.snapshot.version):\(kernelContext.snapshot.snapshotGeneration)",
           hasScreenshot: effectiveImageData != nil,
           screenshotSizeBytes: effectiveImageData?.count,
-          toolNames: toolNames,
+          toolNames: toolTiming.toolNames,
           sqlRowsReturned: metricsSnapshot.sqlRowsReturned,
           sqlQueryCount: metricsSnapshot.sqlQueryCount
         )
@@ -4570,8 +4591,8 @@ class ChatProvider: ObservableObject {
       // background reliability concerns and must not inflate query latency
       // or turn a successful answer into a failed attempt.
       let completionMetrics = ChatQueryCompletionMetrics(
-        toolCallCount: toolNames.count,
-        toolNames: toolNames,
+        toolCallCount: toolTiming.toolNames.count,
+        toolNames: toolTiming.toolNames,
         costUsd: queryResult.costUsd,
         responseLength: messageText.count,
         screenToolRequested: metricsSnapshot.screenContext.screenToolRequested,
@@ -4616,7 +4637,7 @@ class ChatProvider: ObservableObject {
           role: "assistant",
           text: aiText,
           step: "chat",
-          toolCalls: toolNames.isEmpty ? nil : toolNames,
+          toolCalls: toolTiming.toolNames.isEmpty ? nil : toolTiming.toolNames,
           model: effectiveRequestModel
         )
       }

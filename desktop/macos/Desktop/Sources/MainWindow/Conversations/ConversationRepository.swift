@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import ObjectiveC
 
 /// Synchronous session fence for conversation cache transaction admission.
 ///
@@ -79,7 +80,7 @@ protocol ConversationRemoteDataSource: Sendable {
   func delete(id: String) async throws
 }
 
-protocol ConversationLocalDataSource {
+protocol ConversationLocalDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation?
@@ -260,7 +261,7 @@ final class ConversationRepository {
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
-  private var ownerChangeObserver: NSObjectProtocol?
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(remote: ConversationRemoteDataSource, local: ConversationLocalDataSource) {
     self.remote = remote

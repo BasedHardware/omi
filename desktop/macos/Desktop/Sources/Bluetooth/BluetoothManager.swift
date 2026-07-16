@@ -3,6 +3,12 @@ import Combine
 import Foundation
 import os.log
 
+/// Sendable wrapper for CoreBluetooth advertisement payloads; `[String: Any]`
+/// is non-Sendable, so it must be boxed to cross the main-actor task boundary.
+private struct AdvertisementDataBox: @unchecked Sendable {
+  let value: [String: Any]
+}
+
 enum BluetoothCentralEvent: Equatable, Sendable {
   case connected(lease: BluetoothConnectionLease)
   case failedToConnect(lease: BluetoothConnectionLease, reason: String)
@@ -272,12 +278,13 @@ extension BluetoothManager: CBCentralManagerDelegate {
     advertisementData: [String: Any],
     rssi RSSI: NSNumber
   ) {
+    let advertisementDataBox = AdvertisementDataBox(value: advertisementData)
     Task { @MainActor in
       // Check if this is a supported device
       guard
         let device = BtDevice.from(
           peripheral: peripheral,
-          advertisementData: advertisementData,
+          advertisementData: advertisementDataBox.value,
           rssi: RSSI
         )
       else {

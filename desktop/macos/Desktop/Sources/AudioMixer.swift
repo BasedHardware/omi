@@ -7,7 +7,7 @@ import Foundation
 ///    16kHz mono Int16 stream. Use when the backend is configured for `channels=1`.
 ///  - `.stereo`: mic on left, system on right, interleaved. Use when the backend
 ///    accepts multichannel audio with per-channel speaker mapping.
-class AudioMixer {
+class AudioMixer: @unchecked Sendable {
 
   // MARK: - Types
 

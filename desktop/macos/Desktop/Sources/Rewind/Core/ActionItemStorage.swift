@@ -1,6 +1,13 @@
 import Foundation
 @preconcurrency import GRDB
 
+/// Sendable wrapper for `[String: Any]` metadata so it can cross the
+/// @Sendable database write closure boundary.
+private struct ActionItemMetadataPayload: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+
 /// Actor-based storage manager for action items/tasks with bidirectional sync
 /// Provides local-first caching for fast startup and background sync with backend
 actor ActionItemStorage {
@@ -961,12 +968,14 @@ actor ActionItemStorage {
     clearDueAt: Bool = false,
     priority: String? = nil,
     metadata: [String: Any]? = nil,
+    metadataBox: ActionItemMetadataBox? = nil,
     recurrenceRule: String? = nil,
     workstreamId: String? = nil,
     authorization: LocalMutationAuthorization
   ) async throws {
     try authorization.require()
     let db = try await ensureInitialized()
+    let metadataPayload = (metadataBox?.value ?? metadata).map { ActionItemMetadataPayload($0) }
 
     try await authorization.withCommitLease {
       try await db.write { database in
@@ -990,7 +999,7 @@ actor ActionItemStorage {
         if let priority = priority {
           record.priority = priority
         }
-        if let metadata = metadata {
+        if let metadata = metadataPayload?.value {
           record.setMetadata(metadata)
         }
         if let recurrenceRule = recurrenceRule {

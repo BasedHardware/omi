@@ -81,7 +81,7 @@ final class DeviceProvider: ObservableObject {
 
   private var batterySubscription: Task<Void, Never>?
   private var cancellables = Set<AnyCancellable>()
-  private var disconnectNotificationTimer: Timer?
+  nonisolated(unsafe) private var disconnectNotificationTimer: Timer?
   private var hasLowBatteryAlerted = false
 
   private let logger = Logger(subsystem: "me.omi.desktop", category: "DeviceProvider")

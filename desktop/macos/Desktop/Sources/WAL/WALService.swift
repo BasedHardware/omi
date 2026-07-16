@@ -858,6 +858,7 @@ final class WALService: ObservableObject {
       fileData.append(Data(bytes: &length, count: 4))
       fileData.append(frame)
     }
+    let fileDataPayload = fileData
 
     let frameCount = frames.count
 
@@ -866,10 +867,10 @@ final class WALService: ObservableObject {
     // need filePath set before proceeding should use writeFramesToDiskAndWait.
     DispatchQueue.global(qos: .utility).async { [weak self] in
       do {
-        try fileData.write(to: fileUrl, options: .atomic)
+        try fileDataPayload.write(to: fileUrl, options: .atomic)
         log("WALService: Wrote \(frameCount) frames to \(fileName)")
 
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
           guard let self else { return }
           if let index = self.wals.firstIndex(where: { $0.id == walId }) {
             self.wals[index].storage = .disk
@@ -885,7 +886,7 @@ final class WALService: ObservableObject {
           "WALService: Failed to write frames to disk "
             + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
             + reason)
-        DispatchQueue.main.async {
+        DispatchQueue.main.async { [weak self] in
           self?.recordFrameWriteFailure(walId: walId, reason: reason)
         }
       }
@@ -911,27 +912,23 @@ final class WALService: ObservableObject {
       fileData.append(Data(bytes: &length, count: 4))
       fileData.append(frame)
     }
+    let fileDataPayload = fileData
 
     let frameCount = frames.count
-    let group = DispatchGroup()
-    var writeSucceeded = false
-    group.enter()
-    DispatchQueue.global(qos: .utility).async {
+    let writeSucceeded: Bool = DispatchQueue.global(qos: .utility).sync {
       do {
-        try fileData.write(to: fileUrl, options: .atomic)
+        try fileDataPayload.write(to: fileUrl, options: .atomic)
         log("WALService: Wrote \(frameCount) frames to \(fileName)")
-        writeSucceeded = true
+        return true
       } catch {
         let reason = error.localizedDescription
         log(
           "WALService: Failed to write frames to disk "
             + "(failure_class=wal_write_failed recovery_action=retain_frames recovery_result=degraded): "
             + reason)
-        writeSucceeded = false
+        return false
       }
-      group.leave()
     }
-    group.wait()
 
     if writeSucceeded, let index = wals.firstIndex(where: { $0.id == walId }) {
       wals[index].storage = .disk

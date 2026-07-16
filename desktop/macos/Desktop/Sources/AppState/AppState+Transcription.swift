@@ -360,18 +360,22 @@ extension AppState {
     guard let mic = audioCaptureService else { return false }
     guard !mic.capturing else { return true }
     do {
+      let useLocalSTT = sttSession.useLocalSTT
+      let localService = localMicService
+      let mixer = audioMixer
       try await mic.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if self.sttSession.useLocalSTT {
-            self.localMicService?.appendAudio(audioData)
+        onAudioChunk: { audioData in
+          if useLocalSTT {
+            localService?.appendAudio(audioData)
           } else {
-            self.audioMixer?.setMicAudio(audioData)
+            mixer?.setMicAudio(audioData)
           }
         },
         onAudioLevel: { level in
           // Use dedicated monitor to avoid triggering AppState re-renders
-          AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          Task { @MainActor in
+            AudioLevelMonitor.shared.updateMicrophoneLevel(level)
+          }
         }
       )
       // The HAL setup above is async and can be slow. If recording stopped — or the service was
@@ -398,17 +402,21 @@ extension AppState {
     guard let systemService = systemAudioCaptureService as? SystemAudioCaptureService else { return }
     guard !systemService.capturing else { return }
     do {
+      let useLocalSTT = sttSession.useLocalSTT
+      let localSystem = localSystemService
+      let mixer = audioMixer
       try await systemService.startCapture(
-        onAudioChunk: { [weak self] audioData in
-          guard let self else { return }
-          if self.sttSession.useLocalSTT {
-            self.localSystemService?.appendAudio(audioData)
+        onAudioChunk: { audioData in
+          if useLocalSTT {
+            localSystem?.appendAudio(audioData)
           } else {
-            self.audioMixer?.setSystemAudio(audioData)
+            mixer?.setSystemAudio(audioData)
           }
         },
         onAudioLevel: { level in
-          AudioLevelMonitor.shared.updateSystemLevel(level)
+          Task { @MainActor in
+            AudioLevelMonitor.shared.updateSystemLevel(level)
+          }
         }
       )
       // The HAL setup above is async and can be slow. If recording stopped — or the service was

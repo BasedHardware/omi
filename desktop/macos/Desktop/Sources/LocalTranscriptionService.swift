@@ -119,8 +119,8 @@ final class LocalTranscriptionService: @unchecked Sendable {
         )
       } catch {
         logError("LocalTranscriptionService: model load failed", error: error)
-        if let onFailed = self.onModelLoadFailed {
-          await MainActor.run { onFailed() }
+        if self.onModelLoadFailed != nil {
+          await MainActor.run { self.onModelLoadFailed?() }
         }
       }
     }
@@ -257,9 +257,9 @@ final class LocalTranscriptionService: @unchecked Sendable {
       )
       // Deliver synchronously on the main actor so an awaited finish() guarantees the
       // segment is persisted (to the current session) before the caller rotates state.
-      if let onSegments {
+      if self.onSegments != nil {
         let segs = [segment]
-        await MainActor.run { onSegments(segs) }
+        await MainActor.run { self.onSegments?(segs) }
       }
       log(
         String(

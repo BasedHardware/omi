@@ -211,7 +211,7 @@ func measurePerf<T>(_ name: String, logCPU: Bool = false, _ block: () -> T) -> T
 }
 
 /// Async version of measurePerf
-func measurePerfAsync<T>(_ name: String, logCPU: Bool = false, _ block: () async -> T) async -> T {
+func measurePerfAsync<T>(_ name: String, logCPU: Bool = false, _ block: @Sendable () async -> T) async -> T {
   let timer = PerfTimer(name, logCPU: logCPU)
   let result = await block()
   timer.stop()

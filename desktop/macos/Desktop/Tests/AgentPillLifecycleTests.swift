@@ -1309,7 +1309,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(
       source.contains(
         "func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
-    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utterance) else { return }"))
+    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }"))
     XCTAssertTrue(source.contains("self.clearFloatingPillResponseGlowIfIdle()"))
   }
 
@@ -1637,7 +1637,7 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("guard self.audioPlayer === player else { return }"))
     XCTAssertTrue(
       source.contains("speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance)"))
-    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utterance) else { return }"))
+    XCTAssertTrue(source.contains("guard self.completeSystemSpeechIfCurrent(utteranceBox.value) else { return }"))
   }
 
   func testFloatingBarResizeCoalescesNoopFrames() throws {

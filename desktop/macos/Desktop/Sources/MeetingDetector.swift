@@ -29,7 +29,7 @@ final class MeetingDetector {
 
   private let pollInterval: TimeInterval
   private let offGracePeriod: TimeInterval
-  private let isMeetingNow: () -> Bool
+  private let isMeetingNow: @Sendable () -> Bool
   private let now: () -> Date
   private let onInitialStateObserved: () -> Void
   private let onChange: (Bool) -> Void
@@ -54,7 +54,7 @@ final class MeetingDetector {
   init(
     pollInterval: TimeInterval = 4.0,
     offGracePeriod: TimeInterval = 8.0,
-    isMeetingNow: @escaping () -> Bool = {
+    isMeetingNow: @escaping @Sendable () -> Bool = {
       if #available(macOS 14.4, *), ConferencingApps.callAppIsUsingMicrophone() { return true }
       return ConferencingApps.browserCallWindowPresent()
     },

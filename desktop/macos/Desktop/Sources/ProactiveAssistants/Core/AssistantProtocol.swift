@@ -1,7 +1,7 @@
 import Foundation
 
 /// Result from an assistant's analysis
-protocol AssistantResult {
+protocol AssistantResult: Sendable {
   /// Convert result to dictionary for Flutter communication
   func toDictionary() -> [String: Any]
 }
@@ -33,7 +33,7 @@ protocol ProactiveAssistant: Actor {
   /// - Parameters:
   ///   - result: The analysis result to handle
   ///   - sendEvent: Callback to send events to Flutter
-  func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async
+  func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async
 
   /// Called when the active application changes
   /// - Parameter newApp: Name of the newly active application

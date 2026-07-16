@@ -1,6 +1,7 @@
+@preconcurrency import Foundation
 import AppKit
 import OmiTheme
-import SwiftUI
+@preconcurrency import SwiftUI
 
 /// Thumbnail view for a single screenshot in the grid
 struct ScreenshotThumbnailView: View {

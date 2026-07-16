@@ -325,7 +325,7 @@ class AppState: ObservableObject {
 
   /// Trigger the monthly-limit popup. Safe to call repeatedly — SwiftUI's
   /// `@Published` dedupes identical-value writes automatically.
-  let servicesCoordinator = AppServicesCoordinator()
+  nonisolated(unsafe) let servicesCoordinator = AppServicesCoordinator()
 
   var audioCaptureService: AudioCaptureService? {
     get { servicesCoordinator.audioCaptureService }
@@ -462,7 +462,7 @@ class AppState: ObservableObject {
     set { servicesCoordinator.bluetoothStateCancellable = newValue }
   }
 
-  private var ownerChangeObserver: NSObjectProtocol?
+  nonisolated(unsafe) private var ownerChangeObserver: NSObjectProtocol?
 
   /// Bumped on every in-place account switch. Owner-scoped loads capture it
   /// before awaiting and drop their result if it moved — a previous account's
@@ -598,7 +598,7 @@ class AppState: ObservableObject {
     // Detects when macOS silently revokes notification authorization and auto-repairs
     notificationHealthTimer = Timer.scheduledTimer(withTimeInterval: 30 * 60, repeats: true) {
       [weak self] _ in
-      DispatchQueue.main.async {
+      MainActor.assumeIsolated {
         self?.checkNotificationPermission()
       }
     }

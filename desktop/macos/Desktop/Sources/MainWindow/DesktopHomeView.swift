@@ -2,6 +2,8 @@ import AppKit
 import OmiTheme
 import SwiftUI
 
+private struct AnySendableBox: @unchecked Sendable { let value: Any? }
+
 // MARK: - NSHostingView sizingOptions access
 
 /// Protocol to access sizingOptions on any NSHostingView<Content> regardless of the generic parameter.
@@ -508,9 +510,10 @@ struct DesktopHomeView: View {
     let minimumContentSize = NSSize(width: minimumWindowWidth, height: minimumWindowHeight)
     NotificationCenter.default.addObserver(
       forName: NSWindow.didResizeNotification, object: nil, queue: .main
-    ) { note in
+    ) { notification in
+      let objectBox = AnySendableBox(value: notification.object)
       MainActor.assumeIsolated {
-        guard let window = note.object as? NSWindow,
+        guard let window = objectBox.value as? NSWindow,
           window.title.lowercased().hasPrefix("omi")
         else { return }
         let frameMin = window.frameRect(

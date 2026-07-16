@@ -1,5 +1,12 @@
 import Foundation
 
+/// `@unchecked Sendable` carrier for the non-Sendable `[String: Any]` event
+/// payload captured by a `@MainActor` `Task` in `processFrame`.
+fileprivate struct TaskAssistantEventPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+
 /// Task extraction assistant that identifies tasks and action items from screen content
 /// Uses single-stage Gemini tool calling with vector + FTS5 search for deduplication
 actor TaskAssistant: ProactiveAssistant {
@@ -374,7 +381,7 @@ actor TaskAssistant: ProactiveAssistant {
     triggerContinuation.yield(.timerFallback(frame))
   }
 
-  func handleResult(_ result: AssistantResult, sendEvent: @escaping (String, [String: Any]) -> Void) async {
+  func handleResult(_ result: AssistantResult, sendEvent: @escaping @Sendable (String, [String: Any]) -> Void) async {
     guard let taskResult = result as? TaskExtractionResult else { return }
     await handleResultWithScreenshot(taskResult, screenshotId: nil, appName: "Unknown", sendEvent: sendEvent)
   }
@@ -885,8 +892,9 @@ actor TaskAssistant: ProactiveAssistant {
         await handleResultWithScreenshot(
           result, screenshotId: frame.screenshotId, appName: frame.appName, windowTitle: frame.windowTitle
         ) { type, data in
+          let boxed = TaskAssistantEventPayloadBox(data)
           Task { @MainActor in
-            AssistantCoordinator.shared.sendEvent(type: type, data: data)
+            AssistantCoordinator.shared.sendEvent(type: type, data: boxed.value)
           }
         }
       }

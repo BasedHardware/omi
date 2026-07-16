@@ -1,5 +1,70 @@
 import Foundation
 
+/// `@preconcurrency` boundary mirroring `AgentArtifactProjectionLoading`. It lets
+/// the non-Sendable `[String: Any]` tool/context payloads cross into the
+/// `AgentBridge` actor without Sendable conformance, which `[String: Any]` can
+/// never satisfy. Each call site forwards an already-copied local value.
+@preconcurrency protocol TaskChatRuntimeControlBridge {
+  func controlTool(
+    name: String,
+    input: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> String
+
+  func updateContextSource(
+    sessionId: String,
+    surfaceKind: String,
+    source: AgentContextSource,
+    sourceRevision: String,
+    outcome: AgentContextSourceOutcome,
+    capturedAtMs: Int,
+    expiresAtMs: Int?,
+    payload: [String: Any],
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> AgentContextSourceUpdateReceipt
+
+  #if DEBUG
+    func debugAutomationControlTool(
+      name: String,
+      input: [String: Any],
+      ownerId: String
+    ) async throws -> String
+  #endif
+}
+
+extension AgentBridge: @preconcurrency TaskChatRuntimeControlBridge {}
+/// `@unchecked Sendable` carrier for the non-Sendable `[String: Any]` tool
+/// payloads that must cross from `@MainActor` `TaskChatRuntime` into the
+/// `AgentBridge` actor. The box is unwrapped inside the actor (same isolation),
+/// so the dictionary never actually races across a boundary.
+struct TaskToolInputBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+
+extension AgentBridge {
+  /// Sendable entry point: accept the boxed payload so the non-Sendable
+  /// `[String: Any]` does not itself cross the actor boundary.
+  func controlTool(
+    name: String,
+    input box: TaskToolInputBox,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
+  ) async throws -> String {
+    try await controlTool(name: name, input: box.value, authorizationSnapshot: authorizationSnapshot)
+  }
+
+  #if DEBUG
+    func debugAutomationControlTool(
+      name: String,
+      input box: TaskToolInputBox,
+      ownerId: String
+    ) async throws -> String {
+      try await debugAutomationControlTool(name: name, input: box.value, ownerId: ownerId)
+    }
+  #endif
+}
+
+
 /// Shared agent bridge for task-backed workstream surfaces. Session identity and
 /// execution truth live in the kernel; this bridge is transport only.
 @MainActor
@@ -17,7 +82,7 @@ enum TaskChatRuntime {
   static func attachJournalEvents(
     workstreamId: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    wake: @escaping @MainActor () -> Void
+    wake: @escaping @Sendable @MainActor () -> Void
   ) async throws -> UUID {
     try requireCurrent(authorizationSnapshot)
     let bridge = try await sharedBridge()
@@ -224,13 +289,14 @@ enum TaskChatRuntime {
     for (source, outcome, payload) in contextInputs {
       let revision = try AgentContextRevision.make(source: source, payload: payload, outcome: outcome)
       guard snapshot.sourceRevision(for: source) != revision else { continue }
-      _ = try await bridge.updateContextSource(
+      _ = try await (bridge as any TaskChatRuntimeControlBridge).updateContextSource(
         sessionId: session.sessionId,
         surfaceKind: surface.surfaceKind,
         source: source,
         sourceRevision: revision,
         outcome: outcome,
         capturedAtMs: Int(Date().timeIntervalSince1970 * 1_000),
+        expiresAtMs: nil,
         payload: payload,
         authorizationSnapshot: authorizationSnapshot
       )
@@ -318,7 +384,7 @@ enum TaskChatRuntime {
     }
     return try await bridge.controlTool(
       name: name,
-      input: input,
+      input: TaskToolInputBox(input),
       authorizationSnapshot: authorizationSnapshot
     )
   }
@@ -338,7 +404,7 @@ enum TaskChatRuntime {
   #if DEBUG
     static func debugAutomationControlTool(name: String, input: [String: Any]) async throws -> String {
       let bridge = try await sharedBridge()
-      return try await bridge.debugAutomationControlTool(name: name, input: input)
+      return try await bridge.debugAutomationControlTool(name: name, input: TaskToolInputBox(input), ownerId: "scenario-13-automation-owner")
     }
 
     static func debugImportLegacyTurn(taskId: String) async throws {

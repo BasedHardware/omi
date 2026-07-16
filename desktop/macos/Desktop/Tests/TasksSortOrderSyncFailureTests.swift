@@ -20,7 +20,7 @@ private actor SortOrderCommitGate {
 
 @MainActor
 private final class SortOrderSyncProbe {
-  var backendWrites = 0
+  nonisolated(unsafe) var backendWrites = 0
 }
 
 final class TasksSortOrderSyncFailureTests: XCTestCase {

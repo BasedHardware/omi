@@ -1153,9 +1153,10 @@ struct RewindPage: View {
     viewModel.rebuildProgress = 0
 
     do {
-      try await RewindIndexer.shared.rebuildFromVideoFiles { progress in
+      let vm = viewModel
+      try await RewindIndexer.shared.rebuildFromVideoFiles { @Sendable progress in
         Task { @MainActor in
-          viewModel.rebuildProgress = progress
+          vm.rebuildProgress = progress
         }
       }
       await viewModel.loadInitialData()

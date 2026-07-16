@@ -20,7 +20,7 @@ extension AppState {
   func requestNotificationPermission() {
     // First check current authorization status
     UNUserNotificationCenter.current().getNotificationSettings { [weak self] settings in
-      DispatchQueue.main.async {
+      Task { @MainActor in
         guard let self = self else { return }
 
         if settings.authorizationStatus == .notDetermined {
@@ -29,7 +29,7 @@ extension AppState {
             reason: "launch_disabled_error",
             previousStatus: "notDetermined"
           ) { [weak self] _ in
-            self?.checkNotificationPermission()
+            MainActor.assumeIsolated { self?.checkNotificationPermission() }
           }
         } else if settings.authorizationStatus == .denied {
           // Previously denied - open System Settings so user can enable manually
@@ -50,7 +50,7 @@ extension AppState {
         reason: "launch_disabled_error_retry",
         previousStatus: "post_repair"
       ) { [weak self] _ in
-        self?.checkNotificationPermission()
+        MainActor.assumeIsolated { self?.checkNotificationPermission() }
       }
     }
 
@@ -79,7 +79,7 @@ extension AppState {
         reason: "settings_fix_button_retry",
         previousStatus: "post_repair"
       ) { [weak self] _ in
-        self?.checkNotificationPermission()
+        MainActor.assumeIsolated { self?.checkNotificationPermission() }
       }
     }
 

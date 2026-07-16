@@ -659,7 +659,7 @@ class ChatToolExecutor {
     expectedOwnerID: String?
   ) async -> String {
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
-    let payload = await ScreenContextWorkContextBuilder.payload(arguments: arguments)
+    let payload = await ScreenContextWorkContextBuilder.payload(arguments: RuntimeJSONPayloadBox(arguments))
     guard isExpectedOwnerCurrent(expectedOwnerID) else { return authorizedOwnerChangedResult() }
     let telemetry = ScreenContextWorkContextBuilder.telemetryValues(from: payload)
     ScreenContextToolTelemetry.trackToolResult(

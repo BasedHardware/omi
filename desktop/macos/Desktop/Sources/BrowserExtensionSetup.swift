@@ -522,12 +522,14 @@ struct BrowserExtensionSetup: View {
   private func startBrowserCheckTimer() {
     guard browserCheckTimer == nil else { return }
     browserCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-      if BrowserAutomationTargetResolver.isInstalled(selectedTarget) {
-        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-          browserInstalled = true
+      MainActor.assumeIsolated {
+        if BrowserAutomationTargetResolver.isInstalled(selectedTarget) {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            browserInstalled = true
+          }
+          browserCheckTimer?.invalidate()
+          browserCheckTimer = nil
         }
-        browserCheckTimer?.invalidate()
-        browserCheckTimer = nil
       }
     }
   }
@@ -536,12 +538,14 @@ struct BrowserExtensionSetup: View {
   private func startExtensionCheckTimer() {
     guard extensionCheckTimer == nil else { return }
     extensionCheckTimer = Timer.scheduledTimer(withTimeInterval: 2, repeats: true) { _ in
-      if BrowserAutomationTargetResolver.isExtensionInstalled(in: selectedTarget) {
-        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-          extensionStepDone = true
+      MainActor.assumeIsolated {
+        if BrowserAutomationTargetResolver.isExtensionInstalled(in: selectedTarget) {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+            extensionStepDone = true
+          }
+          extensionCheckTimer?.invalidate()
+          extensionCheckTimer = nil
         }
-        extensionCheckTimer?.invalidate()
-        extensionCheckTimer = nil
       }
     }
   }

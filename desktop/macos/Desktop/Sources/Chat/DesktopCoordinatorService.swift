@@ -5,16 +5,16 @@ import Foundation
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String
 }
 
-extension AgentRuntimeProcess: DesktopCoordinatorRuntimeControlling {
+extension AgentRuntimeProcess: @preconcurrency DesktopCoordinatorRuntimeControlling {
   func directControlTool(
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any]
+    input: RuntimeJSONPayloadBox
   ) async throws -> String {
     try await directControlTool(
       clientId: clientId,
@@ -693,7 +693,7 @@ final class DesktopCoordinatorService {
       clientId: clientId,
       harnessMode: harnessModeProvider(),
       name: name,
-      input: input
+      input: RuntimeJSONPayloadBox(input)
     )
   }
 

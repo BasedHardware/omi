@@ -341,15 +341,14 @@ struct DynamicFilterTag: Identifiable, Hashable {
 class TasksViewModel: ObservableObject {
   typealias SortOrderUpdate = (id: String, sortOrder: Int, indentLevel: Int)
 
-  struct SortOrderSyncOperations {
-    let updateStorage: (_ updates: [SortOrderUpdate], _ authorization: LocalMutationAuthorization) async throws -> Void
-    let updateBackend:
-      (
-        _ updates: [SortOrderUpdate],
-        _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
-      ) async throws -> Void
+  struct SortOrderSyncOperations: Sendable {
+    let updateStorage: @Sendable (_ updates: [SortOrderUpdate], _ authorization: LocalMutationAuthorization) async throws -> Void
+    let updateBackend: @Sendable (
+      _ updates: [SortOrderUpdate],
+      _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
+    ) async throws -> Void
 
-    nonisolated(unsafe) static let live = SortOrderSyncOperations(
+    static let live = SortOrderSyncOperations(
       updateStorage: { updates, authorization in
         try await ActionItemStorage.shared.updateSortOrders(
           updates.map {
@@ -3213,9 +3212,11 @@ struct TasksPage: View {
                     // draggedTaskId == endedId stops it clobbering the new
                     // drag's dim state (BL-030). Same-id re-fires are idempotent
                     // (second call sees a nil/other draggedTaskId and no-ops).
-                    guard viewModel.draggedTaskId == endedId else { return }
-                    viewModel.draggedTaskId = nil
-                    viewModel.dropTargetTaskId = nil
+                    MainActor.assumeIsolated {
+                      guard viewModel.draggedTaskId == endedId else { return }
+                      viewModel.draggedTaskId = nil
+                      viewModel.dropTargetTaskId = nil
+                    }
                   },
                   onDragHoverChanged: { taskId, isHovered in
                     if isHovered {
@@ -3487,7 +3488,7 @@ struct TaskCategorySection: View {
   // Carries the id of the task whose drag ended, so the receiver can scope the
   // dim/drag-state reset to that exact task and ignore a stale late end from a
   // prior drag (BL-030).
-  var onDragEnded: (String) -> Void = { _ in }
+  var onDragEnded: @Sendable (String) -> Void = { _ in }
   var onDragHoverChanged: ((String, Bool) -> Void)?
 
   // Edit mode support
@@ -3693,7 +3694,7 @@ struct TaskDragDropModifier: ViewModifier {
   var onMoveTask: ((TaskActionItem, Int) -> Void)?
   /// Called with the id of the dragged task when a drop lands, so the drag-end
   /// reset stays scoped to that task (BL-030).
-  var onDragEnded: ((String) -> Void)?
+  var onDragEnded: (@Sendable (String) -> Void)?
   var onHoverChanged: ((String, Bool) -> Void)?
 
   func body(content: Content) -> some View {
@@ -3770,9 +3771,9 @@ struct TaskDragDropModifier: ViewModifier {
 /// inside the AppKit drag modal loop, leaving the dragged row stuck dimmed.
 final class TaskDragItemProvider: NSItemProvider {
   private let taskId: String
-  private let onEnd: (String) -> Void
+  private let onEnd: @Sendable (String) -> Void
 
-  init(taskId: String, onEnd: @escaping (String) -> Void) {
+  init(taskId: String, onEnd: @escaping @Sendable (String) -> Void) {
     self.taskId = taskId
     self.onEnd = onEnd
     super.init()
@@ -3920,7 +3921,7 @@ struct TaskRow: View {
   /// carrying the id of the task whose drag ended. Required so the dimmed row is
   /// restored even if the drop misses every target — and so a late end from a
   /// prior drag doesn't clear a newer drag's dim (BL-030).
-  var onDragEnded: (String) -> Void = { _ in }
+  var onDragEnded: @Sendable (String) -> Void = { _ in }
   /// True iff this row is the one currently being dragged. Drives the dim effect.
   var isBeingDragged: Bool = false
   var isChatActive: Bool = false

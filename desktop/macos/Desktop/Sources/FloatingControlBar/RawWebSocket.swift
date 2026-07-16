@@ -71,7 +71,7 @@ final class RawWebSocket: @unchecked Sendable {
     c.start(queue: queue)
   }
 
-  func sendText(_ text: String, completion: ((Error?) -> Void)? = nil) {
+  func sendText(_ text: String, completion: (@Sendable (Error?) -> Void)? = nil) {
     send(frame(opcode: 0x1, payload: Data(text.utf8)), completion: completion)
   }
 
@@ -275,7 +275,7 @@ final class RawWebSocket: @unchecked Sendable {
     }
   }
 
-  private func send(_ data: Data, completion: ((Error?) -> Void)? = nil) {
+  private func send(_ data: Data, completion: (@Sendable (Error?) -> Void)? = nil) {
     guard let conn else {
       completion?(RawWebSocketSendError.notConnected)
       return

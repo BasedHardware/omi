@@ -3,8 +3,8 @@ import OmiTheme
 import SwiftUI
 
 /// Settings for the Task Agent feature
-class TaskAgentSettings: ObservableObject {
-  nonisolated(unsafe) static let shared = TaskAgentSettings()
+class TaskAgentSettings: ObservableObject, @unchecked Sendable {
+  static let shared = TaskAgentSettings()
 
   /// Whether the terminal task agent feature is enabled (Run Agent / terminal icon)
   @Published var isEnabled: Bool {

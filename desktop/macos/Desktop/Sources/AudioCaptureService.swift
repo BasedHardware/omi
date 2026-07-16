@@ -11,10 +11,10 @@ class AudioCaptureService: @unchecked Sendable {
   // MARK: - Types
 
   /// Callback for receiving audio chunks
-  typealias AudioChunkHandler = (Data) -> Void
+  typealias AudioChunkHandler = @Sendable (Data) -> Void
 
   /// Callback for receiving audio levels (0.0 - 1.0)
-  typealias AudioLevelHandler = (Float) -> Void
+  typealias AudioLevelHandler = @Sendable (Float) -> Void
 
   enum SilentMicRecoveryAction {
     case fallbackToBuiltIn
@@ -89,7 +89,7 @@ class AudioCaptureService: @unchecked Sendable {
   /// it can recover a stale HAL route that reports the built-in mic but still returns
   /// silence. The watchdog re-arms after each fire (see `evaluateSilentMicWindow`), so a
   /// single capture session can recover from more than one silent episode.
-  var onSilentMicDetected: ((SilentMicDetection) -> Void)?
+  var onSilentMicDetected: (@Sendable (SilentMicDetection) -> Void)?
   var detectSilentMicOnAnyTransport = false
 
   /// Human-readable description of the capture device currently in use — for
@@ -121,6 +121,10 @@ class AudioCaptureService: @unchecked Sendable {
   private var inputFormat: AVAudioFormat?
   private var targetFormat: AVAudioFormat?
   private var detectedSampleRate: Double = 0.0
+  // Flipped exactly once per convert() call by the synchronous AVAudioConverter input
+  // block (a @Sendable closure) on the non-reentrant CoreAudio IO thread. nonisolated(unsafe)
+  // because the IOProc is serial; it is reset at the top of every handleAudioInput() call.
+  private nonisolated(unsafe) var hasConsumedInput = false
 
   // Audio level smoothing (for natural decay like system audio)
   private var smoothedLevel: Float = 0.0
@@ -579,14 +583,14 @@ class AudioCaptureService: @unchecked Sendable {
     else { return }
 
     var error: NSError?
-    var hasConsumedInput = false
+    hasConsumedInput = false
 
     let inputBlock: AVAudioConverterInputBlock = { inNumPackets, outStatus in
-      if hasConsumedInput {
+      if self.hasConsumedInput {
         outStatus.pointee = .noDataNow
         return nil
       }
-      hasConsumedInput = true
+      self.hasConsumedInput = true
       outStatus.pointee = .haveData
       return inputBuffer
     }
@@ -711,8 +715,9 @@ class AudioCaptureService: @unchecked Sendable {
     )
 
     let deviceBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-      self?.audioQueue.async {
-        self?.handleConfigurationChange()
+      guard let self else { return }
+      self.audioQueue.async {
+        self.handleConfigurationChange()
       }
     }
     self.defaultDeviceListenerBlock = deviceBlock
@@ -736,8 +741,9 @@ class AudioCaptureService: @unchecked Sendable {
     )
 
     let formatBlock: AudioObjectPropertyListenerBlock = { [weak self] numberAddresses, addresses in
-      self?.audioQueue.async {
-        self?.handleConfigurationChange()
+      guard let self else { return }
+      self.audioQueue.async {
+        self.handleConfigurationChange()
       }
     }
     self.deviceFormatListenerBlock = formatBlock

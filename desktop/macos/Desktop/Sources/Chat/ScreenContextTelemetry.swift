@@ -224,12 +224,13 @@ enum ScreenContextToolTelemetry {
     toolName: String? = nil,
     properties: [String: Any] = [:]
   ) {
+    let propertiesBox = RuntimeJSONPayloadBox(properties)
     Task { @MainActor in
       AnalyticsManager.shared.screenContextInvariant(
         name: name,
         context: context,
         toolName: toolName,
-        properties: properties
+        properties: propertiesBox.value
       )
     }
   }
@@ -469,6 +470,10 @@ enum ScreenContextWorkContextBuilder {
       "guidance":
         "The attached image is the only current-screen evidence for this turn. Answer the user's question from it; do not substitute stored history or OCR metadata.",
     ]
+  }
+
+  static func payload(arguments: RuntimeJSONPayloadBox) async -> [String: Any] {
+    await payload(arguments: arguments.value)
   }
 
   static func payload(arguments: [String: Any]) async -> [String: Any] {

@@ -1,5 +1,10 @@
 @preconcurrency import AVFoundation
 import Foundation
+/// `AVAudioPCMBuffer` is not Sendable; this box lets a scheduled-buffer
+/// completion carry the buffer across to the main-actor bookkeeping hop.
+private struct PCMBufferBox: @unchecked Sendable {
+  let buffer: AVAudioPCMBuffer
+}
 
 /// Tracks buffers that AVAudioPlayerNode owns but has not reported as played yet.
 ///
@@ -145,10 +150,13 @@ final class StreamingPCMPlayer: @unchecked Sendable {
     let scheduledPlaybackEpoch = playbackEpoch
     onPlaybackScheduled?(scheduledPlaybackEpoch)
     let generation = playbackQueue.appendScheduled(buffer)
-    player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self, weak buffer] _ in
+    // AVAudioPCMBuffer is not Sendable; box it so the main-actor completion hop
+    // can carry it across the concurrency boundary.
+    let bufferBox = PCMBufferBox(buffer: buffer)
+    player.scheduleBuffer(buffer, completionCallbackType: .dataPlayedBack) { [weak self] _ in
+      guard let self else { return }
       DispatchQueue.main.async {
-        guard let self, let buffer else { return }
-        let didMarkPlayed = self.playbackQueue.markPlayed(buffer, generation: generation)
+        let didMarkPlayed = self.playbackQueue.markPlayed(bufferBox.buffer, generation: generation)
         if didMarkPlayed, self.playbackQueue.isEmpty {
           self.onPlaybackIdle?(scheduledPlaybackEpoch)
         }

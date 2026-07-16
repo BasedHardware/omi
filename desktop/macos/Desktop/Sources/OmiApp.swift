@@ -230,7 +230,7 @@ struct OMIApp: App {
   }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
+class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate, @unchecked Sendable {
   nonisolated(unsafe) static var openMainWindow: (() -> Void)?
   private nonisolated(unsafe) static var appIsActive = false
   private nonisolated(unsafe) static var mainWindowIsKey = false
@@ -533,7 +533,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       object: nil,
       queue: .main
     ) { [weak self] _ in
-      self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      MainActor.assumeIsolated {
+        self?.updateOnboardingLifecyclePolicy(reason: "user_defaults_changed")
+      }
     }
 
     // Register for Apple Events to handle URL scheme
@@ -563,7 +565,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     // Safety net for any edge case (macOS Sequoia bugs, activation policy races) that
     // causes the status bar item to vanish while the process keeps running.
     Timer.scheduledTimer(withTimeInterval: 30, repeats: true) { [weak self] _ in
-      DispatchQueue.main.async {
+      MainActor.assumeIsolated {
         guard let self = self else { return }
         let item = self.statusBarItem
         let button = item?.button

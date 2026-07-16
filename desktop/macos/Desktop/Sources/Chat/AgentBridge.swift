@@ -1234,6 +1234,32 @@ actor AgentBridge {
     payload: [String: Any],
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentContextSourceUpdateReceipt {
+    try await updateContextSource(
+      sessionId: sessionId,
+      surfaceKind: surfaceKind,
+      source: source,
+      sourceRevision: sourceRevision,
+      outcome: outcome,
+      capturedAtMs: capturedAtMs,
+      expiresAtMs: expiresAtMs,
+      payload: RuntimeJSONPayloadBox(payload),
+      authorizationSnapshot: authorizationSnapshot
+    )
+  }
+
+  /// Sendable-safe entry point for cross-actor callers. Boxes the JSON payload
+  /// so it can cross actor boundaries without triggering data-race diagnostics.
+  func updateContextSource(
+    sessionId: String,
+    surfaceKind: String,
+    source: AgentContextSource,
+    sourceRevision: String,
+    outcome: AgentContextSourceOutcome,
+    capturedAtMs: Int,
+    expiresAtMs: Int? = nil,
+    payload: RuntimeJSONPayloadBox,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> AgentContextSourceUpdateReceipt {
     let authorization = try resolveAuthorization(authorizationSnapshot)
     try await start(authorizationSnapshot: authorization)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorization) else {
@@ -1448,7 +1474,7 @@ actor AgentBridge {
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
-      input: input,
+      input: RuntimeJSONPayloadBox(input),
       authorizationSnapshot: authorization
     )
   }
@@ -1464,7 +1490,7 @@ actor AgentBridge {
         clientId: clientId,
         harnessMode: harnessMode,
         name: name,
-        input: input,
+        input: RuntimeJSONPayloadBox(input),
         ownerId: ownerId
       )
     }

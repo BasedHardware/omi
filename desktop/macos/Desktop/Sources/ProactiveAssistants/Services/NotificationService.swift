@@ -2,6 +2,14 @@ import AppKit
 import Foundation
 @preconcurrency import UserNotifications
 
+/// Sendable wrapper for a `UNUserNotificationCenter` completion handler so the
+/// non-Sendable closure can be captured across an isolation hop (e.g. into a
+/// `@MainActor` `Task`) without a data-race diagnostic.
+private struct UNCompletionHandlerBox: @unchecked Sendable {
+  let value: (UNNotificationPresentationOptions) -> Void
+  init(_ value: @escaping (UNNotificationPresentationOptions) -> Void) { self.value = value }
+}
+
 /// Sound options for notifications
 enum NotificationSound {
   case `default`
@@ -209,13 +217,14 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
     let title = notification.request.content.title
     // Resolve owner provenance before presenting an already-scheduled banner;
     // an OS callback may arrive after the originating session signed out.
+    let completion = UNCompletionHandlerBox(completionHandler)
     Task { @MainActor in
       guard let metadata = self.notificationMetadata[notificationId],
         RuntimeOwnerIdentity.isAuthorizationCurrent(metadata.authorizationSnapshot)
       else {
         self.notificationMetadata.removeValue(forKey: notificationId)
         self.notificationMetadataOrder.removeAll { $0 == notificationId }
-        completionHandler([])
+        completion.value([])
         return
       }
       AnalyticsManager.shared.notificationWillPresent(notificationId: notificationId, title: title)
@@ -224,7 +233,7 @@ class NotificationService: NSObject, UNUserNotificationCenterDelegate {
       if notification.request.content.sound != nil {
         options.insert(.sound)
       }
-      completionHandler(options)
+      completion.value(options)
     }
   }
 

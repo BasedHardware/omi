@@ -1,6 +1,13 @@
 import Combine
 import SwiftUI
 
+/// Boxes a non-Sendable `[String: Any]` tool input so it can be sent into a
+/// `@MainActor` task. The dictionary is built once and only read on the main
+/// actor, so the unchecked Sendable conformance is sound.
+private struct EventPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+}
+
 struct TaskChatOwnerLease: Equatable, Sendable {
   let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   let generation: UInt64
@@ -92,7 +99,7 @@ class TaskChatState: ObservableObject {
   typealias AttachJournalEventsOperation = (
     _ workstreamId: String,
     _ authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot,
-    _ wake: @escaping @MainActor () -> Void
+    _ wake: @escaping @Sendable @MainActor () -> Void
   ) async throws -> UUID
   typealias ListJournalTurnsOperation = (
     _ workstreamId: String,
@@ -604,6 +611,7 @@ class TaskChatState: ObservableObject {
       }
       let toolActivityHandler: @Sendable (String, String, String?, [String: Any]?) -> Void = {
         [weak self] name, status, toolUseId, input in
+        let inputBox = input.map { EventPayloadBox(value: $0) }
         Task { @MainActor [weak self] in
           guard let self, self.isCurrent(lease) else { return }
           self.addToolActivity(
@@ -611,7 +619,7 @@ class TaskChatState: ObservableObject {
             toolName: name,
             status: ToolCallStatus.fromBridgeStatus(status),
             toolUseId: toolUseId,
-            input: input
+            input: inputBox?.value
           )
         }
       }

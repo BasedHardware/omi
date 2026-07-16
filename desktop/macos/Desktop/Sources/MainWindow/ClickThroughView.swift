@@ -5,7 +5,7 @@ import SwiftUI
 class ClickThroughHostingView<Content: View>: NSHostingView<Content> {
   private var pendingClickLocation: NSPoint?
   private var wasWindowKey: Bool = false
-  private var localMonitor: Any?
+  private nonisolated(unsafe) var localMonitor: Any?
   private var isProcessingSyntheticClick: Bool = false  // Guard against re-entry
 
   /// When false, the view is transparent to AppKit hit testing (returns nil from hitTest).

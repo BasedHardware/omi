@@ -232,9 +232,30 @@ struct ChatInputView: View {
 // MARK: - File Drop Helper
 
 enum ChatAttachmentDropHandler {
+  /// Thread-safe accumulator for URLs gathered from concurrent
+  /// `NSItemProvider.loadItem` completions. `@unchecked Sendable` because all
+  /// mutation is serialized through `lock`; the captured `let` reference is
+  /// therefore safe to share across the @Sendable completion closures.
+  private final class URLBuffer: @unchecked Sendable {
+    private var urls: [URL] = []
+    private let lock = NSLock()
+
+    func append(_ url: URL) {
+      lock.lock()
+      urls.append(url)
+      lock.unlock()
+    }
+
+    func snapshot() -> [URL] {
+      lock.lock()
+      let copy = urls
+      lock.unlock()
+      return copy
+    }
+  }
+
   static func collectURLs(from providers: [NSItemProvider], onComplete: @escaping ([URL]) -> Void) -> Bool {
-    var urls: [URL] = []
-    let lock = NSLock()
+    let buffer = URLBuffer()
     let group = DispatchGroup()
     for provider in providers {
       guard provider.hasItemConformingToTypeIdentifier(UTType.fileURL.identifier) else { continue }
@@ -250,13 +271,11 @@ enum ChatAttachmentDropHandler {
           loadedURL = nil
         }
         if let loadedURL {
-          lock.lock()
-          urls.append(loadedURL)
-          lock.unlock()
+          buffer.append(loadedURL)
         }
       }
     }
-    group.notify(queue: .main) { onComplete(urls) }
+    group.notify(queue: .main) { onComplete(buffer.snapshot()) }
     return !providers.isEmpty
   }
 }

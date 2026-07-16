@@ -1,10 +1,16 @@
 import AppKit
 import Combine
-import MarkdownUI
+@preconcurrency import MarkdownUI
 import OmiSupport
 import OmiTheme
 import SwiftUI
 import UniformTypeIdentifiers
+/// Holds a non-Sendable value so the `@Sendable` NotificationCenter/Timer
+/// closures (all run on `.main`) can capture it. Access is main-thread-only.
+private final class MainSendableBox<Value>: @unchecked Sendable {
+  var value: Value
+  init(_ value: Value) { self.value = value }
+}
 
 enum ShortcutHintLayout {
   static func visibleTokens(for keys: [String]) -> [String] {
@@ -1162,26 +1168,33 @@ struct FloatingControlBarView: View {
   /// Replaces fixed `asyncAfter` guesses that waited for `openWindow(id:)` to
   /// create/activate the window (BL-005); the window-key event is the real signal.
   private func runWhenMainAppWindowKey(_ action: @escaping () -> Void) {
+    // The observer/Timer closures below are `@Sendable`; `action` is a non-Sendable
+    // closure (it captures this view), so box it to carry it across safely. All of
+    // these closures run on `.main`.
+    let actionBox = MainSendableBox(action)
     if let key = NSApp.keyWindow, Self.isRealMainAppWindow(key) {
       // One runloop hop, same as the observer path below, so a freshly-keyed
       // window's content (e.g. the navigate receiver) is mounted before we act.
-      DispatchQueue.main.async { action() }
+      DispatchQueue.main.async { actionBox.value() }
       return
     }
-    var token: NSObjectProtocol?
-    let removeObserver = {
-      if let token { NotificationCenter.default.removeObserver(token) }
+    let tokenBox = MainSendableBox<NSObjectProtocol?>(nil)
+    let removeObserver: @Sendable () -> Void = {
+      if let token = tokenBox.value { NotificationCenter.default.removeObserver(token) }
     }
-    token = NotificationCenter.default.addObserver(
+    tokenBox.value = NotificationCenter.default.addObserver(
       forName: NSWindow.didBecomeKeyNotification, object: nil, queue: .main
     ) { note in
-      guard let window = note.object as? NSWindow, Self.isRealMainAppWindow(window) else {
-        return
+      let noteBox = MainSendableBox(note)
+      MainActor.assumeIsolated {
+        guard let window = noteBox.value.object as? NSWindow, Self.isRealMainAppWindow(window) else {
+          return
+        }
+        removeObserver()
+        // One runloop hop so SwiftUI can mount the freshly-opened window's
+        // content (e.g. the navigate receiver) before we act.
+        DispatchQueue.main.async { actionBox.value() }
       }
-      removeObserver()
-      // One runloop hop so SwiftUI can mount the freshly-opened window's
-      // content (e.g. the navigate receiver) before we act.
-      DispatchQueue.main.async { action() }
     }
     // Safety net: if no real main window ever becomes key (e.g. openMainWindow
     // was nil, or the view went away), drop the observer after a bounded delay

@@ -719,7 +719,7 @@ private final class MemoryFeedbackOutboxStore: SuggestedFeedbackOutboxPersisting
   }
 }
 
-private final class FakeSuggestedTasksClient: SuggestedTasksClient {
+private final class FakeSuggestedTasksClient: SuggestedTasksClient, @unchecked Sendable {
   var records: [OmiAPI.CandidateRecord] = []
   var listError: Error?
   var registeredInterventionCandidateIDs: Set<String> = []

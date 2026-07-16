@@ -181,8 +181,9 @@ struct MemoryGraphSceneView: NSViewRepresentable {
       // Throttle to ~30fps for physics updates
       guard time - lastUpdateTime > 0.033 else { return }
       lastUpdateTime = time
+      let vm = viewModel
       Task { @MainActor in
-        viewModel.updateSimulation()
+        vm.updateSimulation()
       }
     }
   }

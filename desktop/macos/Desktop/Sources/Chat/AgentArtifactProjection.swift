@@ -197,7 +197,7 @@ enum AgentArtifactProjectionError: LocalizedError, Equatable {
   func controlTool(name: String, input: [String: Any]) async throws -> String
 }
 
-extension AgentBridge: AgentArtifactProjectionLoading {
+extension AgentBridge: @preconcurrency AgentArtifactProjectionLoading {
   func controlTool(name: String, input: [String: Any]) async throws -> String {
     try await controlTool(
       name: name,

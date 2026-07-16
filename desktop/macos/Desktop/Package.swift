@@ -95,6 +95,9 @@ let package = Package(
         // Resources/ are only picked up when the manifest regenerates — editing
         // this file forces incremental builds to re-scan and include them.
         .process("Resources"),
+      ],
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ]
     ),
     .testTarget(

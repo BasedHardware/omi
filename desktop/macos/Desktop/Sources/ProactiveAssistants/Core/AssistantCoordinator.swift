@@ -1,5 +1,10 @@
 import Foundation
 
+private struct AssistantEventDataBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
+
 /// Coordinates all proactive assistants, distributing frames and managing lifecycle
 @MainActor
 class AssistantCoordinator {
@@ -166,8 +171,9 @@ class AssistantCoordinator {
         // Analyze and handle result
         if let result = await assistant.analyze(frame: frame) {
           await assistant.handleResult(result) { [weak self] type, data in
+            let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
-              self?.sendEvent(type: type, data: data)
+              self?.sendEvent(type: type, data: dataBox.value)
             }
           }
         }
@@ -206,8 +212,9 @@ class AssistantCoordinator {
 
         if let result = await assistant.analyze(frame: frame) {
           await assistant.handleResult(result) { [weak self] type, data in
+            let dataBox = AssistantEventDataBox(data)
             Task { @MainActor in
-              self?.sendEvent(type: type, data: data)
+              self?.sendEvent(type: type, data: dataBox.value)
             }
           }
         }
