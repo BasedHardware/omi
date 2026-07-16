@@ -35,6 +35,7 @@ extension RealtimeHubController {
       log("RealtimeHub: refusing to begin provider input for a stale voice owner")
       return .rejected
     }
+    admittedInputTurnID = nil
     if let pending = reconnectAudioBuffer, pending.turnID != turnID {
       reconnectAudioBuffer = nil
       log("RealtimeHub: discarded reconnect audio for a superseded rapid PTT turn")
@@ -73,11 +74,8 @@ extension RealtimeHubController {
     turnEarlyVerdictCode = nil
     fullLIDTask = nil
     testProviderTranscriptOverride = nil  // never leak a test override into a real turn
-    pendingCompletedAgentDeltaAckIds.removeAll()
-    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     lastTurnAt = Date()
-    inputTurnActivityStartPending = false
     if bargeIn {
       pcmPlayer?.stop()  // stop the prior reply locally only for a real barge-in.
     }
@@ -130,6 +128,38 @@ extension RealtimeHubController {
         log("RealtimeHub: unable to establish a context-fresh PTT input boundary")
         return .rejected
       }
+      let cachedRequirement = voiceSessionContext(for: currentOwnerScope)
+      if cachedRequirement.isResolved {
+        guard var pending = reconnectAudioBuffer,
+          pending.turnID == turnID,
+          pending.bindRequiredContextFreshnessIdentity(cachedRequirement.snapshotFreshnessIdentity)
+        else {
+          failContextFreshInputPreparation(
+            turnID: turnID,
+            message: "Voice context admission identity is unavailable")
+          return .rejected
+        }
+        reconnectAudioBuffer = pending
+        if isTransportReady,
+          cachedRequirement.snapshotFreshnessIdentity == sessionVoiceContextFreshnessIdentity
+        {
+          // The common path: the launch/post-turn prewarm already installed the
+          // exact immutable context. Open its input window synchronously; do
+          // not fetch or replace a session from the physical press path.
+          finishContextFreshInputOnCurrentSession()
+        } else {
+          pendingContextCacheReplacement = true
+          requestSessionHandoff(
+            reason: .voiceContextFreshness,
+            preservingReconnectAudio: true)
+        }
+        return .accepted
+      }
+
+      // No cached requirement exists yet (cold start or a transient kernel
+      // read). Capture immediately, then bind and hand off exactly once when
+      // the canonical snapshot arrives. A failed read takes the typed fallback
+      // route rather than terminalizing a user's already-captured turn.
       turnPreparationTask = Task { @MainActor [weak self] in
         guard let self else { return }
         guard !Task.isCancelled else { return }
@@ -155,38 +185,15 @@ extension RealtimeHubController {
           return
         }
         self.reconnectAudioBuffer = pending
-        let needsSessionRefresh = self.session != nil
-          && RealtimeVoiceContextRefreshPolicy.requiresRefresh(
-            currentSnapshotIdentity: current.snapshotFreshnessIdentity,
-            sessionSnapshotIdentity: self.sessionVoiceContextFreshnessIdentity)
-        if needsSessionRefresh {
-          log("RealtimeHub: reconnecting before PTT input so provider instructions match canonical context")
-          self.pendingContextCacheReplacement = true
-          self.teardownSession(preservingReconnectAudio: true)
-        }
+        self.pendingContextCacheReplacement = true
         guard !Task.isCancelled,
           self.contextFreshInputPreparationIsCurrent(
             turnID: turnID,
             preparationEpoch: preparationEpoch)
         else { return }
-        self.ensureWarm()
-        if await self.waitUntilActive(timeout: 15) {
-          guard !Task.isCancelled,
-            self.contextFreshInputPreparationIsCurrent(
-              turnID: turnID,
-              preparationEpoch: preparationEpoch)
-          else { return }
-          self.finishContextFreshInputOnCurrentSession()
-        } else {
-          guard !Task.isCancelled,
-            self.contextFreshInputPreparationIsCurrent(
-              turnID: turnID,
-              preparationEpoch: preparationEpoch)
-          else { return }
-          self.inputTurnActivityStartPending = true
-          log(
-            "RealtimeHub: session not ready for context-fresh PTT input — will replay on connect")
-        }
+        self.requestSessionHandoff(
+          reason: .voiceContextFreshness,
+          preservingReconnectAudio: true)
       }
     }
     return .accepted
@@ -289,6 +296,10 @@ extension RealtimeHubController {
         responseID: responseID,
         identity: identity,
         interrupting: reducerInterruptsPreviousTurn)
+      guard pending.bindRequiredContextFreshnessIdentity(sessionVoiceContextFreshnessIdentity) else {
+        log("RealtimeHub: refusing audio buffer without an admitted session context identity")
+        return
+      }
       _ = pending.appendAudio(pcm16k)
       reconnectAudioBuffer = pending
       VoiceTurnCoordinator.shared.send(
@@ -384,7 +395,6 @@ extension RealtimeHubController {
     guard session != nil, voiceSessionID != nil else {
       turnPreparationTask?.cancel()
       turnPreparationTask = nil
-      inputTurnActivityStartPending = false
       exitVoiceUI(clearResponseGlow: true)
       return .rejectedNoSession
     }
@@ -418,7 +428,6 @@ extension RealtimeHubController {
       log("RealtimeHub: claimed physical commit lost its session before provider side effects")
       turnPreparationTask?.cancel()
       turnPreparationTask = nil
-      inputTurnActivityStartPending = false
       VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerFailed))
       exitVoiceUI(clearResponseGlow: true)
       return
@@ -458,7 +467,6 @@ extension RealtimeHubController {
     if !preservingContextPreparation {
       turnPreparationTask?.cancel()
       turnPreparationTask = nil
-      inputTurnActivityStartPending = false
     }
     // Runs during the seconds the model spends answering; consumed at turn-done.
     if !turnAudio16k.isEmpty {
@@ -525,16 +533,14 @@ extension RealtimeHubController {
     let canceledPreparationTask = turnPreparationTask
     turnPreparationTask?.cancel()
     turnPreparationTask = nil
-    inputTurnActivityStartPending = false
     reconnectAudioBuffer = nil
+    if admittedInputTurnID == requestedTurnID { admittedInputTurnID = nil }
     realtimePlaybackEpoch += 1
     pcmPlayer?.stop()
     turnTranscript = ""
     providerTranscriptFinalized = false
     lastInputTranscriptUpdateAt = nil
     assistantText = ""
-    pendingCompletedAgentDeltaAckIds.removeAll()
-    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     let interruptedContinuityTask = bargeInContinuityTask
     bargeInContinuityTask = nil
@@ -550,12 +556,12 @@ extension RealtimeHubController {
     }
     if replaceAbandonedSession {
       // A canceled provider input may still emit commit/activity acknowledgements.
-      // Give every abandoned turn a fresh socket boundary before a later turn
-      // can enqueue new pending identities on the same transport.
-      cancelContinuityFenceActive = true
-      cancelContinuityFenceTurnID = requestedTurnID
+      // Give every abandoned turn a fresh socket boundary, but never make the
+      // next physical press wait behind the canceled turn's persistence fence.
+      // Its captured audio joins the same typed handoff if it races this work.
       teardownSession()
-      pendingSessionRefreshReason = "voice_context_changed"
+      pendingSessionRefreshReason = RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue
+      ensureWarm()
       canceledTurnRewarmTask?.cancel()
       canceledTurnRewarmTask = Task { @MainActor [weak self] in
         if let canceledPreparationTask {
@@ -566,21 +572,20 @@ extension RealtimeHubController {
         }
         guard let self, !Task.isCancelled else { return }
         let refreshed = await self.refreshVoiceContextAfterPersistenceFence(
-          reason: "voice_context_changed")
+          reason: RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue)
         guard !Task.isCancelled else { return }
         guard refreshed else {
           self.canceledTurnRewarmTask = nil
           return
         }
-        self.cancelContinuityFenceActive = false
-        self.cancelContinuityFenceTurnID = nil
         self.canceledTurnRewarmTask = nil
-        if self.pendingSessionRefreshReason == "voice_context_changed" {
+        if self.pendingSessionRefreshReason == RealtimeHubSessionHandoffReason.persistedVoiceContext.rawValue {
           self.pendingSessionRefreshReason = nil
         }
         log("RealtimeHub: applying canceled-turn voice context refresh after continuity persistence")
-        self.teardownSession()
-        self.ensureWarm()
+        self.requestSessionHandoff(
+          reason: .cancelledTurnContinuity,
+          preservingReconnectAudio: self.reconnectAudioBuffer != nil)
       }
     }
     exitVoiceUI(clearResponseGlow: true)

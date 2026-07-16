@@ -86,12 +86,13 @@ final class AgentPillLifecycleTests: XCTestCase {
     let source = try agentPillSource()
 
     XCTAssertTrue(source.contains("DesktopCoordinatorService.shared.listFloatingAgentPills(limit: 50)"))
-    XCTAssertTrue(source.contains("guard let pillId = canonicalPillId(from: entry),"))
-    XCTAssertTrue(source.contains("let sessionId = canonicalString(entry[\"sessionId\"]),"))
-    XCTAssertTrue(source.contains("let runId = canonicalString(entry[\"runId\"])"))
+    XCTAssertTrue(source.contains("guard let pillId = canonicalPillId(from: entry) else"))
+    XCTAssertTrue(source.contains("guard let sessionId = canonicalString(entry[\"sessionId\"]) else"))
+    XCTAssertTrue(source.contains("guard let runId = canonicalString(entry[\"runId\"]) else"))
+    XCTAssertTrue(source.contains("canonical projection source="))
     XCTAssertTrue(source.contains("pill.canonicalSessionId = sessionId"))
-    XCTAssertTrue(source.contains("pill.canonicalRunId = runId"))
-    XCTAssertTrue(source.contains("pill.canonicalAttemptId = canonicalString(entry[\"attemptId\"])"))
+    XCTAssertTrue(source.contains("updateCanonicalRun(\n                for: pill,\n                runId: runId,"))
+    XCTAssertTrue(source.contains("attemptId: canonicalString(entry[\"attemptId\"]),"))
     XCTAssertTrue(source.contains("reconcileProjectedPillRun(entryStatus: projectedStatus, pill: pill)"))
     XCTAssertTrue(source.contains("removeRenderedProjection(pillID: pill.id)"))
     XCTAssertTrue(source.contains("Self.shouldRemoveRenderedProjection("))
@@ -102,20 +103,59 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertFalse(source.contains("UUID(uuidString: idString) ??"))
   }
 
-  func testProjectedPillsStartCanonicalPollingForTerminalOutputReconciliation() throws {
+  func testProjectedPillsKeepTerminalJournalReconciliationSeparateFromRunPolling() throws {
     let source = try agentPillSource()
 
     XCTAssertTrue(source.contains("private func reconcileProjectedPillRun(entryStatus: String, pill: AgentPill)"))
     XCTAssertTrue(source.contains("guard shouldPollCanonicalRun(for: pill, projectedStatus: entryStatus) else { return }"))
     XCTAssertTrue(source.contains("startCanonicalRunPolling(for: pill)"))
     XCTAssertTrue(source.contains("private func shouldPollCanonicalRun(for pill: AgentPill, projectedStatus: String)"))
-    XCTAssertTrue(source.contains("if isTerminalProjectedStatus(projectedStatus)"))
-    XCTAssertTrue(source.contains("return !Self.hasTerminalAssistantMessage(for: pill)"))
-    XCTAssertTrue(source.contains("return !pill.status.isFinished && runTasksByPill[pill.id] == nil"))
-    XCTAssertTrue(source.contains("private static func hasTerminalAssistantMessage(for pill: AgentPill)"))
+    XCTAssertTrue(source.contains("AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll("))
+    XCTAssertTrue(source.contains("private func ensureCanonicalReconciliation()"))
+    XCTAssertTrue(source.contains("await self.refreshProjectedPillsFromKernel()"))
+    XCTAssertTrue(source.contains("func lifecycleConvergenceSnapshot(runIDs: Set<String>) async -> String"))
+    XCTAssertTrue(source.contains("pill.producingJournalSurface != nil"))
+    XCTAssertTrue(source.contains("private func ensureTerminalJournalMaterialization(for pill: AgentPill)"))
     XCTAssertTrue(source.contains("if isCurrentRunAttempt(pillID: pill.id, generation: generation) {\n                runTasksByPill[pill.id] = nil"))
     XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(status)"))
     XCTAssertTrue(source.contains("if pill.status.isFinished && !isTerminalProjectedStatus(inspection.status)"))
+  }
+
+  func testProjectionBootstrapRetriesUntilTheRuntimeCanReadCanonicalPills() throws {
+    let source = try agentPillSource()
+
+    XCTAssertTrue(source.contains("private func scheduleProjectionBootstrap()"))
+    XCTAssertTrue(source.contains("for _ in 0..<projectionBootstrapAttempts"))
+    XCTAssertTrue(source.contains("AgentRuntimeProcess.shared.isReadyForDirectControl()"))
+    XCTAssertTrue(source.contains("await refreshProjectedPillsFromKernel()"))
+    XCTAssertTrue(source.contains("func refreshProjectedPillsFromKernel() async -> Bool"))
+    XCTAssertTrue(source.contains("canonical projection bootstrap started"))
+    XCTAssertTrue(source.contains("projection bootstrap did not reach a ready runtime"))
+  }
+
+  func testRuntimeHandshakeRestartsCanonicalPillProjectionBootstrap() throws {
+    let pillSource = try agentPillSource()
+    let runtimeSource = try agentRuntimeProcessSource()
+
+    XCTAssertTrue(runtimeSource.contains("static let agentRuntimeDidBecomeReady"))
+    XCTAssertTrue(runtimeSource.contains("func isReadyForDirectControl() -> Bool"))
+    XCTAssertTrue(runtimeSource.contains("NotificationCenter.default.post(name: .agentRuntimeDidBecomeReady"))
+    XCTAssertTrue(pillSource.contains("publisher(for: .agentRuntimeDidBecomeReady)"))
+    XCTAssertTrue(pillSource.contains("self?.scheduleProjectionBootstrap()"))
+  }
+
+  func testDirectControlTimeoutsSeparateBoundedReadsFromRunCompletion() throws {
+    let runtimeSource = try agentRuntimeProcessSource()
+
+    XCTAssertTrue(runtimeSource.contains("private var activeControlTimeoutTasks"))
+    XCTAssertTrue(runtimeSource.contains("static func directControlTimeoutNanoseconds"))
+    XCTAssertTrue(runtimeSource.contains("case \"list_agent_sessions\", \"get_agent_run\""))
+    XCTAssertEqual(AgentRuntimeProcess.directControlTimeoutNanoseconds(for: "get_agent_run"), 2_000_000_000)
+    XCTAssertEqual(AgentRuntimeProcess.directControlTimeoutNanoseconds(for: "send_agent_message"), 180_000_000_000)
+    XCTAssertEqual(AgentRuntimeProcess.directControlTimeoutNanoseconds(for: "spawn_agent"), 15_000_000_000)
+    XCTAssertTrue(runtimeSource.contains("private func timeoutControlRequest("))
+    XCTAssertTrue(runtimeSource.contains("if !isBridgeReady {\n      try await registerClient("))
+    XCTAssertTrue(runtimeSource.contains("BridgeError.timeout"))
   }
 
   func testFloatingPillInspectResultsAreGuardedByCurrentRunAttempt() throws {
@@ -135,11 +175,94 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(source.contains("\"stale_inspection_ignored\""))
   }
 
+  @MainActor
+  func testCanonicalReconciliationRequiresTerminalJournalMaterialization() {
+    XCTAssertTrue(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .running,
+        requiresJournalCompletion: false,
+        hasTerminalJournalCompletion: false,
+        hasTerminalJournalMaterializationFailure: false,
+        hasPendingFollowUp: false))
+    XCTAssertFalse(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .done,
+        requiresJournalCompletion: false,
+        hasTerminalJournalCompletion: false,
+        hasTerminalJournalMaterializationFailure: false,
+        hasPendingFollowUp: false))
+    XCTAssertTrue(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .done,
+        requiresJournalCompletion: true,
+        hasTerminalJournalCompletion: false,
+        hasTerminalJournalMaterializationFailure: false,
+        hasPendingFollowUp: false))
+    XCTAssertFalse(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .done,
+        requiresJournalCompletion: true,
+        hasTerminalJournalCompletion: true,
+        hasTerminalJournalMaterializationFailure: false,
+        hasPendingFollowUp: false))
+    XCTAssertTrue(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .done,
+        requiresJournalCompletion: true,
+        hasTerminalJournalCompletion: true,
+        hasTerminalJournalMaterializationFailure: false,
+        hasPendingFollowUp: true))
+    XCTAssertFalse(
+      AgentPillLifecycleConvergencePolicy.requiresCanonicalReconciliation(
+        status: .done,
+        requiresJournalCompletion: true,
+        hasTerminalJournalCompletion: false,
+        hasTerminalJournalMaterializationFailure: true,
+        hasPendingFollowUp: false))
+
+    XCTAssertTrue(
+      AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll(
+        projectedStatusIsTerminal: true,
+        pillStatus: .done,
+        hasCanonicalTerminalDetail: false,
+        isPolling: false))
+    XCTAssertFalse(
+      AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll(
+        projectedStatusIsTerminal: true,
+        pillStatus: .done,
+        hasCanonicalTerminalDetail: true,
+        isPolling: false))
+    XCTAssertFalse(
+      AgentPillLifecycleConvergencePolicy.shouldStartCanonicalPoll(
+        projectedStatusIsTerminal: false,
+        pillStatus: .running,
+        hasCanonicalTerminalDetail: false,
+        isPolling: true))
+  }
+
+  @MainActor
+  func testTerminalListProjectionWaitsForCanonicalDetailBeforeJournalizingExactOutput() {
+    let statusOnly = AgentPillTerminalJournalMaterializationPolicy.decision(
+      status: .done,
+      canonicalRunID: "run-123",
+      canonicalDetailRunID: nil,
+      canonicalDetailOutput: nil)
+    XCTAssertEqual(statusOnly, .awaitingCanonicalDetail)
+
+    let finalText = "The background agent completed the requested task."
+    let canonicalDetail = AgentPillTerminalJournalMaterializationPolicy.decision(
+      status: .done,
+      canonicalRunID: "run-123",
+      canonicalDetailRunID: "run-123",
+      canonicalDetailOutput: finalText)
+    XCTAssertEqual(canonicalDetail, .materialize(status: "completed", output: finalText))
+  }
+
   func testFloatingPillRunChangesResetAttemptAndPreserveTransients() throws {
     let source = try agentPillSource()
 
     XCTAssertTrue(source.contains("private func updateCanonicalRun("))
-    XCTAssertTrue(source.contains("if nextRunId != previousRunId {\n            pill.canonicalAttemptId = nextAttemptId"))
+    XCTAssertTrue(source.contains("terminalJournalMaterializedPillIDs.remove(pill.id)"))
     XCTAssertTrue(source.contains("preservingAttemptForSameRun: true"))
     XCTAssertTrue(source.contains("return !isSeenInRuntimeSnapshot && !hasLocalTransientState"))
     XCTAssertTrue(source.contains("private func hasLocalTransientState(pillID: UUID) -> Bool"))
@@ -886,9 +1009,20 @@ final class AgentPillLifecycleTests: XCTestCase {
     XCTAssertTrue(playerSource.contains("@discardableResult\n  func enqueue(_ data: Data) -> Bool"))
     XCTAssertTrue(hubSource.contains("guard let pcmPlayer, pcmPlayer.enqueue(pcm24k) else"))
     XCTAssertTrue(hubSource.contains("keeping text fallback armed"))
-    XCTAssertTrue(hubSource.contains("audioReceivedThisTurn = true\n    realtimePlaybackEpoch = pcmPlayer.playbackEpoch\n    responseGlowGate.markPlaybackActive(lease: lease)"))
+    XCTAssertTrue(hubSource.contains("RealtimeNativeAudioScheduleFailureAction.decide("))
+    XCTAssertTrue(hubSource.contains("VoiceTurnCoordinator.shared.noteOutputProgress(lease)"))
+    XCTAssertTrue(hubSource.contains("responseGlowGate.markPlaybackActive(lease: lease)"))
     XCTAssertFalse(hubSource.contains("pcmPlayer?.playbackEpoch ??"))
     XCTAssertFalse(hubSource.contains("audioReceivedThisTurn = true\n    // If PTT muted music/system output"))
+  }
+
+  func testVoiceHandoffCloseDoesNotCancelAnAdmittedPTTTurn() throws {
+    XCTAssertTrue(FloatingConversationCloseIntent.userDismissal.cancelsInFlightWork)
+    XCTAssertFalse(FloatingConversationCloseIntent.voiceHandoff.cancelsInFlightWork)
+
+    // omi-test-quality: source-inspection -- static contract: the AppKit voice handoff passes the non-cancelling intent.
+    let source = try floatingControlBarWindowSource()
+    XCTAssertTrue(source.contains("window.closeAIConversation(intent: .voiceHandoff)"))
   }
 
   func testBeginTurnStopsQueuedLocalSpeechOnBargeIn() throws {
@@ -1588,6 +1722,15 @@ final class AgentPillLifecycleTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentRuntimeStatusStore.swift")
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func agentRuntimeProcessSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
+    // omi-test-quality: source-inspection -- static contract: runtime bridge wiring stays owned by the process boundary.
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 

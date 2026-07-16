@@ -453,11 +453,8 @@ final class DesktopCoordinatorServiceTests: XCTestCase {
     let source = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let toolsSource = try sourceFile("FloatingControlBar/RealtimeHubTools.swift")
 
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("pendingCompletedAgentDeltaAckIds"))
-    XCTAssertTrue(source.contains("pendingCompletedAgentDeltaHighWaterMs"))
-    XCTAssertTrue(source.contains("completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs"))
+    XCTAssertFalse(source.contains("pendingCompletedAgentDeltaAckIds"))
+    XCTAssertFalse(source.contains("pendingCompletedAgentDeltaHighWaterMs"))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
     XCTAssertTrue(source.contains("coordinatorOpenLoopsIsEmpty("))
     XCTAssertTrue(source.contains("voice context"))

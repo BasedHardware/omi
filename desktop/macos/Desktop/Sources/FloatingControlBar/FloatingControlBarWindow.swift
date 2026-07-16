@@ -1218,27 +1218,31 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         return false
     }
 
-    func closeAIConversation() {
+    func closeAIConversation(intent: FloatingConversationCloseIntent = .userDismissal) {
         AnalyticsManager.shared.floatingBarAskOmiClosed()
         resignKeyAnimationToken += 1
         let closeAnimationToken = resignKeyAnimationToken
 
-        // Collapsing the chat should not interrupt spoken playback. The voice
-        // response glow is owned by playback state and must survive surface
-        // transitions while audio is still being delivered. However the UI
-        // streaming subscription must still be cancelled so late-arriving
-        // chunks cannot re-present .mainResponse and pop the panel back open.
-        // (Codex P2 — streaming reopens surface during playback.)
-        let keepVoiceResponseAlive = state.isVoiceResponseGlowActive
-        FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)
+        if intent.cancelsInFlightWork {
+            // Collapsing the chat should not interrupt spoken playback. The voice
+            // response glow is owned by playback state and must survive surface
+            // transitions while audio is still being delivered. However the UI
+            // streaming subscription must still be cancelled so late-arriving
+            // chunks cannot re-present .mainResponse and pop the panel back open.
+            // (Codex P2 — streaming reopens surface during playback.)
+            let keepVoiceResponseAlive = state.isVoiceResponseGlowActive
+            FloatingControlBarManager.shared.cancelChat(keepVoiceAlive: keepVoiceResponseAlive)
+
+            // A user dismissal is a typed cancellation boundary. A voice handoff
+            // merely replaces this surface and must not terminalize its admitted
+            // PTT turn while that turn is awaiting a provider response.
+            PushToTalkManager.shared.cancelListening()
+        }
 
         // Cancel dynamic response-height observer and reset its state
         responseHeightCancellable?.cancel()
         responseHeightCancellable = nil
         state.responseContentHeight = 0
-
-        // Cancel PTT if listening while chat closes
-        PushToTalkManager.shared.cancelListening()
 
         OmiMotion.withGated(.easeOut(duration: 0.08)) {
             state.showingAIConversation = false
@@ -3348,7 +3352,7 @@ class FloatingControlBarManager {
             window.cancelInputHeightObserver()
             window.state.currentQueryFromVoice = true
             if window.state.showingAIConversation {
-                window.closeAIConversation()
+                window.closeAIConversation(intent: .voiceHandoff)
             } else if !window.isVisible {
                 window.makeKeyAndOrderFront(nil)
             }
@@ -4086,6 +4090,25 @@ class FloatingControlBarManager {
 
     func refreshKernelJournal(surface: AgentSurfaceReference) async {
         await historyChatProvider?.kernelTurnProjection.refresh(surface: surface)
+    }
+
+    /// Read the projected journal receipt for one pill/run without exposing its
+    /// prompt or final output. AgentPills uses this as the durable half of the
+    /// completion invariant; its local terminal message alone is not enough to
+    /// prove that the next PTT turn can retrieve the child result.
+    func hasMaterializedAgentCompletion(pillID: UUID, runID: String?) -> Bool {
+        guard let provider = historyChatProvider else { return false }
+        let expectedRunID = runID?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return provider.messages.contains { message in
+            message.contentBlocks.contains { block in
+                guard case .agentCompletion(_, let recordedPillID, _, let recordedRunID, _, _, _, _) = block
+                else { return false }
+                if !expectedRunID.isEmpty {
+                    return recordedRunID?.trimmingCharacters(in: .whitespacesAndNewlines) == expectedRunID
+                }
+                return recordedPillID == pillID
+            }
+        }
     }
 
     /// Enrich the assistant turn that produced this pill's `agentSpawn` with one

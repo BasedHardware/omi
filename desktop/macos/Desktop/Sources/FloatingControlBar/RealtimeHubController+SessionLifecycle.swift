@@ -20,10 +20,6 @@ extension RealtimeHubController {
       log("RealtimeHub: warm start denied during effective-owner transition")
       return
     }
-    guard !cancelContinuityFenceActive else {
-      log("RealtimeHub: general warm deferred behind canceled-turn continuity fence")
-      return
-    }
     guard
       RealtimeHubLifecyclePolicy.canStartGeneralWarmSession(
         replacementPending: replacementAudioBuffer != nil)
@@ -232,6 +228,7 @@ extension RealtimeHubController {
   }
 
   func voiceTurnDidTerminate(turnID: VoiceTurnID) {
+    if admittedInputTurnID == turnID { admittedInputTurnID = nil }
     if let terminal = VoiceTurnCoordinator.shared.model.lastTerminal,
       terminal.turnID == turnID
     {
@@ -242,18 +239,7 @@ extension RealtimeHubController {
     } else if screenEvidence?.descriptor.turnID == turnID {
       clearScreenGrounding(stage: "cancelled")
     }
-    guard pendingSessionRefreshReason != nil else { return }
-    guard
-      RealtimeHubLifecyclePolicy.shouldResumeCanceledTurnRefresh(
-        fenceTurnID: cancelContinuityFenceTurnID,
-        terminalTurnID: turnID)
-    else { return }
-
-    if cancelContinuityFenceActive {
-      canceledTurnRewarmTask?.cancel()
-      canceledTurnRewarmTask = nil
-    }
-    applyPendingSessionRefreshIfIdle()
+    if pendingSessionRefreshReason != nil { applyPendingSessionRefreshIfIdle() }
   }
 
   /// Managed users: fetch a short-lived ephemeral token from the backend (gated by
@@ -354,10 +340,6 @@ extension RealtimeHubController {
   ) {
     guard !RuntimeOwnerIdentity.effectiveOwnerTransitionInProgress else {
       log("RealtimeHub: physical session start denied during effective-owner transition")
-      return
-    }
-    guard !cancelContinuityFenceActive else {
-      log("RealtimeHub: session start rejected behind canceled-turn continuity fence")
       return
     }
     guard isOwnerScopeCurrent(ownerScope) else {
@@ -477,6 +459,7 @@ extension RealtimeHubController {
         self.updateRegisteredDirectedProviders(registeredProviders)
         self.prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
         self.prefetchedVoiceContextOwnerScope = ownerScope
+        self.reconcileWarmSessionForCurrentRequirement()
       }
     }
   }
@@ -517,6 +500,7 @@ extension RealtimeHubController {
     updateRegisteredDirectedProviders(registeredProviders)
     prefetchedVoiceContextTurnIDs = resolvedSnapshot.turnIDs
     prefetchedVoiceContextOwnerScope = ownerScope
+    reconcileWarmSessionForCurrentRequirement()
     return true
   }
 
@@ -524,12 +508,77 @@ extension RealtimeHubController {
     let normalized = providers.filter { ["hermes", "openclaw"].contains($0) }.sorted()
     guard registeredDirectedProviderIDs != normalized else { return }
     registeredDirectedProviderIDs = normalized
-    // A realtime provider's tool schema is immutable for the physical session.
-    // Replace a warm session so it cannot advertise a stale local adapter.
-    if session != nil {
-      teardownSession()
-      ensureWarm()
+    // Tool schemas are immutable per provider session. This asynchronous
+    // key-down prefetch used to tear down the socket directly, racing a press.
+    // Route it through the same handoff owner and retain any reducer-owned PCM.
+    requestSessionHandoff(
+      reason: .directedProviderSchema,
+      preservingReconnectAudio: reconnectAudioBuffer != nil)
+  }
+
+  func reconcileWarmSessionForCurrentRequirement() {
+    let requirement = voiceSessionContext(for: currentOwnerScope)
+    guard requirement.isResolved else { return }
+    if var pending = reconnectAudioBuffer {
+      // The speculative key-down read may resolve after capture begins but
+      // before a candidate session exists. Move this one buffered turn to the
+      // newest canonical requirement so a newly minted socket cannot repeatedly
+      // reconnect to the identity it has already superseded.
+      guard pending.replaceRequiredContextFreshnessIdentity(requirement.snapshotFreshnessIdentity) else {
+        failContextFreshInputPreparation(
+          turnID: pending.turnID,
+          message: "Voice context admission identity is unavailable")
+        return
+      }
+      reconnectAudioBuffer = pending
     }
+    guard session != nil else {
+      ensureWarm()
+      return
+    }
+    guard RealtimeVoiceContextRefreshPolicy.requiresRefresh(
+      currentSnapshotIdentity: requirement.snapshotFreshnessIdentity,
+      sessionSnapshotIdentity: sessionVoiceContextFreshnessIdentity)
+    else { return }
+    requestSessionHandoff(
+      reason: .voiceContextFreshness,
+      preservingReconnectAudio: reconnectAudioBuffer != nil)
+  }
+
+  /// Converts an input already streaming to a live socket into the same
+  /// bounded replay representation used for cold admission. This closes the
+  /// gap where a mid-hold socket error had no `reconnectAudioBuffer` and thus
+  /// terminalized an otherwise recoverable PTT turn.
+  @discardableResult
+  func beginTransportRebindForActiveInputIfNeeded() -> Bool {
+    guard reconnectAudioBuffer == nil,
+      let active = VoiceTurnCoordinator.shared.activeTurn,
+      active.phase.isRecording || active.hubCommitPending,
+      let responseID = voiceResponseID,
+      let identity = VoiceTurnCoordinator.shared.reserveEffectIdentity()
+    else { return false }
+    guard case .hub = active.route else { return false }
+
+    var pending = RealtimeReconnectAudioBuffer(
+      turnID: active.id,
+      responseID: responseID,
+      identity: identity,
+      interrupting: reducerInterruptsPreviousTurn)
+    guard pending.bindRequiredContextFreshnessIdentity(sessionVoiceContextFreshnessIdentity) else {
+      return false
+    }
+    _ = pending.appendAudio(turnAudio16k)
+    reconnectAudioBuffer = pending
+    admittedInputTurnID = nil
+    VoiceTurnCoordinator.shared.send(
+      .providerReconnectStarted(
+        turnID: active.id,
+        identity: identity,
+        previousSessionID: voiceSessionID))
+    log(
+      "RealtimeHub: ptt_handoff event=rebind_buffered turn=\(active.id.rawValue.uuidString) "
+        + "source=active_input")
+    return true
   }
 
   /// Establish a reducer-owned input boundary before a PTT turn can touch the
@@ -570,6 +619,24 @@ extension RealtimeHubController {
       pending: pending,
       activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
       sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
+    if admission == .rejectStaleProviderContext {
+      var updated = pending
+      guard updated.replaceRequiredContextFreshnessIdentity(
+        voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
+      else {
+        failContextFreshInputPreparation(
+          turnID: pending.turnID,
+          message: "Voice context admission identity is unavailable")
+        return
+      }
+      reconnectAudioBuffer = updated
+      if updated.requiredContextFreshnessIdentity == sessionVoiceContextFreshnessIdentity {
+        finishContextFreshInputOnCurrentSession()
+        return
+      }
+      reconcileWarmSessionForCurrentRequirement()
+      return
+    }
     guard admission == .admit else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
@@ -596,7 +663,7 @@ extension RealtimeHubController {
       return
     }
     reconnectAudioBuffer = nil
-    inputTurnActivityStartPending = false
+    admittedInputTurnID = pending.turnID
     let candidates = AssistantSettings.shared.voiceBaseLanguages
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)
@@ -644,7 +711,7 @@ extension RealtimeHubController {
   ) {
     guard let pending = reconnectAudioBuffer, pending.turnID == turnID else { return }
     reconnectAudioBuffer = nil
-    inputTurnActivityStartPending = false
+    if admittedInputTurnID == turnID { admittedInputTurnID = nil }
     guard VoiceTurnCoordinator.shared.activeTurnID == turnID else { return }
     session?.abandonInputTurn()
     VoiceTurnCoordinator.shared.send(
@@ -666,11 +733,12 @@ extension RealtimeHubController {
       operation)
   }
 
-  /// A native screen answer becomes visible before the provider can narrate it.
+  /// A deterministic screen-verification failure becomes visible before the provider can
+  /// continue. Successful reports do not use this path: they keep provider narration open.
   /// Register its canonical journal obligation through the same retained receipt
   /// path as other authoritative local results before the reducer closes the turn.
   @discardableResult
-  func enqueueAuthoritativeScreenEvidencePersistence(
+  func enqueueAuthoritativeScreenEvidenceFailurePersistence(
     ownerID: String,
     assistantText: String
   ) -> Task<Bool, Never> {
@@ -812,9 +880,9 @@ extension RealtimeHubController {
           .journalAccepted(turnID: turnID, identity: identity))
         // The provider only receives kernel context when its socket starts.
         // Re-warm after the durable journal acknowledgement so the usual next
-        // PTT press is already fresh; beginTurn still enforces the hard gate
-        // for a press that races this asynchronous refresh.
-        self.requestSessionRefresh(reason: "voice_context_changed")
+        // PTT press is already fresh. A press that races this handoff owns a
+        // bounded buffer instead of being failed or sent to generic warm wait.
+        self.requestSessionHandoff(reason: .persistedVoiceContext)
       } else {
         VoiceTurnCoordinator.shared.send(
           .journalFailed(
@@ -848,13 +916,12 @@ extension RealtimeHubController {
 #endif
     hubConnected = false  // no live session → PTT falls back to the cascade until re-warm
     sessionVoiceContextFreshnessIdentity = ""
+    admittedInputTurnID = nil
     geminiSessionNeedsTurnBoundary = false
     if !preservingReconnectAudio {
       reconnectAudioBuffer = nil
     }
     clearBargeInReplacementState()
-    pendingCompletedAgentDeltaAckIds.removeAll()
-    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     return detachedSession
   }
@@ -1236,6 +1303,24 @@ extension RealtimeHubController {
       pending: pending,
       activeTurnID: VoiceTurnCoordinator.shared.activeTurnID,
       sessionContextFreshnessIdentity: sessionVoiceContextFreshnessIdentity)
+    if admission == .rejectStaleProviderContext {
+      var updated = pending
+      guard updated.replaceRequiredContextFreshnessIdentity(
+        voiceSessionContext(for: currentOwnerScope).snapshotFreshnessIdentity)
+      else {
+        failContextFreshInputPreparation(
+          turnID: pending.turnID,
+          message: "Voice context admission identity is unavailable")
+        return
+      }
+      reconnectAudioBuffer = updated
+      if updated.requiredContextFreshnessIdentity == sessionVoiceContextFreshnessIdentity {
+        finishSessionReconnectAfterReady()
+        return
+      }
+      reconcileWarmSessionForCurrentRequirement()
+      return
+    }
     guard admission == .admit else {
       reconnectAudioBuffer = nil
       live.abandonInputTurn()
@@ -1261,6 +1346,7 @@ extension RealtimeHubController {
       log("RealtimeHub: reducer rejected reconnect before audio replay")
       return
     }
+    admittedInputTurnID = pending.turnID
     let candidates = AssistantSettings.shared.voiceBaseLanguages
     if live.supportsInputTranscriptionLanguage, !candidates.isEmpty {
       live.setInputTranscriptionLanguage(candidates.count == 1 ? candidates[0] : turnEarlyVerdictCode)

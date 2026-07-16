@@ -615,6 +615,7 @@ extension RealtimeHubController {
     // Transport readiness has no authority to open provider input. Reconnect
     // and replacement replay paths above require an exact context admission;
     // an ordinary warm connection waits for prepareHubInput -> beginTurn.
+    applyPendingSessionRefreshIfIdle()
   }
 
   func hubDidReceiveInputTranscript(
@@ -655,12 +656,11 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard !screenGroundingState.suppressesProviderOutput else { return }
-    guard !RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
-      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil)
-    else { return }
-    guard !VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    else { return }
+    guard RealtimeProviderOutputPresentationPolicy.decide(
+      screenGroundingState: screenGroundingState,
+      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil,
+      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+    ) == .present else { return }
     guard let lease = acquireVoiceOutput(.nativeRealtime, reason: "provider_audio") else { return }
     if let voiceSessionID {
       guard let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
@@ -713,6 +713,11 @@ extension RealtimeHubController {
     }
     audioReceivedThisTurn = true
     realtimePlaybackEpoch = pcmPlayer.playbackEpoch
+    // The reducer's drain deadline is an inactivity watchdog. Refresh it only
+    // after this exact PCM chunk reached the player, so long healthy native
+    // replies are not cut off at a fixed duration while a stalled stream still
+    // fails closed.
+    _ = VoiceTurnCoordinator.shared.noteOutputProgress(lease)
     responseGlowGate.markPlaybackActive(lease: lease)
   }
 
@@ -723,12 +728,11 @@ extension RealtimeHubController {
     source: RealtimeHubSession
   ) {
     guard acceptsTurnEvent(identity, source: source), let identity else { return }
-    guard !screenGroundingState.suppressesProviderOutput else { return }
-    guard !RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
-      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil)
-    else { return }
-    guard !VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
-    else { return }
+    guard RealtimeProviderOutputPresentationPolicy.decide(
+      screenGroundingState: screenGroundingState,
+      hasCanonicalSpawnReceipt: acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil,
+      reducerOutputSuppressed: VoiceTurnCoordinator.shared.outputSnapshot.providerOutputSuppressed
+    ) == .present else { return }
     if !text.isEmpty {
       assistantText += text
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
@@ -842,9 +846,13 @@ extension RealtimeHubController {
     arguments: [String: Any],
     expectedTurnEpoch: Int
   ) {
-    let answer = String(((arguments["answer"] as? String) ?? "").prefix(1_200))
+    // `answer` is accepted only for already-warm sessions created by a prior
+    // bundle. New generated schemas use `observation`, whose value is an
+    // internal grounding acknowledgement rather than the user-facing answer.
+    let observation = String(
+      ((arguments["observation"] as? String) ?? (arguments["answer"] as? String) ?? "").prefix(1_200))
     let accepted = resolveScreenObservation(
-      answer: answer,
+      observation: observation,
       source: source,
       turnID: turnID,
       expectedTurnEpoch: expectedTurnEpoch,
@@ -860,29 +868,26 @@ extension RealtimeHubController {
 
   @discardableResult
   func resolveScreenObservation(
-    answer: String,
+    observation: String,
     source: RealtimeHubSession,
     turnID: VoiceTurnID,
     expectedTurnEpoch: Int,
     callID: String,
     reportIdentity: VoiceEffectIdentity
   ) -> Bool {
-    let knownApplicationNames = NSWorkspace.shared.runningApplications.compactMap(\.localizedName)
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: screenGroundingState,
-      answer: answer,
+      observation: observation,
       sourceObjectID: ObjectIdentifier(source),
       activeTurnID: turnID,
       activeResponseID: voiceResponseID,
-      currentTurnEpoch: expectedTurnEpoch,
-      knownApplicationNames: knownApplicationNames)
+      currentTurnEpoch: expectedTurnEpoch)
     guard decision == .accepted, case .awaitingReport(let receipt) = screenGroundingState else {
       let reason: String
       switch decision {
       case .evidenceUnavailable: reason = "evidence_unavailable"
       case .transportNotDispatched: reason = "transport_not_dispatched"
       case .staleReceipt: reason = "stale_receipt"
-      case .evidenceExpired: reason = "evidence_expired"
       case .contradictoryApplication: reason = "contradictory_application"
       case .emptyAnswer: reason = "empty_answer"
       case .accepted: reason = "evidence_state_changed"
@@ -898,12 +903,11 @@ extension RealtimeHubController {
     }
     screenGroundingState = .accepted(receipt)
     logScreenEvidence(stage: "report_accepted", evidence: receipt.descriptor, callID: callID)
-    return completeScreenEvidenceProtocol(
+    return acceptScreenEvidenceReport(
       receipt.protocolToken,
-      outcome: .verified(
-        reportCallID: VoiceToolCallID(callID),
-        reportIdentity: reportIdentity),
-      answer: RealtimeScreenGroundingPolicy.presentedAnswer(evidence: receipt.descriptor, answer: answer))
+      reportCallID: VoiceToolCallID(callID),
+      reportIdentity: reportIdentity)
+      == .completed
   }
 
   func hubDidFinishTurn(identity: RealtimeHubEventIdentity?, source: RealtimeHubSession) {
@@ -921,13 +925,13 @@ extension RealtimeHubController {
       VoiceTurnCoordinator.shared.activeTurn?.postToolContinuationRequired == true
         && RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
           hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
-    if RealtimeProviderTurnDoneDisposition.decide(
+    switch RealtimeProviderTurnDoneDisposition.decide(
       pendingToolCount: pendingToolCount,
       postToolContinuationRequired: postToolContinuationRequired)
-      == .awaitToolContinuation
     {
+    case .awaitPendingTools:
       log(
-        "RealtimeHub[\(providerTag)]: provider cycle done with \(pendingToolCount) tool result(s) pending; waiting for post-tool continuation"
+        "RealtimeHub[\(providerTag)]: provider cycle done with \(pendingToolCount) tool result(s) pending; waiting for provider tool delivery"
       )
       if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
         let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
@@ -940,6 +944,35 @@ extension RealtimeHubController {
             responseID: identity.responseID))
       }
       return
+
+    case .requestPostToolContinuation:
+      log(
+        "RealtimeHub[\(providerTag)]: provider cycle ended after tool delivery; requesting one bounded continuation"
+      )
+      if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
+        let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
+      {
+        VoiceTurnCoordinator.shared.send(
+          .providerTurnFinishedScoped(
+            turnID: turnID,
+            identity: providerIdentity,
+            sessionID: voiceSessionID,
+            responseID: identity.responseID))
+      }
+      source.resumeAfterToolOnlyCycle(identity: identity) { resumed in
+        DispatchQueue.main.async { [weak self, weak source] in
+          guard let self, let source else { return }
+          self.handlePostToolContinuationStart(
+            resumed,
+            identity: identity,
+            source: source,
+            pendingToolCount: pendingToolCount)
+        }
+      }
+      return
+
+    case .finalizeLogicalTurn:
+      break
     }
     if sessionProvider == .gemini {
       geminiSessionNeedsTurnBoundary = true
@@ -1009,15 +1042,6 @@ extension RealtimeHubController {
         return accepted
       }
     }
-    if !pendingCompletedAgentDeltaAckIds.isEmpty {
-      DesktopCoordinatorService.shared.acknowledgeCompletedAgentDelta(
-        surfaceKind: "ptt",
-        ids: pendingCompletedAgentDeltaAckIds,
-        completedAtHighWaterMs: pendingCompletedAgentDeltaHighWaterMs
-      )
-      pendingCompletedAgentDeltaAckIds.removeAll()
-      pendingCompletedAgentDeltaHighWaterMs = nil
-    }
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID,
       VoiceTurnCoordinator.shared.activeTurn?.providerFinished != true,
       let providerIdentity = VoiceTurnCoordinator.shared.activeTurn?.providerEffectIdentity
@@ -1035,6 +1059,48 @@ extension RealtimeHubController {
     } else {
       exitVoiceUI()
       applyPendingSessionRefreshIfIdle()
+    }
+  }
+
+  /// The session owns whether a continuation can start; the controller owns the reducer terminal
+  /// transition. Recheck the original turn/session after the session queue callback so a stale
+  /// recovery result cannot finish a replacement PTT turn.
+  func handlePostToolContinuationStart(
+    _ result: RealtimePostToolContinuationStartResult,
+    identity: RealtimeHubEventIdentity,
+    source: RealtimeHubSession,
+    pendingToolCount: Int
+  ) {
+    guard acceptsTurnEvent(identity, source: source) else { return }
+    let sessionProviderTag = sessionProvider?.rawValue ?? "unbound"
+    let controllerAction = RealtimePostToolContinuationControllerAction.decide(result)
+    switch result {
+    case .started:
+      DesktopDiagnosticsManager.shared.recordFallback(
+        area: "realtime_hub",
+        from: "\(sessionProviderTag)_tool_cycle_complete",
+        to: "\(sessionProviderTag)_explicit_post_tool_continuation",
+        reason: "provider_no_user_facing_output",
+        outcome: .recovered,
+        extra: ["pending_tool_count": pendingToolCount])
+      log("RealtimeHub[\(sessionProviderTag)]: resumed after tool-only cycle")
+
+    case .alreadyInFlight:
+      log("RealtimeHub[\(sessionProviderTag)]: post-tool provider response already in flight")
+
+    case .stale:
+      guard controllerAction == .ignoreStaleCallback else { return }
+      return
+
+    case .exhausted, .transportUnavailable:
+      guard controllerAction == .finishProviderNoResponse else { return }
+      log("RealtimeHub[\(sessionProviderTag)]: post-tool continuation unavailable result=\(result)")
+      guard let turnID = VoiceTurnCoordinator.shared.activeTurnID else { return }
+      VoiceTurnCoordinator.shared.send(.finish(turnID: turnID, reason: .providerNoResponse))
+      if VoiceTurnCoordinator.shared.outputSnapshot.activeLease == nil {
+        exitVoiceUI()
+        applyPendingSessionRefreshIfIdle()
+      }
     }
   }
 
@@ -1082,6 +1148,34 @@ extension RealtimeHubController {
 
   func hubDidError(_ message: String, source: RealtimeHubSession) {
     guard isCurrentSession(source) else { return }
+    if reconnectAudioBuffer == nil {
+      _ = beginTransportRebindForActiveInputIfNeeded()
+    }
+    if var pending = reconnectAudioBuffer {
+      if pending.beginRebindAttempt() {
+        reconnectAudioBuffer = pending
+        log(
+          "RealtimeHub: ptt_handoff event=rebind_attempt turn=\(pending.turnID.rawValue.uuidString) "
+            + "attempt=\(pending.rebindAttempts) reason=transport_failure")
+        requestSessionHandoff(
+          reason: .transportFailure,
+          preservingReconnectAudio: true)
+        return
+      }
+      // The one transparent rebind has already been consumed. Clear the
+      // controller buffer before handing the same logical turn to the reducer's
+      // established transcription fallback; a late socket callback can no
+      // longer replay audio into that fallback turn.
+      reconnectAudioBuffer = nil
+      VoiceTurnCoordinator.shared.send(
+        .providerReconnectFailed(
+          turnID: pending.turnID,
+          identity: pending.identity,
+          message: "realtime provider reconnect exhausted"))
+      log(
+        "RealtimeHub: ptt_handoff event=fallback turn=\(pending.turnID.rawValue.uuidString) "
+          + "reason=rebind_exhausted")
+    }
     var resolvedScreenProtocol = false
     if let turnID = VoiceTurnCoordinator.shared.activeTurnID {
       resolvedScreenProtocol = resolvePendingScreenEvidenceBeforeProviderTermination(
@@ -1134,8 +1228,6 @@ extension RealtimeHubController {
     let terminalToolErrorCode = lastExternalToolErrorCode.isEmpty ? "none" : lastExternalToolErrorCode
     let terminalHadAcceptedSpawn =
       acceptedSpawnJournalReceiptByContinuityKey[turnIdempotencyKey] != nil
-    pendingCompletedAgentDeltaAckIds.removeAll()
-    pendingCompletedAgentDeltaHighWaterMs = nil
     clearRealtimeToolTracking()
     let aliveFor = (hubConnected ? lastWarmAt.map { Date().timeIntervalSince($0) } : nil) ?? 0
     // Most "session error" closes are expected lifecycle events, not bugs: a socket

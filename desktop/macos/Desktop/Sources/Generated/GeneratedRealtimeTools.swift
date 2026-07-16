@@ -74,19 +74,10 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "list_agent_sessions",
-    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, do not infer run completion from session status or restrict discovery to status='open'. List recent sessions, then inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
+    "description": "List canonical Omi-managed agents and subagents, including their sessions/runs, across chat, PTT/realtime, task chat, floating-bar pills, and migrated surfaces. For a prior child agent's final answer, omit status filters: session archive state is not run completion. List recent sessions, then answer from latestRun.finalText or inspect the returned run with get_agent_run. Keep internal ids out of the user-visible response.",
     "parameters": {
       "type": "object",
       "properties": {
-        "status": {
-          "type": "string",
-          "enum": [
-            "open",
-            "archived",
-            "closed"
-          ],
-          "description": "Optional session status filter."
-        },
         "surfaceKind": {
           "type": "string",
           "enum": [
@@ -652,17 +643,17 @@ enum GeneratedRealtimeTools {
   {
     "type": "function",
     "name": "report_screen_observation",
-    "description": "After screenshot succeeds for a current-screen question, report exactly one observation with concise visual detail. Never identify, name, or claim an application in the answer because the desktop supplies app identity from native evidence. Do not speak or answer the current-screen question outside this report.",
+    "description": "After screenshot succeeds for a current-screen question, report exactly one concise grounding observation. This report is internal verification, not the user-facing answer: when it succeeds, answer the user's original request naturally from the attached image.",
     "parameters": {
       "type": "object",
       "properties": {
-        "answer": {
+        "observation": {
           "type": "string",
-          "description": "Concise visual detail only; do not name or identify an app."
+          "description": "Concise visual grounding observation from the attached image; this is not the user-facing answer."
         }
       },
       "required": [
-        "answer"
+        "observation"
       ]
     }
   },

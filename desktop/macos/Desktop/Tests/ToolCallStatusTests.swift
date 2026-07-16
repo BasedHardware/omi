@@ -128,6 +128,55 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  @MainActor
+  func testReleasedSendLockTerminalizesEveryOrphanedStreamingAssistantRow() {
+    var messages = [
+      ChatMessage(
+        id: "orphaned-assistant",
+        text: "",
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [
+          .toolCall(
+            id: "web-search",
+            name: "web_search",
+            status: .running,
+            toolUseId: "tool-web-search",
+            input: nil,
+            output: nil
+          )
+        ]
+      ),
+      ChatMessage(id: "stable-user", text: "next", sender: .user),
+    ]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: false
+    )
+
+    XCTAssertEqual(terminalized, ["orphaned-assistant"])
+    XCTAssertFalse(messages[0].isStreaming)
+    guard case .toolCall(_, _, let status, _, _, _) = messages[0].contentBlocks[0] else {
+      return XCTFail("Expected tool call content block")
+    }
+    XCTAssertEqual(status, .failed)
+    XCTAssertFalse(messages[1].isStreaming)
+  }
+
+  @MainActor
+  func testActiveSendLockDoesNotTerminalizeCurrentStreamingAssistantRow() {
+    var messages = [ChatMessage(id: "current-assistant", text: "", sender: .ai, isStreaming: true)]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: true
+    )
+
+    XCTAssertTrue(terminalized.isEmpty)
+    XCTAssertTrue(messages[0].isStreaming)
+  }
+
   // MARK: - Tool-call content block lifecycle
 
   func testStreamingBufferPreservesTextBeforeToolOrder() {

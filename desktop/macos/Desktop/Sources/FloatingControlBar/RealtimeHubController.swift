@@ -77,8 +77,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var screenEvidence: RealtimeScreenEvidence?
   var screenEvidenceReadiness: RealtimeScreenEvidenceReadiness?
   var screenGroundingState: RealtimeScreenGroundingState = .inactive
+  /// Latest safe protocol disposition, surfaced only through the non-production automation
+  /// bridge. This lets a PTT probe distinguish a provider wait from a local lifecycle failure.
+  var lastScreenEvidenceProtocolCompletion: RealtimeScreenEvidenceProtocolCompletion = .notRun
   var authorizedRealtimeScreenshotImages: [String: RealtimeScreenEvidenceAttachment] = [:]
-  var screenAnswerPresented = false
+  var screenFailurePresented = false
   var voiceContextPrefetchTask: Task<Void, Never>?
   var voiceContextRefreshGeneration: UInt64 = 0
   var turnPreparationTask: Task<Void, Never>?
@@ -101,9 +104,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var legacyVoiceJournalImportedOwners = Set<String>()
   var deferredSessionRefreshTask: Task<Void, Never>?
   var canceledTurnRewarmTask: Task<Void, Never>?
-  /// (b) Genuinely local race fence — never observed by the kernel.
-  var cancelContinuityFenceActive = false
-  var cancelContinuityFenceTurnID: VoiceTurnID?
   var bargeInContinuityTask: Task<Void, Never>?
   var bargeInReplacementGeneration: UInt64 = 0
   var pendingBargeInProvider: RealtimeHubProvider?
@@ -119,8 +119,11 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   var turnAudio16k = Data()
   /// Monotonic turn counter guarding async language-ID results against cross-turn races.
   var turnEpoch = 0
-  /// `beginInputTurn` was deferred because the warm session was still opening after a context reconnect.
-  var inputTurnActivityStartPending = false
+  /// The provider input window is already open for this logical turn. This is
+  /// deliberately separate from `reconnectAudioBuffer`: the manager needs to
+  /// avoid a second `beginTurn` when a warm-wait callback arrives immediately
+  /// after the controller replayed the buffered turn.
+  var admittedInputTurnID: VoiceTurnID?
   /// Early (mid-hold) language verdict — kicked off ~1.5 s into the hold so it's already
   /// computed by PTT-up and the provider hint adds zero perceived latency.
   var earlyLIDTask: Task<PTTLanguageIdentifier.Verdict, Never>?
@@ -196,8 +199,6 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// each run; this set only suppresses duplicate command delivery in-session.
   var completedAuthorizedRealtimeInvocationIDs: Set<String> = []
   var realtimeToolTurnEpoch = 0
-  var pendingCompletedAgentDeltaAckIds: [String] = []
-  var pendingCompletedAgentDeltaHighWaterMs: Int?
   /// When the last PTT turn started — used to keep the socket warm via auto-reconnect
   /// only while the user is actively using it (Gemini idle-closes the WS ~2.5 min).
   var lastTurnAt: Date?
@@ -225,8 +226,8 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// latest scheduled playback epoch may publish a drain for the current lease.
   var realtimePlaybackEpoch = 0
 
-  /// Log tag for the currently-connected provider.
-  var providerTag: String { sessionProvider == .gemini ? "gemini" : "openai" }
+  /// Log tag; an unbound handoff never infers a provider.
+  var providerTag: String { RealtimeHubProviderLogTag.current(sessionProvider) }
 
   var reducerCapturingInput: Bool {
     VoiceTurnCoordinator.shared.activeTurn?.phase.isRecording == true
@@ -400,9 +401,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     hubReconnectStrikes = 0
     fallbackProvider = nil
     pendingFailoverReason = nil
-    cancelContinuityFenceActive = false
-    cancelContinuityFenceTurnID = nil
-    inputTurnActivityStartPending = false
+    admittedInputTurnID = nil
     turnTranscript = ""
     providerTranscriptFinalized = false
     lastInputTranscriptUpdateAt = nil
@@ -790,6 +789,60 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     return hubConnected
       && (sessionProvider == RealtimeHubSettings.shared.provider
         || sessionProvider == fallbackProvider)
+  }
+
+  /// PTT must distinguish a merely authenticated socket from a session that can
+  /// accept this turn's canonical context. Callers always begin capture; this
+  /// answer only chooses direct ingress versus bounded controller-owned buffering.
+  var pttAdmission: RealtimePTTAdmission {
+    let requirement = voiceSessionContext(for: currentOwnerScope)
+    return RealtimePTTAdmissionPolicy.decide(
+      requirementIsResolved: requirement.isResolved,
+      transportIsReady: isTransportReady,
+      bindingMatchesRequirement: requirement.snapshotFreshnessIdentity == sessionVoiceContextFreshnessIdentity)
+  }
+
+  func hasPendingInputPreparation(for turnID: VoiceTurnID?) -> Bool {
+    guard let turnID else { return false }
+    return reconnectAudioBuffer?.turnID == turnID || admittedInputTurnID == turnID
+  }
+
+  /// Non-production manager-harness facts. These describe ownership and
+  /// admission only; they deliberately omit turn IDs, context payload, and
+  /// provider text so a failed physical-path probe is diagnosable without
+  /// exposing user content.
+  func automationPTTInputDiagnostics() -> [String: String] {
+    let requirement = voiceSessionContext(for: currentOwnerScope)
+    let preparation: String
+    if reconnectAudioBuffer != nil {
+      preparation = "buffered"
+    } else if admittedInputTurnID != nil {
+      preparation = "admitted"
+    } else {
+      preparation = "none"
+    }
+    return [
+      "ptt_admission": pttAdmission == .immediate ? "immediate" : "capture_and_buffer",
+      "ptt_input_preparation": preparation,
+      "ptt_rebind_attempts": "\(reconnectAudioBuffer?.rebindAttempts ?? 0)",
+      "ptt_binding_matches_requirement": (
+        requirement.isResolved && requirement.snapshotFreshnessIdentity == sessionVoiceContextFreshnessIdentity
+      ) ? "true" : "false",
+      "ptt_handoff_pending": pendingSessionRefreshReason ?? "none",
+    ]
+  }
+
+  /// The reducer selected the non-hub fallback for this logical turn. Drop only
+  /// its pending physical replay so a late socket connect cannot revive audio
+  /// that is now owned by the transcription lane.
+  func abandonInputPreparation(turnID: VoiceTurnID) {
+    guard reconnectAudioBuffer?.turnID == turnID else { return }
+    turnPreparationTask?.cancel()
+    turnPreparationTask = nil
+    reconnectAudioBuffer = nil
+    if admittedInputTurnID == turnID { admittedInputTurnID = nil }
+    session?.abandonInputTurn()
+    log("RealtimeHub: ptt_handoff event=fallback_cleanup turn=\(turnID.rawValue.uuidString)")
   }
 
   /// PTT cold-start grace: give an already-warming/reconnecting hub a short chance to
@@ -1274,7 +1327,7 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
   /// forces session=nil so ensureWarm() rebuilds (it would otherwise treat the stale socket
   /// as already-warm and no-op).
   @objc private func systemDidWake() {
-    requestSessionRefresh(reason: "system_wake")
+    requestSessionHandoff(reason: .systemWake)
   }
 
   /// Voice languages changed: prewarm the LID model (a 1→2 language change would
@@ -1284,15 +1337,10 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     if !AssistantSettings.shared.voiceBaseLanguages.isEmpty {
       Task.detached(priority: .utility) { await PTTLanguageIdentifier.shared.prewarm() }
     }
-    requestSessionRefresh(reason: "voice_languages_changed")
+    requestSessionHandoff(reason: .voiceLanguages)
   }
 
   @objc private func settingsChanged() {
-    guard RealtimeHubLifecyclePolicy.canReplaceSession(lifecycleSnapshot) else {
-      pendingSessionRefreshReason = "provider_settings_changed"
-      log("RealtimeHub: deferring provider settings change until active voice turn terminates")
-      return
-    }
     resetFailoverForProviderSettingsChange()
     // Only reconnect if the provider actually changed — avoids redundant
     // teardown/recreate races on unrelated notifications.
@@ -1303,20 +1351,42 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
     {
       return
     }
-    teardownSession()
-    ensureWarm()
+    requestSessionHandoff(reason: .providerSettings)
   }
 
-  func requestSessionRefresh(reason: String) {
-    guard session != nil else { return }
-    guard RealtimeHubLifecyclePolicy.canReplaceSession(lifecycleSnapshot) else {
-      pendingSessionRefreshReason = reason
-      log("RealtimeHub: deferring \(reason) session refresh until active voice turn terminates")
+  /// The only ordinary session-maintenance entrypoint. A captured PTT turn
+  /// owns bounded audio while this method changes a physical binding; all other
+  /// maintenance defers until the reducer reports an idle lifecycle.
+  func requestSessionHandoff(
+    reason: RealtimeHubSessionHandoffReason,
+    preservingReconnectAudio: Bool = false
+  ) {
+    let hasBufferedTurn = preservingReconnectAudio && reconnectAudioBuffer != nil
+    let decision = RealtimeHubSessionHandoffPolicy.decide(
+      bindingMatchesRequirement: false,
+      canReplaceIdleSession: RealtimeHubLifecyclePolicy.canReplaceSession(lifecycleSnapshot),
+      hasBufferedTurn: hasBufferedTurn,
+      rebindAttempts: reconnectAudioBuffer?.rebindAttempts ?? 0)
+    switch decision {
+    case .keepActive:
       return
+    case .deferUntilIdle:
+      pendingSessionRefreshReason = reason.rawValue
+      log("RealtimeHub: deferring \(reason.rawValue) handoff until active voice turn terminates")
+      return
+    case .fallbackToTranscription:
+      // The caller that owns the buffered turn translates this into the
+      // reducer's existing fallback route. Never replace a second time here.
+      return
+    case .replacePreservingBufferedTurn:
+      if hasBufferedTurn {
+        log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=buffered_turn")
+      } else {
+        log("RealtimeHub: handoff requested reason=\(reason.rawValue) mode=idle")
+      }
+      if session != nil { teardownSession(preservingReconnectAudio: hasBufferedTurn) }
+      ensureWarm()
     }
-    log("RealtimeHub: \(reason) — re-warming idle session")
-    teardownSession()
-    ensureWarm()
   }
 
   func applyPendingSessionRefreshIfIdle() {
@@ -1329,23 +1399,22 @@ final class RealtimeHubController: NSObject, RealtimeHubSessionDelegate {
       deferredSessionRefreshTask = Task { @MainActor [weak self] in
         guard let self else { return }
         if await self.refreshVoiceContextAfterPersistenceFence(reason: reason) {
-          self.cancelContinuityFenceActive = false
-          self.cancelContinuityFenceTurnID = nil
           self.canceledTurnRewarmTask = nil
           log("RealtimeHub: applying deferred voice context refresh after turn persistence")
-          self.teardownSession()
-          self.ensureWarm()
+          self.requestSessionHandoff(reason: .persistedVoiceContext)
         }
         self.deferredSessionRefreshTask = nil
       }
       return
     }
-    log("RealtimeHub: applying deferred \(reason) session refresh")
-    if reason == "provider_settings_changed" {
+    log("RealtimeHub: applying deferred \(reason) session handoff")
+    if reason == RealtimeHubSessionHandoffReason.providerSettings.rawValue {
       resetFailoverForProviderSettingsChange()
     }
-    teardownSession()
-    ensureWarm()
+    guard let typedReason = RealtimeHubSessionHandoffReason(rawValue: reason) else {
+      return
+    }
+    requestSessionHandoff(reason: typedReason)
   }
 
   /// Waits for every persistence write visible at the fence, refreshes context,

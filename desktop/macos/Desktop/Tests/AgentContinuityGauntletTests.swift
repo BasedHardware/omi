@@ -38,6 +38,7 @@ final class AgentContinuityGauntletTests: XCTestCase {
       "restore_test_owner",
       "clear_owner_surface_state",
       "kernel_turn_tail",
+      "ptt_manager_turn",
     ]
     for name in required {
       XCTAssertTrue(

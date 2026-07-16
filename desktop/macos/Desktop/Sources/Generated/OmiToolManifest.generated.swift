@@ -179,7 +179,7 @@ enum OmiToolManifest {
     ),
     LocalAgentTool(
       name: "get_work_context",
-      description: "Get the user's current screen plus a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. Call this first when seeing the user's current work would help.",
+      description: "Get a compressed timeline of recent on-screen activity without sharing raw screenshot pixels. It is historical context, not current visual evidence.",
       properties: [
         "minutes": [
           "type": "number",

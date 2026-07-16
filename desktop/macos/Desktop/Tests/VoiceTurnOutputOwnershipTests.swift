@@ -180,7 +180,7 @@ final class VoiceTurnOutputOwnershipTests: XCTestCase {
     XCTAssertTrue(coordinator.outputSnapshot.providerOutputSuppressed)
   }
 
-  func testAuthoritativeScreenEvidenceCanTakeOverSpeculativeNativeLease() throws {
+  func testScreenVerificationFailureCanTakeOverSpeculativeNativeLease() throws {
     let (coordinator, turnID) = awaitingCoordinator()
     let native = try XCTUnwrap(tryLease(coordinator.acquireOutput(.nativeRealtime, turnID: turnID)))
 
