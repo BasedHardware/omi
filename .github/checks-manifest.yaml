@@ -212,6 +212,16 @@ checks:
     triggers: ["desktop/macos/scripts/swift-format-wrapper.sh", "desktop/macos/tests/test-swift-format-wrapper.sh"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 02: pinned swift-format bootstrap wrapper provenance contract"
+  - id: desktop-main-actor-xctest-hooks
+    command: ["python3", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    triggers: ["desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/check-main-actor-xctest-hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "Xcode 16.4 rejects non-Sendable XCTestCase transfers from @MainActor async lifecycle hooks; fail before the full Swift test build"
+  - id: desktop-main-actor-xctest-hooks-fixtures
+    command: ["python3", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    triggers: ["desktop/macos/scripts/check-main-actor-xctest-hooks.py", ".github/scripts/test_check_main_actor_xctest_hooks.py"]
+    lanes: ["local", "ci"]
+    reason: "adversarial fixtures for the @MainActor XCTest lifecycle compiler-failure tripwire"
   - id: desktop-swift-format-lint
     command: ["bash", "desktop/macos/scripts/swift-format-wrapper.sh", "lint-scope"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/Desktop/.swift-format", "desktop/macos/scripts/swift-format-wrapper.sh"]
