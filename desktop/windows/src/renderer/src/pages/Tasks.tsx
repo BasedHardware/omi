@@ -90,24 +90,38 @@ function formatDue(ms: number): string {
   })
 }
 
-type Bucket = 'overdue' | 'today' | 'tomorrow' | 'upcoming' | 'nodate'
+type Bucket = 'today' | 'tomorrow' | 'later' | 'nodate'
 
+// Four due-date buckets, matching Mac's TaskCategory (Today · Tomorrow · Later ·
+// No Deadline). Overdue tasks fold into Today — there is no separate Overdue
+// section — mirroring Mac's `categoryFor` (`dueAt < startOfTomorrow → .today`,
+// TasksPage.swift) and the Flutter app's grouping.
 function bucketOf(t: ActionItemRecord): Bucket {
   if (t.dueAt == null) return 'nodate'
   const due = startOfDay(t.dueAt)
   const today = startOfDay(Date.now())
-  if (due < today) return 'overdue'
-  if (due === today) return 'today'
-  if (due === today + DAY) return 'tomorrow'
-  return 'upcoming'
+  if (due <= today) return 'today' // overdue + today
+  // Tomorrow's local start-of-day via Date.setDate (which handles DST shifts and
+  // month/year boundaries). A fixed `today + DAY` offset is 23h/25h wrong on the
+  // two DST-transition days each year, which would mis-bucket a "due tomorrow"
+  // task into Later.
+  const tomorrow = new Date(today)
+  tomorrow.setDate(tomorrow.getDate() + 1)
+  if (due === startOfDay(tomorrow.getTime())) return 'tomorrow'
+  return 'later'
 }
 
-const BUCKET_ORDER: Bucket[] = ['overdue', 'today', 'tomorrow', 'upcoming', 'nodate']
+// A task whose due date is before today. Independent of bucketing (overdue rows
+// live in the Today bucket) so the date badge can still flag them in rose.
+function isOverdue(t: ActionItemRecord): boolean {
+  return !t.completed && t.dueAt != null && startOfDay(t.dueAt) < startOfDay(Date.now())
+}
+
+const BUCKET_ORDER: Bucket[] = ['today', 'tomorrow', 'later', 'nodate']
 const BUCKET_LABEL: Record<Bucket, string> = {
-  overdue: 'Overdue',
   today: 'Today',
   tomorrow: 'Tomorrow',
-  upcoming: 'Upcoming',
+  later: 'Later',
   nodate: 'No due date'
 }
 
@@ -270,10 +284,9 @@ export function Tasks(): React.JSX.Element {
   const openGroups = useMemo(() => {
     if (filter === 'done') return []
     const groups: Record<Bucket, ActionItemRecord[]> = {
-      overdue: [],
       today: [],
       tomorrow: [],
-      upcoming: [],
+      later: [],
       nodate: []
     }
     for (const t of items) {
@@ -307,7 +320,7 @@ export function Tasks(): React.JSX.Element {
     // so its controls can't fire a mutation with no backendId.
     const isBusy = busy.has(t.id) || !t.backendId
     const conv = t.conversationId ? convs[t.conversationId] : undefined
-    const overdue = !t.completed && bucketOf(t) === 'overdue'
+    const overdue = isOverdue(t)
     return (
       <li key={t.id} className="surface-card group flex items-start gap-3 p-4 animate-fade-in">
         <button
