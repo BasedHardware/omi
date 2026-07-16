@@ -37,6 +37,9 @@
 		BAADF00DF00DF00DF00DFD17 /* PhoneMicInterruptionMonitor.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */; };
 		BAADF00DF00DF00DF00DFD18 /* PhoneMicEventEmitter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */; };
 		BAADF00DF00DF00DF00DFD19 /* PhoneMicHostApiImpl.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */; };
+		BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */; };
+		BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */; };
+		BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */ = {isa = PBXBuildFile; fileRef = BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */; };
 		42B17C7C2F69BC6600BFDA9D /* PigeonCommunicator.g.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */; };
 		42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */; };
 		42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */ = {isa = PBXBuildFile; fileRef = 42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */; };
@@ -158,6 +161,10 @@
 		BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicInterruptionMonitor.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicEventEmitter.swift; sourceTree = "<group>"; };
 		BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicHostApiImpl.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicOpusEncoder.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PhoneMicBatchAudioWriter.swift; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.h; path = PhoneMicOpusShim.h; sourceTree = "<group>"; };
+		BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.c.objc; path = PhoneMicOpusShim.m; sourceTree = "<group>"; };
 		42B17C7B2F69BC6600BFDA9D /* PigeonCommunicator.g.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = PigeonCommunicator.g.swift; sourceTree = "<group>"; };
 		42BABFB62F2A81B100E78A3C /* OmiRecordingAudioDevice.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiRecordingAudioDevice.swift; sourceTree = "<group>"; };
 		42BABFB72F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = OmiPhoneCallsPlugin.swift; sourceTree = "<group>"; };
@@ -418,6 +425,10 @@
 				BAADF00DF00DF00DF00DFD07 /* PhoneMicInterruptionMonitor.swift */,
 				BAADF00DF00DF00DF00DFD08 /* PhoneMicEventEmitter.swift */,
 				BAADF00DF00DF00DF00DFD09 /* PhoneMicHostApiImpl.swift */,
+				BAADF00DF00DF00DF00DFD0A /* PhoneMicOpusEncoder.swift */,
+				BAADF00DF00DF00DF00DFD0B /* PhoneMicBatchAudioWriter.swift */,
+				BAADF00DF00DF00DF00DFD0C /* PhoneMicOpusShim.h */,
+				BAADF00DF00DF00DF00DFD0D /* PhoneMicOpusShim.m */,
 			);
 			path = PhoneMic;
 			sourceTree = "<group>";
@@ -740,6 +751,9 @@
 				BAADF00DF00DF00DF00DFD17 /* PhoneMicInterruptionMonitor.swift in Sources */,
 				BAADF00DF00DF00DF00DFD18 /* PhoneMicEventEmitter.swift in Sources */,
 				BAADF00DF00DF00DF00DFD19 /* PhoneMicHostApiImpl.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1A /* PhoneMicOpusEncoder.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1B /* PhoneMicBatchAudioWriter.swift in Sources */,
+				BAADF00DF00DF00DF00DFD1D /* PhoneMicOpusShim.m in Sources */,
 				EF12345678901234567890EF /* WifiNetworkPlugin.swift in Sources */,
 				42BABFB82F2A81B100E78A3C /* OmiRecordingAudioDevice.swift in Sources */,
 				42BABFB92F2A81B100E78A3C /* OmiPhoneCallsPlugin.swift in Sources */,

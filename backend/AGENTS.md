@@ -315,7 +315,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.
 5. **Webhook timeout = 30s** — partner integrations depend on this window. Don't change `httpx.Timeout(30.0, connect=2.0)`.
-6. **WAL files must be opus-encoded** — opus decoder silently errors on raw PCM but returns HTTP 200
+6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. PCM is fully supported; the real gotcha is a mislabeled/missing codec token silently decodes as the wrong codec (garbage audio, still HTTP 200) — name the codec correctly in the filename
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work

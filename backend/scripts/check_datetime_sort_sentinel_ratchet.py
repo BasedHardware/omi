@@ -30,8 +30,10 @@ SOURCE_ROOT = Path("backend")
 # Virtual environments are local tooling, not backend sources. In particular,
 # the OpenAPI checker creates ``.openapi-venv`` under backend/; scanning a
 # vendored Python-2 compatibility module there would make this source ratchet
-# fail independently of a production change.
-EXCLUDED_DIRECTORY_NAMES = {"__pycache__", "tests"}
+# fail independently of a production change. Dot-prefixed directories are
+# excluded below, but developers also keep plain ``venv``/``env`` checkouts
+# under backend/ (test.sh supports them), so exclude those by name too.
+EXCLUDED_DIRECTORY_NAMES = {"__pycache__", "tests", "venv", "env", "node_modules"}
 BASELINE = 0
 
 SORT_SENTINEL_GUIDANCE = (

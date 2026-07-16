@@ -9409,7 +9409,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'தற்போது Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
+      'தொலைபேசி மைக்ரோஃபோன், Omi மற்றும் Limitless சாதனங்களுடன் இயங்கும். நீங்கள் பதிவேற்ற விரும்பும் வரை ஆடியோ உங்கள் தொலைபேசியிலேயே இருக்கும்.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9664,4 +9664,8 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
 }

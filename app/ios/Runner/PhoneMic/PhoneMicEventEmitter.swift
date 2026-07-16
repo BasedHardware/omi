@@ -66,4 +66,12 @@ final class PhoneMicEventEmitter {
             self?.api.onCaptureError(code: code, message: message) { _ in }
         }
     }
+
+    /// Batch-mode 1Hz liveness/progress. Not epoch-gated: unlike frames it carries
+    /// no audio, and its steady arrival is the Dart watchdog's liveness signal.
+    func emitBatchProgress(_ capturedSeconds: Double) {
+        DispatchQueue.main.async { [weak self] in
+            self?.api.onBatchProgress(capturedSeconds: capturedSeconds) { _ in }
+        }
+    }
 }

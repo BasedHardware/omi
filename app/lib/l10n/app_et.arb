@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Kasutate oma transkriptsiooniteenust. Nende salvestiste sünkroonimine transkribeerib need Omi serverites ja need arvestatakse teie paketi transkriptsioonilimiidi sisse.",
     "transcribeLaterTitle": "Transkribeeri hiljem",
     "transcribeLaterDescription": "Salvesta heli kohe ja transkribeeri see vajaduse korral hiljem, mitte reaalajas. Salvestised hoitakse sinu telefonis ning vestluste loomiseks laadid need üles.",
-    "transcribeLaterNote": "Praegu töötab Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
+    "transcribeLaterNote": "Töötab telefoni mikrofoni ning Omi ja Limitless seadmetega. Heli jääb sinu telefoni seni, kuni otsustad selle üles laadida.",
     "transcribeLaterStorageFull": "Sinu telefonis on vähe mäluruumi, seega salvestamine on peatatud. Vabasta ruumi või laadi salvestised üles, siis jätkub salvestamine automaatselt.",
     "unmute": "Tühista vaigistus",
     "newRecording": "Uus salvestus",
@@ -3148,5 +3148,6 @@
     "deviceStoragePercentFull": "{percent}% täis",
     "deviceStorageUsedOfTotal": "{used} / {total} kasutatud",
     "deviceStorageFree": "{free} vaba",
-    "deviceStorageNearlyFull": "Seade on peaaegu täis — sünkroonige ruumi vabastamiseks."
+    "deviceStorageNearlyFull": "Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.",
+    "phoneMicOfflineFallbackMessage": "Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus."
 }

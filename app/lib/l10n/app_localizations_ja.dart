@@ -9190,7 +9190,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+  String get transcribeLaterNote => 'スマートフォンのマイク、OmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
@@ -9437,4 +9437,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'デバイスの空き容量がわずかです — 同期して空き容量を確保してください。';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => '接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。';
 }

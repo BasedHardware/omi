@@ -70,6 +70,32 @@ class ArbitratedMic implements IMicRecorderService {
   }
 
   @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    if (!_arbiter.tryAcquire(_owner)) {
+      throw StateError('Microphone is busy (held by ${_arbiter.owner})');
+    }
+    try {
+      await _inner.startBatch(
+        onStop: () {
+          _arbiter.release(_owner);
+          onStop?.call();
+        },
+        onInterruption: onInterruption,
+        onBatchStalled: onBatchStalled,
+        onError: onError,
+      );
+    } catch (e) {
+      _arbiter.release(_owner);
+      rethrow;
+    }
+  }
+
+  @override
   void stop() {
     _inner.stop();
     _arbiter.release(_owner);

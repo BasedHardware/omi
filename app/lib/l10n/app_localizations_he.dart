@@ -9273,7 +9273,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'פועל עם מכשירי Omi ו-Limitless בשלב זה. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
+      'פועל עם מיקרופון הטלפון ועם מכשירי Omi ו-Limitless. האודיו נשאר בטלפון שלך עד שתבחר להעלות אותו.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9522,4 +9522,7 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
 }
