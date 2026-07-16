@@ -68,6 +68,7 @@ import { seedUserAssistOnce } from './usage/userAssistSeed'
 import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerChatPrivacyHandlers } from './ipc/chatPrivacy'
+import { registerAssistantSettingsHandlers } from './ipc/assistantSettings'
 import { registerBillingIpc } from './billing/checkoutWindow'
 import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
@@ -808,6 +809,7 @@ app.whenReady().then(async () => {
   registerRewindHandlers()
   registerScreenHandlers()
   registerChatPrivacyHandlers()
+  registerAssistantSettingsHandlers()
   registerBillingIpc()
   registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local

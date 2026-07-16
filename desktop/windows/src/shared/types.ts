@@ -829,6 +829,18 @@ export type OmiBridgeApi = {
   goalsSetAutoGeneration: (enabled: boolean) => Promise<boolean>
   /** main → renderer: a goal was created/removed (auto-gen or manual). Re-fetch. */
   onGoalsChanged: (cb: () => void) => () => void
+  /** Read the proactive-assistant settings the Notifications tab drives (master
+   *  toggle, frequency, Focus/memory/glow, screen-analysis master). A scoped,
+   *  whitelisted projection — the renderer cannot reach any other setting. */
+  assistantsGetSettings: () => Promise<AssistantSettingsView>
+  /** Write a whitelisted patch of those flags. Anything outside the whitelist is
+   *  dropped in main; junk values are sanitized (a bad frequency → 0, never
+   *  louder). Returns the fresh, stored projection. */
+  assistantsSetSettings: (patch: Partial<AssistantSettingsView>) => Promise<AssistantSettingsView>
+  /** main → renderer: the assistant settings changed (this window's write, the
+   *  tray "Screen Analysis" checkbox, or a background sync). Keeps rows in sync.
+   *  Returns an unsubscribe fn. */
+  onAssistantSettingsChanged: (cb: (view: AssistantSettingsView) => void) => () => void
   /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
@@ -1900,6 +1912,26 @@ export type DbRecoveryStatus = {
   unrepairable?: boolean
   /** Tables whose reads actually throw (populated on the confirmed-damage paths). */
   damagedTables?: string[]
+}
+
+/** The whitelisted projection of proactive-assistant settings exposed to the
+ *  renderer through the `assistants:getSettings`/`setSettings` channel. Exactly
+ *  the keys the Notifications tab and the General "Screen Analysis" row may
+ *  read/write — see main/ipc/assistantSettings.ts. */
+export type AssistantSettingsView = {
+  /** Master switch for proactive notifications. */
+  notificationsEnabled: boolean
+  /** 0–5 → [Off, 60m, 30m, 10m, 3m, no throttle]. 0 = Off (default): the single
+   *  control that unblocks (or re-silences) every proactive toast. */
+  notificationFrequency: number
+  /** Whether Focus judges the screen + may notify (Mac's AND-gate half). */
+  focusNotificationsEnabled: boolean
+  /** Whether the interval-based memory extractor runs (quiet; writes memories). */
+  memoryEnabled: boolean
+  /** Whether Focus may draw its distraction/refocus glow ring. */
+  glowOverlayEnabled: boolean
+  /** Master switch for the whole screen-analysis loop (Focus/memory/task/insight). */
+  screenAnalysisEnabled: boolean
 }
 
 export type InsightPayload = {
