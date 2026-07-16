@@ -54,6 +54,11 @@ const VOICED_FRAME_SAMPLES = 320 // 20ms @ 16kHz
 const REPLY_VOICED_MS_MIN = 500 // the "it spoke" bar
 const HOLD_THRESHOLD_MS = 350
 const MAX_TURN_ATTEMPTS = 3
+// pi-mono (managed-cloud LLM + local tool subprocess) streams a chatty preamble,
+// THEN calls the tool, THEN the final answer — slow on a saturated box. Wait for
+// the true terminal run event (not just the first message.completed) so the tool
+// call actually happens within the window.
+const TURN_TERMINAL_MS = 210_000
 
 function log(m) {
   console.log(`[gauntlet] ${m}`)
@@ -449,6 +454,20 @@ async function main() {
     })
     log('bar window ready (__omiPtt attached, chat-state mirrored)')
 
+    // Silent warm-up hold: the FIRST getUserMedia/mic-graph creation is slow, so
+    // the very first real hold can capture nothing. Fire a short, audio-less hold
+    // — the gate discards it as silent (no chat turn, no quota spent) — so the
+    // first scored turn already has a warm mic graph.
+    try {
+      await barPage.evaluate(() => window.__omiPtt.beginHold())
+      await new Promise((r) => setTimeout(r, 900))
+      await barPage.evaluate(() => window.__omiPtt.endHold())
+      await new Promise((r) => setTimeout(r, 1500))
+      log('mic warm-up hold done')
+    } catch {
+      /* non-fatal */
+    }
+
     // ── Run each test ───────────────────────────────────────────────────────
     for (const t of TESTS) {
       const outcome = await runTurn({ app, page, barPage, t, tmp, dshowName, auditLog })
@@ -579,31 +598,31 @@ async function runTurn({ app, page, barPage, t, tmp, dshowName, auditLog }) {
     const replyPcm = path.join(tmp, `${t.id}-reply-${attempt}.pcm`)
     const cap = startReplyCapture(dshowName, replyPcm)
 
-    // Wait for the turn: a tool_activity completed AND a terminal run event.
+    // Wait for the TRUE terminal run event (run_finished). The tool call lands
+    // mid-turn, after the streamed preamble — cutting off at the first delta/
+    // completed would miss it. tool_activity events accumulate in __tev meanwhile.
     let turnOk = false
     let runError = null
     try {
       await waitFor(
         page,
-        () =>
-          window.__tev.some((e) => e.type === 'run_finished') ||
-          window.__tev.some((e) => e.type === 'completed'),
-        60_000,
-        `${t.id} turn terminal`
+        () => window.__tev.some((e) => e.type === 'run_finished'),
+        TURN_TERMINAL_MS,
+        `${t.id} run_finished`
       )
       turnOk = true
     } catch {
-      // no terminal event in time
+      // no terminal event in time — capture whatever streamed so far
     }
 
-    // Give TTS a moment to start, then wait for the spoken reply to drain.
     const evts = await page.evaluate(() => window.__tev)
     const rf = evts.find((e) => e.type === 'run_finished')
     if (rf && rf.status === 'failed') runError = rf.error || 'run failed'
 
-    // Wait for the bar status to hit 'speaking' then leave it (TTS reply), or a cap.
+    // Let the spoken reply drain: the TTS of the final answer plays AFTER
+    // run_finished. Wait for the bar status to settle out of 'speaking'.
     let sawSpeaking = false
-    const speakDeadline = Date.now() + 20_000
+    const speakDeadline = Date.now() + 30_000
     while (Date.now() < speakDeadline) {
       const st = await barPage.evaluate(() => window.__bcs?.status)
       if (st === 'speaking') sawSpeaking = true
@@ -611,7 +630,7 @@ async function runTurn({ app, page, barPage, t, tmp, dshowName, auditLog }) {
       await new Promise((r) => setTimeout(r, 300))
     }
     // A short tail so the final syllable is captured.
-    await new Promise((r) => setTimeout(r, 800))
+    await new Promise((r) => setTimeout(r, 1000))
     await stopReplyCapture(cap)
 
     // Collect results.
