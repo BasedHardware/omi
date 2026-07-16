@@ -1,6 +1,8 @@
 # Single source of truth for deterministic, diff-scoped, stdlib-or-repo-only checks.
 # Values use JSON scalars/lists within this stdlib-parsed YAML subset.
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
+# Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
+# push runs exclude only that category because no authoritative PR body is available.
 checks:
   - id: pre-push-final-pr-diff
     command: ["bash", "scripts/test-pre-push-diff-base.sh"]
@@ -51,7 +53,14 @@ checks:
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "changed paths determine required invariant citations"
+  - id: failure-class-protocol
+    command: ["python3", "scripts/failure-class", "validate", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "fix commits declare a validated semantic failure class"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
     triggers: ["all"]
@@ -127,6 +136,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
+  - id: backend-datetime-sort-sentinel-ratchet
+    command: ["python3", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "#9571/#9600 reject naive datetime min/max fallbacks in backend sort keys"
   - id: backend-route-policy-baseline
     command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
