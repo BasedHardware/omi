@@ -143,12 +143,34 @@ class ChatLabViewModel: ObservableObject {
         isLoadingHistory = false
     }
 
+    /// Locate the repository root by walking up from this source file until a
+    /// `.git` directory is found. Returns nil in a shipped `.app` (or a moved
+    /// checkout) where the compile-time source path no longer exists — the
+    /// prompt-history feature then degrades to empty rather than shelling out
+    /// against a foreign hardcoded path.
+    private func repoRootFromSource() -> String? {
+        var dir = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+        for _ in 0..<12 {
+            if FileManager.default.fileExists(atPath: dir.appendingPathComponent(".git").path) {
+                return dir.path
+            }
+            let parent = dir.deletingLastPathComponent()
+            if parent.path == dir.path { break }
+            dir = parent
+        }
+        return nil
+    }
+
     /// Parse git log for commits that changed ChatPrompts.swift or ChatProvider's floating prefix
     private func getPromptVersionsFromGit() async -> [PromptHistoryEntry] {
-        // Find the repo root (go up from the app bundle or use known path)
-        let repoPath = "/Users/nik/projects/omi"
-        let promptFile = "desktop/Desktop/Sources/Chat/ChatPrompts.swift"
-        let providerFile = "desktop/Desktop/Sources/Providers/ChatProvider.swift"
+        // Resolve the repo root from the source location instead of a hardcoded
+        // developer path; bail cleanly when it can't be found (e.g. shipped app).
+        guard let repoPath = repoRootFromSource() else {
+            log("ChatLab: repo root not found from source path; skipping git prompt history")
+            return []
+        }
+        let promptFile = "desktop/macos/Desktop/Sources/Chat/ChatPrompts.swift"
+        let providerFile = "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift"
 
         let process = Process()
         process.executableURL = URL(fileURLWithPath: "/usr/bin/git")

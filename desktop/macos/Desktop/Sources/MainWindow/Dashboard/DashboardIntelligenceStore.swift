@@ -166,6 +166,11 @@ final class DashboardIntelligenceStore: ObservableObject {
   private var ownerRevision: UInt = 0
   private var activeLoadToken: UUID?
   private var loadingOwnerID: String?
+  /// The in-flight same-owner load, so a concurrent `load()` (e.g. from
+  /// `openRecommendation`) can await the real fetch instead of returning a no-op
+  /// and then acting on a still-empty `recommendations`.
+  private var activeLoadTask: Task<Void, Never>?
+  private var activeLoadTaskID: UUID?
   private var pendingFeedback: [PendingDashboardFeedback]
   private var presentedInterventionIDs = Set<String>()
   private var didRegisterAutomationActions = false
@@ -204,7 +209,34 @@ final class DashboardIntelligenceStore: ObservableObject {
 
   func load() async {
     let ownerScope = captureOwnerScope()
-    guard loadingOwnerID != ownerScope.ownerID else { return }
+    if loadingOwnerID == ownerScope.ownerID {
+      // A same-owner load is already running. Await it rather than returning a
+      // no-op, so callers that depend on the fetched data see the populated
+      // result instead of a stale/empty one.
+      if let activeLoadTask { await activeLoadTask.value }
+      return
+    }
+    // Claim the dedup slot SYNCHRONOUSLY here — before spawning the task and
+    // before the first await. performLoad() runs inside the Task (asynchronously),
+    // so if we relied on it to set loadingOwnerID, a re-entrant same-owner load()
+    // could run on the MainActor first, still see nil, and start a second
+    // concurrent load (overwriting activeLoadTask) — defeating the dedup.
+    loadingOwnerID = ownerScope.ownerID
+    let taskID = UUID()
+    let task = Task { [weak self] in
+      guard let self else { return }
+      await self.performLoad(ownerScope: ownerScope)
+    }
+    activeLoadTask = task
+    activeLoadTaskID = taskID
+    await task.value
+    if activeLoadTaskID == taskID {
+      activeLoadTask = nil
+      activeLoadTaskID = nil
+    }
+  }
+
+  private func performLoad(ownerScope: OwnerScope) async {
     let loadToken = UUID()
     activeLoadToken = loadToken
     loadingOwnerID = ownerScope.ownerID

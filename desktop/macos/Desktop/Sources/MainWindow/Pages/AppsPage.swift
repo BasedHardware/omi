@@ -2466,6 +2466,22 @@ struct AppDetailSheet: View {
         appProvider.apps.first(where: { $0.id == app.id })?.enabled ?? app.enabled
     }
 
+    /// The primary action the detail-sheet button offers, derived once from the
+    /// app's enabled + external-integration state. Single source of truth so the
+    /// button's label and its action can never diverge: previously an enabled
+    /// non-external app rendered an "Open" label whose action fell through to a
+    /// destructive `toggleApp` (disable), silently uninstalling the app on tap.
+    enum PrimaryAppAction: Equatable {
+        case install  // not enabled → install / enable
+        case open  // enabled external integration → open in browser
+        case hidden  // enabled non-external → no primary action (disable is the trash button)
+    }
+
+    static func primaryAppAction(isEnabled: Bool, worksExternally: Bool) -> PrimaryAppAction {
+        if !isEnabled { return .install }
+        return worksExternally ? .open : .hidden
+    }
+
     private func dismissSheet() {
         if let onDismiss = onDismiss {
             onDismiss()
@@ -2536,45 +2552,58 @@ struct AppDetailSheet: View {
                         Spacer()
 
                         // Action button
+                        let primaryAction = Self.primaryAppAction(isEnabled: isEnabled, worksExternally: app.worksExternally)
                         HStack(spacing: OmiSpacing.sm) {
-                            Button(action: {
-                                Task {
-                                    if isEnabled && app.worksExternally {
-                                        // Open the external integration in browser
-                                        openExternalApp()
-                                    } else if !isEnabled && app.worksExternally {
-                                        await handleInstall()
-                                    } else {
-                                        await appProvider.toggleApp(app)
+                            // Only render a primary button when there is a real action:
+                            // install/enable, or open an external integration. An enabled
+                            // non-external app has no "open" target — disable is owned by
+                            // the trash button, so we never show a primary button that
+                            // would otherwise fire a destructive toggle under an "Open" label.
+                            if primaryAction != .hidden {
+                                Button(action: {
+                                    Task {
+                                        switch primaryAction {
+                                        case .open:
+                                            // Open the external integration in browser
+                                            openExternalApp()
+                                        case .install:
+                                            if app.worksExternally {
+                                                await handleInstall()
+                                            } else {
+                                                await appProvider.toggleApp(app)
+                                            }
+                                        case .hidden:
+                                            break
+                                        }
                                     }
-                                }
-                            }) {
-                                if appProvider.isAppLoading(app.id) {
-                                    ProgressView()
-                                        .frame(width: 100, height: 36)
-                                } else if isSettingUp {
-                                    HStack(spacing: OmiSpacing.xs) {
+                                }) {
+                                    if appProvider.isAppLoading(app.id) {
                                         ProgressView()
-                                            .scaleEffect(0.7)
-                                        Text("Setting up...")
-                                            .scaledFont(size: OmiType.caption, weight: .semibold)
+                                            .frame(width: 100, height: 36)
+                                    } else if isSettingUp {
+                                        HStack(spacing: OmiSpacing.xs) {
+                                            ProgressView()
+                                                .scaleEffect(0.7)
+                                            Text("Setting up...")
+                                                .scaledFont(size: OmiType.caption, weight: .semibold)
+                                        }
+                                        .foregroundColor(OmiColors.textSecondary)
+                                        .frame(width: 120, height: 36)
+                                    } else {
+                                        Text(primaryAction == .open ? "Open" : "Install")
+                                            .scaledFont(size: OmiType.body, weight: .semibold)
+                                            .foregroundColor(.black)
+                                            .frame(width: 100, height: 36)
+                                            .background(Color.white)
+                                            .cornerRadius(OmiChrome.controlRadius)
+                                            .overlay(
+                                                RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+                                                    .stroke(OmiColors.border, lineWidth: 1)
+                                            )
                                     }
-                                    .foregroundColor(OmiColors.textSecondary)
-                                    .frame(width: 120, height: 36)
-                                } else {
-                                    Text(isEnabled ? "Open" : "Install")
-                                        .scaledFont(size: OmiType.body, weight: .semibold)
-                                        .foregroundColor(.black)
-                                        .frame(width: 100, height: 36)
-                                        .background(Color.white)
-                                        .cornerRadius(OmiChrome.controlRadius)
-                                        .overlay(
-                                            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                                                .stroke(OmiColors.border, lineWidth: 1)
-                                        )
                                 }
+                                .buttonStyle(.plain)
                             }
-                            .buttonStyle(.plain)
 
                             // Disable button shown only when app is enabled
                             if isEnabled && !appProvider.isAppLoading(app.id) && !isSettingUp {

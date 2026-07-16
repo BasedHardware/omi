@@ -31,7 +31,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1572,
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": 1790,
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1915,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3586,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3615,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4430,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3216,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5401,
@@ -58,6 +58,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Controller growth predates this ratchet; new pure policies are extracted and separately guarded by the hub ratchet.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Provider completion now exposes typed bounded continuation outcomes instead of inferred callback state.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": "Turn reducers now encode terminal provenance needed to distinguish completion, continuation, and recovery.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Fix destructive app-detail 'Open' button (uninstalled enabled non-integration apps): pure primaryAppAction helper + button gating + unit test; splitting this 3.6k-line view is out of scope for a bug fix",
     "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Explicit current-screen chat questions attach one turn-scoped live image rather than historical metadata."
   },
   "threshold": 1500
