@@ -84,12 +84,15 @@ must name the invariant they affect and update the matching guard test.
 - A realtime spawn acknowledgement is an admission receipt, not a child
   completion claim. The kernel derives that acknowledgement deterministically;
   only the canonical child run's terminal lifecycle may report completion,
-  failure, cancellation, or timeout. PTT presents that deterministic
-  acknowledgement, suppresses provider continuations for the spawned turn, and
-  advances its logical completion path from the validated receipt rather than
-  waiting on a provider continuation. Session-refresh recovery must recognize
-  that validated receipt as committed work and never replay it into a duplicate
-  child run.
+  failure, cancellation, or timeout. The receipt is persistence-only: it
+  records the canonical journal fact but does not claim a deterministic local
+  TTS lease or stop the native realtime stream. The active provider's post-tool
+  continuation is the sole audible response for the spawned turn; any pre-tool
+  speculation is cleared so it stays out of the visible reply without
+  interrupting the native voice lane, and the turn advances from that provider
+  continuation rather than from the receipt itself. Session-refresh recovery
+  must recognize that validated receipt as committed work and never replay it
+  into a duplicate child run.
 - Workstream consolidation moves task-scoped history through the canonical
   journal migration transaction, preserving typed payloads, revisions, outbox
   state, sequencing, and restart visibility; it never inserts or deletes turn
