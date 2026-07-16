@@ -381,53 +381,55 @@ def prepare_fixture(
     refs = _entity_refs(uid, firestore_client=client)
     now = datetime.now(timezone.utc)
     prior_feature_refs = _existing_feature_refs(uid, firestore_client=client)
-    transaction = client.transaction()
-    state_snapshot = refs['state'].get(transaction=transaction)
+    # Read the fixture revision before opening its write batch.  This avoids
+    # passing an inactive Firestore transaction to DocumentReference.get().
+    state_snapshot = refs['state'].get()
     existing_state = state_snapshot.to_dict() if state_snapshot.exists else {}
     revision = int(existing_state.get('fixture_revision', 0)) + 1 if isinstance(existing_state, dict) else 1
+    batch = client.batch()
 
     # All fixture-owned surfaces are deterministic document IDs.  The same
-    # transaction removes their prior contents before exposing the next case.
+    # batch removes their prior contents before exposing the next case.
     reset_refs = prior_feature_refs + [
         refs[ref_name]
         for ref_name in ('question_intent', 'cold_start_intent', 'daily_opener_intent', 'question_deferral', 'budget')
     ]
     for ref in _unique_document_refs(reset_refs):
-        transaction.delete(ref)
-    transaction.set(refs['control'], _control_for_case(fixture_case).persisted_payload())
-    transaction.set(
+        batch.delete(ref)
+    batch.set(refs['control'], _control_for_case(fixture_case).persisted_payload())
+    batch.set(
         refs['goal'],
         _goal_payload(goal_id=_GOAL_ID, title='E2E fixture goal', focused=True, now=now),
     )
-    transaction.set(
+    batch.set(
         refs['secondary_goal'],
         _goal_payload(goal_id=_SECONDARY_GOAL_ID, title='E2E fixture next goal', focused=False, now=now),
     )
-    transaction.set(refs['task'], _task_payload(now=now))
-    transaction.set(refs['capture'], _capture_payload(now=now))
+    batch.set(refs['task'], _task_payload(now=now))
+    batch.set(refs['capture'], _capture_payload(now=now))
     if fixture_case is ChatFirstE2EFixtureCase.cold_start:
-        transaction.set(refs['cold_start_intent'], _cold_start_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['cold_start_intent'], _cold_start_intent(uid, now=now).model_dump(mode='python'))
     elif fixture_case is ChatFirstE2EFixtureCase.question:
-        transaction.set(
+        batch.set(
             refs['cold_start_intent'],
             _completed_rich_cold_start_intent(uid, now=now).model_dump(mode='python'),
         )
-        transaction.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
     elif fixture_case is ChatFirstE2EFixtureCase.enabled:
-        transaction.set(
+        batch.set(
             refs['daily_opener_intent'],
             _daily_opener_intent(uid, now=now).model_dump(mode='python'),
         )
     elif fixture_case is ChatFirstE2EFixtureCase.unreachable_control:
-        transaction.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
+        batch.set(refs['question_intent'], _question_intent(uid, now=now).model_dump(mode='python'))
     state = {
         'fixture_case': fixture_case.value,
         'fixture_revision': revision,
         'advanced_seconds': 0,
         'prepared_at': now,
     }
-    transaction.set(refs['state'], state)
-    transaction.commit()
+    batch.set(refs['state'], state)
+    batch.commit()
     return _snapshot_from_rows(uid, firestore_client=client, prepared_state=state)
 
 
@@ -457,13 +459,13 @@ def advance_fixture_clock(
         data = document.to_dict()
         if isinstance(data, dict) and data.get('account_generation') == 1 and data.get('state') == 'pending':
             pending_refs.append(document.reference)
-    transaction = client.transaction()
+    batch = client.batch()
     for ref in pending_refs:
-        transaction.update(ref, {'due_at': now - timedelta(seconds=1)})
+        batch.update(ref, {'due_at': now - timedelta(seconds=1)})
     advanced_state = deepcopy(state)
     advanced_state['advanced_seconds'] = int(advanced_state.get('advanced_seconds', 0)) + seconds
-    transaction.set(refs['state'], advanced_state)
-    transaction.commit()
+    batch.set(refs['state'], advanced_state)
+    batch.commit()
     return _snapshot_from_rows(uid, firestore_client=client, prepared_state=advanced_state)
 
 
