@@ -429,13 +429,19 @@ export function realCandidateDeps(): CandidateDeps {
 }
 
 /** Phase-2 real deps. Pins the session + epoch at entry (the create's staleness
- *  guard). `manual` only selects the notification's throttle policy. */
+ *  guard). `manual` selects TWO things: the notification's throttle policy, and —
+ *  critically — whether the goal is recorded into the cleanup-eligible attribution
+ *  set. A MANUAL accept is a goal the user deliberately chose from the preview, so
+ *  it must NEVER be auto-deleted by stale-cleanup — it is not attributed, making it
+ *  indistinguishable from a hand-created goal. Only the AUTO job's goals are
+ *  attributed (and thus cleanup-eligible). */
 export function realCreateDeps(opts: { manual: boolean }): CreateDeps {
   const session = getBackendSession()
   const epochAtEntry = getSessionEpoch()
   return {
     createGoal: (body) => createGoalOnBackend(session as BackendSession, body),
-    recordAttribution,
+    // Manual accept → no attribution (user-chosen goals are never reaped); auto → attribute.
+    recordAttribution: opts.manual ? () => {} : recordAttribution,
     // Documented no-op: the live backend has no action-item goal_id field. The
     // ids are still validated (buildCandidateWith) so a future backend link
     // endpoint drops straight in here. Task→goal linking is deferred pending that.
