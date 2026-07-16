@@ -49,6 +49,7 @@ docs/*
 !docs/conversation-sync.md
 !docs/bar-gotchas.md
 !docs/multi-worktree-dev.md
+!docs/release-pipeline.md
 !docs/mac-parity-audit
 skills-lock.json
 
