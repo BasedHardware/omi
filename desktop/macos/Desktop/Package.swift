@@ -43,6 +43,9 @@ let package = Package(
     .target(
       name: "OmiTheme",
       path: "Sources/Theme",
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
+      ],
       plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
     ),
     .target(
