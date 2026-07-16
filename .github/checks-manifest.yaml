@@ -217,6 +217,11 @@ checks:
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "#9843 Ticket 05: enforce pinned swift-format lint on all first-party Swift"
+  - id: desktop-swiftlint-config
+    command: ["python3", ".github/scripts/test_swiftlint_config.py"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", ".github/scripts/test_swiftlint_config.py"]
+    lanes: ["local", "ci"]
+    reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
   - id: desktop-userdefaults-ratchet
     command: ["python3", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/scripts/check-userdefaults-key-ratchet.py"]
