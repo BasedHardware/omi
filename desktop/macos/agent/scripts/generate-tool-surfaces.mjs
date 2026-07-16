@@ -630,7 +630,7 @@ function generateLocalApiSwift() {
 import Foundation
 
 enum OmiToolManifest {
-  static let localAgentAPITools: [LocalAgentTool] = [
+  nonisolated(unsafe) static let localAgentAPITools: [LocalAgentTool] = [
 ${entries}
   ]
 }

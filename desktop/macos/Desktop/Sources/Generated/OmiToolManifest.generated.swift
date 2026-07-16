@@ -2,7 +2,7 @@
 import Foundation
 
 enum OmiToolManifest {
-  static let localAgentAPITools: [LocalAgentTool] = [
+  nonisolated(unsafe) static let localAgentAPITools: [LocalAgentTool] = [
     LocalAgentTool(
       name: "execute_sql",
       description: "Run SQL on the user's local omi.db SQLite database. Use for app usage stats, screen time, activity counts, task lookups, aggregations. Read-only in agent adapters.",
