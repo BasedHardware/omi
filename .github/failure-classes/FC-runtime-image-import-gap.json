@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-runtime-image-import-gap",
+  "violated_contract": "A service's runtime container image must copy every first-party package its entrypoints import, so the process never fails at import time with ModuleNotFoundError.",
+  "canonical_prevention": "Reconcile each whitelist-copy Dockerfile against the first-party packages its entrypoints statically reach with a hermetic import-contract test.",
+  "evidence_prs": [9140, 9141, 9704],
+  "scope_hints": ["backend/pusher/**", "backend/**/Dockerfile"],
+  "status": "open"
+}
