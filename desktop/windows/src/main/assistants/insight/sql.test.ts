@@ -239,16 +239,68 @@ describe('rejectDangerousShape (DoS guard)', () => {
       rejectDangerousShape('SELECT count(*) FROM rewind_frames a JOIN rewind_frames b')
     ).toMatch(/cartesian/i)
   })
-  it('allows a proper JOIN ... ON, a single-table aggregate, and FROM t, (scalar subquery)', () => {
+  it('allows a proper JOIN ... ON and a single-table aggregate', () => {
     expect(
       rejectDangerousShape(
         'SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id'
       )
     ).toBeNull()
     expect(rejectDangerousShape('SELECT count(*) FROM rewind_frames')).toBeNull()
+  })
+  it('allows an ON predicate that references columns nested in a subquery', () => {
+    // The correlation is real (f.ts is compared), even though a subquery follows.
+    expect(
+      rejectDangerousShape(
+        'SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id AND f.ts > (SELECT min(ts) FROM rewind_frames)'
+      )
+    ).toBeNull()
+  })
+})
+
+// Regression tests for the 4 DoS shape-guard bypasses closed together. Each was an
+// otherwise-valid, read-only, allowlisted query that the outer-LIMIT wrap could not
+// bound and the guard used to let through.
+describe('rejectDangerousShape — closed bypasses', () => {
+  it('bypass 1: a recursive-CTE bomb nested inside a subquery (not a leading WITH)', () => {
+    expect(
+      rejectDangerousShape(
+        'SELECT * FROM (WITH RECURSIVE r AS (SELECT 1 AS x UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r) t'
+      )
+    ).toMatch(/recursive/i)
+  })
+  it('bypass 2: a LIMIT smuggled into a nested subquery does NOT count as bounding the recursion', () => {
+    expect(
+      rejectDangerousShape(
+        'WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM r WHERE x < (SELECT 100 LIMIT 1)) SELECT max(x) FROM r'
+      )
+    ).toMatch(/recursive/i)
+    // A genuine top-level LIMIT on the recursive body still terminates → still allowed.
+    expect(
+      rejectDangerousShape(
+        'WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM r LIMIT 100) SELECT * FROM r'
+      )
+    ).toBeNull()
+  })
+  it('bypass 3: a tautological ON predicate (ON 1=1 / ON true) is a cartesian in disguise', () => {
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames a JOIN rewind_frames b ON 1=1')
+    ).toMatch(/cartesian/i)
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames a JOIN rewind_frames b ON true')
+    ).toMatch(/cartesian/i)
+    expect(
+      rejectDangerousShape("SELECT count(*) FROM rewind_frames a JOIN rewind_frames b ON 'x'='x'")
+    ).toMatch(/cartesian/i)
+  })
+  it('bypass 4: a comma-subquery (FROM a, (SELECT …)) is an implicit cartesian', () => {
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames, (SELECT id FROM rewind_frames)')
+    ).toMatch(/cartesian/i)
+    // The old "scalar subquery" idiom is now rejected too (its cardinality is
+    // unverifiable) — this is a deliberate tightening.
     expect(
       rejectDangerousShape('SELECT * FROM rewind_frames, (SELECT max(ts) m FROM rewind_frames)')
-    ).toBeNull()
+    ).toMatch(/cartesian/i)
   })
 })
 
@@ -272,6 +324,25 @@ describe('executeSql DoS protections', () => {
     })
     const out = executeSql(
       'WITH RECURSIVE r AS (SELECT 1 AS x UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r',
+      runQuery
+    )
+    expect(out).toMatch(/recursive/i)
+    expect(runQuery).not.toHaveBeenCalled()
+    db.close()
+  })
+  it('rejects a recursive-CTE bomb NESTED in a subquery (reaches the shape guard, no hang)', () => {
+    // No column list, so the allowlist recognizes `r` as a CTE-bound relation and
+    // lets it through to the shape guard — which must reject it before the DB runs it.
+    const db = new DatabaseSync(':memory:')
+    db.exec('CREATE TABLE rewind_frames (id INTEGER)')
+    const runQuery = vi.fn((sql: string) => {
+      const stmt = db.prepare(sql)
+      const rows = stmt.all() as Record<string, unknown>[]
+      const columns = rows.length ? Object.keys(rows[0]) : []
+      return { columns, rows: rows.map((r) => columns.map((c) => r[c])) }
+    })
+    const out = executeSql(
+      'SELECT * FROM (WITH RECURSIVE r AS (SELECT 1 AS x UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r) t',
       runQuery
     )
     expect(out).toMatch(/recursive/i)
