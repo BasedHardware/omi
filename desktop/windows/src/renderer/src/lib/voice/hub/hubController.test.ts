@@ -458,6 +458,70 @@ describe('HubController — requestSessionRefresh (A7c wake / zombie-session ref
   })
 })
 
+describe('HubController — ensureWarm teardown race (M1: cancelable warm)', () => {
+  it('a teardownSession while the token is minting discards the warm — no orphaned session is installed', async () => {
+    let resolveMint: (t: string) => void = () => {}
+    const mintToken = vi.fn(
+      (_p: VoiceProvider) => new Promise<string>((res) => (resolveMint = res))
+    )
+    const h = harness({ mintToken })
+
+    const p = h.controller.ensureWarm()
+    p.catch(() => {}) // the aborted warm rejects — swallow so it is not an unhandled rejection
+    await tick() // parked on the mint await, before any session is constructed
+
+    // The hub is explicitly dropped (kill-switch off / sign-out) mid-mint — exactly the
+    // wake-deferred-refresh path where teardownSession runs while this warm is still
+    // minting and this.session is null (so teardown cannot cancel the not-yet-built one).
+    h.controller.teardownSession()
+
+    resolveMint('ek_token') // the in-flight mint finally resolves…
+    await tick()
+
+    // …and the warm bails BEFORE constructing a session: no orphaned socket to re-warm.
+    expect(h.createSession).not.toHaveBeenCalled()
+    expect(h.controller.isAvailable()).toBe(false)
+    expect(h.controller.isWarm()).toBe(false)
+    await expect(p).rejects.toThrow('hub warm aborted by teardown')
+  })
+
+  it('a teardownSession after the warm resolves but before it installs discards the session (no leak)', async () => {
+    const h = harness()
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick() // session constructed, connecting
+    const s = h.getSession()
+
+    // The socket connects (markReady → onConnected → warm resolves), then — before the
+    // ensureWarm continuation runs — the hub is explicitly dropped. warmReject is already
+    // cleared, so the session is torn down but NOT rejected; the generation guard is what
+    // stops this resolved-then-dropped session from being installed as the live hub.
+    s.connect()
+    h.controller.teardownSession()
+    await tick() // the ensureWarm continuation runs and aborts on the moved generation
+
+    expect(h.controller.isAvailable()).toBe(false)
+    expect(h.controller.isWarm()).toBe(false)
+    expect(s.toreDown).toBeGreaterThanOrEqual(1) // the created socket was closed, not leaked
+    await expect(p).rejects.toThrow('hub warm aborted by teardown')
+  })
+
+  it('overlapping warms WITHOUT a teardown still coalesce to a single warm (no regression)', async () => {
+    const h = harness()
+    const a = h.controller.ensureWarm()
+    const b = h.controller.ensureWarm() // straddles the same in-flight warm
+    await tick()
+    h.getSession().connect()
+
+    const [sa, sb] = await Promise.all([a, b])
+    expect(sa).toBe(SID)
+    expect(sb).toBe(SID)
+    // One mint, one session — the generation guard did not fracture the coalescing.
+    expect(h.mintToken).toHaveBeenCalledTimes(1)
+    expect(h.createSession).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('HubController — connect/error surface (A7c seam)', () => {
   it('passes provider content events straight through to the host', async () => {
     const h = harness()

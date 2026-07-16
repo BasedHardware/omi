@@ -124,6 +124,17 @@ export type HubControllerOptions = {
 
 // MARK: - Controller
 
+/** Thrown by `createAndWarm` when a `teardownSession` bumped the warm generation
+ *  while the warm was in flight: the result is discarded (never installed) rather
+ *  than left as an orphaned socket re-warming on a now-disabled hub (M1). Callers
+ *  swallow it exactly like the A7c reconnect reject — it is not a surfaced error. */
+class HubWarmAbortedError extends Error {
+  constructor() {
+    super('hub warm aborted by teardown')
+    this.name = 'HubWarmAbortedError'
+  }
+}
+
 export class HubController {
   private readonly events: HubControllerEvents
   private readonly resolveProvider: () => VoiceProvider
@@ -140,6 +151,13 @@ export class HubController {
   private connectedAt: number | null = null
   /** In flight ensureWarm, so overlapping calls (summon + first press) coalesce. */
   private warming: Promise<VoiceSessionID> | null = null
+  /** Monotonic warm generation, bumped by every `teardownSession`. An in-flight
+   *  `createAndWarm` captures it at the START and, at each commit point (after the
+   *  mint, after the connect), discards its result if the generation moved — so a
+   *  teardown that interleaves a warm can't leave an orphaned socket re-warming on a
+   *  now-disabled hub (M1). Only diverges when a teardown straddles a warm; the
+   *  normal no-teardown path is unaffected, so coalescing semantics are unchanged. */
+  private warmGeneration = 0
 
   // A7c reconnect budget (ported from macOS RealtimeHubController) ---------------
   /** After this many consecutive FAILURE re-warms with no surviving session, stop
@@ -245,6 +263,10 @@ export class HubController {
   }
 
   private async createAndWarm(provider: VoiceProvider): Promise<VoiceSessionID> {
+    // Capture the generation this warm belongs to. A teardownSession() that runs at
+    // any await point below bumps it, and the commit-point checks then discard this
+    // warm instead of installing an orphaned socket (M1).
+    const gen = this.warmGeneration
     try {
       // Refresh the daily A8 pick and the <about_user> card OFF the hot path — this
       // session uses whatever is cached now; the next one gets the fresh values.
@@ -276,6 +298,12 @@ export class HubController {
           activeProvider = alternate
         }
       }
+      // A teardownSession() straddled the mint (e.g. the wake-deferred refresh kicked
+      // this warm off, then a kill-switch-off / sign-out dropped the hub while minting —
+      // at which point `this.session` was still null so the teardown could not cancel
+      // this not-yet-constructed session). Bail BEFORE building a session: nothing was
+      // opened yet, so there is nothing to close, just discard the token.
+      if (this.warmGeneration !== gen) throw new HubWarmAbortedError()
       const instructions = this.buildInstructions()
       const session = this.createSession({
         provider: activeProvider,
@@ -295,6 +323,18 @@ export class HubController {
       }
 
       await session.ensureWarm()
+      // A teardownSession() interleaved between the warm resolving (markReady fired
+      // onConnected, so `warmReject` was already cleared — the session was torn down but
+      // NOT rejected) and this continuation. Discard the just-connected session: close
+      // its socket so it does not leak, and do NOT touch `this.session`/`this.sessionID`
+      // (teardownSession already cleared them; a newer warm would own them). A teardown
+      // DURING the connect await instead rejects the session's warm promise, so that
+      // path throws above and never reaches here. `teardown()` is idempotent, so a
+      // double close (teardownSession already closed it) is safe.
+      if (this.warmGeneration !== gen) {
+        session.teardown()
+        throw new HubWarmAbortedError()
+      }
       // onConnected (wired below) set `sessionID` synchronously inside markReady,
       // before this promise resolves.
       if (this.sessionID === null) throw new Error('hub session connected without a session id')
@@ -359,6 +399,11 @@ export class HubController {
    *  re-warm is `teardownSession()` then `ensureWarm()`; both are safe at any turn
    *  phase. Does NOT touch per-turn reducer state. */
   teardownSession(): void {
+    // Invalidate any in-flight ensureWarm: a warm that was minting or connecting when
+    // this explicit drop happened must discard its result at its next commit point
+    // rather than install an orphaned socket on the now-torn-down hub (M1). Every
+    // explicit drop is a new generation; bumping when no warm is in flight is harmless.
+    this.warmGeneration += 1
     // An explicit drop (kill-switch off / sign-out) must NOT auto-re-warm, and it is a
     // clean reset — cancel any pending backoff and clear the strike budget.
     this.cancelReconnect()
@@ -425,7 +470,11 @@ export class HubController {
     // straight through and `warmBuffer` stays null.
     this.warmBuffer = this.session?.isWarm() ? null : []
 
-    void this.ensureWarm() // idempotent safety; eager summon usually warmed already
+    // idempotent safety; eager summon usually warmed already. Swallow the reject like
+    // the A7c reconnect path: this warm can reject on a mint failure or a teardown-abort
+    // (M1), and the reducer's warm-wait / cascade timeout owns the degradation — an
+    // unhandled rejection here would be a false crash signal.
+    void this.ensureWarm().catch(() => {})
     if (this.session) {
       this.session.beginTurn(begin)
     } else {

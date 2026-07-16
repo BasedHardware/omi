@@ -192,7 +192,11 @@ export class VoiceHubTurnDriver {
    *  press routes to the hub instead of falling straight to the cascade. */
   warm(): void {
     if (this.prefs().pttHubEnabled !== true) return
-    void this.hub.ensureWarm()
+    // Eager warm is best-effort fire-and-forget: swallow the rejection so a failed
+    // mint (both providers down) OR a teardown-during-warm abort (HubWarmAbortedError,
+    // e.g. sign-out mid-warm) never becomes an unhandled rejection. Matches the A7c
+    // reconnect/beginTurn pattern; the next real press re-warms or falls back.
+    void this.hub.ensureWarm().catch(() => {})
   }
 
   /** A7c item E — the machine woke / unlocked. A socket warmed before suspend is
