@@ -192,13 +192,18 @@ def process_in_progress_conversation(
         nonlocal persisted
         persisted = current
 
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
+    # This synchronous path has no durable job for the reconciler to replay, so
+    # a processing failure must return the admission to in_progress — otherwise
+    # the conversation is stranded on "processing" forever and the client shows
+    # a stuck Processing card it can never resolve.
+    with lifecycle_service.processing_admission_guard(uid, conversation.id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation.id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
@@ -260,13 +265,16 @@ def finalize_conversation(
         nonlocal persisted
         persisted = current
 
-    conversation = process_conversation(
-        uid,
-        conversation.language,
-        conversation,
-        force_process=True,
-        persistence_observer=record_persistence,
-    )
+    # Same recovery as POST /v1/conversations: undo the just-claimed admission
+    # if processing raises, so a failure cannot strand the conversation.
+    with lifecycle_service.processing_admission_guard(uid, conversation_id):
+        conversation = process_conversation(
+            uid,
+            conversation.language,
+            conversation,
+            force_process=True,
+            persistence_observer=record_persistence,
+        )
     if not persisted:
         latest = _get_valid_conversation_by_id(uid, conversation_id)
         return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
