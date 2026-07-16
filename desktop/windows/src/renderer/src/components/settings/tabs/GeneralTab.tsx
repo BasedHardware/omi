@@ -6,7 +6,8 @@ import {
   Mic,
   Monitor,
   Power,
-  Presentation
+  Presentation,
+  ScanEye
 } from 'lucide-react'
 import type { MeetingMode, RewindSettings } from '../../../../../shared/types'
 import { getPreferences, onPreferencesChange, setPreferences } from '../../../lib/preferences'
@@ -22,6 +23,7 @@ export function GeneralTab(): React.JSX.Element {
       {/* macOS General leads with the capture-status cards (spec §3.1). */}
       <ScreenCaptureRow />
       <AudioRecordingRow />
+      <ScreenAnalysisRow />
       <SettingRow
         icon={MessagesSquare}
         title="Chat history"
@@ -110,6 +112,40 @@ function AudioRecordingRow(): React.JSX.Element {
       subtitle={on ? 'Recording and transcribing audio' : 'Audio recording is paused'}
       keywords="audio recording microphone transcribe listening voice"
       control={<Toggle on={on} onChange={change} label="Audio Recording" />}
+    />
+  )
+}
+
+// Screen Analysis master (macOS General "Screen Capture" consent, Windows-named
+// "Screen Analysis" to avoid colliding with the local-Rewind "Screen Capture" row
+// above). This is the single consent gate for the whole proactive screen loop —
+// Focus, memory/task extraction, and insights. Today it is only reachable from the
+// tray checkbox; this row exposes it in Settings. It reads/writes through the same
+// scoped assistant bridge the tray and the Notifications tab use, and subscribes to
+// the broadcast so it and the tray checkbox can never disagree.
+export function ScreenAnalysisRow(): React.JSX.Element {
+  const [on, setOn] = useState<boolean | null>(null)
+
+  useEffect(() => {
+    void window.omi?.assistantsGetSettings?.().then((s) => setOn(s.screenAnalysisEnabled))
+    return window.omi?.onAssistantSettingsChanged?.((s) => setOn(s.screenAnalysisEnabled))
+  }, [])
+
+  const change = (next: boolean): void => {
+    setOn(next) // optimistic; the coordinator re-syncs off the settings write
+    void window.omi?.assistantsSetSettings?.({ screenAnalysisEnabled: next })
+  }
+
+  return (
+    <SettingRow
+      icon={ScanEye}
+      dot={on ? 'on' : 'off'}
+      title="Screen Analysis"
+      subtitle="Master switch for Omi's proactive screen features — Focus, memory and task extraction, and insights. When off, Omi never analyzes your screen. Separate from Screen Capture above, which only records your local Rewind timeline."
+      keywords="screen analysis proactive focus memory task insight vision master consent"
+      control={
+        <Toggle on={!!on} onChange={change} disabled={on === null} label="Screen Analysis" />
+      }
     />
   )
 }
