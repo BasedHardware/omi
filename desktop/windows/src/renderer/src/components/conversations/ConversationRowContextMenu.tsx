@@ -13,7 +13,7 @@ const EDGE = 8 // px minimum distance from the viewport edge
 const GAP = 4 // px between the parent item and the folder submenu
 const MENU_WIDTH = 224 // px — must match the w-56 below
 const SUB_WIDTH = 208 // px — must match the w-52 below
-const SUB_MAX_HEIGHT = 240 // px — vertical clearance kept for the max-h-72 submenu
+const SUB_MAX_HEIGHT = 288 // px — must match the submenu's max-h-72 (vertical clearance)
 
 // Right-click context menu for a conversation row — the Windows-idiomatic
 // affordance (File Explorer et al.) mirroring the macOS row's `.contextMenu`.
@@ -146,6 +146,9 @@ export function ConversationRowContextMenu({
           visibility: pos ? 'visible' : 'hidden'
         }}
         onClick={(e) => e.stopPropagation()}
+        // A right-click on the menu itself is ignored, not re-propagated to the
+        // row's onContextMenu (which would jump the open menu to the cursor).
+        onContextMenu={(e) => e.stopPropagation()}
       >
         <button
           role="menuitem"
@@ -230,6 +233,7 @@ export function ConversationRowContextMenu({
             visibility: subPos ? 'visible' : 'hidden'
           }}
           onClick={(e) => e.stopPropagation()}
+          onContextMenu={(e) => e.stopPropagation()}
         >
           <FolderPickerList
             folders={folders}
