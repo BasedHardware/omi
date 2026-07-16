@@ -39,10 +39,7 @@ void main() {
       await _settle();
       expect(harness.reconcilePasses, 1);
 
-      final concurrentWakes = List.generate(
-        5,
-        (_) => harness.coordinator.wake(WakeTrigger.connectivityRestored),
-      );
+      final concurrentWakes = List.generate(5, (_) => harness.coordinator.wake(WakeTrigger.connectivityRestored));
       reconcileGate.complete();
       await Future.wait([firstWake, ...concurrentWakes]);
 
@@ -175,11 +172,8 @@ class _ScheduledCooldown {
 }
 
 class _TransferHarness {
-  _TransferHarness({
-    bool autoUploadEnabled = true,
-    List<String>? backlog,
-    List<String>? drainedWalIds,
-  })  : _autoUploadEnabled = autoUploadEnabled,
+  _TransferHarness({bool autoUploadEnabled = true, List<String>? backlog, List<String>? drainedWalIds})
+      : _autoUploadEnabled = autoUploadEnabled,
         backlog = backlog ?? <String>['wal-1'],
         drainedWalIds = drainedWalIds ?? <String>[] {
     coordinator = RecordingTransferCoordinator(

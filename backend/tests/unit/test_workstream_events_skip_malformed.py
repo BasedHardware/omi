@@ -8,12 +8,18 @@ rest still return. No live services.
 import os
 from unittest.mock import MagicMock
 
+from pydantic import BaseModel
+
 os.environ.setdefault(
     "ENCRYPTION_SECRET",
     "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
 )
 
 import database.workstreams as workstreams_db  # noqa: E402
+
+
+class _Probe(BaseModel):
+    x: int
 
 
 def test_list_workstream_events_skips_malformed(monkeypatch):
@@ -31,7 +37,7 @@ def test_list_workstream_events_skips_malformed(monkeypatch):
 
     def fake_validate(data):
         if data.get("bad"):
-            raise ValueError("malformed workstream event")
+            _Probe.model_validate({})  # raises a genuine pydantic ValidationError
         return data  # stand-in for a parsed WorkstreamEvent
 
     monkeypatch.setattr(workstreams_db, "_snapshot_dict", lambda snap: snap.to_dict())

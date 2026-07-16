@@ -1,5 +1,121 @@
 import Foundation
 
+#if DEBUG
+/// Deterministic provider decisions for the hermetic desktop profile. This type
+/// is absent from release builds and is reachable only through `ptt_test_turn`.
+struct RealtimeLocalProfileTurnPlan: Equatable {
+  struct Spawn: Equatable {
+    let objective: String
+    let title: String
+  }
+
+  static let exactMemoryAgentRequest =
+    "Have an agent look through my memories today and surface one surprising insight."
+
+  let assistantText: String
+  let spawn: Spawn?
+
+  static func make(
+    transcript rawTranscript: String,
+    voiceContext: String,
+    localProfileEnabled: Bool
+  ) -> Self? {
+    guard localProfileEnabled else { return nil }
+    let transcript = rawTranscript.trimmingCharacters(in: .whitespacesAndNewlines)
+    guard !transcript.isEmpty else { return nil }
+
+    if transcript == exactMemoryAgentRequest {
+      return Self(
+        assistantText: "I started a background agent to review today's memories.",
+        spawn: Spawn(objective: transcript, title: "Today's memory insight"))
+    }
+
+    if transcript.localizedCaseInsensitiveContains("what was the last thing i asked you for"),
+      let reference = lastHarnessReference(in: voiceContext)
+    {
+      return Self(
+        assistantText: "The last request was the background-agent task tagged \(reference).",
+        spawn: nil)
+    }
+
+    if let marker = lastHarnessReference(in: transcript) {
+      return Self(assistantText: "Stub saw marker: \(marker)", spawn: nil)
+    }
+    return Self(assistantText: "Hermetic realtime stub response.", spawn: nil)
+  }
+
+  private static func lastHarnessReference(in text: String) -> String? {
+    guard
+      let expression = try? NSRegularExpression(
+        pattern: #"(?:GAUNTLET|RESILIENCE)[A-Z0-9-]*"#),
+      let match = expression.matches(
+        in: text, range: NSRange(text.startIndex..., in: text)).last,
+      let range = Range(match.range, in: text)
+    else { return nil }
+    return String(text[range])
+  }
+}
+#endif
+
+/// A canonical spawn receipt proves that the child exists, but it does not
+/// authorize the realtime provider to narrate the child's eventual outcome.
+/// Provider continuations remain necessary for transport completion, but are
+/// not presented to the user for that turn.
+enum RealtimeAcceptedSpawnPresentationPolicy {
+  static func suppressesProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
+    hasCanonicalSpawnReceipt
+  }
+
+  static func requiresProviderContinuation(hasCanonicalSpawnReceipt: Bool) -> Bool {
+    !hasCanonicalSpawnReceipt
+  }
+}
+
+/// Audio and text are two transports for the same response. Keeping every
+/// presentation gate here prevents one transport from exposing output the other
+/// correctly withheld.
+enum RealtimeProviderOutputPresentationPolicy {
+  enum Disposition: Equatable {
+    case present
+    case suppressScreenGrounding
+    case suppressCanonicalLocalResult
+    case suppressReducerOwnedOutput
+  }
+
+  static func decide(
+    screenGroundingState: RealtimeScreenGroundingState,
+    hasCanonicalSpawnReceipt: Bool,
+    reducerOutputSuppressed: Bool
+  ) -> Disposition {
+    if screenGroundingState.suppressesProviderOutput {
+      return .suppressScreenGrounding
+    }
+    if RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+      hasCanonicalSpawnReceipt: hasCanonicalSpawnReceipt)
+    {
+      return .suppressCanonicalLocalResult
+    }
+    return reducerOutputSuppressed ? .suppressReducerOwnedOutput : .present
+  }
+}
+
+/// Logging must distinguish an unbound handoff from an actual OpenAI session.
+/// During a controller-owned reconnect, `sessionProvider` is briefly nil while
+/// the next physical provider is being selected. Treating that as OpenAI made
+/// a Gemini-only turn look like a voice/provider switch in diagnostics.
+enum RealtimeHubProviderLogTag {
+  static func current(_ provider: RealtimeHubProvider?) -> String {
+    switch provider {
+    case .gemini:
+      return "gemini"
+    case .openai:
+      return "openai"
+    case nil:
+      return "unbound"
+    }
+  }
+}
+
 /// Safe, non-sensitive classification for realtime WebSocket teardown messages.
 ///
 /// Gemini can idle-close warm sessions with WebSocket 1008 after the socket has
@@ -25,6 +141,29 @@ enum RealtimeHubCloseCategory: String {
 enum RealtimeHubSessionRotationPlan: Equatable {
   case rewarmIdleTransport
   case terminateActiveTurnAndRewarm
+}
+
+/// Realtime provider tool schemas are immutable per physical session. A
+/// directed-agent capability change therefore needs a fresh socket, but a PTT
+/// turn already buffered behind its canonical context refresh remains owned by
+/// the reducer and must be replayed on that fresh socket.
+enum RealtimeHubSchemaRefreshPlan: Equatable {
+  case keepCurrentSession
+  case replaceSession(preservingReconnectInput: Bool)
+}
+
+enum RealtimeHubSchemaRefreshPolicy {
+  static func plan(
+    currentDirectedProviderIDs: [String],
+    nextDirectedProviderIDs: [String],
+    hasLiveSession: Bool,
+    hasPendingReconnectInput: Bool
+  ) -> RealtimeHubSchemaRefreshPlan {
+    guard currentDirectedProviderIDs != nextDirectedProviderIDs, hasLiveSession else {
+      return .keepCurrentSession
+    }
+    return .replaceSession(preservingReconnectInput: hasPendingReconnectInput)
+  }
 }
 
 enum RealtimeHubCloseClassifier {
@@ -359,12 +498,6 @@ enum RealtimeHubLifecyclePolicy {
     !replacementPending
   }
 
-  static func shouldResumeCanceledTurnRefresh(
-    fenceTurnID: VoiceTurnID?,
-    terminalTurnID: VoiceTurnID
-  ) -> Bool {
-    fenceTurnID != terminalTurnID
-  }
 }
 
 /// Immutable account identity attached to a realtime socket, its context, and
@@ -639,16 +772,69 @@ enum RealtimeHubBargeInAction: Equatable {
 }
 
 enum RealtimeProviderTurnDoneDisposition: Equatable {
-  case awaitToolContinuation
+  /// The provider ended a cycle while local tool work is still active. Tool delivery owns the
+  /// next provider response; do not start a competing synthetic continuation.
+  case awaitPendingTools
+  /// All tool results were delivered but the provider emitted no answer. One bounded internal
+  /// continuation may recover the same physical turn.
+  case requestPostToolContinuation
   case finalizeLogicalTurn
 
   static func decide(
     pendingToolCount: Int,
     postToolContinuationRequired: Bool
   ) -> Self {
-    pendingToolCount > 0 || postToolContinuationRequired
-      ? .awaitToolContinuation
-      : .finalizeLogicalTurn
+    if pendingToolCount > 0 { return .awaitPendingTools }
+    return postToolContinuationRequired ? .requestPostToolContinuation : .finalizeLogicalTurn
+  }
+}
+
+/// The session reports an immutable continuation-start fact; only the controller may turn it
+/// into a reducer terminal event. This keeps an old session callback from owning a replacement
+/// voice turn while making genuine no-answer exhaustion fail promptly rather than time out.
+enum RealtimePostToolContinuationControllerAction: Equatable {
+  case waitForProvider
+  case ignoreStaleCallback
+  case finishProviderNoResponse
+
+  static func decide(_ result: RealtimePostToolContinuationStartResult) -> Self {
+    switch result {
+    case .started, .alreadyInFlight:
+      return .waitForProvider
+    case .stale:
+      return .ignoreStaleCallback
+    case .exhausted, .transportUnavailable:
+      return .finishProviderNoResponse
+    }
+  }
+}
+
+/// A headless harness may retry only a turn whose request was actually lost.
+/// Once the kernel has accepted a canonical spawn receipt, a session refresh is
+/// expected completion work and replaying would create a second child run.
+enum RealtimeHeadlessPTTSessionSwapPolicy {
+  static func shouldRedrive(
+    sessionChanged: Bool,
+    hasCanonicalSpawnReceipt: Bool
+  ) -> Bool {
+    sessionChanged && !hasCanonicalSpawnReceipt
+  }
+}
+
+/// A headless PTT probe is successful only when the same physical turn reaches a
+/// terminal reducer state. Persistence diagnostics arrive earlier, while native
+/// playback may still be draining, so treating them as completion hides exactly the
+/// cut-off and fallback regressions this harness is meant to catch.
+enum RealtimeHeadlessPTTCompletionPolicy {
+  /// Persistence diagnostics are observability, not user-visible completion. A probe may return
+  /// only when its exact reducer turn reaches a terminal state, after native playback and all
+  /// other logical fences have drained.
+  static func terminalReason(
+    for turnID: VoiceTurnID,
+    lastTerminal: VoiceTurnTerminalRecord?
+  ) -> VoiceTurnTerminalReason? {
+    guard lastTerminal?.turnID == turnID else { return nil }
+    return lastTerminal?.reason
   }
 }
 

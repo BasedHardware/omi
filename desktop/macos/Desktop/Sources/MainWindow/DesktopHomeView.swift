@@ -1217,6 +1217,11 @@ private struct ConversationsPageHost: View {
 
   var body: some View {
     ConversationsPage(appState: appState, selectedConversation: $selectedConversation)
+      // Owner fencing: an open detail view must not keep showing the previous
+      // account's conversation after an in-place account switch.
+      .onReceive(NotificationCenter.default.publisher(for: .runtimeOwnerDidChange)) { _ in
+        selectedConversation = nil
+      }
   }
 }
 

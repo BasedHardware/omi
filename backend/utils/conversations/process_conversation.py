@@ -48,7 +48,6 @@ from models.conversation_enums import ConversationSource, ConversationStatus, Ex
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.conversations.subjects import infer_subject_from_segments
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
@@ -484,9 +483,18 @@ def _update_goal_progress(uid: str, conversation: Conversation) -> None:
         logger.error(f"[GOAL] Error updating progress: {e}")
 
 
-def _extract_memories(uid: str, conversation: Conversation) -> None:
+def extract_memories(uid: str, conversation: Conversation) -> None:
+    """Extract one conversation's memories through the selected memory system.
+
+    Finalization workers use this public boundary while holding their durable
+    lease. Keep the private helper below for existing in-module async callers.
+    """
     with track_usage(uid, Features.MEMORIES):
         _extract_memories_inner(uid, conversation)
+
+
+def _extract_memories(uid: str, conversation: Conversation) -> None:
+    extract_memories(uid, conversation)
 
 
 def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_client: Any) -> None:
@@ -589,7 +597,8 @@ def _extract_memories_canonical(uid: str, conversation: Conversation, *, db_clie
 def _extract_memories_inner(uid: str, conversation: Conversation) -> None:
     with memory_system_request_scope(uid) as memory_system:
         db_client = getattr(db_client_module, 'db', None)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
+            MemoryService(db_client=db_client).ensure_canonical_mutation_ready(uid)
             _extract_memories_canonical(uid, conversation, db_client=db_client)
             return
 
@@ -992,6 +1001,7 @@ def process_conversation(
     is_reprocess: bool = False,
     app_id: Optional[str] = None,
     persistence_observer: Callable[[bool], None] | None = None,
+    defer_memory_extraction: bool = False,
 ) -> Conversation:
     def report_persistence(current: bool) -> None:
         if persistence_observer is not None:
@@ -1180,7 +1190,15 @@ def process_conversation(
             submit_with_context(postprocess_executor, save_structured_vector, uid, conversation)
             if TRANSCRIPT_CHUNK_INDEXING_ENABLED:
                 submit_with_context(postprocess_executor, save_transcript_chunk_vectors, uid, conversation)
-        submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
+        if not defer_memory_extraction:
+            with memory_system_request_scope(uid) as memory_system:
+                if memory_system == MemorySystem.CANONICAL:
+                    # Canonical writes intentionally fail closed. Do not hide a
+                    # retryable gate/store failure in an unobserved future and
+                    # report this conversation as successfully processed.
+                    _extract_memories(uid, conversation)
+                else:
+                    submit_with_context(postprocess_executor, _extract_memories, uid, conversation)
         submit_with_context(postprocess_executor, _save_action_items, uid, conversation)
         submit_with_context(postprocess_executor, _update_goal_progress, uid, conversation)
 

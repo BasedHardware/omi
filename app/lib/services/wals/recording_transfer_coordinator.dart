@@ -6,14 +6,7 @@ import 'package:omi/utils/logger.dart';
 ///
 /// All recording recovery paths use this closed set so a wake can be audited
 /// without introducing a second recovery owner.
-enum WakeTrigger {
-  startup,
-  foregrounded,
-  connectivityRestored,
-  deviceConnected,
-  cooldownElapsed,
-  userRetry,
-}
+enum WakeTrigger { startup, foregrounded, connectivityRestored, deviceConnected, cooldownElapsed, userRetry }
 
 /// Result reported by the production drain seam.
 ///
@@ -150,10 +143,7 @@ class RecordingTransferCoordinator {
     }
   }
 
-  void _listenToConnectivity(
-    Stream<bool>? connectivityChanges,
-    bool initiallyConnected,
-  ) {
+  void _listenToConnectivity(Stream<bool>? connectivityChanges, bool initiallyConnected) {
     _connectivitySubscription?.cancel();
     _wasConnected = initiallyConnected;
     _connectivitySubscription = connectivityChanges?.listen((isConnected) {
@@ -257,9 +247,7 @@ class RecordingTransferCoordinator {
       }
       _failureStreak = 0;
     } catch (error, stackTrace) {
-      Logger.debug(
-        'RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace',
-      );
+      Logger.debug('RecordingTransferCoordinator: $trigger pass failed: $error\n$stackTrace');
       _scheduleRetry('pass threw while recovering recording transfers');
     }
   }
@@ -270,9 +258,7 @@ class RecordingTransferCoordinator {
     final delay = _failureBackoff[index];
     _failureStreak++;
     nextCooldownAt = _clock().add(delay);
-    Logger.debug(
-      'RecordingTransferCoordinator: scheduling $reason in ${delay.inSeconds}s',
-    );
+    Logger.debug('RecordingTransferCoordinator: scheduling $reason in ${delay.inSeconds}s');
 
     _cooldownTimer?.cancel();
     final generation = ++_cooldownGeneration;

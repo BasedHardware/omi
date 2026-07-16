@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Fixed push-to-talk screen answers getting stuck after a verified screen response by making the screenshot/report lifecycle a single, bounded voice-turn protocol."
+  ],
   "releases": [
     {
       "version": "0.12.74",

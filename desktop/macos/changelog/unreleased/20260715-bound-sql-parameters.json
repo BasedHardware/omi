@@ -1,0 +1,3 @@
+{
+  "change": "Fixed Desktop agent SQL queries with names, dates, and search patterns so they no longer fail on malformed literals"
+}

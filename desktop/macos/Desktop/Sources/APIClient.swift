@@ -2434,10 +2434,10 @@ extension APIClient {
   }
 }
 
-struct CreateMemoryResponse: Codable {
-  let id: String
-  let message: String?
-}
+/// The create endpoint returns the stored memory, including its authoritative
+/// canonical lifecycle. Keep the historical name so callers do not mistake a
+/// successful response for an ID-only receipt.
+typealias CreateMemoryResponse = ServerMemory
 
 /// One item in a POST /v3/memories/batch payload. Mirrors the `Memory` model
 /// in `backend/models/memories.py`. The server honors `category`, so batch
@@ -3220,9 +3220,11 @@ extension APIClient {
     struct StatusResponse: Decodable {
       let status: String
     }
-    let request = BatchRequest(
-      scores: scores.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
-    let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    for scoreBatch in scores.chunked(maxSize: 500) {
+      let request = BatchRequest(
+        scores: scoreBatch.map { ScoreUpdate(id: $0.id, relevance_score: $0.score) })
+      let _: StatusResponse = try await patch("v1/staged-tasks/batch-scores", body: request)
+    }
   }
 
   /// Promotes the top-ranked staged task to action_items
@@ -6425,76 +6427,4 @@ extension APIClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
-  // MARK: - X (Twitter) Connector
-
-  /// Ask the Python backend for the X OAuth authorize URL. The desktop passes
-  /// its own deep link so the backend can redirect back to this exact build.
-  func xOAuthURL(successRedirectURL: String) async throws -> XOAuthURLResponse {
-    let encoded = successRedirectURL.addingPercentEncoding(withAllowedCharacters: .urlQueryAllowed) ?? ""
-    return try await get("v1/x/oauth-url?success_redirect_url=\(encoded)")
-  }
-
-  func xConnectionStatus() async throws -> XConnectionStatus {
-    try await get("v1/x/connection-status")
-  }
-
-  @discardableResult
-  func xSync() async throws -> XSyncResult {
-    try await post("v1/x/sync")
-  }
-
-  func xDisconnect() async throws {
-    let _: XSimpleOK = try await post("v1/x/disconnect")
-  }
-}
-
-struct XOAuthURLResponse: Decodable {
-  let success: Bool
-  let authUrl: String?
-  let error: String?
-  enum CodingKeys: String, CodingKey {
-    case success
-    case authUrl = "auth_url"
-    case error
-  }
-}
-
-struct XConnectionStatus: Decodable {
-  let success: Bool
-  let connected: Bool
-  let handle: String?
-  let postCount: Int?
-  let memoryCount: Int?
-  let syncing: Bool?
-  let lastSyncedAt: String?
-  let lastSyncSource: String?
-  enum CodingKeys: String, CodingKey {
-    case success
-    case connected
-    case handle
-    case postCount = "post_count"
-    case memoryCount = "memory_count"
-    case syncing
-    case lastSyncedAt = "last_synced_at"
-    case lastSyncSource = "last_sync_source"
-  }
-}
-
-struct XSyncResult: Decodable {
-  let success: Bool
-  let source: String?
-  let newPosts: Int?
-  let memoriesCreated: Int?
-  let error: String?
-  enum CodingKeys: String, CodingKey {
-    case success
-    case source
-    case newPosts = "new_posts"
-    case memoriesCreated = "memories_created"
-    case error
-  }
-}
-
-struct XSimpleOK: Decodable {
-  let success: Bool
 }

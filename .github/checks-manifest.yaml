@@ -1,12 +1,29 @@
 # Single source of truth for deterministic, diff-scoped, stdlib-or-repo-only checks.
 # Values use JSON scalars/lists within this stdlib-parsed YAML subset.
 # Add new checks here with both local and ci lanes; never hardcode them in workflow YAML.
+# Checks that consume PR metadata declare `requires_pr_body: true`; post-merge
+# push runs exclude only that category because no authoritative PR body is available.
 checks:
+  - id: pre-push-final-pr-diff
+    command: ["bash", "scripts/test-pre-push-diff-base.sh"]
+    triggers: ["scripts/pre-push", "scripts/pre-push-diff-base", "scripts/test-pre-push-diff-base.sh", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "pre-push check selection must use the final PR diff rather than a stale remote feature tip"
   - id: check-manifest-contract
     command: ["python3", ".github/scripts/test_run_checks.py"]
     triggers: ["all"]
     lanes: ["local", "ci"]
     reason: "manifest validity and workflow drift guard"
+  - id: product-file-line-count-ratchet
+    command: ["python3", ".github/scripts/check_product_file_line_count_ratchet.py", "--changed-files", "{changed_files}", "--base", "{base}"]
+    triggers: ["backend/**/*.py", "desktop/macos/**/*.swift", "desktop/macos/**/*.rs", ".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9838 freezes oversized product files; #9836's chat_completions.rs collision chain (#9384/#9638/#9692), transcribe.py's undocumented growth, and the FC-5 RealtimeHubController chain show why"
+  - id: product-file-line-count-ratchet-tests
+    command: ["python3", ".github/scripts/test_check_product_file_line_count_ratchet.py"]
+    triggers: [".github/scripts/check_product_file_line_count_ratchet.py", ".github/scripts/test_check_product_file_line_count_ratchet.py", ".github/scripts/product_file_line_count_ratchet_baseline.json", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "oversized product-file ratchet must reject growth, reject threshold crossings, and ratchet splits down"
   - id: desktop-release-manifest-v1
     command: ["python3", ".github/scripts/test_desktop_release_manifest.py"]
     triggers: [".github/schemas/desktop-release-manifest-v1.schema.json", ".github/scripts/desktop_release_manifest.py", ".github/scripts/test_desktop_release_manifest.py", ".github/scripts/fixtures/desktop_release_manifest/**"]
@@ -36,7 +53,14 @@ checks:
     command: ["python3", ".github/scripts/check_product_invariants.py", "--changed-files", "{changed_files}", "--pr-body-file", "{pr_body_file}"]
     triggers: ["all"]
     lanes: ["local", "ci"]
+    requires_pr_body: true
     reason: "changed paths determine required invariant citations"
+  - id: failure-class-protocol
+    command: ["python3", "scripts/failure-class", "validate", "--base", "{base}", "--head", "{head}", "--pr-body-file", "{pr_body_file}"]
+    triggers: ["all"]
+    lanes: ["local", "ci"]
+    requires_pr_body: true
+    reason: "fix commits declare a validated semantic failure class"
   - id: desktop-changelog-data
     command: ["python3", ".github/scripts/desktop-changelog.py", "validate"]
     triggers: ["all"]
@@ -47,6 +71,11 @@ checks:
     triggers: ["desktop/macos/**"]
     lanes: ["local", "ci"]
     reason: "desktop files changed"
+  - id: omi-macos-dev-cli
+    command: ["bash", "desktop/macos/tests/test-omi-macos-dev.sh"]
+    triggers: ["desktop/macos/scripts/omi-macos-dev", "desktop/macos/scripts/cleanup-omi-tcc.sh", "desktop/macos/tests/test-omi-macos-dev.sh", "desktop/macos/tests/test-cleanup-omi-tcc.sh"]
+    lanes: ["local", "ci"]
+    reason: "agent-facing macOS development hygiene CLI remains safe and deterministic"
   - id: desktop-e2e-flow-coverage
     command: ["python3", "desktop/macos/scripts/check-e2e-flow-coverage.py", "--strict", "--base", "{base}"]
     triggers: ["desktop/macos/Desktop/Sources/**/*.swift"]
@@ -72,11 +101,46 @@ checks:
     triggers: [".github/scripts/check_deployment_secret_boundary.py", ".github/scripts/test_check_deployment_secret_boundary.py"]
     lanes: ["local", "ci"]
     reason: "deployment secret-boundary fake-name fixtures must remain executable"
+  - id: opentofu-foundation-boundary
+    command: ["python3", ".github/scripts/check_opentofu_foundation.py"]
+    triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "OpenTofu remains limited to durable foundation resources and cannot carry secret values"
+  - id: opentofu-foundation-boundary-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_foundation.py"]
+    triggers: ["infrastructure/opentofu/**", ".github/scripts/check_opentofu_foundation.py", ".github/scripts/test_check_opentofu_foundation.py", ".github/workflows/opentofu-foundation-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "OpenTofu foundation boundary fixtures must reject release and secret-value ownership"
+  - id: opentofu-development-wif-pilot
+    command: ["python3", ".github/scripts/check_opentofu_development_wif_pilot.py"]
+    triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "development WIF pilot stays read-only, GitHub-main-scoped, and outside release ownership"
+  - id: opentofu-development-wif-pilot-fixtures
+    command: ["python3", ".github/scripts/test_check_opentofu_development_wif_pilot.py"]
+    triggers: ["infrastructure/opentofu/pilots/development-wif-plan/**", "infrastructure/opentofu/probes/development-project-read/**", ".github/scripts/check_opentofu_development_wif_pilot.py", ".github/scripts/test_check_opentofu_development_wif_pilot.py", ".github/workflows/opentofu-development-wif-pilot.yml", ".github/workflows/opentofu-development-wif-pilot-validate.yml"]
+    lanes: ["local", "ci"]
+    reason: "development WIF pilot fixtures must reject secret access, apply, and scope expansion"
+  - id: public-build-contract
+    command: ["python3", ".github/scripts/check_public_build_contract.py"]
+    triggers: [".github/actions/deploy-public-build/**", ".github/actions/prepare-public-build/**", ".github/actions/public-build-candidate-promotion/**", ".github/workflows/gcp_admin.yml", ".github/workflows/gcp_app.yml", ".github/workflows/gcp_frontend.yml", ".github/workflows/gcp_personas.yml", ".github/workflows/public-build-config-preflight.yml", ".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py", "config/public-build-contract.json", "config/public-build-values.json", "config/deployment-setting-classification.json", "web/admin/Dockerfile", "web/app/Dockerfile", "web/frontend/Dockerfile", "web/personas-open-source/Dockerfile", "web/admin/components/public-build-canary.tsx", "web/app/src/components/public-build-canary.tsx", "web/frontend/src/components/public-build-canary.tsx", "web/personas-open-source/src/components/public-build-canary.tsx"]
+    lanes: ["local", "ci"]
+    reason: "reviewed public inputs, Docker guards, client canaries, no-traffic candidates, and promotion wiring must match one contract"
+  - id: public-build-contract-fixtures
+    command: ["python3", ".github/scripts/test_check_public_build_contract.py"]
+    triggers: [".github/scripts/check_public_build_contract.py", ".github/scripts/preflight_public_build_config.py", ".github/scripts/preflight_public_build_runtime.py", ".github/scripts/smoke_public_build_browser.py", ".github/scripts/test_check_public_build_contract.py"]
+    lanes: ["local", "ci"]
+    reason: "public-build contract and GitHub variable scope fixtures must remain executable"
   - id: backend-async-blockers
     command: ["python3", "backend/scripts/scan_async_blockers.py", "--dirs", "backend/routers", "backend/utils", "backend/agent-proxy", "backend/dependencies.py", "--diff-base", "{base}", "--fail-on", "high_network_io,async_helpers_with_blocking,time_sleep,mixed_await_sync_db,no_await_should_be_def,unmanaged_thread_offload"]
     triggers: ["backend/**/*.py", "backend/agent-proxy/**", "backend/scripts/scan_async_blockers.py"]
     lanes: ["local", "ci"]
     reason: "backend Python changed"
+  - id: backend-datetime-sort-sentinel-ratchet
+    command: ["python3", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    triggers: ["backend/**/*.py", "backend/scripts/check_datetime_sort_sentinel_ratchet.py"]
+    lanes: ["local", "ci"]
+    reason: "#9571/#9600 reject naive datetime min/max fallbacks in backend sort keys"
   - id: backend-route-policy-baseline
     command: ["python3", "backend/scripts/check_route_policy_baseline.py", "--base-ref", "{base}"]
     triggers: ["backend/**/*.py", "backend/route_policy_manifest.yaml", "backend/route_policy_legacy_missing_routes.txt", "backend/scripts/check_route_policy_baseline.py"]
@@ -92,6 +156,11 @@ checks:
     triggers: ["backend/**/*.py", "backend/scripts/firestore_query_coverage_baseline.json", "backend/scripts/firestore_query_coverage_waivers.json"]
     lanes: ["local", "ci"]
     reason: "serving Firestore compound queries cannot add unregistered or unsupported debt"
+  - id: firestore-model-read-boundary
+    command: ["python3", ".github/scripts/check_firestore_model_read_boundary.py"]
+    triggers: ["backend/database/**/*.py", ".github/scripts/check_firestore_model_read_boundary.py", ".github/scripts/firestore_model_read_boundary_baseline.json"]
+    lanes: ["local", "ci"]
+    reason: "#9494 -> #9696 malformed Firestore documents must use the shared read boundary"
   - id: lifecycle-headers
     command: ["python3", ".github/scripts/check_lifecycle_headers.py", "--changed-files", "{changed_files}"]
     triggers: ["all"]
@@ -136,7 +205,7 @@ checks:
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     lanes: ["local", "ci"]
-    reason: "realtime hub ownership/line-count anti-regrowth ratchet"
+    reason: "realtime hub extracted-type ownership anti-regrowth ratchet"
   - id: desktop-auth-session-ratchet
     command: ["python3", ".github/scripts/check_desktop_auth_session.py"]
     triggers: ["desktop/macos/Desktop/Sources/APIClient.swift", "desktop/macos/Desktop/Sources/AuthService.swift", "desktop/macos/Desktop/Sources/AuthSessionCoordinator.swift", "desktop/macos/Desktop/Sources/DesktopKeychainStore.swift", "desktop/macos/Desktop/Sources/OmiApp.swift", "desktop/macos/Desktop/Sources/Auth/**/*.swift", ".github/scripts/check_desktop_auth_session.py"]

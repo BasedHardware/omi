@@ -16,7 +16,7 @@ from models.geolocation import Geolocation
 from utils.app_integrations import trigger_external_integrations
 from utils.conversations.factory import deserialize_conversation
 from utils.conversations.location import async_resolve_geolocation
-from utils.conversations.process_conversation import process_conversation
+from utils.conversations.process_conversation import extract_memories, process_conversation
 from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking
 
@@ -92,8 +92,18 @@ async def finalize_persisted_conversation(
         resolved_language = language or getattr(conversation, 'language', None) or 'en'
         if conversation.status != ConversationStatus.completed:
             conversation = await run_blocking(
-                postprocess_executor, process_conversation, uid, resolved_language, conversation
+                postprocess_executor,
+                process_conversation,
+                uid,
+                resolved_language,
+                conversation,
+                defer_memory_extraction=True,
             )
+        if not getattr(conversation, 'discarded', False):
+            # A finalization job owns a durable lease. Keep canonical memory
+            # extraction inside that lease so a temporary fail-closed gate
+            # leaves the job retryable instead of dropping the source.
+            await run_blocking(postprocess_executor, extract_memories, uid, conversation)
         # This is deliberately the only fanout admission read. The lifecycle
         # transaction re-reads the durable conversation together with the job
         # lease, so a discard or superseding generation cannot slip between a

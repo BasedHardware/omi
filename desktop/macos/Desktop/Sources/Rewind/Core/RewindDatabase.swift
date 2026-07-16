@@ -585,6 +585,11 @@ actor RewindDatabase {
     }
 
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
+        // The legacy `Omi` root is shared historical state. A named bundle that
+        // now has an identity-derived profile must never claim it: the first
+        // bundle to launch would otherwise move data belonging to Omi/Omi Dev
+        // or another old named bundle into its isolated root.
+        guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -709,6 +714,10 @@ actor RewindDatabase {
         }
 
         log("RewindDatabase: Legacy migration complete")
+    }
+
+    static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
+        !isolatedStorage
     }
 
     // MARK: - Corruption Detection & Recovery

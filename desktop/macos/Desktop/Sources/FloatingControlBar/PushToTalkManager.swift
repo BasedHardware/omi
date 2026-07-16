@@ -236,6 +236,10 @@ class PushToTalkManager: ObservableObject {
   private var barState: FloatingControlBarState?
   private var automationBarState: FloatingControlBarState?
   private var automationCaptureBypass = false
+  /// The ordinary bridge start/stop probe intentionally avoids providers. This
+  /// opt-in lane exercises the same manager routing and controller admission as
+  /// a physical hold, while injecting PCM rather than opening CoreAudio.
+  private var automationExercisesRealtimePath = false
 
   // Double-tap detection
   private var lastOptionDownTime: TimeInterval = 0
@@ -411,6 +415,8 @@ class PushToTalkManager: ObservableObject {
         log("PushToTalkManager: live finalization timeout — sending transcript")
         sendTranscript(turnID: turnID)
       }
+    case .screenEvidenceProtocolExpired(let turnID, let token):
+      RealtimeHubController.shared.expireScreenEvidenceProtocol(turnID: turnID, token: token)
     case .finalizeJournal(let turnID, let identity):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
       if Self.isHubRoute(voiceTurnCoordinator.activeTurn?.route ?? .undecided) {
@@ -422,7 +428,8 @@ class PushToTalkManager: ObservableObject {
       }
     case .fallbackToTranscription(let turnID, let reason):
       guard voiceTurnCoordinator.activeTurnID == turnID else { return }
-      discloseBackupTranscriptionFallback(reason: reason)
+      RealtimeHubController.shared.abandonInputPreparation(turnID: turnID)
+      recordBackupTranscriptionFallback(reason: reason)
       resolveRealtimeHubWarmWait(ready: false)
     case .stopPlayback(let lease):
       if lease.lane == .nativeRealtime {
@@ -643,7 +650,7 @@ class PushToTalkManager: ObservableObject {
       mode: mode,
       hubActive: RealtimeHubController.shared.isTransportReady,
       micPermissionGranted: refreshedMicPermission())
-    let preOverlayImage = ScreenCaptureManager.captureScreenImage()
+    let preOverlayImage = captureTurnScreenEvidence()
     updateBarState()
 
     captureContextAndStartAudio(preOverlayImage: preOverlayImage)
@@ -688,7 +695,7 @@ class PushToTalkManager: ObservableObject {
       seenFinalSegmentIDs.removeAll()
       lastInterimText = ""
       currentContextSnapshot = nil
-      let preOverlayImage = ScreenCaptureManager.captureScreenImage()
+      let preOverlayImage = captureTurnScreenEvidence()
       captureContextAndStartAudio(preOverlayImage: preOverlayImage)
     }
 
@@ -733,6 +740,7 @@ class PushToTalkManager: ObservableObject {
     // doesn't leak into the next PTT turn. No trace is written for these.
     activeTracer = nil
     automationCaptureBypass = false
+    automationExercisesRealtimePath = false
   }
 
   /// Drain every previous-owner voice authority before the defaults/auth owner
@@ -799,10 +807,65 @@ class PushToTalkManager: ObservableObject {
       configureVoiceTurnCoordinator(barState: state)
     }
     automationCaptureBypass = true
+    automationExercisesRealtimePath = false
     startListening()
     let isRecording = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
     if !isRecording { automationCaptureBypass = false }
     return ["state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle), "listening": isRecording ? "true" : "false"]
+  }
+
+  /// Starts the manager's actual realtime admission path without opening a
+  /// physical microphone. Pair with `injectRealtimePTTAutomationAudio(_:)`
+  /// and `endPushToTalkForAutomation()` to exercise routing, warm buffering,
+  /// and controller replay through the same public PTT lifecycle used by a
+  /// shortcut hold.
+  @discardableResult
+  func beginRealtimePushToTalkForAutomation() -> [String: String] {
+    if barState == nil {
+      let state = FloatingControlBarState()
+      automationBarState = state
+      barState = state
+      configureVoiceTurnCoordinator(barState: state)
+    }
+    automationCaptureBypass = true
+    automationExercisesRealtimePath = true
+    let admission = RealtimeHubController.shared.pttAdmission
+    startListening()
+    let isRecording = voiceTurnCoordinator.activeTurn?.phase.isRecording == true
+    if !isRecording {
+      automationCaptureBypass = false
+      automationExercisesRealtimePath = false
+    }
+    return [
+      "state": VoiceTurnCoordinator.phaseLabel(phase ?? .idle),
+      "listening": isRecording ? "true" : "false",
+      "admission": admission == .immediate ? "immediate" : "capture_and_buffer",
+    ]
+  }
+
+  /// Injects raw 16kHz PCM into the active realtime manager route. This is the
+  /// same hub/warm-buffer split as `AudioCaptureService`'s production callback,
+  /// kept behind the non-production automation bridge so tests never depend on
+  /// microphone permission or device routing.
+  @discardableResult
+  func injectRealtimePTTAutomationAudio(_ pcm16k: Data) -> Bool {
+    guard automationCaptureBypass,
+      automationExercisesRealtimePath,
+      !pcm16k.isEmpty,
+      let turnID = currentVoiceTurnID,
+      phase?.isRecording == true
+    else { return false }
+
+    if isHubMode {
+      RealtimeHubController.shared.feedAudio(pcm16k, turnID: turnID)
+      appendBatchAudioBounded(pcm16k, turn: micCaptureGeneration)
+      return true
+    }
+    if isWaitingForHub {
+      appendBatchAudioBounded(pcm16k, turn: micCaptureGeneration)
+      return true
+    }
+    return false
   }
 
   /// Release an in-progress push-to-talk capture the same way a long-hold key-up does
@@ -1464,11 +1527,35 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
+  /// Captures one in-memory visual evidence object before Omi expands its PTT overlay.
+  /// The realtime hub may later deliver these exact pixels only through the authorized
+  /// screenshot tool; it must never take a second, pointer-selected screen capture.
+  private func captureTurnScreenEvidence() -> CGImage? {
+    guard let turnID = currentVoiceTurnID else { return nil }
+    let evidence = RealtimeScreenEvidenceCapture.capture(for: turnID)
+    RealtimeHubController.shared.installScreenEvidence(evidence)
+    return evidence.preOverlayImage
+  }
+
+  /// Non-production PTT probes use the same pre-overlay capture path as a physical shortcut
+  /// press. The turn ID is supplied by the controller harness because it deliberately bypasses
+  /// the floating overlay, but it still captures once, before `beginTurn` can send provider
+  /// input. This makes current-screen regressions reproducible without synthetic screenshots.
+  func captureScreenEvidenceForAutomation(turnID: VoiceTurnID) -> Bool {
+    guard voiceTurnCoordinator.activeTurnID == turnID else { return false }
+    let evidence = RealtimeScreenEvidenceCapture.capture(for: turnID)
+    RealtimeHubController.shared.installScreenEvidence(evidence)
+    return evidence.preOverlayImage != nil
+  }
+
   private func startAudioTranscription() {
     if automationCaptureBypass, let turnID = currentVoiceTurnID {
       micCaptureGeneration &+= 1
       voiceTurnCoordinator.send(
         .captureStarted(turnID: turnID, captureID: VoiceCaptureID(micCaptureGeneration)))
+      if automationExercisesRealtimePath {
+        startRealtimePTTRoute(startMicrophoneCapture: false)
+      }
       return
     }
     // Always re-check permission (it can be granted at any time via System Settings)
@@ -1497,21 +1584,22 @@ class PushToTalkManager: ObservableObject {
       return
     }
 
-    // Realtime-as-hub (Phase 1): when enabled + BYOK-keyed, the realtime model
-    // drives this turn end-to-end (in-session STT + reasoning + tool-choice routing
-    // + spoken reply). Stream mic PCM to the hub and skip both the omni/Deepgram
-    // STT path AND the transcript→router→ChatProvider hop. The Haiku classify()
-    // router is bypassed — routing is the model's tool choice.
-    if RealtimeHubController.shared.isTransportReady {
+    startRealtimePTTRoute(startMicrophoneCapture: true)
+  }
+
+  /// A connected socket is not necessarily admitted for this turn's immutable
+  /// kernel context. Capture starts in either case; only an exact binding earns
+  /// direct ingress, otherwise the controller buffers through its one handoff.
+  private func startRealtimePTTRoute(startMicrophoneCapture: Bool) {
+    switch RealtimeHubController.shared.pttAdmission {
+    case .immediate:
       if let turnID = currentVoiceTurnID {
         voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .hub(sessionID: nil)))
       }
-      _ = startRealtimeHubCapture(bufferWhileWarming: false)
-      return
+      _ = startRealtimeHubCapture(bufferWhileWarming: !startMicrophoneCapture)
+    case .captureAndBuffer:
+      startRealtimeHubWarmWait(startMicrophoneCapture: startMicrophoneCapture)
     }
-
-    startRealtimeHubWarmWait()
-    return
   }
 
   @discardableResult
@@ -1519,7 +1607,12 @@ class PushToTalkManager: ObservableObject {
     if !bufferWhileWarming {
       batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
     }
-    let preparation = RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    let preparation: RealtimeInputPreparationResult
+    if RealtimeHubController.shared.hasPendingInputPreparation(for: currentVoiceTurnID) {
+      preparation = .accepted
+    } else {
+      preparation = RealtimeHubController.shared.beginTurn(turnID: currentVoiceTurnID)
+    }
     guard preparation == .accepted else {
       log("PushToTalkManager: realtime transport was ready but context admission was rejected")
       if bufferWhileWarming {
@@ -1556,16 +1649,21 @@ class PushToTalkManager: ObservableObject {
         startMicCapture()
       }
     }
-    log("PushToTalkManager: realtime hub active — model is the voice hub")
+    log("PushToTalkManager: realtime hub capture admitted — model is the voice hub")
     return true
   }
 
-  private func startRealtimeHubWarmWait() {
+  private func startRealtimeHubWarmWait(startMicrophoneCapture: Bool = true) {
     batchAudioLock.lock(); batchAudioBuffer = Data(); batchAudioLock.unlock()
     if let turnID = currentVoiceTurnID {
       voiceTurnCoordinator.send(.selectRoute(turnID: turnID, route: .hubWarmWait))
+      // Establish the reducer-owned input boundary before any warm attempt.
+      // This lets a retry join cancellation/context handoff rather than waiting
+      // behind a global fence with no captured-turn owner.
+      _ = RealtimeHubController.shared.beginTurn(turnID: turnID)
     }
     RealtimeHubController.shared.ensureWarm()
+    guard startMicrophoneCapture else { return }
     if let builtIn = preferredPTTInputOverrideDeviceID() {
       log("PushToTalkManager: waiting for realtime hub — buffering built-in mic audio")
       startMicCapture(batchMode: true, overrideDeviceID: builtIn)
@@ -1598,11 +1696,8 @@ class PushToTalkManager: ObservableObject {
     }
   }
 
-  /// One-line UX + shared fallback telemetry when hub warm/admission cascades.
-  private func discloseBackupTranscriptionFallback(reason: VoiceTurnTerminalReason) {
-    guard let turnID = currentVoiceTurnID else { return }
-    voiceTurnCoordinator.send(
-      .hintChanged(turnID: turnID, text: VoiceTurnUICopy.backupTranscription))
+  /// Preserve fallback observability without adding progress copy to PTT chrome.
+  private func recordBackupTranscriptionFallback(reason: VoiceTurnTerminalReason) {
     let toLane = phase == .finalizing ? "batch_stt" : "omni"
     DesktopDiagnosticsManager.shared.recordFallback(
       area: "ptt_cascade",
@@ -1611,7 +1706,7 @@ class PushToTalkManager: ObservableObject {
       reason: "timeout",
       outcome: .degraded,
       extra: [
-        "user_visible": true,
+        "user_visible": false,
         "terminal_reason": reason.rawValue,
       ])
   }
@@ -1669,7 +1764,7 @@ class PushToTalkManager: ObservableObject {
       batchAudioLock.lock()
       batchAudioBuffer = turnAudio
       batchAudioLock.unlock()
-      discloseBackupTranscriptionFallback(reason: .hubWarmTimeout)
+      recordBackupTranscriptionFallback(reason: .hubWarmTimeout)
       transcribeBufferedWarmWaitAudio()
       return
     }

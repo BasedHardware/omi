@@ -1,6 +1,12 @@
 import Foundation
 import OmiSupport
 
+extension Notification.Name {
+  /// Posted on MainActor after the runtime handshake makes direct control
+  /// tools admissible. Carries no owner id or request content.
+  static let agentRuntimeDidBecomeReady = Notification.Name("com.omi.desktop.agentRuntimeDidBecomeReady")
+}
+
 /// Shares one asynchronous runtime launch across every client admitted while
 /// that launch is suspended. The key is deliberately exact (owner-session
 /// authorization plus authority epoch), so work admitted under a newer owner
@@ -304,7 +310,7 @@ actor AgentRuntimeProcess {
   }
 
   struct RuntimeMessage {
-    struct RequestKey: Hashable, Equatable {
+    struct RequestKey: Hashable, Equatable, Sendable {
       let clientId: String
       let requestId: String
     }
@@ -523,6 +529,7 @@ actor AgentRuntimeProcess {
   private var clients: [String: ClientRegistration] = [:]
   private var activeRequests: [RuntimeMessage.RequestKey: ActiveRequest] = [:]
   private var activeControlRequests: [RuntimeMessage.RequestKey: ActiveControlRequest] = [:]
+  private var activeControlTimeoutTasks: [RuntimeMessage.RequestKey: Task<Void, Never>] = [:]
   private var activeJournalRequests: [RuntimeMessage.RequestKey: ActiveJournalRequest] = [:]
   private var activeKernelContractRequests: [RuntimeMessage.RequestKey: ActiveKernelContractRequest] = [:]
   private var timedOutKernelContractRequests: [RuntimeMessage.RequestKey: TimedOutKernelContractRequest] = [:]
@@ -580,6 +587,12 @@ actor AgentRuntimeProcess {
       protocolVersion: negotiatedProtocolVersion,
       runtimeVersion: negotiatedRuntimeVersion
     )
+  }
+
+  /// Read-only admission probe for UI recovery loops. A process handle alone
+  /// is not enough: direct control is valid only after the JSONL handshake.
+  func isReadyForDirectControl() -> Bool {
+    isBridgeReady
   }
 
   func runtimeOwnerAuthorityStatus() -> RuntimeOwnerAuthorityStatus {
@@ -672,8 +685,9 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.stopped)
     }
     for (requestKey, request) in activeControlRequests where request.clientId == clientId {
-      activeControlRequests.removeValue(forKey: requestKey)
-      request.continuation.resume(throwing: BridgeError.stopped)
+      if let activeRequest = takeActiveControlRequest(requestKey) {
+        activeRequest.continuation.resume(throwing: BridgeError.stopped)
+      }
     }
     for (requestKey, request) in activeJournalRequests where request.clientId == clientId {
       activeJournalRequests.removeValue(forKey: requestKey)
@@ -1084,10 +1098,17 @@ actor AgentRuntimeProcess {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     try assertCurrentExternalOwner(ownerID)
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // Direct control is an owner-scoped runtime protocol, not an interactive
+    // client lease. Once the runtime has completed its handshake, registering
+    // another client here can race the client that owns startup and strand a
+    // read such as `list_agent_sessions`. Only acquire a client lease when we
+    // actually need to start or join an unavailable runtime.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     // Process startup/initialization may suspend for up to its bounded init
     // timeout. Revalidate immediately before the begin mutation so cancelling a
     // pending owner-A task during an A→B transition cannot create a late run.
@@ -1155,10 +1176,16 @@ actor AgentRuntimeProcess {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     try assertCurrentExternalOwner(binding.ownerID)
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // Direct-control reads are owner-scoped protocol messages, not another
+    // interactive client lease. Re-registering while the shared runtime is
+    // already live mutates its startup lease on every reconciliation tick and
+    // can delay otherwise small reads behind concurrent projections.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
@@ -2114,10 +2141,17 @@ actor AgentRuntimeProcess {
     guard let authorizationSnapshot else {
       throw BridgeError.authMissing
     }
-    try await registerClient(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      authorizationSnapshot: authorizationSnapshot)
+    // A direct control call is an owner-scoped request on the already-live
+    // JSONL bridge, not a new interactive client. Re-registering it on every
+    // read mutates the startup lease and can queue a small canonical read
+    // behind concurrent projection work. Only acquire a client lease while
+    // there is no completed runtime handshake to carry this request.
+    if !isBridgeReady {
+      try await registerClient(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        authorizationSnapshot: authorizationSnapshot)
+    }
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
       throw BridgeError.authMissing
     }
@@ -2128,6 +2162,7 @@ actor AgentRuntimeProcess {
     let requestId = UUID().uuidString
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
     let ownerEpoch = observeDirectControlOwner(ownerId)
+    let timeoutNanoseconds = Self.directControlTimeoutNanoseconds(for: name)
     return try await withCheckedThrowingContinuation { continuation in
       activeControlRequests[requestKey] = ActiveControlRequest(
         clientId: clientId,
@@ -2137,6 +2172,11 @@ actor AgentRuntimeProcess {
         authorizationSnapshot: authorizationSnapshot,
         continuation: continuation
       )
+      activeControlTimeoutTasks[requestKey] = Task.detached { [weak self] in
+        try? await Task.sleep(nanoseconds: timeoutNanoseconds)
+        guard !Task.isCancelled else { return }
+        await self?.timeoutControlRequest(requestKey, toolName: name)
+      }
       let dict = Self.directControlToolWireMessage(
         clientId: clientId,
         requestId: requestId,
@@ -2144,10 +2184,42 @@ actor AgentRuntimeProcess {
         name: name,
         input: input)
       let sent = sendJson(dict)
-      if !sent, let request = activeControlRequests.removeValue(forKey: requestKey) {
+      if !sent, let request = takeActiveControlRequest(requestKey) {
         request.continuation.resume(throwing: BridgeError.agentError("Failed to send direct control tool request"))
       }
     }
+  }
+
+  /// Direct control reads are intentionally short so reconciliation cannot
+  /// block on a stalled runtime. Commands that synchronously return a child
+  /// run's result must instead use the full agent-run deadline: a 15-second
+  /// transport timeout can otherwise abandon a valid continuation while the
+  /// runtime is still completing it.
+  nonisolated static func directControlTimeoutNanoseconds(for toolName: String) -> UInt64 {
+    switch toolName {
+    case "list_agent_sessions", "get_agent_run", "build_desktop_awareness_snapshot":
+      return 2_000_000_000
+    case "run_agent_and_wait", "send_agent_message":
+      return 180_000_000_000
+    default:
+      return 15_000_000_000
+    }
+  }
+
+  private func takeActiveControlRequest(
+    _ requestKey: RuntimeMessage.RequestKey
+  ) -> ActiveControlRequest? {
+    activeControlTimeoutTasks.removeValue(forKey: requestKey)?.cancel()
+    return activeControlRequests.removeValue(forKey: requestKey)
+  }
+
+  private func timeoutControlRequest(
+    _ requestKey: RuntimeMessage.RequestKey,
+    toolName: String
+  ) {
+    guard let request = takeActiveControlRequest(requestKey) else { return }
+    log("AgentRuntimeProcess: direct control tool timed out name=\(toolName)")
+    request.continuation.resume(throwing: BridgeError.timeout)
   }
 
   static func directControlToolWireMessage(
@@ -2969,6 +3041,9 @@ actor AgentRuntimeProcess {
       runtimeAdapterIDs = Set(message.payload["runtimeAdapterIds"] as? [String] ?? [])
       _ = bridgeLifecycle.reduce(.handshakeSucceeded)
       resolveInitContinuations()
+      Task { @MainActor in
+        NotificationCenter.default.post(name: .agentRuntimeDidBecomeReady, object: nil)
+      }
 
     case .authRequired:
       let methods = message.payload["methods"] as? [[String: Any]] ?? []
@@ -3351,7 +3426,7 @@ actor AgentRuntimeProcess {
 
   private func completeControlRequest(_ message: RuntimeMessage) {
     guard let requestKey = message.requestKey,
-      let request = activeControlRequests.removeValue(forKey: requestKey)
+      let request = takeActiveControlRequest(requestKey)
     else {
       log("AgentRuntimeProcess: dropping unroutable control tool result")
       return
@@ -3719,7 +3794,7 @@ actor AgentRuntimeProcess {
     let failure = AgentRuntimeFailure.parse(from: message.payload["failure"])
     let raw = failure?.displayMessage ?? message.payload["message"] as? String ?? "Unknown error"
     if let requestKey = message.requestKey,
-      let controlRequest = activeControlRequests.removeValue(forKey: requestKey)
+      let controlRequest = takeActiveControlRequest(requestKey)
     {
       guard RuntimeOwnerIdentity.isAuthorizationCurrent(controlRequest.authorizationSnapshot) else {
         controlRequest.continuation.resume(throwing: BridgeError.authMissing)
@@ -3878,6 +3953,9 @@ actor AgentRuntimeProcess {
     }
     let controlRequests = activeControlRequests.values
     activeControlRequests.removeAll()
+    let controlTimeoutTasks = activeControlTimeoutTasks.values
+    activeControlTimeoutTasks.removeAll()
+    for task in controlTimeoutTasks { task.cancel() }
     for request in controlRequests {
       request.continuation.resume(throwing: error)
     }

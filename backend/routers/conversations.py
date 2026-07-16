@@ -47,7 +47,6 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -671,7 +670,7 @@ def delete_conversation(
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
         else:
             deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)

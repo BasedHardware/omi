@@ -1,0 +1,3 @@
+{
+  "change": "Fixed push-to-talk screen questions so Omi answers the original question from a fresh, turn-specific screen capture instead of only reading back a visual report."
+}

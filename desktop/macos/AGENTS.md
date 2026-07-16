@@ -6,7 +6,9 @@ OMI Desktop App for macOS (Swift)
 ## Logs & Debugging
 
 ### Local App Logs
-- **App log file**: `/private/tmp/omi.log` (production) or `/private/tmp/omi-dev.log` (dev builds)
+- **App log file**: `/private/tmp/omi.log` (production). Each non-production
+  launch writes to its own owner-only log; ask the running named bundle for its
+  exact path with `./scripts/omi-ctl log-path` rather than reading a shared dev log.
 
 ### Release Health (Sentry)
 Check errors in the latest (or specific) release using the **sentry-release skill**:
@@ -286,12 +288,26 @@ Fast path (skips web login and sidebar click-through):
    - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
    - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
    - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
-3. **Read logs to confirm behavior:** app + chat bridge in `/private/tmp/omi-dev.log` (dev) or `/private/tmp/omi.log`; local Rust backend on the `./run.sh` stdout; per-user issues in Sentry/PostHog.
+3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
+   `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
+   (production); `./run.sh` prints the isolated local Rust backend log path at
+   launch; per-user issues in Sentry/PostHog.
 4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
 
+### Default agent development loop
+
+1. **Edit or diagnose:** run the smallest relevant unit/static harness. Do not launch the app only to obtain compile evidence.
+2. **Swift/UI behavior:** reuse the existing named bundle with `OMI_APP_NAME=omi-<feature> ./run.sh --yolo --fast-only`, then use the local bridge (`omi-ctl action`, `state`, or a semantic snapshot) to assert the changed behavior.
+3. **Package boundary:** use `./run.sh --full` only for the first named launch, resource/entitlement/package/runtime input changes, or when `--fast-only` reports an expected fingerprint mismatch.
+4. **QA, commit, and PR readiness:** run `./scripts/omi-macos-dev doctor`, exercise the real user-facing path, then run the appropriate full component/PR contract.
+
+`omi-macos-dev` defaults to bounded JSON summaries so an agent can safely inspect a busy machine. Pass `--verbose` to the specific command for path-level records (for example, `clean plan --verbose`); cleanup always requires the exact current plan hash. The normal 14-day retention window can be deliberately bypassed with `--older-than 0` only when the operator has explicitly approved immediate cleanup.
+
+Never ask a user to test an unexercised path. A fast named-bundle launch plus a semantic bridge assertion is valid inner-loop evidence; a clean full bundle is release/QA evidence.
+
 ### After Implementing Changes
+
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
-- To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
 - Voice-path verification means a natural authenticated PTT turn on a named bundle — signed-out, forced-transcript, or reducer-only runs do not count; provider mint or payload changes must also show the deploy-inline provider probe.
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
 

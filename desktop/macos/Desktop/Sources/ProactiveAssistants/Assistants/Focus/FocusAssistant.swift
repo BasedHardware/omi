@@ -792,7 +792,7 @@ actor FocusAssistant: ProactiveAssistant {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Sync to backend once and update both tables with backendId
-        if let backendId = await syncFocusSessionToBackend(
+        if let backendMemory = await syncFocusSessionToBackend(
             analysis: analysis,
             windowTitle: windowTitle,
             ownerID: ownerID)
@@ -803,7 +803,7 @@ actor FocusAssistant: ProactiveAssistant {
                 do {
                     try await ProactiveStorage.shared.updateFocusSessionSyncStatus(
                         id: recordId,
-                        backendId: backendId,
+                        backendId: backendMemory.id,
                         synced: true
                     )
                     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
@@ -815,7 +815,7 @@ actor FocusAssistant: ProactiveAssistant {
             // Update memories table
             if let memId = memoryId {
                 do {
-                    try await MemoryStorage.shared.markSynced(id: memId, backendId: backendId)
+                    try await MemoryStorage.shared.markSynced(id: memId, serverMemory: backendMemory)
                     guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
                 } catch {
                     logError("Focus: Failed to update memories sync status", error: error)
@@ -884,7 +884,7 @@ actor FocusAssistant: ProactiveAssistant {
         analysis: ScreenAnalysis,
         windowTitle: String? = nil,
         ownerID: String
-    ) async -> String? {
+    ) async -> ServerMemory? {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
         do {
             // Build content for the memory
@@ -913,7 +913,7 @@ actor FocusAssistant: ProactiveAssistant {
             guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
 
             log("Focus: Synced as memory to backend (id: \(response.id))")
-            return response.id
+            return response
         } catch {
             logError("Focus: Failed to sync to backend", error: error)
             return nil

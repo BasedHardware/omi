@@ -270,6 +270,20 @@ final class VoiceTurnCoordinator {
     return true
   }
 
+  /// Refresh the native-output inactivity watchdog after a successfully
+  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// replaced turn cannot prolong the current response.
+  @discardableResult
+  func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {
+    guard activeTurn?.activeLease == lease else { return false }
+    send(
+      .playbackProgressScoped(
+        turnID: lease.turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    return activeTurn?.activeLease == lease
+  }
+
   func configure(barState: FloatingControlBarState) {
     presenter = FloatingControlBarState.PTTBarPresenter(barState: barState)
     presenter?.apply(projection)
@@ -444,6 +458,9 @@ final class VoiceTurnCoordinator {
           route: Self.routeLabel(terminal.route),
           staleEventCount: model.staleEventCount,
           invalidTransitionCount: model.invalidTransitionCount)
+        log(
+          "VoiceTurnCoordinator: terminal turn=\(terminal.turnID.description) "
+            + "reason=\(terminal.reason.rawValue) route=\(Self.routeLabel(terminal.route))")
         effectHandler?(effect)
       case .staleEventDropped(let turnID, let event):
         DesktopDiagnosticsManager.shared.recordVoiceTurnAnomaly(
@@ -475,7 +492,8 @@ final class VoiceTurnCoordinator {
   private static func ownerFencedTurnID(for effect: VoiceTurnEffect) -> VoiceTurnID? {
     switch effect {
     case .finalizeCapturedInput(let turnID), .commitClaimedHubInput(let turnID), .prepareHubInput(let turnID, _),
-      .finalizeJournal(let turnID, _), .fallbackToTranscription(let turnID, _):
+      .screenEvidenceProtocolExpired(let turnID, _), .finalizeJournal(let turnID, _),
+      .fallbackToTranscription(let turnID, _):
       return turnID
     case .scheduleDeadline, .cancelDeadline, .cancelAllDeadlines, .stopCapture,
       .transcriptionFinalizationTimedOut, .cancelHub, .stopPlayback, .terminal,
@@ -491,6 +509,10 @@ final class VoiceTurnCoordinator {
       [weak self] in
       guard let self else { return }
       self.deadlineCancellations.removeValue(forKey: key)
+      let phase = self.activeTurn.map { Self.phaseLabel($0.phase) } ?? "idle"
+      log(
+        "VoiceTurnCoordinator: deadline fired turn=\(turnID.description) "
+          + "deadline=\(deadline.rawValue) phase=\(phase)")
       self.send(.deadlineFired(turnID: turnID, deadline: deadline))
     }
   }

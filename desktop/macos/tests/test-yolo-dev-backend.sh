@@ -3,6 +3,7 @@ set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 RUN="$ROOT/run.sh"
+BACKEND_MAIN="$ROOT/Backend-Rust/src/main.rs"
 
 YOLO_FUNCTION="$(sed -n '/^apply_yolo_env()/,/^}/p' "$RUN")"
 NAMED_DEFAULT_FUNCTION="$(sed -n '/^should_default_named_bundle_to_dev_backend()/,/^}/p' "$RUN")"
@@ -49,5 +50,16 @@ fi
 )
 
 bash "$RUN" --help | grep -q 'Quick start: use dev backend, no local services'
+
+# Static tripwire: app and backend diagnostics must never converge on a
+# machine-global developer log. The launcher's private per-launch directory
+# is the ownership boundary for a local backend started by run.sh.
+if grep -qE '/private/tmp/omi-dev\.log|/tmp/omi-dev\.log' "$RUN" "$BACKEND_MAIN"; then
+  echo "FAIL: named-bundle launcher or Rust backend still uses the shared developer log" >&2
+  exit 1
+fi
+grep -q 'BACKEND_LOG_FILE' "$RUN"
+grep -q 'mktemp -d' "$RUN"
+grep -q '>>"$BACKEND_LOG_FILE" 2>&1' "$RUN"
 
 echo "PASS: --yolo and implicit named bundles target development backends"

@@ -305,17 +305,45 @@ def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> 
     assert '--check-runtime-bindings' not in production_workflow.read_text(encoding='utf-8')
 
 
-def test_dev_deploy_uses_manifest_derived_gcloud_index_provisioning_only() -> None:
-    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml'
-    production_workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
-    text = workflow.read_text(encoding='utf-8')
+def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> None:
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+    )
 
-    assert 'environment: development' in text
-    assert 'backend/scripts/reconcile_firestore_indexes.py' in text
-    assert '--provision-missing' in text
-    assert 'firebase' not in text
-    assert 'setup-node' not in text
-    assert '--provision-missing' not in production_workflow.read_text(encoding='utf-8')
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        assert text.count('backend/scripts/reconcile_firestore_indexes.py') == 2
+        assert '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"' in text
+        assert text.count('--check-only') == 1
+        assert text.count('--validate-proposal') == 1
+        assert '--provision-missing' not in text
+        assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
+        assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
+        assert '--proposal-ttl-seconds 3600' in text
+        assert 'actions/upload-artifact@v4' in text
+        assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
+        assert 'if-no-files-found: error' in text
+        assert 'retention-days: 1' in text
+        assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
+        assert 'needs: firestore_readiness' in text
+
+
+def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+    readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+    deploy = text.split('\n  deploy:\n', 1)[1]
+
+    schema_guard = 'git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json'
+    assert 'ref: main' in readiness
+    assert 'refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate' in readiness
+    assert schema_guard in readiness
+    assert "printf 'candidate_sha=%s\\n' \"$candidate_sha\" >> \"$GITHUB_OUTPUT\"" in readiness
+    assert 'ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}' in deploy
+    assert readiness.index(schema_guard) < readiness.index('Google Auth for read-only Firestore inventory')
+    assert readiness.index(schema_guard) < readiness.index('--check-only')
+    assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:

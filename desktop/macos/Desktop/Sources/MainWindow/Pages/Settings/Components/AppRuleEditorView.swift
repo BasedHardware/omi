@@ -58,7 +58,7 @@ struct AppRuleEditorView: View {
 
       HStack(spacing: OmiSpacing.sm) {
         TextField(placeholder, text: $newAppName)
-          .textFieldStyle(.roundedBorder)
+          .settingsTextInputStyle()
           .onSubmit { addApp() }
 
         Button(addButtonTitle) { addApp() }
@@ -189,8 +189,7 @@ struct BrowserKeywordListView: View {
       // Add new keyword
       HStack(spacing: OmiSpacing.sm) {
         TextField("Add keyword...", text: $newKeyword)
-          .textFieldStyle(.roundedBorder)
-          .scaledFont(size: OmiType.caption)
+          .settingsTextInputStyle()
           .onSubmit { addKeyword() }
 
         Button("Add") { addKeyword() }

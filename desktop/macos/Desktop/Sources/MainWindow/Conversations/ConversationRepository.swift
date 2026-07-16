@@ -260,10 +260,29 @@ final class ConversationRepository {
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
+  private var ownerChangeObserver: NSObjectProtocol?
 
   init(remote: ConversationRemoteDataSource, local: ConversationLocalDataSource) {
     self.remote = remote
     self.local = local
+    // Owner fencing: an in-place account switch posts only
+    // .runtimeOwnerDidChange (never .userDidSignOut), so without this reset the
+    // previous owner's conversations keep rendering for the next account and
+    // ConversationsPage.onAppear skips its reload because the array is
+    // non-empty. Mirrors TasksStore.resetSessionState's subscription.
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.reset()
+      }
+    }
+  }
+
+  deinit {
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 
   convenience init() {

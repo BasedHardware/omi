@@ -148,6 +148,62 @@ final class ChatToolExecutorSQLTests: XCTestCase {
         )
     }
 
+    func testExecuteSQLBindsDMLParametersAndPersistsMutations() async throws {
+        let directory = FileManager.default.temporaryDirectory
+            .appendingPathComponent("execute-sql-parameters-\(UUID().uuidString)", isDirectory: true)
+        try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: directory) }
+
+        let pool = try DatabasePool(path: directory.appendingPathComponent("test.sqlite").path)
+        try await pool.write { db in
+            try db.execute(sql: "CREATE TABLE probe (person TEXT PRIMARY KEY, note TEXT NOT NULL)")
+        }
+
+        let insertResult = await ChatToolExecutor.executeSQL(
+            ["query": "INSERT INTO probe (person, note) VALUES (?, ?)", "parameters": ["O'Connor", "created"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        XCTAssertEqual(insertResult, "OK: 1 row(s) affected")
+        let noteAfterInsert = try await pool.read { db in
+            try String.fetchOne(db, sql: "SELECT note FROM probe WHERE person = ?", arguments: ["O'Connor"])
+        }
+        XCTAssertEqual(noteAfterInsert, "created")
+
+        let updateResult = await ChatToolExecutor.executeSQL(
+            ["query": "UPDATE probe SET note = ? WHERE person = ?", "parameters": ["updated", "O'Connor"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        XCTAssertEqual(updateResult, "OK: 1 row(s) affected")
+        let noteAfterUpdate = try await pool.read { db in
+            try String.fetchOne(db, sql: "SELECT note FROM probe WHERE person = ?", arguments: ["O'Connor"])
+        }
+        XCTAssertEqual(noteAfterUpdate, "updated")
+
+        let unsafeUpdateResult = await ChatToolExecutor.executeSQL(
+            ["query": "UPDATE probe SET note = ?", "parameters": ["unsafe"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        XCTAssertEqual(unsafeUpdateResult, "Error: UPDATE without WHERE clause is not allowed")
+        let noteAfterRejectedUpdate = try await pool.read { db in
+            try String.fetchOne(db, sql: "SELECT note FROM probe WHERE person = ?", arguments: ["O'Connor"])
+        }
+        XCTAssertEqual(noteAfterRejectedUpdate, "updated")
+
+        let deleteResult = await ChatToolExecutor.executeSQL(
+            ["query": "DELETE FROM probe WHERE person = ?", "parameters": ["O'Connor"]],
+            dbQueue: pool,
+            expectedOwnerID: nil
+        )
+        XCTAssertEqual(deleteResult, "OK: 1 row(s) affected")
+        let remainingRows = try await pool.read { db in
+            try Int.fetchOne(db, sql: "SELECT COUNT(*) FROM probe")
+        }
+        XCTAssertEqual(remainingRows, 0)
+    }
+
     func testPostDMLOwnerRevocationRollsBackPrimarySQLWrite() async throws {
         let directory = FileManager.default.temporaryDirectory
             .appendingPathComponent("owner-bound-sql-\(UUID().uuidString)", isDirectory: true)

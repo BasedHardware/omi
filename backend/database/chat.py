@@ -14,6 +14,7 @@ from models.chat import Message
 from utils import encryption
 from ._client import db
 from .helpers import prepare_for_read, prepare_for_write, set_data_protection_level
+from database.read_boundary import parse_snapshot_or_none
 
 logger = logging.getLogger(__name__)
 
@@ -396,12 +397,13 @@ def get_message(uid: str, message_id: str) -> tuple[Message, str] | None:
     if not message_doc:
         return None
 
-    message_data: Dict[str, Any] = _typed_doc(message_doc)
-    if not message_data:
+    message = parse_snapshot_or_none(
+        Message,
+        message_doc,
+        payload_from_snapshot=lambda snapshot: _prepare_message_for_read(_typed_doc(snapshot), uid),
+    )
+    if message is None:
         return None
-
-    decrypted_data: Dict[str, Any] = _prepare_message_for_read(message_data, uid)
-    message = Message(**decrypted_data)
 
     return message, message_doc.id
 

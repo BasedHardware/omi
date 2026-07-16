@@ -715,6 +715,34 @@ final class ConversationRepositoryTests: XCTestCase {
     }
   }
 
+  func testRuntimeOwnerChangeClearsThePreviousAccountsConversations() async {
+    // Regression: an in-place account switch posts only .runtimeOwnerDidChange
+    // (never .userDidSignOut). Without the repository's own owner fence, the
+    // previous account's conversations kept rendering for the next account and
+    // ConversationsPage.onAppear skipped its reload because the array was
+    // non-empty.
+    let previousOwners = makeConversation(title: "Previous account's conversation", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([previousOwners]), countResult: .success(1))
+    let repository = ConversationRepository(
+      remote: remote,
+      local: FakeConversationLocal(listResult: [], count: 0)
+    )
+    var snapshots: [ConversationRepositorySnapshot] = []
+    repository.onSnapshot = { snapshots.append($0) }
+    await repository.load(query: .all)
+    XCTAssertFalse(repository.conversations.isEmpty, "precondition: previous account's rows are loaded")
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertTrue(
+      repository.conversations.isEmpty,
+      "an in-place account switch must clear the previous account's conversations")
+    XCTAssertEqual(
+      snapshots.last?.conversations.count, 0,
+      "the cleared state must be published so the UI empties and the page reloads")
+  }
+
   private func makeConversation(
     id: String = "conversation-1",
     title: String = "Title",

@@ -79,10 +79,20 @@ enum RealtimeHubTools {
     have yet. For a slower step, it's fine to signal it'll take a moment. NEVER speak an answer — \
     real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
-    without calling a tool. When the screenshot tool succeeds, the image attached to its result \
-    is a live capture of the current screen. Treat that image as the source of truth for any \
-    current-screen question, and disregard or qualify any conflicting kernel context, OCR, work \
-    summaries, or earlier screen descriptions.
+    without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
+    attached image and, when present, its locally captured foreground-application context are \
+    the only current visual source of truth. The foreground-application context is trustworthy \
+    only for identifying the app active at capture time; it never replaces visual reasoning. \
+    Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
+    You MUST then call \
+    report_screen_observation with a concise grounding observation. That report is internal \
+    verification, not your user-facing reply. Once it succeeds, answer the user's original \
+    current-screen question naturally and conversationally from the attached image. Do not let \
+    the report replace the answer or fall back to a generic screen description when the user \
+    asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
+    visible in the image: treat that as assistant chrome, not as the subject of the user's \
+    screen question, unless the user specifically asks about Omi. Answer about the user's \
+    visible work and intent, not the assistant UI.
 
     Keep latency low: prefer answering directly when you can.
     """
@@ -91,9 +101,45 @@ enum RealtimeHubTools {
   /// The result is delivered immediately after the live image. Keep the freshness contract in
   /// the tool result as well as the session instruction so a warm session cannot prefer an older
   /// context summary over the pixels it just received.
-  static func screenshotToolResult(capturedBytes: Int?) -> String {
-    guard capturedBytes != nil else { return "Could not capture the screen." }
-    return "Live screenshot captured just now. The attached image is authoritative for the current screen; disregard any conflicting screen summaries, OCR, or earlier screen descriptions."
+  static func screenshotToolResult(
+    capturedBytes: Int?,
+    frontmostApplication: String? = nil
+  ) -> String {
+    guard capturedBytes != nil else {
+      return jsonToolResult([
+        "ok": false,
+        "error": ["code": "screen_evidence_unavailable"],
+      ])
+    }
+    var result: [String: Any] = [
+      "ok": true,
+      "instruction": "Use the attached image and any locally captured foreground-application context as the only current visual source. Call report_screen_observation with a concise grounding observation, then answer the user's original request naturally from this evidence.",
+    ]
+    if let frontmostApplication = frontmostApplication?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !frontmostApplication.isEmpty
+    {
+      // This is sampled with the frozen screenshot and sent only through the matching
+      // provider tool result. It is not persisted, logged, or reused as ambient context.
+      result["capture_context"] = ["foreground_application": frontmostApplication]
+    }
+    return jsonToolResult(result)
+  }
+
+  static func screenObservationResult(accepted: Bool) -> String {
+    jsonToolResult(accepted
+      ? [
+        "ok": true,
+        "status": "screen_observation_accepted",
+        "instruction": "Grounding verified. Now answer the user's original request naturally using the attached image; the observation was not the user-facing answer.",
+      ]
+      : ["ok": false, "error": ["code": "screen_observation_rejected"]])
+  }
+
+  private static func jsonToolResult(_ value: [String: Any]) -> String {
+    guard let data = try? JSONSerialization.data(withJSONObject: value, options: [.sortedKeys]),
+      let result = String(data: data, encoding: .utf8)
+    else { return #"{\"ok\":false,\"error\":{\"code\":\"screen_evidence_encoding_failed\"}}"# }
+    return result
   }
 
   /// OpenAI Realtime GA `session.tools` entries.
