@@ -23,18 +23,9 @@ import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/g
 import { GoalCelebration } from '../components/goals/GoalCelebration'
 import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
 import type { GoalResponse as Goal } from '../lib/omiApi.generated'
+import { cache, writeCache, hydrateGoalsFromDisk } from '../lib/goalsCache'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
-
-// Module-level cache so navigating away and back is instant; refresh re-fetches.
-const cache = {
-  goals: null as Goal[] | null,
-  loaded: false
-}
-
-function writeCache(list: Goal[]): void {
-  cache.goals = list
-}
 
 function apiError(e: unknown): string {
   return (
@@ -54,7 +45,9 @@ function asList(data: unknown): Goal[] {
 async function fetchAll(): Promise<Goal[]> {
   const res = await omiApi.get('/v1/goals/all')
   const list = asList(res.data)
-  cache.goals = list
+  // writeCache mirrors the list to the per-uid cold-start snapshot; loaded is set
+  // here (only a successful fetch is authoritative, not an optimistic writeCache).
+  writeCache(list)
   cache.loaded = true
   return list
 }
@@ -66,8 +59,13 @@ async function fetchAll(): Promise<Goal[]> {
 // route), so progress reaching the target is the only completion signal.
 
 export function Goals(): React.JSX.Element {
+  // Seed the cache from the per-uid cold-start snapshot before the initial state is
+  // read, so the list paints last-known goals immediately on app restart instead of
+  // a spinner. The revalidating fetch still runs (gated on cache.loaded) below.
+  hydrateGoalsFromDisk()
   const [goals, setGoals] = useState<Goal[]>(cache.goals ?? [])
-  const [loading, setLoading] = useState(!cache.loaded)
+  // Show the loading state only when there is genuinely nothing to paint.
+  const [loading, setLoading] = useState(!cache.loaded && (cache.goals?.length ?? 0) === 0)
   const [error, setError] = useState<string | null>(null)
   const [refreshing, setRefreshing] = useState(false)
   const [filter, setFilter] = useState<'active' | 'completed' | 'all'>('active')
