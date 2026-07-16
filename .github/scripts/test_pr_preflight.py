@@ -11,6 +11,7 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
@@ -57,6 +58,50 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(captured["url"], "https://api.github.com/repos/BasedHardware/omi/pulls/9402")
         self.assertEqual(captured["authorization"], "Bearer test-token")
         self.assertEqual(captured["timeout"], 15)
+
+    def test_api_loader_retries_transient_failures_then_succeeds(self) -> None:
+        payload = json.dumps({"number": 9847, "body": "ok", "updated_at": "u", "labels": []}).encode()
+        outcomes: list[object] = [
+            urllib.error.HTTPError("url", 502, "bad gateway", None, None),  # type: ignore[arg-type]
+            TimeoutError("timed out"),
+            FakeResponse(payload),
+        ]
+        sleeps: list[float] = []
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome  # type: ignore[return-value]
+
+        metadata = load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=sleeps.append)
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(sleeps, [2.0, 4.0])
+
+    def test_api_loader_does_not_retry_permanent_http_errors(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise urllib.error.HTTPError("url", 404, "not found", None, None)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 1)
+        cause = raised.exception.__cause__
+        self.assertIsInstance(cause, urllib.error.HTTPError)
+        cause.close()  # type: ignore[union-attr]
+
+    def test_api_loader_raises_after_exhausting_transient_retries(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise TimeoutError("timed out")
+
+        with self.assertRaisesRegex(RuntimeError, "request failed"):
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 3)
 
 
 class SelectionTests(unittest.TestCase):
