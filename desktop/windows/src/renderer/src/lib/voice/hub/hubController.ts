@@ -45,6 +45,7 @@ import { getAboutUserCard, refreshAboutUserCard } from '../aboutUser'
 import { buildVoiceSystemInstruction } from '../systemInstruction'
 import { mintRealtimeToken, MintError } from '../tokenMint'
 import type { VoiceProvider } from '../sessionMachine'
+import type { VoiceToolDeclaration } from '../../../../../shared/types'
 import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
 import { GeminiHubSession } from './geminiHubSession'
 import { OpenAiHubSession } from './openaiHubSession'
@@ -111,6 +112,9 @@ export type HubSessionSpec = {
   token: string
   instructions: string
   events: HubSessionEvents
+  /** The provider-neutral tool catalog this session advertises (PR-C). Empty when
+   *  no `fetchTools` seam is wired or no signed-in owner exists yet. */
+  tools: VoiceToolDeclaration[]
 }
 
 export type HubControllerOptions = {
@@ -125,6 +129,13 @@ export type HubControllerOptions = {
    *  behavior). Its result feeds the default `buildInstructions`'
    *  `topLevelConversationContext`, refreshed via a full reconnect when stale. */
   fetchSeed?: () => Promise<{ context: string; idempotencyKeys: string[] }>
+  /** Read the provider-neutral tool catalog the session should advertise (PR-C).
+   *  Built HOST-side from the shared manifest with a host-derived execution role, so
+   *  a leaf voice session can't be handed coordinator tools. Injected so the
+   *  controller stays hermetic; the host wires it to `voiceHub:toolCatalog`. Absent ⇒
+   *  no tools (today's behavior). Fetched fresh at each warm; a fetch failure warms
+   *  tool-less rather than failing the session. */
+  fetchTools?: () => Promise<VoiceToolDeclaration[]>
   /** Mint one ephemeral token for the resolved provider. Fresh per `ensureWarm`. */
   mintToken?: (provider: VoiceProvider) => Promise<string>
   /** Construct the provider hub session. Default picks OpenAI/Gemini by provider. */
@@ -157,6 +168,7 @@ export class HubController {
   private readonly resolveProvider: () => VoiceProvider
   private readonly buildInstructions: () => string
   private readonly fetchSeed?: () => Promise<{ context: string; idempotencyKeys: string[] }>
+  private readonly fetchTools?: () => Promise<VoiceToolDeclaration[]>
   private readonly mintToken: (provider: VoiceProvider) => Promise<string>
   private readonly createSession: (spec: HubSessionSpec) => HubSession
   private readonly now: () => number
@@ -242,6 +254,7 @@ export class HubController {
     this.events = options.events ?? {}
     this.resolveProvider = options.resolveProvider ?? resolveEffectiveVoiceProvider
     this.fetchSeed = options.fetchSeed
+    this.fetchTools = options.fetchTools
     this.buildInstructions =
       options.buildInstructions ??
       (() =>
@@ -262,6 +275,7 @@ export class HubController {
           token: spec.token,
           instructions: spec.instructions,
           events: spec.events,
+          tools: spec.tools,
           sinkId: sinkId?.()
         }
         return spec.provider === 'openai' ? new OpenAiHubSession(opts) : new GeminiHubSession(opts)
@@ -340,12 +354,21 @@ export class HubController {
       // this not-yet-constructed session). Bail BEFORE building a session: nothing was
       // opened yet, so there is nothing to close, just discard the token.
       if (this.warmGeneration !== gen) throw new HubWarmAbortedError()
+      // The tool catalog is host-derived (role from the surface, never model-claimed).
+      // A fetch failure warms tool-less rather than failing the whole session — voice
+      // conversation still works; the model just can't act this session.
+      const tools = this.fetchTools ? await this.fetchTools().catch(() => []) : []
+      // The catalog fetch is another await point — re-check the generation so a
+      // teardown that straddled it discards this warm instead of installing a socket
+      // on a now-torn-down hub (M1), matching the mint/connect commit points.
+      if (this.warmGeneration !== gen) throw new HubWarmAbortedError()
       const instructions = this.buildInstructions()
       const session = this.createSession({
         provider: activeProvider,
         token,
         instructions,
-        events: this.sessionEvents()
+        events: this.sessionEvents(),
+        tools
       })
       this.session = session
       this.sessionProvider = activeProvider
@@ -549,6 +572,14 @@ export class HubController {
     this.warmBuffer = null
     this.warmCommitted = false
     this.session?.cancelTurn()
+  }
+
+  /** Relay a tool result back to the warm provider session so the model can finish
+   *  the turn (PR-C). Keyed by the provider `callId`; a no-op when no session exists
+   *  (a torn-down / barged-in turn). The driver applies the turn-epoch gate before
+   *  calling this, so a stale turn's result never reaches the provider. */
+  sendToolResult(callId: string, name: string, output: string): void {
+    this.session?.sendToolResult(callId, name, output)
   }
 
   /** The reducer's 1 s `hubWarm` deadline fired: the hub lost the race. Hand the

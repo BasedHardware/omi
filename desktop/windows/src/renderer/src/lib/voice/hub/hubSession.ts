@@ -29,6 +29,7 @@
 
 import type { VoiceSessionID, VoiceTurnID, VoiceResponseID } from '../turn/voiceTurnMachine'
 import { base64ToBytes, createVoicePlayer, type VoicePlayer } from '../pcmPlayer'
+import type { VoiceToolDeclaration } from '../../../../../shared/types'
 
 export type HubProvider = 'openai' | 'gemini'
 
@@ -195,9 +196,11 @@ export type HubSessionOptions = {
   clock?: HubClock
   mintSessionID?: () => VoiceSessionID
   idleReleaseMs?: number
-  /** Provider tool declarations. Tool CATALOG assembly is a host concern (PR-5/6);
-   *  default is none so the warm frame is still faithful. */
-  tools?: unknown[]
+  /** Provider-neutral tool declarations. Tool CATALOG assembly is a host concern
+   *  (built main-side from the shared manifest with a host-derived role); each
+   *  subclass projects these to its wire shape. Default none so a warm frame with no
+   *  catalog is still faithful. */
+  tools?: VoiceToolDeclaration[]
 }
 
 /** Chunked bytes → base64 (large frames must not blow the `String.fromCharCode`
@@ -223,7 +226,7 @@ export abstract class BaseHubSession implements HubSession {
 
   protected readonly instructions: string
   protected readonly token: string
-  protected readonly tools: unknown[]
+  protected readonly tools: VoiceToolDeclaration[]
   private readonly events: HubSessionEvents
   private readonly socketFactory: HubSocketFactory
   private readonly clock: HubClock

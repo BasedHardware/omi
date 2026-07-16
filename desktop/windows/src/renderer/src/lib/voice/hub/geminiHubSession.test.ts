@@ -62,7 +62,11 @@ const tick = (): Promise<void> => new Promise((r) => setTimeout(r, 0))
 const tid = 't1' as VoiceTurnID
 const rid = 'r1' as VoiceResponseID
 
-function harness(): {
+function harness(
+  opts: {
+    tools?: { name: string; description: string; parameters: Record<string, unknown> }[]
+  } = {}
+): {
   session: GeminiHubSession
   events: ReturnType<typeof makeEvents>
   player: ReturnType<typeof makePlayer>
@@ -93,7 +97,8 @@ function harness(): {
     socketFactory,
     playerFactory: async () => player as never,
     clock,
-    mintSessionID: () => 'sess-1' as VoiceSessionID
+    mintSessionID: () => 'sess-1' as VoiceSessionID,
+    tools: opts.tools
   })
   return {
     session,
@@ -132,9 +137,41 @@ describe('GeminiHubSession — warm config', () => {
     const aad = ric.automaticActivityDetection as Json
     expect(aad.disabled).toBe(true)
     expect((setup.generationConfig as Json).responseModalities).toEqual(['AUDIO'])
+    // No catalog wired ⇒ an empty (but faithful) functionDeclarations frame.
+    expect(setup.tools).toEqual([{ functionDeclarations: [] }])
     h.getSocket().spec.onMessage(JSON.stringify({ setupComplete: {} }))
     await warm
     expect(h.events.onConnected).toHaveBeenCalledWith('sess-1')
+  })
+
+  it('projects the provider-neutral catalog into functionDeclarations (PR-C)', async () => {
+    const h = harness({
+      tools: [
+        {
+          name: 'spawn_agent',
+          description: 'do work',
+          parameters: { type: 'object', properties: { objective: { type: 'string' } } }
+        }
+      ]
+    })
+    const warm = h.session.ensureWarm()
+    await tick()
+    h.getSocket().spec.onOpen()
+    const setup = h.getSocket().frames()[0].setup as Json
+    // Gemini's FunctionDeclaration shape IS the neutral shape — passed straight through.
+    expect(setup.tools).toEqual([
+      {
+        functionDeclarations: [
+          {
+            name: 'spawn_agent',
+            description: 'do work',
+            parameters: { type: 'object', properties: { objective: { type: 'string' } } }
+          }
+        ]
+      }
+    ])
+    h.getSocket().spec.onMessage(JSON.stringify({ setupComplete: {} }))
+    await warm
   })
 })
 
