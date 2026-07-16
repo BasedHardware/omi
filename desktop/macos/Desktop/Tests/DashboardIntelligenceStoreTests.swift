@@ -15,6 +15,26 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     XCTAssertNil(store.error)
   }
 
+  func testConcurrentSameOwnerLoadsDedupeToASingleFetch() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(items: [])
+    let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
+
+    // Two same-owner loads launched together. load() must claim its dedup slot
+    // (loadingOwnerID) SYNCHRONOUSLY — before it yields at its first await —
+    // otherwise the second load runs on the MainActor before the first load's
+    // performLoad Task sets loadingOwnerID, sees it unset, and starts a second
+    // concurrent fetch. Because the claim is synchronous, the second load always
+    // observes it and awaits the in-flight load, so only one fetch happens.
+    let first = Task { await store.load() }
+    let second = Task { await store.load() }
+    await first.value
+    await second.value
+
+    XCTAssertEqual(
+      api.projectionLoads, 1, "concurrent same-owner loads must dedupe to a single fetch")
+  }
+
   func testControlFailureUsesDashboardErrorWithoutLeakingBackendDetail() async {
     let api = FakeDashboardIntelligenceClient()
     api.controlError = APIError.httpError(

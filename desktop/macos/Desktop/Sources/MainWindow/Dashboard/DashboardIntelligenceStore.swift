@@ -216,6 +216,12 @@ final class DashboardIntelligenceStore: ObservableObject {
       if let activeLoadTask { await activeLoadTask.value }
       return
     }
+    // Claim the dedup slot SYNCHRONOUSLY here — before spawning the task and
+    // before the first await. performLoad() runs inside the Task (asynchronously),
+    // so if we relied on it to set loadingOwnerID, a re-entrant same-owner load()
+    // could run on the MainActor first, still see nil, and start a second
+    // concurrent load (overwriting activeLoadTask) — defeating the dedup.
+    loadingOwnerID = ownerScope.ownerID
     let taskID = UUID()
     let task = Task { [weak self] in
       guard let self else { return }
