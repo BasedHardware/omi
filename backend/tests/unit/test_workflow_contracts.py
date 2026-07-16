@@ -247,7 +247,10 @@ def test_shared_change_detection_and_backend_isolation_are_ci_wired():
     assert "unmanaged_thread_offload" in manifest
     assert "scan_import_time_side_effects.py" not in backend_checks
     assert "check_module_stub_pollution.py" not in backend_checks
-    assert "run_checks.py --lane ci" in repo_checks
+    assert "run_checks.py" in repo_checks
+    assert "--lane ci" in repo_checks
+    assert "git show -s --format=%B HEAD > /tmp/main-push-body.md" in repo_checks
+    assert "--pr-body-file /tmp/main-push-body.md" in repo_checks
     assert 'BASE_REMOTE="${PRE_PUSH_BASE_REMOTE:-origin}"' in pre_push
     assert 'scripts/changed-files "$DIFF_BASE" "$local_oid"' in pre_push
     assert "scripts/pr-preflight --lane local" in pre_push

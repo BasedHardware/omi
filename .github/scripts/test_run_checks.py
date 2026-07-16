@@ -38,7 +38,10 @@ def deterministic_workflow_references(workflows_dir: Path) -> set[str]:
             path = match.group("path")
             name = Path(path).name
             if (
-                (path.startswith(".github/scripts/") and (name.startswith(("check_", "check-")) or name.endswith("-count.py")))
+                (
+                    path.startswith(".github/scripts/")
+                    and (name.startswith(("check_", "check-")) or name.endswith("-count.py"))
+                )
                 or (path.startswith("backend/scripts/") and name.startswith(("scan_", "check_")))
                 or (path.startswith("desktop/macos/scripts/") and name.startswith(("check_", "check-")))
             ):
@@ -72,9 +75,19 @@ class ManifestContractTests(unittest.TestCase):
 
     def test_ci_lane_is_reachable_from_repo_checks(self) -> None:
         workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
-        self.assertRegex(workflow, r"run_checks\.py\s+--lane\s+ci")
+        self.assertRegex(workflow, r"run_checks\.py(?:\s+\\)?\s+--lane\s+ci")
         manifest = load_manifest(MANIFEST_PATH)
         self.assertTrue(any("ci" in check.lanes for check in manifest.checks))
+
+    def test_main_push_forwards_commit_body_to_invariant_check(self) -> None:
+        workflow = (WORKFLOWS_DIR / "repo-checks.yml").read_text(encoding="utf-8")
+        step_name = "      - name: Run deterministic check manifest on main pushes"
+        step_start = workflow.index(step_name)
+        step_end = workflow.index("\n      - name:", step_start + len(step_name))
+        main_push_step = workflow[step_start:step_end]
+
+        self.assertIn("git show -s --format=%B HEAD > /tmp/main-push-body.md", main_push_step)
+        self.assertIn("--pr-body-file /tmp/main-push-body.md", main_push_step)
 
     def test_unregistered_fake_workflow_check_is_named(self) -> None:
         with tempfile.TemporaryDirectory() as tmp:
