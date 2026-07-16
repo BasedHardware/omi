@@ -206,14 +206,14 @@ export async function runMainChatTurn(
     //
     // Cross-session isolation holds because pi-mono is requiresPinnedWorker:true —
     // each chatId pins its OWN worker+subprocess (workerPool.ts), so a live pi
-    // conversation is never shared between chats. KNOWN EDGE (not fixed here,
-    // shared latent with macOS): under pin-EVICTION — when concurrently-active
-    // pinned pi chats exceed the worker-pool cap — an evicted worker reassigned to a
-    // new chat keeps its still-alive subprocess (its old chat's turns), a narrow
-    // same-user context bleed. The tail injection does not address it (the bleed is
-    // pi's native in-memory accumulation on subprocess reuse); eviction hardening
-    // (new_session on pinned-worker reassignment + a small pi-mono maxWorkers cap)
-    // is a separable follow-up owned outside this PR.
+    // conversation is never shared between chats. The pin-EVICTION edge — when
+    // concurrently-active pinned pi chats exceed the worker-pool cap, an evicted
+    // worker reassigned to a new chat kept its still-alive subprocess (its old
+    // chat's turns), a narrow same-user context bleed — is now closed:
+    // PiMonoRuntimeAdapter.openBinding sends pi `new_session` when it reassigns a
+    // live subprocess (piMono.ts), and the pi-mono pool is capped at
+    // configuredPiMonoMaxWorkers (workerPool.ts). This tail injection then
+    // re-seeds the reassigned chat's own history.
     const tail = kernel.getMainChatTurnTail(ownerId, MAIN_CHAT_TAIL_LIMIT, chatId)
     const history = formatTranscriptTail(tail.turns)
     const effectivePrompt = history ? `${history}\n\n${args.prompt}` : args.prompt

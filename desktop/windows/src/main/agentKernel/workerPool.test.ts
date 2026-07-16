@@ -3,7 +3,11 @@
 // pinned adapters, and pinned-worker reuse across sequential attempts.
 
 import { describe, expect, it } from 'vitest'
-import { AdapterWorkerPool } from './workerPool'
+import {
+  AdapterWorkerPool,
+  DEFAULT_PI_MONO_MAX_WORKERS,
+  configuredPiMonoMaxWorkers
+} from './workerPool'
 import type {
   AdapterBindingHandle,
   AdapterCapabilities,
@@ -161,5 +165,24 @@ describe('AdapterWorkerPool', () => {
     expect(pool.size).toBe(1)
     await pool.runExclusiveQueued(binding('b1'), 'a2', async () => {})
     expect(pool.size).toBe(1)
+  })
+})
+
+describe('configuredPiMonoMaxWorkers', () => {
+  it('defaults to DEFAULT_PI_MONO_MAX_WORKERS (2) when unset', () => {
+    expect(DEFAULT_PI_MONO_MAX_WORKERS).toBe(2)
+    expect(configuredPiMonoMaxWorkers({})).toBe(2)
+  })
+
+  it('honors a valid OMI_PI_MONO_MAX_WORKERS override', () => {
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: '5' })).toBe(5)
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: '1' })).toBe(1)
+  })
+
+  it('falls back to the default for non-numeric or out-of-range values', () => {
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: 'nope' })).toBe(2)
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: '0' })).toBe(2)
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: '-3' })).toBe(2)
+    expect(configuredPiMonoMaxWorkers({ OMI_PI_MONO_MAX_WORKERS: '' })).toBe(2)
   })
 })

@@ -8,19 +8,30 @@
 // OpenClaw) can float across workers. Pure concurrency logic — no kernel/store
 // deps — so it unit-tests standalone with a fake adapter.
 //
-// macOS parity note: the pi-mono-specific worker-count helper is omitted (no
-// pi-mono adapter on Windows). `configuredMaxWorkers` / DEFAULT_MAX_WORKERS are
-// unchanged.
+// macOS parity note: pi-mono is registered with the pi-mono-specific cap
+// (`configuredPiMonoMaxWorkers`, default 2) — mirroring mac worker-pool.ts —
+// while every other adapter keeps `configuredMaxWorkers` / DEFAULT_MAX_WORKERS.
 
 import type { AdapterBindingHandle, RuntimeAdapter } from '../codingAgent/interface'
 
 export const DEFAULT_MAX_WORKERS = 8
+export const DEFAULT_PI_MONO_MAX_WORKERS = 2
 
 export function configuredMaxWorkers(env = process.env): number {
   const raw = env.OMI_AGENT_MAX_WORKERS
   if (!raw) return DEFAULT_MAX_WORKERS
   const parsed = Number.parseInt(raw, 10)
   if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_MAX_WORKERS
+  return parsed
+}
+
+// pi-mono spawns one pi subprocess per pinned worker, so its pool is capped
+// well below the generic default to bound concurrent subprocesses (mac parity).
+export function configuredPiMonoMaxWorkers(env = process.env): number {
+  const raw = env.OMI_PI_MONO_MAX_WORKERS
+  if (!raw) return DEFAULT_PI_MONO_MAX_WORKERS
+  const parsed = Number.parseInt(raw, 10)
+  if (!Number.isFinite(parsed) || parsed < 1) return DEFAULT_PI_MONO_MAX_WORKERS
   return parsed
 }
 

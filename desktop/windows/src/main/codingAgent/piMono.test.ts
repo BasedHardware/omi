@@ -22,6 +22,7 @@ import {
   piExtensionCandidates
 } from './piMono'
 import type { AdapterAttemptContext, AdapterStreamEvent } from './interface'
+import { AdapterWorkerPool } from '../agentKernel/workerPool'
 
 vi.mock('child_process', async () => {
   const actual = await vi.importActual<typeof import('child_process')>('child_process')
@@ -972,5 +973,134 @@ describe('resolveBundledExtension', () => {
     expect(dev.map((p) => p.replace(/\\/g, '/'))).toContain(
       '/w/src/main/codingAgent/pi-mono-extension/index.ts'
     )
+  })
+})
+
+// Number of `new_session` RPCs the adapter has emitted (its conversation-reset
+// signal). sendCommand is the vi.fn() installed by createAdapter / the pool
+// factory below.
+function newSessionCount(sendCommand: unknown): number {
+  const mock = sendCommand as { mock?: { calls: Array<[Record<string, unknown>]> } }
+  if (!mock.mock) return 0
+  return mock.mock.calls.filter(([cmd]) => cmd?.type === 'new_session').length
+}
+
+// The narrow same-user context bleed this guards: pi accumulates ONE
+// conversation per subprocess, and a pinned worker's live subprocess reassigned
+// to a different chat (pool eviction) would otherwise carry the old chat's turns
+// into the new chat. PiMonoRuntimeAdapter.openBinding resets pi (new_session)
+// exactly when it reuses a live subprocess for a new binding.
+describe('PiMonoRuntimeAdapter eviction reset', () => {
+  it('does not reset pi on the first openBinding of a fresh worker', async () => {
+    const { adapter } = createAdapter()
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+    expect(adapter.isRunning).toBe(false)
+
+    await runtime.openBinding({ sessionId: 'ses-A', cwd: '/tmp', metadata: { bindingId: 'A' } })
+
+    expect(adapter.isRunning).toBe(true)
+    expect(newSessionCount(internals(adapter).sendCommand)).toBe(0)
+  })
+
+  it('resets pi (new_session) when a live worker is reassigned to a new binding', async () => {
+    const { adapter } = createAdapter()
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+
+    await runtime.openBinding({ sessionId: 'ses-A', cwd: '/tmp', metadata: { bindingId: 'A' } })
+    expect(newSessionCount(internals(adapter).sendCommand)).toBe(0)
+
+    // Reassignment: the same live adapter (its subprocess still holds A's turns)
+    // opens a DIFFERENT binding — new_session must fire before the new prompt.
+    await runtime.openBinding({ sessionId: 'ses-C', cwd: '/tmp', metadata: { bindingId: 'C' } })
+
+    expect(adapter.isRunning).toBe(true)
+    expect(newSessionCount(internals(adapter).sendCommand)).toBe(1)
+  })
+
+  it('does not reset pi when a binding resumes on its own pinned worker', async () => {
+    const { adapter } = createAdapter()
+    const runtime = new PiMonoRuntimeAdapter(adapter)
+
+    const opened = await runtime.openBinding({
+      sessionId: 'ses-A',
+      cwd: '/tmp',
+      metadata: { bindingId: 'A' }
+    })
+    await runtime.resumeBinding({
+      sessionId: 'ses-A',
+      adapterNativeSessionId: opened.adapterNativeSessionId,
+      cwd: '/tmp',
+      metadata: { bindingId: 'A' }
+    })
+
+    expect(newSessionCount(internals(adapter).sendCommand)).toBe(0)
+  })
+
+  it('resetConversation is a no-op before the subprocess is spawned', () => {
+    const { adapter } = createAdapter()
+    expect(adapter.isRunning).toBe(false)
+    adapter.resetConversation()
+    expect(newSessionCount(internals(adapter).sendCommand)).toBe(0)
+  })
+})
+
+// Integration: drive the real AdapterWorkerPool the way kernelCore does
+// (acquire → openBinding → pin, with the new-binding eviction hook) and prove
+// that exceeding the pool cap evicts an idle pinned worker, reassigns it to the
+// new chat, and that the REASSIGNED worker's adapter resets pi — while the
+// worker that keeps its binding never does.
+describe('pi-mono pool eviction reset (integration)', () => {
+  it('resets pi on the reassigned worker when concurrent chats exceed the cap', async () => {
+    const harnesses: PiMonoAdapter[] = []
+    const factory = () => {
+      const harness = new PiMonoAdapter(
+        { authToken: 'test-token' },
+        { piPath: '/fake/pi', extensionPath: '/fake/ext.ts', nodeBin: '/fake/node' }
+      )
+      internals(harness).sendCommand = vi.fn()
+      harnesses.push(harness)
+      return new PiMonoRuntimeAdapter(harness)
+    }
+    const pool = new AdapterWorkerPool(factory, 2)
+    const evictedBindingIds: string[] = []
+
+    const openBinding = (bindingId: string) =>
+      pool.runExclusiveQueued(
+        // New-binding lease: no queue key + the eviction hook, mirroring
+        // kernelCore. protectPinnedBindingAfterWork is omitted so the just-served
+        // idle binding stays evictable (the kernel unprotects on run completion).
+        undefined,
+        `${bindingId}:binding`,
+        async (worker) => {
+          const handle = await worker.adapter.openBinding({
+            sessionId: `ses-${bindingId}`,
+            cwd: '/tmp',
+            metadata: { bindingId, executionRole: 'coordinator' }
+          })
+          worker.pinBinding(handle)
+        },
+        {
+          onIdlePinnedBindingEvicted: (bindingId) => {
+            evictedBindingIds.push(bindingId)
+          }
+        }
+      )
+
+    await openBinding('A') // worker 1 → harnesses[0]
+    await openBinding('B') // worker 2 → harnesses[1] (has capacity, no eviction)
+    expect(pool.size).toBe(2)
+    expect(evictedBindingIds).toEqual([])
+    // Neither reset yet: both are fresh, first-time openings.
+    expect(newSessionCount(internals(harnesses[0]).sendCommand)).toBe(0)
+    expect(newSessionCount(internals(harnesses[1]).sendCommand)).toBe(0)
+
+    await openBinding('C') // over cap → evicts idle pinned A, reuses worker 1
+
+    expect(pool.size).toBe(2)
+    expect(evictedBindingIds).toEqual(['A'])
+    // The reassigned worker (formerly A) reset pi before serving C; worker B,
+    // which kept its binding, never did.
+    expect(newSessionCount(internals(harnesses[0]).sendCommand)).toBe(1)
+    expect(newSessionCount(internals(harnesses[1]).sendCommand)).toBe(0)
   })
 })
