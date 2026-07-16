@@ -39,6 +39,7 @@ import { AgentRuntimeKernel } from './kernel'
 import { SqliteAgentStore } from './store'
 import { AgentControlMcpBridge } from './controlMcpBridge'
 import { AgentToolRelayBridge } from './toolRelayBridge'
+import { configuredPiMonoMaxWorkers } from './workerPool'
 import { PiMonoAdapter, PiMonoRuntimeAdapter } from '../codingAgent/piMono'
 import {
   getPiMonoByokEnv,
@@ -186,7 +187,9 @@ export function ensurePiMonoAdapterRegistered(): boolean {
   if (!getPiMonoSession()) return false
   const registry = getAgentAdapterRegistry()
   if (!registry.has('pi-mono')) {
-    registry.register('pi-mono', buildPiMonoRuntimeAdapter)
+    // Cap pi-mono's pool well below the generic default (mac parity): each
+    // pinned worker owns one pi subprocess, so bound concurrent subprocesses.
+    registry.register('pi-mono', buildPiMonoRuntimeAdapter, configuredPiMonoMaxWorkers())
   }
   return true
 }
