@@ -236,3 +236,47 @@ body.bar-body {
   zoom: 0.7;
   width: 480px;
 }
+
+/* Transient push-to-talk feedback chip (BarHintStrip): a detached "notch" that
+   drops just below the collapsed pill to say why a failed hold produced no reply
+   (too-short / dead mic / mic unavailable / transcription failed). macOS shows the
+   same pttHintText inline in the notch (FloatingControlBarView); the narrow
+   Windows pill can't fit a sentence, so it sits underneath. It lives OUTSIDE the
+   morphing surface (a sibling of .bar-slide) so it never touches the pill's size,
+   the orb, or the box morph — and is click-through, so it can't affect the pill
+   hit-rect. Shown only when the hook has a hint/error; the success path renders
+   nothing at all. */
+.bar-hint {
+  position: absolute;
+  top: 44px; /* just below the 36px pill + a small gap */
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 300px;
+  padding: 5px 12px;
+  border-radius: 12px;
+  background: rgba(15, 15, 15, 0.96);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.45);
+  /* Amber, matching the panel's usage-limit notice — the one existing strip tone. */
+  color: rgb(252 211 77 / 0.9);
+  font-size: 11px;
+  line-height: 1.35;
+  text-align: center;
+  pointer-events: none;
+  animation: bar-hint-in 140ms ease;
+}
+@keyframes bar-hint-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, -3px);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, 0);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .bar-hint {
+    animation: none;
+  }
+}

@@ -74,6 +74,12 @@ export type BarChatSurfaceProps = {
    *  input (Mac drops the same copy into the bar as a local assistant message).
    *  The main window raises the shared upgrade modal in parallel. */
   limitNotice?: string | null
+  /** A push-to-talk hold that FAILED while the panel is open (e.g. holding Space in
+   *  the textarea): the friendly hint / error from usePushToTalk. Shown inline above
+   *  the input, next to the limit notice. Collapsed-pill holds surface it below the
+   *  pill instead (BarHintStrip). Self-clearing via the hook's own timers — null in
+   *  the common success case, so nothing renders. */
+  pttNotice?: string | null
   /** PTT gets first dibs on Space in the textarea (hold-to-talk). Returns true
    *  when it consumed the event (skip Enter/typing). */
   pttKeyDown: (e: React.KeyboardEvent) => boolean
@@ -248,6 +254,12 @@ export function BarChatSurface(props: BarChatSurfaceProps): React.JSX.Element {
           Ask Omi anything, or hold Space to talk.
         </div>
       )}
+
+      {props.pttNotice ? (
+        <div role="status" className="px-4 pb-1 pt-1 text-xs leading-relaxed text-amber-300/90">
+          {props.pttNotice}
+        </div>
+      ) : null}
 
       {props.limitNotice ? (
         <div role="status" className="px-4 pb-1 pt-1 text-xs leading-relaxed text-amber-300/90">
