@@ -1,15 +1,18 @@
 import { DatabaseSync } from 'node:sqlite'
 import { describe, expect, it, vi } from 'vitest'
 import {
-  appendLimit,
   applyDenylistShadow,
   buildDenyFilter,
   executeSql,
+  executeReadOnlySql,
   formatRows,
   isReadOnlySql,
   loadScreenshotBase64,
   MAX_ROWS,
+  ROW_FETCH_CAP,
   CELL_CAP,
+  rejectDangerousShape,
+  wrapWithRowCap,
   type QueryRunner
 } from './sql'
 
@@ -64,14 +67,26 @@ describe('isReadOnlySql', () => {
   })
 })
 
-describe('appendLimit', () => {
-  it('appends LIMIT 200 when absent', () => {
-    expect(appendLimit('SELECT * FROM rewind_frames')).toBe('SELECT * FROM rewind_frames LIMIT 200')
-  })
-  it('leaves an existing LIMIT alone and strips a trailing ;', () => {
-    expect(appendLimit('SELECT * FROM rewind_frames LIMIT 5;')).toBe(
-      'SELECT * FROM rewind_frames LIMIT 5'
+describe('wrapWithRowCap', () => {
+  it('wraps the query in an unsuppressible outer LIMIT (cap + 1)', () => {
+    expect(wrapWithRowCap('SELECT * FROM rewind_frames')).toBe(
+      `SELECT * FROM (SELECT * FROM rewind_frames) LIMIT ${ROW_FETCH_CAP}`
     )
+  })
+  it('strips a trailing ; and keeps the outer LIMIT even when the inner query has its own', () => {
+    expect(wrapWithRowCap('SELECT * FROM rewind_frames LIMIT 5;')).toBe(
+      `SELECT * FROM (SELECT * FROM rewind_frames LIMIT 5) LIMIT ${ROW_FETCH_CAP}`
+    )
+  })
+  it('cannot be suppressed by the word "limit" hidden in a string literal or alias', () => {
+    // The old conditional append skipped whenever the raw query merely contained
+    // "limit"; the outer wrap applies regardless.
+    for (const q of [
+      "SELECT ocr_text FROM rewind_frames WHERE ocr_text LIKE '%limit%'",
+      'SELECT app AS limit_col FROM rewind_frames'
+    ]) {
+      expect(wrapWithRowCap(q).endsWith(`) LIMIT ${ROW_FETCH_CAP}`)).toBe(true)
+    }
   })
 })
 
@@ -116,10 +131,12 @@ describe('executeSql', () => {
     expect(executeSql('SELECT 1; SELECT 2', runQuery)).toMatch(/single statement/i)
     expect(runQuery).not.toHaveBeenCalled()
   })
-  it('auto-appends LIMIT and passes the query to the runner', () => {
+  it('wraps the query in an unsuppressible outer LIMIT and passes it to the runner', () => {
     const runQuery = vi.fn(() => ({ columns: ['id'], rows: [[1]] }))
     const out = executeSql('SELECT id FROM rewind_frames', runQuery)
-    expect(runQuery).toHaveBeenCalledWith('SELECT id FROM rewind_frames LIMIT 200')
+    expect(runQuery).toHaveBeenCalledWith(
+      `SELECT * FROM (SELECT id FROM rewind_frames) LIMIT ${ROW_FETCH_CAP}`
+    )
     expect(out).toContain('1 row(s)')
   })
   it('returns an error string (not a throw) when the runner throws', () => {
@@ -134,7 +151,9 @@ describe('executeSql table allowlist', () => {
   it('allows a plain read of rewind_frames', () => {
     const runQuery = vi.fn(() => ({ columns: ['app'], rows: [['Terminal']] }))
     executeSql('SELECT app FROM rewind_frames', runQuery)
-    expect(runQuery).toHaveBeenCalledWith('SELECT app FROM rewind_frames LIMIT 200')
+    expect(runQuery).toHaveBeenCalledWith(
+      `SELECT * FROM (SELECT app FROM rewind_frames) LIMIT ${ROW_FETCH_CAP}`
+    )
   })
   it('allows the FTS mirror table and a rewind_frames↔fts join', () => {
     const runQuery = vi.fn(() => ({ columns: ['id'], rows: [[1]] }))
@@ -184,6 +203,144 @@ describe('executeSql table allowlist', () => {
       expect(executeSql(q, runQuery), q).toMatch(/only the rewind_frames table is queryable/i)
     }
     expect(runQuery).not.toHaveBeenCalled()
+  })
+})
+
+describe('rejectDangerousShape (DoS guard)', () => {
+  it('rejects an unbounded recursive CTE', () => {
+    expect(
+      rejectDangerousShape(
+        'WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r'
+      )
+    ).toMatch(/recursive/i)
+  })
+  it('allows a recursive CTE whose body carries its own LIMIT', () => {
+    expect(
+      rejectDangerousShape(
+        'WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM r LIMIT 100) SELECT * FROM r'
+      )
+    ).toBeNull()
+  })
+  it('allows a non-self-referential WITH RECURSIVE (cannot infinite-loop)', () => {
+    expect(rejectDangerousShape('WITH RECURSIVE r AS (SELECT 1) SELECT * FROM r')).toBeNull()
+  })
+  it('rejects an implicit comma-join cartesian', () => {
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames a, rewind_frames b, rewind_frames c')
+    ).toMatch(/cartesian/i)
+  })
+  it('rejects a CROSS JOIN', () => {
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames a CROSS JOIN rewind_frames b')
+    ).toMatch(/cartesian/i)
+  })
+  it('rejects a JOIN with no ON/USING predicate', () => {
+    expect(
+      rejectDangerousShape('SELECT count(*) FROM rewind_frames a JOIN rewind_frames b')
+    ).toMatch(/cartesian/i)
+  })
+  it('allows a proper JOIN ... ON, a single-table aggregate, and FROM t, (scalar subquery)', () => {
+    expect(
+      rejectDangerousShape(
+        'SELECT f.id FROM rewind_frames f JOIN rewind_frames_fts x ON x.rowid = f.id'
+      )
+    ).toBeNull()
+    expect(rejectDangerousShape('SELECT count(*) FROM rewind_frames')).toBeNull()
+    expect(
+      rejectDangerousShape('SELECT * FROM rewind_frames, (SELECT max(ts) m FROM rewind_frames)')
+    ).toBeNull()
+  })
+})
+
+describe('executeSql DoS protections', () => {
+  it('a "limit" in a string literal does NOT suppress the outer row cap', () => {
+    const runQuery = vi.fn((_sql: string) => ({ columns: ['ocr'], rows: [['x']] }))
+    executeSql("SELECT ocr_text ocr FROM rewind_frames WHERE ocr_text LIKE '%limit%'", runQuery)
+    const sql = runQuery.mock.calls[0][0]
+    expect(sql.endsWith(`) LIMIT ${ROW_FETCH_CAP}`)).toBe(true)
+  })
+  it('rejects a recursive-CTE bomb BEFORE it ever reaches the DB (no hang)', () => {
+    // The runner is a real node:sqlite handle; if the guard let this through it
+    // would loop forever. It must never be called.
+    const db = new DatabaseSync(':memory:')
+    db.exec('CREATE TABLE rewind_frames (id INTEGER)')
+    const runQuery = vi.fn((sql: string) => {
+      const stmt = db.prepare(sql)
+      const rows = stmt.all() as Record<string, unknown>[]
+      const columns = rows.length ? Object.keys(rows[0]) : []
+      return { columns, rows: rows.map((r) => columns.map((c) => r[c])) }
+    })
+    const out = executeSql(
+      'WITH RECURSIVE r AS (SELECT 1 AS x UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r',
+      runQuery
+    )
+    expect(out).toMatch(/recursive/i)
+    expect(runQuery).not.toHaveBeenCalled()
+    db.close()
+  })
+  it('also rejects the column-list recursion form (defense in depth — allowlist layer)', () => {
+    // `r(x) AS (…)` is not recognized as a CTE binding by the table allowlist, so
+    // `r` reads as a disallowed table and the query is rejected there — still no hang.
+    const runQuery = vi.fn(() => ({ columns: [], rows: [] as unknown[][] }))
+    const out = executeSql(
+      'WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r',
+      runQuery
+    )
+    expect(out).toMatch(/^Error:/)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('rejects a cartesian-join aggregate BEFORE it ever reaches the DB (no N³ scan)', () => {
+    const runQuery = vi.fn(() => ({ columns: ['n'], rows: [[0]] }))
+    const out = executeSql(
+      'SELECT count(*) FROM rewind_frames a, rewind_frames b, rewind_frames c',
+      runQuery
+    )
+    expect(out).toMatch(/cartesian/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('flags truncation when more than MAX_ROWS come back (cap + 1 sentinel)', () => {
+    const rows = Array.from({ length: ROW_FETCH_CAP }, (_, i) => [i])
+    const runQuery = vi.fn(() => ({ columns: ['id'], rows }))
+    const out = executeSql('SELECT id FROM rewind_frames', runQuery)
+    expect(out).toContain(`${MAX_ROWS} row(s)`)
+    expect(out).toMatch(/Auto-limited to 200 rows/i)
+  })
+  it('does NOT flag truncation at exactly MAX_ROWS', () => {
+    const rows = Array.from({ length: MAX_ROWS }, (_, i) => [i])
+    const runQuery = vi.fn(() => ({ columns: ['id'], rows }))
+    const out = executeSql('SELECT id FROM rewind_frames', runQuery)
+    expect(out).not.toMatch(/Auto-limited/i)
+  })
+})
+
+describe('executeReadOnlySql DoS protections (agent surface)', () => {
+  const allowlist = new Set(['rewind_frames', 'memories'])
+  it('rejects a recursive-CTE bomb, runner never called', () => {
+    const runQuery = vi.fn(() => ({ columns: [], rows: [] }))
+    const out = executeReadOnlySql(
+      'WITH RECURSIVE r AS (SELECT 1 AS x UNION ALL SELECT x+1 FROM r) SELECT max(x) FROM r',
+      runQuery,
+      allowlist
+    )
+    expect(out).toMatch(/recursive/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('rejects a cartesian join of allowlisted tables, runner never called', () => {
+    const runQuery = vi.fn(() => ({ columns: [], rows: [] }))
+    const out = executeReadOnlySql(
+      'SELECT count(*) FROM memories a, memories b',
+      runQuery,
+      allowlist
+    )
+    expect(out).toMatch(/cartesian/i)
+    expect(runQuery).not.toHaveBeenCalled()
+  })
+  it('still wraps a valid query in the unsuppressible outer LIMIT', () => {
+    const runQuery = vi.fn((_sql: string) => ({ columns: ['n'], rows: [[1]] }))
+    executeReadOnlySql('SELECT count(*) n FROM memories', runQuery, allowlist)
+    expect(runQuery.mock.calls[0][0]).toBe(
+      `SELECT * FROM (SELECT count(*) n FROM memories) LIMIT ${ROW_FETCH_CAP}`
+    )
   })
 })
 
@@ -272,14 +429,19 @@ describe('executeSql under an active denylist', () => {
   it('leaves the query unchanged when the denylist is empty', () => {
     const runQuery = vi.fn(() => ({ columns: ['app'], rows: [['X']] }))
     executeSql('SELECT app FROM rewind_frames', runQuery, [])
-    expect(runQuery).toHaveBeenCalledWith('SELECT app FROM rewind_frames LIMIT 200')
+    expect(runQuery).toHaveBeenCalledWith(
+      `SELECT * FROM (SELECT app FROM rewind_frames) LIMIT ${ROW_FETCH_CAP}`
+    )
   })
   it('shadows rewind_frames with a filtered CTE before running', () => {
     const runQuery = vi.fn((_sql: string) => ({ columns: ['app'], rows: [] as unknown[][] }))
     executeSql('SELECT app FROM rewind_frames', runQuery, ['Signal'])
     const sql = runQuery.mock.calls[0][0]
+    // Shadowed (filtered CTE) AND wrapped in the unsuppressible outer LIMIT.
     expect(sql).toContain('WITH rewind_frames AS (SELECT * FROM main.rewind_frames WHERE')
-    expect(sql).toContain('SELECT app FROM rewind_frames LIMIT 200')
+    expect(sql).toContain('SELECT app FROM rewind_frames')
+    expect(sql.startsWith('SELECT * FROM (WITH rewind_frames AS')).toBe(true)
+    expect(sql.endsWith(`) LIMIT ${ROW_FETCH_CAP}`)).toBe(true)
   })
   it('rejects the FTS mirror (it cannot be shadow-filtered) before running', () => {
     const runQuery = vi.fn()
