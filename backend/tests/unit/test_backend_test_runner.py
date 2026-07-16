@@ -181,3 +181,58 @@ def test_file_isolation_reuses_first_worker_that_finishes(tmp_path):
     assert (control_dir / "fast-finished").is_file()
     assert (control_dir / "reused-finished-worker").is_file()
     assert not (control_dir / "slow-released-by-timeout").exists()
+
+
+def test_file_isolation_reaps_worker_that_dies_before_status(tmp_path):
+    """A worker killed before writing its status must not hang the scheduler.
+
+    Without a liveness check for exited-but-statusless PIDs, the final drain
+    loop spins forever waiting for a file that will never arrive. The runner
+    must detect the dead child, reap it, and fail the suite.
+    """
+
+    selected_tests = tmp_path / "selected-tests.txt"
+    selected_tests.write_text(
+        "tests/unit/test_crash.py\ntests/unit/test_ok.py\n",
+        encoding="utf-8",
+    )
+
+    fake_python = tmp_path / "fake-python"
+    fake_python.write_text(
+        "#!/usr/bin/env bash\n"
+        "set -euo pipefail\n"
+        'test_path="${!#}"\n'
+        'case "$test_path" in\n'
+        "  tests/unit/test_crash.py)\n"
+        # Kill the parent subshell so NO status file is ever written.
+        # This simulates an OOM/signal crash before status handoff.
+        "    kill -9 $PPID\n"
+        "    exit 137\n"
+        "    ;;\n"
+        "  tests/unit/test_ok.py)\n"
+        "    exit 0\n"
+        "    ;;\n"
+        "esac\n",
+        encoding="utf-8",
+    )
+    fake_python.chmod(fake_python.stat().st_mode | stat.S_IXUSR)
+
+    result = subprocess.run(
+        ["bash", str(TEST_RUNNER)],
+        cwd=BACKEND_DIR,
+        env=os.environ
+        | {
+            "PYTHON": str(fake_python),
+            "BACKEND_UNIT_TEST_FILE_LIST": str(selected_tests),
+            "BACKEND_PYTEST_WORKERS": "1",
+        },
+        text=True,
+        capture_output=True,
+        check=False,
+        timeout=10,
+    )
+
+    # The suite must fail, not hang (timeout=10 would raise subprocess.TimeoutExpired).
+    assert result.returncode == 1, result.stderr
+    assert "test_crash.py" in result.stdout
+    assert "worker exited before writing status" in result.stdout

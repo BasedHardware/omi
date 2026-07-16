@@ -103,6 +103,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
 
   active_pids=()
   active_status_files=()
+  active_test_paths=()
   failed_test_paths=()
   failed=0
   status_dir="$(mktemp -d)"
@@ -119,8 +120,11 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     local index
     local pid
     local status_file
+    local test_path
     local still_active=()
     local still_status_files=()
+    local still_test_paths=()
+    local running_pids
 
     # Each file-isolated child writes its status atomically before it exits.
     # Waiting for the oldest PID leaves a worker idle when a newer short test
@@ -128,18 +132,34 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     # soon as *any* worker is available. This is portable to macOS's Bash 3,
     # which lacks `wait -n`.
     set +u
+    # Snapshot running job PIDs once per reap pass.  ``jobs -pr`` lists only
+    # actively-running jobs — a zombie child (exited but not yet waited on) is
+    # NOT listed, so we can distinguish "still computing" from "died before
+    # status handoff" without a blocking ``wait``.
+    running_pids="$(jobs -pr 2>/dev/null || true)"
     for index in "${!active_pids[@]}"; do
       pid="${active_pids[$index]}"
       status_file="${active_status_files[$index]}"
+      test_path="${active_test_paths[$index]}"
       if [[ -f "$status_file" ]]; then
         wait "$pid" || true
-      else
+      elif [[ $'\n'"$running_pids"$'\n' == *$'\n'"$pid"$'\n'* ]]; then
         still_active+=("$pid")
         still_status_files+=("$status_file")
+        still_test_paths+=("$test_path")
+      else
+        # Worker exited before writing its status file (OOM kill, signal,
+        # crash).  Reap it so the scheduler does not spin forever waiting
+        # for a file that will never arrive.
+        wait "$pid" 2>/dev/null || true
+        echo "::error title=Backend unit file failed::$test_path worker exited before writing status"
+        failed_test_paths+=("$test_path")
+        failed=1
       fi
     done
     active_pids=("${still_active[@]}")
     active_status_files=("${still_status_files[@]}")
+    active_test_paths=("${still_test_paths[@]}")
     set -u
   }
 
@@ -169,6 +189,7 @@ if [[ "$use_file_isolation" == "1" || "$use_file_isolation" == "true" ]]; then
     ) &
     active_pids+=("$!")
     active_status_files+=("$status_file")
+    active_test_paths+=("$test_path")
 
     while [[ "$(active_pid_count)" -ge "$worker_count" ]]; do
       reap_finished_children
