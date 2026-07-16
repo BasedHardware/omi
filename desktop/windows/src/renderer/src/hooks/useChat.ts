@@ -57,6 +57,11 @@ const OMI_BASE = import.meta.env.VITE_OMI_API_BASE as string
 // wedged stream can't strand the chat forever.
 export const CHAT_STREAM_TIMEOUT_MS = 180_000
 
+// User-facing copy shown when a turn exceeds CHAT_STREAM_TIMEOUT_MS. Shared by BOTH
+// watchdogs — the legacy /v2/messages catch path and the pi_mono per-turn watchdog —
+// so the two can never drift. Exported so tests key off the same string (no copy drift).
+export const CHAT_STREAM_TIMEOUT_COPY = 'Response took too long. Try again.'
+
 // First-chat readiness copy (#123). Right after sign-in the FIRST turn can race
 // session readiness — on legacy_sse the persisted Firebase user may not be
 // rehydrated yet (auth.currentUser null → `Bearer undefined` → a raw 401 bubble);
@@ -646,6 +651,44 @@ export function useChat(): UseChat {
       }
     }
 
+    // Per-turn watchdog (pi_mono parity with the legacy /v2/messages path). The
+    // kernel IPC (mainChatSend) resolves only on the run's terminal event; a hung
+    // run or a wedged bridge would otherwise leave `sending` latched forever — a
+    // permanent spinner in the Home ask-bar and the bar. Unlike the legacy fetch,
+    // this IPC has NO abort primitive, so we can't unwind the await. Instead, on the
+    // deadline we RECOVER the UX in THIS turn's bubble and INVALIDATE the turn
+    // (exactly as reset() does): the abandoned in-flight send — even if it never
+    // resolves — can then neither overwrite the timeout copy nor re-unlatch, because
+    // every write past the bump is isCurrent()-gated on the pre-bump generation. The
+    // timer is set BEFORE the try so it covers context-gathering + BOTH attempts +
+    // the 600ms retry delay, and is cleared at the top of the finally so a normal
+    // completion cancels it (the success path is otherwise byte-identical).
+    const watchdog = setTimeout(() => {
+      if (!isCurrent()) return
+      // Recover the bubble FIRST (writeAssistant guards on the still-current gen) and
+      // unlatch the spinner + attempt a best-effort server cancel…
+      writeAssistant(CHAT_STREAM_TIMEOUT_COPY)
+      setBusy(false)
+      void window.omi.mainChatCancel(activeKernelRunRef.current ?? '').catch(() => {})
+      // …then invalidate: bump the gen so the abandoned send's late deltas AND its
+      // terminal finally (all gated on the pre-bump `myGen`) are dropped — no double
+      // terminal, no zombie overwrite, no second setBusy. Capture the POST-bump gen
+      // for the local persist so this watchdog's own bump can't cancel its own write
+      // (persistChat re-checks stillValid after an async read in 'infinite' — the
+      // DEFAULT — mode), while an external reset()/switchThread (which bumps again)
+      // still cancels it: the cross-thread guard. INV-CHAT-1: the timeout line is NOT
+      // a real reply, so it is persisted LOCALLY only — never saveDesktopMessage'd.
+      const invalidated = ++genRef.current
+      void persistChat(
+        [
+          ...baseHistory,
+          userMsg,
+          { id: assistantId, role: 'assistant', content: CHAT_STREAM_TIMEOUT_COPY }
+        ],
+        () => genRef.current === invalidated
+      )
+    }, CHAT_STREAM_TIMEOUT_MS)
+
     let errored = false
     let errorLine = ''
     try {
@@ -698,6 +741,11 @@ export function useChat(): UseChat {
       errored = true
       errorLine = friendlyChatError((e as Error).message)
     } finally {
+      // A normal completion (before the deadline) cancels the watchdog. If the
+      // watchdog already fired it bumped the generation, so the isCurrent() block
+      // below is skipped — the recovered timeout state stands and there is no double
+      // terminal. clearTimeout on an already-fired timer is a harmless no-op.
+      clearTimeout(watchdog)
       // Terminal handling runs exactly once, after the FINAL attempt (each attempt
       // already released its own run handle + listener in its own finally). State
       // writes only for the still-current generation (a dismissed turn was already
@@ -1062,7 +1110,7 @@ export function useChat(): UseChat {
         // transport error ("Failed to fetch") when offline — map it to friendly,
         // plain-English copy instead of surfacing the raw string in a bubble.
         assistantText = timedOut
-          ? 'Response took too long. Try again.'
+          ? CHAT_STREAM_TIMEOUT_COPY
           : friendlyChatError((e as Error).message)
         finalMsg = assistantMsg(assistantText)
         renderAssistant(finalMsg)
