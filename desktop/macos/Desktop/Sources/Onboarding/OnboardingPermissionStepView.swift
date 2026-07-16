@@ -69,10 +69,14 @@ struct OnboardingPermissionStepView: View {
             Spacer()
           }
 
-          Text(reasonDetail)
-            .font(.system(size: 14))
-            .foregroundColor(OmiColors.textSecondary)
-            .lineSpacing(4)
+          // Skip the reason line when it just repeats the page description
+          // (the Screen Recording step's copy was accidentally duplicated).
+          if reasonDetail != description {
+            Text(reasonDetail)
+              .font(.system(size: 14))
+              .foregroundColor(OmiColors.textSecondary)
+              .lineSpacing(4)
+          }
 
           if permissionType == "screen_recording", appState.isScreenRecordingStale {
             Text("macOS still isn’t granting screen capture to this build. In Screen & System Audio Recording, toggle Omi Dev off, then on again, then quit and reopen the app.")
