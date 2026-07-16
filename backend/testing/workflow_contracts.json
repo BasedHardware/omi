@@ -193,7 +193,8 @@
         "config/deployment-setting-classification.json",
         "firestore.indexes.json",
         ".github/workflows/gcp_backend.yml",
-        ".github/workflows/gcp_backend_auto_dev.yml"
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_firestore_indexes.yml"
       ],
       "tests": [
         "tests/unit/test_reconcile_firestore_indexes.py",
@@ -203,6 +204,7 @@
       "checks": [],
       "invariants": [
         "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
+        "Firestore schema writes use only the manual main-scoped migration workflow and serialize with backend deployment readiness",
         "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
         "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
       ]
