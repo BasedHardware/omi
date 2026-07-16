@@ -220,12 +220,12 @@ checks:
     reason: "#9843 Ticket 05: enforce pinned swift-format lint on all first-party Swift"
   - id: desktop-swiftlint-config
     command: ["python3", ".github/scripts/test_swiftlint_config.py"]
-    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", ".github/scripts/test_swiftlint_config.py"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh", ".github/scripts/test_swiftlint_config.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 06: SwiftLint safety config, plugin attachment, and baseline contract"
   - id: desktop-swiftlint
     command: ["bash", "desktop/macos/scripts/swiftlint-wrapper.sh", "lint"]
-    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/swiftlint-wrapper.sh"]
+    triggers: ["desktop/macos/Desktop/.swiftlint.yml", "desktop/macos/Desktop/.swiftlint-baseline.json", "desktop/macos/Desktop/Sources/**/*.swift", "desktop/macos/Desktop/Tests/**/*.swift", "desktop/macos/scripts/prepare-swiftlint-baseline.py", "desktop/macos/scripts/swiftlint-wrapper.sh"]
     lanes: ["local", "ci"]
     platforms: ["macos"]
     reason: "#9843 Ticket 06: pinned SwiftLint must reject new safety violations outside the committed baseline"
