@@ -167,6 +167,14 @@ let releaseWanted = false
 export async function warmPttMic(): Promise<void> {
   releaseWanted = false
   if (warmGraph) return
+  // A rebuild ladder (device-change A7a / silent-mic A7b) already owns graph
+  // creation and installs the fresh warm graph when it settles. Starting a second
+  // createGraph here races it — whichever resolves last wins `warmGraph` and ORPHANS
+  // the other (a live mic stream + AudioContext + ScriptProcessorNode still wired to
+  // destination that is never torn down). Under PTT stress a key-down warm colliding
+  // with a rebuild leaks capture graphs until the audio service crashes. Defer to the
+  // in-flight rebuild — releaseWanted is cleared above, so it keeps the graph it makes.
+  if (reconfiguring) return
   warmPromise ??= createGraph(true)
   try {
     const graph = await warmPromise
