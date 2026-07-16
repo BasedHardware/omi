@@ -350,12 +350,12 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
-  func testHowDidYouHearKeepsOtherLastAfterShuffle() {
-    for _ in 0..<20 {
-      let sources = OnboardingHowDidYouHearStepView.displaySources()
-      XCTAssertEqual(sources.last, "Other")
-      XCTAssertEqual(sources.sorted(), OnboardingHowDidYouHearStepView.sources.sorted())
-    }
+  func testHowDidYouHearKeepsOtherLast() {
+    XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last, "Other")
+    XCTAssertEqual(
+      OnboardingHowDidYouHearStepView.sources.count,
+      Set(OnboardingHowDidYouHearStepView.sources).count,
+      "duplicate chips would break selection")
   }
 
   private func onboardingSourceFile(_ name: String) throws -> String {

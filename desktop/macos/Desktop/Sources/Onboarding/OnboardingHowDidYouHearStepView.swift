@@ -9,7 +9,6 @@ struct OnboardingHowDidYouHearStepView: View {
   let onForceComplete: (() -> Void)?
 
   @AppStorage("onboardingHowDidYouHearSource") private var selectedSource: String = ""
-  @State private var shuffledSources: [String] = []
   /// True when the step appeared with an answer already saved (a revisit).
   /// Only the first-ever selection auto-advances; revisits use Continue so
   /// changing your saved answer doesn't yank you forward.
@@ -19,22 +18,17 @@ struct OnboardingHowDidYouHearStepView: View {
   static let sources = [
     "Social media",
     "YouTube",
-    "Newsletter",
-    "AI chat",
-    "Search engine",
-    "Event",
     "Friend",
-    "Colleague",
+    "Search engine",
+    "AI chat",
     "Podcast",
+    "Colleague",
     "Article",
     "Product Hunt",
+    "Newsletter",
+    "Event",
     "Other",
   ]
-
-  /// Chips shown in random order, except "Other" always stays last.
-  static func displaySources() -> [String] {
-    sources.filter { $0 != "Other" }.shuffled() + ["Other"]
-  }
 
   var body: some View {
     OnboardingStepScaffold(
@@ -48,7 +42,7 @@ struct OnboardingHowDidYouHearStepView: View {
     ) {
       VStack(alignment: .leading, spacing: OmiSpacing.md) {
         FlowLayout(spacing: OmiSpacing.sm) {
-          ForEach(shuffledSources, id: \.self) { source in
+          ForEach(Self.sources, id: \.self) { source in
             OnboardingSelectableChip(
               title: source,
               isSelected: selectedSource == source
@@ -83,9 +77,6 @@ struct OnboardingHowDidYouHearStepView: View {
       .frame(maxWidth: .infinity, alignment: .leading)
       .onAppear {
         hadSelectionOnAppear = !selectedSource.isEmpty
-        if shuffledSources.isEmpty {
-          shuffledSources = Self.displaySources()
-        }
       }
       .onDisappear {
         advanceTask?.cancel()
