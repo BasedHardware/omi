@@ -105,6 +105,7 @@ import { registerFocusAssistant } from './assistants/focus/register'
 import { registerInsightAssistant } from './assistants/insight/register'
 import { registerMemoryAssistant } from './assistants/memory/register'
 import { registerTaskAssistant, bringUpTaskEmbeddingIndex } from './assistants/tasks/register'
+import { registerGoalGeneration } from './assistants/goals/register'
 import { startRendererServer, rendererBaseUrl } from './rendererServer'
 import { startRewindCapture } from './rewind/captureService'
 import { startRewindOcr } from './rewind/ocrService'
@@ -1042,6 +1043,11 @@ app.whenReady().then(async () => {
     // PR-A primitives were shipped but never wired until now.
     registerTaskAssistant()
     bringUpTaskEmbeddingIndex()
+    // Track 3 (Goals, Wave C): client-side goal auto-generation. NOT a coordinator
+    // peer — it's a time-triggered job (no screen frames). Registers the manual
+    // Suggest IPC and starts the periodic scheduler; both no-op until a session is
+    // relayed and the goalAutoGenerationEnabled toggle is on (default OFF).
+    registerGoalGeneration()
   })
 
   // Bar (replaces the old floating overlay): wire IPC + the global summon

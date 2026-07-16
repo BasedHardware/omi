@@ -46,7 +46,8 @@ import type {
   TaskCreateFields,
   TaskUpdateFields,
   TaskDashboardSlices,
-  LiveNote
+  LiveNote,
+  GoalGenerateResult
 } from '../shared/types'
 import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -204,6 +205,13 @@ const omi: OmiBridgeApi = {
     const listener = (): void => cb()
     ipcRenderer.on('tasks:changed', listener)
     return () => ipcRenderer.removeListener('tasks:changed', listener)
+  },
+  goalsGenerateNow: () =>
+    ipcRenderer.invoke('goals:generateNow') as Promise<GoalGenerateResult>,
+  onGoalsChanged: (cb: () => void) => {
+    const listener = (): void => cb()
+    ipcRenderer.on('goals:changed', listener)
+    return () => ipcRenderer.removeListener('goals:changed', listener)
   },
   // Dev/QA only (handler registered on dev builds): force one Focus analysis of
   // the latest captured frame, so the pipeline + halo can be exercised without

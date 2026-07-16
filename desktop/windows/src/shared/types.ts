@@ -795,6 +795,12 @@ export type OmiBridgeApi = {
   /** main → renderer: the local task store changed (optimistic write or a
    *  background sync landed). Returns an unsubscribe fn. */
   onTasksChanged: (cb: () => void) => () => void
+  /** Manual goal generation (the Goals "Suggest" button). Client-side: assembles
+   *  the on-device context bundle and generates one goal via the Gemini proxy,
+   *  creating it directly on the backend. Returns the outcome to toast. */
+  goalsGenerateNow: () => Promise<GoalGenerateResult>
+  /** main → renderer: a goal was created/removed (auto-gen or manual). Re-fetch. */
+  onGoalsChanged: (cb: () => void) => () => void
   /** Dev/QA only: force one Focus analysis of the latest frame. Resolves
    *  `{ ok:false, reason:'no-frame' }` when nothing has been captured yet, and
    *  the handler is absent entirely on production builds. */
@@ -2139,6 +2145,15 @@ export type WhatsNewPayload = {
   version: string
   changes: string[]
 }
+
+// Outcome of a manual goal generation (goals:generateNow). Mirrors the main-side
+// GenerateResult (assistants/goals/generate.ts) across the IPC boundary.
+export type GoalGenerateResult =
+  | { status: 'created'; goalId: string; title: string }
+  | {
+      status: 'skipped'
+      reason: 'no_session' | 'insufficient_context' | 'invalid_suggestion' | 'stale' | 'error'
+    }
 
 export type InsightSettings = {
   enabled: boolean // default ON
