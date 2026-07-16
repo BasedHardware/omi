@@ -1,26 +1,19 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
-import {
-  Check,
-  ChevronRight,
-  Copy,
-  FolderInput,
-  FolderMinus,
-  Link2,
-  Pencil,
-  Trash2
-} from 'lucide-react'
+import { ChevronRight, Copy, FolderInput, Link2, Pencil, Trash2 } from 'lucide-react'
 import type { ConversationFolder } from '../../../../shared/types'
 import type { ConversationRow } from '../../lib/pageCache'
+import { isCloudBacked } from '../../lib/conversations/filtering'
 import { getConversationShareLink } from '../../lib/conversations/mutations'
 import { loadRowTranscript } from '../../lib/conversations/transcript'
 import { toast } from '../../lib/toast'
-import { DEFAULT_FOLDER_COLOR } from './folderColors'
+import { FolderPickerList } from './FolderPickerList'
 
 const EDGE = 8 // px minimum distance from the viewport edge
 const GAP = 4 // px between the parent item and the folder submenu
 const MENU_WIDTH = 224 // px — must match the w-56 below
 const SUB_WIDTH = 208 // px — must match the w-52 below
+const SUB_MAX_HEIGHT = 240 // px — vertical clearance kept for the max-h-72 submenu
 
 // Right-click context menu for a conversation row — the Windows-idiomatic
 // affordance (File Explorer et al.) mirroring the macOS row's `.contextMenu`.
@@ -31,13 +24,12 @@ const SUB_WIDTH = 208 // px — must match the w-52 below
 // Escape, or choosing an item. `surface-panel` is opaque so nothing shows through.
 //
 // Item order matches Mac (ConversationRowView.swift): Copy Transcript, Copy Link,
-// divider, Edit Title, Move to Folder ▸, divider, Delete. `cloud` gates the two
-// backend-id actions (Copy Link, Move to Folder) exactly like the row's hover
-// buttons — a local-only row omits them rather than showing a broken action.
+// divider, Edit Title, Move to Folder ▸, divider, Delete. isCloudBacked(row) gates
+// the two backend-id actions (Copy Link, Move to Folder) exactly like the row's
+// hover buttons — a local-only row omits them rather than showing a broken action.
 export function ConversationRowContextMenu({
   row,
   folders,
-  cloud,
   position,
   onClose,
   onEditTitle,
@@ -46,18 +38,19 @@ export function ConversationRowContextMenu({
 }: {
   row: ConversationRow
   folders: ConversationFolder[]
-  cloud: boolean
   position: { x: number; y: number }
   onClose: () => void
   onEditTitle: () => void
   onMoveToFolder: (folderId: string | null) => void
   onDelete: () => void
 }): React.JSX.Element {
+  const cloud = isCloudBacked(row)
   const panelRef = useRef<HTMLDivElement>(null)
   const moveItemRef = useRef<HTMLButtonElement>(null)
   const [pos, setPos] = useState<{ top: number; left: number } | null>(null)
   const [submenuOpen, setSubmenuOpen] = useState(false)
   const [subPos, setSubPos] = useState<{ top: number; left: number } | null>(null)
+  const closeSubmenu = (): void => setSubmenuOpen(false)
 
   // Clamp the menu to the viewport from the cursor point. Runs before paint so
   // the panel never flashes at an off-screen position.
@@ -83,7 +76,7 @@ export function ConversationRowContextMenu({
       toRight + SUB_WIDTH > window.innerWidth - EDGE
         ? Math.max(EDGE, r.left - GAP - SUB_WIDTH)
         : toRight
-    const top = Math.max(EDGE, Math.min(r.top, window.innerHeight - EDGE - 240))
+    const top = Math.max(EDGE, Math.min(r.top, window.innerHeight - EDGE - SUB_MAX_HEIGHT))
     setSubPos({ top, left })
   }, [submenuOpen, folders.length])
 
@@ -98,26 +91,17 @@ export function ConversationRowContextMenu({
   // Copy actions fire-and-forget: close the menu first (so it can't linger over
   // the async work), then copy and confirm via toast. Mac copies silently; a
   // toast is the Windows-idiomatic confirmation now that the menu is gone.
-  const copyTranscript = (): void => {
+  const copyToClipboard = (label: string, load: () => Promise<string>): void => {
     onClose()
     void (async (): Promise<void> => {
       try {
-        await navigator.clipboard.writeText(await loadRowTranscript(row))
-        toast('Transcript copied', { tone: 'success' })
+        await navigator.clipboard.writeText(await load())
+        toast(`${label} copied`, { tone: 'success' })
       } catch (e) {
-        toast('Could not copy transcript', { tone: 'error', body: (e as Error).message })
-      }
-    })()
-  }
-
-  const copyLink = (): void => {
-    onClose()
-    void (async (): Promise<void> => {
-      try {
-        await navigator.clipboard.writeText(await getConversationShareLink(row.id))
-        toast('Link copied', { tone: 'success' })
-      } catch (e) {
-        toast('Could not copy link', { tone: 'error', body: (e as Error).message })
+        toast(`Could not copy ${label.toLowerCase()}`, {
+          tone: 'error',
+          body: (e as Error).message
+        })
       }
     })()
   }
@@ -127,8 +111,11 @@ export function ConversationRowContextMenu({
     onMoveToFolder(folderId)
   }
 
-  const itemClass =
-    'flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white'
+  // Shared item chrome; `danger` swaps the hover text color for Delete.
+  const itemClass = (variant: 'default' | 'danger' = 'default'): string =>
+    `flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-white/80 transition-colors hover:bg-white/10 ${
+      variant === 'danger' ? 'hover:text-red-300' : 'hover:text-white'
+    }`
   const divider = <div className="my-1 border-t border-white/10" />
 
   return createPortal(
@@ -154,17 +141,17 @@ export function ConversationRowContextMenu({
         aria-label="Conversation actions"
         className="surface-panel fixed z-[200] w-56 p-1.5"
         style={{
-          top: pos?.top ?? position.y,
-          left: pos?.left ?? position.x,
+          top: pos?.top ?? 0,
+          left: pos?.left ?? 0,
           visibility: pos ? 'visible' : 'hidden'
         }}
         onClick={(e) => e.stopPropagation()}
       >
         <button
           role="menuitem"
-          onMouseEnter={() => setSubmenuOpen(false)}
-          onClick={copyTranscript}
-          className={itemClass}
+          onMouseEnter={closeSubmenu}
+          onClick={() => copyToClipboard('Transcript', () => loadRowTranscript(row))}
+          className={itemClass()}
         >
           <Copy className="h-4 w-4 shrink-0 text-white/55" />
           Copy Transcript
@@ -173,9 +160,9 @@ export function ConversationRowContextMenu({
         {cloud && (
           <button
             role="menuitem"
-            onMouseEnter={() => setSubmenuOpen(false)}
-            onClick={copyLink}
-            className={itemClass}
+            onMouseEnter={closeSubmenu}
+            onClick={() => copyToClipboard('Link', () => getConversationShareLink(row.id))}
+            className={itemClass()}
           >
             <Link2 className="h-4 w-4 shrink-0 text-white/55" />
             Copy Link
@@ -186,12 +173,12 @@ export function ConversationRowContextMenu({
 
         <button
           role="menuitem"
-          onMouseEnter={() => setSubmenuOpen(false)}
+          onMouseEnter={closeSubmenu}
           onClick={() => {
             onClose()
             onEditTitle()
           }}
-          className={itemClass}
+          className={itemClass()}
         >
           <Pencil className="h-4 w-4 shrink-0 text-white/55" />
           Edit Title
@@ -205,7 +192,7 @@ export function ConversationRowContextMenu({
             aria-expanded={submenuOpen}
             onMouseEnter={() => setSubmenuOpen(true)}
             onClick={() => setSubmenuOpen((o) => !o)}
-            className={itemClass}
+            className={itemClass()}
           >
             <FolderInput className="h-4 w-4 shrink-0 text-white/55" />
             <span className="flex-1">Move to Folder</span>
@@ -217,12 +204,12 @@ export function ConversationRowContextMenu({
 
         <button
           role="menuitem"
-          onMouseEnter={() => setSubmenuOpen(false)}
+          onMouseEnter={closeSubmenu}
           onClick={() => {
             onClose()
             onDelete()
           }}
-          className="flex w-full items-center gap-2.5 rounded-lg px-2.5 py-2 text-left text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-red-300"
+          className={itemClass('danger')}
         >
           <Trash2 className="h-4 w-4 shrink-0 text-white/55" />
           Delete
@@ -244,42 +231,11 @@ export function ConversationRowContextMenu({
           }}
           onClick={(e) => e.stopPropagation()}
         >
-          {folders.length === 0 && (
-            <div className="px-2.5 py-2 text-xs text-white/45">No folders yet</div>
-          )}
-          {folders.map((f) => (
-            <button
-              key={f.id}
-              role="menuitem"
-              onClick={(e) => {
-                e.stopPropagation()
-                chooseFolder(f.id)
-              }}
-              className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-white/80 transition-colors hover:bg-white/10 hover:text-white"
-            >
-              <span
-                className="h-2 w-2 shrink-0 rounded-full"
-                style={{ backgroundColor: f.color ?? DEFAULT_FOLDER_COLOR }}
-              />
-              <span className="min-w-0 flex-1 truncate">{f.name}</span>
-              {row.folderId === f.id && <Check className="h-3.5 w-3.5 shrink-0 text-white" />}
-            </button>
-          ))}
-          {row.folderId != null && (
-            <div className="mt-1.5 border-t border-white/10 pt-1.5">
-              <button
-                role="menuitem"
-                onClick={(e) => {
-                  e.stopPropagation()
-                  chooseFolder(null)
-                }}
-                className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-white/60 transition-colors hover:bg-white/10 hover:text-white"
-              >
-                <FolderMinus className="h-3.5 w-3.5 shrink-0" />
-                Remove from folder
-              </button>
-            </div>
-          )}
+          <FolderPickerList
+            folders={folders}
+            currentFolderId={row.folderId}
+            onChoose={chooseFolder}
+          />
         </div>
       )}
     </>,

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useCallback, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { Check, Loader2, Pencil, Star, Trash2 } from 'lucide-react'
 import type { ConversationRow } from '../../lib/pageCache'
@@ -118,6 +118,9 @@ export function ConversationListRow({
     setDraft(row.title)
     setEditing(true)
   }
+  // Stable identity so the menu's Escape listener doesn't re-subscribe on every
+  // parent re-render (the list re-renders on live local-store updates).
+  const closeMenu = useCallback(() => setMenuPos(null), [])
 
   // --- Optimistic "Processing" placeholder (no server doc yet). ---
   if (row.pending) {
@@ -277,9 +280,8 @@ export function ConversationListRow({
         <ConversationRowContextMenu
           row={row}
           folders={folders}
-          cloud={cloud}
           position={menuPos}
-          onClose={() => setMenuPos(null)}
+          onClose={closeMenu}
           onEditTitle={beginRename}
           onMoveToFolder={(folderId) => onMoveToFolder(row, folderId)}
           onDelete={() => onDelete(row)}
