@@ -1,53 +1,79 @@
 import Foundation
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
 
-private extension APIClient {
-  func setOwnerBoundTestAuthHeader(_ header: String) {
+extension APIClient {
+  fileprivate func setOwnerBoundTestAuthHeader(_ header: String) {
     testAuthHeader = header
   }
 }
 
-private actor AuthorizedToolRequestGate {
+private final class AuthorizedToolRequestGate: @unchecked Sendable {
   private struct RequestWaiter {
     let path: String
     let continuation: CheckedContinuation<URLRequest, Never>
   }
 
+  private let lock = NSLock()
   private var pendingProtocols: [AuthorizedToolOwnerURLProtocol] = []
   private var selectedProtocols: [String: AuthorizedToolOwnerURLProtocol] = [:]
   private var requestWaiters: [RequestWaiter] = []
 
-  func reset() {
-    pendingProtocols.removeAll()
-    selectedProtocols.removeAll()
-    requestWaiters.removeAll()
+  func reset() async {
+    lock.withLock {
+      pendingProtocols.removeAll()
+      selectedProtocols.removeAll()
+      requestWaiters.removeAll()
+    }
   }
 
+  /// Synchronous so `URLProtocol.startLoading()` (nonisolated) can register itself without
+  /// spawning a `Task`/crossing an actor boundary, which trips Swift 6 region-based sendability
+  /// for the URLProtocol instance (shared with the URL-loading infrastructure). State is
+  /// serialized by `lock`; continuations are resumed outside the lock to avoid re-entrancy.
   func receive(_ urlProtocol: AuthorizedToolOwnerURLProtocol) {
-    pendingProtocols.append(urlProtocol)
-    let path = urlProtocol.request.url?.path ?? ""
-    if let index = requestWaiters.firstIndex(where: { $0.path == path }) {
-      let waiter = requestWaiters.remove(at: index)
-      selectedProtocols[path] = urlProtocol
+    var toResume: RequestWaiter?
+    lock.withLock {
+      pendingProtocols.append(urlProtocol)
+      let path = urlProtocol.request.url?.path ?? ""
+      if let index = requestWaiters.firstIndex(where: { $0.path == path }) {
+        toResume = requestWaiters.remove(at: index)
+        selectedProtocols[path] = urlProtocol
+      }
+    }
+    if let waiter = toResume {
       waiter.continuation.resume(returning: urlProtocol.request)
     }
   }
 
   func waitForRequest(path: String) async -> URLRequest {
-    if let pendingProtocol = pendingProtocols.last(where: { $0.request.url?.path == path }) {
-      selectedProtocols[path] = pendingProtocol
-      return pendingProtocol.request
-    }
-    return await withCheckedContinuation { continuation in
-      requestWaiters.append(RequestWaiter(path: path, continuation: continuation))
+    await withCheckedContinuation { continuation in
+      var immediate: URLRequest?
+      lock.withLock {
+        if let pendingProtocol = pendingProtocols.last(where: { $0.request.url?.path == path }) {
+          selectedProtocols[path] = pendingProtocol
+          immediate = pendingProtocol.request
+        } else {
+          requestWaiters.append(RequestWaiter(path: path, continuation: continuation))
+        }
+      }
+      if let request = immediate {
+        continuation.resume(returning: request)
+      }
     }
   }
 
-  func succeed(path: String, with body: String) {
-    guard let pendingProtocol = selectedProtocols.removeValue(forKey: path) else { return }
-    pendingProtocols.removeAll { $0 === pendingProtocol }
+  func succeed(path: String, with body: String) async {
+    let pendingProtocol: AuthorizedToolOwnerURLProtocol? = lock.withLock {
+      let proto = selectedProtocols.removeValue(forKey: path)
+      if let proto {
+        pendingProtocols.removeAll { $0 === proto }
+      }
+      return proto
+    }
+    guard let pendingProtocol else { return }
     let response = HTTPURLResponse(
       url: pendingProtocol.request.url!,
       statusCode: 200,
@@ -89,9 +115,7 @@ private final class AuthorizedToolOwnerURLProtocol: URLProtocol, @unchecked Send
   override class func canonicalRequest(for request: URLRequest) -> URLRequest { request }
 
   override func startLoading() {
-    Task {
-      await Self.gate.receive(self)
-    }
+    Self.gate.receive(self)
   }
 
   override func stopLoading() {}
@@ -140,14 +164,12 @@ private actor PermissionCallbackBox<Value: Sendable> {
   }
 }
 
-@MainActor
-final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
+@MainActor final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   private var originalAuthOwner: String?
   private var originalOwnerOverride: String?
   private var originalOwnerBackup: String?
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     originalAuthOwner = UserDefaults.standard.string(forKey: .authUserId)
     originalOwnerOverride = UserDefaults.standard.string(forKey: .automationOwnerOverride)
     originalOwnerBackup = UserDefaults.standard.string(forKey: .automationOwnerABackup)
@@ -156,7 +178,6 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
   override func tearDown() async throws {
     await restoreOriginalOwnerDefaults()
     await AuthorizedToolOwnerURLProtocol.gate.reset()
-    try await super.tearDown()
   }
 
   func testMemoryReadRejectsPrivateResponseAfterMidFlightAccountSwitch() async {
@@ -235,13 +256,15 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   func testRealtimeHigherModelNeverReleasesOwnerAContextAfterMidFlightAccountSwitch() async {
     let client = await makeClient()
-    let privateBody: [String: Any] = [
-      "messages": [[
-        "role": "user",
-        "content": "owner-a-private-query\nowner-a-private-about-user",
-      ]]
-    ]
     let operation = Task { @MainActor in
+      let privateBody: [String: Any] = [
+        "messages": [
+          [
+            "role": "user",
+            "content": "owner-a-private-query\nowner-a-private-about-user",
+          ]
+        ]
+      ]
       do {
         _ = try await client.askHigherModel(
           body: privateBody,
@@ -332,8 +355,9 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   func testDetachedPermissionEffectsStayRevokedAcrossSameOwnerSessionReplacement() async {
     await establishStandardOwner("owner-a")
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: "owner-a")
+    guard
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: "owner-a")
     else {
       XCTFail("owner-a authorization snapshot was not available")
       return
@@ -420,8 +444,9 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
 
   func testSuspendedPhysicalEffectStaysRevokedAcrossSameOwnerSessionReplacement() async {
     await establishStandardOwner("owner-a")
-    guard let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: "owner-a")
+    guard
+      let authorization = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: "owner-a")
     else {
       XCTFail("owner-a authorization snapshot was not available")
       return
@@ -565,7 +590,8 @@ final class AuthorizedToolOwnerBoundAuthTests: XCTestCase {
     let authOwner = originalAuthOwner
     let ownerOverride = originalOwnerOverride
     let ownerBackup = originalOwnerBackup
-    let effectiveOwner = ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
+    let effectiveOwner =
+      ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
       ? ownerOverride
       : authOwner
     // Force one distinct completed generation first so even an authority that

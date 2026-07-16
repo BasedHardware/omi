@@ -6,6 +6,7 @@ app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/Chat/ChatDraftStore.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AIResponseView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/ClickThroughView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AskAIInputView.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/DelayedActionScheduler.swift
@@ -27,7 +28,7 @@ covers:
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
+  - desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift
   - desktop/macos/Desktop/Sources/DesktopDiagnosticsManager.swift
   - desktop/macos/Desktop/Sources/Generated/GeneratedRealtimeTools.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/FloatingBackgroundModifier.swift

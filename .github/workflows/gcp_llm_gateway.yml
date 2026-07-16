@@ -94,6 +94,7 @@ jobs:
       - name: Deploy LLM Gateway to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}

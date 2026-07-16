@@ -66,7 +66,8 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
       let src = try sourceFile(path)
       XCTAssertNil(
         src.range(
-          of: "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
+          of:
+            "openScreenRecordingPreferences\\([\\s\\S]{0,240}(requestAllScreenCapturePermissions|triggerScreenRecordingPermission)",
           options: .regularExpression),
         "\(path) still opens Settings before requesting screen-recording access")
     }

@@ -227,15 +227,18 @@ actor APIClient {
     let (data, response) = try await session.data(for: request)
     try validateExpectedOwner(authPolicy)
     guard let httpResponse = response as? HTTPURLResponse else {
-      throw CredentialHealthError.backendTransient(statusCode: nil, message: APIError.invalidResponse.localizedDescription)
+      throw CredentialHealthError.backendTransient(
+        statusCode: nil, message: APIError.invalidResponse.localizedDescription)
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      guard let retry = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: false,
-        authPolicy: authPolicy
-      ) else {
+      guard
+        let retry = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: false,
+          authPolicy: authPolicy
+        )
+      else {
         throw CredentialHealthError.requiresLogin(message: "Please sign in again to use voice responses.")
       }
       do {
@@ -273,7 +276,8 @@ actor APIClient {
 
     let resp = try decoder.decode(Resp.self, from: data)
     guard !resp.token.isEmpty else {
-      throw CredentialHealthError.backendTransient(statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
+      throw CredentialHealthError.backendTransient(
+        statusCode: httpResponse.statusCode, message: "Realtime token was empty.")
     }
     return resp.token
   }
@@ -444,11 +448,13 @@ actor APIClient {
       if !retriedAuth, authPolicy.recordsAuthRetryTelemetry {
         DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "retrying")
       }
-      guard let retryRequest = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: retriedAuth,
-        authPolicy: authPolicy
-      ) else {
+      guard
+        let retryRequest = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: retriedAuth,
+          authPolicy: authPolicy
+        )
+      else {
         if authPolicy.recordsAuthRetryTelemetry {
           DesktopDiagnosticsManager.shared.recordApiAuthRetry(endpoint: endpoint, outcome: "unauthorized")
         }
@@ -1041,19 +1047,20 @@ struct ServerConversation: Codable, Identifiable, Equatable {
   }
 
   // Date helpers shared with Event/Structured adapters.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String, decoder: Decoder) throws -> Date {
     if let d = fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s) { return d }
-    throw DecodingError.dataCorrupted(.init(
-      codingPath: decoder.codingPath,
-      debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
-    ))
+    throw DecodingError.dataCorrupted(
+      .init(
+        codingPath: decoder.codingPath,
+        debugDescription: "Conversation.created_at is not a valid ISO8601 date: \(s)"
+      ))
   }
 
   private static func parseOptionalDate(_ s: String?, decoder: Decoder) throws -> Date? {
@@ -1206,7 +1213,10 @@ struct Structured: Codable, Equatable {
 
   func encode(to encoder: Encoder) throws {
     let actionItemsWire = actionItems.map {
-      OmiAPI.ActionItem(candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed, completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description, dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
+      OmiAPI.ActionItem(
+        candidateAction: nil, captureConfidence: nil, captureKind: nil, captureOwner: nil, completed: $0.completed,
+        completedAt: nil, concreteDeliverable: nil, conversationId: nil, createdAt: nil, description_: $0.description,
+        dueAt: nil, ownershipConfidence: nil, targetTaskId: nil, updatedAt: nil)
     }
     let eventsWire = events.map {
       OmiAPI.Event(
@@ -1328,11 +1338,14 @@ struct Event: Codable, Identifiable, Equatable {
     }
 
     enum LegacyKeys: String, CodingKey {
-      case title, start, startsAt = "starts_at", duration, description, created
+      case title, start
+      case startsAt = "starts_at"
+      case duration, description, created
     }
     let container = try decoder.container(keyedBy: LegacyKeys.self)
     self.title = try container.decode(String.self, forKey: .title)
-    let startString = try container.decodeIfPresent(String.self, forKey: .start)
+    let startString =
+      try container.decodeIfPresent(String.self, forKey: .start)
       ?? container.decodeIfPresent(String.self, forKey: .startsAt)
     self.startsAt = startString.flatMap(Self.parseDate) ?? Date()
     self.duration = try container.decodeIfPresent(Int.self, forKey: .duration) ?? 0
@@ -1353,12 +1366,12 @@ struct Event: Codable, Identifiable, Equatable {
   }
 
   // Date helpers — reuse the APIClient decoder's ISO8601-with-fractional strategy.
-  private static let fractionalFormatter: ISO8601DateFormatter = {
+  private nonisolated(unsafe) static let fractionalFormatter: ISO8601DateFormatter = {
     let f = ISO8601DateFormatter()
     f.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
     return f
   }()
-  private static let standardFormatter = ISO8601DateFormatter()
+  private nonisolated(unsafe) static let standardFormatter = ISO8601DateFormatter()
 
   private static func parseDate(_ s: String) -> Date? {
     fractionalFormatter.date(from: s) ?? standardFormatter.date(from: s)
@@ -1773,7 +1786,8 @@ private enum ServerMemoryAliasDecodeError {
     DecodingError.dataCorrupted(
       DecodingError.Context(
         codingPath: codingPath,
-        debugDescription: "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
+        debugDescription:
+          "Conflicting ServerMemory aliases: \(firstField)=\(firstValue) differs from \(secondField)=\(secondValue)"
       )
     )
   }
@@ -1857,11 +1871,11 @@ struct ServerMemory: Decodable, Identifiable {
     let idValue = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id)
     let memoryIdValue = try wire?.memoryId ?? container.decodeIfPresent(String.self, forKey: .memoryId)
     switch (idValue, memoryIdValue) {
-    case let (.some(id), .some(memoryId)) where id != memoryId:
+    case (.some(let id), .some(let memoryId)) where id != memoryId:
       self.id = id
-    case let (.some(id), _):
+    case (.some(let id), _):
       self.id = id
-    case let (_, .some(memoryId)):
+    case (_, .some(let memoryId)):
       self.id = memoryId
     case (.none, .none):
       throw DecodingError.keyNotFound(
@@ -1888,10 +1902,12 @@ struct ServerMemory: Decodable, Identifiable {
     // layer / tier / memory_tier alias resolution. Prefer wire DTO fields
     // (schema-validated); fall back to container decoding when the wire DTO
     // could not be constructed (missing required fields like uid).
-    let layerValue = try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
+    let layerValue =
+      try wire?.layer.flatMap(MemoryLayer.init(rawValue:))
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .layer)
     let tierValue = try container.decodeIfPresent(MemoryLayer.self, forKey: .tier)
-    let memoryTierValue = try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
+    let memoryTierValue =
+      try wire?.memoryTier.flatMap { MemoryLayer(rawValue: $0.rawValue) }
       ?? container.decodeIfPresent(MemoryLayer.self, forKey: .memoryTier)
     tierIsExplicit = layerValue != nil || tierValue != nil || memoryTierValue != nil
 
@@ -1909,11 +1925,11 @@ struct ServerMemory: Decodable, Identifiable {
     }
 
     switch (layerValue, tierValue, memoryTierValue) {
-    case let (.some(layer), _, _):
+    case (.some(let layer), _, _):
       self.tier = layer
-    case let (_, .some(tier), _):
+    case (_, .some(let tier), _):
       self.tier = tier
-    case let (_, _, .some(memoryTier)):
+    case (_, _, .some(let memoryTier)):
       self.tier = memoryTier
     case (.none, .none, .none):
       self.tier = .longTerm
@@ -2193,11 +2209,13 @@ extension APIClient {
     }
 
     if httpResponse.statusCode == 401, !retriedAuth {
-      guard let retry = try await authorizedRetryRequest(
-        from: request,
-        retriedAuth: false,
-        authPolicy: .default
-      ) else {
+      guard
+        let retry = try await authorizedRetryRequest(
+          from: request,
+          retriedAuth: false,
+          authPolicy: .default
+        )
+      else {
         throw APIError.unauthorized
       }
       return try await performMemoryListRequest(retry, retriedAuth: true)
@@ -2623,8 +2641,7 @@ struct ActionItemsListResponse: Decodable {
 
   init(from decoder: Decoder) throws {
     let container = try decoder.container(keyedBy: CodingKeys.self)
-    if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems)
-    {
+    if let actionItems = try container.decodeIfPresent([TaskActionItem].self, forKey: .actionItems) {
       self.items = actionItems
     } else {
       self.items = try container.decode([TaskActionItem].self, forKey: .items)
@@ -2660,6 +2677,7 @@ extension APIClient {
     clearDueAt: Bool = false,
     priority: String? = nil,
     metadata: [String: Any]? = nil,
+    metadataBox: ActionItemMetadataBox? = nil,
     goalId: String? = nil,
     clearGoalId: Bool = false,
     workstreamId: String? = nil,
@@ -2682,7 +2700,7 @@ extension APIClient {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
     var metadataString: String? = nil
-    if let metadata = metadata {
+    if let metadata = metadataBox?.value ?? metadata {
       if let data = try? JSONSerialization.data(withJSONObject: metadata),
         let str = String(data: data, encoding: .utf8)
       {
@@ -2743,6 +2761,7 @@ extension APIClient {
     priority: String? = nil,
     category: String? = nil,
     metadata: [String: Any]? = nil,
+    metadataBox: ActionItemMetadataBox? = nil,
     relevanceScore: Int? = nil,
     recurrenceRule: String? = nil,
     recurrenceParentId: String? = nil,
@@ -2761,7 +2780,7 @@ extension APIClient {
     formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
 
     var metadataString: String? = nil
-    if let metadata = metadata {
+    if let metadata = metadataBox?.value ?? metadata {
       if let data = try? JSONSerialization.data(withJSONObject: metadata),
         let str = String(data: data, encoding: .utf8)
       {
@@ -3479,7 +3498,9 @@ struct Goal: Codable, Identifiable {
     id = try wire?.id ?? container.decodeIfPresent(String.self, forKey: .id) ?? ""
     title = try wire?.title ?? container.decodeIfPresent(String.self, forKey: .title) ?? ""
     description = try container.decodeIfPresent(String.self, forKey: .description)
-    goalType = GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "") ?? .boolean
+    goalType =
+      GoalType(rawValue: try wire?.goalType ?? container.decodeIfPresent(String.self, forKey: .goalType) ?? "")
+      ?? .boolean
     targetValue = try wire?.targetValue ?? container.decodeIfPresent(Double.self, forKey: .targetValue) ?? 0
     currentValue = try wire?.currentValue ?? container.decodeIfPresent(Double.self, forKey: .currentValue) ?? 0
     minValue = try wire?.minValue ?? container.decodeIfPresent(Double.self, forKey: .minValue) ?? 0
@@ -4624,11 +4645,11 @@ struct NotificationSettingsResponse: Codable {
 }
 
 enum SubscriptionPlanType: String, Codable {
-  case basic      // display "Free"
+  case basic  // display "Free"
   case unlimited  // legacy — display "Unlimited (legacy)"
   case architect  // display "Architect" ($400/mo, cost_usd quota)
-  case pro        // backward compat: old Firestore docs may still say "pro"
-  case `operator` // new — display "Operator"
+  case pro  // backward compat: old Firestore docs may still say "pro"
+  case `operator`  // new — display "Operator"
 }
 
 enum SubscriptionStatusType: String, Codable {
@@ -4693,7 +4714,10 @@ struct SubscriptionPlanOption: Codable, Identifiable {
   let features: [String]
   let prices: [SubscriptionPriceOption]
 
-  init(id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil, features: [String] = [], prices: [SubscriptionPriceOption] = []) {
+  init(
+    id: String, title: String, subtitle: String? = nil, description: String? = nil, eyebrow: String? = nil,
+    features: [String] = [], prices: [SubscriptionPriceOption] = []
+  ) {
     self.id = id
     self.title = title
     self.subtitle = subtitle
@@ -4956,13 +4980,15 @@ struct DesktopUpdatePolicyResponse: Decodable, Equatable, Sendable {
     let container = try decoder.container(keyedBy: CodingKeys.self)
     let id = Self.nonEmptyString(try? container.decode(String.self, forKey: .id)) ?? "current"
     let active = (try? container.decode(Bool.self, forKey: .active)) ?? false
-    let severity = (try? container.decode(String.self, forKey: .severity))
+    let severity =
+      (try? container.decode(String.self, forKey: .severity))
       .flatMap(Severity.init(rawValue:)) ?? .none
     let maximumBuildNumber = try? container.decode(Int.self, forKey: .maximumBuildNumber)
     let latestBuildNumber = try? container.decode(Int.self, forKey: .latestBuildNumber)
     let title = Self.nonEmptyString(try? container.decode(String.self, forKey: .title))
     let message = Self.nonEmptyString(try? container.decode(String.self, forKey: .message))
-    let ctaText = Self.nonEmptyString(try? container.decode(String.self, forKey: .ctaText))
+    let ctaText =
+      Self.nonEmptyString(try? container.decode(String.self, forKey: .ctaText))
       ?? "Download latest"
     let downloadURL = (try? container.decode(String.self, forKey: .downloadURL)) ?? ""
     let canDismiss = (try? container.decode(Bool.self, forKey: .canDismiss)) ?? true
@@ -5389,7 +5415,8 @@ extension APIClient {
     request.allHTTPHeaderFields = try? await buildHeaders(requireAuth: true)
 
     guard let (data, response) = try? await session.data(for: request),
-          let http = response as? HTTPURLResponse else {
+      let http = response as? HTTPURLResponse
+    else {
       return SyncJobFetch(outcome: .transient)
     }
 
@@ -5446,7 +5473,9 @@ extension APIClient {
     return request
   }
 
-  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws -> UploadLocalFilesResult {
+  private func performSyncLocalFilesUpload(_ request: URLRequest, retriedAuth: Bool = false) async throws
+    -> UploadLocalFilesResult
+  {
     let (data, http) = try await performAuthenticatedData(for: request, retriedAuth: retriedAuth)
 
     if http.statusCode == 200 {
@@ -5768,8 +5797,7 @@ struct AIUserProfileResponse: Codable {
 extension APIClient {
 
   /// Sync AI-generated user profile to backend
-  func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws
-  {
+  func syncAIUserProfile(profileText: String, generatedAt: Date, dataSourcesUsed: Int) async throws {
     struct SyncRequest: Encodable {
       let profile_text: String
       let generated_at: String
@@ -6057,14 +6085,14 @@ extension APIClient {
   /// Current-month chat usage + the plan's cap. Backed by Python backend
   /// endpoint `/v1/users/me/usage-quota` which reads `users/{uid}/llm_usage/*`.
   struct ChatUsageQuota: Decodable {
-    let plan: String       // display name: "Free" | "Plus" | "Pro"
-    let planType: String   // internal id: "basic" | "unlimited" | "architect"
-    let unit: String       // "questions" | "cost_usd"
+    let plan: String  // display name: "Free" | "Plus" | "Pro"
+    let planType: String  // internal id: "basic" | "unlimited" | "architect"
+    let unit: String  // "questions" | "cost_usd"
     let used: Double
-    let limit: Double?     // nil means unlimited
+    let limit: Double?  // nil means unlimited
     let percent: Double
     let allowed: Bool
-    let resetAt: Int?      // unix seconds — start of next UTC month
+    let resetAt: Int?  // unix seconds — start of next UTC month
 
     enum CodingKeys: String, CodingKey {
       case plan

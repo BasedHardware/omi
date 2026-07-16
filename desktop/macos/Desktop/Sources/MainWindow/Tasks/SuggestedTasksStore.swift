@@ -2,7 +2,7 @@ import CryptoKit
 import Foundation
 import OmiSupport
 
-protocol SuggestedTasksClient: AnyObject {
+protocol SuggestedTasksClient: AnyObject, Sendable {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
   func listCanonicalCandidates(status: String, limit: Int) async throws -> [OmiAPI.CandidateRecord]
   func registerTaskIntervention(

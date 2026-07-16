@@ -1,15 +1,15 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Back action for the current onboarding step, injected by `OnboardingView`.
 /// `nil` on the first step (nothing to return to), which hides the back button.
 private struct OnboardingBackActionKey: EnvironmentKey {
-  static let defaultValue: (() -> Void)? = nil
+  static let defaultValue: (@MainActor () -> Void)? = nil
 }
 
 extension EnvironmentValues {
-  var onboardingBack: (() -> Void)? {
+  var onboardingBack: (@MainActor () -> Void)? {
     get { self[OnboardingBackActionKey.self] }
     set { self[OnboardingBackActionKey.self] = newValue }
   }
@@ -18,11 +18,11 @@ extension EnvironmentValues {
 /// Jump straight to a step index, injected by `OnboardingView`. Powers the
 /// clickable progress dots so the user can move to any step directly.
 private struct OnboardingJumpActionKey: EnvironmentKey {
-  static let defaultValue: ((Int) -> Void)? = nil
+  static let defaultValue: (@MainActor (Int) -> Void)? = nil
 }
 
 extension EnvironmentValues {
-  var onboardingJumpTo: ((Int) -> Void)? {
+  var onboardingJumpTo: (@MainActor (Int) -> Void)? {
     get { self[OnboardingJumpActionKey.self] }
     set { self[OnboardingJumpActionKey.self] = newValue }
   }
@@ -589,16 +589,16 @@ struct OnboardingSelectableChip: View {
           .font(.system(size: 14, weight: .semibold))
           .foregroundColor(isSelected ? .black : OmiColors.textSecondary)
       }
-        .padding(.horizontal, OmiSpacing.lg)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-          Capsule()
-            .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
-        )
-        .overlay(
-          Capsule()
-            .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
-        )
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
+      .background(
+        Capsule()
+          .fill(isSelected ? Color.white : OmiColors.backgroundSecondary)
+      )
+      .overlay(
+        Capsule()
+          .stroke(Color.white.opacity(isSelected ? 0 : 0.08), lineWidth: 1)
+      )
     }
     .buttonStyle(.plain)
   }

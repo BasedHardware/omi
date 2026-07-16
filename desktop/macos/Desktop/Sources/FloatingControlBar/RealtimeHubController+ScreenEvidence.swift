@@ -1,4 +1,5 @@
 import Foundation
+import VoiceTurnDomain
 
 /// Owns the turn-scoped visual evidence boundary apart from the realtime transport lifecycle.
 /// Keeping it separate makes its capture → attach → delivery → validation trace independently
@@ -90,7 +91,7 @@ extension RealtimeHubController {
     // is enqueued while fresh, the report gets this separate bounded wait rather than inheriting
     // a nearly-expired capture timestamp and failing before the model can inspect the image.
     let expiresAfter = screenEvidence == nil ? 0 : RealtimeScreenEvidenceProtocolPolicy.maximumReportWait
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .screenEvidenceProtocolStartedScoped(
         turnID: turnID,
         token: token,
@@ -152,15 +153,20 @@ extension RealtimeHubController {
   ) {
     let ageMs = max(0, Int(Date().timeIntervalSince(evidence.capturedAt) * 1_000))
     let ageBucket = ageMs < 1_000 ? "lt_1s" : ageMs < 5_000 ? "lt_5s" : "gte_5s"
-    let bytesBucket = evidence.imageByteCount == 0 ? "0" : evidence.imageByteCount < 256_000
-      ? "lt_256k" : evidence.imageByteCount < 1_024_000 ? "lt_1m" : "gte_1m"
-    let callHash = callID.map { KernelTurnProjection.stableTurnID(continuityKey: $0, role: "screen_call") }
+    let bytesBucket =
+      evidence.imageByteCount == 0
+      ? "0"
+      : evidence.imageByteCount < 256_000
+        ? "lt_256k" : evidence.imageByteCount < 1_024_000 ? "lt_1m" : "gte_1m"
+    let callHash =
+      callID.map { KernelTurnProjection.stableTurnID(continuityKey: $0, role: "screen_call") }
       ?? ""
     let turn = String(evidence.turnID.rawValue.uuidString.prefix(8))
     let image = evidence.imageDigest.map { String($0.prefix(12)) } ?? ""
     let tokens = imageTokenCount.map(String.init) ?? ""
     let transcriptSeen = lastInputTranscriptUpdateAt != nil
-    let message = "RealtimeHub: ptt_screen_evidence stage=\(stage) evidence=\(evidence.opaqueID) "
+    let message =
+      "RealtimeHub: ptt_screen_evidence stage=\(stage) evidence=\(evidence.opaqueID) "
       + "provider=\(providerTag) turn=\(turn) epoch=\(realtimeToolTurnEpoch) "
       + "input_transcription_seen=\(transcriptSeen) target=\(evidence.target.rawValue) "
       + "capture_age=\(ageBucket) bytes=\(bytesBucket) "
@@ -199,7 +205,7 @@ extension RealtimeHubController {
       VoiceTurnCoordinator.shared.activeTurn?.pendingToolCallIDs.contains(token.screenshotCallID) == true
     {
       log("RealtimeHub: ptt_screen_evidence completion_failed=\(completion.rawValue) action=terminal_fail_closed")
-      VoiceTurnCoordinator.shared.send(.finish(turnID: token.turnID, reason: .providerFailed))
+      VoiceTurnCoordinator.shared.publish(.finish(turnID: token.turnID, reason: .providerFailed))
     }
   }
 
@@ -270,7 +276,7 @@ extension RealtimeHubController {
     _ = enqueueAuthoritativeScreenEvidenceFailurePersistence(
       ownerID: ownerID,
       assistantText: presentedFailure)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .authoritativeLocalResultAcceptedScoped(
         turnID: token.turnID,
         identity: token.screenshotIdentity,
@@ -283,7 +289,7 @@ extension RealtimeHubController {
     }
 
     presentScreenEvidenceFailure(presentedFailure)
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .toolFinishedScoped(
         turnID: token.turnID,
         identity: token.screenshotIdentity,
@@ -306,7 +312,7 @@ extension RealtimeHubController {
     guard VoiceTurnCoordinator.shared.activeTurn?.screenEvidenceProtocol == token else {
       return recordScreenEvidenceProtocolCompletion(.protocolNotActive)
     }
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .screenEvidenceReportVerifiedScoped(
         turnID: token.turnID,
         screenshotIdentity: token.screenshotIdentity,
@@ -318,7 +324,7 @@ extension RealtimeHubController {
     else {
       return recordScreenEvidenceProtocolCompletion(.reducerDidNotResolve)
     }
-    VoiceTurnCoordinator.shared.send(
+    VoiceTurnCoordinator.shared.publish(
       .toolFinishedScoped(
         turnID: token.turnID,
         identity: token.screenshotIdentity,

@@ -162,6 +162,13 @@ class FallbackPolicy(StrictBaseModel):
         return self
 
 
+class OutputBudgetPolicy(StrictBaseModel):
+    """An opt-in per-route output cap, never a global provider default."""
+
+    experiment: str = Field(min_length=1, max_length=64, pattern=r'^[a-z][a-z0-9_-]*$')
+    max_completion_tokens: int = Field(ge=1, le=8192)
+
+
 class LaneConfig(StrictBaseModel):
     lane_id: LaneId
     surface: Surface
@@ -179,6 +186,7 @@ class RouteArtifact(StrictBaseModel):
     primary: ProviderRef
     fallbacks: list[ProviderRef] = Field(default_factory=_empty_provider_refs)
     provider_options: dict[str, Any] = Field(default_factory=dict)
+    output_budget: OutputBudgetPolicy | None = None
     timeouts: TimeoutPolicy
     retry: RetryPolicy
     capabilities: Capabilities

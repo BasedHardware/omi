@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class APIClientConversationCountTests: XCTestCase {
@@ -64,18 +65,21 @@ final class APIClientConversationCountTests: XCTestCase {
       starred: false
     )
 
-    XCTAssertEqual(queryItems, [
-      "include_discarded=true",
-      "statuses=completed",
-      "start_date=2026-06-01T00:00:00Z",
-      "folder_id=folder-a",
-      "starred=false",
-    ])
+    XCTAssertEqual(
+      queryItems,
+      [
+        "include_discarded=true",
+        "statuses=completed",
+        "start_date=2026-06-01T00:00:00Z",
+        "folder_id=folder-a",
+        "starred=false",
+      ])
   }
 
   func testConversationMutationsInvalidateCountCache() throws {
     let testFile = URL(fileURLWithPath: #filePath)
-    let sourceURL = testFile
+    let sourceURL =
+      testFile
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/APIClient.swift")

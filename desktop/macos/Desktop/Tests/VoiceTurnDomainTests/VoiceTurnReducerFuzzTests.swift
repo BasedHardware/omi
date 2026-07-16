@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 // Test-only convenience. Production leases have no initializer that can mint
 // an identity outside VoiceTurnCoordinator.
@@ -247,7 +248,8 @@ private struct FuzzSequenceHarness {
     if let reserved = context.reservedIdentity {
       return reserved
     }
-    let effectID = model.turn?.id == turnID ? (model.turn?.nextEffectID ?? 1) : UInt64(context.toolIdentity?.effectID ?? 1)
+    let effectID =
+      model.turn?.id == turnID ? (model.turn?.nextEffectID ?? 1) : UInt64(context.toolIdentity?.effectID ?? 1)
     let identity = VoiceEffectIdentity(turnID: turnID, effectID: effectID)
     context.reservedIdentity = identity
     setContext(context, for: turnID)
@@ -546,7 +548,7 @@ private struct FuzzFailure: Error, CustomStringConvertible {
 
 // MARK: - Event alphabet
 
-private struct FuzzEventGenerator {
+@MainActor private struct FuzzEventGenerator {
   struct Entry {
     let label: String
     let isDriver: Bool
@@ -690,7 +692,8 @@ private struct FuzzEventGenerator {
     },
     Entry(label: "context_resolved", isDriver: false) { rng, harness in
       let turnID = harness.pickTurnID(&rng, preferCurrent: true)
-      let outcome: VoiceContextOutcome = rng.nextBool()
+      let outcome: VoiceContextOutcome =
+        rng.nextBool()
         ? .captured(FuzzIDs.contextVersion(&rng))
         : .omitted(reason: "fuzz-omit-\(rng.nextUInt64())")
       return .contextResolved(turnID: turnID, outcome: outcome)
@@ -711,7 +714,8 @@ private struct FuzzEventGenerator {
     Entry(label: "provider_response_started_scoped", isDriver: false) { rng, harness in
       let turnID = harness.pickTurnID(&rng, preferCurrent: true)
       var context = harness.context(for: turnID)
-      let identity = context.providerIdentity ?? harness.model.turn?.providerEffectIdentity
+      let identity =
+        context.providerIdentity ?? harness.model.turn?.providerEffectIdentity
         ?? harness.reserveIdentity(for: turnID)
       return .providerResponseStartedScoped(
         turnID: turnID,
@@ -722,7 +726,8 @@ private struct FuzzEventGenerator {
     Entry(label: "provider_turn_finished_scoped", isDriver: false) { rng, harness in
       let turnID = harness.pickTurnID(&rng, preferCurrent: true)
       var context = harness.context(for: turnID)
-      let identity = context.providerIdentity ?? harness.model.turn?.providerEffectIdentity
+      let identity =
+        context.providerIdentity ?? harness.model.turn?.providerEffectIdentity
         ?? harness.reserveIdentity(for: turnID)
       return .providerTurnFinishedScoped(
         turnID: turnID,
@@ -876,7 +881,7 @@ private struct FuzzRunSnapshot: Equatable {
   var effectBatches: [[VoiceTurnEffect]]
 }
 
-private enum FuzzRunner {
+@MainActor private enum FuzzRunner {
   static let baseSeedCorpus: [UInt64] = [
     0x5054_5453_545AB_01,
     0x5054_5453_545AB_02,
@@ -949,7 +954,7 @@ private enum FuzzRunner {
 
 // MARK: - Tests
 
-final class VoiceTurnReducerFuzzTests: XCTestCase {
+@MainActor final class VoiceTurnReducerFuzzTests: XCTestCase {
   func testEventAlphabetCoversAllDiagnosticLabels() {
     let generatorLabels = Set(FuzzEventGenerator.entries.map(\.label))
     XCTAssertEqual(generatorLabels, FuzzEventGenerator.expectedLabels)

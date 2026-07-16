@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct OnboardingGoalStepView: View {
   @ObservedObject var appState: AppState

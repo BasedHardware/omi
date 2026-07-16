@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct ExportsSection: View {
   let statuses: [MemoryExportDestination: MemoryExportStatus]
@@ -463,7 +463,8 @@ struct MemoryExportDestinationSheet: View {
     .background(OmiColors.backgroundPrimary)
     .task {
       await model.loadConfiguration()
-      statuses[destination] = destination == .chatgpt
+      statuses[destination] =
+        destination == .chatgpt
         ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
         : await MemoryExportService.shared.status(for: destination)
       if destination.supportsMCP && destination.requiresHostedMCPKeyForSetup && model.mcpKey == nil {
@@ -473,8 +474,7 @@ struct MemoryExportDestinationSheet: View {
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
       refreshChatGPTDirectoryConnectionIfNeeded()
     }
@@ -660,7 +660,8 @@ struct MemoryExportDestinationSheet: View {
   private var executeBlockSubtitle: String {
     switch destination.mcpExecuteKind {
     case .directoryApp:
-      return "Open Omi’s approved ChatGPT listing, then add Omi and authorize it in ChatGPT. Omi checks the connection when you return."
+      return
+        "Open Omi’s approved ChatGPT listing, then add Omi and authorize it in ChatGPT. Omi checks the connection when you return."
     case .localAutonomous:
       return
         "Omi sets up \(destination.title) for you — it runs as an Omi task you can watch in the floating bar. If it gets stuck, use the manual steps below."
@@ -710,7 +711,8 @@ struct MemoryExportDestinationSheet: View {
         Button {
           Task {
             await model.executeWithOmi(destination: destination)
-            statuses[destination] = destination == .chatgpt
+            statuses[destination] =
+              destination == .chatgpt
               ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
               : await MemoryExportService.shared.status(for: destination)
             // Assisted flow: the user pastes values by hand, so surface the

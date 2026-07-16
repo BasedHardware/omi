@@ -1,5 +1,5 @@
-import Combine
-import CoreBluetooth
+@preconcurrency import Combine
+@preconcurrency import CoreBluetooth
 import Foundation
 import os.log
 
@@ -7,31 +7,31 @@ import os.log
 
 /// Device connection errors
 enum DeviceConnectionError: LocalizedError {
-    case alreadyConnected
-    case connectionFailed(String)
-    case notConnected
-    case operationFailed(String)
+  case alreadyConnected
+  case connectionFailed(String)
+  case notConnected
+  case operationFailed(String)
 
-    var errorDescription: String? {
-        switch self {
-        case .alreadyConnected:
-            return "This connection session has already started"
-        case .connectionFailed(let reason):
-            return "Connection failed: \(reason)"
-        case .notConnected:
-            return "Device is not connected"
-        case .operationFailed(let reason):
-            return "Operation failed: \(reason)"
-        }
+  var errorDescription: String? {
+    switch self {
+    case .alreadyConnected:
+      return "This connection session has already started"
+    case .connectionFailed(let reason):
+      return "Connection failed: \(reason)"
+    case .notConnected:
+      return "Device is not connected"
+    case .operationFailed(let reason):
+      return "Operation failed: \(reason)"
     }
+  }
 }
 
 // MARK: - Oriented Image (OpenGlass)
 
 /// Image with orientation data from OpenGlass camera
 struct OrientedImage {
-    let imageData: Data
-    let orientation: ImageOrientation
+  let imageData: Data
+  let orientation: ImageOrientation
 }
 
 // MARK: - Accelerometer Data
@@ -39,29 +39,29 @@ struct OrientedImage {
 /// Accelerometer and gyroscope data from device
 /// Ported from: omi/app/lib/services/devices/omi_connection.dart
 struct AccelerometerData {
-    /// Accelerometer X axis value
-    let accelX: Double
-    /// Accelerometer Y axis value
-    let accelY: Double
-    /// Accelerometer Z axis value
-    let accelZ: Double
-    /// Gyroscope X axis value
-    let gyroX: Double
-    /// Gyroscope Y axis value
-    let gyroY: Double
-    /// Gyroscope Z axis value
-    let gyroZ: Double
+  /// Accelerometer X axis value
+  let accelX: Double
+  /// Accelerometer Y axis value
+  let accelY: Double
+  /// Accelerometer Z axis value
+  let accelZ: Double
+  /// Gyroscope X axis value
+  let gyroX: Double
+  /// Gyroscope Y axis value
+  let gyroY: Double
+  /// Gyroscope Z axis value
+  let gyroZ: Double
 
-    /// Calculate magnitude for fall detection
-    /// Returns sqrt(accelX² + accelY² + accelZ²)
-    var magnitude: Double {
-        sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
-    }
+  /// Calculate magnitude for fall detection
+  /// Returns sqrt(accelX² + accelY² + accelZ²)
+  var magnitude: Double {
+    sqrt(accelX * accelX + accelY * accelY + accelZ * accelZ)
+  }
 
-    /// Check if this reading indicates a potential fall (magnitude > 30)
-    var indicatesFall: Bool {
-        magnitude > 30.0
-    }
+  /// Check if this reading indicates a potential fall (magnitude > 30)
+  var indicatesFall: Bool {
+    magnitude > 30.0
+  }
 }
 
 // MARK: - Device Connection Delegate
@@ -69,11 +69,11 @@ struct AccelerometerData {
 /// Delegate for device connection events
 @MainActor
 protocol DeviceConnectionDelegate: AnyObject {
-    /// Called when device disconnects unexpectedly during an operation
-    func deviceConnection(_ connection: DeviceConnection, didDisconnectUnexpectedly device: BtDevice)
+  /// Called when device disconnects unexpectedly during an operation
+  func deviceConnection(_ connection: DeviceConnection, didDisconnectUnexpectedly device: BtDevice)
 
-    /// Called when a potential fall is detected
-    func deviceConnection(_ connection: DeviceConnection, didDetectFall data: AccelerometerData)
+  /// Called when a potential fall is detected
+  func deviceConnection(_ connection: DeviceConnection, didDetectFall data: AccelerometerData)
 }
 
 // MARK: - Device Connection Protocol
@@ -83,137 +83,137 @@ protocol DeviceConnectionDelegate: AnyObject {
 @MainActor
 protocol DeviceConnection: AnyObject {
 
-    // MARK: - Properties
+  // MARK: - Properties
 
-    /// The connected device
-    var device: BtDevice { get set }
+  /// The connected device
+  var device: BtDevice { get set }
 
-    /// The underlying transport
-    var transport: DeviceTransport { get }
+  /// The underlying transport
+  var transport: DeviceTransport { get }
 
-    /// Generation assigned by the canonical device-session coordinator.
-    var sessionGeneration: UInt64 { get }
+  /// Generation assigned by the canonical device-session coordinator.
+  var sessionGeneration: UInt64 { get }
 
-    /// Last successful ping time
-    var lastPongAt: Date? { get }
+  /// Last successful ping time
+  var lastPongAt: Date? { get }
 
-    /// Cached device features
-    var cachedFeatures: OmiFeatures? { get }
+  /// Cached device features
+  var cachedFeatures: OmiFeatures? { get }
 
-    /// Delegate for connection events
-    var delegate: DeviceConnectionDelegate? { get set }
+  /// Delegate for connection events
+  var delegate: DeviceConnectionDelegate? { get set }
 
-    // MARK: - Connection Lifecycle
+  // MARK: - Connection Lifecycle
 
-    /// Unpair the device (clear pairing info)
-    func unpair() async
+  /// Unpair the device (clear pairing info)
+  func unpair() async
 
-    /// Connect to the device
-    func connect() async throws
+  /// Connect to the device
+  func connect() async throws
 
-    /// Disconnect from the device
-    func disconnect() async
+  /// Disconnect from the device
+  func disconnect() async
 
-    /// Check if connected
-    func isConnected() async -> Bool
+  /// Check if connected
+  func isConnected() async -> Bool
 
-    /// Ping the device to verify connection
-    func ping() async -> Bool
+  /// Ping the device to verify connection
+  func ping() async -> Bool
 
-    // MARK: - Battery
+  // MARK: - Battery
 
-    /// Get current battery level (0-100, or -1 if unavailable)
-    func getBatteryLevel() async -> Int
+  /// Get current battery level (0-100, or -1 if unavailable)
+  func getBatteryLevel() async -> Int
 
-    /// Get a stream of battery level updates
-    func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error>
+  /// Get a stream of battery level updates
+  func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error>
 
-    // MARK: - Audio
+  // MARK: - Audio
 
-    /// Get the audio codec used by the device
-    func getAudioCodec() async -> BleAudioCodec
+  /// Get the audio codec used by the device
+  func getAudioCodec() async -> BleAudioCodec
 
-    /// Get a stream of audio data from the device
-    func getAudioStream() -> AsyncThrowingStream<Data, Error>
+  /// Get a stream of audio data from the device
+  func getAudioStream() -> AsyncThrowingStream<Data, Error>
 
-    // MARK: - Button
+  // MARK: - Button
 
-    /// Get the current button state
-    func getButtonState() async -> [UInt8]
+  /// Get the current button state
+  func getButtonState() async -> [UInt8]
 
-    /// Get a stream of button press events
-    func getButtonStream() -> AsyncThrowingStream<[UInt8], Error>
+  /// Get a stream of button press events
+  func getButtonStream() -> AsyncThrowingStream<[UInt8], Error>
 
-    // MARK: - Storage
+  // MARK: - Storage
 
-    /// Get list of storage files/lengths
-    func getStorageList() async -> [Int32]
+  /// Get list of storage files/lengths
+  func getStorageList() async -> [Int32]
 
-    /// Write command to storage
-    func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool
+  /// Write command to storage
+  func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool
 
-    /// Get a stream of storage data
-    func getStorageStream() -> AsyncThrowingStream<Data, Error>
+  /// Get a stream of storage data
+  func getStorageStream() -> AsyncThrowingStream<Data, Error>
 
-    // MARK: - Camera (OpenGlass)
+  // MARK: - Camera (OpenGlass)
 
-    /// Check if device has photo streaming capability
-    func hasPhotoStreaming() async -> Bool
+  /// Check if device has photo streaming capability
+  func hasPhotoStreaming() async -> Bool
 
-    /// Start photo capture controller
-    func startPhotoCapture() async
+  /// Start photo capture controller
+  func startPhotoCapture() async
 
-    /// Stop photo capture controller
-    func stopPhotoCapture() async
+  /// Stop photo capture controller
+  func stopPhotoCapture() async
 
-    /// Get a stream of images from the camera
-    func getImageStream() -> AsyncThrowingStream<OrientedImage, Error>
+  /// Get a stream of images from the camera
+  func getImageStream() -> AsyncThrowingStream<OrientedImage, Error>
 
-    // MARK: - Accelerometer
+  // MARK: - Accelerometer
 
-    /// Get a stream of accelerometer/gyroscope data
-    func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error>
+  /// Get a stream of accelerometer/gyroscope data
+  func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error>
 
-    // MARK: - Speaker/Haptic
+  // MARK: - Speaker/Haptic
 
-    /// Play haptic feedback (1=20ms, 2=50ms, 3=500ms)
-    func playHaptic(level: Int) async -> Bool
+  /// Play haptic feedback (1=20ms, 2=50ms, 3=500ms)
+  func playHaptic(level: Int) async -> Bool
 
-    // MARK: - Features
+  // MARK: - Features
 
-    /// Get device feature flags
-    func getFeatures() async -> OmiFeatures
+  /// Get device feature flags
+  func getFeatures() async -> OmiFeatures
 
-    // MARK: - Settings
+  // MARK: - Settings
 
-    /// Set LED dim ratio (0-100)
-    func setLedDimRatio(_ ratio: Int) async
+  /// Set LED dim ratio (0-100)
+  func setLedDimRatio(_ ratio: Int) async
 
-    /// Get LED dim ratio
-    func getLedDimRatio() async -> Int?
+  /// Get LED dim ratio
+  func getLedDimRatio() async -> Int?
 
-    /// Set microphone gain (0-100)
-    func setMicGain(_ gain: Int) async
+  /// Set microphone gain (0-100)
+  func setMicGain(_ gain: Int) async
 
-    /// Get microphone gain
-    func getMicGain() async -> Int?
+  /// Get microphone gain
+  func getMicGain() async -> Int?
 
-    // MARK: - WiFi Sync
+  // MARK: - WiFi Sync
 
-    /// Check if WiFi sync is supported
-    func isWifiSyncSupported() async -> Bool
+  /// Check if WiFi sync is supported
+  func isWifiSyncSupported() async -> Bool
 
-    /// Setup WiFi sync with credentials
-    func setupWifiSync(ssid: String, password: String) async -> WifiSyncSetupResult
+  /// Setup WiFi sync with credentials
+  func setupWifiSync(ssid: String, password: String) async -> WifiSyncSetupResult
 
-    /// Start WiFi sync
-    func startWifiSync() async -> Bool
+  /// Start WiFi sync
+  func startWifiSync() async -> Bool
 
-    /// Stop WiFi sync
-    func stopWifiSync() async -> Bool
+  /// Stop WiFi sync
+  func stopWifiSync() async -> Bool
 
-    /// Get a stream of WiFi sync status updates
-    func getWifiSyncStatusStream() -> AsyncThrowingStream<Int, Error>
+  /// Get a stream of WiFi sync status updates
+  func getWifiSyncStatusStream() -> AsyncThrowingStream<Int, Error>
 }
 
 // MARK: - Base Implementation
@@ -223,561 +223,559 @@ protocol DeviceConnection: AnyObject {
 @MainActor
 class BaseDeviceConnection: DeviceConnection {
 
-    // MARK: - Properties
+  // MARK: - Properties
 
-    var device: BtDevice
-    let transport: DeviceTransport
-    var sessionGeneration: UInt64 { transport.sessionGeneration }
-    let operationClock: any DeviceOperationClock
+  var device: BtDevice
+  let transport: DeviceTransport
+  var sessionGeneration: UInt64 { transport.sessionGeneration }
+  let operationClock: any DeviceOperationClock
 
-    private(set) var lastPongAt: Date?
-    private(set) var cachedFeatures: OmiFeatures?
+  private(set) var lastPongAt: Date?
+  private(set) var cachedFeatures: OmiFeatures?
 
-    /// Delegate for connection events
-    weak var delegate: DeviceConnectionDelegate?
+  /// Delegate for connection events
+  weak var delegate: DeviceConnectionDelegate?
 
-    private var transportStateSubscription: AnyCancellable?
-    private var isReadyForCallbacks = false
-    private var didStartLifecycle = false
-    private var teardownTask: Task<Void, Never>?
-    private let logger = Logger(subsystem: "me.omi.desktop", category: "DeviceConnection")
+  private nonisolated(unsafe) var transportStateSubscription: AnyCancellable?
+  private var isReadyForCallbacks = false
+  private var didStartLifecycle = false
+  private var teardownTask: Task<Void, Never>?
+  private let logger = Logger(subsystem: "me.omi.desktop", category: "DeviceConnection")
 
-    // MARK: - Initialization
+  // MARK: - Initialization
 
-    init(
-        device: BtDevice,
-        transport: DeviceTransport,
-        operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
-    ) {
-        self.device = device
-        self.transport = transport
-        self.operationClock = operationClock
+  init(
+    device: BtDevice,
+    transport: DeviceTransport,
+    operationClock: any DeviceOperationClock = ContinuousDeviceOperationClock()
+  ) {
+    self.device = device
+    self.transport = transport
+    self.operationClock = operationClock
 
-        transportStateSubscription = transport.connectionStatePublisher
-            .sink { [weak self] transportState in
-                Task { @MainActor in
-                    self?.handleTransportStateChange(transportState)
-                }
-            }
-    }
-
-    deinit {
-        transportStateSubscription?.cancel()
-    }
-
-    private func handleTransportStateChange(_ transportState: DeviceTransportState) {
-        guard transportState == .disconnected,
-              isReadyForCallbacks,
-              teardownTask == nil else { return }
-
-        beginTeardown(notifyUnexpectedDisconnect: true)
-    }
-
-    // MARK: - Connection Lifecycle
-
-    final func unpair() async {
-        cachedFeatures = nil
-        lastPongAt = nil
-        await beginTeardown(
-            notifyUnexpectedDisconnect: false,
-            performUnpair: true
-        ).value
-        logger.info("Device unpaired: \(self.device.displayName)")
-    }
-
-    final func connect() async throws {
-        guard !didStartLifecycle, teardownTask == nil else {
-            throw DeviceConnectionError.alreadyConnected
+    transportStateSubscription = transport.connectionStatePublisher
+      .sink { [weak self] transportState in
+        Task { @MainActor in
+          self?.handleTransportStateChange(transportState)
         }
-        didStartLifecycle = true
+      }
+  }
+
+  deinit {
+    transportStateSubscription?.cancel()
+  }
+
+  private func handleTransportStateChange(_ transportState: DeviceTransportState) {
+    guard transportState == .disconnected,
+      isReadyForCallbacks,
+      teardownTask == nil
+    else { return }
+
+    beginTeardown(notifyUnexpectedDisconnect: true)
+  }
+
+  // MARK: - Connection Lifecycle
+
+  final func unpair() async {
+    cachedFeatures = nil
+    lastPongAt = nil
+    await beginTeardown(
+      notifyUnexpectedDisconnect: false,
+      performUnpair: true
+    ).value
+    logger.info("Device unpaired: \(self.device.displayName)")
+  }
+
+  final func connect() async throws {
+    guard !didStartLifecycle, teardownTask == nil else {
+      throw DeviceConnectionError.alreadyConnected
+    }
+    didStartLifecycle = true
+
+    do {
+      try await transport.connect()
+      try await ensureLifecycleIsActive()
+
+      // Verify connection with ping
+      let pingSuccess = await ping()
+      try await ensureLifecycleIsActive()
+      if !pingSuccess {
+        logger.warning("Ping failed after connection, but continuing")
+      }
+
+      // Update device info
+      await updateDeviceInfo()
+      try await ensureLifecycleIsActive()
+      try await prepareDeviceAfterConnect()
+      try await ensureLifecycleIsActive()
+      isReadyForCallbacks = true
+    } catch {
+      await beginTeardown(notifyUnexpectedDisconnect: false).value
+      throw normalizedConnectionError(error)
+    }
+  }
+
+  final func disconnect() async {
+    await beginTeardown(notifyUnexpectedDisconnect: false).value
+  }
+
+  /// Starts the session's single teardown operation or joins the one already in flight.
+  /// Keeping the task as the lifecycle boundary prevents an explicit disconnect from
+  /// returning while unexpected-disconnect cleanup is still draining the transport.
+  @discardableResult
+  private func beginTeardown(
+    notifyUnexpectedDisconnect: Bool,
+    performUnpair: Bool = false
+  ) -> Task<Void, Never> {
+    if let teardownTask {
+      return teardownTask
+    }
+
+    isReadyForCallbacks = false
+    let task = Task { @MainActor [self] in
+      if performUnpair {
+        await performDeviceUnpair()
+      }
+      await teardownDevice()
+      await transport.dispose()
+
+      if notifyUnexpectedDisconnect {
+        delegate?.deviceConnection(
+          self,
+          didDisconnectUnexpectedly: device
+        )
+      }
+    }
+    teardownTask = task
+    return task
+  }
+
+  /// Device-specific setup after the transport and shared metadata are ready.
+  /// The base lifecycle calls this exactly once per session generation.
+  func prepareDeviceAfterConnect() async throws {}
+
+  /// Device-specific cleanup before the transport is disposed.
+  /// The base lifecycle calls this at most once per session generation.
+  func teardownDevice() async {}
+
+  /// Optional device-side unpair command, invoked before teardown.
+  func performDeviceUnpair() async {}
+
+  private func ensureLifecycleIsActive() async throws {
+    guard teardownTask == nil else {
+      throw DeviceConnectionError.operationFailed("Connection was cancelled")
+    }
+    guard await transport.isConnected() else {
+      throw DeviceConnectionError.connectionFailed(
+        "Device disconnected during connection setup"
+      )
+    }
+  }
+
+  private func normalizedConnectionError(_ error: Error) -> DeviceConnectionError {
+    if let connectionError = error as? DeviceConnectionError {
+      return connectionError
+    }
+    if let transportError = error as? DeviceTransportError,
+      case .connectionFailed(let reason) = transportError
+    {
+      return .connectionFailed(reason)
+    }
+    return .connectionFailed(error.localizedDescription)
+  }
+
+  func isConnected() async -> Bool {
+    await transport.isConnected()
+  }
+
+  func ping() async -> Bool {
+    let result = await transport.ping()
+    if result {
+      lastPongAt = Date()
+    }
+    return result
+  }
+
+  /// Update device info from device information service
+  func updateDeviceInfo() async {
+    // Read device info characteristics
+    do {
+      let modelData = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.DeviceInfo.service,
+        characteristicUUID: DeviceUUIDs.DeviceInfo.modelNumber
+      )
+      if !modelData.isEmpty {
+        device.modelNumber = String(data: modelData, encoding: .utf8)
+      }
+
+      let firmwareData = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.DeviceInfo.service,
+        characteristicUUID: DeviceUUIDs.DeviceInfo.firmwareRevision
+      )
+      if !firmwareData.isEmpty {
+        device.firmwareRevision = String(data: firmwareData, encoding: .utf8)
+      }
+
+      let hardwareData = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.DeviceInfo.service,
+        characteristicUUID: DeviceUUIDs.DeviceInfo.hardwareRevision
+      )
+      if !hardwareData.isEmpty {
+        device.hardwareRevision = String(data: hardwareData, encoding: .utf8)
+      }
+
+      let manufacturerData = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.DeviceInfo.service,
+        characteristicUUID: DeviceUUIDs.DeviceInfo.manufacturerName
+      )
+      if !manufacturerData.isEmpty {
+        device.manufacturerName = String(data: manufacturerData, encoding: .utf8)
+      }
+    } catch {
+      logger.debug("Failed to read device info: \(error.localizedDescription)")
+    }
+  }
+
+  // MARK: - Battery (Default Implementation)
+
+  func getBatteryLevel() async -> Int {
+    guard await isConnected() else { return -1 }
+
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Battery.service,
+        characteristicUUID: DeviceUUIDs.Battery.level
+      )
+      return data.isEmpty ? -1 : Int(data[0])
+    } catch {
+      logger.debug("Failed to read battery level: \(error.localizedDescription)")
+      return -1
+    }
+  }
+
+  func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
+    let stream = transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Battery.service,
+      characteristicUUID: DeviceUUIDs.Battery.level
+    )
+
+    return AsyncThrowingStream { continuation in
+      let forwardingTask = Task {
+        do {
+          for try await data in stream {
+            if !data.isEmpty {
+              continuation.yield(Int(data[0]))
+            }
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { @Sendable _ in
+        forwardingTask.cancel()
+      }
+    }
+  }
+
+  // MARK: - Audio (Default Implementation)
+
+  func getAudioCodec() async -> BleAudioCodec {
+    guard await isConnected() else { return .pcm8 }
+
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Omi.mainService,
+        characteristicUUID: DeviceUUIDs.Omi.audioCodec
+      )
+
+      guard !data.isEmpty else { return .pcm8 }
+
+      let codecId = Int(data[0])
+      switch codecId {
+      case 1: return .pcm8
+      case 20: return .opus
+      case 21: return .opusFS320
+      default: return .pcm8
+      }
+    } catch {
+      logger.debug("Failed to read audio codec: \(error.localizedDescription)")
+      return .pcm8
+    }
+  }
+
+  func getAudioStream() -> AsyncThrowingStream<Data, Error> {
+    transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Omi.mainService,
+      characteristicUUID: DeviceUUIDs.Omi.audioDataStream
+    )
+  }
+
+  // MARK: - Button (Default Implementation)
+
+  func getButtonState() async -> [UInt8] {
+    guard await isConnected() else { return [] }
+
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Button.service,
+        characteristicUUID: DeviceUUIDs.Button.trigger
+      )
+      return Array(data)
+    } catch {
+      logger.debug("Failed to read button state: \(error.localizedDescription)")
+      return []
+    }
+  }
+
+  func getButtonStream() -> AsyncThrowingStream<[UInt8], Error> {
+    let stream = transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Button.service,
+      characteristicUUID: DeviceUUIDs.Button.trigger
+    )
+
+    return AsyncThrowingStream { continuation in
+      let forwardingTask = Task {
+        do {
+          for try await data in stream {
+            continuation.yield(Array(data))
+          }
+          continuation.finish()
+        } catch {
+          continuation.finish(throwing: error)
+        }
+      }
+      continuation.onTermination = { @Sendable _ in
+        forwardingTask.cancel()
+      }
+    }
+  }
+
+  // MARK: - Storage (Default Implementation)
+
+  func getStorageList() async -> [Int32] {
+    guard await isConnected() else { return [] }
+
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Storage.service,
+        characteristicUUID: DeviceUUIDs.Storage.readControl
+      )
+
+      var lengths: [Int32] = []
+      let totalEntries = data.count / 4
+
+      for i in 0..<totalEntries {
+        let baseIndex = i * 4
+        let value =
+          Int32(data[baseIndex]) | (Int32(data[baseIndex + 1]) << 8) | (Int32(data[baseIndex + 2]) << 16)
+          | (Int32(data[baseIndex + 3]) << 24)
+        lengths.append(value)
+      }
+
+      return lengths
+    } catch {
+      logger.debug("Failed to read storage list: \(error.localizedDescription)")
+      return []
+    }
+  }
+
+  func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool {
+    guard await isConnected() else { return false }
+
+    let offsetBytes: [UInt8] = [
+      UInt8((offset >> 24) & 0xFF),
+      UInt8((offset >> 16) & 0xFF),
+      UInt8((offset >> 8) & 0xFF),
+      UInt8(offset & 0xFF),
+    ]
+
+    let data = Data([
+      UInt8(command & 0xFF),
+      UInt8(fileNum & 0xFF),
+      offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3],
+    ])
+
+    do {
+      try await transport.writeCharacteristic(
+        data: data,
+        serviceUUID: DeviceUUIDs.Storage.service,
+        characteristicUUID: DeviceUUIDs.Storage.dataStream,
+        withResponse: true
+      )
+      return true
+    } catch {
+      logger.debug("Failed to write to storage: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  func getStorageStream() -> AsyncThrowingStream<Data, Error> {
+    transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Storage.service,
+      characteristicUUID: DeviceUUIDs.Storage.dataStream
+    )
+  }
+
+  // MARK: - Camera (Default - Override in subclass)
+
+  func hasPhotoStreaming() async -> Bool { false }
+  func startPhotoCapture() async {}
+  func stopPhotoCapture() async {}
+
+  func getImageStream() -> AsyncThrowingStream<OrientedImage, Error> {
+    AsyncThrowingStream { $0.finish() }
+  }
+
+  // MARK: - Accelerometer (Default)
+
+  func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error> {
+    let stream = transport.getCharacteristicStream(
+      serviceUUID: DeviceUUIDs.Accelerometer.service,
+      characteristicUUID: DeviceUUIDs.Accelerometer.dataStream
+    )
+
+    return AsyncThrowingStream { [weak self] continuation in
+      let forwardingTask = Task { [weak self] in
+        guard let self = self else {
+          continuation.finish()
+          return
+        }
 
         do {
-            try await transport.connect()
-            try await ensureLifecycleIsActive()
-
-            // Verify connection with ping
-            let pingSuccess = await ping()
-            try await ensureLifecycleIsActive()
-            if !pingSuccess {
-                logger.warning("Ping failed after connection, but continuing")
-            }
-
-            // Update device info
-            await updateDeviceInfo()
-            try await ensureLifecycleIsActive()
-            try await prepareDeviceAfterConnect()
-            try await ensureLifecycleIsActive()
-            isReadyForCallbacks = true
-        } catch {
-            await beginTeardown(notifyUnexpectedDisconnect: false).value
-            throw normalizedConnectionError(error)
-        }
-    }
-
-    final func disconnect() async {
-        await beginTeardown(notifyUnexpectedDisconnect: false).value
-    }
-
-    /// Starts the session's single teardown operation or joins the one already in flight.
-    /// Keeping the task as the lifecycle boundary prevents an explicit disconnect from
-    /// returning while unexpected-disconnect cleanup is still draining the transport.
-    @discardableResult
-    private func beginTeardown(
-        notifyUnexpectedDisconnect: Bool,
-        performUnpair: Bool = false
-    ) -> Task<Void, Never> {
-        if let teardownTask {
-            return teardownTask
-        }
-
-        isReadyForCallbacks = false
-        let task = Task { @MainActor [self] in
-            if performUnpair {
-                await performDeviceUnpair()
-            }
-            await teardownDevice()
-            await transport.dispose()
-
-            if notifyUnexpectedDisconnect {
-                delegate?.deviceConnection(
-                    self,
-                    didDisconnectUnexpectedly: device
+          for try await data in stream {
+            // Parse 6-axis accelerometer/gyroscope data
+            // Format: 12 bytes = 6 x Int16 (little-endian)
+            // [accelX, accelY, accelZ, gyroX, gyroY, gyroZ]
+            guard data.count >= 12 else {
+              // Fallback: if only 1 byte, treat as simple magnitude
+              if !data.isEmpty {
+                let accelData = AccelerometerData(
+                  accelX: Double(data[0]),
+                  accelY: 0,
+                  accelZ: 0,
+                  gyroX: 0,
+                  gyroY: 0,
+                  gyroZ: 0
                 )
-            }
-        }
-        teardownTask = task
-        return task
-    }
-
-    /// Device-specific setup after the transport and shared metadata are ready.
-    /// The base lifecycle calls this exactly once per session generation.
-    func prepareDeviceAfterConnect() async throws {}
-
-    /// Device-specific cleanup before the transport is disposed.
-    /// The base lifecycle calls this at most once per session generation.
-    func teardownDevice() async {}
-
-    /// Optional device-side unpair command, invoked before teardown.
-    func performDeviceUnpair() async {}
-
-    private func ensureLifecycleIsActive() async throws {
-        guard teardownTask == nil else {
-            throw DeviceConnectionError.operationFailed("Connection was cancelled")
-        }
-        guard await transport.isConnected() else {
-            throw DeviceConnectionError.connectionFailed(
-                "Device disconnected during connection setup"
-            )
-        }
-    }
-
-    private func normalizedConnectionError(_ error: Error) -> DeviceConnectionError {
-        if let connectionError = error as? DeviceConnectionError {
-            return connectionError
-        }
-        if let transportError = error as? DeviceTransportError,
-           case .connectionFailed(let reason) = transportError {
-            return .connectionFailed(reason)
-        }
-        return .connectionFailed(error.localizedDescription)
-    }
-
-    func isConnected() async -> Bool {
-        await transport.isConnected()
-    }
-
-    func ping() async -> Bool {
-        let result = await transport.ping()
-        if result {
-            lastPongAt = Date()
-        }
-        return result
-    }
-
-    /// Update device info from device information service
-    func updateDeviceInfo() async {
-        // Read device info characteristics
-        do {
-            let modelData = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.DeviceInfo.service,
-                characteristicUUID: DeviceUUIDs.DeviceInfo.modelNumber
-            )
-            if !modelData.isEmpty {
-                device.modelNumber = String(data: modelData, encoding: .utf8)
+                continuation.yield(accelData)
+              }
+              continue
             }
 
-            let firmwareData = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.DeviceInfo.service,
-                characteristicUUID: DeviceUUIDs.DeviceInfo.firmwareRevision
-            )
-            if !firmwareData.isEmpty {
-                device.firmwareRevision = String(data: firmwareData, encoding: .utf8)
+            // Parse Int16 values (little-endian)
+            func parseInt16(at offset: Int) -> Double {
+              let low = Int16(data[offset])
+              let high = Int16(data[offset + 1])
+              let value = low | (high << 8)
+              return Double(value)
             }
 
-            let hardwareData = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.DeviceInfo.service,
-                characteristicUUID: DeviceUUIDs.DeviceInfo.hardwareRevision
+            let accelData = AccelerometerData(
+              accelX: parseInt16(at: 0),
+              accelY: parseInt16(at: 2),
+              accelZ: parseInt16(at: 4),
+              gyroX: parseInt16(at: 6),
+              gyroY: parseInt16(at: 8),
+              gyroZ: parseInt16(at: 10)
             )
-            if !hardwareData.isEmpty {
-                device.hardwareRevision = String(data: hardwareData, encoding: .utf8)
-            }
 
-            let manufacturerData = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.DeviceInfo.service,
-                characteristicUUID: DeviceUUIDs.DeviceInfo.manufacturerName
-            )
-            if !manufacturerData.isEmpty {
-                device.manufacturerName = String(data: manufacturerData, encoding: .utf8)
+            continuation.yield(accelData)
+
+            // Check for fall detection and notify delegate
+            if accelData.indicatesFall {
+              self.logger.warning("Fall detected! Magnitude: \(accelData.magnitude)")
+              self.delegate?.deviceConnection(self, didDetectFall: accelData)
             }
+          }
+          continuation.finish()
         } catch {
-            logger.debug("Failed to read device info: \(error.localizedDescription)")
+          continuation.finish(throwing: error)
         }
+      }
+      continuation.onTermination = { @Sendable _ in
+        forwardingTask.cancel()
+      }
+    }
+  }
+
+  // MARK: - Speaker/Haptic (Default)
+
+  func playHaptic(level: Int) async -> Bool {
+    guard await isConnected() else { return false }
+
+    do {
+      try await transport.writeCharacteristic(
+        data: Data([UInt8(level & 0xFF)]),
+        serviceUUID: DeviceUUIDs.Speaker.service,
+        characteristicUUID: DeviceUUIDs.Speaker.dataStream,
+        withResponse: true
+      )
+      return true
+    } catch {
+      logger.debug("Failed to play haptic: \(error.localizedDescription)")
+      return false
+    }
+  }
+
+  // MARK: - Features (Default - Override in subclass)
+
+  func getFeatures() async -> OmiFeatures {
+    if let cached = cachedFeatures {
+      return cached
     }
 
-    // MARK: - Battery (Default Implementation)
+    guard await isConnected() else { return [] }
 
-    func getBatteryLevel() async -> Int {
-        guard await isConnected() else { return -1 }
+    do {
+      let data = try await transport.readCharacteristic(
+        serviceUUID: DeviceUUIDs.Omi.featuresService,
+        characteristicUUID: DeviceUUIDs.Omi.featuresCharacteristic
+      )
 
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Battery.service,
-                characteristicUUID: DeviceUUIDs.Battery.level
-            )
-            return data.isEmpty ? -1 : Int(data[0])
-        } catch {
-            logger.debug("Failed to read battery level: \(error.localizedDescription)")
-            return -1
-        }
+      guard data.count >= 4 else { return [] }
+
+      let rawValue = Int(data[0]) | (Int(data[1]) << 8) | (Int(data[2]) << 16) | (Int(data[3]) << 24)
+
+      let features = OmiFeatures(rawValue: rawValue)
+      cachedFeatures = features
+      return features
+    } catch {
+      logger.debug("Failed to read features: \(error.localizedDescription)")
+      return []
+    }
+  }
+
+  // MARK: - Settings (Default - Override in subclass)
+
+  func setLedDimRatio(_ ratio: Int) async {}
+  func getLedDimRatio() async -> Int? { nil }
+  func setMicGain(_ gain: Int) async {}
+  func getMicGain() async -> Int? { nil }
+
+  // MARK: - WiFi Sync (Default - Override in subclass)
+
+  func isWifiSyncSupported() async -> Bool { false }
+
+  func setupWifiSync(ssid: String, password: String) async -> WifiSyncSetupResult {
+    // Validate credentials first
+    if let ssidError = WifiCredentialsValidator.validateSsid(ssid) {
+      return .failure(.ssidLengthInvalid, customMessage: ssidError)
+    }
+    if let passwordError = WifiCredentialsValidator.validatePassword(password) {
+      return .failure(.passwordLengthInvalid, customMessage: passwordError)
     }
 
-    func getBatteryLevelStream() -> AsyncThrowingStream<Int, Error> {
-        let stream = transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Battery.service,
-            characteristicUUID: DeviceUUIDs.Battery.level
-        )
+    // Default implementation returns not supported
+    return .failure(.wifiHardwareNotAvailable)
+  }
 
-        return AsyncThrowingStream { continuation in
-            let forwardingTask = Task {
-                do {
-                    for try await data in stream {
-                        if !data.isEmpty {
-                            continuation.yield(Int(data[0]))
-                        }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { @Sendable _ in
-                forwardingTask.cancel()
-            }
-        }
-    }
+  func startWifiSync() async -> Bool { false }
+  func stopWifiSync() async -> Bool { false }
 
-    // MARK: - Audio (Default Implementation)
-
-    func getAudioCodec() async -> BleAudioCodec {
-        guard await isConnected() else { return .pcm8 }
-
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Omi.mainService,
-                characteristicUUID: DeviceUUIDs.Omi.audioCodec
-            )
-
-            guard !data.isEmpty else { return .pcm8 }
-
-            let codecId = Int(data[0])
-            switch codecId {
-            case 1: return .pcm8
-            case 20: return .opus
-            case 21: return .opusFS320
-            default: return .pcm8
-            }
-        } catch {
-            logger.debug("Failed to read audio codec: \(error.localizedDescription)")
-            return .pcm8
-        }
-    }
-
-    func getAudioStream() -> AsyncThrowingStream<Data, Error> {
-        transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Omi.mainService,
-            characteristicUUID: DeviceUUIDs.Omi.audioDataStream
-        )
-    }
-
-    // MARK: - Button (Default Implementation)
-
-    func getButtonState() async -> [UInt8] {
-        guard await isConnected() else { return [] }
-
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Button.service,
-                characteristicUUID: DeviceUUIDs.Button.trigger
-            )
-            return Array(data)
-        } catch {
-            logger.debug("Failed to read button state: \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    func getButtonStream() -> AsyncThrowingStream<[UInt8], Error> {
-        let stream = transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Button.service,
-            characteristicUUID: DeviceUUIDs.Button.trigger
-        )
-
-        return AsyncThrowingStream { continuation in
-            let forwardingTask = Task {
-                do {
-                    for try await data in stream {
-                        continuation.yield(Array(data))
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { @Sendable _ in
-                forwardingTask.cancel()
-            }
-        }
-    }
-
-    // MARK: - Storage (Default Implementation)
-
-    func getStorageList() async -> [Int32] {
-        guard await isConnected() else { return [] }
-
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Storage.service,
-                characteristicUUID: DeviceUUIDs.Storage.readControl
-            )
-
-            var lengths: [Int32] = []
-            let totalEntries = data.count / 4
-
-            for i in 0..<totalEntries {
-                let baseIndex = i * 4
-                let value = Int32(data[baseIndex]) |
-                           (Int32(data[baseIndex + 1]) << 8) |
-                           (Int32(data[baseIndex + 2]) << 16) |
-                           (Int32(data[baseIndex + 3]) << 24)
-                lengths.append(value)
-            }
-
-            return lengths
-        } catch {
-            logger.debug("Failed to read storage list: \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    func writeToStorage(fileNum: Int, command: Int, offset: Int) async -> Bool {
-        guard await isConnected() else { return false }
-
-        let offsetBytes: [UInt8] = [
-            UInt8((offset >> 24) & 0xFF),
-            UInt8((offset >> 16) & 0xFF),
-            UInt8((offset >> 8) & 0xFF),
-            UInt8(offset & 0xFF)
-        ]
-
-        let data = Data([
-            UInt8(command & 0xFF),
-            UInt8(fileNum & 0xFF),
-            offsetBytes[0], offsetBytes[1], offsetBytes[2], offsetBytes[3]
-        ])
-
-        do {
-            try await transport.writeCharacteristic(
-                data: data,
-                serviceUUID: DeviceUUIDs.Storage.service,
-                characteristicUUID: DeviceUUIDs.Storage.dataStream,
-                withResponse: true
-            )
-            return true
-        } catch {
-            logger.debug("Failed to write to storage: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    func getStorageStream() -> AsyncThrowingStream<Data, Error> {
-        transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Storage.service,
-            characteristicUUID: DeviceUUIDs.Storage.dataStream
-        )
-    }
-
-    // MARK: - Camera (Default - Override in subclass)
-
-    func hasPhotoStreaming() async -> Bool { false }
-    func startPhotoCapture() async {}
-    func stopPhotoCapture() async {}
-
-    func getImageStream() -> AsyncThrowingStream<OrientedImage, Error> {
-        AsyncThrowingStream { $0.finish() }
-    }
-
-    // MARK: - Accelerometer (Default)
-
-    func getAccelerometerStream() -> AsyncThrowingStream<AccelerometerData, Error> {
-        let stream = transport.getCharacteristicStream(
-            serviceUUID: DeviceUUIDs.Accelerometer.service,
-            characteristicUUID: DeviceUUIDs.Accelerometer.dataStream
-        )
-
-        return AsyncThrowingStream { [weak self] continuation in
-            let forwardingTask = Task { [weak self] in
-                guard let self = self else {
-                    continuation.finish()
-                    return
-                }
-
-                do {
-                    for try await data in stream {
-                        // Parse 6-axis accelerometer/gyroscope data
-                        // Format: 12 bytes = 6 x Int16 (little-endian)
-                        // [accelX, accelY, accelZ, gyroX, gyroY, gyroZ]
-                        guard data.count >= 12 else {
-                            // Fallback: if only 1 byte, treat as simple magnitude
-                            if !data.isEmpty {
-                                let accelData = AccelerometerData(
-                                    accelX: Double(data[0]),
-                                    accelY: 0,
-                                    accelZ: 0,
-                                    gyroX: 0,
-                                    gyroY: 0,
-                                    gyroZ: 0
-                                )
-                                continuation.yield(accelData)
-                            }
-                            continue
-                        }
-
-                        // Parse Int16 values (little-endian)
-                        func parseInt16(at offset: Int) -> Double {
-                            let low = Int16(data[offset])
-                            let high = Int16(data[offset + 1])
-                            let value = low | (high << 8)
-                            return Double(value)
-                        }
-
-                        let accelData = AccelerometerData(
-                            accelX: parseInt16(at: 0),
-                            accelY: parseInt16(at: 2),
-                            accelZ: parseInt16(at: 4),
-                            gyroX: parseInt16(at: 6),
-                            gyroY: parseInt16(at: 8),
-                            gyroZ: parseInt16(at: 10)
-                        )
-
-                        continuation.yield(accelData)
-
-                        // Check for fall detection and notify delegate
-                        if accelData.indicatesFall {
-                            self.logger.warning("Fall detected! Magnitude: \(accelData.magnitude)")
-                            self.delegate?.deviceConnection(self, didDetectFall: accelData)
-                        }
-                    }
-                    continuation.finish()
-                } catch {
-                    continuation.finish(throwing: error)
-                }
-            }
-            continuation.onTermination = { @Sendable _ in
-                forwardingTask.cancel()
-            }
-        }
-    }
-
-    // MARK: - Speaker/Haptic (Default)
-
-    func playHaptic(level: Int) async -> Bool {
-        guard await isConnected() else { return false }
-
-        do {
-            try await transport.writeCharacteristic(
-                data: Data([UInt8(level & 0xFF)]),
-                serviceUUID: DeviceUUIDs.Speaker.service,
-                characteristicUUID: DeviceUUIDs.Speaker.dataStream,
-                withResponse: true
-            )
-            return true
-        } catch {
-            logger.debug("Failed to play haptic: \(error.localizedDescription)")
-            return false
-        }
-    }
-
-    // MARK: - Features (Default - Override in subclass)
-
-    func getFeatures() async -> OmiFeatures {
-        if let cached = cachedFeatures {
-            return cached
-        }
-
-        guard await isConnected() else { return [] }
-
-        do {
-            let data = try await transport.readCharacteristic(
-                serviceUUID: DeviceUUIDs.Omi.featuresService,
-                characteristicUUID: DeviceUUIDs.Omi.featuresCharacteristic
-            )
-
-            guard data.count >= 4 else { return [] }
-
-            let rawValue = Int(data[0]) |
-                          (Int(data[1]) << 8) |
-                          (Int(data[2]) << 16) |
-                          (Int(data[3]) << 24)
-
-            let features = OmiFeatures(rawValue: rawValue)
-            cachedFeatures = features
-            return features
-        } catch {
-            logger.debug("Failed to read features: \(error.localizedDescription)")
-            return []
-        }
-    }
-
-    // MARK: - Settings (Default - Override in subclass)
-
-    func setLedDimRatio(_ ratio: Int) async {}
-    func getLedDimRatio() async -> Int? { nil }
-    func setMicGain(_ gain: Int) async {}
-    func getMicGain() async -> Int? { nil }
-
-    // MARK: - WiFi Sync (Default - Override in subclass)
-
-    func isWifiSyncSupported() async -> Bool { false }
-
-    func setupWifiSync(ssid: String, password: String) async -> WifiSyncSetupResult {
-        // Validate credentials first
-        if let ssidError = WifiCredentialsValidator.validateSsid(ssid) {
-            return .failure(.ssidLengthInvalid, customMessage: ssidError)
-        }
-        if let passwordError = WifiCredentialsValidator.validatePassword(password) {
-            return .failure(.passwordLengthInvalid, customMessage: passwordError)
-        }
-
-        // Default implementation returns not supported
-        return .failure(.wifiHardwareNotAvailable)
-    }
-
-    func startWifiSync() async -> Bool { false }
-    func stopWifiSync() async -> Bool { false }
-
-    func getWifiSyncStatusStream() -> AsyncThrowingStream<Int, Error> {
-        // Default implementation returns empty stream
-        AsyncThrowingStream { $0.finish() }
-    }
+  func getWifiSyncStatusStream() -> AsyncThrowingStream<Int, Error> {
+    // Default implementation returns empty stream
+    AsyncThrowingStream { $0.finish() }
+  }
 
 }

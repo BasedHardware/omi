@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -205,17 +206,18 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
         enqueuedTurnEpoch: 7,
         callID: "different-screenshot-call"),
       .notAdmitted)
-    guard case .accepted(let receipt) =
-      RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
-        state: state,
-        attachment: attachment,
-        sourceObjectID: sessionObjectID,
-        activeTurnID: turnID,
-        activeResponseID: responseID,
-        currentTurnEpoch: 7,
-        enqueuedTurnEpoch: 7,
-        callID: "screenshot-1",
-        now: Date(timeIntervalSince1970: 1_004.999))
+    guard
+      case .accepted(let receipt) =
+        RealtimeScreenGroundingPolicy.receiptAfterTransportEnqueued(
+          state: state,
+          attachment: attachment,
+          sourceObjectID: sessionObjectID,
+          activeTurnID: turnID,
+          activeResponseID: responseID,
+          currentTurnEpoch: 7,
+          enqueuedTurnEpoch: 7,
+          callID: "screenshot-1",
+          now: Date(timeIntervalSince1970: 1_004.999))
     else {
       return XCTFail("Expected the matching transport enqueue to mint a receipt")
     }
@@ -285,11 +287,11 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: .awaitingReport(receipt(descriptor: descriptor)),
       observation: "You are in Cursor.",
-        sourceObjectID: sessionObjectID,
-        activeTurnID: turnID,
-        activeResponseID: responseID,
-        currentTurnEpoch: 7,
-        now: freshNow)
+      sourceObjectID: sessionObjectID,
+      activeTurnID: turnID,
+      activeResponseID: responseID,
+      currentTurnEpoch: 7,
+      now: freshNow)
     XCTAssertEqual(decision, .contradictoryApplication)
   }
 

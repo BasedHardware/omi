@@ -1,7 +1,7 @@
-import AVFoundation
+@preconcurrency import AVFoundation
 import Combine
 import SwiftUI
-import UserNotifications
+@preconcurrency import UserNotifications
 
 @MainActor
 extension AppState {
@@ -131,7 +131,8 @@ extension AppState {
     if isNonProduction {
       openCommand = "open -n \"\(appPath)\" --args \(DesktopAutomationLaunchOptions.portPrefix)\(automationPort)"
     }
-    return "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
+    return
+      "sleep 0.5 && while kill -0 \(terminatingProcessIdentifier) 2>/dev/null; do sleep 0.1; done && \(openCommand)"
   }
 
   /// Reset onboarding state for the current app only, then restart.
@@ -159,7 +160,7 @@ extension AppState {
     // hasCompletedOnboarding lives on AppState (@AppStorage on an
     // ObservableObject); the .resetOnboardingRequested handler above set it to
     // false, this drops the persisted key before the restart.
-    UserDefaults.standard.removeObject(forKey: "hasCompletedOnboarding")
+    UserDefaults.standard.removeObject(forKey: DefaultsKey.hasCompletedOnboarding)
     UserDefaults.standard.synchronize()
     log("Cleared onboarding UserDefaults keys")
 
@@ -233,8 +234,7 @@ extension AppState {
     // Clean DMG staging directories
     let tmpDir = "/private/tmp"
     if let contents = try? fileManager.contentsOfDirectory(atPath: tmpDir) {
-      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test")
-      {
+      for item in contents where item.hasPrefix("omi-dmg-staging") || item.hasPrefix("omi-dmg-test") {
         let itemPath = "\(tmpDir)/\(item)"
         do {
           try fileManager.removeItem(atPath: itemPath)

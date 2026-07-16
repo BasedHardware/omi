@@ -1,8 +1,8 @@
 import AVKit
 import AppKit
+import OmiTheme
 import SceneKit
 import SwiftUI
-import OmiTheme
 
 struct OnboardingView: View {
   @ObservedObject var appState: AppState
@@ -470,7 +470,7 @@ struct OnboardingView: View {
     .environment(\.onboardingBack, canGoBack ? goBack : nil)
     .environment(\.onboardingJumpTo, isExportPreview ? nil : jumpTo)
     .environment(\.onboardingFurthestStep, isExportPreview ? Int.max : furthestStep)
-    .focusable()
+    .focusable(true)
     .focusEffectDisabled()
     .focused($contentFocused)
     .onAppear {

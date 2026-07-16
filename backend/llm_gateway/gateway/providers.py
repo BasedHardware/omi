@@ -1,16 +1,22 @@
 from __future__ import annotations
 
+import asyncio
 from collections import deque
-from collections.abc import Mapping
+from collections.abc import Awaitable, Callable, Mapping
 from dataclasses import dataclass
 import json
 import os
+import time
 from typing import Any, Protocol, cast
 
+import google.auth
+from google.auth.transport.requests import Request as GoogleAuthRequest
 import httpx
 
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
+from llm_gateway.gateway.sse import SSEEventDecoder
+from utils.executors import critical_executor, run_blocking
 from utils.log_sanitizer import sanitize
 
 OPENAI_API_KEY_ENV_VAR = 'OPENAI_API_KEY'
@@ -21,6 +27,11 @@ MAX_RESPONSE_BYTES_ENV_VAR = 'OPENAI_MAX_RESPONSE_BYTES'
 PROVIDER_ERROR_DETAIL_BYTES = 1000
 EXPOSE_PROVIDER_ERROR_DETAILS_ENV_VAR = 'LLM_GATEWAY_EXPOSE_PROVIDER_ERROR_DETAILS'
 GENERIC_PROVIDER_FAILURE_MESSAGE = 'provider request failed'
+GOOGLE_CLOUD_PROJECT_ENV_VAR = 'GOOGLE_CLOUD_PROJECT'
+GCP_LOCATION_ENV_VAR = 'GCP_LOCATION'
+DEFAULT_GCP_LOCATION = 'us-central1'
+GOOGLE_CLOUD_PLATFORM_SCOPE = 'https://www.googleapis.com/auth/cloud-platform'
+VERTEX_API_VERSION = 'v1'
 
 
 class ChatCompletionProvider(Protocol):
@@ -143,6 +154,377 @@ class OpenAICompatibleChatCompletionProvider:
     async def aclose(self) -> None:
         if self._owns_http_client:
             await self._http_client.aclose()
+
+
+class VertexAccessTokenSupplier:
+    """Cache ADC access tokens while refreshing blocking Google auth off-loop."""
+
+    def __init__(
+        self,
+        *,
+        credentials_factory: Callable[..., tuple[Any, str | None]] = google.auth.default,
+        auth_request_factory: Callable[[], Any] = GoogleAuthRequest,
+        now: Callable[[], float] = time.time,
+    ) -> None:
+        self._credentials_factory = credentials_factory
+        self._auth_request_factory = auth_request_factory
+        self._now = now
+        self._credentials: Any | None = None
+        self._access_token: str | None = None
+        self._expires_at = 0.0
+        self._refresh_lock = asyncio.Lock()
+
+    async def get_access_token(self) -> str:
+        if self._access_token and self._now() < self._expires_at - 60:
+            return self._access_token
+        async with self._refresh_lock:
+            if self._access_token and self._now() < self._expires_at - 60:
+                return self._access_token
+            try:
+                token, expires_at = await run_blocking(critical_executor, self._refresh)
+            except Exception as exc:
+                raise ProviderFailure(FailureClass.INVALID_CONFIG) from exc
+            if not token:
+                raise ProviderFailure(FailureClass.INVALID_CONFIG)
+            self._access_token = token
+            self._expires_at = expires_at
+            return token
+
+    def _refresh(self) -> tuple[str, float]:
+        credentials = self._credentials
+        if credentials is None:
+            credentials, _ = self._credentials_factory(scopes=[GOOGLE_CLOUD_PLATFORM_SCOPE])
+            self._credentials = credentials
+        credentials.refresh(self._auth_request_factory())
+        token = str(getattr(credentials, 'token', '') or '')
+        expiry = getattr(credentials, 'expiry', None)
+        expires_at = expiry.timestamp() if expiry is not None else self._now() + 300
+        return token, expires_at
+
+
+class VertexGeminiProvider:
+    """Native Gemini-on-Vertex adapter behind the gateway's OpenAI contract."""
+
+    def __init__(
+        self,
+        *,
+        http_client: httpx.AsyncClient | None = None,
+        access_token_supplier: Callable[[], Awaitable[str]] | None = None,
+        project_env: str = GOOGLE_CLOUD_PROJECT_ENV_VAR,
+        location_env: str = GCP_LOCATION_ENV_VAR,
+    ) -> None:
+        self._http_client = http_client or httpx.AsyncClient()
+        self._owns_http_client = http_client is None
+        self._project_env = project_env
+        self._location_env = location_env
+        token_supplier = VertexAccessTokenSupplier()
+        self._access_token_supplier = access_token_supplier or token_supplier.get_access_token
+
+    async def create_chat_completion(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ) -> Mapping[str, Any]:
+        self._reject_byok(credentials)
+        endpoint = self._endpoint(provider_ref.model, method='generateContent')
+        payload = _vertex_request(request)
+        try:
+            access_token = await self._vertex_access_token()
+            async with self._http_client.stream(
+                'POST',
+                endpoint,
+                json=payload,
+                headers=_vertex_headers(access_token),
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview)
+                parsed = _parse_limited_json_response(
+                    await _read_limited_response(response, max_bytes=_configured_max_response_bytes())
+                )
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+        normalized = _vertex_to_openai_response(parsed, requested_model=provider_ref.model)
+        _validate_chat_completion_response_shape(normalized)
+        return normalized
+
+    async def stream_chat_completion(
+        self,
+        request: Mapping[str, Any],
+        *,
+        provider_ref: ProviderRef,
+        credentials: CredentialContext,
+        timeout_ms: int,
+    ):
+        self._reject_byok(credentials)
+        endpoint = self._endpoint(provider_ref.model, method='streamGenerateContent')
+        payload = _vertex_request(request)
+        decoder = SSEEventDecoder()
+        try:
+            access_token = await self._vertex_access_token()
+            async with self._http_client.stream(
+                'POST',
+                endpoint,
+                params={'alt': 'sse'},
+                json=payload,
+                headers=_vertex_headers(access_token),
+                timeout=timeout_ms / 1000.0,
+            ) as response:
+                if response.status_code >= 400:
+                    error_preview = await _read_bounded_preview(response, max_bytes=PROVIDER_ERROR_DETAIL_BYTES)
+                    _raise_for_status(response.status_code, error_preview)
+                async for chunk in response.aiter_bytes():
+                    for event in decoder.feed(chunk):
+                        event_data = event.data.strip()
+                        if not event_data or event_data == '[DONE]':
+                            continue
+                        parsed = _parse_limited_json_response(event_data.encode('utf-8'))
+                        translated, _ = _vertex_to_openai_stream_chunk(parsed, requested_model=provider_ref.model)
+                        if translated is not None:
+                            yield translated
+                yield _openai_sse_done()
+        except ProviderFailure:
+            raise
+        except httpx.TimeoutException as exc:
+            raise ProviderFailure(FailureClass.TIMEOUT_BEFORE_OUTPUT) from exc
+        except httpx.HTTPError as exc:
+            raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
+
+    async def aclose(self) -> None:
+        if self._owns_http_client:
+            await self._http_client.aclose()
+
+    def _endpoint(self, model: str, *, method: str) -> str:
+        project = os.getenv(self._project_env, '').strip()
+        location = os.getenv(self._location_env, DEFAULT_GCP_LOCATION).strip()
+        if not project or not location:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG)
+        return (
+            f'https://{location}-aiplatform.googleapis.com/{VERTEX_API_VERSION}/projects/{project}'
+            f'/locations/{location}/publishers/google/models/{model}:{method}'
+        )
+
+    async def _vertex_access_token(self) -> str:
+        try:
+            return await self._access_token_supplier()
+        except ProviderFailure:
+            raise
+        except Exception as exc:
+            raise ProviderFailure(FailureClass.INVALID_CONFIG) from exc
+
+    @staticmethod
+    def _reject_byok(credentials: CredentialContext) -> None:
+        if credentials.mode == CredentialMode.BYOK:
+            raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
+
+
+def _vertex_headers(access_token: str) -> dict[str, str]:
+    if not access_token.strip():
+        raise ProviderFailure(FailureClass.INVALID_CONFIG)
+    return {
+        'Authorization': f'Bearer {access_token}',
+        'Content-Type': 'application/json',
+    }
+
+
+def _vertex_request(request: Mapping[str, Any]) -> dict[str, Any]:
+    unsupported_params = sorted(
+        key
+        for key in (
+            'frequency_penalty',
+            'logit_bias',
+            'logprobs',
+            'n',
+            'presence_penalty',
+            'prompt_cache_key',
+            'seed',
+            'top_logprobs',
+            'user',
+        )
+        if key in request
+    )
+    if unsupported_params:
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+
+    system_parts: list[dict[str, str]] = []
+    contents: list[dict[str, Any]] = []
+    raw_messages = request.get('messages')
+    if not isinstance(raw_messages, list):
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    for message in raw_messages:
+        if not isinstance(message, Mapping):
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        role = message.get('role')
+        text = _text_content(message.get('content'))
+        if role == 'system':
+            system_parts.append({'text': text})
+            continue
+        if role not in {'user', 'assistant'}:
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        contents.append(
+            {
+                'role': 'model' if role == 'assistant' else 'user',
+                'parts': [{'text': text}],
+            }
+        )
+
+    generation_config: dict[str, Any] = {}
+    for request_key, vertex_key in (('temperature', 'temperature'), ('top_p', 'topP')):
+        if request_key in request:
+            generation_config[vertex_key] = request[request_key]
+    if 'stop' in request:
+        stop = request['stop']
+        if isinstance(stop, str):
+            generation_config['stopSequences'] = [stop]
+        elif isinstance(stop, list) and all(isinstance(item, str) for item in stop):
+            generation_config['stopSequences'] = stop
+        else:
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    output_limit = _output_limit(request)
+    if output_limit is not None:
+        generation_config['maxOutputTokens'] = output_limit
+    thinking_budget = _thinking_budget(request)
+    if thinking_budget is not None:
+        generation_config['thinkingConfig'] = {'thinkingBudget': thinking_budget}
+    response_format = request.get('response_format')
+    if isinstance(response_format, Mapping):
+        json_schema = response_format.get('json_schema')
+        if not isinstance(json_schema, Mapping) or not isinstance(json_schema.get('schema'), Mapping):
+            raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+        generation_config['responseMimeType'] = 'application/json'
+        generation_config['responseSchema'] = dict(cast(Mapping[str, Any], json_schema['schema']))
+
+    payload: dict[str, Any] = {'contents': contents}
+    if system_parts:
+        payload['systemInstruction'] = {'parts': system_parts}
+    if generation_config:
+        payload['generationConfig'] = generation_config
+    return payload
+
+
+def _output_limit(request: Mapping[str, Any]) -> int | None:
+    max_completion_tokens = request.get('max_completion_tokens')
+    max_tokens = request.get('max_tokens')
+    value = max_completion_tokens if max_completion_tokens is not None else max_tokens
+    if value is None:
+        return None
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    return value
+
+
+def _thinking_budget(request: Mapping[str, Any]) -> int | None:
+    if request.get('reasoning_effort') == 'none':
+        return 0
+    extra_body = request.get('extra_body')
+    if not isinstance(extra_body, Mapping):
+        return None
+    google_options = extra_body.get('google')
+    if not isinstance(google_options, Mapping):
+        return None
+    thinking_config = google_options.get('thinking_config')
+    if not isinstance(thinking_config, Mapping):
+        return None
+    thinking_budget = thinking_config.get('thinking_budget')
+    if not isinstance(thinking_budget, int) or isinstance(thinking_budget, bool) or thinking_budget < 0:
+        raise ProviderFailure(FailureClass.CAPABILITY_MISMATCH)
+    return thinking_budget
+
+
+def _vertex_to_openai_response(response: Mapping[str, Any], *, requested_model: str) -> dict[str, Any]:
+    candidates = response.get('candidates')
+    candidate = (
+        candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
+    )
+    content = _vertex_candidate_text(candidate)
+    finish_reason = _vertex_finish_reason(candidate.get('finishReason') if candidate is not None else 'SAFETY')
+    return {
+        'id': str(response.get('responseId') or 'vertex_gateway'),
+        'object': 'chat.completion',
+        'created': int(time.time()),
+        'model': requested_model,
+        'choices': [
+            {
+                'index': 0,
+                'message': {'role': 'assistant', 'content': content},
+                'finish_reason': finish_reason,
+            }
+        ],
+    }
+
+
+def _vertex_to_openai_stream_chunk(
+    response: Mapping[str, Any],
+    *,
+    requested_model: str,
+) -> tuple[bytes | None, bool]:
+    candidates = response.get('candidates')
+    candidate = (
+        candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
+    )
+    if candidate is None:
+        return None, False
+    text = _vertex_candidate_text(candidate)
+    raw_finish_reason = candidate.get('finishReason')
+    finish_reason = _vertex_finish_reason(raw_finish_reason) if raw_finish_reason else None
+    if not text and finish_reason is None:
+        return None, False
+    body = {
+        'id': str(response.get('responseId') or 'vertex_gateway'),
+        'object': 'chat.completion.chunk',
+        'created': int(time.time()),
+        'model': requested_model,
+        'choices': [
+            {
+                'index': 0,
+                'delta': {'content': text} if text else {},
+                'finish_reason': finish_reason,
+            }
+        ],
+    }
+    return _openai_sse(body), finish_reason is not None
+
+
+def _vertex_candidate_text(candidate: Mapping[str, Any] | None) -> str:
+    if candidate is None:
+        return ''
+    content = candidate.get('content')
+    if not isinstance(content, Mapping):
+        return ''
+    parts = content.get('parts')
+    if not isinstance(parts, list):
+        return ''
+    text_parts: list[str] = []
+    for part in parts:
+        if isinstance(part, Mapping) and isinstance(part.get('text'), str):
+            text_parts.append(part['text'])
+    return ''.join(text_parts)
+
+
+def _vertex_finish_reason(value: object) -> str:
+    normalized = str(value or '').upper()
+    if normalized in {'MAX_TOKENS', 'LENGTH'}:
+        return 'length'
+    if normalized in {'SAFETY', 'BLOCKLIST', 'PROHIBITED_CONTENT', 'SPII', 'RECITATION'}:
+        return 'content_filter'
+    return 'stop'
+
+
+def _openai_sse(body: Mapping[str, Any]) -> bytes:
+    return f'data: {json.dumps(dict(body), separators=(",", ":"))}\n\n'.encode('utf-8')
+
+
+def _openai_sse_done() -> bytes:
+    return b'data: [DONE]\n\n'
 
 
 class AnthropicMessagesProvider:

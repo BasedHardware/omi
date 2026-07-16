@@ -1,3 +1,4 @@
+import VoiceTurnDomain
 import XCTest
 
 @testable import Omi_Computer
@@ -21,7 +22,9 @@ final class HubEscalationTests: XCTestCase {
     let messages = body["messages"] as! [[String: String]]
     XCTAssertEqual(messages[0]["role"], "system")
     XCTAssertTrue(messages[0]["content"]!.contains("Resolve direct references"))
-    XCTAssertTrue(messages[0]["content"]!.contains("<!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->"))
+    XCTAssertTrue(
+      messages[0]["content"]!.contains(
+        "<!-- OMI_CONTEXT_CACHE_V1 stable=sha256:stable dynamic=sha256:dynamic plan=sha256:plan -->"))
     XCTAssertTrue(messages[0]["content"]!.contains("canonical turn"))
     XCTAssertFalse(messages[0]["content"]!.contains("M3 and M4"))
     XCTAssertEqual(messages[1]["role"], "user")
