@@ -13,9 +13,16 @@ import type { ChatMessage, CodingAgentEvent } from '../../../shared/types'
 // parser (messagesSse) and the merge helper (chatConversation) are the REAL
 // modules, since the fix lives at their boundary.
 
-vi.mock('../lib/firebase', () => ({
-  auth: { currentUser: { getIdToken: async () => 'test-token' } }
-}))
+// Mutable so the first-chat not-ready tests can start with a null (not-yet-
+// rehydrated) session and flip it mid-poll. Reset to the ready default in
+// beforeEach so every other test runs the byte-identical already-signed-in path.
+const fbAuth = vi.hoisted(
+  () =>
+    ({
+      currentUser: { getIdToken: async () => 'test-token' }
+    }) as { currentUser: { getIdToken: () => Promise<string> } | null }
+)
+vi.mock('../lib/firebase', () => ({ auth: fbAuth }))
 vi.mock('../lib/pageCache', () => ({ invalidateConversationsCache: vi.fn() }))
 vi.mock('../lib/localAgent', () => ({ gatherLocalContext: async () => '' }))
 vi.mock('../lib/screenContext', () => ({ readCurrentScreen: async () => '' }))
@@ -45,7 +52,12 @@ vi.mock('../lib/preferences', () => ({
 const speakSpy = vi.fn((_t: string) => Promise.resolve())
 vi.mock('../lib/voice/voiceController', () => ({ speakText: (t: string) => speakSpy(t) }))
 
-import { useChat, CHAT_STREAM_TIMEOUT_MS } from './useChat'
+import {
+  useChat,
+  CHAT_STREAM_TIMEOUT_MS,
+  CHAT_NOT_READY_INTERIM,
+  CHAT_NOT_READY_FINAL
+} from './useChat'
 import {
   addAttachments,
   awaitUploadsSettled,
@@ -118,6 +130,7 @@ const codingAgentCancelSpy = vi.fn(async () => {})
 
 beforeEach(() => {
   vi.clearAllMocks()
+  fbAuth.currentUser = { getIdToken: async () => 'test-token' } // ready by default
   streams = []
   signals = []
   bodies = []
@@ -680,5 +693,96 @@ describe('useChat — chat attachments (file_ids)', () => {
       await sendP
     })
     expect(JSON.parse(bodies[0])).toEqual({ text: 'later', file_ids: ['srv-a.txt'] })
+  })
+})
+
+// #123 first-chat not-ready (legacy_sse). Right after sign-in the persisted Firebase
+// user may not be rehydrated yet, so auth.currentUser is null and getIdToken() would
+// yield `Bearer undefined` → a raw 401 bubble. useChat must show the interim copy and
+// briefly WAIT for the session before the fetch (never `Bearer undefined`), then send
+// with a valid Bearer if it arrives, or show a friendly line (never `Error: HTTP 401`)
+// if it never does. The already-signed-in path stays byte-identical.
+describe('useChat — first-chat not ready (legacy_sse readiness wait)', () => {
+  const authHeaderOf = (i: number): string | undefined => {
+    const calls = (
+      global.fetch as unknown as {
+        mock: { calls: Array<[unknown, { headers?: Record<string, string> }]> }
+      }
+    ).mock.calls
+    return calls[i]?.[1]?.headers?.Authorization
+  }
+
+  it('waits for auth readiness, then sends a REAL Bearer (never `Bearer undefined`)', async () => {
+    vi.useFakeTimers()
+    try {
+      fbAuth.currentUser = null // not yet rehydrated at send time
+      const { result } = renderHook(() => useChat())
+      let p!: Promise<void>
+      await act(async () => {
+        p = result.current.send('hello')
+        for (
+          let k = 0;
+          k < 50 && lastAssistant(result.current.history)?.content !== CHAT_NOT_READY_INTERIM;
+          k++
+        )
+          await vi.advanceTimersByTimeAsync(1)
+      })
+      // Interim copy shown; the fetch has NOT opened yet (no `Bearer undefined`).
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_INTERIM)
+      expect(streams[0]).toBeUndefined()
+
+      // Session rehydrates; the next poll tick sees it and the fetch opens.
+      fbAuth.currentUser = { getIdToken: async () => 't' }
+      await act(async () => {
+        for (let k = 0; k < 100 && !streams[0]; k++) await vi.advanceTimersByTimeAsync(300)
+        streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'hi back' }))}\n\n`)
+        streams[0].close()
+        await p
+      })
+      expect(authHeaderOf(0)).toBe('Bearer t')
+      expect(lastAssistant(result.current.history)?.content).toBe('hi back')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('opens NO fetch and shows the friendly final copy when auth never becomes ready', async () => {
+    vi.useFakeTimers()
+    try {
+      fbAuth.currentUser = null // stays null the whole poll window
+      const { result } = renderHook(() => useChat())
+      await act(async () => {
+        const p = result.current.send('hello')
+        for (
+          let k = 0;
+          k < 50 && lastAssistant(result.current.history)?.content !== CHAT_NOT_READY_INTERIM;
+          k++
+        )
+          await vi.advanceTimersByTimeAsync(1)
+        await vi.advanceTimersByTimeAsync(3000) // exhaust the ~1.5s poll window
+        await p
+      })
+      // Never opened a fetch → never `Bearer undefined`; friendly line, not `Error: HTTP 401`.
+      expect(streams[0]).toBeUndefined()
+      expect(lastAssistant(result.current.history)?.content).toBe(CHAT_NOT_READY_FINAL)
+      expect(lastAssistant(result.current.history)?.content).not.toMatch(/^Error: HTTP/)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('when auth is already ready, opens the fetch immediately with a valid Bearer (byte-identical, no interim)', async () => {
+    // fbAuth.currentUser is the ready default (beforeEach).
+    const { result } = renderHook(() => useChat())
+    await act(async () => {
+      const p = result.current.send('hello')
+      await waitForStream(0)
+      streams[0].push(`done: ${b64(JSON.stringify({ id: 'srv', text: 'hi' }))}\n\n`)
+      streams[0].close()
+      await p
+    })
+    expect(authHeaderOf(0)).toBe('Bearer test-token')
+    // The pending bubble went straight to the reply — the interim copy never showed.
+    expect(lastAssistant(result.current.history)?.content).toBe('hi')
   })
 })
