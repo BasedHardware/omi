@@ -10,24 +10,30 @@
 import { ipcMain } from 'electron'
 import { configurePiMonoSession, getPiMonoSession } from '../codingAgent/piMonoSession'
 import { ensurePiMonoAdapterRegistered, setControlPlaneOwner } from '../agentKernel/controlPlane'
-import { decodeUidFromIdToken } from '../auth/omiAuth'
+import { verifyFirebaseIdToken } from '../auth/firebaseIdToken'
 
 /** Registers the `pimono:*` IPC handlers backing the session store. */
 export function registerPiMonoHandlers(): void {
-  ipcMain.handle('pimono:setSession', (_e, session: unknown): void => {
+  ipcMain.handle('pimono:setSession', async (_e, session: unknown): Promise<void> => {
     configurePiMonoSession(session)
-    // Wire the control-plane owner to the signed-in user, HOST-DERIVED. The
-    // relayed payload carries no uid; we decode it from the Firebase ID token in
-    // the now-validated session (getPiMonoSession returns the coerced session, or
-    // null when signed out / invalid), so the owner comes from the credential
-    // itself — never a renderer-asserted field. This is what scopes every kernel
+    // Wire the control-plane owner to the signed-in user, HOST-DERIVED and
+    // SIGNATURE-VERIFIED. The relayed payload carries no uid; we take it from the
+    // `sub` of the Firebase ID token in the now-validated session — but ONLY after
+    // verifying that token is a genuine, unexpired, Google-signed token for this
+    // project (verifyFirebaseIdToken). A mere decode would trust an unsigned
+    // `{user_id: <victim>}` a compromised renderer could forge, letting it read
+    // another local account's kernel chat. The owner is what scopes every kernel
     // session/surface row (surfaceSession.ts) to the real account instead of the
-    // shared DEFAULT_LOCAL_OWNER_ID constant, closing the cross-account read on a
-    // shared Windows profile. On sign-out (session === null) it resets to default.
-    // An undecodable/forged token decodes to '' → setControlPlaneOwner falls back
-    // to the default, which the cold-start gate then refuses (fail closed).
+    // shared DEFAULT_LOCAL_OWNER_ID constant.
+    //
+    // On ANY verification failure (bad sig, wrong alg, expired, wrong aud/iss,
+    // cert-fetch failure) uid is null → setControlPlaneOwner falls back to the
+    // default constant → the cold-start gate (hasKnownControlPlaneOwner) refuses
+    // kernel chat + control tools. Fail closed, never fall back to the decode path.
+    // On sign-out (session === null) it resets to default.
     const current = getPiMonoSession()
-    setControlPlaneOwner(current ? decodeUidFromIdToken(current.token) : null)
+    const uid = current ? await verifyFirebaseIdToken(current.token) : null
+    setControlPlaneOwner(uid)
     // Register the managed-cloud pi-mono adapter into the kernel now that a
     // session may be present. Idempotent, and a no-op when signed out (returns
     // false), so the registry stays empty until a real Firebase session exists.

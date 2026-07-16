@@ -8,6 +8,10 @@ interface ImportMetaEnv {
   /** Omi backend base URL (shared VITE_ prefix — visible to all processes).
    *  Main uses it for the sign-in authorize/token endpoints. */
   readonly VITE_OMI_API_BASE?: string
+  /** Firebase project id (shared VITE_ prefix — frozen into the main bundle at
+   *  build time). Main verifies the relayed Firebase ID token's aud/iss against
+   *  it (auth/firebaseIdToken.ts); it must come from here, never the renderer. */
+  readonly VITE_FIREBASE_PROJECT_ID?: string
 }
 
 interface ImportMeta {
