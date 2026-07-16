@@ -13,6 +13,8 @@ import { clearUserScopedPreferences } from './preferences'
 import { CHAT_INFINITE_ID_KEY } from './chatStorageKeys'
 import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
 import { resetByokKeys } from './byokKeys'
+import { clearAllPersistedCaches } from './persistentCache'
+import { resetMemoriesCache } from './memoriesCache'
 
 // Standalone user-scoped localStorage keys (the device-prefs blob and sidebar
 // collapse state are machine-scoped and NOT listed here).
@@ -53,11 +55,17 @@ export async function teardownUserData(): Promise<void> {
   }
   // 3. In-memory module caches so the current window reflects the wipe without a
   //    relaunch (the Conversations list, pending placeholders, the chat-grounding
-  //    memory cache).
+  //    memory cache, and the Memories page's module-singleton cache).
   invalidateConversationsCache()
   clearPendingConversations()
   clearMemoryCache()
-  // 4. User-scoped localStorage keys.
+  resetMemoriesCache()
+  // 4. Per-uid cold-start snapshots (persistentCache): the last-known page data
+  //    mirrored to localStorage so surfaces render instantly on the next launch.
+  //    Keys are already uid-scoped, but purge them all so a second account on this
+  //    install can never read the prior user's snapshot even via devtools.
+  clearAllPersistedCaches()
+  // 5. User-scoped localStorage keys.
   for (const key of USER_SCOPED_LOCALSTORAGE_KEYS) {
     try {
       localStorage.removeItem(key)
@@ -65,7 +73,7 @@ export async function teardownUserData(): Promise<void> {
       /* privacy mode / quota */
     }
   }
-  // 5. User-identity fields inside the shared prefs blob (name, chosen goal) so
+  // 6. User-identity fields inside the shared prefs blob (name, chosen goal) so
   //    the next account doesn't briefly inherit them. Device settings, consents,
   //    and onboarding state in the same blob are preserved.
   clearUserScopedPreferences()

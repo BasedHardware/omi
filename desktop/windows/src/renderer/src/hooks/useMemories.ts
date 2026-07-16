@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
+import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
 
 export type Memory = {
   id: string
@@ -28,30 +29,8 @@ export type Memory = {
   app_id?: string | null
 }
 
-const cache = {
-  list: null as Memory[] | null,
-  error: null as string | null,
-  loaded: false,
-  // Whether the server exposes canonical memory tiering for this account
-  // (X-Omi-Memory-Canonical-Lifecycle-Exposed). Prod runs MEMORY_MODE=off, so
-  // this stays false and the tier/device filters never render. Set from the
-  // fetch response immediately BEFORE publish(), so the list re-render that
-  // publish triggers reads the fresh value.
-  canonicalLifecycleExposed: false
-}
-
 // Axios lowercases response header keys.
 const CANONICAL_LIFECYCLE_HEADER = 'x-omi-memory-canonical-lifecycle-exposed'
-
-// Every mounted useMemories subscribes here so a refresh/create in one place
-// (e.g. the Settings importer) updates the Memories page too — without this the
-// module cache only refreshed the component that triggered the write.
-const subscribers = new Set<(list: Memory[]) => void>()
-
-function publish(list: Memory[]): void {
-  cache.list = list
-  subscribers.forEach((fn) => fn(list))
-}
 
 // Optional extra fields for a created memory. `tags` carries provenance (e.g.
 // 'omi-app-index'); `category` is sent best-effort — the server may ignore or
@@ -116,8 +95,14 @@ export function useMemories(): {
   deleteMemory: (id: string) => Promise<void>
   refresh: () => Promise<void>
 } {
+  hydrateFromDisk()
   const [memories, setMemories] = useState<Memory[]>(cache.list ?? [])
-  const [loading, setLoading] = useState(!cache.loaded)
+  // Show cached memories immediately on cold start (no spinner) whenever we have a
+  // snapshot to render — from disk (hydrateFromDisk) or a prior in-session fetch.
+  // Only fall back to the loading state when there is genuinely nothing to show.
+  // The revalidating fetch still runs (gated on cache.loaded), so fresh data lands
+  // shortly after.
+  const [loading, setLoading] = useState(!cache.loaded && (cache.list?.length ?? 0) === 0)
   const [error, setError] = useState<string | null>(cache.error)
 
   useEffect(() => {
