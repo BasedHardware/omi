@@ -1430,10 +1430,10 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
   }
 
   func testBeginTurnBuffersThroughTypedHandoffInsteadOfWaitingOnThePressPath() throws {
-    let source = try realtimeHubControllerSource()
+    let source = try realtimeHubPushToTalkSource()
     let begin = try XCTUnwrap(source.range(of: "func beginTurn(turnID requestedTurnID:"))
     let nextMethod = try XCTUnwrap(
-      source.range(of: "private func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
+      source.range(of: "func captureInterruptedTurnPayloadIfNeeded()", range: begin.upperBound..<source.endIndex))
     let beginBody = String(source[begin.lowerBound..<nextMethod.lowerBound])
 
     XCTAssertTrue(beginBody.contains("self.contextFreshInputPreparationIsCurrent("))
@@ -1479,6 +1479,12 @@ final class RealtimeHubBargeInContinuityTests: XCTestCase {
 
   private func realtimeHubControllerSource() throws -> String {
     try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
+  }
+
+  private func realtimeHubPushToTalkSource() throws -> String {
+    // omi-test-quality: source-inspection -- ownership-specific boundary for an extracted extension
+    try RealtimeHubControllerSourceTestSupport.source(
+      named: "RealtimeHubController+PushToTalk.swift", testFilePath: #filePath)
   }
 
   private func realtimeTurnPersistenceSource() throws -> String {
