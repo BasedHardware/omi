@@ -84,6 +84,13 @@ class SharedPreferencesUtil {
 
   set batchModeEnabled(bool value) => saveBool('batchModeEnabled', value);
 
+  // Phone-mic batch capture marker. false = explicit Transcribe Later (files
+  // named audio_omibatchphone_...), true = automatic offline fallback (files
+  // named audio_omibatchphoneauto_...). Read natively as flutter.phoneBatchAuto.
+  bool get phoneBatchAuto => getBool('phoneBatchAuto');
+
+  set phoneBatchAuto(bool value) => saveBool('phoneBatchAuto', value);
+
   // Transcribe Later: pause capture (native writer drops packets, keeps the file
   // open) so the user can mute a sensitive moment and resume the same recording.
   bool get batchMuted => getBool('batchMuted');

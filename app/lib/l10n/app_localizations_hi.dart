@@ -9320,7 +9320,7 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'फ़िलहाल यह Omi और Limitless डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।';
+      'यह फ़ोन के माइक्रोफ़ोन, Omi और Limitless डिवाइस के साथ काम करता है। जब तक आप अपलोड करना न चुनें, तब तक ऑडियो आपके फ़ोन में ही रहता है।';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9571,4 +9571,8 @@ class AppLocalizationsHi extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'डिवाइस लगभग भर गया है — स्थान खाली करने के लिए सिंक करें।';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'कोई कनेक्शन नहीं — स्थानीय रूप से रिकॉर्ड किया जा रहा है। ऑनलाइन वापस आने पर इसे ट्रांसक्राइब किया जाएगा।';
 }

@@ -120,6 +120,13 @@ class CaptureController extends ChangeNotifier
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
 
+  // True while a phone-mic Transcribe Later (batch) session is running: the
+  // native recorder writes .bin files directly, so no socket/WAL/AudioSource is
+  // active. Distinct from the Live phone-mic path (_phoneMicWalActive).
+  bool _phoneMicBatchActive = false;
+
+  bool get isPhoneMicBatchRecording => _phoneMicBatchActive;
+
   bool _isLoadingInProgressConversation = false;
 
   late final CaptureMetricsTracker _metrics = CaptureMetricsTracker(onNotify: notifyListeners);
@@ -164,17 +171,24 @@ class CaptureController extends ChangeNotifier
   bool _micInterrupted = false;
 
   void _onMicInterruption(bool began) {
-    if (_activeSource is! PhoneMicSource) return;
+    // Live phone mic drives an AudioSource; batch has none (_activeSource stays
+    // null) but still needs its interruption state mirrored.
+    if (_activeSource is! PhoneMicSource && !_phoneMicBatchActive) return;
     _micInterrupted = began;
     if (began) {
       updateRecordingState(RecordingState.interrupted);
+    } else if (_phoneMicBatchActive) {
+      // Batch has no onRecording callback to restore the state; native already
+      // resumed, so flip back to record here.
+      updateRecordingState(RecordingState.record);
     }
-    // On end, native capture has already resumed; onRecording restores
+    // On end (Live), native capture has already resumed; onRecording restores
     // RecordingState.record once frames flow again.
     notifyListeners();
   }
 
   bool _phoneMicRestartInFlight = false;
+  bool _phoneMicBatchRestartInFlight = false;
 
   Future<void> _restartPhoneMicRecording() async {
     if (_phoneMicRestartInFlight) return;
@@ -493,6 +507,11 @@ class CaptureController extends ChangeNotifier
 
   bool get deviceSupportsTranscribeLater => supportsTranscribeLater(_recordingDevice?.type);
 
+  // The phone microphone can capture Transcribe Later (batch) audio only where
+  // the native AVAudioEngine recorder lives: iOS. On Android the phone-mic path
+  // has no batch writer, so an offline/batch session falls back to Live.
+  static bool get phoneMicSupportsTranscribeLater => Platform.isIOS;
+
   Future<bool> setBatchMode(bool enabled) async {
     if (SharedPreferencesUtil().batchModeEnabled == enabled) return true;
     // With batch on the realtime socket is suppressed for every device type, so a
@@ -512,6 +531,20 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
     await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
+    // A phone-mic session's mode is fixed at start, so a mid-session toggle
+    // must roll the session into a fresh one — otherwise _resetState() tears
+    // the socket down under a still-running Live session (no transcript, audio
+    // silently diverted to the offline WAL) and the UI keeps the Live card.
+    final phoneMicSessionActive = _phoneMicBatchActive || _activeSource is PhoneMicSource;
+    if (phoneMicSessionActive) {
+      try {
+        await stopStreamRecording();
+        await streamRecording();
+      } catch (e, st) {
+        Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
+      }
+      return true;
+    }
     try {
       await onRecordProfileSettingChanged();
     } catch (_) {}
@@ -1337,6 +1370,17 @@ class CaptureController extends ChangeNotifier
   }
 
   streamRecording() async {
+    // Mode is fixed for the whole session at start. On iOS the phone mic can
+    // capture Transcribe Later (batch) audio: explicitly when the user enabled
+    // it, or automatically as an offline fallback when there is no network. Both
+    // write .bin files natively instead of opening the realtime socket.
+    final bool batchExplicit = Platform.isIOS && SharedPreferencesUtil().batchModeEnabled;
+    final bool batchAuto = !batchExplicit && Platform.isIOS && !ConnectivityService().isConnected;
+    if (batchExplicit || batchAuto) {
+      await _startPhoneMicBatch(auto: batchAuto);
+      return;
+    }
+
     updateRecordingState(RecordingState.initialising);
     final micPermission = await Permission.microphone.request();
     if (!micPermission.isGranted) {
@@ -1400,6 +1444,19 @@ class CaptureController extends ChangeNotifier
   }
 
   stopStreamRecording() async {
+    // Batch (Transcribe Later) phone-mic session: no WAL flush or socket to
+    // close. Native stop() finalizes the current .bin before it resolves; the
+    // recordings list refreshes from onBatchRecordingFinalized.
+    if (_phoneMicBatchActive) {
+      _micInterrupted = false;
+      ServiceManager.instance().phoneMic.stop();
+      _endOfflineSession();
+      await _cleanupCurrentState();
+      _phoneMicBatchActive = false;
+      updateRecordingState(RecordingState.stop);
+      return;
+    }
+
     // Flush remaining phone mic WAL buffer before stopping
     if (_phoneMicWalActive) {
       final flushed = _activeSource?.flush() ?? [];
@@ -1417,6 +1474,84 @@ class CaptureController extends ChangeNotifier
     ServiceManager.instance().phoneMic.stop();
     updateRecordingState(RecordingState.stop);
     await _socket?.stop(reason: 'stop stream recording');
+  }
+
+  /// Start a phone-mic Transcribe Later (batch) session. Native opus-encodes and
+  /// writes WAL-compatible .bin files; no socket, WAL, or AudioSource is used
+  /// (_activeSource stays null). [auto] selects the file marker: false = explicit
+  /// Transcribe Later, true = automatic offline fallback.
+  Future<void> _startPhoneMicBatch({required bool auto}) async {
+    updateRecordingState(RecordingState.initialising);
+    final micPermission = await Permission.microphone.request();
+    if (!micPermission.isGranted) {
+      Logger.error('[CaptureProvider] microphone permission denied, not starting phone mic batch');
+      updateRecordingState(RecordingState.stop);
+      return;
+    }
+
+    await _cleanupCurrentState();
+
+    // batchAudioDir may never have been written if batch was chosen via the
+    // offline auto-switch (setBatchMode was never called with batch on).
+    final docs = await getApplicationDocumentsDirectory();
+    await SharedPreferencesUtil().saveString('batchAudioDir', docs.path);
+    await SharedPreferencesUtil().saveBool('phoneBatchAuto', auto);
+    if (SharedPreferencesUtil().batchMuted) SharedPreferencesUtil().batchMuted = false;
+    if (SharedPreferencesUtil().batchCutRequested) SharedPreferencesUtil().batchCutRequested = false;
+
+    _phoneMicBatchActive = true;
+    // Offline-session bookkeeping drives the capture-card timer (mirrors
+    // _initiateDeviceAudioStreaming); _onOfflineRecordingFinalized resets it on
+    // each native file rotation.
+    _offlineSessionStartSeconds = _nowSeconds;
+    _offlineMuteStartedAt = null;
+
+    updateRecordingState(RecordingState.record);
+    try {
+      await ServiceManager.instance().phoneMic.startBatch(
+            onStop: () {
+              if (!_micInterrupted && !_phoneMicBatchRestartInFlight) {
+                updateRecordingState(RecordingState.stop);
+              }
+            },
+            onInterruption: _onMicInterruption,
+            onBatchStalled: _onBatchStalled,
+            onError: _onBatchCaptureError,
+          );
+    } catch (e, st) {
+      // No socket to clean in batch — fail visibly instead of recording nothing.
+      Logger.error('[CaptureProvider] phone mic batch start failed: $e\n$st');
+      _phoneMicBatchActive = false;
+      _endOfflineSession();
+      updateRecordingState(RecordingState.stop);
+    }
+  }
+
+  /// Batch liveness watchdog escalation: the native progress feed went silent, so
+  /// tear the session down and start a fresh one. Never routes through the Live
+  /// restart path (_restartPhoneMicRecording), which assumes a socket/WAL.
+  Future<void> _onBatchStalled() async {
+    if (!_phoneMicBatchActive || _phoneMicBatchRestartInFlight) return;
+    _phoneMicBatchRestartInFlight = true;
+    try {
+      ServiceManager.instance().phoneMic.stop();
+      if (!_phoneMicBatchActive) return; // user stopped while restarting
+      await _startPhoneMicBatch(auto: SharedPreferencesUtil().phoneBatchAuto);
+    } catch (e, st) {
+      Logger.error('[CaptureProvider] _onBatchStalled restart failed: $e\n$st');
+    } finally {
+      _phoneMicBatchRestartInFlight = false;
+    }
+  }
+
+  Future<void> _onBatchCaptureError(String code, String message) async {
+    Logger.error('[CaptureProvider] batch capture error $code: $message');
+    if (code == 'batch_storage_full') {
+      // The flag is written natively; reload so the Dart prefs cache sees it
+      // before the UI re-reads it on notify.
+      await SharedPreferencesUtil.reload();
+      notifyListeners();
+    }
   }
 
   Future streamDeviceRecording({BtDevice? device}) async {

@@ -17412,7 +17412,7 @@ abstract class AppLocalizations {
   /// Caveat note shown in the Transcribe Later sheet
   ///
   /// In en, this message translates to:
-  /// **'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.'**
+  /// **'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.'**
   String get transcribeLaterNote;
 
   /// Warning shown when storage is too low to keep recording in Transcribe Later mode
@@ -17882,6 +17882,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'Device nearly full — sync to free space.'**
   String get deviceStorageNearlyFull;
+
+  /// Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline
+  ///
+  /// In en, this message translates to:
+  /// **'No connection — recording locally. It will be transcribed when you\'re back online.'**
+  String get phoneMicOfflineFallbackMessage;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {
