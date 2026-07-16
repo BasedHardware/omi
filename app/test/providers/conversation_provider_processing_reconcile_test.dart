@@ -65,6 +65,19 @@ void main() {
 
     expect(provider.processingConversations.map((c) => c.id), ['0']);
   });
+
+  test('failed refresh leaves the processing card untouched', () async {
+    final provider = ConversationProvider(
+      conversationListFetcher: () async => (items: <ServerConversation>[], ok: false),
+      isSignedIn: () => true,
+    );
+    addTearDown(provider.dispose);
+    provider.addProcessingConversation(_conversation('c1', status: ConversationStatus.processing));
+
+    await provider.forceRefreshConversations();
+
+    expect(provider.processingConversations.map((c) => c.id), ['c1']);
+  });
 }
 
 ServerConversation _conversation(String id, {required ConversationStatus status}) => ServerConversation(
