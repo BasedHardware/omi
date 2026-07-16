@@ -161,7 +161,22 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let isResuming = OnboardingChatPersistence.isMidOnboarding
     OnboardingChatPersistence.saveMidOnboarding()
     if !isResuming {
-      Task { await KnowledgeGraphStorage.shared.clearAll() }
+      if let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() {
+        let authorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+        }
+        Task {
+          do {
+            try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
+          } catch LocalMutationAuthorizationError.revoked {
+            log("Onboarding: skipped stale-owner local knowledge graph reset")
+          } catch {
+            logError("Onboarding: failed to reset local knowledge graph", error: error)
+          }
+        }
+      } else {
+        log("Onboarding: skipped local knowledge graph reset without an authenticated owner")
+      }
     }
 
     if scanSnapshot == nil {

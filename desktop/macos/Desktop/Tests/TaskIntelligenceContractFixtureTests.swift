@@ -70,7 +70,7 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
 
     func testCaptureFixturesHaveIdenticalRecordedAdapterOutputsAcrossModalities() throws {
         let url = repositoryRoot()
-            .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/capture_v1.json")
+            .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/capture_v2.json")
         let data = try Data(contentsOf: url)
         let root = try XCTUnwrap(JSONSerialization.jsonObject(with: data) as? [String: Any])
         let cases = try XCTUnwrap(root["cases"] as? [[String: Any]])
@@ -86,7 +86,7 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
 
     func testScreenCapturePolicyMatchesEverySharedFixture() throws {
         let url = repositoryRoot()
-            .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/capture_v1.json")
+            .appendingPathComponent("backend/tests/unit/fixtures/task_intelligence/capture_v2.json")
         let root = try XCTUnwrap(
             JSONSerialization.jsonObject(with: Data(contentsOf: url)) as? [String: Any]
         )
@@ -289,6 +289,41 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
         XCTAssertFalse(json.contains("Messages"))
         XCTAssertFalse(json.contains("window"))
         XCTAssertFalse(json.contains("screenshot_bytes"))
+    }
+
+    func testScreenCaptureFailsClosedWhenOwnershipConfidenceIsMissing() {
+        let task = ExtractedTask(
+            title: "Send the revised budget",
+            description: nil,
+            priority: .high,
+            sourceApp: "Messages",
+            inferredDeadline: nil,
+            confidence: 0.95,
+            tags: [],
+            sourceCategory: "direct_request",
+            sourceSubcategory: "message",
+            captureKind: "direct_request",
+            owner: "user",
+            concreteDeliverable: true,
+            publicBroadcast: false,
+            directMention: true,
+            alreadyDone: false,
+            duplicateOf: nil,
+            refinesTask: nil,
+            ownershipConfidence: nil
+        )
+
+        let facts = ScreenCandidateAdapter.facts(for: task)
+        let decision = ScreenCandidateAdapter.adapt(
+            task: task,
+            dueAt: nil,
+            localEvidenceID: "screen-ownership-missing",
+            deviceID: "macos_device"
+        )
+
+        XCTAssertEqual(facts.ownershipConfidence, 0.5)
+        XCTAssertEqual(decision.outcome, .ignore)
+        XCTAssertNil(decision.candidate)
     }
 
     func testScreenCompletionRequiresAndPreservesCanonicalTaskIdentity() throws {
@@ -536,7 +571,11 @@ final class TaskIntelligenceSQLiteRoundTripTests: XCTestCase {
             from: JSONSerialization.data(withJSONObject: updateResponse)
         )
 
-        try await ActionItemStorage.shared.syncTaskActionItems([item])
+        // Fixture persistence is intentionally session-independent.
+        try await ActionItemStorage.shared.syncTaskActionItems(
+            [item],
+            authorization: .unrestricted
+        )
         let stored = try await ActionItemStorage.shared.getLocalActionItem(byBackendId: item.id)
         let restored = try XCTUnwrap(stored)
 

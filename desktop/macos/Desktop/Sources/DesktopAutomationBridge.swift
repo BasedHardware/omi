@@ -15,18 +15,31 @@ enum DesktopAutomationLaunchOptions {
   private static let generatedToken = "omi_auto_\(UUID().uuidString.replacingOccurrences(of: "-", with: "").lowercased())"
 
   static var isEnabled: Bool {
-    guard AppBuild.isNonProduction else {
+    isEnabled(
+      allowsLocalAutomation: AppBuild.allowsLocalAutomation,
+      arguments: CommandLine.arguments,
+      environment: ProcessInfo.processInfo.environment
+    )
+  }
+
+  static func isEnabled(
+    allowsLocalAutomation: Bool,
+    arguments: [String],
+    environment: [String: String]
+  ) -> Bool {
+    guard allowsLocalAutomation else {
       return false
     }
     // Explicit opt-out always wins, so a dev build can be run "clean" if needed.
-    if ProcessInfo.processInfo.environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
+    if environment["OMI_DISABLE_LOCAL_AUTOMATION"] == "1" {
       return false
     }
-    // Auto-enable on any non-production bundle (Omi Dev + every `omi-*` named test
-    // bundle) so agents can drive the app without remembering a launch flag.
-    return CommandLine.arguments.contains(enableFlag)
-      || ProcessInfo.processInfo.environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
-      || AppBuild.isNonProduction
+    // Auto-enable on local bundles (Omi Dev + every `omi-*` named test bundle) so agents
+    // can drive the app without remembering a launch flag. Published previews are excluded
+    // by `allowsLocalAutomation` above even if their process environment is contaminated.
+    return arguments.contains(enableFlag)
+      || environment["OMI_ENABLE_LOCAL_AUTOMATION"] == "1"
+      || allowsLocalAutomation
   }
 
   static var port: UInt16 {
@@ -331,8 +344,18 @@ private struct DesktopAutomationHealth: Codable {
   let ok: Bool
   let name: String
   let bundleIdentifier: String
+  let processID: Int32
+  let logFilePath: String
+  let logLaunchID: String
   let bridgePort: UInt16
   let requiresAuth: Bool
+  let backendEnvironment: String
+  let pythonBackendURL: String
+  let rustBackendURL: String
+  let agentRuntimeRunning: Bool
+  let agentRuntimeExpectedProtocolVersion: Int
+  let agentRuntimeProtocolVersion: Int?
+  let agentRuntimeVersion: String?
 }
 
 struct DesktopAutomationRouteTrace: Codable {
@@ -805,6 +828,9 @@ final class DesktopAutomationActionRegistry {
       summary: "Evaluate a synthetic bounded recommendation through the real interruption gate",
       params: ["can_wait", "expires_in_seconds"]
     ) { params in
+      guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() else {
+        return ["error": "runtime_owner_unavailable"]
+      }
       let nonce = UUID().uuidString.lowercased()
       let trace = NotificationService.shared.sendContextualTaskInterruption(
         TaskInterruptionCandidate(
@@ -817,7 +843,8 @@ final class DesktopAutomationActionRegistry {
           expiresAt: Date().addingTimeInterval(TimeInterval(
             intParam(params["expires_in_seconds"], default: 300))),
           canWait: boolParam(params["can_wait"], default: false)
-        )
+        ),
+        authorizationSnapshot: authorizationSnapshot
       )
       return [
         "reason": trace.reason.rawValue,
@@ -1251,22 +1278,46 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    // Manager-level PTT harness: this crosses the real shortcut lifecycle,
+    // routing decision, realtime admission, warm buffering, and replay seam.
+    // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
+    // physical test, it needs neither microphone permission nor a device.
+    register(
+      name: "ptt_manager_turn",
+      summary: "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
+      params: ["pcm"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+
+      var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
+      guard result["listening"] == "true" else { return result }
+      let chunkSize = 3_200
+      var offset = 0
+      var injected = 0
+      while offset < pcm16k.count {
+        let end = min(offset + chunkSize, pcm16k.count)
+        if PushToTalkManager.shared.injectRealtimePTTAutomationAudio(pcm16k.subdata(in: offset..<end)) {
+          injected += end - offset
+        }
+        offset = end
+      }
+      let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      result["injected_bytes"] = "\(injected)"
+      result["finalized"] = stopped["finalized"] ?? "false"
+      for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
+    }
+
     register(
       name: "ptt_turn_snapshot",
-      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+      summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"
     ) { _ in
-      let coordinator = VoiceTurnCoordinator.shared
-      let turn = coordinator.model.turn
-      let terminalReason = turn?.terminalReason?.rawValue ?? ""
-      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
-      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
-      return [
-        "phase": phase,
-        "route": route,
-        "terminal_reason": terminalReason,
-        "stale_event_count": "\(coordinator.model.staleEventCount)",
-        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
-      ]
+      RealtimeHubController.shared.automationPTTDiagnostics()
     }
 
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
@@ -1360,9 +1411,7 @@ final class DesktopAutomationActionRegistry {
       guard AuthState.shared.isSignedIn else {
         return ["signed_out": "true", "was_signed_in": "false"]
       }
-      try await MainActor.run {
-        try AuthService.shared.signOut()
-      }
+      try await AuthService.shared.signOut()
       return [
         "signed_out": "true",
         "was_signed_in": "true",
@@ -1479,12 +1528,15 @@ final class DesktopAutomationActionRegistry {
       params: ["state"]
     ) { params in
       let s = (params["state"] ?? "thinking").lowercased()
+      guard let debugState = VoiceTurnDebugPresentationState(rawValue: s) else {
+        return ["error": "state must be idle, listening, thinking, or answering"]
+      }
       let mgr = FloatingControlBarManager.shared
       guard let bar = mgr.barState else { return ["error": "no bar state"] }
       if s != "idle", !mgr.isVisible { mgr.show() }
-      bar.isVoiceResponseActive = (s == "answering")
-      bar.isVoiceListening = (s == "listening")
-      bar.isThinking = (s == "thinking")
+      guard VoiceTurnCoordinator.shared.applyDebugPresentationState(debugState) else {
+        return ["error": "a non-debug voice turn is active"]
+      }
       return ["state": s, "usesNotchIsland": bar.usesNotchIsland ? "true" : "false"]
     }
 
@@ -1499,7 +1551,10 @@ final class DesktopAutomationActionRegistry {
       guard let provider = ChatProvider.mainInstance else {
         return ["error": "main ChatProvider not yet initialized"]
       }
-      _ = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      let clear = await provider.automationClearOwnerSurfaceState(chatId: "default")
+      if let error = clear["error"] {
+        return ["error": error]
+      }
       if let error = await provider.automationResetChatForHarness() {
         return ["error": error]
       }
@@ -2105,10 +2160,75 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_awareness_snapshot",
-      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging"
-    ) { _ in
-      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON()
+      summary: "Read the Swift coordinator awareness projection for Agents & Attention debugging",
+      params: ["limit"]
+    ) { params in
+      let limit = max(1, min(200, intParam(params["limit"], default: 50)))
+      let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "agent_lifecycle_convergence_snapshot",
+      summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
+      params: ["runIds"],
+      category: "read",
+      surfaces: ["floating_bar", "main_chat", "realtime"],
+      safety: "read_only"
+    ) { params in
+      let runIDs = Set(
+        (params["runIds"] ?? "")
+          .split(separator: ",")
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+          .prefix(20)
+      )
+      return ["snapshot": await AgentPillsManager.shared.lifecycleConvergenceSnapshot(runIDs: runIDs)]
+    }
+
+    register(
+      name: "coordinator_inspect_run",
+      summary: "Inspect one owner-scoped kernel run and its bounded tool-invocation ledger",
+      params: ["runId"]
+    ) { params in
+      guard let runId = params["runId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !runId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing runId")
+      }
+      let run = try await DesktopCoordinatorService.shared.inspectRun(runId: runId)
+      return ["run": run]
+    }
+
+    register(
+      name: "coordinator_continue_agent",
+      summary: "Continue one owner-scoped canonical agent session and return its new run handles",
+      params: ["sessionId", "prompt", "surfaceKind"]
+    ) { params in
+      guard let sessionId = params["sessionId"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !sessionId.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing sessionId")
+      }
+      guard let prompt = params["prompt"]?.trimmingCharacters(in: .whitespacesAndNewlines),
+        !prompt.isEmpty
+      else {
+        throw DesktopAutomationActionError.invalidParams("missing prompt")
+      }
+      let inspection = try await DesktopCoordinatorService.shared.continueAgent(
+        sessionId: sessionId,
+        prompt: prompt,
+        originSurface: DesktopCoordinatorOriginSurface(surfaceKind: params["surfaceKind"]),
+        model: nil,
+        cwd: nil
+      )
+      return [
+        "session_id": inspection.sessionId ?? "",
+        "run_id": inspection.runId ?? "",
+        "attempt_id": inspection.attemptId ?? "",
+        "status": inspection.status,
+        "error": inspection.errorMessage ?? "",
+      ]
     }
 
     register(
@@ -2131,13 +2251,33 @@ final class DesktopAutomationActionRegistry {
 
     register(
       name: "coordinator_route_intent",
-      summary: "Route an intent through deterministic coordinator projection rules",
-      params: ["intent", "surfaceKind", "taskId"]
+      summary: "Route a structured proposal through the canonical agent kernel",
+      params: [
+        "intent", "surfaceKind", "taskId", "proposal", "snapshotVersion",
+        "sessionId", "runId", "parentRunId", "provider", "agentCount",
+      ]
     ) { params in
+      let proposal: DesktopCoordinatorIntentProposal
+      switch params["proposal"] {
+      case "spawn_agent": proposal = .spawnAgent
+      case "continue_run": proposal = .continueRun
+      case "clarify": proposal = .clarify(missing: ["automation_input"])
+      default: proposal = .answerInline
+      }
+      let syntaxFacts = DesktopCoordinatorIntentSyntaxFacts(
+        delegationNegated: nil,
+        explicitSessionId: params["sessionId"],
+        explicitRunId: params["runId"],
+        parentRunId: params["parentRunId"],
+        explicitProvider: params["provider"],
+        requestedAgentCount: params["agentCount"].flatMap(Int.init))
       let decision = try await DesktopCoordinatorService.shared.routeIntentJSON(
         intent: params["intent"] ?? "",
         surfaceKind: params["surfaceKind"],
-        taskId: params["taskId"]
+        taskId: params["taskId"],
+        snapshotVersion: params["snapshotVersion"],
+        proposal: proposal,
+        syntaxFacts: syntaxFacts
       )
       return ["decision": decision]
     }
@@ -2301,6 +2441,14 @@ final class DesktopAutomationActionRegistry {
     }
 
     register(
+      name: "preview_screen_recording_drag_helper",
+      summary: "Open Screen Recording settings and show the drag-to-enable helper"
+    ) { _ in
+      await MainActor.run { ScreenCaptureService.openScreenRecordingPreferences() }
+      return CloudConnectorGuidanceOverlay.shared.automationState()
+    }
+
+    register(
       name: "open_conversation",
       summary: "Open a conversation detail view (same path as POST /conversation/open)",
       params: ["conversationId", "showTranscript", "timeoutMs"]
@@ -2329,6 +2477,20 @@ final class DesktopAutomationActionRegistry {
         "show_transcript": showTranscript ? "true" : "false",
         "detail_open": ConversationDetailAutomationState.shared.openConversationId == conversationId ? "true" : "false",
       ]
+    }
+
+    register(
+      name: "set_conversations_search",
+      summary: "Set the Conversations page search query (drives the real debounced search path)",
+      params: ["query"]
+    ) { params in
+      try await ensureConversationsTabVisibleForAutomation()
+      NotificationCenter.default.post(
+        name: .desktopAutomationSetConversationsSearchRequested,
+        object: nil,
+        userInfo: ["query": params["query"] ?? ""]
+      )
+      return ["query": params["query"] ?? ""]
     }
 
     register(
@@ -3124,6 +3286,66 @@ final class DesktopAutomationActionRegistry {
       return ["blocking_main_thread_ms": "\(durationMs)"]
     }
 
+    // AUTH-03: force the stored idToken's expiry into the past through AuthService's own
+    // storage abstraction, so a harness can relaunch and prove the app REFRESHES an
+    // expired token without signing the user out. The old harness trick
+    // (`defaults write <bundle> auth_tokenExpiry -float 1000`) tampers a key the app no
+    // longer reads now that tokens are keychain-backed — it measured nothing and reported
+    // a false regression. This seam is storage-agnostic and never exposes token material.
+    // Non-prod only (double-gated: here and inside AuthService).
+    register(
+      name: "expire_auth_token",
+      summary:
+        "Expire the stored idToken via AuthService's real storage path (keychain or UserDefaults) so a relaunch must refresh it without signing out — AUTH-03. Status only, no token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "expire_auth_token is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.expireStoredTokenForAutomation() }
+    }
+
+    // AUTH-03 read-back: which backend actually holds the tokens, and is the stored
+    // idToken currently expired? Lets a harness assert "expired -> relaunch -> refreshed,
+    // still signed in" against the REAL storage rather than a UserDefaults key the app may
+    // no longer use. Presence/expiry booleans only — never token material. Non-prod only.
+    register(
+      name: "auth_token_status",
+      summary:
+        "Read-only auth token status (signed_in, storage backend, has_id_token, has_refresh_token, is_token_expired) — AUTH-03. No token material. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "auth_token_status is disabled on production bundles"]
+      }
+      return await MainActor.run { AuthService.shared.tokenStatusForAutomation() }
+    }
+
+    // CHAT-07: post `NSWorkspace.didWakeNotification` on the WORKSPACE notification
+    // center — the top of the real wake chain. Every production consumer then fires
+    // exactly as on a physical wake: RealtimeHubController re-warms/defers its
+    // session ("system_wake"), and AppState's observer re-broadcasts the
+    // default-center `.systemDidWake` for downstream consumers. (Posting only the
+    // default-center `.systemDidWake` would MISS RealtimeHub, which observes the
+    // workspace center directly.) Transcription restart stays guarded by
+    // wasTranscribingBeforeSleep, so a synthetic wake is a safe no-op there.
+    // Read-only with respect to user data; non-prod only.
+    register(
+      name: "simulate_system_wake",
+      summary: "Post NSWorkspace.didWakeNotification on the workspace center (the top of the real wake chain: RealtimeHub re-warm + AppState .systemDidWake re-broadcast) so post-wake restart paths run without a real sleep — CHAT-07 harness. Non-prod only.",
+      params: []
+    ) { _ in
+      guard AppBuild.isNonProduction else {
+        return ["error": "simulate_system_wake is disabled on production bundles"]
+      }
+      await MainActor.run {
+        NSWorkspace.shared.notificationCenter.post(
+          name: NSWorkspace.didWakeNotification, object: nil)
+      }
+      log("DesktopAutomationBridge: simulate_system_wake posted NSWorkspace.didWakeNotification")
+      return ["posted": "NSWorkspace.didWakeNotification"]
+    }
+
     // PERM-06: trigger the permission-flow "Quit & Reopen" restart — the exact
     // AppState.restartApp() path used after granting Accessibility / Screen
     // Recording — so a harness can prove the SAME bundle relaunches with the
@@ -3397,13 +3619,25 @@ final class DesktopAutomationBridge {
         statusCode: 403)
     }
     if request.method == "GET", request.path == "/health", request.headers["authorization"] == nil {
+      let runtime = await AgentRuntimeProcess.shared.diagnosticsSnapshot()
       return jsonResponse(
         DesktopAutomationHealth(
           ok: true,
           name: "omi-desktop-automation",
           bundleIdentifier: Bundle.main.bundleIdentifier ?? "unknown",
+          processID: getpid(),
+          logFilePath: omiLogFilePath(),
+          logLaunchID: omiLogLaunchID(),
           bridgePort: DesktopAutomationLaunchOptions.port,
-          requiresAuth: true
+          requiresAuth: true,
+          backendEnvironment: DesktopBackendEnvironment.shouldUseDevelopmentBackends
+            ? "development" : "production",
+          pythonBackendURL: DesktopBackendEnvironment.pythonBaseURL(),
+          rustBackendURL: DesktopBackendEnvironment.rustBackendURL(),
+          agentRuntimeRunning: runtime.running,
+          agentRuntimeExpectedProtocolVersion: AgentRuntimeProcess.expectedProtocolVersion,
+          agentRuntimeProtocolVersion: runtime.protocolVersion,
+          agentRuntimeVersion: runtime.runtimeVersion
         )
       )
     }

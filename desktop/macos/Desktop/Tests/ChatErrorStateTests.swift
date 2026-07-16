@@ -187,6 +187,15 @@ final class ChatErrorStateTests: XCTestCase {
     )
   }
 
+  func testTypedBridgeStartFailureSurfacesARecoverableRetryCard() {
+    let error = BridgeError.failedToStart(.handshakeTimedOut)
+    XCTAssertEqual(
+      ChatErrorState.from(error),
+      .bridgeUnavailable(reason: .failedToStart(.handshakeTimedOut)))
+    XCTAssertEqual(ChatErrorState.from(error)?.primaryRecovery, .retry)
+    XCTAssertEqual(ChatErrorState.from(error)?.userFacingSummary, "AI took too long to start. Try again.")
+  }
+
   func testBridgeUnavailableReasonsCoverUnknown() {
     XCTAssertEqual(
       ChatErrorState.from(.notRunning),
@@ -282,6 +291,29 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(source.contains("ChatErrorCard("))
   }
 
+  /// Static tripwire for the Home chat layout. The shared ChatErrorCard belongs to
+  /// homePanelStage, below the composer; placing it inside homeChatPanel as well
+  /// visibly duplicates the sign-in recovery CTA for the same ChatProvider state.
+  func testDashboardHomeChatHasOneSharedErrorCardRenderSite() throws {
+    let source = try sourceFile("MainWindow/Pages/DashboardPage.swift")
+    let panelStart = try XCTUnwrap(source.range(of: "private func homePanelStage"))
+    let chatStart = try XCTUnwrap(source.range(of: "private func homeChatPanel"))
+    let connectStart = try XCTUnwrap(source.range(of: "private func homeConnectPanel"))
+
+    let panelSource = String(source[panelStart.lowerBound..<chatStart.lowerBound])
+    let chatSource = String(source[chatStart.lowerBound..<connectStart.lowerBound])
+
+    XCTAssertEqual(
+      panelSource.components(separatedBy: "dashboardChatErrorCard").count - 1,
+      1,
+      "Home must have one canonical error-card owner outside the chat panel."
+    )
+    XCTAssertFalse(
+      chatSource.contains("dashboardChatErrorCard"),
+      "The embedded chat panel must not render a second copy of the shared auth gate."
+    )
+  }
+
   func testFloatingBarReadsCurrentError() throws {
     let source = try sourceFile("Providers/ChatProvider.swift")
     XCTAssertTrue(source.contains("var displayErrorMessage"))
@@ -302,7 +334,7 @@ final class ChatErrorStateTests: XCTestCase {
   func testSavedUserDefaultsSessionIsValidatedBeforeUse() throws {
     let source = try sourceFile("AuthService.swift")
 
-    XCTAssertTrue(source.contains("validateRestoredSession()"))
+    XCTAssertTrue(source.contains("validateRestoredSession(attempt: attempt)"))
     XCTAssertTrue(source.contains("refreshSingleFlight(auth: self)"))
     XCTAssertTrue(source.contains("Restored session validated via forced refresh"))
     XCTAssertTrue(source.contains("Restored session validation deferred - preserving credentials for retry"))
@@ -325,15 +357,20 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertNotNil(range)
     let snippet = String(source[range!.lowerBound...]).prefix(200)
     XCTAssertTrue(snippet.contains("invalidateSession(reason: .restoredSessionInvalid)"))
-    let methodStart = source.range(of: "private func validateRestoredSessionNow() async")
+    let methodStart = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(methodStart)
-    let method = String(source[methodStart!.lowerBound...]).prefix(1200)
-    XCTAssertTrue(method.contains("storedIdToken == nil") || method.contains("storedRefreshToken == nil"))
+    let methodEnd = source.range(
+      of: "// MARK: - Auth State Listener",
+      range: methodStart!.upperBound..<source.endIndex)
+    XCTAssertNotNil(methodEnd)
+    let method = String(source[methodStart!.lowerBound..<methodEnd!.lowerBound])
+    XCTAssertTrue(method.contains("sessionCoordinator.phase == .needsReauth"))
+    XCTAssertTrue(method.contains("storedIdToken == nil && storedRefreshToken == nil"))
   }
 
   func testRestoredSessionValidationForceRefreshesOnLaunch() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationRange = source.range(of: "private func validateRestoredSessionNow() async")
+    let validationRange = source.range(of: "private func validateRestoredSessionNow(attempt:")
     XCTAssertNotNil(validationRange)
     let snippet = String(source[validationRange!.lowerBound...])
 

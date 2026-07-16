@@ -36,7 +36,8 @@ final class HomeStatusStoreTests: XCTestCase {
                     exportLoads += 1
                     return [:]
                 }
-            )
+            ),
+            localDatabaseReady: true
         )
         let start = Date(timeIntervalSince1970: 10_000)
 
@@ -106,6 +107,101 @@ final class HomeStatusStoreTests: XCTestCase {
         XCTAssertEqual(connectorLoads, 1)
     }
 
+    func testDatabaseReadinessLoadsSkippedScreenshotCountWithoutWaitingForCooldown() async {
+        let testDefaults = makeDefaults()
+        let defaults = testDefaults.defaults
+        defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+
+        var connectorLoads = 0
+        var screenshotLoads = 0
+        var knowledgeLoads = 0
+        var exportLoads = 0
+        let connectorStore = ImportConnectorStatusStore(defaults: defaults)
+        let store = HomeStatusStore(
+            connectorStatusStore: connectorStore,
+            defaults: defaults,
+            loader: HomeStatusLoader(
+                refreshConnectorStatuses: { connectorLoads += 1 },
+                loadScreenshotCount: {
+                    screenshotLoads += 1
+                    return 73
+                },
+                loadKnowledgeCounts: { _ in
+                    knowledgeLoads += 1
+                    return HomeKnowledgeCounts(
+                        conversations: nil,
+                        memories: nil,
+                        tasks: nil,
+                        hasOmiDeviceConversations: nil
+                    )
+                },
+                loadMemoryExportStatuses: {
+                    exportLoads += 1
+                    return [:]
+                }
+            )
+        )
+        let start = Date(timeIntervalSince1970: 25_000)
+
+        await store.refreshIfNeeded(now: start)
+
+        XCTAssertEqual(screenshotLoads, 0)
+        XCTAssertNil(store.screenshotCount)
+        XCTAssertEqual(connectorLoads, 1)
+        XCTAssertEqual(knowledgeLoads, 1)
+        XCTAssertEqual(exportLoads, 1)
+
+        await store.databaseDidBecomeReady()
+
+        XCTAssertEqual(screenshotLoads, 1)
+        XCTAssertEqual(store.screenshotCount, 73)
+
+        await store.refreshIfNeeded(now: start.addingTimeInterval(1))
+
+        XCTAssertEqual(
+            screenshotLoads,
+            1,
+            "The readiness-triggered screenshot load must not wait for or bypass the normal Home refresh cooldown"
+        )
+        XCTAssertEqual(connectorLoads, 1)
+        XCTAssertEqual(knowledgeLoads, 1)
+        XCTAssertEqual(exportLoads, 1)
+    }
+
+    func testFailedScreenshotRefreshKeepsLastKnownCount() async {
+        let testDefaults = makeDefaults()
+        let defaults = testDefaults.defaults
+        defer { defaults.removePersistentDomain(forName: testDefaults.suiteName) }
+
+        var results: [Int?] = [9, nil]
+        let connectorStore = ImportConnectorStatusStore(defaults: defaults)
+        let store = HomeStatusStore(
+            connectorStatusStore: connectorStore,
+            defaults: defaults,
+            loader: HomeStatusLoader(
+                refreshConnectorStatuses: {},
+                loadScreenshotCount: { results.removeFirst() },
+                loadKnowledgeCounts: { _ in
+                    HomeKnowledgeCounts(
+                        conversations: nil,
+                        memories: nil,
+                        tasks: nil,
+                        hasOmiDeviceConversations: nil
+                    )
+                },
+                loadMemoryExportStatuses: { [:] }
+            ),
+            localDatabaseReady: true
+        )
+
+        await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 27_000))
+        XCTAssertEqual(store.screenshotCount, 9)
+
+        await store.refreshIfNeeded(force: true, now: Date(timeIntervalSince1970: 27_001))
+
+        XCTAssertEqual(store.screenshotCount, 9)
+    }
+
     func testCompletedImportRefreshesOnlyKnowledgeCounts() async {
         let testDefaults = makeDefaults()
         let defaults = testDefaults.defaults
@@ -138,7 +234,8 @@ final class HomeStatusStoreTests: XCTestCase {
                     exportLoads += 1
                     return [:]
                 }
-            )
+            ),
+            localDatabaseReady: true
         )
 
         await store.refreshIfNeeded(now: Date(timeIntervalSince1970: 30_000))

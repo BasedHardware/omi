@@ -3145,5 +3145,10 @@
             }
         }
     },
+    "deviceStorageTitle": "デバイスのストレージ",
+    "deviceStoragePercentFull": "{percent}% 使用済み",
+    "deviceStorageUsedOfTotal": "{total} 中 {used} を使用",
+    "deviceStorageFree": "空き {free}",
+    "deviceStorageNearlyFull": "デバイスの空き容量がわずかです — 同期して空き容量を確保してください。",
     "phoneMicOfflineFallbackMessage": "接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。"
 }

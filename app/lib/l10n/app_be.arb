@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Сховішча прылады",
+    "deviceStoragePercentFull": "запоўнена {percent}%",
+    "deviceStorageUsedOfTotal": "{used} з {total} выкарыстана",
+    "deviceStorageFree": "{free} вольна",
+    "deviceStorageNearlyFull": "Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.",
     "phoneMicOfflineFallbackMessage": "Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы."
 }

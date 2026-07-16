@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Pohrana uređaja",
+    "deviceStoragePercentFull": "{percent}% popunjeno",
+    "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
+    "deviceStorageFree": "{free} slobodno",
+    "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte kako biste oslobodili prostor.",
     "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži."
 }

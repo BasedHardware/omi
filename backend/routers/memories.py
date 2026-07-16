@@ -23,7 +23,7 @@ from models.memory_imports import MemoryImportBatchRequest, MemoryImportBatchRes
 from utils.apps import update_personas_async
 from utils.memory.v3.composed_get_service import V3ComposedRequestParams, V3ComposedResponse
 from utils.memory.v3.production_runtime import build_v3_production_runtime
-from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision, canonical_write_enabled
+from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
 from utils.memory.canonical_memory_adapter import (
     memory_item_to_memorydb,
     read_canonical_memory_item,
@@ -331,7 +331,7 @@ def _validate_memory(uid: str, memory_id: str) -> MemoryPayload:
 
 
 def _validate_mutable_memory(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
-    if canonical_write_enabled(uid, db_client=db_client):
+    if _canonical_write_enabled_or_fail_closed(uid, db_client=db_client):
         item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise HTTPException(status_code=404, detail='Memory not found')

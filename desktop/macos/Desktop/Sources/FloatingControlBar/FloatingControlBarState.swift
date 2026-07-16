@@ -100,6 +100,22 @@ enum FloatingConversationSurface: Equatable {
     }
 }
 
+/// Closing a visible surface is usually a user cancellation. A voice handoff is
+/// different: it only collapses the typed surface before routing the already
+/// admitted voice turn, so it must leave that turn's physical drivers and
+/// reducer-owned lifecycle intact.
+enum FloatingConversationCloseIntent: Equatable {
+    case userDismissal
+    case voiceHandoff
+
+    var cancelsInFlightWork: Bool {
+        switch self {
+        case .userDismissal: return true
+        case .voiceHandoff: return false
+        }
+    }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {
@@ -120,6 +136,9 @@ enum FloatingBarNotificationAction: Equatable {
 /// A custom in-app notification rendered directly below the floating bar.
 struct FloatingBarNotification: Identifiable, Equatable {
     let id = UUID()
+    /// Immutable owner provenance captured before the workflow that produced
+    /// this notification crossed an async boundary.
+    let ownerID: String
     let title: String
     let message: String
     let assistantId: String
@@ -129,6 +148,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
     let screenshotData: Data?
 
     init(
+        ownerID: String,
         title: String,
         message: String,
         assistantId: String,
@@ -136,6 +156,7 @@ struct FloatingBarNotification: Identifiable, Equatable {
         action: FloatingBarNotificationAction? = nil,
         screenshotData: Data? = nil
     ) {
+        self.ownerID = ownerID
         self.title = title
         self.message = message
         self.assistantId = assistantId
@@ -153,10 +174,6 @@ struct FloatingBarNotification: Identifiable, Equatable {
 @MainActor
 class FloatingControlBarState: NSObject, ObservableObject {
     static let visibleConversationReuseInterval: TimeInterval = 10 * 60
-    static var voiceResponseWatchdogDelay: TimeInterval = 30
-    /// Safety cap: the "thinking" indicator self-clears after this long even if
-    /// no explicit response-start/teardown signal arrives, so it can never stick.
-    static var thinkingWatchdogDelay: TimeInterval = 25
 
     @Published var isRecording: Bool = false
     @Published var duration: Int = 0
@@ -197,16 +214,38 @@ class FloatingControlBarState: NSObject, ObservableObject {
     private var aiDraftRevision: UInt64 = 0
     private var submittedAIDraft: (key: ChatDraftKey, text: String, revision: UInt64)?
 
-    override convenience init() {
-        self.init(delayedActionScheduler: TaskDelayedActionScheduler())
-    }
-
-    init(delayedActionScheduler: DelayedActionScheduling) {
-        self.delayedActionScheduler = delayedActionScheduler
+    override init() {
         super.init()
         isRestoringAIDraft = true
         aiInputText = ChatDraftStore.shared.text(for: activeAIDraftKey)
         isRestoringAIDraft = false
+    }
+
+    /// The sole bridge from reducer state into floating-bar voice presentation.
+    /// Keeping the presenter nested lets `applyVoiceProjection` remain private,
+    /// so no capture, window, onboarding, or automation caller can mutate the
+    /// rendered voice state independently.
+    @MainActor
+    final class PTTBarPresenter {
+        private weak var barState: FloatingControlBarState?
+
+        init(barState: FloatingControlBarState) {
+            self.barState = barState
+        }
+
+        func apply(_ projection: VoiceTurnUIProjection) {
+            guard let barState else { return }
+            let wasExpandedForVoice = barState.isVoiceListening
+            barState.applyVoiceProjection(projection)
+            let shouldExpandForVoice = barState.isVoiceListening
+
+            if shouldExpandForVoice != wasExpandedForVoice,
+               !barState.showingAIConversation,
+               UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
+            {
+                FloatingControlBarManager.shared.resizeForPTT(expanded: shouldExpandForVoice)
+            }
+        }
     }
 
     /// Onboarding demos reuse the real floating window but must not overwrite the
@@ -272,32 +311,23 @@ class FloatingControlBarState: NSObject, ObservableObject {
         }
     }
 
-    // Push-to-talk state
-    @Published var isVoiceListening: Bool = false
-    @Published var isVoiceLocked: Bool = false
-    @Published var voiceTranscript: String = ""
-    /// Transient inline hint shown in the bar (e.g. "Hold longer to record") after a
-    /// too-short PTT tap. Non-empty keeps the bar in its voice-UI size for ~2s.
-    @Published var pttHintText: String = ""
-    @Published var isVoiceResponseActive: Bool = false {
-        didSet {
-            if isVoiceResponseActive {
-                isVoiceResponseWaiting = false
-            }
-            updateVoiceResponseWatchdog()
-            // A live voice response supersedes the "thinking" indicator.
-            if isVoiceResponseActive { isThinking = false }
-        }
+    // Push-to-talk presentation is one atomic reducer projection. Individual
+    // fields are read-only derivations so observers cannot see or create a
+    // partially applied voice state.
+    @Published private(set) var voiceProjection = VoiceTurnUIProjection.idle
+    var isVoiceListening: Bool {
+        voiceProjection.isListening || !voiceProjection.hint.isEmpty
     }
-    @Published var isVoiceResponseWaiting: Bool = false {
-        didSet { updateVoiceResponseWatchdog() }
-    }
+    var isVoiceLocked: Bool { voiceProjection.isLocked }
+    var voiceTranscript: String { voiceProjection.transcript }
+    /// Transient inline status shown only for actionable PTT failures.
+    var pttHintText: String { VoiceTurnUICopy.statusBannerText(for: voiceProjection) }
+    var isVoiceResponseActive: Bool { voiceProjection.isResponseActive }
+    var isVoiceResponseWaiting: Bool { voiceProjection.isResponseWaiting }
     /// True while a committed Push-to-Talk query is being processed and no
     /// response output (voice glow or conversation surface) has surfaced yet.
-    /// Drives the notch/pill "thinking" animation. Auto-clears via a watchdog.
-    @Published var isThinking: Bool = false {
-        didSet { updateThinkingWatchdog() }
-    }
+    /// Drives the notch/pill "thinking" animation.
+    var isThinking: Bool { voiceProjection.isThinking }
     var isVoiceResponseGlowActive: Bool {
         isVoiceResponseActive || isVoiceResponseWaiting
     }
@@ -306,17 +336,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     @Published var usesNotchIsland: Bool = false
     @Published var notchRevealProgress: CGFloat = 1
 
-    // Voice follow-up state (PTT while AI conversation is active)
-    @Published var isVoiceFollowUp: Bool = false
-    @Published var voiceFollowUpTranscript: String = ""
+    private func applyVoiceProjection(_ projection: VoiceTurnUIProjection) {
+        voiceProjection = projection
+    }
 
     /// Whether the current query originated from voice (PTT). Used to decide
     /// whether voice responses should play for this particular query.
     @Published var currentQueryFromVoice: Bool = false
-
-    private let delayedActionScheduler: DelayedActionScheduling
-    private var voiceResponseWatchdogCancellation: DelayedActionCancellation?
-    private var thinkingWatchdogCancellation: DelayedActionCancellation?
 
     // Model selection
     @Published var selectedModel: String = ModelQoS.Claude.defaultSelection
@@ -361,7 +387,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
     /// timeline remains source of truth once an answer id is anchored.
     func currentAIMessage(from provider: ChatProvider?) -> ChatMessage? {
         if let answerId = chatViewport.answerMessageId,
-           let message = provider?.messages.first(where: { $0.id == answerId })
+           let provider,
+           let message = AgentLifecycleDisplayProjection.projectedMessage(
+               id: answerId,
+               in: provider.messages
+           )
         {
             return message
         }
@@ -372,7 +402,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
                $0.clientTurnId == turnId && $0.sender == .ai
            })
         {
-            return message
+            return AgentLifecycleDisplayProjection.projectedMessage(
+                id: message.id,
+                in: provider.messages
+            )
         }
         return nil
     }
@@ -432,7 +465,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
         guard let provider else { return [] }
         return chatViewport.archivedExchanges.compactMap { pair in
             guard let answerId = pair.answerMessageId,
-                  let aiMessage = provider.messages.first(where: { $0.id == answerId })
+                  let aiMessage = AgentLifecycleDisplayProjection.projectedMessage(
+                      id: answerId,
+                      in: provider.messages
+                  )
             else { return nil }
             let question: String?
             if let questionId = pair.questionMessageId,
@@ -604,9 +640,6 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = surface.isOpen
         showingAIResponse = surface.isResponseLike
         markConversationActivity()
-        // The conversation surface owns its own loading header once it opens, so
-        // hand the "thinking" indicator off to it (avoids showing both).
-        if surface.isOpen { isThinking = false }
     }
 
     func leaveAgentSurface() {
@@ -622,19 +655,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
         // are cleared, and late-arriving chunks update a surface nobody sees.
         // (Cubic P2 — presentation/process desync.)
         FloatingControlBarManager.shared.cancelChat()
-        // Call cancelListening() directly instead of gating on isVoiceFollowUp:
-        // the derived UI flag is not the authoritative source of microphone
-        // state, and cancelListening() is already guarded by state != .idle.
-        // (Cubic P2 — stale PTT capture after surface hide.)
+        // cancelListening() is already guarded by state != .idle.
         PushToTalkManager.shared.cancelListening()
         activeAgentChatPillID = nil
         conversationSurface = .closed
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
-        isThinking = false
-        isVoiceFollowUp = false
-        voiceFollowUpTranscript = ""
         markConversationActivity()
     }
 
@@ -688,52 +715,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
         showingAIConversation = false
         showingAIResponse = false
         isAILoading = false
-        isThinking = false
-        isVoiceFollowUp = false
-        voiceFollowUpTranscript = ""
         currentQueryFromVoice = false
         lastConversationActivityAt = nil
-        pttHintText = ""  // stay self-consistent; don't rely on PTTManager's cancel side effect
-        clearVoiceResponseState()
     }
 
-    func beginVoiceResponseWaiting() {
-        guard !isVoiceResponseActive else { return }
-        isVoiceResponseWaiting = true
-    }
-
-    func clearVoiceResponseState() {
-        isVoiceResponseWaiting = false
-        isVoiceResponseActive = false
-    }
-
-    private func updateVoiceResponseWatchdog() {
-        voiceResponseWatchdogCancellation?.cancel()
-        voiceResponseWatchdogCancellation = nil
-        guard isVoiceResponseGlowActive else { return }
-
-        voiceResponseWatchdogCancellation = delayedActionScheduler.schedule(
-            after: Self.voiceResponseWatchdogDelay
-        ) { [weak self] in
-            guard let self, self.isVoiceResponseGlowActive else { return }
-            self.voiceResponseWatchdogCancellation = nil
-            self.clearVoiceResponseState()
-        }
-    }
-
-    private func updateThinkingWatchdog() {
-        thinkingWatchdogCancellation?.cancel()
-        thinkingWatchdogCancellation = nil
-        guard isThinking else { return }
-
-        thinkingWatchdogCancellation = delayedActionScheduler.schedule(
-            after: Self.thinkingWatchdogDelay
-        ) { [weak self] in
-            guard let self, self.isThinking else { return }
-            self.thinkingWatchdogCancellation = nil
-            self.isThinking = false
-        }
-    }
 }
 
 private extension ChatContentBlock {
@@ -743,7 +728,7 @@ private extension ChatContentBlock {
         case .toolCall(let id, let name, let status, _, _, _): return "c:\(id):\(name):\(status)"
         case .thinking(let id, _): return "h:\(id)"
         case .discoveryCard(let id, _, _, _): return "d:\(id)"
-        case .agentSpawn(let id, let pillId, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
+        case .agentSpawn(let id, let pillId, _, _, _, _, _): return "s:\(id):\(pillId?.uuidString ?? "")"
         case .agentCompletion(let id, let pillId, _, _, _, _, _, _): return "a:\(id):\(pillId?.uuidString ?? "")"
         }
     }

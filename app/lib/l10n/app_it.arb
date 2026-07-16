@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Archiviazione del dispositivo",
+    "deviceStoragePercentFull": "{percent}% pieno",
+    "deviceStorageUsedOfTotal": "{used} di {total} utilizzati",
+    "deviceStorageFree": "{free} liberi",
+    "deviceStorageNearlyFull": "Dispositivo quasi pieno — sincronizza per liberare spazio.",
     "phoneMicOfflineFallbackMessage": "Nessuna connessione: registrazione in locale. Verrà trascritto quando tornerai online."
 }

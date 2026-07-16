@@ -9577,6 +9577,27 @@ class AppLocalizationsFa extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'فضای ذخیره‌سازی دستگاه';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent٪ پر';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used از $total استفاده‌شده';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free آزاد';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.';
 }

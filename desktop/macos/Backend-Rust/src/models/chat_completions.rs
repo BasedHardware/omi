@@ -185,6 +185,11 @@ pub struct AnthropicRequest {
     pub tools: Option<Vec<AnthropicToolDef>>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tool_choice: Option<serde_json::Value>,
+    /// Gateway-owned execution metadata. A public-web turn may use Anthropic's
+    /// long-running server tool and therefore needs internal pause-turn
+    /// continuation before an OpenAI-compatible response is emitted.
+    #[serde(skip)]
+    pub requires_public_web: bool,
 }
 
 /// A tool definition in an Anthropic request: either a client-executed custom
@@ -370,12 +375,6 @@ pub struct AnthropicStreamError {
 pub struct ModelRoute {
     pub public_model: &'static str,
     pub upstream_model: &'static str,
-    pub provider: Provider,
-}
-
-#[derive(Debug, Clone, Copy, PartialEq)]
-pub enum Provider {
-    Anthropic,
 }
 
 /// Model allowlist — maps public model names to upstream provider models.
@@ -384,34 +383,28 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
     ModelRoute {
         public_model: "omi-sonnet",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "omi-opus",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     // Pass-through aliases used by onboarding chat and other app components
     ModelRoute {
         public_model: "claude-opus-4-6",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-6",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     // Legacy dated IDs — redirect to 4.6
     ModelRoute {
         public_model: "claude-opus-4-20250514",
         upstream_model: "claude-opus-4-6",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-sonnet-4-20250514",
         upstream_model: "claude-sonnet-4-6",
-        provider: Provider::Anthropic,
     },
     // Haiku 4.5 — used by the AgentPill router classifier and ModelQoS
     // synthesis paths. Without these entries every call 400s and the
@@ -420,12 +413,10 @@ pub const MODEL_ROUTES: &[ModelRoute] = &[
     ModelRoute {
         public_model: "claude-haiku-4-5-20251001",
         upstream_model: "claude-haiku-4-5",
-        provider: Provider::Anthropic,
     },
     ModelRoute {
         public_model: "claude-haiku-4-5",
         upstream_model: "claude-haiku-4-5",
-        provider: Provider::Anthropic,
     },
 ];
 
@@ -441,9 +432,9 @@ pub fn map_stop_reason(anthropic_reason: Option<&str>) -> Option<String> {
         "max_tokens" => "length".to_string(),
         "tool_use" => "tool_calls".to_string(),
         "stop_sequence" => "stop".to_string(),
-        // Long-running server tools (web search) can pause the turn. The proxy
-        // cannot resume it — the OpenAI client never saw the server tool blocks
-        // — so terminate cleanly instead of leaking an unknown finish_reason.
+        // Defensive fallback only: public-web turns are resumed at the gateway
+        // before translation. Keep an OpenAI-compatible value if a future
+        // non-public stream unexpectedly reaches this mapping.
         "pause_turn" => "stop".to_string(),
         other => other.to_string(),
     })

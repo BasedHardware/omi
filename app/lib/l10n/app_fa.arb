@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "فضای ذخیره‌سازی دستگاه",
+    "deviceStoragePercentFull": "{percent}٪ پر",
+    "deviceStorageUsedOfTotal": "{used} از {total} استفاده‌شده",
+    "deviceStorageFree": "{free} آزاد",
+    "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.",
     "phoneMicOfflineFallbackMessage": "اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود."
 }

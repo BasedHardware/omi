@@ -1,7 +1,7 @@
 use super::*;
 
 impl FirestoreService {
-    pub async fn get_agent_vm(
+    pub(crate) async fn get_agent_vm(
         &self,
         uid: &str,
     ) -> Result<Option<crate::models::agent::AgentVm>, Box<dyn std::error::Error + Send + Sync>>
@@ -96,7 +96,7 @@ impl FirestoreService {
     }
 
     /// Set agent VM info on a user's document
-    pub async fn set_agent_vm(
+    pub(crate) async fn set_agent_vm(
         &self,
         uid: &str,
         vm_name: &str,
@@ -131,7 +131,7 @@ impl FirestoreService {
 
     /// Delete the agentVm field from a user's document.
     /// Used when the GCE VM no longer exists in GCP.
-    pub async fn delete_agent_vm(
+    pub(crate) async fn delete_agent_vm(
         &self,
         uid: &str,
     ) -> Result<(), Box<dyn std::error::Error + Send + Sync>> {

@@ -3179,5 +3179,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Cihaz depolama",
+    "deviceStoragePercentFull": "%{percent} dolu",
+    "deviceStorageUsedOfTotal": "{total} alanın {used} kısmı kullanıldı",
+    "deviceStorageFree": "{free} boş",
+    "deviceStorageNearlyFull": "Cihaz neredeyse dolu — yer açmak için eşitleyin.",
     "phoneMicOfflineFallbackMessage": "Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek."
 }

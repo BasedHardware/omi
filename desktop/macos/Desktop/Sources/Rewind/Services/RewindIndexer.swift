@@ -57,7 +57,11 @@ actor RewindIndexer {
 
     /// Initialize all Rewind services
     func initialize() async throws {
-        guard !isInitialized, !isInitializing else { return }
+        let databaseIsInitialized = await RewindDatabase.shared.isInitialized
+        guard !(isInitialized && databaseIsInitialized), !isInitializing else { return }
+        // RewindDatabase can close itself after repeated I/O/corruption errors.
+        // Its readiness, not this cached flag, is authoritative.
+        isInitialized = false
         isInitializing = true
         defer { isInitializing = false }
 
@@ -89,7 +93,12 @@ actor RewindIndexer {
 
     /// Try to initialize with exponential backoff. Returns true if initialized.
     private func ensureInitialized() async -> Bool {
-        if isInitialized { return true }
+        let databaseIsInitialized = await RewindDatabase.shared.isInitialized
+        if isInitialized && databaseIsInitialized { return true }
+
+        // RewindDatabase can close itself after recovery while this actor retains
+        // its cached initialized flag; only the database can confirm readiness.
+        if isInitialized { isInitialized = false }
 
         // Check backoff timer - skip if too soon after last failure
         if Date() < nextRetryTime {
@@ -272,7 +281,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame: \(error)")
+            logError("RewindIndexer: Failed to process frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -353,7 +362,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process CGImage frame: \(error)")
+            logError("RewindIndexer: Failed to process CGImage frame", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -463,7 +472,7 @@ actor RewindIndexer {
             }
 
         } catch {
-            logError("RewindIndexer: Failed to process frame with metadata: \(error)")
+            logError("RewindIndexer: Failed to process frame with metadata", error: error)
             await RewindDatabase.shared.reportQueryError(error)
         }
     }
@@ -532,7 +541,7 @@ actor RewindIndexer {
         do {
             _ = try await VideoChunkEncoder.shared.flushCurrentChunk()
         } catch {
-            logError("RewindIndexer: Failed to flush video chunk: \(error)")
+            logError("RewindIndexer: Failed to flush video chunk", error: error)
             return false
         }
 
@@ -664,65 +673,166 @@ actor RewindIndexer {
 
         var processedChunks = 0
         var totalFrames = 0
+        var failureSummary = RewindRebuildFailureSummary(totalChunks: totalChunks)
 
         for chunkInfo in videoChunks {
-            // Extract frames from video chunk
-            do {
-                let frames = try await extractFramesFromChunk(chunkInfo)
-                totalFrames += frames.count
-
-                // Insert each frame into database
-                for frame in frames {
-                    let screenshot = Screenshot(
-                        timestamp: frame.timestamp,
-                        appName: frame.appName ?? "Unknown",
-                        windowTitle: frame.windowTitle,
-                        imagePath: "",
-                        videoChunkPath: chunkInfo.relativePath,
-                        frameOffset: frame.frameOffset,
-                        ocrText: nil,
-                        ocrDataJson: nil,
-                        isIndexed: false  // Will need re-OCR
-                    )
-
-                    try await RewindDatabase.shared.insertScreenshot(screenshot)
-                }
-            } catch {
-                logError("RewindIndexer: Failed to process chunk \(chunkInfo.relativePath): \(error)")
+            defer {
+                processedChunks += 1
+                progressCallback(Double(processedChunks) / Double(totalChunks))
             }
 
-            processedChunks += 1
-            progressCallback(Double(processedChunks) / Double(totalChunks))
+            let screenshots: [Screenshot]
+            do {
+                screenshots = try await Self.reconstructedScreenshots(from: chunkInfo)
+            } catch RewindChunkExtractionError.unparseablePath {
+                failureSummary.record(.unparseablePath)
+                log("RewindIndexer: Cannot rebuild chunk with an unparseable path: \(chunkInfo.relativePath)")
+                continue
+            } catch RewindChunkExtractionError.zeroFrames {
+                failureSummary.record(.zeroFrames)
+                log("RewindIndexer: Cannot rebuild zero-frame chunk: \(chunkInfo.relativePath)")
+                continue
+            } catch RewindChunkExtractionError.invalidTimeline {
+                failureSummary.record(.invalidTimeline)
+                log("RewindIndexer: Cannot rebuild chunk with an invalid sample timeline: \(chunkInfo.relativePath)")
+                continue
+            } catch {
+                failureSummary.record(.videoRead)
+                log("RewindIndexer: Failed to read chunk \(chunkInfo.relativePath): \(error)")
+                continue
+            }
+
+            do {
+                // Replacement is transactional and idempotent: a retry neither
+                // duplicates rows nor destroys the previous complete chunk when a
+                // reconstructed insert fails.
+                totalFrames += try await RewindDatabase.shared.replaceScreenshotsForVideoChunk(
+                    path: chunkInfo.relativePath,
+                    screenshots: screenshots
+                )
+            } catch {
+                failureSummary.record(.databaseWrite)
+                log("RewindIndexer: Failed to commit chunk \(chunkInfo.relativePath): \(error)")
+            }
+        }
+
+        if failureSummary.hasFailures {
+            let message = failureSummary.message
+            logError("RewindIndexer: \(message)")
+            throw RewindError.storageError(message)
         }
 
         log("RewindIndexer: Rebuild complete - processed \(totalChunks) chunks, \(totalFrames) frames")
-        progressCallback(1.0)
     }
 
-    /// Extract frame metadata from a video chunk
-    private func extractFramesFromChunk(_ chunkInfo: VideoChunkInfo) async throws -> [FrameMetadata] {
+    /// Reconstruct screenshot rows from the chunk's actual encoded sample timeline.
+    /// Sample ordinal remains the durable `frameOffset` contract used by playback;
+    /// presentation time preserves variable/low-cadence capture timing.
+    static func reconstructedScreenshots(from chunkInfo: VideoChunkInfo) async throws -> [Screenshot] {
         // Parse the chunk's capture time from its relative path (the day lives in
         // the parent directory: "<yyyy-MM-dd>/chunk_HHmmss.mp4").
         guard let timestamp = Self.parseChunkTimestamp(relativePath: chunkInfo.relativePath) else {
-            return []
+            throw RewindChunkExtractionError.unparseablePath
         }
 
-        // Get frame count from video file
-        let frameCount = try await getVideoFrameCount(at: chunkInfo.fullPath)
+        let presentationTimes = try await readVideoSamplePresentationTimes(at: chunkInfo.fullPath)
+        return presentationTimes.enumerated().map { frameOffset, presentationTime in
+            Screenshot(
+                timestamp: timestamp.addingTimeInterval(presentationTime),
+                appName: "Unknown",
+                windowTitle: nil,
+                imagePath: "",
+                videoChunkPath: chunkInfo.relativePath,
+                frameOffset: frameOffset,
+                ocrText: nil,
+                ocrDataJson: nil,
+                isIndexed: false
+            )
+        }
+    }
 
-        // Create frame metadata for each frame (assuming 1 fps capture rate)
-        var frames: [FrameMetadata] = []
-        for i in 0..<frameCount {
-            let frameTimestamp = timestamp.addingTimeInterval(Double(i))
-            frames.append(FrameMetadata(
-                timestamp: frameTimestamp,
-                frameOffset: i,
-                appName: nil,  // Can't recover app name from video
-                windowTitle: nil
-            ))
+    /// Validate a decoded sample timeline before it becomes durable database state.
+    /// Video samples must be non-empty and strictly increase from a finite,
+    /// non-negative presentation time.
+    @discardableResult
+    static func validateVideoSampleTimeline(_ presentationTimes: [TimeInterval]) throws -> [TimeInterval] {
+        guard !presentationTimes.isEmpty else {
+            throw RewindChunkExtractionError.zeroFrames
         }
 
-        return frames
+        var previous: TimeInterval?
+        for presentationTime in presentationTimes {
+            guard presentationTime.isFinite,
+                  presentationTime >= 0,
+                  previous.map({ presentationTime > $0 }) ?? true
+            else {
+                throw RewindChunkExtractionError.invalidTimeline
+            }
+            previous = presentationTime
+        }
+        return presentationTimes
+    }
+
+    /// Read compressed video samples directly so rebuild count and timing come
+    /// from the file rather than `duration × nominalFrameRate`, which invents rows
+    /// for low-cadence and variable-frame-rate chunks.
+    private static func readVideoSamplePresentationTimes(at path: URL) async throws -> [TimeInterval] {
+        let asset = AVURLAsset(url: path)
+        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
+            throw RewindChunkExtractionError.zeroFrames
+        }
+
+        let reader = try AVAssetReader(asset: asset)
+        let output = AVAssetReaderTrackOutput(track: videoTrack, outputSettings: nil)
+        output.alwaysCopiesSampleData = false
+
+        guard reader.canAdd(output) else {
+            throw RewindError.storageError("AVFoundation cannot add rebuild video track output")
+        }
+        reader.add(output)
+
+        guard reader.startReading() else {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation rebuild reader failed to start: \(message)")
+        }
+
+        var presentationTimes: [TimeInterval] = []
+        while let sampleBuffer = output.copyNextSampleBuffer() {
+            defer { CMSampleBufferInvalidate(sampleBuffer) }
+            let sampleCount = CMSampleBufferGetNumSamples(sampleBuffer)
+            // AVAssetReader may surface zero-sample marker buffers around
+            // compressed HEVC media. They carry no screenshot identity; skip
+            // them and let the final non-empty validation reject files that
+            // contain no actual video samples.
+            guard sampleCount > 0 else { continue }
+
+            for sampleIndex in 0..<sampleCount {
+                var timing = CMSampleTimingInfo(
+                    duration: .invalid,
+                    presentationTimeStamp: .invalid,
+                    decodeTimeStamp: .invalid
+                )
+                guard CMSampleBufferGetSampleTimingInfo(
+                    sampleBuffer,
+                    at: sampleIndex,
+                    timingInfoOut: &timing
+                ) == 0 else {
+                    reader.cancelReading()
+                    throw RewindChunkExtractionError.invalidTimeline
+                }
+                presentationTimes.append(CMTimeGetSeconds(timing.presentationTimeStamp))
+            }
+        }
+
+        if reader.status == .failed {
+            let message = reader.error?.localizedDescription ?? "unknown error"
+            throw RewindError.storageError("AVFoundation rebuild reader failed: \(message)")
+        }
+        if reader.status == .cancelled {
+            throw RewindError.storageError("AVFoundation rebuild reader was cancelled")
+        }
+
+        return try validateVideoSampleTimeline(presentationTimes)
     }
 
     /// Parse a chunk's capture timestamp from its stored relative path.
@@ -787,23 +897,6 @@ actor RewindIndexer {
         return formatter.date(from: dateStr + timeStr)
     }
 
-    /// Get frame count from video file using AVFoundation
-    private func getVideoFrameCount(at path: URL) async throws -> Int {
-        let asset = AVAsset(url: path)
-        guard let videoTrack = try await asset.loadTracks(withMediaType: .video).first else {
-            return 0
-        }
-
-        let duration = try await asset.load(.duration)
-        let frameRate = try await videoTrack.load(.nominalFrameRate)
-
-        if frameRate > 0 {
-            return Int(CMTimeGetSeconds(duration) * Double(frameRate))
-        }
-
-        // Fallback: assume 1 fps
-        return Int(CMTimeGetSeconds(duration))
-    }
 }
 
 enum RewindShutdownFlush {
@@ -844,18 +937,64 @@ private final class RewindFlushState: @unchecked Sendable {
     }
 }
 
-/// Metadata for a frame extracted from video
-private struct FrameMetadata {
-    let timestamp: Date
-    let frameOffset: Int
-    let appName: String?
-    let windowTitle: String?
-}
-
 private struct FrameDedupeSignature: Equatable {
     let fingerprint: UInt64
     let width: Int
     let height: Int
     let appName: String
     let windowTitle: String?
+}
+
+enum RewindChunkExtractionError: Error, Equatable {
+    case unparseablePath
+    case zeroFrames
+    case invalidTimeline
+}
+
+enum RewindRebuildFailureKind: CaseIterable, Hashable {
+    case unparseablePath
+    case zeroFrames
+    case invalidTimeline
+    case videoRead
+    case databaseWrite
+
+    var summaryLabel: String {
+        switch self {
+        case .unparseablePath: return "unparseable_path"
+        case .zeroFrames: return "zero_frames"
+        case .invalidTimeline: return "invalid_timeline"
+        case .videoRead: return "video_read"
+        case .databaseWrite: return "database_write"
+        }
+    }
+}
+
+/// Fixed-cardinality failure accounting for a best-effort rebuild. The thrown
+/// summary never grows with the number of chunks and never includes paths or raw
+/// error payloads; detailed per-chunk diagnostics remain in the local log.
+struct RewindRebuildFailureSummary {
+    let totalChunks: Int
+    private(set) var counts: [RewindRebuildFailureKind: Int] = [:]
+
+    mutating func record(_ kind: RewindRebuildFailureKind) {
+        counts[kind, default: 0] += 1
+    }
+
+    var failedChunkCount: Int {
+        counts.values.reduce(0, +)
+    }
+
+    var hasFailures: Bool {
+        failedChunkCount > 0
+    }
+
+    var message: String {
+        let committedChunks = max(0, totalChunks - failedChunkCount)
+        let categorySummary = RewindRebuildFailureKind.allCases.compactMap { kind -> String? in
+            guard let count = counts[kind], count > 0 else { return nil }
+            return "\(kind.summaryLabel)=\(count)"
+        }.joined(separator: ", ")
+        return "Rebuild committed \(committedChunks) of \(totalChunks) video chunks; "
+            + "\(failedChunkCount) failed (\(categorySummary))"
+    }
 }

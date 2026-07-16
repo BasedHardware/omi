@@ -2,150 +2,121 @@ import XCTest
 @testable import Omi_Computer
 
 final class HubSystemInstructionTests: XCTestCase {
-    func testInstructionInjectsCardAndUsesUserLanguage() {
-        let card = "<about_user>\nName: Sam\n</about_user>"
-        let instr = RealtimeHubTools.systemInstruction(aboutUser: card)
-        XCTAssertTrue(instr.contains(card))                                   // card injected
-        XCTAssertTrue(instr.lowercased().contains("language the user"))        // reply-in-user-language
-        XCTAssertFalse(instr.contains("Always reply in English"))             // old rule gone
+    func testInstructionUsesExactKernelContextAndVoiceLanguagePresentation() {
+        let kernelContext = "[Kernel Context Snapshot]\n{\"sourceOutcomes\":[{\"source\":\"identity\"}]}"
+        let instr = RealtimeHubTools.systemInstruction(
+            kernelContext: kernelContext,
+            userLanguages: ["en"]
+        )
+
+        XCTAssertTrue(instr.contains(kernelContext))
+        XCTAssertTrue(instr.lowercased().contains("language the user"))
+        XCTAssertFalse(instr.contains("Always reply in English"))
+        XCTAssertTrue(instr.contains(DesktopCapabilityRegistry.realtimeSelfModelPrompt))
+        XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
+        XCTAssertFalse(instr.contains("evidence_id"))
+        XCTAssertTrue(instr.contains("report_screen_observation"))
+        XCTAssertTrue(instr.contains("locally captured foreground-application context"))
+    }
+
+    func testLiveScreenshotResultRequiresAValidatedObservationReport() {
+        let valid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let invalid = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: nil)
+        let validPayload = try? JSONSerialization.jsonObject(with: Data(valid.utf8)) as? [String: Any]
+        let invalidPayload = try? JSONSerialization.jsonObject(with: Data(invalid.utf8)) as? [String: Any]
+
+        XCTAssertEqual(validPayload?["ok"] as? Bool, true)
+        XCTAssertNil(validPayload?["evidence_id"])
+        XCTAssertNil(validPayload?["frontmost_app"])
+        XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
+        XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
+    }
+
+    func testLiveScreenshotResultCarriesOnlySameCaptureForegroundContext() {
+        let result = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1,
+            frontmostApplication: "Example App")
+        let payload = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+        let context = payload?["capture_context"] as? [String: String]
+
+        XCTAssertEqual(context?["foreground_application"], "Example App")
+        XCTAssertNil(payload?["frontmost_app"], "legacy ambient app fields must remain unavailable")
+    }
+
+    func testValidatedScreenObservationContinuesToTheOriginalUserAnswer() {
+        let instruction = RealtimeHubTools.systemInstruction()
+        let accepted = RealtimeHubTools.screenObservationResult(accepted: true)
+        let acceptedPayload = try? JSONSerialization.jsonObject(with: Data(accepted.utf8)) as? [String: Any]
+
+        XCTAssertTrue(instruction.contains("internal verification, not your user-facing reply"))
+        XCTAssertTrue(instruction.contains("answer the user's original"))
+        XCTAssertTrue(instruction.contains("foreground-application context"))
+        XCTAssertTrue(instruction.contains("assistant chrome, not as the subject"))
+        XCTAssertTrue(instruction.contains("visible work and intent"))
+        XCTAssertFalse(instruction.contains("app will present an accepted report itself"))
+        XCTAssertEqual(acceptedPayload?["ok"] as? Bool, true)
+        XCTAssertTrue((acceptedPayload?["instruction"] as? String ?? "").contains("original request naturally"))
+    }
+
+    func testScreenObservationSchemaCarriesGroundingInsteadOfAUserFacingAnswer() {
+        let tool = RealtimeHubTools.openAITools.first {
+            ($0["name"] as? String) == HubTool.reportScreenObservation.rawValue
+        }
+        let parameters = tool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+
+        XCTAssertNotNil(properties?["observation"])
+        XCTAssertNil(properties?["answer"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["observation"])
+    }
+
+    func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {
+        let raw = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1)
+        let prepared = RealtimeProviderToolResultPolicy.prepare(
+            provider: .gemini, name: HubTool.screenshot.rawValue, output: raw)
+        let payload = try? JSONSerialization.jsonObject(with: Data(prepared.output.utf8)) as? [String: Any]
+
+        XCTAssertEqual(payload?["ok"] as? Bool, true)
+        XCTAssertNil(payload?["evidence_id"])
+        XCTAssertEqual(
+            ((payload?["toolResultEnvelope"] as? [String: Any])?["status"] as? String),
+            "succeeded")
+    }
+
+    func testInstructionDoesNotOwnSemanticSelectionOrRoutingPolicy() {
+        let instr = RealtimeHubTools.systemInstruction()
+        for forbidden in [
+            "Try before asking",
+            "Only ask a clarifying question",
+            "Do not ask permission to delegate",
+            "WHO the user is",
+            "MOST RECENT exchange",
+            "MUST call get_daily_recap",
+            "rather than spawning an agent",
+            "If the user asks to use/ask OpenClaw",
+            "Resolve relative dates",
+            "list_agent_sessions first",
+            "Call ask_higher_model when",
+            "spawn_agent proposes background work",
+        ] {
+            XCTAssertFalse(instr.contains(forbidden), "surface prompt must not own rule: \(forbidden)")
+        }
+    }
+
+    func testInstructionKeepsOnlyGenericSpokenToolUseContractAroundGeneratedCapabilities() {
+        let instr = RealtimeHubTools.systemInstruction()
+        XCTAssertTrue(instr.contains("short spoken heads-up"))
+        XCTAssertTrue(instr.contains("call the tool in the same turn"))
+        XCTAssertTrue(instr.contains("status, not a question or confirmation"))
+        XCTAssertTrue(instr.contains("Never claim a physical action succeeded"))
+        XCTAssertTrue(instr.contains("never read tool JSON or ids aloud"))
         XCTAssertTrue(instr.contains("spawn_agent"))
-        XCTAssertTrue(instr.contains("list_agent_sessions"))
-        XCTAssertFalse(instr.contains("run_agent_and_wait"))
-        XCTAssertTrue(instr.contains("set_desktop_attention_override"))
-        XCTAssertTrue(instr.contains("get_agent_run"))
-        XCTAssertTrue(instr.contains("cancel_agent_run"))
-        XCTAssertTrue(instr.contains("floating-bar pill projections"))
-        XCTAssertTrue(instr.contains("subagent"))
-        XCTAssertTrue(instr.contains("get_daily_recap"))
-        XCTAssertTrue(instr.contains("ask_higher_model"))
-        XCTAssertTrue(instr.contains("create_calendar_event"))
-        XCTAssertTrue(instr.contains("Current local datetime:"))
-        XCTAssertTrue(instr.contains("Current timezone:"))
-        XCTAssertTrue(instr.contains("Resolve relative dates"))
-        XCTAssertTrue(instr.contains("ANSWER YOURSELF"))
-    }
-
-    func testInstructionRequiresTryingContextBeforeAsking() {
-        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
-        XCTAssertTrue(instr.contains("Try before asking"))
-        XCTAssertTrue(instr.contains("use the relevant read tools before asking the user"))
-        XCTAssertTrue(instr.contains("Missing or incomplete context is"))
-        XCTAssertTrue(instr.contains("not a reason to ask first"))
-        XCTAssertTrue(instr.contains("give the best answer you can with a confidence caveat"))
-    }
-
-    func testInstructionDelegatesLargerVoiceWork() {
-        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
-        XCTAssertTrue(instr.contains("Larger work"))
-        XCTAssertTrue(instr.contains("PTT is the fast front door"))
-        XCTAssertTrue(instr.contains("call spawn_agent with a clear objective and title"))
-        XCTAssertTrue(instr.contains("Do not ask permission to delegate when the user's intent is clear"))
-        XCTAssertTrue(instr.contains("work product, investigation, or"))
-    }
-
-    func testInstructionKeepsPermissionsAsDirectVoiceActions() {
-        let instr = RealtimeHubTools.systemInstruction(aboutUser: "")
         XCTAssertTrue(instr.contains("check_permission_status"))
         XCTAssertTrue(instr.contains("request_permission"))
-        XCTAssertTrue(instr.contains("NEVER use spawn_agent for a permission request"))
-    }
-
-    func testDelegatedPermissionRequestIsRedirectedToDirectTool() {
-        XCTAssertEqual(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Request Screen Recording permission for Omi in Mac System Settings."
-            ),
-            .init(tool: .requestPermission, type: "screen_recording", recoveredFromDelegation: true)
-        )
-        XCTAssertNil(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Research whether screen recording APIs support WebP."
-            )
-        )
-        XCTAssertNil(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Research how our Chrome extension should request Screen Recording permission."
-            )
-        )
-    }
-
-    func testDelegatedPermissionStatusIsCheckedWithoutOpeningSettings() {
-        XCTAssertEqual(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Check whether Omi has Screen Recording permission granted."
-            ),
-            .init(tool: .checkPermissionStatus, type: "screen_recording", recoveredFromDelegation: true)
-        )
-        XCTAssertNil(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Check whether Chrome has Screen Recording permission granted."
-            )
-        )
-    }
-
-    func testRealtimePermissionRedirectUsesCanonicalChatRoutingContract() {
-        let cases: [(String, HubTool, String)] = [
-            ("Request microphone permission for Omi.", .requestPermission, "microphone"),
-            ("Enable Omi notifications.", .requestPermission, "notifications"),
-            ("Check whether Omi has Accessibility permission granted.", .checkPermissionStatus, "accessibility"),
-            ("Check whether Omi has Automation permission granted.", .checkPermissionStatus, "automation"),
-            ("Request Full Disk Access for this app.", .requestPermission, "full_disk_access"),
-        ]
-
-        for (brief, tool, type) in cases {
-            let chatRoute = ChatToolExecutor.permissionExecutionRoute(
-                toolName: HubTool.spawnAgent.rawValue,
-                arguments: ["brief": brief]
-            )
-            XCTAssertEqual(
-                chatRoute,
-                .directNative(toolName: tool.rawValue, type: type, recoveredFromDelegation: true)
-            )
-            XCTAssertEqual(
-                RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief),
-                .init(tool: tool, type: type, recoveredFromDelegation: true)
-            )
-        }
-    }
-
-    func testRealtimeExplicitOtherAppAndAmbiguousPermissionRequestsNeverRedirect() {
-        for brief in [
-            "Request Screen Recording permission for Chrome.",
-            "Check whether Zoom has microphone permission granted.",
-            "Request Screen Recording permission for Chromium.",
-            "Check Google Chrome Screen Recording permission.",
-            "Allow Microsoft Teams to use microphone access.",
-            "Request Screen Recording permission.",
-            "Check microphone permission status.",
-        ] {
-            XCTAssertNil(RealtimeHubTools.directPermissionRedirect(forDelegationBrief: brief), brief)
-        }
-    }
-
-    func testRealtimePermissionExecutorRoutesBothToolsToCanonicalChatExecutor() {
-        XCTAssertEqual(
-            RealtimeHubTools.permissionExecutorRoute(
-                for: .checkPermissionStatus, arguments: ["type": "microphone"]),
-            .init(toolName: "check_permission_status", type: "microphone")
-        )
-        XCTAssertEqual(
-            RealtimeHubTools.permissionExecutorRoute(
-                for: .requestPermission, arguments: ["permission": "screen_recording"]),
-            .init(toolName: "request_permission", type: "screen_recording")
-        )
-        XCTAssertNil(
-            RealtimeHubTools.permissionExecutorRoute(
-                for: .spawnAgent, arguments: ["type": "screen_recording"])
-        )
-    }
-
-    func testRealtimeRedirectTrustsUserTurnOverMalformedBrief() {
-        XCTAssertNil(
-            RealtimeHubTools.directPermissionRedirect(
-                forDelegationBrief: "Request Screen Recording permission for Omi.",
-                originatingUserText: "Request Screen Recording permission for Chromium."
-            )
-        )
+        XCTAssertFalse(instr.contains("run_agent_and_wait"))
     }
 
     func testRealtimeToolSurfaceMatchesCapabilityRegistry() {
@@ -213,7 +184,10 @@ final class HubSystemInstructionTests: XCTestCase {
         let parameters = request?["parameters"] as? [String: Any]
         let properties = parameters?["properties"] as? [String: Any]
         XCTAssertNotNil(properties?["type"])
-        XCTAssertTrue((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
+        XCTAssertTrue(
+            (request?["description"] as? String ?? "").contains("kernel-authorized native executor")
+        )
+        XCTAssertFalse((request?["description"] as? String ?? "").contains("Never use spawn_agent"))
     }
 
     func testGeminiRealtimeToolSchemasOmitUnsupportedJsonSchemaKeys() {

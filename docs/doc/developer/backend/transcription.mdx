@@ -150,20 +150,124 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 
 ## STT Service Selection
 
-The system uses Deepgram for all transcription:
+The selected streaming provider comes from the ordered `STT_SERVICE_MODELS`
+configuration. The first configured model that supports the requested language
+wins. Pre-recorded voice and sync routes use the corresponding
+`STT_PRERECORDED_MODEL` selection contract.
 
 ```mermaid
 flowchart TD
     Start[Incoming Audio] --> Lang{Language?}
-    Lang -->|Supported| DG3[Deepgram Nova-3]
-    Lang -->|Unsupported| Fallback[Fallback to English Nova-3]
+    Lang -->|Supported by first configured model| Selected[Deepgram / Modulate / Parakeet]
+    Lang -->|Unsupported| Fallback[Next configured model]
 ```
 
 ### Provider Capabilities
 
 | Provider | Languages | Model | Best For |
 |----------|-----------|-------|----------|
-| **Deepgram Nova-3** | 50+ | `nova-3` | All supported languages |
+| **Deepgram** | 50+ | `nova-3` | Broad language coverage |
+| **Modulate** | Provider-dependent | `velma-2` | Supported configured languages |
+| **Parakeet** | Deployment-dependent | `parakeet` | Self-hosted streaming and batch STT |
+
+## Transcription outcome contract
+
+Transport success is not transcription success. The backend uses one bounded
+semantic vocabulary across voice upload, voice-message SSE, offline sync, and
+live provider failures:
+
+| Outcome | Meaning | Retryable |
+| --- | --- | --- |
+| `success` | Speech-eligible audio produced non-empty normalized text | No |
+| `expected_silence` | An explicit speech gate found no eligible speech | No |
+| `empty_unexpected` | Eligible audio reached STT but produced no usable text | Yes |
+| `timeout` | The selected provider timed out | Yes |
+| `upstream_error` | The provider or response parser failed | Yes |
+| `config_error` | The selected provider is not deployable on this runtime | No |
+| `invalid_input` | The audio cannot be decoded or violates the route contract | No |
+
+`POST /v2/voice-message/transcribe` returns `outcome` alongside `transcript`,
+`stt_provider`, and `stt_model`. True silence remains HTTP 200 with an empty
+transcript and `outcome=expected_silence`. All failure outcomes use a non-2xx
+status and a fixed response body containing only `error`, `outcome`,
+`provider`, `retryable`, and a public-safe message; provider response bodies,
+audio identifiers, and exception text are never exposed.
+
+The `/v2/voice-messages` stream emits the same safe failure object in a terminal
+`error:` SSE frame. A normal empty stream is reserved for explicit
+`expected_silence`.
+
+For `/v4/listen`, an unusable initial or mid-session STT socket emits this event
+before the client connection closes with WebSocket code 1011:
+
+```json
+{
+  "type": "service_status",
+  "status": "stt_failed",
+  "outcome": "upstream_error",
+  "provider": "parakeet",
+  "retryable": true,
+  "reason": "connection_lost"
+}
+```
+
+The backend retains any buffered audio it could not hand to the provider. It
+does not keep a green client WebSocket while discarding later audio; the close
+activates the client's existing reconnect or local-recovery path.
+
+## Production transcription candidate gate
+
+The manual backend workflow deploys a no-traffic, uniquely tagged `backend`
+candidate and proves the real `/v2/voice-message/transcribe` route before
+shifting any Cloud Run traffic. The same path runs for an explicit development
+deployment first, which is the required identity-and-route dry run before a
+production release. The tag resolver requires the exact candidate revision
+recorded in Cloud Run `status.traffic`; it cannot accidentally exercise the
+current serving revision or latest-created revision.
+
+`backend/testing/release_fixtures/transcription-release-probe.wav` and its
+versioned JSON manifest provide the known audio, language, expected transcript,
+SHA-256 digest, and CC-BY-4.0 LibriSpeech provenance. The gate requires HTTP
+200, `outcome=success`, and the exact normalized transcript. It intentionally
+does not assert provider or model identity: this is a semantic capability gate,
+not an unreviewed routing-policy setting.
+
+The shared `transcription-release-candidate-probe` action uses the existing
+authenticated deploy identity to read the existing `FIREBASE_API_KEY` Secret
+Manager secret, sign a five-minute Firebase custom token for the dedicated
+non-human `omi-release-probe` UID, and exchange it immediately for an ID token.
+It writes that token only to an owner-only temporary runner file, never exposes
+it through workflow outputs or evidence, and deletes it at step exit. The
+workflow makes no IAM changes: the existing deploy identity must be reviewed to
+have only the Secret Manager read and `iam.serviceAccounts.signJwt` access this
+action needs. Missing access fails closed before promotion. Reports contain only
+redacted booleans and status codes.
+
+The Cloud Run candidate itself makes the private VPC hop to Parakeet. After a
+passing or failed candidate gate, the workflow removes its temporary tag; a
+failed gate never shifts traffic.
+
+## Automatic development candidate acceptance
+
+`gcp_backend_auto_dev.yml` keeps the development backend mutation lock while
+it deploys the four Cloud Run services (`backend`, `backend-sync`,
+`backend-sync-backfill`, and `backend-integration`) with the service-scoped
+`candidate` tag. It resolves each exact tag URL from Cloud Run status, runs the
+source-owned `backend/deploy/dev_candidate_acceptance.json` manifest, and only
+then permits the one traffic-promotion step. The backend uses the authenticated
+What Matters Now contract; the worker services use bounded `/v1/health` checks.
+The evidence artifact records only service, bounded contract category, and
+outcome — never URLs, tokens, user data, or response bodies.
+
+Candidate requests carry an OIDC token in `X-Serverless-Authorization` while
+the application keeps its own `Authorization` header. The token audience is
+the canonical Cloud Run service URL as required by Cloud Run; the HTTP target
+remains the exact no-traffic tagged candidate URL.
+
+Development pusher is deliberately **GKE-only** (`pusher.omiapi.com`). A
+legacy Cloud Run `pusher` service is not a deploy, candidate, or health-report
+surface; do not publish an image merely to make that retired surface appear
+ready.
 
 ## Deepgram Configuration
 
@@ -561,13 +665,15 @@ The system includes robust error handling:
 
 | Error Type | Handling |
 |------------|----------|
-| **STT Connection Failed** | Exponential backoff retry (1s → 32s, 3 attempts) |
-| **Provider Error** | Exponential backoff retry with Deepgram |
+| **STT Connection Failed** | Before live audio is accepted, bounded connection retry may select a configured provider. After a live provider becomes unusable, emit `service_status(stt_failed)` and close the client WebSocket with `1011`; do not discard audio as successful. |
+| **Provider Error** | Pre-recorded/sync work classifies the provider failure and remains retryable. Live `/v4/listen` fails the session visibly; the desktop/mobile client retains local retry material and reconnects. |
 | **Decode Error** | Log and skip corrupted audio chunk |
 | **WebSocket Error** | Clean close with appropriate code |
 
 <Warning>
-If the STT provider fails after retries, the connection will be closed with an error message. The app should handle reconnection.
+Live STT never silently downgrades a terminal provider failure to a successful
+transcription. The app receives the bounded failure status before the `1011`
+close and must retain unconfirmed local audio until a later successful sync.
 </Warning>
 
 ## Key File Locations

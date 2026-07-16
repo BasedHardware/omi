@@ -3153,5 +3153,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Enhedens lager",
+    "deviceStoragePercentFull": "{percent}% fyldt",
+    "deviceStorageUsedOfTotal": "{used} af {total} brugt",
+    "deviceStorageFree": "{free} ledig",
+    "deviceStorageNearlyFull": "Enheden er næsten fuld — synkronisér for at frigøre plads.",
     "phoneMicOfflineFallbackMessage": "Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen."
 }

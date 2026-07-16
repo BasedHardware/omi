@@ -31,20 +31,20 @@ struct AskAIInputView: View {
                 HStack {
                     Spacer()
 
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Text("esc")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                             .frame(width: 30, height: 16)
                             .background(Color.white.opacity(0.1))
-                            .cornerRadius(4)
+                            .cornerRadius(OmiChrome.stripRadius)
                         Text("to clear")
-                            .scaledFont(size: 11)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                     }
                 }
-                .padding(.top, 8)
-                .padding(.trailing, 16)
+                .padding(.top, OmiSpacing.sm)
+                .padding(.trailing, OmiSpacing.lg)
             }
 
             if !attachments.isEmpty {
@@ -53,18 +53,18 @@ struct AskAIInputView: View {
                     onRemove: removeAttachment
                 )
                 .environment(\.colorScheme, .dark)
-                .padding(.horizontal, 16)
-                .padding(.top, 8)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.top, OmiSpacing.sm)
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
                 ZStack(alignment: .topLeading) {
                     if userInput.isEmpty && !hasMarkedText {
                         Text("Ask a question...")
-                            .scaledFont(size: 13)
+                            .scaledFont(size: OmiType.body)
                             .foregroundColor(.secondary)
-                            .padding(.horizontal, 8)
-                            .padding(.vertical, 8)
+                            .padding(.horizontal, OmiSpacing.sm)
+                            .padding(.vertical, OmiSpacing.sm)
                     }
 
                     OmiTextEditor(
@@ -86,7 +86,7 @@ struct AskAIInputView: View {
                         }
                     )
                 }
-                .padding(.horizontal, 4)
+                .padding(.horizontal, OmiSpacing.xxs)
                 .frame(height: textHeight)
 
                 Button(action: {
@@ -102,8 +102,8 @@ struct AskAIInputView: View {
                 .disabled(!canSend)
                 .buttonStyle(.plain)
             }
-            .padding(.horizontal, 16)
-            .padding(.vertical, 12)
+            .padding(.horizontal, OmiSpacing.lg)
+            .padding(.vertical, OmiSpacing.md)
             .frame(maxWidth: .infinity)
         }
         .onDrop(of: [UTType.fileURL], isTargeted: $isDropTargeted, perform: handleAttachmentDrop)

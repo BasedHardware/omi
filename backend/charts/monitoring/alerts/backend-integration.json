@@ -212,7 +212,7 @@
             "groupBys": [
               "metric.label.response_code_class"
             ],
-            "perSeriesAligner": "ALIGN_SUM",
+            "perSeriesAligner": "ALIGN_NONE",
             "preprocessor": "rate",
             "projectName": "based-hardware",
             "view": "FULL"
@@ -306,7 +306,7 @@
       }
     ],
     "updated": "2026-06-23T01:27:11Z",
-    "noDataState": "Alerting",
+    "noDataState": "OK",
     "execErrState": "Error",
     "for": "3m",
     "keep_firing_for": "0s",

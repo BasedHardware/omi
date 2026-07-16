@@ -3113,5 +3113,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Памет на устройството",
+    "deviceStoragePercentFull": "{percent}% запълнена",
+    "deviceStorageUsedOfTotal": "{used} от {total} използвани",
+    "deviceStorageFree": "{free} свободни",
+    "deviceStorageNearlyFull": "Устройството е почти пълно — синхронизирайте, за да освободите място.",
     "phoneMicOfflineFallbackMessage": "Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн."
 }

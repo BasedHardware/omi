@@ -9572,6 +9572,27 @@ class AppLocalizationsEt extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Seadme salvestusruum';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% täis';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total kasutatud';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vaba';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.';
 }

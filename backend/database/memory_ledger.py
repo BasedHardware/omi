@@ -2,25 +2,37 @@ import copy
 import hashlib
 import json
 from datetime import datetime, timezone
+from functools import wraps
 from typing import Any, Callable, Dict, List, Optional, TypeVar, cast
 
 from google.cloud.firestore_v1 import transactional  # type: ignore[reportUnknownMemberType]  # firestore SDK stub gap
 
 from database import projection_repair
+from database.firestore_transaction_retry import run_with_transaction_contention_retry
 from models.memories import confidence_fields_for_evidence
+from models.memory_state_head import (
+    trusted_memory_state_head_fields_from_control,
+    trusted_memory_state_head_fields_from_state,
+)
 from ._client import db
 
 T = TypeVar("T")
 
 
 def _typed_transactional(func: Callable[..., T]) -> Callable[..., T]:
-    """Wrap @transactional preserving the wrapped function's typed signature.
+    """Create an isolated SDK transaction wrapper for every invocation.
 
-    google-cloud-firestore's @transactional decorator surfaces as partially
-    unknown under strict Pyright (no stubs); this thin wrapper keeps the typed
-    call site while delegating runtime behavior to the SDK decorator.
+    Firestore's ``_Transactional`` wrapper stores mutable retry IDs. Reusing one
+    module-level instance across request threads can cross-contaminate retries,
+    so defer constructing it until each call while preserving the typed surface.
     """
-    return transactional(func)
+
+    @wraps(func)
+    def invoke(transaction: Any, *args: Any, **kwargs: Any) -> T:
+        wrapped = cast(Callable[..., T], transactional(func))
+        return wrapped(transaction, *args, **kwargs)
+
+    return invoke
 
 
 def _typed_doc(doc: Any) -> Dict[str, Any]:
@@ -32,6 +44,7 @@ def _typed_doc(doc: Any) -> Dict[str, Any]:
 users_collection = 'users'
 memory_state_collection = 'memory_state'
 memory_state_document = 'head'
+memory_apply_control_document = 'apply_control'
 memory_commits_collection = 'memory_commits'
 
 
@@ -40,6 +53,39 @@ class HeadConflict(Exception):
         super().__init__(f"Memory ledger head moved from {expected_parent} to {current_head}")
         self.expected_parent = expected_parent
         self.current_head = current_head
+
+
+def _state_head_write_payload(
+    *,
+    transaction: Any,
+    user_ref: Any,
+    uid: str,
+    state: Dict[str, Any],
+    commit: Dict[str, Any],
+) -> Dict[str, Any]:
+    """Keep canonical trusted fields when the legacy ledger advances its own head.
+
+    The legacy ledger's ``current_head_commit_id`` is independent from the
+    canonical apply stream's ``head_commit_id``.  Older ledger writes replaced
+    the shared document and erased the canonical fields.  If an old write has
+    already clobbered them, repair only from the transactional canonical control
+    record; do not fabricate a trusted generation.
+    """
+    trusted_fields = trusted_memory_state_head_fields_from_state(state, uid=uid)
+    if trusted_fields is None:
+        control_ref = user_ref.collection(memory_state_collection).document(memory_apply_control_document)
+        control_snapshot = control_ref.get(transaction=transaction)
+        control = _typed_doc(control_snapshot) if control_snapshot.exists else {}
+        trusted_fields = trusted_memory_state_head_fields_from_control(control, uid=uid)
+
+    payload = {
+        'current_head_commit_id': commit['commit_id'],
+        'projection_version': 1,
+        'updated_at': commit['commit_time'],
+    }
+    if trusted_fields is not None:
+        payload.update(trusted_fields)
+    return payload
 
 
 def mutation(mutation_type: str, **payload: Any) -> Dict[str, Any]:
@@ -195,17 +241,20 @@ def append_commit(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     database: Any = firestore_client or db
-    transaction: Any = database.transaction()
-    result = _append_commit_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutations,
-        run_id,
-        commit_time,
-        projection_writer,
-        use_current_head,
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutations,
+            run_id,
+            commit_time,
+            projection_writer,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
@@ -223,16 +272,19 @@ def append_commit_with_builder(
     firestore_client: Any = None,
 ) -> Dict[str, Any]:
     database: Any = firestore_client or db
-    transaction: Any = database.transaction()
-    result = _append_commit_with_builder_transaction(
-        transaction,
-        database,
-        uid,
-        parent_commit_id,
-        mutation_builder,
-        run_id,
-        commit_time,
-        use_current_head,
+    result = run_with_transaction_contention_retry(
+        database.transaction,
+        lambda transaction: _append_commit_with_builder_transaction(
+            transaction,
+            database,
+            uid,
+            parent_commit_id,
+            mutation_builder,
+            run_id,
+            commit_time,
+            use_current_head,
+        ),
+        operation_name="memory_ledger_append_with_builder",
     )
     if result.get('applied'):
         projection_repair.enqueue_projection_repairs(uid, result.get('commit'), firestore_client=database)
@@ -268,18 +320,22 @@ def _append_commit_transaction(
     if current_head != expected_parent:
         raise HeadConflict(expected_parent, current_head)
 
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
+
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 
@@ -314,18 +370,22 @@ def _append_commit_with_builder_transaction(
     if commit_snapshot.exists:
         return {'commit': _typed_doc(commit_snapshot), 'applied': False}
 
+    # Build the state-head payload (including any apply_control fallback read)
+    # before staging any writes: Firestore forbids a transactional read after a
+    # write and raises ReadAfterWriteError otherwise.
+    state_head_payload = _state_head_write_payload(
+        transaction=transaction,
+        user_ref=user_ref,
+        uid=uid,
+        state=state,
+        commit=commit,
+    )
+
     if projection_writer:
         projection_writer(transaction)
 
     transaction.set(commit_ref, commit)
-    transaction.set(
-        state_ref,
-        {
-            'current_head_commit_id': commit['commit_id'],
-            'projection_version': 1,
-            'updated_at': commit['commit_time'],
-        },
-    )
+    transaction.set(state_ref, state_head_payload)
     return {'commit': commit, 'applied': True}
 
 

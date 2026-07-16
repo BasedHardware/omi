@@ -53,10 +53,12 @@ def users_service():
         "utils.twilio_service": AutoMockModule("utils.twilio_service"),
     }
     with stub_modules(fakes):
-        yield load_module_fresh(
+        service = load_module_fresh(
             "services.users.account_deletion",
             os.path.join(str(_BACKEND), "services", "users", "account_deletion.py"),
         )
+        service.users_db.mark_user_deletion_wipe_intent.return_value = 'job-1'
+        yield service
 
 
 def _sub(stripe_subscription_id):

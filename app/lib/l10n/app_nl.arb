@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Apparaatopslag",
+    "deviceStoragePercentFull": "{percent}% vol",
+    "deviceStorageUsedOfTotal": "{used} van {total} gebruikt",
+    "deviceStorageFree": "{free} vrij",
+    "deviceStorageNearlyFull": "Apparaat bijna vol — synchroniseer om ruimte vrij te maken.",
     "phoneMicOfflineFallbackMessage": "Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent."
 }

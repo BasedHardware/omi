@@ -3145,5 +3145,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Almacenamiento del dispositivo",
+    "deviceStoragePercentFull": "{percent}% lleno",
+    "deviceStorageUsedOfTotal": "{used} de {total} usado",
+    "deviceStorageFree": "{free} libre",
+    "deviceStorageNearlyFull": "El dispositivo está casi lleno: sincroniza para liberar espacio.",
     "phoneMicOfflineFallbackMessage": "Sin conexión: se está grabando localmente. Se transcribirá cuando vuelvas a estar en línea."
 }

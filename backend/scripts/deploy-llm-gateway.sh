@@ -14,8 +14,8 @@ if [[ -z "$ENVIRONMENT" ]]; then
   echo "ERROR: ENVIRONMENT or ENV is required" >&2
   exit 2
 fi
-if [[ "$ENVIRONMENT" != "dev" ]]; then
-  echo "ERROR: LLM Gateway deploys are dev-only until the prod launch checklist is explicitly completed" >&2
+if [[ "$ENVIRONMENT" != "dev" && "$ENVIRONMENT" != "prod" ]]; then
+  echo "ERROR: LLM Gateway environment must be dev or prod" >&2
   exit 2
 fi
 if [[ -z "$IMAGE_TAG" ]]; then
@@ -88,7 +88,7 @@ HELM_ARGS=(
   "$RELEASE_NAME"
   "$CHART_DIR"
   -f "$VALUES_FILE"
-  --set "image.tag=${IMAGE_TAG}"
+  --set-string "image.tag=${IMAGE_TAG}"
 )
 
 helm template "${HELM_ARGS[@]}" >/dev/null
@@ -126,9 +126,8 @@ if [[ "$DRY_RUN" == "true" ]]; then
   exit 0
 fi
 
-# The first dev ingress and BackendConfig were bootstrapped manually before this
-# chart owned them. Adopt only these known chart resources so future deploys
-# converge through Helm.
+# The first gateway ingress and BackendConfig may predate Helm ownership. Adopt
+# only the chart's known resources so future deploys converge through Helm.
 adopt_for_helm ingress "$RELEASE_NAME"
 adopt_for_helm backendconfig "${ENVIRONMENT}-llm-gateway-backend-config"
 

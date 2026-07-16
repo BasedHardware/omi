@@ -3149,5 +3149,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Úložisko zariadenia",
+    "deviceStoragePercentFull": "{percent}% zaplnené",
+    "deviceStorageUsedOfTotal": "{used} z {total} využité",
+    "deviceStorageFree": "{free} voľných",
+    "deviceStorageNearlyFull": "Zariadenie je takmer plné — synchronizujte, aby ste uvoľnili miesto.",
     "phoneMicOfflineFallbackMessage": "Bez pripojenia – nahráva sa lokálne. Prepíše sa, keď budete znova online."
 }

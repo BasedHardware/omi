@@ -9400,5 +9400,26 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => '设备存储';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '已用 $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 中已使用 $used';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '剩余 $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '设备快满了 — 请同步以释放空间。';
+
+  @override
   String get phoneMicOfflineFallbackMessage => '无网络连接 — 正在本地录制。恢复联网后将自动转写。';
 }

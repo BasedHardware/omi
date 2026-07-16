@@ -290,6 +290,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
 
     DesktopAutomationBridge.shared.startIfNeeded()
     LocalAgentAPIServer.shared.startIfNeeded()
+    publishNamedBundleRuntimeManifest()
 
     // Strip com.apple.provenance xattrs that macOS adds when Sparkle extracts updates.
     // These break the code signature seal, causing the NEXT update to fail with
@@ -428,7 +429,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       let options = FirebaseOptions(contentsOfFile: path)
     {
       FirebaseApp.configure(options: options)
-      AuthService.shared.configure()
+      Task { @MainActor in
+        await AuthService.shared.configure()
+      }
     } else {
       log("Firebase configure skipped (plistPath=\(plistPath ?? "nil"))")
     }
@@ -475,11 +478,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
     }
 
     AnalyticsManager.shared.trackFirstLaunchIfNeeded()
-
-    // Set per-user database path before any async tasks can trigger DB initialization.
-    // This is synchronous and must happen before ViewModelContainer initializes SQLite.
-    let userId = UserDefaults.standard.string(forKey: "auth_userId")
-    RewindDatabase.currentUserId = (userId?.isEmpty == false) ? userId : "anonymous"
 
     // Start resource monitoring (memory, CPU, disk)
     ResourceMonitor.shared.start()
@@ -1077,7 +1075,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
   @MainActor @objc private func signOut() {
     AnalyticsManager.shared.menuBarActionClicked(action: "sign_out")
     ProactiveAssistantsPlugin.shared.stopMonitoring()
-    try? AuthService.shared.signOut()
+    Task { @MainActor in
+      try? await AuthService.shared.signOut()
+    }
   }
 
   @MainActor @objc private func quitApp() {
@@ -1251,6 +1251,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, NSMenuDelegate {
       return false
     }
     return true
+  }
+
+  /// Publish only token-free local diagnostics for a running named dev bundle.
+  /// The agent-facing doctor reads endpoint URLs from the loopback health route,
+  /// not from this durable file.
+  private func publishNamedBundleRuntimeManifest() {
+    guard DesktopLocalProfile.isNamedDevelopmentBundle,
+          let bundleID = Bundle.main.bundleIdentifier
+    else { return }
+
+    let manifest = DesktopDevRuntimeManifest(
+      bundleIdentifier: bundleID,
+      processID: ProcessInfo.processInfo.processIdentifier,
+      startedAt: Date(),
+      appPath: Bundle.main.bundleURL.path,
+      profileRoot: DesktopLocalProfile.applicationSupportURL().path,
+      logPath: omiLogFilePath(),
+      automationPort: Int(DesktopAutomationLaunchOptions.port))
+    do {
+      try DesktopDevRuntimeManifestStore.write(
+        manifest,
+        in: DesktopLocalProfile.applicationSupportURL())
+      log("AppDelegate: Published named-bundle runtime manifest")
+    } catch {
+      logError("AppDelegate: Failed to publish named-bundle runtime manifest", error: error)
+    }
   }
 
   func applicationWillTerminate(_ notification: Notification) {

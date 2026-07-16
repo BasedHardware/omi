@@ -16,7 +16,7 @@ setup-hooks:
 	@bash scripts/install-git-hooks.sh
 
 preflight:
-	python3 .github/scripts/run_checks.py --lane local --base origin/main
+	python3 .github/scripts/pr_preflight.py --lane local --base origin/main
 
 dev-check:
 	bash scripts/dev-harness/dev-check.sh

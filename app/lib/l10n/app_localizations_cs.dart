@@ -9576,6 +9576,27 @@ class AppLocalizationsCs extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Úložiště zařízení';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% zaplněno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used z $total využito';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free volných';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Zařízení je téměř plné — synchronizujte pro uvolnění místa.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.';
 }

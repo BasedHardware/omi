@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Storage ng device",
+    "deviceStoragePercentFull": "{percent}% puno",
+    "deviceStorageUsedOfTotal": "{used} sa {total} ang nagamit",
+    "deviceStorageFree": "{free} ang libre",
+    "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo.",
     "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit."
 }

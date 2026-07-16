@@ -80,7 +80,7 @@ def _get_storage_client() -> Any:
 
 speech_profiles_bucket = (os.getenv('BUCKET_SPEECH_PROFILES') or '').strip() or None
 postprocessing_audio_bucket = os.getenv('BUCKET_POSTPROCESSING')
-memories_recordings_bucket = os.getenv('BUCKET_MEMORIES_RECORDINGS')
+memories_recordings_bucket = (os.getenv('BUCKET_MEMORIES_RECORDINGS') or '').strip() or None
 private_cloud_sync_bucket = os.getenv('BUCKET_PRIVATE_CLOUD_SYNC', 'omi-private-cloud-sync')
 syncing_local_bucket = os.getenv('BUCKET_TEMPORAL_SYNC_LOCAL')
 omi_apps_bucket = os.getenv('BUCKET_PLUGINS_LOGOS')
@@ -346,6 +346,12 @@ def get_conversation_recording_if_exists(uid: str, memory_id: str) -> Optional[s
 
 def delete_all_conversation_recordings(uid: str) -> None:
     if not uid:
+        return
+    if not memories_recordings_bucket:
+        # A required purge failure blocks the irreversible Firestore wipe (see
+        # services/users/account_deletion.py), so an unconfigured bucket must not raise here:
+        # uploads resolve the same name, so a deployment without it cannot have stored recordings.
+        logger.warning('BUCKET_MEMORIES_RECORDINGS is not configured; skipping conversation recordings purge')
         return
     bucket = _get_storage_client().bucket(memories_recordings_bucket)
     # Trailing slash so a uid is not a prefix of another uid's folder (e.g. "abc" matching "abcd/").
@@ -1360,7 +1366,6 @@ def precache_conversation_audio(
         return
 
     def _precache_all():
-
         def _cache_single(af: Dict[str, Any]) -> None:
             try:
                 audio_file_id = af.get('id')

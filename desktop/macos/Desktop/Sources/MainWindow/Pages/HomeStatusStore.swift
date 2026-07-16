@@ -21,8 +21,12 @@ struct HomeStatusLoader {
                 await connectorStatusStore.refresh()
             },
             loadScreenshotCount: {
-                let stats = await RewindIndexer.shared.getStats()
-                return stats?.total
+                do {
+                    return try await RewindDatabase.shared.getScreenshotCount()
+                } catch {
+                    logError("HomeStatusLoader: Failed to load screenshot count", error: error)
+                    return nil
+                }
             },
             loadKnowledgeCounts: { includeOmiDeviceHistory in
                 async let conversations = try? APIClient.shared.getConversationsCount(includeDiscarded: false)
@@ -66,6 +70,7 @@ final class HomeStatusStore: ObservableObject {
     private let loader: HomeStatusLoader
     private let currentUserIDProvider: () -> String?
     private var sessionUserID: String?
+    private var localDatabaseReady: Bool
     private var lastRefreshAt = Date.distantPast
     private var refreshTask: Task<Void, Never>?
     private var refreshID: UUID?
@@ -77,7 +82,8 @@ final class HomeStatusStore: ObservableObject {
         connectorStatusStore: ImportConnectorStatusStore? = nil,
         defaults: UserDefaults = .standard,
         loader: HomeStatusLoader? = nil,
-        currentUserIDProvider: (() -> String?)? = nil
+        currentUserIDProvider: (() -> String?)? = nil,
+        localDatabaseReady: Bool = false
     ) {
         let currentUserIDProvider = currentUserIDProvider ?? {
             defaults.string(forKey: .authUserId)
@@ -90,6 +96,7 @@ final class HomeStatusStore: ObservableObject {
         self.loader = loader ?? .live(connectorStatusStore: connectorStatusStore)
         self.currentUserIDProvider = currentUserIDProvider
         self.sessionUserID = sessionUserID
+        self.localDatabaseReady = localDatabaseReady
         accountHasOmiDeviceConversations = Self.loadPersistedDeviceHistory(
             defaults: defaults,
             userID: sessionUserID
@@ -144,6 +151,22 @@ final class HomeStatusStore: ObservableObject {
         accountHasOmiDeviceConversations = false
     }
 
+    /// The Rewind database has opened for the current owner. Load the local
+    /// screenshot metric immediately instead of waiting for the Home refresh
+    /// cooldown after a pre-startup refresh skipped it.
+    func databaseDidBecomeReady() async {
+        ensureCurrentSessionScope()
+        localDatabaseReady = true
+
+        let generation = refreshGeneration
+        let loadedScreenshotCount = await loader.loadScreenshotCount()
+        guard !Task.isCancelled,
+              generation == refreshGeneration,
+              localDatabaseReady
+        else { return }
+        apply(screenshotCount: loadedScreenshotCount)
+    }
+
     private func resetTransientState() {
         refreshGeneration += 1
         refreshTask?.cancel()
@@ -151,6 +174,7 @@ final class HomeStatusStore: ObservableObject {
         refreshID = nil
         latestKnowledgeRefreshID = nil
         lastRefreshAt = .distantPast
+        localDatabaseReady = false
         screenshotCount = nil
         conversationCount = nil
         memoryCount = nil
@@ -173,9 +197,10 @@ final class HomeStatusStore: ObservableObject {
 
     private func performRefresh(generation: Int) async {
         let includeDeviceHistory = !accountHasOmiDeviceConversations
+        let shouldLoadScreenshotCount = localDatabaseReady
         let knowledgeRefreshID = beginKnowledgeRefresh()
         async let connectorStatuses: Void = loader.refreshConnectorStatuses()
-        async let screenshots = loader.loadScreenshotCount()
+        async let screenshots: Int? = shouldLoadScreenshotCount ? loader.loadScreenshotCount() : nil
         async let knowledgeCounts = loader.loadKnowledgeCounts(includeDeviceHistory)
         async let exportStatuses = loader.loadMemoryExportStatuses()
         let (_, loadedScreenshots, loadedKnowledgeCounts, loadedExportStatuses) = await (

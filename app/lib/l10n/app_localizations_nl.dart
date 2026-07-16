@@ -9603,6 +9603,27 @@ class AppLocalizationsNl extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Apparaatopslag';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% vol';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used van $total gebruikt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vrij';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Apparaat bijna vol — synchroniseer om ruimte vrij te maken.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent.';
 }

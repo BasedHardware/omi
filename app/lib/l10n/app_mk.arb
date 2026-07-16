@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Меморија на уредот",
+    "deviceStoragePercentFull": "{percent}% полна",
+    "deviceStorageUsedOfTotal": "{used} од {total} искористени",
+    "deviceStorageFree": "{free} слободни",
+    "deviceStorageNearlyFull": "Уредот е речиси полн — синхронизирајте за да ослободите простор.",
     "phoneMicOfflineFallbackMessage": "Нема врска — се снима локално. Ќе биде транскрибирано кога повторно ќе бидете онлајн."
 }

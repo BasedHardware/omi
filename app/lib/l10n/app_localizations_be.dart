@@ -9606,6 +9606,27 @@ class AppLocalizationsBe extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Сховішча прылады';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'запоўнена $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used з $total выкарыстана';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free вольна';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.';
 }

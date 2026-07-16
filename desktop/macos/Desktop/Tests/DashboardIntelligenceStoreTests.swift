@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
@@ -16,7 +17,8 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
   func testControlFailureUsesDashboardErrorWithoutLeakingBackendDetail() async {
     let api = FakeDashboardIntelligenceClient()
-    api.controlError = APIError.httpError(statusCode: 404, detail: "v1/candidates/control was not found")
+    api.controlError = APIError.httpError(
+      statusCode: 404, detail: "v1/candidates/control was not found")
     let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
 
     await store.load()
@@ -37,15 +39,52 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     XCTAssertTrue(store.goals.isEmpty)
   }
 
+  func testWhatMattersNowFailureSurvivesSuccessfulGoalsAndPendingFeedbackWarning() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projectionError = APIError.httpError(statusCode: 403, detail: "Device scope mismatch")
+    api.goals = [goal(id: "goal-1", status: .focused, rank: 0)]
+    api.failFeedback = true
+    let outbox = MemoryDashboardOutbox()
+    outbox.entries = [
+      PendingDashboardFeedback(
+        request: OmiAPI.FeedbackCreate(
+          action: .later,
+          contextSnapshotHash: nil,
+          interventionId: "intervention-pending",
+          laterUntil: "2030-01-01T00:00:00Z",
+          reason: nil,
+          subjectId: "task-pending",
+          subjectKind: .task
+        ),
+        idempotencyKey: "feedback-pending",
+        accountGeneration: 7
+      )
+    ]
+    let store = DashboardIntelligenceStore(client: api, outboxStore: outbox)
+
+    await store.load()
+
+    XCTAssertEqual(store.error, "You don't have permission to do that.")
+    XCTAssertEqual(store.focusedGoals.map(\.goalId), ["goal-1"])
+    XCTAssertTrue(store.recommendations.isEmpty)
+    XCTAssertEqual(outbox.entries.map(\.idempotencyKey), ["feedback-pending"])
+  }
+
   func testContextProjectionRefreshesDashboardWithoutConsultingNotificationSettings() {
     let defaults = UserDefaults.standard
     let previousMaster = defaults.object(forKey: NotificationService.masterEnabledDefaultsKey)
     let previousFrequency = defaults.object(forKey: NotificationService.frequencyDefaultsKey)
     defer {
-      if let previousMaster { defaults.set(previousMaster, forKey: NotificationService.masterEnabledDefaultsKey) }
-      else { defaults.removeObject(forKey: NotificationService.masterEnabledDefaultsKey) }
-      if let previousFrequency { defaults.set(previousFrequency, forKey: NotificationService.frequencyDefaultsKey) }
-      else { defaults.removeObject(forKey: NotificationService.frequencyDefaultsKey) }
+      if let previousMaster {
+        defaults.set(previousMaster, forKey: NotificationService.masterEnabledDefaultsKey)
+      } else {
+        defaults.removeObject(forKey: NotificationService.masterEnabledDefaultsKey)
+      }
+      if let previousFrequency {
+        defaults.set(previousFrequency, forKey: NotificationService.frequencyDefaultsKey)
+      } else {
+        defaults.removeObject(forKey: NotificationService.frequencyDefaultsKey)
+      }
     }
     defaults.set(false, forKey: NotificationService.masterEnabledDefaultsKey)
     defaults.set(0, forKey: NotificationService.frequencyDefaultsKey)
@@ -67,11 +106,14 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
       outboxStore: MemoryDashboardOutbox(),
       now: { Date(timeIntervalSince1970: 1_800_000_000) }
     )
-    store.applyContextProjection(projection(items: [recommendation(
-      id: "artifact-1",
-      kind: .artifact,
-      destinationWorkstreamID: "workstream-existing"
-    )]))
+    store.applyContextProjection(
+      projection(items: [
+        recommendation(
+          id: "artifact-1",
+          kind: .artifact,
+          destinationWorkstreamID: "workstream-existing"
+        )
+      ]))
     var openedDestination: DashboardRecommendationDestination?
     store.setRecommendationActionHandler { recommendation in
       openedDestination = recommendation.destination
@@ -110,7 +152,8 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
   func testExpiredProjectionAndExpiredCardsNeverRender() async {
     let now = Date(timeIntervalSince1970: 1_800_000_000)
     let api = FakeDashboardIntelligenceClient()
-    api.projection = projection(expiresAt: "2027-01-15T08:00:00Z", items: [recommendation(id: "task-1")])
+    api.projection = projection(
+      expiresAt: "2027-01-15T08:00:00Z", items: [recommendation(id: "task-1")])
     let store = DashboardIntelligenceStore(
       client: api,
       outboxStore: MemoryDashboardOutbox(),
@@ -226,7 +269,7 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
   func testCanonicalGoalsRemainAvailableOutsideIntelligenceCohort() async {
     let api = FakeDashboardIntelligenceClient()
-    api.failProjection = true
+    api.projectionError = APIError.httpError(statusCode: 404, detail: "Not found")
     api.goals = [goal(id: "goal-1", status: .focused, rank: 0)]
     let store = DashboardIntelligenceStore(client: api, outboxStore: MemoryDashboardOutbox())
 
@@ -327,22 +370,53 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
     )
   }
 
-  func testLoadPassesDeviceScopedContextHash() async {
+  func testFailedPendingLaterAndDismissFeedbackDoNotResurrectFromSuccessfulProjection() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.failFeedback = true
+    api.projection = projection(items: [
+      recommendation(id: "owner-a-later"),
+      recommendation(id: "owner-a-dismiss"),
+      recommendation(id: "owner-b-only"),
+      recommendation(id: "unrelated"),
+    ])
+    let outbox = MemoryDashboardOutbox()
+    outbox.ownerID = "owner-a"
+    outbox.entries = [
+      pendingFeedback(action: .later, key: "owner-a-later", subjectID: "owner-a-later"),
+      pendingFeedback(action: .dismiss, key: "owner-a-dismiss", subjectID: "owner-a-dismiss"),
+    ]
+    outbox.ownerID = "owner-b"
+    outbox.entries = [
+      pendingFeedback(action: .dismiss, key: "owner-b-only", subjectID: "owner-b-only")
+    ]
+    outbox.ownerID = "owner-a"
+    let store = DashboardIntelligenceStore(client: api, outboxStore: outbox)
+
+    await store.load()
+
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["owner-b-only", "unrelated"])
+    XCTAssertEqual(api.feedbackKeys, ["owner-a-later", "owner-a-dismiss"])
+    XCTAssertEqual(outbox.load(ownerID: "owner-a").count, 2)
+    XCTAssertEqual(outbox.load(ownerID: "owner-b").map(\.idempotencyKey), ["owner-b-only"])
+    XCTAssertEqual(store.error, "Saved feedback will retry automatically.")
+  }
+
+  func testLoadPassesHeaderBoundClientDeviceID() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: [recommendation(id: "task-1")])
     let store = DashboardIntelligenceStore(
       client: api,
       outboxStore: MemoryDashboardOutbox(),
-      deviceIDProvider: { "device-hash-abc" }
+      deviceIDProvider: { "macos_deadbeef" }
     )
 
     await store.load()
 
-    XCTAssertEqual(api.lastDeviceID, "device-hash-abc")
+    XCTAssertEqual(api.lastDeviceID, "macos_deadbeef")
     XCTAssertEqual(store.recommendations.map(\.subjectID), ["task-1"])
   }
 
-  func testPresentationFeedbackAndDoNowEmitBoundedAttribution() async {
+  func testPresentationFeedbackAndDoNowEmitBoundedAttributionWithoutFalseOutcome() async {
     let api = FakeDashboardIntelligenceClient()
     api.projection = projection(items: [recommendation(id: "task-1")])
     var events: [TaskIntelligenceAttributionEvent] = []
@@ -373,17 +447,121 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 
     XCTAssertEqual(
       events.map(\.eventType),
-      [.interventionPresented, .feedbackRecorded, .interventionPresented, .feedbackRecorded, .outcomeRecorded]
+      [.interventionPresented, .feedbackRecorded, .interventionPresented, .feedbackRecorded]
     )
-    XCTAssertEqual(api.outcomeRequests.map(\.outcomeCode), [.workstream_advanced])
-    XCTAssertEqual(events.last?.outcomeCode, "workstream_advanced")
+    XCTAssertTrue(api.outcomeRequests.isEmpty)
+    XCTAssertTrue(api.outcomeKeys.isEmpty)
+    XCTAssertNil(events.last?.outcomeCode)
     XCTAssertNil(events.last?.analyticsProperties["headline"])
   }
 
+  func testAccountSwitchSupersedesDelayedProjectionAndKeepsNewOwnerGoalMix() async {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(
+      outputVersion: "owner-a-output",
+      items: [recommendation(id: "owner-a-task", outputVersion: "owner-a-output")]
+    )
+    api.goals = [goal(id: "owner-a-goal", status: .focused, rank: 0)]
+    api.projectionSuspensionsRemaining = 1
+    let outbox = MemoryDashboardOutbox()
+    outbox.ownerID = "owner-a"
+    let store = DashboardIntelligenceStore(client: api, outboxStore: outbox)
+
+    let ownerALoad = Task { await store.load() }
+    while api.projectionRelease == nil { await Task.yield() }
+    let ownerARelease = api.projectionRelease
+
+    outbox.ownerID = "owner-b"
+    api.projection = projection(
+      outputVersion: "owner-b-output",
+      items: [recommendation(id: "owner-b-task", outputVersion: "owner-b-output")]
+    )
+    api.goals = [goal(id: "owner-b-goal", status: .focused, rank: 0)]
+    await store.load()
+
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["owner-b-task"])
+    XCTAssertEqual(store.goals.map(\.goalId), ["owner-b-goal"])
+
+    ownerARelease?.resume()
+    await ownerALoad.value
+
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["owner-b-task"])
+    XCTAssertEqual(store.goals.map(\.goalId), ["owner-b-goal"])
+    XCTAssertNil(store.error)
+  }
+
+  func testAccountSwitchDuringDelayedFeedbackCannotRemoveOrAttributeNewOwnerRecommendation()
+    async throws
+  {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(
+      outputVersion: "owner-a-output",
+      items: [recommendation(id: "owner-a-task", outputVersion: "owner-a-output")]
+    )
+    let outbox = MemoryDashboardOutbox()
+    outbox.ownerID = "owner-a"
+    var events: [TaskIntelligenceAttributionEvent] = []
+    let store = DashboardIntelligenceStore(
+      client: api,
+      outboxStore: outbox,
+      reportAttribution: { events.append($0) }
+    )
+    await store.load()
+    let ownerACard = try XCTUnwrap(store.recommendations.first)
+    api.feedbackSuspensionsRemaining = 1
+
+    let ownerAFeedback = Task { await store.later(ownerACard) }
+    while api.feedbackRelease == nil { await Task.yield() }
+    let ownerARelease = api.feedbackRelease
+
+    outbox.ownerID = "owner-b"
+    api.projection = projection(
+      outputVersion: "owner-b-output",
+      items: [recommendation(id: "owner-b-task", outputVersion: "owner-b-output")]
+    )
+    api.goals = [goal(id: "owner-b-goal", status: .focused, rank: 0)]
+    await store.load()
+
+    ownerARelease?.resume()
+    await ownerAFeedback.value
+
+    XCTAssertEqual(store.recommendations.map(\.subjectID), ["owner-b-task"])
+    XCTAssertEqual(store.goals.map(\.goalId), ["owner-b-goal"])
+    XCTAssertTrue(outbox.load(ownerID: "owner-b").isEmpty)
+    XCTAssertEqual(outbox.load(ownerID: "owner-a").count, 1)
+    XCTAssertTrue(
+      outbox.load(ownerID: "owner-a")[0].idempotencyKey
+        .hasPrefix("wmn:intervention-owner-a-task:later:")
+    )
+    XCTAssertFalse(events.contains { $0.eventType == .feedbackRecorded })
+    XCTAssertNil(store.error)
+  }
+
+  func testRecommendationActionStartedAfterOwnerSwitchCannotQueuePreviousOwnerCard() async throws {
+    let api = FakeDashboardIntelligenceClient()
+    api.projection = projection(items: [recommendation(id: "owner-a-task")])
+    let outbox = MemoryDashboardOutbox()
+    outbox.ownerID = "owner-a"
+    let store = DashboardIntelligenceStore(client: api, outboxStore: outbox)
+    await store.load()
+    let ownerACard = try XCTUnwrap(store.recommendations.first)
+
+    outbox.ownerID = "owner-b"
+    await store.later(ownerACard)
+
+    XCTAssertTrue(store.recommendations.isEmpty)
+    XCTAssertTrue(outbox.load(ownerID: "owner-a").isEmpty)
+    XCTAssertTrue(outbox.load(ownerID: "owner-b").isEmpty)
+    XCTAssertTrue(api.feedbackKeys.isEmpty)
+    XCTAssertNil(store.error)
+  }
+
   func testDashboardDoesNotPersistOrRewriteTaskOrder() throws {
-    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+    let root = URL(fileURLWithPath: #filePath).deletingLastPathComponent()
+      .deletingLastPathComponent()
     let storeSource = try String(
-      contentsOf: root.appendingPathComponent("Sources/MainWindow/Dashboard/DashboardIntelligenceStore.swift"),
+      contentsOf: root.appendingPathComponent(
+        "Sources/MainWindow/Dashboard/DashboardIntelligenceStore.swift"),
       encoding: .utf8
     )
     XCTAssertFalse(storeSource.contains("TaskPrioritizationService"))
@@ -412,6 +590,26 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
       outputVersion: outputVersion,
       recommendations: items,
       schemaVersion: 1
+    )
+  }
+
+  private func pendingFeedback(
+    action: OmiAPI.TaskIntelligenceFeedbackAction,
+    key: String,
+    subjectID: String
+  ) -> PendingDashboardFeedback {
+    PendingDashboardFeedback(
+      request: OmiAPI.FeedbackCreate(
+        action: action,
+        contextSnapshotHash: nil,
+        interventionId: "intervention-\(subjectID)",
+        laterUntil: action == .later ? "2030-01-01T00:00:00Z" : nil,
+        reason: action == .dismiss ? .not_useful : nil,
+        subjectId: subjectID,
+        subjectKind: .task
+      ),
+      idempotencyKey: key,
+      accountGeneration: 7
     )
   }
 
@@ -508,10 +706,19 @@ final class DashboardIntelligenceStoreTests: XCTestCase {
 }
 
 private final class MemoryDashboardOutbox: DashboardFeedbackOutboxPersisting {
-  var entries: [PendingDashboardFeedback] = []
-  func currentOwnerID() -> String { "test-owner" }
-  func load(ownerID: String) -> [PendingDashboardFeedback] { entries }
-  func save(_ entries: [PendingDashboardFeedback], ownerID: String) { self.entries = entries }
+  var ownerID = "test-owner"
+  private var entriesByOwner: [String: [PendingDashboardFeedback]] = [:]
+
+  var entries: [PendingDashboardFeedback] {
+    get { load(ownerID: ownerID) }
+    set { save(newValue, ownerID: ownerID) }
+  }
+
+  func currentOwnerID() -> String { ownerID }
+  func load(ownerID: String) -> [PendingDashboardFeedback] { entriesByOwner[ownerID] ?? [] }
+  func save(_ entries: [PendingDashboardFeedback], ownerID: String) {
+    entriesByOwner[ownerID] = entries
+  }
 }
 
 @MainActor
@@ -539,7 +746,8 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
     defaults.set("owner-b", forKey: "auth_userId")
     XCTAssertTrue(outbox.load(ownerID: outbox.currentOwnerID()).isEmpty)
     defaults.set("owner-a", forKey: "auth_userId")
-    XCTAssertEqual(outbox.load(ownerID: outbox.currentOwnerID()).first?.idempotencyKey, "feedback-1")
+    XCTAssertEqual(
+      outbox.load(ownerID: outbox.currentOwnerID()).first?.idempotencyKey, "feedback-1")
   }
 
   func testAccountSwitchDuringFeedbackDoesNotOverwriteNewOwnerQueue() async {
@@ -549,10 +757,11 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
     defaults.set("owner-a", forKey: "auth_userId")
     let outbox = DashboardFeedbackOutboxDefaults(defaults: defaults)
     let client = FakeDashboardIntelligenceClient()
+    client.projection = Self.projection(id: "recommendation-1")
     client.feedbackSuspensionsRemaining = 1
     let store = DashboardIntelligenceStore(client: client, outboxStore: outbox)
     await store.load()
-    let recommendation = Self.recommendation(id: "recommendation-1")
+    let recommendation = store.recommendations[0]
     let requestTask = Task { await store.later(recommendation) }
     while client.feedbackRelease == nil { await Task.yield() }
     defaults.set("owner-b", forKey: "auth_userId")
@@ -573,7 +782,11 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
     client.feedbackRelease?.resume()
     await requestTask.value
 
-    XCTAssertTrue(outbox.load(ownerID: "owner-a").isEmpty)
+    XCTAssertEqual(outbox.load(ownerID: "owner-a").count, 1)
+    XCTAssertTrue(
+      outbox.load(ownerID: "owner-a")[0].idempotencyKey
+        .hasPrefix("wmn:intervention-recommendation-1:later:")
+    )
     XCTAssertEqual(outbox.load(ownerID: "owner-b").map(\.idempotencyKey), ["owner-b-feedback"])
   }
 
@@ -600,37 +813,51 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
     let client = FakeDashboardIntelligenceClient()
     client.feedbackSuspensionsRemaining = 1
     let store = DashboardIntelligenceStore(client: client, outboxStore: outbox)
+    store.applyContextProjection(Self.projection(id: "new-recommendation"))
+    let recommendation = store.recommendations[0]
     let loadTask = Task { await store.load() }
     while client.feedbackRelease == nil { await Task.yield() }
     client.failFeedback = true
-    await store.later(Self.recommendation(id: "new-recommendation"))
+    await store.later(recommendation)
     client.failFeedback = false
     client.feedbackRelease?.resume()
     await loadTask.value
 
     let remaining = outbox.load(ownerID: "owner-a")
     XCTAssertEqual(remaining.count, 1)
-    XCTAssertTrue(remaining[0].idempotencyKey.hasPrefix("wmn:intervention-new-recommendation:later:"))
+    XCTAssertTrue(
+      remaining[0].idempotencyKey.hasPrefix("wmn:intervention-new-recommendation:later:"))
   }
 
-  private static func recommendation(id: String) -> DashboardRecommendation {
-    DashboardRecommendation(
-      id: id,
-      interventionID: "intervention-\(id)",
-      outputVersion: "output-1",
-      subjectKind: .task,
-      subjectID: "task-1",
-      feedbackSubjectKind: .task,
-      feedbackSubjectID: "task-1",
-      headline: "Continue task",
-      whyNow: "Ready",
-      contextLabel: nil,
-      recommendedAction: "Continue",
-      evidencePreview: "Evidence",
-      evidenceCount: 1,
-      dedupeKey: "task-1:v1",
+  private static func projection(id: String) -> OmiAPI.WhatMattersNowProjection {
+    OmiAPI.WhatMattersNowProjection(
+      evaluationId: "evaluation-\(id)",
       expiresAt: "2030-01-01T00:00:00Z",
-      destination: .task(taskID: "task-1", workstreamID: nil)
+      generatedAt: "2027-01-15T08:00:00Z",
+      materialVersion: "material-1",
+      outputVersion: "output-1",
+      recommendations: [
+        OmiAPI.Recommendation(
+          alternativeAction: nil,
+          dedupeKey: "dedupe-\(id)",
+          destinationTaskId: id,
+          destinationWorkstreamId: nil,
+          evidencePreview: "Evidence",
+          evidenceRefs: [],
+          expiresAt: "2030-01-01T00:00:00Z",
+          feedbackSubjectId: id,
+          feedbackSubjectKind: .task,
+          goalOrWorkstreamLabel: nil,
+          headline: "Continue task",
+          interventionId: "intervention-\(id)",
+          outputVersion: "output-1",
+          recommendedAction: "Continue",
+          subjectId: id,
+          subjectKind: .task,
+          whyNow: "Ready"
+        )
+      ],
+      schemaVersion: 1
     )
   }
 }
@@ -641,7 +868,9 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   var goals: [OmiAPI.GoalResponse] = []
   var detail: OmiAPI.GoalDetailProjection?
   var projectionLoads = 0
-  var failProjection = false
+  var projectionError: Error?
+  var projectionSuspensionsRemaining = 0
+  var projectionRelease: CheckedContinuation<Void, Never>?
   var controlError: Error?
   var goalsError: Error?
   var detailLoads = 0
@@ -655,7 +884,8 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   var outcomeKeys: [String] = []
   var failOutcome = false
   var lastDeviceID: String?
-  var createdGoal: (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
+  var createdGoal:
+    (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
   var exactCandidate: OmiAPI.CandidateRecord?
   var exactTask: TaskActionItem?
 
@@ -679,8 +909,15 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
     projectionLoads += 1
     lastDeviceID = deviceID
-    if failProjection { throw FakeError.missing }
-    return projection
+    let result = projection!
+    let resultError = projectionError
+    if projectionSuspensionsRemaining > 0 {
+      projectionSuspensionsRemaining -= 1
+      await withCheckedContinuation { projectionRelease = $0 }
+      projectionRelease = nil
+    }
+    if let resultError { throw resultError }
+    return result
   }
 
   func getCanonicalGoals(includeEnded: Bool) async throws -> [OmiAPI.GoalResponse] {

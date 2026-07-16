@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Stocarea dispozitivului",
+    "deviceStoragePercentFull": "{percent}% plin",
+    "deviceStorageUsedOfTotal": "{used} din {total} utilizat",
+    "deviceStorageFree": "{free} liber",
+    "deviceStorageNearlyFull": "Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.",
     "phoneMicOfflineFallbackMessage": "Fără conexiune — se înregistrează local. Va fi transcris când revii online."
 }

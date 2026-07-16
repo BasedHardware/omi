@@ -1,0 +1,3 @@
+{
+  "change": "Fixed canonical memory views so only server-confirmed Short-term and Long-term memories receive lifecycle badges and filters"
+}

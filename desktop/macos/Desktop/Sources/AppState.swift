@@ -125,6 +125,34 @@ enum DesktopConversationMatchPolicy {
     return recordingSessionId == nil || recordingSessionId == expectedBackendId
   }
 
+  /// Versioned lifecycle envelopes are an ordered protocol. A client only
+  /// accepts a newer event for its own durable recording-session binding;
+  /// omitted fields use the legacy compatibility path above.
+  static func acceptsLifecycleEnvelope(
+    recordingSessionId: String?,
+    conversationId: String,
+    lifecycleVersion: Int?,
+    lifecyclePhase: String?,
+    lifecycleSequence: Int?,
+    expectedLifecyclePhase: String,
+    expectedBackendId: String?,
+    lastAcceptedSequence: Int?
+  ) -> Bool {
+    guard lifecycleVersion != nil || lifecycleSequence != nil else { return true }
+    guard lifecycleVersion == 1,
+          let recordingSessionId,
+          !recordingSessionId.isEmpty,
+          lifecyclePhase == expectedLifecyclePhase,
+          let lifecycleSequence,
+          lifecycleSequence >= 0
+    else { return false }
+    if let expectedBackendId, !expectedBackendId.isEmpty {
+      guard recordingSessionId == expectedBackendId, conversationId == expectedBackendId else { return false }
+    }
+    guard let lastAcceptedSequence else { return true }
+    return lifecycleSequence > lastAcceptedSequence
+  }
+
   static func canCompleteBoundBackendConversation(
     id conversationId: String,
     boundBackendId: String,
@@ -182,6 +210,10 @@ class AppState: ObservableObject {
 
   // Transcription state
   @Published var isTranscribing = false
+  /// A terminal live-STT failure reported by `/v4/listen`. Audio capture can
+  /// continue into the WAL while the transport reconnects, so this stays
+  /// visible until the backend is ready or the active session is reset.
+  @Published var transcriptionServiceError: String?
   /// Monotonically increasing counter — incremented each time a new recording starts.
   /// Used to detect if a new recording began during the post-stop force-process delay.
   var recordingGeneration: UInt64 = 0
@@ -373,6 +405,9 @@ class AppState: ObservableObject {
   /// In the current compatible protocol it is also the backend conversation id.
   var currentClientConversationId: String?
   var pendingBackendConversationId: String?
+  /// Last accepted server event sequence per durable recording session. This
+  /// is display state only; Firestore remains the authoritative sequence owner.
+  var lifecycleSequenceByRecordingSession: [String: Int] = [:]
   var ignoredRotatedBackendConversationIds: Set<String> = []
   var finishedSessionId: Int64?
   var finishedClientConversationId: String?
@@ -427,9 +462,43 @@ class AppState: ObservableObject {
     set { servicesCoordinator.bluetoothStateCancellable = newValue }
   }
 
+  private var ownerChangeObserver: NSObjectProtocol?
+
+  /// Bumped on every in-place account switch. Owner-scoped loads capture it
+  /// before awaiting and drop their result if it moved — a previous account's
+  /// in-flight response must never repopulate state after the reset (the
+  /// skip-while-non-empty reload guards would then pin the stale data).
+  private(set) var ownerScopeGeneration: UInt64 = 0
+
+  /// Clear account-owned conversation UI state on an in-place account switch.
+  /// The .userDidSignOut handler in DesktopHomeView covers full sign-out (and
+  /// additionally resets onboarding and stops transcription); an in-place
+  /// switch posts only .runtimeOwnerDidChange, so without this the previous
+  /// account's folders, filters, counts, and people kept rendering.
+  func resetOwnerScopedContent() {
+    ownerScopeGeneration &+= 1
+    folders = []
+    selectedFolderId = nil
+    selectedDateFilter = nil
+    showStarredOnly = false
+    totalConversationsCount = nil
+    filteredConversationsCount = nil
+    conversationsError = nil
+    isLoadingConversations = false
+    isLoadingFolders = false
+    people = []
+  }
+
   init() {
     // Register as the current instance so background services can check recording state
     AppState.current = self
+    ownerChangeObserver = NotificationCenter.default.addObserver(
+      forName: .runtimeOwnerDidChange, object: nil, queue: nil
+    ) { [weak self] _ in
+      MainActor.assumeIsolated {
+        self?.resetOwnerScopedContent()
+      }
+    }
     conversationRepository.onSnapshot = { [weak self] snapshot in
       guard let self else { return }
       self.conversations = snapshot.conversations
@@ -706,6 +775,9 @@ class AppState: ObservableObject {
 
   deinit {
     servicesCoordinator.removeLifecycleObservers()
+    if let ownerChangeObserver {
+      NotificationCenter.default.removeObserver(ownerChangeObserver)
+    }
   }
 }
 
@@ -784,6 +856,8 @@ extension Notification.Name {
   /// Posted by the local desktop automation bridge to open a specific conversation detail.
   static let desktopAutomationOpenConversationRequested = Notification.Name(
     "desktopAutomationOpenConversationRequested")
+  static let desktopAutomationSetConversationsSearchRequested = Notification.Name(
+    "desktopAutomationSetConversationsSearchRequested")
   /// Posted by the local desktop automation bridge to expand the transcript drawer.
   static let desktopAutomationShowConversationTranscriptRequested = Notification.Name(
     "desktopAutomationShowConversationTranscriptRequested")

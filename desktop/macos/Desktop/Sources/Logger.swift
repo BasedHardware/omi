@@ -1,14 +1,36 @@
 import Foundation
 import Sentry
 
-private let logFile: String = {
-  let isDev = AppBuild.isNonProduction
-  return isDev ? "/tmp/omi-dev.log" : "/tmp/omi.log"
-}()
+enum OmiLogPathResolver {
+  static func launchID(processID: Int32) -> String { "pid-\(processID)" }
+
+  static func logPath(
+    isNonProduction: Bool,
+    bundleIdentifier: String?,
+    processID: Int32
+  ) -> String {
+    guard isNonProduction else { return "/tmp/omi.log" }
+    let rawBundleID = bundleIdentifier?.trimmingCharacters(in: .whitespacesAndNewlines) ?? "unknown"
+    let safeBundleID = rawBundleID.replacingOccurrences(
+      of: #"[^A-Za-z0-9._-]+"#,
+      with: "-",
+      options: .regularExpression)
+    return "/private/tmp/omi-dev-\(safeBundleID)-\(processID).log"
+  }
+}
+
+private let logBundleIdentifier = Bundle.main.bundleIdentifier ?? "unknown"
+private let logProcessID = getpid()
+private let logFile: String = OmiLogPathResolver.logPath(
+  isNonProduction: AppBuild.isNonProduction,
+  bundleIdentifier: logBundleIdentifier,
+  processID: logProcessID)
+private let logLaunchID = OmiLogPathResolver.launchID(processID: logProcessID)
 /// The on-disk app-log path for the current build. Single source of truth for
 /// the log location so callers (feedback export, diagnostics bundle) don't
 /// re-derive it. Owner-only permissions are enforced by `ensureLogFileOwnerOnly`.
 func omiLogFilePath() -> String { logFile }
+func omiLogLaunchID() -> String { logLaunchID }
 
 private let logQueue = DispatchQueue(label: "me.omi.logger", qos: .utility)
 private let dateFormatter: DateFormatter = {
@@ -65,9 +87,43 @@ func ensureLogFileOwnerOnly(atPath path: String) -> Bool {
   return fileManager.createFile(atPath: path, contents: nil, attributes: [.posixPermissions: 0o600])
 }
 
+/// Non-production bundles can run side by side during QA. Keep a private directory per bundle
+/// and launch so one app cannot truncate or contaminate another app's diagnostic evidence.
+@discardableResult
+func ensureLogDirectoryOwnerOnly(atPath path: String) -> Bool {
+  let fileManager = FileManager.default
+  var info = stat()
+  if lstat(path, &info) == 0 {
+    let isDirectory = (info.st_mode & mode_t(S_IFMT)) == mode_t(S_IFDIR)
+    let isOwnedByUs = info.st_uid == getuid()
+    guard isDirectory, isOwnedByUs else {
+      guard (try? fileManager.removeItem(atPath: path)) != nil else { return false }
+      return (try? fileManager.createDirectory(
+        atPath: path,
+        withIntermediateDirectories: false,
+        attributes: [.posixPermissions: 0o700])) != nil
+    }
+    return (try? fileManager.setAttributes([.posixPermissions: 0o700], ofItemAtPath: path)) != nil
+  }
+  return (try? fileManager.createDirectory(
+    atPath: path,
+    withIntermediateDirectories: false,
+    attributes: [.posixPermissions: 0o700])) != nil
+}
+
 /// Guards the one-time permission normalization. Mutated only on the serial
 /// `logQueue` (every writer hops through it), so it needs no extra locking.
 private var didEnsureLogFilePermissions = false
+
+private func ensureLogParentDirectories() -> Bool {
+  // Non-production logs live as owner-only files directly under private tmp.
+  // Do not chmod `/private/tmp`: it is shared infrastructure owned by macOS.
+  true
+}
+
+private func logLine(timestamp: String, category: String, message: String) -> String {
+  "[\(timestamp)] [\(category)] [bundle_id=\(logBundleIdentifier) pid=\(logProcessID)] \(message)"
+}
 
 /// Shared file-write implementation (must be called on logQueue)
 private func writeToLogFile(_ data: Data) {
@@ -75,7 +131,8 @@ private func writeToLogFile(_ data: Data) {
     // Latch only when normalization actually succeeds, so a transient failure
     // (e.g. a racing create) is retried on the next write instead of leaving
     // the log permanently world-readable.
-    didEnsureLogFilePermissions = ensureLogFileOwnerOnly(atPath: logFile)
+    didEnsureLogFilePermissions = ensureLogParentDirectories()
+      && ensureLogFileOwnerOnly(atPath: logFile)
   }
   if FileManager.default.fileExists(atPath: logFile) {
     if let handle = FileHandle(forWritingAtPath: logFile) {
@@ -95,7 +152,7 @@ private func writeToLogFile(_ data: Data) {
 /// Log a performance event with timing info - writes to omi.log with [perf] tag
 func logPerf(_ message: String, duration: Double? = nil, cpu: Bool = false) {
   let timestamp = dateFormatter.string(from: Date())
-  var parts = ["[\(timestamp)] [perf] \(message)"]
+  var parts = [logLine(timestamp: timestamp, category: "perf", message: message)]
 
   if let duration = duration {
     parts.append(String(format: "(%.1fms)", duration * 1000))
@@ -165,7 +222,7 @@ private let isDevBuild: Bool = AppBuild.isNonProduction
 /// Use sparingly (blocks the calling thread); prefer `log()` for normal logging.
 func logSync(_ message: String) {
   let timestamp = dateFormatter.string(from: Date())
-  let line = "[\(timestamp)] [app] \(message)"
+  let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
 
@@ -181,7 +238,7 @@ func logSync(_ message: String) {
 /// Write to log file, stdout, and Sentry breadcrumbs
 func log(_ message: String) {
   let timestamp = dateFormatter.string(from: Date())
-  let line = "[\(timestamp)] [app] \(message)"
+  let line = logLine(timestamp: timestamp, category: "app", message: message)
   print(line)
   fflush(stdout)
 
@@ -298,7 +355,7 @@ func logError(_ message: String, error: Error? = nil) {
   let timestamp = dateFormatter.string(from: Date())
   let errorDesc = error?.localizedDescription ?? ""
   let fullMessage = error != nil ? "\(message): \(errorDesc)" : message
-  let line = "[\(timestamp)] [error] \(fullMessage)"
+  let line = logLine(timestamp: timestamp, category: "error", message: fullMessage)
   print(line)
   fflush(stdout)
 

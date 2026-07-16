@@ -3145,5 +3145,10 @@
             }
         }
     },
+    "deviceStorageTitle": "डिवाइस स्टोरेज",
+    "deviceStoragePercentFull": "{percent}% भरा",
+    "deviceStorageUsedOfTotal": "{total} में से {used} उपयोग किया गया",
+    "deviceStorageFree": "{free} खाली",
+    "deviceStorageNearlyFull": "डिवाइस लगभग भर गया है — स्थान खाली करने के लिए सिंक करें।",
     "phoneMicOfflineFallbackMessage": "कोई कनेक्शन नहीं — स्थानीय रूप से रिकॉर्ड किया जा रहा है। ऑनलाइन वापस आने पर इसे ट्रांसक्राइब किया जाएगा।"
 }

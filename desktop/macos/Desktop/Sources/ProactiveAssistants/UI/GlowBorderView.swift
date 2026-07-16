@@ -1,4 +1,5 @@
 import SwiftUI
+import OmiTheme
 
 /// Color mode for the glow effect
 enum GlowColorMode {
@@ -56,7 +57,7 @@ struct GlowBorderView: View {
                     borderMask(
                         totalSize: CGSize(width: totalWidth, height: totalHeight),
                         innerSize: targetSize,
-                        cornerRadius: 12
+                        cornerRadius: OmiChrome.smallControlRadius
                     )
                 )
                 // Add blur for soft glow effect
@@ -72,7 +73,7 @@ struct GlowBorderView: View {
                             width: targetSize.width + 4,
                             height: targetSize.height + 4
                         ),
-                        cornerRadius: 12
+                        cornerRadius: OmiChrome.smallControlRadius
                     )
                 )
                 .blur(radius: 2)
@@ -197,12 +198,12 @@ struct GlowBorderView: View {
     /// Start the glow animation sequence
     private func startAnimation() {
         // Fade in
-        withAnimation(.easeIn(duration: 0.3)) {
+        OmiMotion.withGated(.easeIn(duration: 0.3)) {
             opacity = 1.0
         }
 
         // Animate the mesh movement
-        withAnimation(
+        OmiMotion.withGated(
             .easeInOut(duration: 1.5)
             .repeatCount(3, autoreverses: true)
         ) {
@@ -211,7 +212,7 @@ struct GlowBorderView: View {
 
         // Schedule fade out after the animation completes
         DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
-            withAnimation(.easeOut(duration: 0.5)) {
+            OmiMotion.withGated(.easeOut(duration: 0.5)) {
                 opacity = 0.0
             }
         }

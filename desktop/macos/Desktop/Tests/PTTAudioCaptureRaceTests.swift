@@ -18,6 +18,21 @@ import XCTest
 /// runtime on a named bundle in the default (hub) config — see
 /// `.omi-hardening/slices/003-ptt-empty-batch/`.
 final class PTTAudioCaptureRaceTests: XCTestCase {
+  func testDeferredCoreAudioReconfigurationCannotRestartAfterOwnerTeardown() {
+    XCTAssertTrue(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: false,
+        isReconfiguring: true))
+    XCTAssertFalse(
+      AudioCaptureService.shouldRunDeferredReconfiguration(
+        isCapturing: true,
+        isReconfiguring: false))
+  }
+
   func testAllModeGatesRouteTooShortTurnsToHint() throws {
     let source = try managerSource()
 
@@ -32,7 +47,7 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   func testHintUsesPTTHintTextAndKeepsBarVoiceSized() throws {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    let started = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    let started = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
 
     let finished = reducer.reduce(started, .finish(turnID: turnID, reason: .tooShort))
 
@@ -49,10 +64,10 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
   func testHintPathResetsStateAndTagsHint() throws {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
-    var model = reducer.reduce(.idle, .start(turnID: turnID, intent: .hold)).model
+    var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reducer.reduce(model, .finish(turnID: turnID, reason: .tooShort)).model
 
-    XCTAssertEqual(PushToTalkManager.legacyState(for: model.turn?.phase), .idle)
+    XCTAssertTrue(model.turn?.phase.isTerminal == true)
 
     let cleared = reducer.reduce(
       model,
@@ -69,27 +84,26 @@ final class PTTAudioCaptureRaceTests: XCTestCase {
     XCTAssertTrue(state.contains("var pttHintText: String"))
   }
 
-  /// MIC-02b: the notch-island layout bypasses the pill's `voiceListeningView`, so the
-  /// hint must render as its own row below the notch chrome (`notchPttHintRow`), the
-  /// surface must count as expanded so it draws, and the window must grow to fit it —
-  /// otherwise the hint is clipped to zero height and never seen on a notched Mac.
+  /// MIC-02b: too-short PTT / mic-error copy renders in a full-width status
+  /// banner under chrome (notch + non-notch), not cramped into the logo lobe.
   func testNotchIslandRendersAndSizesPTTHint() throws {
     let view = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarView.swift")
-    // Dedicated notch hint row, gated on the notch layout + a non-empty hint.
-    XCTAssertTrue(view.contains("notchPttHintRow"))
-    XCTAssertTrue(view.contains("state.usesNotchIsland && !state.pttHintText.isEmpty"))
-    // The hint keeps the unified surface in its expanded (drawn) state.
-    XCTAssertTrue(view.contains("|| !state.pttHintText.isEmpty"))
+    XCTAssertTrue(view.contains("pttStatusBanner"))
+    XCTAssertTrue(view.contains("showingPTTStatusBanner"))
+    XCTAssertTrue(view.contains("state.isVoiceListening && state.pttHintText.isEmpty"))
+    XCTAssertFalse(view.contains("showingNotchPttHint"))
+    XCTAssertFalse(view.contains("notchPttHintRow"))
+    // Waveform no longer excludes open chat; thinking still does (chat has its own loader).
+    XCTAssertFalse(view.contains("!state.isVoiceFollowUp && !state.showingAIConversation"))
+    XCTAssertTrue(view.contains("&& !state.showingAIConversation\n            && !state.isVoiceListening"))
 
     let window = try source(relativePath: "Sources/FloatingControlBar/FloatingControlBarWindow.swift")
-    // All three sizing paths grow for the hint...
-    let sizedBranches = window.components(separatedBy: "!state.pttHintText.isEmpty").count - 1
-    XCTAssertGreaterThanOrEqual(sizedBranches, 3)
-    // ...using a dedicated hint-row height...
     XCTAssertTrue(window.contains("pttHintRowHeight"))
-    // ...and a dedicated observer resizes when the hint appears/clears (no
-    // isVoiceListening transition fires on its own to trigger a resize).
-    XCTAssertTrue(window.contains("state.$pttHintText"))
+    XCTAssertTrue(window.contains("observePttHint"))
+    XCTAssertTrue(window.contains("pttHintSurfaceSize"))
+    XCTAssertTrue(window.contains("pttStatusBannerBudget"))
+    // Chat-open hints must grow the panel (do not bail out of observePttHint).
+    XCTAssertFalse(window.contains("guard !self.state.showingAIConversation else { return }\n                self.resizeAnchored(\n                    to: self.currentSurfaceSizeForCurrentScreen()"))
   }
 
   private func managerSource() throws -> String {

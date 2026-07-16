@@ -9623,6 +9623,27 @@ class AppLocalizationsTe extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'పరికర నిల్వ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% నిండింది';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total లో $used ఉపయోగించబడింది';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ఖాళీ';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'పరికరం దాదాపు నిండిపోయింది — స్థలాన్ని ఖాళీ చేయడానికి సింక్ చేయండి.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'కనెక్షన్ లేదు — స్థానికంగా రికార్డ్ చేయబడుతోంది. మీరు మళ్లీ ఆన్‌లైన్‌కి వచ్చినప్పుడు దీన్ని ట్రాన్స్‌క్రైబ్ చేయబడుతుంది.';
 }

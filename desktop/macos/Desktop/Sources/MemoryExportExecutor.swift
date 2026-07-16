@@ -28,6 +28,16 @@ enum MemoryExportExecutor {
   }
 
   static func run(_ destination: MemoryExportDestination) async throws -> Outcome {
+    if case .directoryApp = destination.mcpExecuteKind {
+      guard let directoryURL = destination.directoryInstallURL else {
+        throw ExecutorError.unsupported(destination.title)
+      }
+      NSWorkspace.shared.open(directoryURL)
+      return Outcome(
+        taskTitle: "Opened Omi in ChatGPT. Add Omi and authorize it there, then return to Omi.",
+        mode: .assisted)
+    }
+
     if requiresAccessibilityPreflight(destination), !isAccessibilityReadyForBrowserSetup() {
       requestAccessibilityApprovalForCloudSetup()
       throw ExecutorError.browserSetupRequired(cloudSetupAccessibilityPermissionMessage)
@@ -47,6 +57,8 @@ enum MemoryExportExecutor {
     }
 
     switch destination.mcpExecuteKind {
+    case .directoryApp:
+      throw ExecutorError.unsupported(destination.title)
     case .localAutonomous:
       guard let task = destination.omiExecutionTask(key: key) else {
         throw ExecutorError.unsupported(destination.title)
@@ -366,6 +378,9 @@ enum MemoryExportExecutor {
       ? "claude-sonnet-4-6" : ShortcutSettings.shared.selectedModel
     let query = ProactiveTaskExecute.buildQuery(title: task.title, message: task.body)
     _ = AgentPillsManager.shared.spawn(
-      query: query, model: model, systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
+      query: query,
+      model: model,
+      originSurface: .mainChat,
+      systemPromptSuffix: ProactiveTaskExecute.systemPromptSuffix)
   }
 }

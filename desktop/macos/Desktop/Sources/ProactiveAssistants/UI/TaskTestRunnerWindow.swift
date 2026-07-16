@@ -47,14 +47,14 @@ struct TaskTestRunnerView: View {
         VStack(spacing: 0) {
             // Header
             header
-                .padding(20)
+                .padding(OmiSpacing.xl)
 
             Divider()
 
             // Column headers
             columnHeaders
-                .padding(.horizontal, 20)
-                .padding(.vertical, 6)
+                .padding(.horizontal, OmiSpacing.xl)
+                .padding(.vertical, OmiSpacing.xs)
                 .background(Color(nsColor: .windowBackgroundColor))
 
             Divider()
@@ -62,17 +62,17 @@ struct TaskTestRunnerView: View {
             // Results
             ScrollViewReader { proxy in
                 ScrollView {
-                    LazyVStack(spacing: 1) {
+                    LazyVStack(spacing: OmiSpacing.hairline) {
                         ForEach(results) { result in
                             resultRow(result)
                                 .id(result.id)
                         }
                     }
-                    .padding(.vertical, 8)
+                    .padding(.vertical, OmiSpacing.sm)
                 }
                 .onChange(of: results.count) { _, _ in
                     if let last = results.last {
-                        withAnimation {
+                        OmiMotion.withGated {
                             proxy.scrollTo(last.id, anchor: .bottom)
                         }
                     }
@@ -83,7 +83,7 @@ struct TaskTestRunnerView: View {
 
             // Footer
             footer
-                .padding(16)
+                .padding(OmiSpacing.lg)
         }
         .frame(width: 1400, height: 900)
         .background(Color(nsColor: .windowBackgroundColor))
@@ -92,15 +92,15 @@ struct TaskTestRunnerView: View {
     // MARK: - Header
 
     private var header: some View {
-        VStack(spacing: 16) {
+        VStack(spacing: OmiSpacing.lg) {
             HStack {
-                VStack(alignment: .leading, spacing: 4) {
+                VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
                     Text("Task Extraction Test Runner")
-                        .scaledFont(size: 16, weight: .semibold)
+                        .scaledFont(size: OmiType.subheading, weight: .semibold)
                         .foregroundColor(.primary)
 
                     Text("Replay departing frames from context switches through the extraction pipeline")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
 
@@ -108,17 +108,17 @@ struct TaskTestRunnerView: View {
 
                 Button(action: { onClose?() }) {
                     Image(systemName: "xmark.circle.fill")
-                        .scaledFont(size: 16)
+                        .scaledFont(size: OmiType.subheading)
                         .foregroundColor(.secondary)
                 }
                 .buttonStyle(.plain)
             }
 
-            HStack(spacing: 16) {
+            HStack(spacing: OmiSpacing.lg) {
                 // Time range pickers
-                HStack(spacing: 8) {
+                HStack(spacing: OmiSpacing.sm) {
                     Text("From:")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.secondary)
 
                     DatePicker("", selection: $periodFrom, in: ...periodTo)
@@ -128,7 +128,7 @@ struct TaskTestRunnerView: View {
                         .disabled(isRunning)
 
                     Text("To:")
-                        .scaledFont(size: 13)
+                        .scaledFont(size: OmiType.body)
                         .foregroundColor(.secondary)
 
                     DatePicker("", selection: $periodTo, in: periodFrom...Date())
@@ -143,11 +143,11 @@ struct TaskTestRunnerView: View {
                 // Run / Stop button
                 if isRunning {
                     Button(action: { cancellationRequested = true }) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "stop.fill")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                             Text("Stop")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                         }
                     }
                     .buttonStyle(.bordered)
@@ -155,11 +155,11 @@ struct TaskTestRunnerView: View {
                     .tint(.red)
                 } else {
                     Button(action: runTest) {
-                        HStack(spacing: 4) {
+                        HStack(spacing: OmiSpacing.xxs) {
                             Image(systemName: "play.fill")
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                             Text("Run Test")
-                                .scaledFont(size: 12)
+                                .scaledFont(size: OmiType.caption)
                         }
                     }
                     .buttonStyle(.borderedProminent)
@@ -169,12 +169,12 @@ struct TaskTestRunnerView: View {
 
             // Progress bar
             if isRunning {
-                VStack(spacing: 4) {
+                VStack(spacing: OmiSpacing.xxs) {
                     ProgressView(value: progress)
                         .tint(.accentColor)
 
                     Text(statusMessage)
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                 }
             }
@@ -184,7 +184,7 @@ struct TaskTestRunnerView: View {
     // MARK: - Column Headers
 
     private var columnHeaders: some View {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
             Text("#")
                 .frame(width: 28, alignment: .trailing)
             Text("Time")
@@ -204,36 +204,36 @@ struct TaskTestRunnerView: View {
             Text("Time")
                 .frame(width: 50, alignment: .trailing)
         }
-        .scaledFont(size: 11, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(.secondary.opacity(0.7))
     }
 
     // MARK: - Result Row
 
     private func resultRow(_ testResult: TaskTestResult) -> some View {
-        HStack(spacing: 16) {
+        HStack(spacing: OmiSpacing.lg) {
             // Index
             Text("\(testResult.index)")
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 28, alignment: .trailing)
 
             // Timestamp
             Text(testResult.timestamp, format: .dateTime.hour().minute().second())
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary)
                 .frame(width: 90, alignment: .leading)
 
             // App name
             Text(testResult.appName)
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .frame(width: 100, alignment: .leading)
                 .lineLimit(1)
 
             // Window title
             Text(testResult.windowTitle ?? "—")
-                .scaledFont(size: 12)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(.secondary)
                 .frame(width: 250, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -244,11 +244,11 @@ struct TaskTestRunnerView: View {
 
             // Search count indicator
             if testResult.searchCount > 0 {
-                HStack(spacing: 2) {
+                HStack(spacing: OmiSpacing.hairline) {
                     Image(systemName: "magnifyingglass")
-                        .scaledFont(size: 9)
+                        .scaledFont(size: OmiType.micro)
                     Text("×\(testResult.searchCount)")
-                        .scaledFont(size: 11, design: .monospaced)
+                        .scaledFont(size: OmiType.caption, design: .monospaced)
                 }
                 .foregroundColor(.secondary)
                 .frame(width: 40, alignment: .leading)
@@ -260,39 +260,39 @@ struct TaskTestRunnerView: View {
             // Task title or context summary
             if let error = testResult.error {
                 Text(error)
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.orange)
                     .lineLimit(2)
             } else if let result = testResult.result {
                 if result.hasNewTask, let task = result.task {
-                    VStack(alignment: .leading, spacing: 2) {
+                    VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                         Text(task.title)
-                            .scaledFont(size: 12, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                             .foregroundColor(.primary)
                             .lineLimit(2)
-                        HStack(spacing: 8) {
+                        HStack(spacing: OmiSpacing.sm) {
                             Text(task.priority.rawValue)
-                                .scaledFont(size: 10, weight: .medium)
+                                .scaledFont(size: OmiType.micro, weight: .medium)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
+                                .padding(.horizontal, OmiSpacing.xs)
+                                .padding(.vertical, OmiSpacing.hairline)
                                 .background(priorityColor(task.priority))
-                                .cornerRadius(3)
+                                .cornerRadius(OmiChrome.stripRadius)
                             Text("\(task.sourceCategory)/\(task.sourceSubcategory)")
-                                .scaledFont(size: 10, weight: .medium)
+                                .scaledFont(size: OmiType.micro, weight: .medium)
                                 .foregroundColor(.white)
-                                .padding(.horizontal, 6)
-                                .padding(.vertical, 1)
-                                .background(Color.purple.opacity(0.7))
-                                .cornerRadius(3)
+                                .padding(.horizontal, OmiSpacing.xs)
+                                .padding(.vertical, OmiSpacing.hairline)
+                                .background(Color.teal.opacity(0.7))
+                                .cornerRadius(OmiChrome.stripRadius)
                             Text(task.tags.joined(separator: ", "))
-                                .scaledFont(size: 10)
+                                .scaledFont(size: OmiType.micro)
                                 .foregroundColor(.secondary)
                         }
                     }
                 } else {
                     Text(result.contextSummary)
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
                         .lineLimit(2)
                 }
@@ -303,7 +303,7 @@ struct TaskTestRunnerView: View {
             // Confidence (only for tasks)
             if let result = testResult.result, result.hasNewTask, let task = result.task {
                 Text("\(Int(task.confidence * 100))%")
-                    .scaledFont(size: 12, weight: .medium, design: .monospaced)
+                    .scaledFont(size: OmiType.caption, weight: .medium, design: .monospaced)
                     .foregroundColor(.green)
                     .frame(width: 40, alignment: .trailing)
             } else {
@@ -313,40 +313,40 @@ struct TaskTestRunnerView: View {
 
             // Duration
             Text(String(format: "%.1fs", testResult.duration))
-                .scaledFont(size: 12, design: .monospaced)
+                .scaledFont(size: OmiType.caption, design: .monospaced)
                 .foregroundColor(.secondary.opacity(0.7))
                 .frame(width: 50, alignment: .trailing)
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.xl)
+        .padding(.vertical, OmiSpacing.sm)
         .background(testResult.result?.hasNewTask == true ? Color.green.opacity(0.05) : Color.clear)
     }
 
     private func decisionBadge(for testResult: TaskTestResult) -> some View {
         Group {
             if testResult.error != nil {
-                HStack(spacing: 4) {
+                HStack(spacing: OmiSpacing.xxs) {
                     Image(systemName: "exclamationmark.triangle.fill")
-                        .scaledFont(size: 10)
+                        .scaledFont(size: OmiType.micro)
                     Text("Error")
-                        .scaledFont(size: 11, weight: .medium)
+                        .scaledFont(size: OmiType.caption, weight: .medium)
                 }
                 .foregroundColor(.orange)
             } else if let result = testResult.result {
                 if result.hasNewTask {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "plus.circle.fill")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                         Text("New Task")
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                     }
                     .foregroundColor(.green)
                 } else {
-                    HStack(spacing: 4) {
+                    HStack(spacing: OmiSpacing.xxs) {
                         Image(systemName: "minus.circle")
-                            .scaledFont(size: 10)
+                            .scaledFont(size: OmiType.micro)
                         Text("No Task")
-                            .scaledFont(size: 11, weight: .medium)
+                            .scaledFont(size: OmiType.caption, weight: .medium)
                     }
                     .foregroundColor(.secondary)
                 }
@@ -367,34 +367,34 @@ struct TaskTestRunnerView: View {
     private var footer: some View {
         HStack {
             if !results.isEmpty {
-                HStack(spacing: 16) {
+                HStack(spacing: OmiSpacing.lg) {
                     Label("\(results.count)/\(totalContextSwitches)", systemImage: "arrow.triangle.swap")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(.secondary)
 
                     Label("\(tasksFound) tasks", systemImage: "checkmark.circle")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(tasksFound > 0 ? .green : .secondary)
 
                     Label("\(totalSearches) searches", systemImage: "magnifyingglass")
-                        .scaledFont(size: 12)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(totalSearches > 0 ? .blue : .secondary)
 
                     if errorsCount > 0 {
                         Label("\(errorsCount) errors", systemImage: "exclamationmark.triangle")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.orange)
                     }
 
                     if elapsedTime > 0 {
                         Label(String(format: "%.1fs total", elapsedTime), systemImage: "clock")
-                            .scaledFont(size: 12)
+                            .scaledFont(size: OmiType.caption)
                             .foregroundColor(.secondary)
                     }
                 }
             } else {
                 Text("Select a time range and click Run Test")
-                    .scaledFont(size: 12)
+                    .scaledFont(size: OmiType.caption)
                     .foregroundColor(.secondary.opacity(0.7))
             }
 

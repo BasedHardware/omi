@@ -73,7 +73,6 @@ def test_cdist_stub_handles_pairwise_rows():
 
 
 class TestFactoryRouting:
-
     def test_parakeet_routing_in_get_prerecorded_service(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('en')
@@ -152,7 +151,6 @@ class TestFactoryRouting:
 
 
 class TestTranscribeBytes:
-
     def test_missing_endpoint_raises_controlled_configuration_error(self, monkeypatch):
         wav = _make_wav()
         monkeypatch.delenv('HOSTED_PARAKEET_API_URL', raising=False)
@@ -321,9 +319,58 @@ class TestTranscribeBytes:
             with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
                 pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
 
+    # A degraded/foreign 200 must not be mapped to "no speech": sync treats a
+    # word-less segment as success, marks the job completed, and the client then
+    # discards the only copy of the audio. See #9586.
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {},
+            {'detail': 'Model loading, try again shortly'},
+            [],
+        ],
+    )
+    def test_response_without_segments_or_text_raises(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match='Parakeet transcription failed'):
+                pr.parakeet_prerecorded_from_bytes(wav, diarize=False)
+
+    @pytest.mark.parametrize(
+        'body',
+        [
+            {'text': '', 'segments': []},
+            {'segments': []},
+            {'text': ''},
+        ],
+    )
+    def test_well_formed_silence_is_still_no_speech(self, body):
+        wav = _make_wav()
+        resp = MagicMock()
+        resp.raise_for_status = MagicMock()
+        resp.json.return_value = body
+
+        with patch('httpx.Client') as mock_client_cls:
+            mock_client = MagicMock()
+            mock_client.__enter__ = MagicMock(return_value=mock_client)
+            mock_client.__exit__ = MagicMock(return_value=False)
+            mock_client.post.return_value = resp
+            mock_client_cls.return_value = mock_client
+
+            assert pr.parakeet_prerecorded_from_bytes(wav, diarize=False) == []
+
 
 class TestTranscribeUrl:
-
     def test_downloads_then_transcribes(self):
         wav = _make_wav()
 
@@ -395,7 +442,6 @@ class TestTranscribeUrl:
 
 
 class TestStreamingFactoryRouting:
-
     def test_parakeet_in_stt_service_models(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
@@ -429,7 +475,6 @@ class TestStreamingFactoryRouting:
 
 
 class TestOutputFormat:
-
     def test_words_compatible_with_postprocess_words(self):
         wav = _make_wav(duration_s=3.0)
         segments = [
@@ -484,7 +529,6 @@ class TestOutputFormat:
 
 
 class TestDiarization:
-
     def _dir_vec(self, idx: int) -> np.ndarray:
         v = np.zeros((1, 256), np.float32)
         v[0, idx] = 1.0
@@ -581,7 +625,6 @@ class TestDiarization:
 
 
 class TestProviderClass:
-
     def test_provider_transcribe_bytes_resets_state(self):
         provider = pr.ParakeetPrerecordedProvider()
         wav = _make_wav()

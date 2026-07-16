@@ -114,6 +114,8 @@ class CaptureController extends ChangeNotifier
 
   List<MessageEvent> _transcriptionServiceStatuses = [];
   List<MessageEvent> get transcriptionServiceStatuses => _transcriptionServiceStatuses;
+  MessageServiceStatusEvent? _terminalTranscriptionFailure;
+  MessageServiceStatusEvent? get terminalTranscriptionFailure => _terminalTranscriptionFailure;
 
   // Phone mic WAL: buffer for splitting variable-sized PCM chunks into fixed-size frames
   bool _phoneMicWalActive = false;
@@ -257,14 +259,6 @@ class CaptureController extends ChangeNotifier
 
   void updateExternalActions(CaptureExternalActions? actions) {
     externalActions = actions ?? const NoopCaptureExternalActions();
-
-    // Run orphan recovery once after providers are wired up and WAL service is initialized.
-    // Uses Future.delayed to let the WAL service finish loading wals.json from disk.
-    if (!_orphanRecoveryDone) {
-      _orphanRecoveryDone = true;
-      Future.delayed(const Duration(seconds: 5), () => recoverOrphanedWals());
-    }
-
     notifyListeners();
   }
 
@@ -364,8 +358,6 @@ class CaptureController extends ChangeNotifier
     notifyListeners();
   }
 
-  bool _orphanRecoveryDone = false;
-
   /// Preserved session start for auto-sync after socket-driven conversation completion.
   /// Set before _resetStateVariables() clears _sessionStartSeconds, consumed on ConversationEvent.
   int _pendingAutoSyncSessionStart = 0;
@@ -376,8 +368,8 @@ class CaptureController extends ChangeNotifier
   /// The conversation ID from ConversationProcessingStartedEvent, kept for fallback sync.
   String? _pendingAutoSyncConversationId;
 
-  /// Future tracking the in-progress _finalizeAndStampSession(), so _autoSyncSessionWals()
-  /// can await it before querying disk WALs. Prevents race when backend responds fast.
+  /// Future tracking the in-progress _finalizeAndStampSession(), so the next
+  /// coordinated transfer wake cannot run before the durable stamp is ready.
   Future<void>? _pendingFinalizeAndStamp;
 
   /// Set in onClosed() when the socket drops during active device recording.
@@ -1271,6 +1263,7 @@ class CaptureController extends ChangeNotifier
     photos = [];
     hasTranscripts = false;
     _transcriptionServiceStatuses = [];
+    _terminalTranscriptionFailure = null;
     suggestionsBySegmentId = {};
     taggingSegmentIds = [];
     notifyListeners();
@@ -1804,7 +1797,7 @@ class CaptureController extends ChangeNotifier
       _pendingAutoSyncConversationId = event.memory.id;
 
       // Force-drain tail buffer, stamp WALs with conversation ID, then clear state.
-      // Store the future so _autoSyncSessionWals() can await it before querying disk WALs.
+      // Store the future so the coordinated transfer wake waits for the stamp.
       _pendingFinalizeAndStamp = _finalizeAndStampSession(_sessionStartSeconds, event.memory.id);
 
       _resetStateVariables();
@@ -1813,12 +1806,11 @@ class CaptureController extends ChangeNotifier
       _autoSyncFallbackTimer?.cancel();
       _autoSyncFallbackTimer = Timer(const Duration(seconds: 30), () {
         if (_pendingAutoSyncSessionStart > 0 && _pendingAutoSyncConversationId != null) {
-          final sessionStart = _pendingAutoSyncSessionStart;
           final convId = _pendingAutoSyncConversationId!;
           _pendingAutoSyncSessionStart = 0;
           _pendingAutoSyncConversationId = null;
           Logger.debug('Auto-sync fallback timer fired — syncing WALs to conversation $convId');
-          _autoSyncSessionWals(sessionStart, convId);
+          _autoSyncSessionWals();
         }
       });
       return;
@@ -1830,10 +1822,9 @@ class CaptureController extends ChangeNotifier
       _processConversationCreated(event.memory, event.messages.cast<ServerMessage>());
       _autoSyncFallbackTimer?.cancel();
       if (_pendingAutoSyncSessionStart > 0) {
-        final sessionStart = _pendingAutoSyncSessionStart;
         _pendingAutoSyncSessionStart = 0;
         _pendingAutoSyncConversationId = null;
-        _autoSyncSessionWals(sessionStart, event.memory.id);
+        _autoSyncSessionWals();
       }
       return;
     }
@@ -1865,6 +1856,15 @@ class CaptureController extends ChangeNotifier
         final thresholdEvent = FreemiumThresholdReachedEvent.fromJson({'status_text': event.statusText});
         _handleFreemiumThresholdReached(thresholdEvent);
         return;
+      }
+
+      // The backend sends stt_failed immediately before it closes the socket.
+      // Keep this terminal state separate from the connection-scoped status
+      // list so the user can see the outage while the reconnect loop runs.
+      if (event.status == 'stt_failed') {
+        _terminalTranscriptionFailure = event;
+      } else if (event.status == 'ready') {
+        _terminalTranscriptionFailure = null;
       }
 
       _transcriptionServiceStatuses.add(event);
@@ -1933,7 +1933,7 @@ class CaptureController extends ChangeNotifier
       // Stamp WALs with conversation ID and auto-sync
       if (sessionStart > 0 && result.conversation != null) {
         await phoneSync.stampConversationId(sessionStart, result.conversation!.id);
-        _autoSyncSessionWals(sessionStart, result.conversation!.id);
+        _autoSyncSessionWals();
       }
     });
 
@@ -1954,137 +1954,15 @@ class CaptureController extends ChangeNotifier
     }
   }
 
-  Future<void> _autoSyncSessionWals(int sessionStartSeconds, String conversationId) async {
-    // Third-party STT users opt out of auto-sync: offline files can only be
-    // transcribed on Omi's servers (counting toward their limit), not on their
-    // own provider. They sync manually with an explicit confirmation instead.
-    if (SharedPreferencesUtil().useCustomStt) {
-      Logger.debug('Auto-sync skipped: custom STT provider enabled');
-      return;
-    }
-    // Omi users can opt out of auto-sync from device settings; they back up
-    // manually instead. Defaults to on.
-    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
-      Logger.debug('Auto-sync skipped: disabled by user');
-      return;
-    }
+  Future<void> _autoSyncSessionWals() async {
     // Wait for finalize+stamp to complete so tail buffer WALs are on disk before querying.
     if (_pendingFinalizeAndStamp != null) {
       await _pendingFinalizeAndStamp;
       _pendingFinalizeAndStamp = null;
     }
-    final phoneSync = _wal.getSyncs().phone;
-    final unsyncedWals = phoneSync.getSessionUnsyncedWals(sessionStartSeconds);
-    if (unsyncedWals.isEmpty) return;
-
-    Logger.debug('Auto-syncing ${unsyncedWals.length} session WALs to conversation $conversationId');
-    for (final wal in unsyncedWals) {
-      await _syncSingleWal(wal, conversationId, phoneSync);
-    }
-  }
-
-  /// Sync a single WAL to a conversation with retry and backoff.
-  /// Retries up to 3 times with exponential delays (5s, 10s, 20s).
-  /// Network/transient errors (SocketException, no connectivity) do NOT increment retryCount.
-  Future<void> _syncSingleWal(Wal wal, String conversationId, LocalWalSyncImpl phoneSync) async {
-    if (wal.filePath == null) {
-      Logger.debug('Auto-sync WAL ${wal.id}: no filePath, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-    final fullPath = await Wal.getFilePath(wal.filePath);
-    if (fullPath == null) {
-      Logger.debug('Auto-sync WAL ${wal.id}: path resolution failed, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-    final file = File(fullPath);
-    if (!file.existsSync()) {
-      Logger.debug('Auto-sync WAL ${wal.id}: file missing, marking corrupted');
-      wal.status = WalStatus.corrupted;
-      await phoneSync.persistRetryMetadata(wal);
-      return;
-    }
-
-    if (!_isConnected) {
-      Logger.debug('Auto-sync WAL ${wal.id}: offline, will retry later');
-      return;
-    }
-
-    // Honor an active fair-use cooldown: don't fire uploads that will just be
-    // 429'd, which amplifies the throttle and mislabels recordings as failed.
-    if (SyncRateLimiter.instance.isLimited) {
-      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited until ${SyncRateLimiter.instance.until}, skipping');
-      return;
-    }
-
-    // Upload only — no poll-to-terminal, no in-method retry loop. On 202 the
-    // WAL becomes `uploaded` and the SyncReconciler resolves the job out of
-    // band; on real failure we bump retryCount so orphan recovery / the next
-    // sync retries (the local file is retained until confirmed synced).
-    try {
-      final result = await SyncUploadGate.instance.upload([file], conversationId: conversationId);
-      if (result.completed != null) {
-        // 200 fast-path: server already produced the result.
-        await phoneSync.markWalSyncedAndPersist(wal);
-      } else {
-        wal.status = WalStatus.uploaded;
-        wal.jobId = result.jobId;
-        wal.uploadedAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-        await phoneSync.persistRetryMetadata(wal); // persists the WAL list
-        SyncReconciler.instance.poke();
-      }
-    } on SyncRateLimitedException {
-      // Account-level rate limit — do not bump retryCount. The WAL stays
-      // pending and the global upload gate owns the cooldown.
-      Logger.debug('Auto-sync WAL ${wal.id}: rate-limited, paused until ${SyncRateLimiter.instance.until}');
-    } on SocketException {
-      Logger.debug('Auto-sync WAL ${wal.id}: network error, aborting without incrementing retryCount');
-    } catch (e) {
-      wal.retryCount = wal.retryCount + 1;
-      wal.lastRetryAt = DateTime.now().millisecondsSinceEpoch ~/ 1000;
-      await phoneSync.persistRetryMetadata(wal);
-      Logger.debug('Auto-sync WAL ${wal.id} upload failed (retryCount=${wal.retryCount}): $e');
-    }
-  }
-
-  /// Recover orphaned WALs on startup. Called once after providers are initialized.
-  /// Finds WALs with conversationId set but status still miss, and syncs them.
-  /// Skips recovery if offline — retryCount is not incremented for transient failures.
-  Future<void> recoverOrphanedWals() async {
-    // Custom STT users never auto-sync (offline files would use Omi STT + count
-    // toward their limit). They back up manually with explicit confirmation.
-    if (SharedPreferencesUtil().useCustomStt) {
-      Logger.debug('Orphan WAL recovery skipped: custom STT provider enabled');
-      return;
-    }
-    // Honor the user's auto-sync opt-out (device settings). Defaults to on.
-    if (!SharedPreferencesUtil().autoSyncOfflineRecordings) {
-      Logger.debug('Orphan WAL recovery skipped: auto-sync disabled by user');
-      return;
-    }
-    if (!_isConnected) {
-      Logger.debug('Startup recovery: offline, skipping orphan WAL sync');
-      _orphanRecoveryDone = false; // Allow retry on next external action update.
-      return;
-    }
-    final phoneSync = _wal.getSyncs().phone;
-    await phoneSync.walReady; // Wait for WALs to be loaded from disk
-    final orphaned = phoneSync.getOrphanedWals();
-    if (orphaned.isEmpty) return;
-
-    Logger.debug('Startup recovery: found ${orphaned.length} orphaned WALs to sync');
-    for (final wal in orphaned) {
-      await _syncSingleWal(wal, wal.conversationId!, phoneSync);
-    }
-    // Check if any orphaned WALs remain (e.g., transient SocketException while "online").
-    // If so, allow onConnectionStateChanged to re-trigger recovery on next transition.
-    final remaining = phoneSync.getOrphanedWals();
-    if (remaining.isNotEmpty) {
-      _orphanRecoveryDone = false;
-    }
+    // The stamped conversation id stays on the WAL; the single transfer owner
+    // will reconcile first and then offer retryable bytes through `syncAll`.
+    await RecordingTransferCoordinator.instance.wake(WakeTrigger.cooldownElapsed);
   }
 
   Future<void> _processConversationCreated(ServerConversation? conversation, List<ServerMessage> messages) async {
@@ -2292,11 +2170,6 @@ class CaptureController extends ChangeNotifier
 
   void onConnectionStateChanged(bool isConnected) {
     _isConnected = isConnected;
-    // When coming back online, retry orphan recovery if it was skipped due to being offline
-    if (isConnected && !_orphanRecoveryDone) {
-      _orphanRecoveryDone = true;
-      recoverOrphanedWals();
-    }
     notifyListeners();
   }
 

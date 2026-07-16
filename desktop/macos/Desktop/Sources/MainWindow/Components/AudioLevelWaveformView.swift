@@ -23,7 +23,7 @@ struct AudioLevelWaveformView: View {
     }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: OmiSpacing.hairline) {
             ForEach(0..<barCount, id: \.self) { index in
                 BarView(
                     level: level,
@@ -77,7 +77,7 @@ private struct BarView: View {
         // Color intensity based on level
         let boostedLevel = min(1.0, pow(CGFloat(level), 0.5) * 2.5)
         if boostedLevel > 0.6 {
-            return OmiColors.purplePrimary
+            return OmiColors.accent
         } else if boostedLevel > 0.2 {
             return OmiColors.textPrimary
         } else if boostedLevel > 0.02 {
@@ -90,7 +90,7 @@ private struct BarView: View {
         RoundedRectangle(cornerRadius: 1.5)
             .fill(barColor)
             .frame(width: barWidth, height: barHeight)
-            // No .animation() — each animation generates ~5 intermediate layout frames at 60fps,
+            // No .omiAnimation() — each animation generates ~5 intermediate layout frames at 60fps,
             // and every frame triggers a full view-tree sizeThatFits() traversal.
             // At 5 Hz update rate, the visual steps are small enough to look smooth.
     }
@@ -98,7 +98,7 @@ private struct BarView: View {
 
 #if canImport(PreviewsMacros)
 #Preview {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
         // Idle state
         HStack {
             Text("Idle:")

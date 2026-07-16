@@ -3149,5 +3149,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Bộ nhớ thiết bị",
+    "deviceStoragePercentFull": "Đã đầy {percent}%",
+    "deviceStorageUsedOfTotal": "Đã dùng {used} trong {total}",
+    "deviceStorageFree": "Còn trống {free}",
+    "deviceStorageNearlyFull": "Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.",
     "phoneMicOfflineFallbackMessage": "Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại."
 }

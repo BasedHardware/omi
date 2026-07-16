@@ -12,38 +12,37 @@ struct PTTContextSnapshot {
 
 enum PTTContextVocabularyProvider {
   private static let maxKeywords = 100
-  private static let maxTextLengthPerScreenshot = 3_000
   private static let maxImmediateOCRLength = 2_000
-  private static let lookbackSeconds: TimeInterval = 120
 
   static func capture(at date: Date = Date(), preOverlayImage: CGImage? = nil) async -> PTTContextSnapshot {
     async let immediateOCRText = captureImmediateScreenText(preferredImage: preOverlayImage)
-    let recentActivityScreenshots = await loadRecentActivityScreenshots(around: date)
     let settingsVocabulary = await MainActor.run {
       AssistantSettings.shared.effectiveVocabulary
     }
+    return snapshot(
+      capturedAt: date,
+      settingsVocabulary: settingsVocabulary,
+      immediateOCRText: await immediateOCRText)
+  }
 
+  /// The final transcript can be rewritten only from explicit user vocabulary and pixels captured
+  /// during this PTT press. Historical Rewind/OCR terms may describe an old app or person and
+  /// must never alter what the user said on a fallback route.
+  static func snapshot(
+    capturedAt: Date,
+    settingsVocabulary: [String],
+    immediateOCRText: String?
+  ) -> PTTContextSnapshot {
     var collector = KeywordCollector(limit: maxKeywords)
     for term in settingsVocabulary {
       collector.add(term)
     }
 
-    let visibleText = await immediateOCRText
+    let visibleText = immediateOCRText
     if let visibleText, !visibleText.isEmpty {
       let clippedText = String(visibleText.prefix(maxImmediateOCRLength))
       collector.addExtractedTerms(from: clippedText, priority: true)
       collector.addVisibleTerms(from: clippedText)
-    }
-
-    for screenshot in recentActivityScreenshots {
-      collector.add(screenshot.appName)
-      if let title = screenshot.windowTitle {
-        collector.add(title)
-        collector.addExtractedTerms(from: title, priority: true)
-      }
-      if let ocrText = screenshot.ocrText, !ocrText.isEmpty {
-        collector.addExtractedTerms(from: String(ocrText.prefix(maxTextLengthPerScreenshot)), priority: false)
-      }
     }
 
     let keywords = collector.values
@@ -51,27 +50,12 @@ enum PTTContextVocabularyProvider {
     let immediateSourceCount = (visibleText?.isEmpty == false) ? 1 : 0
     log(
       "PTTContextVocabulary: captured \(keywords.count) transcription keyword(s) from "
-        + "\(recentActivityScreenshots.count) fresh recent-activity screenshot(s) + "
-        + "\(immediateSourceCount) immediate OCR source(s); sample=[\(sample)]")
+        + "\(immediateSourceCount) turn-scoped immediate OCR source(s); sample=[\(sample)]")
     return PTTContextSnapshot(
-      capturedAt: date,
+      capturedAt: capturedAt,
       keywords: keywords,
-      sourceCount: recentActivityScreenshots.count + immediateSourceCount
+      sourceCount: immediateSourceCount
     )
-  }
-
-  private static func loadRecentActivityScreenshots(around date: Date) async -> [Screenshot] {
-    do {
-      let startDate = date.addingTimeInterval(-lookbackSeconds)
-      return try await RewindDatabase.shared.getScreenshots(
-        from: startDate,
-        to: date.addingTimeInterval(2),
-        limit: 12
-      )
-    } catch {
-      logError("PTTContextVocabulary: failed to load fresh recent-activity screenshots", error: error)
-      return []
-    }
   }
 
   private static func captureImmediateScreenText(preferredImage: CGImage?) async -> String? {

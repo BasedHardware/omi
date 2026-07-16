@@ -34,11 +34,6 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: DEEPGRAM_API_KEY
-  - name: ENCRYPTION_SECRET
-    valueFrom:
-      secretKeyRef:
-        name: prod-omi-backend-secrets
-        key: ENCRYPTION_SECRET
   - name: REDIS_DB_HOST
     valueFrom:
       secretKeyRef:
@@ -72,6 +67,8 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
+    # Keep Redis-independent routes available; probe /ready separately when
+    # evaluating managed/server-key dependency health.
     path: /health
     port: 8080
   failureThreshold: 3

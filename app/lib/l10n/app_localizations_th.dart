@@ -9524,6 +9524,27 @@ class AppLocalizationsTh extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'ที่จัดเก็บของอุปกรณ์';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'เต็ม $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'ใช้ไป $used จาก $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return 'ว่าง $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'อุปกรณ์เกือบเต็มแล้ว — ซิงค์เพื่อเพิ่มพื้นที่ว่าง';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'ไม่มีการเชื่อมต่อ — กำลังบันทึกในเครื่อง จะถอดเสียงเมื่อคุณกลับมาออนไลน์';
 }

@@ -219,7 +219,7 @@ struct ChatScrollContainer<Content: View>: View {
     ScrollViewReader { proxy in
       ZStack(alignment: .bottom) {
         ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
+          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
             content()
             Color.clear.frame(height: 1).id(bottomAnchorId)
           }
@@ -311,7 +311,7 @@ struct ChatScrollContainer<Content: View>: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Jump to latest message")
-      .padding(.bottom, 12)
+      .padding(.bottom, OmiSpacing.md)
       .transition(.scale.combined(with: .opacity))
     }
   }
@@ -365,7 +365,7 @@ struct ChatScrollContainer<Content: View>: View {
   private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
     guard scrollMode == .followingBottom, !userIsScrolling else { return }
     if animated {
-      withAnimation(.easeOut(duration: 0.15)) {
+      OmiMotion.withGated(.easeOut(duration: 0.15)) {
         proxy.scrollTo(bottomAnchorId, anchor: .bottom)
       }
     } else {

@@ -61,6 +61,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -522,7 +523,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
-          syncProvider.syncWals();
+          syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
     });

@@ -54,6 +54,10 @@ struct ScopedDefaultsKey {
     static func taskContextSubjectMatches(ownerHash: String) -> Self {
         Self(rawValue: "taskContextSubjectMatches.v1.\(ownerHash)")
     }
+
+    static func trialNudge(_ kind: String, ownerHash: String) -> Self {
+        Self(rawValue: "trial_nudge.v1.\(kind).\(ownerHash)")
+    }
 }
 
 /// Typed accessors that take a `DefaultsKey` instead of a `String`.
@@ -68,9 +72,12 @@ extension UserDefaults {
     func integer(forKey key: DefaultsKey) -> Int { integer(forKey: key.rawValue) }
     func double(forKey key: DefaultsKey) -> Double { double(forKey: key.rawValue) }
     func data(forKey key: ScopedDefaultsKey) -> Data? { data(forKey: key.rawValue) }
+    func bool(forKey key: ScopedDefaultsKey) -> Bool { bool(forKey: key.rawValue) }
+    func object(forKey key: ScopedDefaultsKey) -> Any? { object(forKey: key.rawValue) }
     func object(forKey key: DefaultsKey) -> Any? { object(forKey: key.rawValue) }
 
     func set(_ value: Any?, forKey key: DefaultsKey) { set(value, forKey: key.rawValue) }
     func set(_ value: Any?, forKey key: ScopedDefaultsKey) { set(value, forKey: key.rawValue) }
     func removeObject(forKey key: DefaultsKey) { removeObject(forKey: key.rawValue) }
+    func removeObject(forKey key: ScopedDefaultsKey) { removeObject(forKey: key.rawValue) }
 }

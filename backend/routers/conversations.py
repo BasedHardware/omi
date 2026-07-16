@@ -43,10 +43,10 @@ from models.other import Person
 from models.shared import StatusResponse
 
 from utils.conversations.process_conversation import process_conversation, retrieve_in_progress_conversation
+from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -104,9 +104,8 @@ def _enrich_deferred_conversation(uid: str, conversation: dict) -> dict:
         except Exception as e:
             logger.error(f"lazy enrich failed uid={uid} conv={conversation_id}: {e}")
             try:
-                conversations_db.update_conversation(
-                    uid, conversation_id, {'deferred': True, 'status': ConversationStatus.completed.value}
-                )
+                conversations_db.update_conversation(uid, conversation_id, {'deferred': True})
+                lifecycle_service.complete(uid, conversation_id)
             except Exception:
                 pass
 
@@ -163,7 +162,6 @@ def process_in_progress_conversation(
     conversation = retrieve_in_progress_conversation(uid)
     if not conversation:
         raise HTTPException(status_code=404, detail="Conversation in progress not found")
-    redis_db.remove_in_progress_conversation_id(uid)
 
     conversation = deserialize_conversation(conversation)
 
@@ -179,8 +177,31 @@ def process_in_progress_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversations_db.update_conversation_status(uid, conversation.id, ConversationStatus.processing)
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
+    if not lifecycle_service.admit_processing(uid, conversation.id):
+        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    current_in_progress_id = redis_db.get_in_progress_conversation_id(uid)
+    if current_in_progress_id == conversation.id:
+        redis_db.remove_in_progress_conversation_id(uid)
+
+    conversation.status = ConversationStatus.processing
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    conversation = process_conversation(
+        uid,
+        conversation.language,
+        conversation,
+        force_process=True,
+        persistence_observer=record_persistence,
+    )
+    if not persisted:
+        latest = _get_valid_conversation_by_id(uid, conversation.id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -213,11 +234,9 @@ def finalize_conversation(
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         claim_updates['external_data'] = conversation.external_data
 
-    if not conversations_db.claim_conversation_status(
+    if not lifecycle_service.admit_processing(
         uid,
         conversation.id,
-        ConversationStatus.in_progress,
-        ConversationStatus.processing,
         extra_updates=claim_updates or None,
     ):
         latest = _get_valid_conversation_by_id(uid, conversation_id)
@@ -235,9 +254,22 @@ def finalize_conversation(
         geolocation = Geolocation(**geolocation)
         conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
 
-    conversation = process_conversation(uid, conversation.language, conversation, force_process=True)
-    if conversation.status:
-        conversations_db.update_conversation_status(uid, conversation.id, conversation.status)
+    persisted = False
+
+    def record_persistence(current: bool) -> None:
+        nonlocal persisted
+        persisted = current
+
+    conversation = process_conversation(
+        uid,
+        conversation.language,
+        conversation,
+        force_process=True,
+        persistence_observer=record_persistence,
+    )
+    if not persisted:
+        latest = _get_valid_conversation_by_id(uid, conversation_id)
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
     messages = asyncio.run(trigger_external_integrations(uid, conversation))
 
     return CreateConversationResponse(conversation=conversation, messages=messages)
@@ -612,7 +644,7 @@ def delete_conversation(
         # so a partial failure cannot orphan derived data.
         db_client = getattr(db_client_module, 'db', None)
         memory_system = pin_memory_system(uid, db_client=db_client)
-        if memory_system == MemorySystem.CANONICAL and canonical_write_enabled(uid, db_client=db_client):
+        if memory_system == MemorySystem.CANONICAL:
             MemoryService(db_client=db_client).retract_conversation_memories(uid, conversation_id)
         else:
             deletion_result = memories_db.delete_memories_for_conversation(uid, conversation_id)
@@ -1106,9 +1138,12 @@ def search_conversations_endpoint(
     conversations = [conversation for conversation in conversations if not conversation.get('is_locked')]
     redact_conversations_for_list(conversations)
     search_results['items'] = conversations
-    search_results['total_pages'] = (
-        search_request.page + 1 if len(conversations) >= search_request.per_page else search_request.page
-    )
+    # Recompute total_pages from the effective (clamped) pagination the search actually ran with, not the
+    # raw request: search_request.page/per_page are optional and unbounded, so a null/0/huge value here
+    # would 500 (None + 1 / len(...) >= None). search_conversations returns clamped current_page/per_page.
+    effective_page = search_results.get('current_page', 1)
+    effective_per_page = search_results.get('per_page', 10)
+    search_results['total_pages'] = effective_page + 1 if len(conversations) >= effective_per_page else effective_page
     return search_results
 
 
@@ -1219,7 +1254,7 @@ def merge_conversations(
 
     # Set all source conversations to 'merging' status so user knows they're being processed
     for conv_id in request.conversation_ids:
-        conversations_db.update_conversation_status(uid, conv_id, ConversationStatus.merging)
+        lifecycle_service.begin_merge(uid, conv_id)
 
     # Start background merge task
     background_tasks.add_task(

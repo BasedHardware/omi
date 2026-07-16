@@ -21,9 +21,9 @@ struct ChatPage: View {
     VStack(spacing: 0) {
       // Header with app picker
       chatHeader
-        .padding(.horizontal, 24)
-        .padding(.top, 24)
-        .padding(.bottom, 18)
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.top, OmiSpacing.xxl)
+        .padding(.bottom, OmiSpacing.lg)
 
       Divider()
         .background(OmiColors.border.opacity(0.4))
@@ -46,41 +46,41 @@ struct ChatPage: View {
             chatProvider.dismissCurrentError()
           }
         )
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
       }
 
       // Legacy error banner — fallback for unmappable BridgeError
       // cases (encodingError, quotaExceeded, free-form .agentError
       // messages). Stays so no error path becomes invisible.
       if let error = chatProvider.errorMessage {
-        HStack(spacing: 8) {
+        HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "exclamationmark.triangle.fill")
             .foregroundColor(OmiColors.warning)
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
           Text(error)
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textSecondary)
           Spacer()
           Button {
             chatProvider.errorMessage = nil
           } label: {
             Image(systemName: "xmark")
-              .scaledFont(size: 11)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
         }
-        .padding(.horizontal, 16)
-        .padding(.vertical, 10)
+        .padding(.horizontal, OmiSpacing.lg)
+        .padding(.vertical, OmiSpacing.sm)
         .background(OmiColors.backgroundSecondary)
       }
 
       // Input area
       inputArea
-        .padding(.horizontal, 24)
-        .padding(.top, 16)
-        .padding(.bottom, 24)
+        .padding(.horizontal, OmiSpacing.xxl)
+        .padding(.top, OmiSpacing.lg)
+        .padding(.bottom, OmiSpacing.xxl)
     }
     .background(OmiColors.backgroundPrimary)
     .sheet(item: $citedConversation) { conversation in
@@ -143,15 +143,15 @@ struct ChatPage: View {
       if isLoadingCitation {
         ZStack {
           Color.black.opacity(0.3)
-          VStack(spacing: 12) {
+          VStack(spacing: OmiSpacing.md) {
             ProgressView()
             Text("Loading source...")
-              .scaledFont(size: 13)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(.white)
           }
-          .padding(20)
+          .padding(OmiSpacing.xl)
           .background(OmiColors.backgroundSecondary)
-          .cornerRadius(12)
+          .cornerRadius(OmiChrome.smallControlRadius)
         }
       }
     }
@@ -166,17 +166,17 @@ struct ChatPage: View {
         // Default Chat indicator or button
         if chatProvider.isInDefaultChat {
           // Show indicator that we're in default chat
-          HStack(spacing: 6) {
+          HStack(spacing: OmiSpacing.xs) {
             Image(systemName: "icloud")
-              .scaledFont(size: 11)
+              .scaledFont(size: OmiType.caption)
             Text("Synced Chat")
-              .scaledFont(size: 11, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
           }
           .foregroundColor(OmiColors.success)
-          .padding(.horizontal, 8)
-          .padding(.vertical, 4)
+          .padding(.horizontal, OmiSpacing.sm)
+          .padding(.vertical, OmiSpacing.xxs)
           .background(OmiColors.success.opacity(0.15))
-          .cornerRadius(6)
+          .cornerRadius(OmiChrome.badgeRadius)
           .help("This chat syncs with your mobile app")
         } else {
           // Show button to switch back to default chat
@@ -185,17 +185,17 @@ struct ChatPage: View {
               await chatProvider.switchToDefaultChat()
             }
           }) {
-            HStack(spacing: 6) {
+            HStack(spacing: OmiSpacing.xs) {
               Image(systemName: "icloud")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
               Text("Synced")
-                .scaledFont(size: 11, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
             }
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.horizontal, 8)
-            .padding(.vertical, 4)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xxs)
             .background(OmiColors.backgroundTertiary)
-            .cornerRadius(6)
+            .cornerRadius(OmiChrome.badgeRadius)
           }
           .buttonStyle(.plain)
           .help("Switch to synced chat (shares messages with mobile)")
@@ -203,7 +203,7 @@ struct ChatPage: View {
           // Current session indicator
           if let session = chatProvider.currentSession {
             Text(session.title)
-              .scaledFont(size: 12, weight: .medium)
+              .scaledFont(size: OmiType.caption, weight: .medium)
               .foregroundColor(OmiColors.textSecondary)
               .lineLimit(1)
           }
@@ -216,7 +216,7 @@ struct ChatPage: View {
           }
         }) {
           Image(systemName: "plus")
-            .scaledFont(size: 14, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -225,7 +225,7 @@ struct ChatPage: View {
 
       // App selector
       Button(action: { showAppPicker.toggle() }) {
-        HStack(spacing: 10) {
+        HStack(spacing: OmiSpacing.sm) {
           if let app = selectedApp {
             // Show selected app
             AsyncImage(url: URL(string: app.image)) { phase in
@@ -242,30 +242,30 @@ struct ChatPage: View {
             .frame(width: 32, height: 32)
             .clipShape(Circle())
 
-            VStack(alignment: .leading, spacing: 2) {
+            VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
               Text(app.name)
-                .scaledFont(size: 14, weight: .medium)
+                .scaledFont(size: OmiType.body, weight: .medium)
                 .foregroundColor(OmiColors.textPrimary)
 
               Text("Chat App")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
           } else {
             // Default OMI assistant
             Text("omi")
-              .scaledFont(size: 14, weight: .medium)
+              .scaledFont(size: OmiType.body, weight: .medium)
               .foregroundColor(OmiColors.textPrimary)
           }
 
           if !appProvider.chatApps.isEmpty {
             Image(systemName: "chevron.down")
-              .scaledFont(size: 10)
+              .scaledFont(size: OmiType.micro)
               .foregroundColor(OmiColors.textTertiary)
           }
         }
-        .padding(.horizontal, 12)
-        .padding(.vertical, 8)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.vertical, OmiSpacing.sm)
         .omiControlSurface(fill: OmiColors.backgroundTertiary, radius: 18)
       }
       .buttonStyle(.plain)
@@ -289,10 +289,10 @@ struct ChatPage: View {
 
       // Model indicator
       Text(chatProvider.currentModel)
-        .scaledFont(size: 11)
+        .scaledFont(size: OmiType.caption)
         .foregroundColor(OmiColors.textTertiary)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xxs)
         .omiControlSurface(fill: OmiColors.backgroundTertiary.opacity(0.9), radius: 12)
 
       // Copy conversation button
@@ -301,7 +301,7 @@ struct ChatPage: View {
           copyConversation()
         }) {
           Image(systemName: copied ? "checkmark" : "doc.on.doc")
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(copied ? OmiColors.success : OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -321,7 +321,7 @@ struct ChatPage: View {
               .frame(width: 14, height: 14)
           } else {
             Image(systemName: "trash")
-              .scaledFont(size: 14)
+              .scaledFont(size: OmiType.body)
               .foregroundColor(OmiColors.textTertiary)
           }
         }
@@ -334,7 +334,7 @@ struct ChatPage: View {
       if chatProvider.multiChatEnabled {
         Button(action: { showHistoryPopover.toggle() }) {
           Image(systemName: "clock.arrow.circlepath")
-            .scaledFont(size: 14)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -352,7 +352,7 @@ struct ChatPage: View {
         NotificationCenter.default.post(name: .navigateToAIChatSettings, object: nil)
       }) {
         Image(systemName: "gear")
-          .scaledFont(size: 14)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textTertiary)
       }
       .buttonStyle(.plain)
@@ -393,7 +393,7 @@ struct ChatPage: View {
   }
 
   private var welcomeMessage: some View {
-    VStack(spacing: 18) {
+    VStack(spacing: OmiSpacing.lg) {
       if let app = selectedApp {
         AsyncImage(url: URL(string: app.image)) { phase in
           switch phase {
@@ -410,15 +410,15 @@ struct ChatPage: View {
         .clipShape(Circle())
 
         Text("Chat with \(app.name)")
-          .scaledFont(size: 18, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Text(app.description)
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textSecondary)
           .multilineTextAlignment(.center)
           .lineLimit(3)
-          .padding(.horizontal, 40)
+          .padding(.horizontal, OmiSpacing.page)
       } else {
         // Default OMI assistant
         if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
@@ -431,18 +431,18 @@ struct ChatPage: View {
         }
 
         Text("Chat with omi")
-          .scaledFont(size: 18, weight: .semibold)
+          .scaledFont(size: OmiType.heading, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Text("Your personal AI assistant that knows you through your memories and conversations")
-          .scaledFont(size: 13)
+          .scaledFont(size: OmiType.body)
           .foregroundColor(OmiColors.textSecondary)
           .multilineTextAlignment(.center)
-          .padding(.horizontal, 40)
+          .padding(.horizontal, OmiSpacing.page)
       }
     }
     .frame(maxWidth: .infinity)
-    .padding(.horizontal, 24)
+    .padding(.horizontal, OmiSpacing.xxl)
     .padding(.vertical, 84)
     .frame(maxWidth: 640)
     .omiPanel(
@@ -533,14 +533,14 @@ struct AppPickerPopover: View {
   var body: some View {
     VStack(alignment: .leading, spacing: 0) {
       Text("Select Assistant")
-        .scaledFont(size: 12, weight: .medium)
+        .scaledFont(size: OmiType.caption, weight: .medium)
         .foregroundColor(OmiColors.textTertiary)
-        .padding(.horizontal, 12)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.horizontal, OmiSpacing.md)
+        .padding(.top, OmiSpacing.md)
+        .padding(.bottom, OmiSpacing.sm)
 
       ScrollView {
-        VStack(spacing: 2) {
+        VStack(spacing: OmiSpacing.hairline) {
           // Default OMI option
           DefaultOmiRow(isSelected: selectedAppId == nil) {
             selectedAppId = nil
@@ -550,8 +550,8 @@ struct AppPickerPopover: View {
 
           if !apps.isEmpty {
             Divider()
-              .padding(.vertical, 4)
-              .padding(.horizontal, 12)
+              .padding(.vertical, OmiSpacing.xxs)
+              .padding(.horizontal, OmiSpacing.md)
 
             ForEach(apps) { app in
               AppPickerRow(
@@ -581,7 +581,7 @@ struct DefaultOmiRow: View {
 
   var body: some View {
     Button(action: onSelect) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
           let logoImage = NSImage(contentsOf: logoURL)
         {
@@ -591,23 +591,23 @@ struct DefaultOmiRow: View {
             .frame(width: 22, height: 22)
             .frame(width: 36, height: 36)
             .background(OmiColors.backgroundTertiary)
-            .clipShape(RoundedRectangle(cornerRadius: 8))
+            .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
         }
 
         Text("omi")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
 
         if isSelected {
           Image(systemName: "checkmark")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.purplePrimary)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(OmiColors.accent)
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .background(isSelected || isHovering ? OmiColors.backgroundSecondary : Color.clear)
     }
     .buttonStyle(.plain)
@@ -624,7 +624,7 @@ struct AppPickerRow: View {
 
   var body: some View {
     Button(action: onSelect) {
-      HStack(spacing: 10) {
+      HStack(spacing: OmiSpacing.sm) {
         AsyncImage(url: URL(string: app.image)) { phase in
           switch phase {
           case .success(let image):
@@ -637,15 +637,15 @@ struct AppPickerRow: View {
           }
         }
         .frame(width: 36, height: 36)
-        .clipShape(RoundedRectangle(cornerRadius: 8))
+        .clipShape(RoundedRectangle(cornerRadius: OmiChrome.elementRadius))
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           Text(app.name)
-            .scaledFont(size: 13, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
 
           Text(app.author)
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
         }
 
@@ -653,12 +653,12 @@ struct AppPickerRow: View {
 
         if isSelected {
           Image(systemName: "checkmark")
-            .scaledFont(size: 12, weight: .semibold)
-            .foregroundColor(OmiColors.purplePrimary)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
+            .foregroundColor(OmiColors.accent)
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .background(isSelected || isHovering ? OmiColors.backgroundSecondary : Color.clear)
     }
     .buttonStyle(.plain)
@@ -679,7 +679,7 @@ struct ChatHistoryPopover: View {
       // Header
       HStack {
         Text("Chat History")
-          .scaledFont(size: 14, weight: .semibold)
+          .scaledFont(size: OmiType.body, weight: .semibold)
           .foregroundColor(OmiColors.textPrimary)
 
         Spacer()
@@ -698,7 +698,7 @@ struct ChatHistoryPopover: View {
               .frame(width: 14, height: 14)
           } else {
             Image(systemName: chatProvider.showStarredOnly ? "star.fill" : "star")
-              .scaledFont(size: 12)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(
                 chatProvider.showStarredOnly ? OmiColors.amber : OmiColors.textTertiary)
           }
@@ -714,41 +714,41 @@ struct ChatHistoryPopover: View {
           }
         }) {
           Image(systemName: "plus")
-            .scaledFont(size: 12, weight: .medium)
-            .foregroundColor(OmiColors.purplePrimary)
+            .scaledFont(size: OmiType.caption, weight: .medium)
+            .foregroundColor(OmiColors.accent)
         }
         .buttonStyle(.plain)
         .help("New chat")
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 12)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.md)
 
       // Search field
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         Image(systemName: "magnifyingglass")
-          .scaledFont(size: 11)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textTertiary)
 
         TextField("Search chats...", text: $chatProvider.searchQuery)
           .textFieldStyle(.plain)
-          .scaledFont(size: 12)
+          .scaledFont(size: OmiType.caption)
           .foregroundColor(OmiColors.textPrimary)
 
         if !chatProvider.searchQuery.isEmpty {
           Button(action: { chatProvider.searchQuery = "" }) {
             Image(systemName: "xmark.circle.fill")
-              .scaledFont(size: 11)
+              .scaledFont(size: OmiType.caption)
               .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
         }
       }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 6)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.xs)
       .background(OmiColors.backgroundSecondary)
-      .cornerRadius(6)
-      .padding(.horizontal, 16)
-      .padding(.bottom, 12)
+      .cornerRadius(OmiChrome.badgeRadius)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.bottom, OmiSpacing.md)
 
       Divider()
 
@@ -759,23 +759,23 @@ struct ChatHistoryPopover: View {
           ProgressView()
             .scaleEffect(0.8)
           Text("Loading...")
-            .scaledFont(size: 12)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
-            .padding(.top, 8)
+            .padding(.top, OmiSpacing.sm)
           Spacer()
         }
         .frame(height: 200)
       } else if chatProvider.filteredSessions.isEmpty {
-        VStack(spacing: 8) {
+        VStack(spacing: OmiSpacing.sm) {
           Spacer()
           Image(systemName: emptyStateIcon)
             .scaledFont(size: 24)
             .foregroundColor(OmiColors.textTertiary)
           Text(emptyStateTitle)
-            .scaledFont(size: 13)
+            .scaledFont(size: OmiType.body)
             .foregroundColor(OmiColors.textSecondary)
           Text(emptyStateSubtitle)
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
           Spacer()
         }
@@ -786,11 +786,11 @@ struct ChatHistoryPopover: View {
             ForEach(chatProvider.groupedSessions, id: \.0) { group, sessions in
               // Group header
               Text(group)
-                .scaledFont(size: 11, weight: .semibold)
+                .scaledFont(size: OmiType.caption, weight: .semibold)
                 .foregroundColor(OmiColors.textTertiary)
-                .padding(.horizontal, 16)
-                .padding(.top, 12)
-                .padding(.bottom, 6)
+                .padding(.horizontal, OmiSpacing.lg)
+                .padding(.top, OmiSpacing.md)
+                .padding(.bottom, OmiSpacing.xs)
 
               // Sessions in group
               ForEach(sessions) { session in
@@ -823,7 +823,7 @@ struct ChatHistoryPopover: View {
               }
             }
           }
-          .padding(.bottom, 12)
+          .padding(.bottom, OmiSpacing.md)
         }
         .frame(maxHeight: 400)
       }
@@ -886,32 +886,32 @@ struct HistorySessionRow: View {
         onSelect()
       }
     }) {
-      HStack(spacing: 8) {
+      HStack(spacing: OmiSpacing.sm) {
         // Star indicator
         if session.starred {
           Image(systemName: "star.fill")
-            .scaledFont(size: 10)
+            .scaledFont(size: OmiType.micro)
             .foregroundColor(.yellow)
         }
 
-        VStack(alignment: .leading, spacing: 2) {
+        VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
           if isEditing {
             TextField("Chat title", text: $editedTitle)
               .textFieldStyle(.plain)
-              .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-              .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+              .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
+              .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textPrimary)
               .focused($isTitleFocused)
               .onSubmit { saveTitle() }
               .onExitCommand { cancelEditing() }
           } else {
             Text(session.title)
-              .scaledFont(size: 13, weight: isSelected ? .semibold : .regular)
-              .foregroundColor(isSelected ? OmiColors.purplePrimary : OmiColors.textPrimary)
+              .scaledFont(size: OmiType.body, weight: isSelected ? .semibold : .regular)
+              .foregroundColor(isSelected ? OmiColors.accent : OmiColors.textPrimary)
               .lineLimit(1)
           }
 
           if !isEditing {
-            HStack(spacing: 4) {
+            HStack(spacing: OmiSpacing.xxs) {
               if let preview = session.preview, !preview.isEmpty,
                 !preview.hasPrefix("[Protected"), !preview.hasPrefix("[Encrypted")
               {
@@ -921,7 +921,7 @@ struct HistorySessionRow: View {
               Text("·")
               Text(session.createdAt, style: .relative)
             }
-            .scaledFont(size: 11)
+            .scaledFont(size: OmiType.caption)
             .foregroundColor(OmiColors.textTertiary)
             .lineLimit(1)
           }
@@ -937,11 +937,11 @@ struct HistorySessionRow: View {
 
         // Action buttons on hover
         if isHovering && !isEditing && !isDeleting {
-          HStack(spacing: 6) {
+          HStack(spacing: OmiSpacing.xs) {
             // Rename button
             Button(action: startEditing) {
               Image(systemName: "pencil")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -949,7 +949,7 @@ struct HistorySessionRow: View {
             // Star button
             Button(action: onToggleStar) {
               Image(systemName: session.starred ? "star.fill" : "star")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(session.starred ? .yellow : OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
@@ -957,15 +957,15 @@ struct HistorySessionRow: View {
             // Delete button
             Button(action: { showDeleteConfirm = true }) {
               Image(systemName: "trash")
-                .scaledFont(size: 11)
+                .scaledFont(size: OmiType.caption)
                 .foregroundColor(OmiColors.textTertiary)
             }
             .buttonStyle(.plain)
           }
         }
       }
-      .padding(.horizontal, 16)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.lg)
+      .padding(.vertical, OmiSpacing.sm)
       .frame(maxWidth: .infinity, alignment: .leading)
       .background(
         isSelected

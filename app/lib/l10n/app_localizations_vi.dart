@@ -9573,6 +9573,27 @@ class AppLocalizationsVi extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Bộ nhớ thiết bị';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'Đã đầy $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'Đã dùng $used trong $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return 'Còn trống $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.';
 }

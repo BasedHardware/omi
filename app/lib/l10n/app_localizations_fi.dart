@@ -9576,6 +9576,27 @@ class AppLocalizationsFi extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Laitteen tallennustila';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent % täynnä';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total käytössä';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free vapaana';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.';
 }

@@ -9597,6 +9597,27 @@ class AppLocalizationsLv extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Ierīces krātuve';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% aizpildīts';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'izmantoti $used no $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free brīvi';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
 }

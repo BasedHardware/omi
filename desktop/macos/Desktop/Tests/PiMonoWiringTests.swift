@@ -73,7 +73,7 @@ final class PiMonoWiringTests: XCTestCase {
     XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
-  func testLocalAgentProviderDetectorIgnoresArbitraryPathEntries() throws {
+  func testLocalAgentProviderDetectorHonorsInjectedPathEntries() throws {
     let root = FileManager.default.temporaryDirectory
       .appendingPathComponent("omi-provider-path-\(UUID().uuidString)", isDirectory: true)
     try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
@@ -88,7 +88,7 @@ final class PiMonoWiringTests: XCTestCase {
       environment: ["PATH": root.path],
       homeDirectory: "/tmp/missing-home")
 
-    XCTAssertFalse(availability.isAvailable)
+    XCTAssertEqual(availability.status, .available(command: executable.path))
   }
 
   func testLocalAgentProviderDetectorMissingPromptIsUserFacing() {

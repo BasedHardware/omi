@@ -9606,6 +9606,27 @@ class AppLocalizationsKn extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'ಸಾಧನ ಸಂಗ್ರಹಣೆ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% ತುಂಬಿದೆ';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total ರಲ್ಲಿ $used ಬಳಸಲಾಗಿದೆ';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ಖಾಲಿ';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.';
 }

@@ -9585,6 +9585,27 @@ class AppLocalizationsId extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Penyimpanan perangkat';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% penuh';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used dari $total terpakai';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free tersisa';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.';
 }

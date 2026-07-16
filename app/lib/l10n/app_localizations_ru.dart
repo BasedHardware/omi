@@ -9611,6 +9611,27 @@ class AppLocalizationsRu extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Хранилище устройства';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'заполнено $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'использовано $used из $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free свободно';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Устройство почти заполнено — синхронизируйте, чтобы освободить место.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Нет подключения — запись ведётся локально. Расшифровка выполнится, когда вы снова будете в сети.';
 }

@@ -187,9 +187,10 @@ def observe_route_result(
             provider=labels['provider'],
             credential_source=labels['credential_source'],
         ).observe(ttfb_seconds)
-    logger.info(
+    terminal_log = logger.warning if outcome == 'error' else logger.info
+    terminal_log(
         'llm_gateway_terminal request_id=%s surface=%s streaming=%s phase=%s lane=%s route=%s provider=%s '
-        'model=%s credential_source=%s outcome=%s error_class=%s fallback_used=%s ttfb_seconds=%s',
+        'model=%s credential_source=%s outcome=%s error_class=%s failure_class=%s fallback_used=%s ttfb_seconds=%s',
         request_id,
         _bounded(api_surface),
         _bool_label(streaming),
@@ -201,6 +202,7 @@ def observe_route_result(
         labels['credential_source'],
         labels['outcome'],
         labels['error_class'],
+        labels['fallback_reason'],
         labels['fallback_used'],
         f'{ttfb_seconds:.6f}' if ttfb_seconds is not None else 'none',
     )
@@ -214,7 +216,7 @@ def observe_request_rejection(*, api_surface: str, error_class: str, request_id:
     surface_label = _bounded(api_surface)
     error_label = _bounded(error_class)
     REQUEST_REJECTIONS_TOTAL.labels(api_surface=surface_label, error_class=error_label).inc()
-    logger.info(
+    logger.warning(
         'llm_gateway_request_rejected request_id=%s surface=%s error_class=%s',
         request_id,
         surface_label,

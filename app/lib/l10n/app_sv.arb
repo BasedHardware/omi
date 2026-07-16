@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Enhetens lagring",
+    "deviceStoragePercentFull": "{percent}% fullt",
+    "deviceStorageUsedOfTotal": "{used} av {total} använt",
+    "deviceStorageFree": "{free} ledigt",
+    "deviceStorageNearlyFull": "Enheten är nästan full — synkronisera för att frigöra utrymme.",
     "phoneMicOfflineFallbackMessage": "Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen."
 }

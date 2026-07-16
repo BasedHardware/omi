@@ -62,6 +62,20 @@ final class MemoryExportStatusTests: XCTestCase {
     XCTAssertTrue(status.hasConnection)
   }
 
+  func testChatGPTMemoryPackDoesNotClaimDirectoryAuthorization() async {
+    UserDefaults.standard.set(7, forKey: "memoryExportExportedCount.chatgpt")
+
+    let status = await MemoryExportService.shared.status(for: .chatgpt)
+    let presentation = MemoryExportConnectionPresentation.make(
+      destination: .chatgpt,
+      status: status,
+      isRunning: false)
+
+    XCTAssertFalse(status.isConfigured)
+    XCTAssertFalse(status.hasConnection)
+    XCTAssertEqual(presentation.primaryActionTitle, "Add Omi to ChatGPT")
+  }
+
   func testOnlyLocalAgentSetupDestinationsHaveLocallyVerifiableLiveSetup() {
     XCTAssertFalse(MemoryExportDestination.chatgpt.hasLocallyVerifiableLiveSetup)
     XCTAssertFalse(MemoryExportDestination.claude.hasLocallyVerifiableLiveSetup)

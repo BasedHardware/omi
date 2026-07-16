@@ -6,6 +6,7 @@ import type { DesktopActionQueueItem } from "./desktop-action-queue.js";
 import { buildDesktopContextPacket, type BuiltDesktopContextPacket } from "./desktop-context-packet.js";
 import { generateAgentId } from "./sqlite-store.js";
 import { artifactFromRow } from "./kernel-support.js";
+import { migrateJournalConversation } from "./conversation-journal.js";
 import { resolveSurfaceSession, type ResolveSurfaceSessionResult } from "./surface-session.js";
 import type {
   AgentArtifact,
@@ -1001,16 +1002,13 @@ export function migrateTaskSessionsToWorkstreams(
           continue;
         }
         if (!report.legacySessionIds.includes(sourceSessionId)) report.legacySessionIds.push(sourceSessionId);
-        const copied = store.execute(
-          `INSERT INTO conversation_turns (
-             conversation_id, turn_id, role, surface_kind, content, created_at_ms, metadata_json
-           )
-           SELECT ?, turn_id, role, surface_kind, content, created_at_ms, metadata_json
-           FROM conversation_turns WHERE conversation_id = ?`,
-          [canonical.conversationId, sourceConversationId],
-        );
-        report.copiedTurns += copied;
-        store.execute("DELETE FROM conversation_turns WHERE conversation_id = ?", [sourceConversationId]);
+        const journalMigration = migrateJournalConversation(store, {
+          ownerId: input.ownerId,
+          sourceConversationId,
+          destinationConversationId: canonical.conversationId,
+          nowMs: now,
+        });
+        report.copiedTurns += journalMigration.movedTurnCount;
         const sourceArtifacts = store.allRows("SELECT * FROM artifacts WHERE session_id = ?", [sourceSessionId]);
         for (const artifact of sourceArtifacts) {
           const migratedArtifactId = `art_${hash(`${input.ownerId}:${workstreamId}:${String(artifact.artifact_id)}`).slice(0, 32)}`;
@@ -1072,7 +1070,7 @@ export function migrateTaskSessionsToWorkstreams(
             taskId,
             workstreamId,
             legacySessionId: sourceSessionId,
-            copiedTurns: copied,
+            copiedTurns: journalMigration.movedTurnCount,
             invalidatedBindingIds: report.invalidatedBindingIds,
           }),
           createdAtMs: now,

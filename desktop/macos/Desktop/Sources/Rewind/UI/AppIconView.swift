@@ -17,12 +17,17 @@ struct AppIconView: View {
                     .aspectRatio(contentMode: .fit)
                     .frame(width: size, height: size)
             } else {
-                // Fallback icon
-                Image(systemName: "app.fill")
-                    .resizable()
-                    .aspectRatio(contentMode: .fit)
+                // Fallback: letter monogram — the app isn't installed (or isn't
+                // findable), so give the row a distinct mark instead of a generic
+                // placeholder.
+                RoundedRectangle(cornerRadius: size * 0.22, style: .continuous)
+                    .fill(OmiColors.backgroundQuaternary)
                     .frame(width: size, height: size)
-                    .foregroundColor(OmiColors.textTertiary)
+                    .overlay(
+                        Text(String(appName.prefix(1)).uppercased())
+                            .font(.system(size: size * 0.55, weight: .semibold, design: .rounded))
+                            .foregroundColor(OmiColors.textSecondary)
+                    )
             }
         }
         .task {
@@ -64,16 +69,25 @@ actor AppIconCache {
         return nil
     }
 
+    /// System apps that were renamed across macOS versions — stored names may
+    /// predate the rename, so resolve through the current name too.
+    private static let renamedApps: [String: String] = [
+        "System Preferences": "System Settings"
+    ]
+
     private func loadIcon(for appName: String) async -> NSImage? {
         // Try to find the app by name
         let workspace = NSWorkspace.shared
+        let appName = Self.renamedApps[appName] ?? appName
 
-        // Common app locations
+        // Common app locations (CoreServices hosts Finder, Archive Utility, …)
         let searchPaths = [
             "/Applications",
             "/System/Applications",
             "/System/Applications/Utilities",
             "/Applications/Utilities",
+            "/System/Library/CoreServices",
+            "/System/Library/CoreServices/Applications",
             NSHomeDirectory() + "/Applications"
         ]
 
@@ -143,7 +157,7 @@ actor AppIconCache {
 
 #if canImport(PreviewsMacros)
 #Preview {
-    HStack(spacing: 16) {
+    HStack(spacing: OmiSpacing.lg) {
         AppIconView(appName: "Safari", size: 32)
         AppIconView(appName: "Xcode", size: 32)
         AppIconView(appName: "Finder", size: 32)

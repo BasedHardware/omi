@@ -1563,6 +1563,49 @@ export async function assignBulkTranscriptSegments(
 }
 
 /**
+ * Error thrown when editing a transcript segment requires a paid plan
+ * (backend returns HTTP 402 for `/segments/text` on gated accounts).
+ */
+export class SegmentEditPlanRequiredError extends Error {
+  constructor(message = 'Editing the transcript requires the Unlimited plan.') {
+    super(message);
+    this.name = 'SegmentEditPlanRequiredError';
+  }
+}
+
+/**
+ * Update the text of a single transcript segment.
+ *
+ * Mirrors the backend `PATCH /v1/conversations/{id}/segments/text`
+ * (`UpdateSegmentTextRequest`), which identifies the segment by its `id` and
+ * rewrites just that segment's text. The response is a bare `{status}`, so
+ * callers must optimistically patch their local `transcript_segments`.
+ *
+ * @param conversationId - The conversation ID
+ * @param segmentId - The `id` of the segment to edit (non-empty)
+ * @param text - New segment text (1–10000 chars, enforced by the backend)
+ * @throws SegmentEditPlanRequiredError when the account is plan-gated (402)
+ */
+export async function updateSegmentText(
+  conversationId: string,
+  segmentId: string,
+  text: string,
+): Promise<void> {
+  try {
+    await fetchWithAuth(`/v1/conversations/${conversationId}/segments/text`, {
+      method: 'PATCH',
+      body: JSON.stringify({ segment_id: segmentId, text }),
+    });
+  } catch (error) {
+    // fetchWithAuth surfaces the status in the thrown message (`API error: 402 ...`).
+    if (error instanceof Error && error.message.includes('402')) {
+      throw new SegmentEditPlanRequiredError();
+    }
+    throw error;
+  }
+}
+
+/**
  * Delete account permanently
  */
 export async function deleteAccount(): Promise<void> {

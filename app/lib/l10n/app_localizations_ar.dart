@@ -9518,6 +9518,27 @@ class AppLocalizationsAr extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'مساحة تخزين الجهاز';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'ممتلئ $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used من $total مستخدمة';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free متاحة';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.';
 }

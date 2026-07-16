@@ -3,6 +3,7 @@ import logging
 import os
 import asyncio
 import time
+from html import escape
 from datetime import datetime, timezone
 
 import httpx
@@ -17,6 +18,7 @@ from langchain_core.messages import SystemMessage, HumanMessage
 from utils.apps import fetch_app_chat_tools_from_manifest
 from utils.executors import db_executor, llm_executor, storage_executor, run_blocking
 from utils.http_client import get_webhook_client
+from utils.multipart import APP_IMAGE_MAX_PART_SIZE, MultipartMaxPartSizeRoute, max_part_size
 from utils.mcp_client import (
     discover_oauth_metadata,
     register_oauth_client,
@@ -142,7 +144,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 
 class AppSelectOption(PydanticBaseModel):
@@ -775,6 +777,7 @@ def get_popular_apps_endpoint(uid: str = Depends(auth.get_current_user_uid)):
 
 
 @router.post('/v1/apps', tags=['v1'], response_model=AppCreateResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)):
     data = parse_form_json(dict, app_data, 'app_data')
     data['approved'] = False
@@ -856,6 +859,7 @@ def create_app(app_data: str = Form(...), file: UploadFile = File(...), uid=Depe
 
 
 @router.post('/v1/personas', tags=['v1'], response_model=PersonaMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def create_persona(
     persona_data: str = Form(...), file: UploadFile = File(...), uid=Depends(auth.get_current_user_uid)
 ):
@@ -899,6 +903,7 @@ async def create_persona(
 
 
 @router.patch('/v1/personas/{persona_id}', tags=['v1'], response_model=PersonaMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def update_persona(
     persona_id: str,
     persona_data: str = Form(...),
@@ -1022,6 +1027,7 @@ async def get_or_create_user_persona(uid: str = Depends(auth.get_current_user_ui
 
 
 @router.patch('/v1/apps/{app_id}', tags=['v1'], response_model=AppMutationResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 def update_app(
     app_id: str, app_data: str = Form(...), file: UploadFile = File(None), uid=Depends(auth.get_current_user_uid)
 ):
@@ -1948,7 +1954,7 @@ async def mcp_oauth_callback(code: str, state: str):
     await run_blocking(db_executor, enable_app, uid, app_id)
 
     tool_count = len(tools)
-    tool_names = ', '.join(t.name for t in tools)
+    tool_names = ', '.join(escape(t.name) for t in tools)
 
     return HTMLResponse(f"""
     <html>
@@ -2189,6 +2195,7 @@ def reject_app(app_id: str, uid: str, secret_key: str = Header(...)):
 
 @router.delete('/v1/personas/{persona_id}', tags=['v1'], response_model=AppThumbnailUploadResponse)
 @router.post('/v1/app/thumbnails', tags=['v1'], response_model=AppThumbnailUploadResponse)
+@max_part_size(APP_IMAGE_MAX_PART_SIZE)
 async def upload_app_thumbnail_endpoint(file: UploadFile = File(...), uid: str = Depends(auth.get_current_user_uid)):
     """Upload a thumbnail image for an app.
 

@@ -9631,6 +9631,27 @@ class AppLocalizationsCa extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Emmagatzematge del dispositiu';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% ple';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used de $total utilitzat';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free lliure';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'El dispositiu és gairebé ple — sincronitza per alliberar espai.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Sense connexió: s\'està gravant localment. Es transcriurà quan tornis a tenir connexió.';
 }

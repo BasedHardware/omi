@@ -6,6 +6,7 @@ enum ChatQueryErrorClass: String, Equatable, Sendable {
   case attachmentUpload = "attachment_upload"
   case authentication
   case bridgeUnavailable = "bridge_unavailable"
+  case bridgeStartFailed = "bridge_start_failed"
   case browserExtensionMissing = "browser_extension_missing"
   case concurrentRequest = "concurrent_request"
   case encoding
@@ -56,6 +57,8 @@ enum ChatQueryFailureDisposition: Equatable, Sendable {
         return .failed(.authentication)
       case .agentError where bridgeError.isSessionAuthenticationFailure:
         return .failed(.authentication)
+      case .failedToStart:
+        return .failed(.bridgeStartFailed)
       case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .processExited, .restarting:
         return .failed(.bridgeUnavailable)
       case .outOfMemory:
@@ -428,5 +431,25 @@ final class ChatQueryTelemetryAttempt {
     case 500..<2_000: return "500_1999"
     default: return "2000_plus"
     }
+  }
+}
+
+/// Orders the successful visible-turn boundary. Once the final answer has been
+/// applied to the projection, product lifecycle and its single terminal
+/// telemetry event close before journal delivery or title generation begins.
+@MainActor
+enum ChatVisibleTurnCompletion {
+  @discardableResult
+  static func finish(
+    lifecycle: ChatTurnLifecycle,
+    telemetryAttempt: ChatQueryTelemetryAttempt,
+    metrics: ChatQueryCompletionMetrics,
+    afterTerminal: @MainActor () -> Void,
+    journalCommit: @MainActor () async -> Bool
+  ) async -> Bool {
+    guard lifecycle.complete() else { return false }
+    guard telemetryAttempt.complete(metrics: metrics) else { return false }
+    afterTerminal()
+    return await journalCommit()
   }
 }

@@ -211,7 +211,7 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "19",
+      "__panelId__": "17",
       "summary": "Backend-listen receiving zero LB traffic for 10+ minutes \u2014 transcription pipeline may be down",
       "threshold": "< 0.001 rps (effectively zero)"
     },
@@ -323,8 +323,8 @@
     "for": "5m",
     "keep_firing_for": "0s",
     "annotations": {
-      "__dashboardUid__": "855b2e16-c098-407a-85dc-dc9ce87698a9",
-      "__panelId__": "9",
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "21",
       "summary": "Backend-listen has zero ready pods \u2014 all replicas are down or failing health checks",
       "threshold": "< 1 ready pod"
     },
@@ -359,7 +359,7 @@
             "type": "prometheus",
             "uid": "prometheus"
           },
-          "expr": "sum(pusher_active_ws_connections{namespace=\"prod-omi-backend\", pod=~\"prod-omi-pusher.*\"}) or vector(0)",
+          "expr": "sum(pusher_active_ws_connections{job=\"pusher-metrics\"}) or vector(0)",
           "instant": true,
           "intervalMs": 1000,
           "maxDataPoints": 43200,
@@ -437,9 +437,122 @@
     "keep_firing_for": "0s",
     "annotations": {
       "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
-      "__panelId__": "43",
+      "__panelId__": "86",
       "summary": "Pusher has zero active WebSocket connections for 10+ minutes \u2014 live transcription pipeline broken",
       "threshold": "< 1 active connection"
+    },
+    "labels": {
+      "severity": "critical",
+      "instatus_component": "live-transcription"
+    },
+    "isPaused": false,
+    "notification_settings": {
+      "receiver": "Omi - Services Alerting (Telegram)"
+    },
+    "record": null
+  },
+  {
+    "uid": "tz_backend_listen_ws_drop",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "Traffic Zero Detection",
+    "title": "Backend-listen - active WS connections critically low",
+    "condition": "C",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 600,
+          "to": 0
+        },
+        "datasourceUid": "prometheus",
+        "model": {
+          "datasource": {
+            "type": "prometheus",
+            "uid": "prometheus"
+          },
+          "expr": "sum(backend_listen_active_ws_connections{job=\"backend-listen-metrics\"}) or vector(0)",
+          "instant": true,
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "A"
+        }
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "A",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "reducer": "last",
+          "refId": "B",
+          "type": "reduce"
+        }
+      },
+      {
+        "refId": "C",
+        "queryType": "",
+        "relativeTimeRange": {
+          "from": 0,
+          "to": 0
+        },
+        "datasourceUid": "__expr__",
+        "model": {
+          "conditions": [
+            {
+              "evaluator": {
+                "params": [
+                  10
+                ],
+                "type": "lt"
+              },
+              "operator": {
+                "type": "and"
+              },
+              "query": {
+                "params": [
+                  "C"
+                ]
+              },
+              "reducer": {
+                "params": [],
+                "type": "last"
+              },
+              "type": "query"
+            }
+          ],
+          "datasource": {
+            "type": "__expr__",
+            "uid": "__expr__"
+          },
+          "expression": "B",
+          "intervalMs": 1000,
+          "maxDataPoints": 43200,
+          "refId": "C",
+          "type": "threshold"
+        }
+      }
+    ],
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {
+      "__dashboardUid__": "6d3d0897-c5a8-4f7b-b034-a3718c52a63b",
+      "__panelId__": "82",
+      "summary": "Backend-listen active WS connections dropped below 10 for 5+ minutes — clients disconnecting, likely backend-listen failure (3-day baseline: min=52, avg=218, max=365)",
+      "threshold": "< 10 active connections"
     },
     "labels": {
       "severity": "critical",

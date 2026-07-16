@@ -130,6 +130,69 @@ jobs:
           location: ${{ env.REGION }}
           project_id: ${{ vars.GCP_PROJECT_ID }}
 
+      - name: Resolve production pusher runtime targets
+        if: env.SERVICE == 'pusher' && vars.ENV == 'prod'
+        id: pusher-runtime-targets
+        run: |
+          set -euo pipefail
+          SYNC_SERVICE_URL="$(
+            gcloud run services describe backend-sync \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format='value(status.url)'
+          )"
+          SYNC_TASKS_INVOKER_SA="$(
+            gcloud run services describe backend-sync \
+              --region="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --format=json \
+              | jq -r '.spec.template.spec.containers[0].env[]? | select(.name == "SYNC_TASKS_INVOKER_SA") | .value'
+          )"
+          test -n "$SYNC_SERVICE_URL"
+          test -n "$SYNC_TASKS_INVOKER_SA"
+          {
+            echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+            echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
+            echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Apply non-secret pusher runtime config
+        if: env.SERVICE == 'pusher'
+        env:
+          ACCOUNT_DELETION_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.account_deletion_handler_url }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_CLAUDE_CLIENT_ID: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_ID }}
+          MCP_OAUTH_CLAUDE_CLIENT_NAME: ${{ vars.MCP_OAUTH_CLAUDE_CLIENT_NAME }}
+          MCP_OAUTH_CLAUDE_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CLAUDE_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+          STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
+          SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
+
+      - name: Preflight pusher ConfigMap and Secret references
+        if: env.SERVICE == 'pusher'
+        run: |
+          python3 -m pip install -q pyyaml
+          python3 backend/scripts/verify_pusher_config_references.py \
+            --environment ${{ vars.ENV }} --namespace ${{ vars.ENV }}-omi-backend
+
       - name: Deploy Pusher to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
@@ -163,7 +226,7 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service llm-gateway
           else
-            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set "image.tag=${GITHUB_SHA::7}"
+            helm -n ${{ vars.ENV }}-omi-backend upgrade --install ${{ vars.ENV }}-omi-pusher ./backend/charts/pusher -f ./backend/charts/pusher/${{ vars.ENV }}_omi_pusher_values.yaml --set-string "image.tag=${GITHUB_SHA::7}"
             if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-pusher --timeout=300s; then
               python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher || true
               exit 1

@@ -2,6 +2,20 @@ import XCTest
 @testable import Omi_Computer
 
 final class CreateCalendarEventToolTests: XCTestCase {
+    private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
+
+    override func setUp() async throws {
+        try await super.setUp()
+        ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+        await ownerFixture.establish(authOwnerID: "calendar-tool-test-owner")
+    }
+
+    override func tearDown() async throws {
+        await ownerFixture.restore()
+        ownerFixture = nil
+        try await super.tearDown()
+    }
+
     func testCreateCalendarEventIsHandledByExecutor() async {
         let toolCall = ToolCall(
             name: "create_calendar_event",

@@ -1,4 +1,5 @@
 import Foundation
+import OmiSupport
 
 /// Manages the cloud agent VM lifecycle: provisioning, status polling, and database upload.
 /// All operations are fire-and-forget from the caller's perspective.
@@ -158,6 +159,15 @@ actor AgentVMService {
         await uploadDatabase(vmIP: vmIP, authToken: authToken)
     }
 
+    /// Compression ratio as a whole-number percent. Guards against a zero
+    /// original size: a 0-byte or unreadable `omi.db` (which still passes the
+    /// `fileExists` check and gzips to a non-empty stub) would otherwise trap on
+    /// unsigned integer division by zero and crash the app during upload.
+    static func compressionPercent(compressed: UInt64, original: UInt64) -> UInt64 {
+        guard original > 0 else { return 0 }
+        return compressed * 100 / original
+    }
+
     /// Upload the local omi.db (gzip-compressed) to the VM's /upload endpoint.
     /// Pauses AgentSync during upload to prevent competing for memory and network.
     private func uploadDatabase(vmIP: String, authToken: String) async {
@@ -165,10 +175,8 @@ actor AgentVMService {
         defer { Task { await AgentSyncService.shared.resume() } }
         // Find the local database path
         let dbPath = await MainActor.run {
-            let appSupport = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
             let userId = RewindDatabase.currentUserId ?? "anonymous"
-            return appSupport
-                .appendingPathComponent("Omi", isDirectory: true)
+            return DesktopLocalProfile.applicationSupportURL()
                 .appendingPathComponent("users", isDirectory: true)
                 .appendingPathComponent(userId, isDirectory: true)
                 .appendingPathComponent("omi.db")
@@ -219,7 +227,7 @@ actor AgentVMService {
 
             let compressedAttrs = try FileManager.default.attributesOfItem(atPath: tempGzPath.path)
             let compressedSize = compressedAttrs[.size] as? UInt64 ?? 0
-            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedSize / 1024 / 1024) MB (\(compressedSize * 100 / originalSize)%)")
+            log("AgentVMService: Compressed \(originalSize / 1024 / 1024) MB → \(compressedSize / 1024 / 1024) MB (\(Self.compressionPercent(compressed: compressedSize, original: originalSize))%)")
         } catch {
             log("AgentVMService: Compression failed — \(error.localizedDescription)")
             try? FileManager.default.removeItem(at: tempGzPath)

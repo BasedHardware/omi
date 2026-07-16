@@ -9616,5 +9616,26 @@ class AppLocalizationsHu extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Eszköz tárhelye';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% megtelt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total felhasználva';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free szabad';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.';
+
+  @override
   String get phoneMicOfflineFallbackMessage => 'Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.';
 }

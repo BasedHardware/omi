@@ -35,7 +35,7 @@ class _BatteryInfoWidgetState extends State<BatteryInfoWidget> {
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
-      builder: (sheetContext) => _RecordOptionsSheet(
+      builder: (sheetContext) => RecordOptionsSheet(
         onPickPhoneMic: () {
           Navigator.pop(sheetContext);
           _startRecording(context);
@@ -376,11 +376,11 @@ class SlashLinePainter extends CustomPainter {
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }
 
-class _RecordOptionsSheet extends StatelessWidget {
+class RecordOptionsSheet extends StatelessWidget {
   final VoidCallback onPickPhoneMic;
   final VoidCallback onPickPhoneCall;
 
-  const _RecordOptionsSheet({required this.onPickPhoneMic, required this.onPickPhoneCall});
+  const RecordOptionsSheet({super.key, required this.onPickPhoneMic, required this.onPickPhoneCall});
 
   @override
   Widget build(BuildContext context) {
@@ -444,6 +444,7 @@ class _RecordOption extends StatelessWidget {
             Container(
               width: 44,
               height: 44,
+              alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
                 gradient: const LinearGradient(

@@ -676,6 +676,9 @@ def extract_action_items(
     • Skip only work demonstrably completed in the current moment; an immediate but still-open commitment is capturable.
     • For every item set capture_kind to exactly one of explicit_command, clear_commitment, direct_request, inferred_next_step.
     • Set capture_owner to user, other, or unknown and emit capture_confidence and ownership_confidence from 0 to 1.
+    • A concrete request addressed directly to the primary user has capture_kind=direct_request,
+      capture_owner=user, and high ownership_confidence. Use unknown only when the addressee is genuinely unclear.
+    • A request addressed to someone else or broadcast without a direct mention is not owned by the primary user.
     • Set concrete_deliverable true only when the commitment names a specific deliverable or outcome; vague "I'll handle it" is false.'''
         if task_intelligence_capture
         else '''LEGACY COMMITMENT FILTER:

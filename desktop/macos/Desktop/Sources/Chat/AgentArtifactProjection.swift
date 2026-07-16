@@ -197,7 +197,14 @@ protocol AgentArtifactProjectionLoading {
   func controlTool(name: String, input: [String: Any]) async throws -> String
 }
 
-extension AgentBridge: AgentArtifactProjectionLoading {}
+extension AgentBridge: AgentArtifactProjectionLoading {
+  func controlTool(name: String, input: [String: Any]) async throws -> String {
+    try await controlTool(
+      name: name,
+      input: input,
+      authorizationSnapshot: nil)
+  }
+}
 
 @MainActor
 final class AgentArtifactProjectionStore: ObservableObject {

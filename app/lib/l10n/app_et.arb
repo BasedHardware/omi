@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Seadme salvestusruum",
+    "deviceStoragePercentFull": "{percent}% täis",
+    "deviceStorageUsedOfTotal": "{used} / {total} kasutatud",
+    "deviceStorageFree": "{free} vaba",
+    "deviceStorageNearlyFull": "Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.",
     "phoneMicOfflineFallbackMessage": "Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus."
 }

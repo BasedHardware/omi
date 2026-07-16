@@ -160,7 +160,6 @@ conv_proc.ZoneInfo = _test_zone_info
 
 
 class TestLocalStartedAtIso:
-
     def test_converts_utc_to_user_local(self):
         # 23:48 UTC -> 13:48 in Honolulu (UTC-10), the meal/time-of-day case from the issue.
         out = conv_proc._local_started_at_iso(datetime(2025, 1, 1, 23, 48, tzinfo=timezone.utc), "Pacific/Honolulu")
@@ -228,7 +227,6 @@ def _capture_structure(fn, **kwargs):
 
 
 class TestStructureFunctionsTimezone:
-
     def test_get_transcript_structure_passes_local_time(self):
         result = _capture_structure(
             conv_proc.get_transcript_structure,

@@ -13792,6 +13792,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -13833,6 +13844,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -13859,6 +13881,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -13922,6 +13966,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
@@ -15885,6 +15940,17 @@
             ],
             "title": "Chat Session Id"
           },
+          "client_message_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Client Message Id"
+          },
           "created_at": {
             "format": "date-time",
             "title": "Created At",
@@ -15926,6 +15992,17 @@
             "title": "Id",
             "type": "string"
           },
+          "journal_revision": {
+            "anyOf": [
+              {
+                "type": "integer"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Journal Revision"
+          },
           "langsmith_run_id": {
             "anyOf": [
               {
@@ -15952,6 +16029,28 @@
             },
             "title": "Memories Id",
             "type": "array"
+          },
+          "message_source": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Message Source"
+          },
+          "metadata": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Metadata"
           },
           "plugin_id": {
             "anyOf": [
@@ -16015,6 +16114,17 @@
           },
           "sender": {
             "$ref": "#/components/schemas/MessageSender"
+          },
+          "session_id": {
+            "anyOf": [
+              {
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Session Id"
           },
           "text": {
             "title": "Text",
@@ -19718,6 +19828,64 @@
         "title": "TranscriptSegment",
         "type": "object"
       },
+      "TranscriptionErrorDetail": {
+        "properties": {
+          "error": {
+            "title": "Error",
+            "type": "string"
+          },
+          "message": {
+            "title": "Message",
+            "type": "string"
+          },
+          "outcome": {
+            "$ref": "#/components/schemas/TranscriptionOutcome"
+          },
+          "provider": {
+            "title": "Provider",
+            "type": "string"
+          },
+          "retryable": {
+            "title": "Retryable",
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "error",
+          "outcome",
+          "provider",
+          "retryable",
+          "message"
+        ],
+        "title": "TranscriptionErrorDetail",
+        "type": "object"
+      },
+      "TranscriptionErrorResponse": {
+        "properties": {
+          "detail": {
+            "$ref": "#/components/schemas/TranscriptionErrorDetail"
+          }
+        },
+        "required": [
+          "detail"
+        ],
+        "title": "TranscriptionErrorResponse",
+        "type": "object"
+      },
+      "TranscriptionOutcome": {
+        "description": "Closed, low-cardinality vocabulary for every accepted transcription.",
+        "enum": [
+          "success",
+          "expected_silence",
+          "empty_unexpected",
+          "timeout",
+          "upstream_error",
+          "config_error",
+          "invalid_input"
+        ],
+        "title": "TranscriptionOutcome",
+        "type": "string"
+      },
       "TranscriptionPreferencesResponse": {
         "properties": {
           "custom_stt_since": {
@@ -21459,6 +21627,16 @@
               }
             ],
             "title": "Language"
+          },
+          "outcome": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/TranscriptionOutcome"
+              },
+              {
+                "type": "null"
+              }
+            ]
           },
           "stt_model": {
             "anyOf": [
@@ -29130,6 +29308,23 @@
               "minimum": 0,
               "title": "Offset",
               "type": "integer"
+            }
+          },
+          {
+            "in": "query",
+            "name": "surface",
+            "required": false,
+            "schema": {
+              "anyOf": [
+                {
+                  "const": "suggested",
+                  "type": "string"
+                },
+                {
+                  "type": "null"
+                }
+              ],
+              "title": "Surface"
             }
           },
           {
@@ -53779,6 +53974,16 @@
             },
             "description": "Successful Response"
           },
+          "400": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Invalid audio input"
+          },
           "401": {
             "$ref": "#/components/responses/Error401"
           },
@@ -53791,6 +53996,36 @@
               }
             },
             "description": "Validation Error"
+          },
+          "502": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Upstream or unexpected-empty result"
+          },
+          "503": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider configuration unavailable"
+          },
+          "504": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TranscriptionErrorResponse"
+                }
+              }
+            },
+            "description": "Provider timeout"
           }
         },
         "security": [

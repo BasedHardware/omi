@@ -4,100 +4,326 @@ import XCTest
 
 @MainActor
 final class RealtimeHubSpawnAgentTests: XCTestCase {
-  func testSpawnAgentSuppressesPostToolAssistantOutput() throws {
+  func testLocalProfileTurnPlanIsFailClosedOutsideHermeticProfile() {
+    XCTAssertNil(
+      RealtimeLocalProfileTurnPlan.make(
+        transcript: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
+        voiceContext: "",
+        localProfileEnabled: false))
+  }
+
+  func testLocalProfileExactMemoryRequestProducesOneCanonicalSpawnProposal() throws {
+    let plan = try XCTUnwrap(
+      RealtimeLocalProfileTurnPlan.make(
+        transcript: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
+        voiceContext: "",
+        localProfileEnabled: true))
+
+    XCTAssertEqual(
+      plan.spawn,
+      RealtimeLocalProfileTurnPlan.Spawn(
+        objective: RealtimeLocalProfileTurnPlan.exactMemoryAgentRequest,
+        title: "Today's memory insight"))
+    XCTAssertFalse(plan.assistantText.isEmpty)
+  }
+
+  func testLocalProfileOrdinaryAndRecallTurnsNeverProposeSpawn() throws {
+    let marker = "GAUNTLET-20260712-FLOATING-ABC123"
+    let ordinary = try XCTUnwrap(
+      RealtimeLocalProfileTurnPlan.make(
+        transcript: "Remember \(marker) exactly.",
+        voiceContext: "",
+        localProfileEnabled: true))
+    XCTAssertNil(ordinary.spawn)
+    XCTAssertTrue(ordinary.assistantText.contains(marker))
+
+    let recall = try XCTUnwrap(
+      RealtimeLocalProfileTurnPlan.make(
+        transcript: "What was the last thing I asked you for?",
+        voiceContext: "Earlier GAUNTLET-OLD. Latest \(marker).",
+        localProfileEnabled: true))
+    XCTAssertNil(recall.spawn)
+    XCTAssertTrue(recall.assistantText.contains(marker))
+    XCTAssertFalse(recall.assistantText.contains("GAUNTLET-OLD"))
+  }
+
+  func testCanonicalSpawnReceiptSuppressesProviderContinuationPresentation() {
+    XCTAssertTrue(
+      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertFalse(
+      RealtimeAcceptedSpawnPresentationPolicy.suppressesProviderContinuation(
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertFalse(
+      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertTrue(
+      RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertEqual(
+      RealtimeProviderTurnDoneDisposition.decide(
+        pendingToolCount: 0,
+        postToolContinuationRequired:
+          RealtimeAcceptedSpawnPresentationPolicy.requiresProviderContinuation(
+            hasCanonicalSpawnReceipt: true)),
+      .finalizeLogicalTurn)
+  }
+
+  func testCanonicalSpawnReceiptNeverRedrivesAfterExpectedSessionRefresh() {
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: true))
+    XCTAssertTrue(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: true,
+        hasCanonicalSpawnReceipt: false))
+    XCTAssertFalse(
+      RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive(
+        sessionChanged: false,
+        hasCanonicalSpawnReceipt: false))
+  }
+
+  func testSpawnJournalReceiptAcceptsOnlyCanonicalTurnIdentity() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
+    let payload = canonicalSpawnPayload(continuityKey: continuityKey)
+    let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    XCTAssertEqual(
+      RealtimeSpawnJournalReceipt.parse(
+        output: output, expectedContinuityKey: continuityKey),
+      RealtimeSpawnJournalReceipt(
+        continuityKey: continuityKey,
+        userTurnID: KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "user"),
+        assistantTurnID: KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "assistant"),
+        assistantText: "I started a background agent for that.",
+        pillProjection: nil))
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: output,
+        expectedContinuityKey: "voice:00000000-0000-0000-0000-000000000000"))
+  }
+
+  func testSpawnJournalReceiptProjectsTheKernelAcceptedChildRun() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009516"
+    let pillID = UUID(uuidString: "00000000-0000-0000-0000-000000000123")!
+    let payload = canonicalSpawnPayload(
+      continuityKey: continuityKey,
+      pillID: pillID,
+      title: "Research models",
+      objective: "Research the latest models")
+    let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    let receipt = try XCTUnwrap(
+      RealtimeSpawnJournalReceipt.parse(output: output, expectedContinuityKey: continuityKey))
+    XCTAssertEqual(
+      receipt.pillProjection,
+      RealtimeSpawnJournalReceipt.PillProjection(
+        pillID: pillID,
+        sessionID: "session-child",
+        runID: "run-child",
+        attemptID: "attempt-child",
+        provider: "hermes",
+        title: "Research models",
+        objective: "Research the latest models"))
+  }
+
+  func testSpawnJournalReceiptRejectsTamperedStableIdentity() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009515"
+    var payload = canonicalSpawnPayload(continuityKey: continuityKey)
+    var receipt = try XCTUnwrap(payload["journalReceipt"] as? [String: Any])
+    receipt["userTurnId"] = "turn_tampered"
+    payload["journalReceipt"] = receipt
+    let data = try JSONSerialization.data(withJSONObject: payload, options: [.sortedKeys])
+    let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: output, expectedContinuityKey: continuityKey))
+  }
+
+  func testSpawnJournalReceiptRejectsMissingOrMismatchedChildLifecycle() throws {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009518"
+    var missingChild = canonicalSpawnPayload(continuityKey: continuityKey)
+    missingChild.removeValue(forKey: "child")
+    let missingData = try JSONSerialization.data(withJSONObject: missingChild, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: missingData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
+
+    var mismatched = canonicalSpawnPayload(continuityKey: continuityKey)
+    var providerResult = try XCTUnwrap(mismatched["providerResult"] as? [String: Any])
+    providerResult["semanticDigest"] = "different-semantic-child"
+    mismatched["providerResult"] = providerResult
+    let mismatchData = try JSONSerialization.data(withJSONObject: mismatched, options: [.sortedKeys])
+    XCTAssertNil(
+      RealtimeSpawnJournalReceipt.parse(
+        output: try XCTUnwrap(String(data: mismatchData, encoding: .utf8)),
+        expectedContinuityKey: continuityKey))
+  }
+
+  func testRejectedSpawnResultCannotBeTreatedAsAnAcceptedVoiceTurn() {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009517"
+    let rejected = #"{"ok":false,"error":{"code":"provider_boundary_rejected","message":"not allowed"}}"#
+
+    XCTAssertEqual(
+      RealtimeSpawnAgentToolOutcome.classify(
+        output: rejected,
+        expectedContinuityKey: continuityKey),
+      .rejected)
+  }
+
+  func testDirectedProviderSetupNeededIsTypedAndCannotCreateAPill() {
+    let continuityKey = "voice:00000000-0000-0000-0000-000000009519"
+    let setupNeeded = #"{"ok":false,"error":{"code":"provider_setup_needed","provider":"openclaw","message":"OpenClaw needs setup"}}"#
+
+    XCTAssertEqual(
+      RealtimeSpawnAgentToolOutcome.classify(
+        output: setupNeeded,
+        expectedContinuityKey: continuityKey),
+      .setupNeeded(.openclaw))
+  }
+
+  func testSharedSpawnReceiptFixturesAcceptValidAndRejectMalformed() throws {
+    let fixtureDir = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("agent/fixtures/spawn-receipt/v1")
+    let names = try FileManager.default.contentsOfDirectory(atPath: fixtureDir.path)
+      .filter { $0.hasSuffix(".json") }
+      .sorted()
+    XCTAssertTrue(names.contains("valid-running.json"))
+    XCTAssertTrue(names.contains { $0.hasPrefix("malformed-") })
+
+    for name in names {
+      let data = try Data(contentsOf: fixtureDir.appendingPathComponent(name))
+      let output = try XCTUnwrap(String(data: data, encoding: .utf8))
+      let payload = try XCTUnwrap(
+        JSONSerialization.jsonObject(with: data) as? [String: Any])
+      let continuityKey =
+        (payload["journalReceipt"] as? [String: Any])?["continuityKey"] as? String
+        ?? "voice:00000000-0000-0000-0000-00000000f001"
+      let parsed = RealtimeSpawnJournalReceipt.parse(
+        output: output,
+        expectedContinuityKey: continuityKey)
+      if name.hasPrefix("valid-") {
+        let receipt = try XCTUnwrap(parsed, "valid fixture \(name) must parse")
+        XCTAssertEqual(receipt.continuityKey, continuityKey)
+        XCTAssertEqual(
+          receipt.userTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "user"))
+        XCTAssertEqual(
+          receipt.assistantTurnID,
+          KernelTurnProjection.stableTurnID(continuityKey: continuityKey, role: "assistant"))
+        XCTAssertFalse(receipt.assistantText.isEmpty)
+      } else {
+        XCTAssertNil(parsed, "malformed fixture \(name) must be rejected")
+      }
+    }
+  }
+
+  private func canonicalSpawnPayload(
+    continuityKey: String,
+    pillID: UUID? = nil,
+    title: String = "Background agent",
+    objective: String = "Research the latest models"
+  ) -> [String: Any] {
+    let childLifecycle: [String: Any] = [
+      "state": "running",
+      "attemptState": "running",
+      "revision": 2,
+      "adapterId": "hermes",
+      "updatedAtMs": 1_720_000_000_000 as NSNumber,
+    ]
+    var child: [String: Any] = [
+      "sessionId": "session-child",
+      "runId": "run-child",
+      "attemptId": "attempt-child",
+      "title": title,
+      "objective": objective,
+      "provider": "hermes",
+      "lifecycle": childLifecycle,
+    ]
+    if let pillID { child["pillId"] = pillID.uuidString }
+    let semanticDigest = "semantic-child-digest"
+    return [
+      "schemaVersion": 1,
+      "ok": true,
+      "journalReceipt": [
+        "accepted": true,
+        "continuityKey": continuityKey,
+        "userTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "user"),
+        "assistantTurnId": KernelTurnProjection.stableTurnID(
+          continuityKey: continuityKey, role: "assistant"),
+        "assistantText": "I started a background agent for that.",
+      ],
+      "child": child,
+      "semanticDigest": semanticDigest,
+      "providerResult": [
+        "schemaVersion": 1,
+        "ok": true,
+        "code": "spawn_started",
+        "message": "Background agent started.",
+        "child": [
+          "sessionId": "session-child",
+          "runId": "run-child",
+          "attemptId": "attempt-child",
+          "state": "running",
+          "attemptState": "running",
+          "revision": 2,
+          "adapterId": "hermes",
+          "updatedAtMs": 1_720_000_000_000 as NSNumber,
+        ],
+        "semanticDigest": semanticDigest,
+      ],
+    ]
+  }
+
+  func testRealtimeToolRequestHasNoLocalExecutionBranch() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("private var suppressAssistantOutputForCurrentTurn = false"))
-    XCTAssertTrue(source.contains("guard !suppressAssistantOutputForCurrentTurn,"))
-    XCTAssertTrue(source.contains("!voiceOutputCoordinator.snapshot().providerOutputSuppressed"))
-    XCTAssertTrue(source.contains("suppressAssistantOutputForCurrentTurn = true"))
-    XCTAssertTrue(source.contains("output: \"Agent started.\""))
-    XCTAssertFalse(source.contains("Acknowledged before the call — do not say anything else"))
+    XCTAssertTrue(source.contains("invokeExternallyAuthorizedTool("))
+    XCTAssertTrue(source.contains("AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
+    XCTAssertFalse(source.contains("handleRealtimeDelegationRequest("))
+    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation("))
+    XCTAssertFalse(source.contains("agentControlService.executeVoiceTool("))
   }
 
-  func testSpawnAgentUsesCanonicalDelegationPath() throws {
+  func testSpawnAgentUsesKernelRuntimeControlAuthority() throws {
+    let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
+
+    XCTAssertTrue(source.contains("toolName: name"))
+    XCTAssertTrue(toolAuthoritySource.contains("command.surfaceKind == \"realtime_voice\""))
+    XCTAssertFalse(source.contains("pendingVoiceAgentHandoff"))
+    XCTAssertFalse(source.contains("Starting a background agent."))
+  }
+
+  func testRealtimeHubDoesNotPerformPillMutationBeforeKernelPolicy() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("let shouldAllowNativePostSpawnAck = !audioReceivedThisTurn"))
-    XCTAssertTrue(source.contains("let existingAck = assistantText.trimmingCharacters"))
-    XCTAssertTrue(source.contains("let resolvedAck = resolution.ack?.trimmingCharacters"))
-    XCTAssertTrue(
-      source.contains(
-        "resolvedAck?.isEmpty == false ? resolvedAck! : \"Starting a background agent.\""))
-    XCTAssertTrue(
-      source.contains("pendingVoiceAgentHandoff = (title: pill.title, brief: resolvedBrief)"))
-    XCTAssertTrue(source.contains("idempotencyKey: completedTurnIdempotencyKey"))
-    XCTAssertTrue(source.contains("Started background agent"))
-    XCTAssertTrue(
-      source.contains("suppressAssistantOutputForCurrentTurn = !shouldAllowNativePostSpawnAck"))
-    XCTAssertTrue(source.contains("await self.handleRealtimeDelegationRequest("))
-    XCTAssertTrue(source.contains("AgentDelegationExecutor.shared.spawnResolvedDelegation("))
-    XCTAssertFalse(source.contains("name: \"spawn_agent\", arguments: toolArgs"))
-    XCTAssertFalse(source.contains("speak(ack)"))
+    XCTAssertFalse(source.contains("setDesktopAttentionOverride"))
+    XCTAssertFalse(source.contains("userExplicitlyRequestedPillManagement"))
+    XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
   }
 
-  func testDelayedDelegationResolutionCannotCrossBargeInBoundary() async {
-    var current = true
-    let resolution = await RealtimeDelegationExecutionGate.resolveIfCurrent(
-      resolve: {
-        await Task.yield()
-        current = false
-        return "resolved"
-      },
-      isCurrent: { current })
-
-    XCTAssertNil(resolution)
-  }
-
-  func testStaleDelegationCannotExecuteSpawnSideEffect() {
-    var spawnCount = 0
-
-    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
-      isCurrent: { false },
-      operation: {
-        spawnCount += 1
-        return "Agent started."
-      })
-
-    XCTAssertNil(result)
-    XCTAssertEqual(spawnCount, 0)
-  }
-
-  func testStaleDelegationCannotExecuteRedirectedPermissionSideEffect() {
-    var permissionRequestCount = 0
-
-    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
-      isCurrent: { false },
-      operation: {
-        permissionRequestCount += 1
-        return "Screen Recording permission request opened."
-      })
-
-    XCTAssertNil(result)
-    XCTAssertEqual(permissionRequestCount, 0)
-  }
-
-  func testFailedDelegationProducesNoSuccessAcknowledgement() {
-    let result: String? = RealtimeDelegationExecutionGate.performIfCurrent(
-      isCurrent: { true },
-      operation: { nil })
-
-    XCTAssertNil(result)
-  }
-
-  func testRealtimeHubBlocksModelInitiatedPillDismissalWithoutExplicitUserRequest() throws {
+  func testRealtimeAcceptedSpawnProjectsPillOnlyAfterTheCurrentTurnFence() throws {
+    // omi-test-quality: source-inspection -- static contract: an accepted PTT spawn can project only after the same current-turn fence used for its tool result.
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(
-      source.contains(
-        "userExplicitlyRequestedPillManagement(action: action, transcript: turnTranscript)"))
-    XCTAssertTrue(source.contains("blocked set_desktop_attention_override"))
-    XCTAssertTrue(
-      source.contains(
-        "Dismissal blocked: only dismiss or clear floating agent pills when the user explicitly asks."
-      ))
-    XCTAssertTrue(source.contains("case \"dismiss\":"))
-    XCTAssertTrue(source.contains("case \"clear_completed\":"))
+    let outputCall = try XCTUnwrap(source.range(of: "let output = try await AgentRuntimeProcess.shared.invokeExternalSurfaceTool("))
+    let currentFence = try XCTUnwrap(source.range(of: "guard self.isCurrentToolTurn(", range: outputCall.upperBound..<source.endIndex))
+    let pillProjection = try XCTUnwrap(source.range(of: "AgentPillsManager.shared.upsertSpawnedPill(", range: currentFence.upperBound..<source.endIndex))
+    XCTAssertLessThan(outputCall.lowerBound, currentFence.lowerBound)
+    XCTAssertLessThan(currentFence.lowerBound, pillProjection.lowerBound)
+    XCTAssertTrue(source.contains("producingJournalSurface: FloatingControlBarManager.shared.realtimeVoiceSurfaceReference()"))
   }
 
   func testRealtimeHubUsesCanonicalVoicePlaybackServiceForLocalSpeechFallbacks() throws {
@@ -109,45 +335,54 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("private func speak(_ text: String)"))
     XCTAssertTrue(
       source.contains("FloatingBarVoicePlaybackService.shared.speakOneShot(reply, lease: lease)"))
-    XCTAssertTrue(source.contains("directedProvider.setupNeededStatus,"))
     XCTAssertTrue(
       source.contains("FloatingBarVoicePlaybackService.shared.interruptCurrentResponse()"))
     XCTAssertTrue(
       source.contains(
         "acquireVoiceOutput(.selectedVoiceFallback, reason: \"text_no_native_audio\")"))
-    XCTAssertTrue(
-      source.contains(".deterministicAgentAck, reason: \"directed_provider_unavailable\""))
+    // omi-test-quality: source-inspection -- static wiring contract for the
+    // behavioral policy tested above and the shared deterministic-ack lease.
+    XCTAssertTrue(source.contains("playCanonicalSpawnAcknowledgement(receipt.assistantText)"))
+    XCTAssertTrue(source.contains("acquireVoiceOutput(.deterministicAgentAck"))
+    XCTAssertTrue(source.contains(".authoritativeLocalResultAcceptedScoped("))
+    XCTAssertTrue(source.contains("RealtimeHeadlessPTTSessionSwapPolicy.shouldRedrive("))
+    XCTAssertTrue(source.contains("requiresProviderContinuation("))
   }
 
   func testRealtimeHubAudibleOutputIsLeaseGated() throws {
-    let coordinator = VoiceOutputCoordinator()
-    let turnID = coordinator.beginTurn()
-    guard case .acquired(let native) = coordinator.acquire(.nativeRealtime, turnID: turnID) else {
+    let coordinator = VoiceTurnCoordinator()
+    let turnID = coordinator.begin(intent: .hold)
+    coordinator.send(.selectRoute(turnID: turnID, route: .deepgramBatch))
+    coordinator.send(.finalize(turnID: turnID))
+    coordinator.send(.transcriptionStarted(turnID: turnID))
+    coordinator.send(.transcriptionFinal(turnID: turnID, text: "fixture"))
+    guard case .acquired(let native) = coordinator.acquireOutput(.nativeRealtime, turnID: turnID) else {
       return XCTFail("native output should acquire the turn")
     }
 
     XCTAssertEqual(
-      coordinator.acquire(.selectedVoiceFallback, turnID: turnID),
+      coordinator.acquireOutput(.selectedVoiceFallback, turnID: turnID),
       .denied(active: native))
     XCTAssertEqual(
-      coordinator.acquire(.deterministicAgentAck, turnID: turnID),
+      coordinator.acquireOutput(.deterministicAgentAck, turnID: turnID),
       .denied(active: native))
-    XCTAssertFalse(coordinator.snapshot().providerOutputSuppressed)
+    XCTAssertFalse(coordinator.outputSnapshot.providerOutputSuppressed)
   }
 
   func testRealtimeToolTurnsStayOpenUntilToolResultReturns() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("private var pendingRealtimeToolCallIds = Set<String>()"))
-    XCTAssertTrue(source.contains("private var realtimeToolTurnEpoch = 0"))
+    XCTAssertTrue(source.contains("private var toolEffectIdentityByTransportKey"))
+    // The screen-receipt extension shares this epoch fence after the visual receipt refactor.
+    XCTAssertTrue(source.contains("var realtimeToolTurnEpoch = 0"))
     XCTAssertTrue(source.contains("expectedTurnEpoch: Int? = nil"))
-    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.insert("))
+    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey[transportKey] = toolIdentity"))
     XCTAssertTrue(
       source.contains("toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)"))
-    XCTAssertTrue(source.contains("pendingRealtimeToolCallIds.remove(key)"))
+    XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey.removeValue(forKey: key)"))
     XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
-    XCTAssertTrue(source.contains("guard pendingRealtimeToolCallIds.isEmpty else"))
-    XCTAssertTrue(source.contains("deferring turn done with"))
+    XCTAssertTrue(source.contains("waiting for provider tool delivery"))
+    XCTAssertTrue(source.contains("authorizedRealtimeInvocations"))
     XCTAssertTrue(source.contains("private func clearRealtimeToolTracking()"))
     XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))
     XCTAssertGreaterThanOrEqual(
@@ -155,49 +390,49 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("session?.sendToolResult("))
   }
 
-  func testRealtimeDelegationResolutionCannotSpawnAfterStaleTurn() throws {
+  func testRealtimeDelegationCannotExecuteAfterStaleTurn() throws {
+    // omi-test-quality: source-inspection -- static contract: all realtime tool paths must retain the shared turn fence.
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("let userText = turnTranscript"))
-    XCTAssertTrue(source.contains("RealtimeDelegationExecutionGate.resolveIfCurrent("))
-    XCTAssertTrue(
-      source.contains(
-        "source: source, callId: callId, name: name, expectedTurnEpoch: expectedTurnEpoch"))
-    XCTAssertTrue(source.contains("dropping stale spawn_agent resolution before side effects"))
-    XCTAssertTrue(source.contains("RealtimeDelegationExecutionGate.performIfCurrent("))
+    XCTAssertTrue(source.contains("RealtimeAuthorizedToolOwnership.accepts("))
+    XCTAssertTrue(source.contains("RealtimeToolTurnOwnership.accepts("))
     XCTAssertTrue(source.contains("private func isCurrentToolTurn("))
     XCTAssertTrue(
       source.contains(
-        "return expectedTurnEpoch == realtimeToolTurnEpoch && pendingRealtimeToolCallIds.contains(key)"
+        "activeToolIdentity: VoiceTurnCoordinator.shared.activeTurn?.toolEffectIdentities[callID]"
       ))
+    XCTAssertFalse(source.contains("AgentDelegationExecutor.shared"))
   }
 
-  func testPermissionRedirectChecksTurnBeforeOpeningSettings() throws {
+  func testPermissionToolsCannotOpenSettingsBeforeKernelAuthorization() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("originatingUserText: userText"))
-    XCTAssertTrue(source.contains("dropping stale spawn_agent permission redirect before side effects"))
-    XCTAssertTrue(source.contains("name: permissionRedirect.tool.rawValue"))
-    XCTAssertTrue(source.contains("if permissionRedirect.recoveredFromDelegation"))
-    XCTAssertTrue(source.contains("from: \"agent\""))
-    XCTAssertTrue(source.contains("to: \"native\""))
+    XCTAssertFalse(source.contains("ChatToolExecutor.execute("))
+    XCTAssertFalse(source.contains("permissionExecutorRoute("))
+    XCTAssertTrue(source.contains("invokeExternalSurfaceTool("))
   }
 
-  func testRealtimeDirectPermissionToolsUseCanonicalExecutorDescriptor() throws {
+  func testRealtimeToolUsesAuthorizedFallbackWhenProviderTranscriptIsUnavailable() throws {
+    // omi-test-quality: source-inspection -- static contract: the realtime tool path must not reintroduce a transcript/tool circular wait.
     let source = try realtimeHubControllerSource()
+    let toolAuthoritySource = try realtimeToolAuthoritySource()
 
-    XCTAssertTrue(source.contains("RealtimeHubTools.permissionExecutorRoute("))
-    XCTAssertTrue(source.contains("name: executorRoute.toolName"))
-    XCTAssertTrue(source.contains("originatingUserText: originatingUserText"))
+    XCTAssertTrue(source.contains("RealtimeExternalRunPromptPolicy.promptForAuthorizedTool("))
+    XCTAssertTrue(source.contains("authorizedToolFallback"))
+    XCTAssertFalse(source.contains("deferredRealtimeToolInvocations.enqueue("))
+    XCTAssertFalse(source.contains("resumeDeferredRealtimeToolsIfReady()"))
+    XCTAssertTrue(source.contains("prompt: normalizedPrompt"))
+    XCTAssertTrue(toolAuthoritySource.contains("Execute only that separately authorized invocation"))
+    XCTAssertFalse(source.contains("I couldn't confirm the spoken request"))
   }
 
   func testBargeInReplacementCommitIsDeferredInsteadOfRejected() throws {
     let source = try realtimeHubControllerSource()
+    let sessionPoliciesSource = try realtimeHubSessionPoliciesSource()
 
-    XCTAssertTrue(source.contains("case deferredForReplacement"))
-    XCTAssertTrue(source.contains("if var pending = pendingBargeInReplacement"))
-    XCTAssertTrue(source.contains("pending.pendingCommit = true"))
-    XCTAssertTrue(source.contains("pendingBargeInReplacement = pending"))
+    XCTAssertTrue(sessionPoliciesSource.contains("case deferredForReplacement"))
+    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.send(.hubCommitDeferredForReplacement"))
+    XCTAssertTrue(source.contains("VoiceTurnCoordinator.shared.activeTurn?.hubCommitPending == true"))
     XCTAssertTrue(source.contains("barge-in replacement not ready at commit"))
     XCTAssertTrue(source.contains("return .deferredForReplacement"))
     XCTAssertFalse(
@@ -217,22 +452,13 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
     XCTAssertFalse(source.contains("replaceVoiceContinuityTurn("))
   }
 
-  func testSpawnAgentPreflightsDirectedProviderAvailability() throws {
+  func testSpawnAgentDelegatesDirectedProviderAvailabilityToKernel() throws {
     let source = try realtimeHubControllerSource()
 
-    XCTAssertTrue(source.contains("LocalAgentProviderDetector.availability(for: directedProvider)"))
-    XCTAssertTrue(source.contains("guard availability.isAvailable else"))
-    XCTAssertTrue(source.contains("assistantText = setupPrompt"))
-    XCTAssertTrue(source.contains("output: availability.toolError"))
-    XCTAssertTrue(
-      source.contains(
-        """
-                sendToolResultIfCurrent(
-                  source: source, callId: callId, name: name,
-                  output: availability.toolError,
-                  expectedTurnEpoch: expectedTurnEpoch)
-                return
-        """))
+    XCTAssertFalse(source.contains("LocalAgentProviderDetector.availability"))
+    XCTAssertFalse(source.contains("directed_provider_unavailable"))
+    XCTAssertTrue(source.contains("invokeExternallyAuthorizedTool("))
+    XCTAssertFalse(source.contains("originSurface: .realtime"))
   }
 
   func testCanonicalAgentControlSummariesDoNotSpeakOpaqueIds() throws {
@@ -259,6 +485,25 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeToolAuthoritySource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeToolAuthority.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
+
+  private func realtimeHubSessionPoliciesSource() throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift")
+    // omi-test-quality: source-inspection -- static contract: extracted policy ownership helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 
@@ -267,6 +512,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent("Sources/Chat/AgentControlService.swift")
+    // omi-test-quality: source-inspection -- static contract: forbidden-path ratchet helper
     return try String(contentsOf: sourceURL, encoding: .utf8)
   }
 }

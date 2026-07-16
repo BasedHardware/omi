@@ -1,698 +1,400 @@
-"""Tests for NLLB translation service integration.
+from __future__ import annotations
 
-Verifies:
-- Google batch translation helper
-- NLLB primary mode with Google fallback
-- BCP-47 to NLLB language mapping
-- Source language auto-detection
-- TRANSLATION_SERVICE_MODELS provider selection
-- Prometheus metric idempotency
-"""
+from typing import Any
 
-import importlib.util
-import os
-import sys
-import unittest
-from types import ModuleType
-from unittest.mock import MagicMock, patch
+import httpx
+import pytest
+from google.cloud import translate_v3
 
-os.environ.setdefault(
-    "ENCRYPTION_SECRET",
-    "omi_ZwB2ZNqB2HHpMK6wStk7sTpavJiPTFg7gXUHnc4tFABPU6pZ2c2DKgehtfgi4RZv",
+from config.translation import TranslationProvider, resolve_translation_profile
+from tests.unit.translation_test_support import (
+    DictTranslationStore,
+    FakeProvider,
+    FallbackRecorder,
+    build_service,
+    profile,
+    provider_error,
+    translations,
 )
-os.environ.setdefault("GOOGLE_CLOUD_PROJECT", "test-project")
-
-_BACKEND_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-
-_saved_modules = {}
-_mock_translate_client = None
-_mock_redis = None
-_TranslationService = None
-_translation_module = None
-
-
-def _ensure_mock_module(name):
-    if name not in sys.modules:
-        mod = MagicMock()
-        mod.__path__ = []
-        mod.__name__ = name
-        mod.__loader__ = None
-        mod.__spec__ = None
-        mod.__package__ = name if '.' not in name else name.rsplit('.', 1)[0]
-        sys.modules[name] = mod
-    return sys.modules[name]
+from utils.translation import TranslationService, TranslationStatus
+from utils.translation_core.cache import TranslationCache
+from utils.translation_core.metrics import NoopTranslationMetrics
+from utils.translation_core.providers import (
+    GoogleTranslationProvider,
+    NllbTranslationProvider,
+    TranslationProviderChain,
+    TranslationProviderError,
+)
 
 
-def _restore_package_path(name, path):
-    module = sys.modules.get(name)
-    if module is not None:
-        module.__path__ = [path]
-
-
-def _restore_real_backend_package(package_name):
-    if _BACKEND_DIR not in sys.path:
-        sys.path.insert(0, _BACKEND_DIR)
-    package = sys.modules.get(package_name)
-    if package is None:
-        return
-    expected_dir = os.path.abspath(os.path.join(_BACKEND_DIR, package_name))
-    package_paths = getattr(package, "__path__", None)
-    if not package_paths:
-        sys.modules.pop(package_name, None)
-        return
-    try:
-        has_real_path = any(os.path.abspath(str(path)) == expected_dir for path in package_paths)
-    except TypeError:
-        has_real_path = False
-    if not has_real_path:
-        sys.modules.pop(package_name, None)
-
-
-def _install_langdetect_stub():
-    if 'langdetect' not in sys.modules and importlib.util.find_spec('langdetect') is not None:
-        return
-    langdetect_mod = sys.modules.get('langdetect') or ModuleType('langdetect')
-    exception_mod = sys.modules.get('langdetect.lang_detect_exception') or ModuleType(
-        'langdetect.lang_detect_exception'
+def test_config_preserves_exact_ordered_provider_policy():
+    nllb_only = resolve_translation_profile(
+        {'TRANSLATION_SERVICE_MODELS': 'nllb', 'HOSTED_TRANSLATION_API_URL': 'http://nllb'}
+    )
+    nllb_google = resolve_translation_profile(
+        {'TRANSLATION_SERVICE_MODELS': 'nllb,google', 'HOSTED_TRANSLATION_API_URL': 'http://nllb'}
+    )
+    google_nllb = resolve_translation_profile(
+        {'TRANSLATION_SERVICE_MODELS': 'google,nllb', 'HOSTED_TRANSLATION_API_URL': 'http://nllb'}
     )
 
-    class LangDetectException(Exception):
-        pass
-
-    class DetectorFactory:
-        seed = None
-
-    class _DetectedLang:
-        def __init__(self, lang, prob):
-            self.lang = lang
-            self.prob = prob
-
-    def detect(text):
-        return 'en'
-
-    def detect_langs(text):
-        return [_DetectedLang('en', 0.99)]
-
-    exception_mod.LangDetectException = LangDetectException
-    langdetect_mod.detect = detect
-    langdetect_mod.detect_langs = detect_langs
-    langdetect_mod.DetectorFactory = DetectorFactory
-    langdetect_mod.lang_detect_exception = exception_mod
-    sys.modules['langdetect'] = langdetect_mod
-    sys.modules['langdetect.lang_detect_exception'] = exception_mod
+    assert nllb_only.providers == (TranslationProvider.nllb,)
+    assert nllb_google.providers == (TranslationProvider.nllb, TranslationProvider.google)
+    assert google_nllb.providers == (TranslationProvider.google, TranslationProvider.nllb)
 
 
-def setUpModule():
-    global _saved_modules, _mock_translate_client, _mock_redis, _TranslationService, _translation_module
+def test_config_filters_unavailable_and_records_unsupported_tokens():
+    resolved = resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'unknown,nllb'})
 
-    _saved_modules = dict(sys.modules)
-
-    _restore_package_path('utils', os.path.join(_BACKEND_DIR, 'utils'))
-    _restore_package_path('models', os.path.join(_BACKEND_DIR, 'models'))
-    _install_langdetect_stub()
-
-    _ensure_mock_module("database")
-    sys.modules["database"].__path__ = getattr(sys.modules["database"], '__path__', [])
-    for sub in ["_client", "redis_db", "auth", "users", "memories", "conversations", "apps", "vector_db"]:
-        _ensure_mock_module(f"database.{sub}")
-
-    _mock_redis = MagicMock()
-    sys.modules["database.redis_db"].r = _mock_redis
-
-    _ensure_mock_module("google")
-    sys.modules["google"].__path__ = []
-    _ensure_mock_module("google.cloud")
-    sys.modules["google.cloud"].__path__ = []
-    _ensure_mock_module("google.cloud.translate_v3")
-    sys.modules["google.cloud"].translate_v3 = sys.modules["google.cloud.translate_v3"]
-
-    _mock_translate_client = MagicMock()
-    sys.modules["google.cloud.translate_v3"].TranslationServiceClient = MagicMock(return_value=_mock_translate_client)
-
-    _restore_real_backend_package("utils")
-    _restore_real_backend_package("models")
-    for mod_name in list(sys.modules.keys()):
-        if 'translation' in mod_name and 'test' not in mod_name:
-            del sys.modules[mod_name]
-
-    from utils.translation import TranslationService
-    import utils.translation as tm
-
-    _TranslationService = TranslationService
-    _translation_module = tm
+    assert resolved.providers == (TranslationProvider.google,)
+    assert resolved.configured_providers == (TranslationProvider.nllb,)
+    assert resolved.unsupported_tokens == ('unknown',)
+    assert resolved.unavailable_tokens == ('nllb',)
 
 
-def tearDownModule():
-    added = set(sys.modules.keys()) - set(_saved_modules.keys())
-    for key in added:
-        del sys.modules[key]
-    sys.modules.update(_saved_modules)
+def test_empty_config_defaults_to_google():
+    assert resolve_translation_profile({}).providers == (TranslationProvider.google,)
 
 
-class TestTranslateGoogleBatchHelper(unittest.TestCase):
+def test_filtered_configured_primary_records_recovered_fallback_after_google_succeeds():
+    recorder = FallbackRecorder()
+    resolved = resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'nllb,google'})
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.google: google},
+        selected_profile=resolved,
+        recorder=recorder,
+    )
 
-    def setUp(self):
-        self.service = _TranslationService()
-
-    def test_google_batch_returns_tuples(self):
-        mock_response = MagicMock()
-        t1 = MagicMock()
-        t1.translated_text = "Hola"
-        t1.detected_language_code = "en"
-        t2 = MagicMock()
-        t2.translated_text = "Mundo"
-        t2.detected_language_code = "en"
-        mock_response.translations = [t1, t2]
-        _mock_translate_client.translate_text.return_value = mock_response
-
-        results = self.service._translate_google_batch(["Hello", "World"], "es")
-        self.assertEqual(len(results), 2)
-        self.assertEqual(results[0], ("Hola", "en"))
-        self.assertEqual(results[1], ("Mundo", "en"))
-
-    def test_google_batch_passes_correct_args(self):
-        mock_response = MagicMock()
-        t1 = MagicMock()
-        t1.translated_text = "Hola"
-        t1.detected_language_code = "en"
-        mock_response.translations = [t1]
-        _mock_translate_client.translate_text.return_value = mock_response
-
-        self.service._translate_google_batch(["Hello"], "es")
-        call_kwargs = _mock_translate_client.translate_text.call_args[1]
-        self.assertEqual(call_kwargs["contents"], ["Hello"])
-        self.assertEqual(call_kwargs["target_language_code"], "es")
-        self.assertIn("parent", call_kwargs)
-        self.assertIn("mime_type", call_kwargs)
-
-    def test_google_batch_none_detected_lang(self):
-        mock_response = MagicMock()
-        t1 = MagicMock()
-        t1.translated_text = "Test"
-        t1.detected_language_code = None
-        mock_response.translations = [t1]
-        _mock_translate_client.translate_text.return_value = mock_response
-
-        results = self.service._translate_google_batch(["Test"], "en")
-        self.assertEqual(results[0], ("Test", ""))
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['from_mode'] == 'nllb'
+    assert recorder.events[0].fields['to_mode'] == 'google'
+    assert recorder.events[0].fields['reason'] == 'config_incomplete'
+    assert recorder.events[0].fields['outcome'] == 'recovered'
 
 
-class TestNLLBLanguageMapping(unittest.TestCase):
+def test_filtered_configured_primary_records_exhausted_when_google_fails():
+    recorder = FallbackRecorder()
+    resolved = resolve_translation_profile({'TRANSLATION_SERVICE_MODELS': 'nllb,google'})
+    google = FakeProvider(
+        TranslationProvider.google,
+        responses=[provider_error(TranslationProvider.google)],
+    )
+    service, _cache = build_service(
+        {TranslationProvider.google: google},
+        selected_profile=resolved,
+        recorder=recorder,
+    )
 
-    def test_nllb_service_language_mapping(self):
-        sys.path.insert(0, _BACKEND_DIR)
-        try:
-            from nllb_translation.main import BCP47_TO_NLLB
+    outcome = service.translate_outcomes('es', [('segment', 'Hello')])[0]
 
-            expected = {
-                "en": "eng_Latn",
-                "es": "spa_Latn",
-                "zh": "zho_Hans",
-                "zh-TW": "zho_Hant",
-                "hi": "hin_Deva",
-                "pt": "por_Latn",
-                "ru": "rus_Cyrl",
-                "ja": "jpn_Jpan",
-                "de": "deu_Latn",
-                "ar": "arb_Arab",
-                "fr": "fra_Latn",
-                "it": "ita_Latn",
-                "ko": "kor_Hang",
-                "nl": "nld_Latn",
-                "th": "tha_Thai",
-                "tr": "tur_Latn",
-                "uk": "ukr_Cyrl",
-                "ur": "urd_Arab",
-                "vi": "vie_Latn",
-            }
-            for bcp47, expected_nllb in expected.items():
-                self.assertEqual(BCP47_TO_NLLB[bcp47], expected_nllb)
-        except ImportError:
-            self.skipTest("nllb_translation dependencies not installed (ctranslate2, sentencepiece)")
-
-    def test_resolve_nllb_code_with_locale(self):
-        sys.path.insert(0, _BACKEND_DIR)
-        try:
-            from nllb_translation.main import _resolve_nllb_code
-
-            self.assertEqual(_resolve_nllb_code("en-US"), "eng_Latn")
-            self.assertEqual(_resolve_nllb_code("fr-CA"), "fra_Latn")
-            self.assertEqual(_resolve_nllb_code("pt-BR"), "por_Latn")
-        except ImportError:
-            self.skipTest("nllb_translation dependencies not installed")
-
-    def test_resolve_nllb_code_unsupported(self):
-        sys.path.insert(0, _BACKEND_DIR)
-        try:
-            from nllb_translation.main import _resolve_nllb_code
-
-            self.assertIsNone(_resolve_nllb_code("xx"))
-            self.assertIsNone(_resolve_nllb_code(""))
-        except ImportError:
-            self.skipTest("nllb_translation dependencies not installed")
+    assert outcome.status == TranslationStatus.failed
+    assert recorder.events[0].fields['reason'] == 'config_incomplete'
+    assert recorder.events[0].fields['outcome'] == 'exhausted'
 
 
-def _set_translation_provider(module, mode_str: str):
-    """Helper: set TRANSLATION_PROVIDER enum."""
-    module.TRANSLATION_PROVIDER = module.TranslationProvider(mode_str)
-
-
-class TestNllbPrimaryMode(unittest.TestCase):
-    """Tests for TRANSLATION_PROVIDER=nllb where NLLB is the primary provider."""
-
-    def setUp(self):
-        self.service = _TranslationService()
-        self._orig_provider = _translation_module.TRANSLATION_PROVIDER
-        self._orig_url = _translation_module.HOSTED_TRANSLATION_API_URL
-
-    def tearDown(self):
-        _translation_module.TRANSLATION_PROVIDER = self._orig_provider
-        _translation_module.HOSTED_TRANSLATION_API_URL = self._orig_url
-        self.service._nllb_client = None
-
-    def test_nllb_batch_returns_translations(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "translations": [
-                {"translated_text": "Hola", "detected_language_code": "en"},
-                {"translated_text": "Mundo", "detected_language_code": "en"},
-            ],
-            "model": "nllb-200-distilled-600M",
-            "latency_ms": 42,
+def test_config_normalizes_case_whitespace_and_duplicate_providers():
+    resolved = resolve_translation_profile(
+        {
+            'TRANSLATION_SERVICE_MODELS': ' NLLB, google, nllb, GOOGLE ',
+            'HOSTED_TRANSLATION_API_URL': ' http://nllb ',
         }
-        mock_client.post.return_value = mock_resp
+    )
 
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            results = self.service._translate_nllb_batch(["Hello", "World"], "es")
-            self.assertEqual(len(results), 2)
-            self.assertEqual(results[0], ("Hola", "en"))
-            self.assertEqual(results[1], ("Mundo", "en"))
+    assert resolved.providers == (TranslationProvider.nllb, TranslationProvider.google)
+    assert resolved.nllb_url == 'http://nllb'
 
-    def test_nllb_batch_sends_source_language_code(self):
-        """Regression: NLLB primary must send source_language_code in the payload."""
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
 
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "translations": [{"translated_text": "Hola", "detected_language_code": "en"}],
-            "latency_ms": 10,
+@pytest.mark.parametrize(
+    ('name', 'value', 'message'),
+    [
+        ('TRANSLATION_NLLB_TIMEOUT_SECONDS', '0', 'must be greater than zero'),
+        ('TRANSLATION_NLLB_TIMEOUT_SECONDS', 'invalid', 'must be a number'),
+        ('TRANSLATION_CACHE_TTL', '-1', 'must be greater than zero'),
+        ('TRANSLATION_NEGATIVE_CACHE_TTL', '1.5', 'must be an integer'),
+    ],
+)
+def test_invalid_numeric_config_fails_at_the_call_boundary(name, value, message):
+    with pytest.raises(ValueError, match=message):
+        resolve_translation_profile({name: value})
+
+
+def test_nllb_failure_recovers_through_google_with_shared_fallback_event():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'timeout')],
+    )
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    outcomes = service.translate_outcomes('es', [('segment', 'Hello')])
+
+    assert outcomes[0].text == 'Hola'
+    assert recorder.events[0].fields['from_mode'] == 'nllb'
+    assert recorder.events[0].fields['to_mode'] == 'google'
+    assert recorder.events[0].fields['reason'] == 'timeout'
+    assert recorder.events[0].fields['outcome'] == 'recovered'
+
+
+def test_nllb_only_failure_does_not_invent_google_fallback():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb)],
+    )
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb},
+        selected_profile=profile((TranslationProvider.nllb,)),
+        recorder=recorder,
+    )
+
+    outcomes = service.translate_outcomes('es', [('segment', 'Hello')])
+
+    assert outcomes[0].status == TranslationStatus.failed
+    assert recorder.events == []
+
+
+def test_exhausted_provider_chain_records_truthful_outcome():
+    recorder = FallbackRecorder()
+    store = DictTranslationStore()
+    nllb = FakeProvider(
+        TranslationProvider.nllb,
+        responses=[provider_error(TranslationProvider.nllb, 'provider_5xx')],
+    )
+    google = FakeProvider(
+        TranslationProvider.google,
+        responses=[provider_error(TranslationProvider.google)],
+    )
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        store=store,
+        recorder=recorder,
+    )
+
+    outcomes = service.translate_outcomes('es', [('segment', 'Hello')])
+
+    assert outcomes[0].status == TranslationStatus.failed
+    assert outcomes[0].text == 'Hello'
+    assert store.puts == []
+    assert recorder.events[0].fields['outcome'] == 'exhausted'
+    assert recorder.events[0].fields['from_mode'] == 'nllb'
+    assert recorder.events[0].fields['to_mode'] == 'google'
+
+
+def test_google_first_can_recover_through_nllb_when_configured():
+    recorder = FallbackRecorder()
+    google = FakeProvider(
+        TranslationProvider.google,
+        responses=[provider_error(TranslationProvider.google)],
+    )
+    nllb = FakeProvider(TranslationProvider.nllb, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.google: google, TranslationProvider.nllb: nllb},
+        selected_profile=profile((TranslationProvider.google, TranslationProvider.nllb)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['from_mode'] == 'google'
+    assert recorder.events[0].fields['to_mode'] == 'nllb'
+
+
+def test_invalid_primary_response_recovers_through_configured_fallback():
+    recorder = FallbackRecorder()
+    nllb = FakeProvider(TranslationProvider.nllb, responses=[[]])
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.nllb: nllb, TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['reason'] == 'invalid_response'
+    assert recorder.events[0].fields['outcome'] == 'recovered'
+
+
+def test_missing_primary_adapter_recovers_without_changing_config_order():
+    recorder = FallbackRecorder()
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Hola', 'en'))])
+    service, _cache = build_service(
+        {TranslationProvider.google: google},
+        selected_profile=profile((TranslationProvider.nllb, TranslationProvider.google)),
+        recorder=recorder,
+    )
+
+    assert service.translate_text('es', 'Hello') == ('Hola', 'en')
+    assert recorder.events[0].fields['from_mode'] == 'nllb'
+    assert recorder.events[0].fields['reason'] == 'config_incomplete'
+
+
+def test_profile_is_resolved_at_each_call_boundary(monkeypatch):
+    metrics = NoopTranslationMetrics()
+    google = FakeProvider(TranslationProvider.google, responses=[translations(('Google result', 'en'))])
+    nllb = FakeProvider(TranslationProvider.nllb, responses=[translations(('NLLB result', 'en'))])
+    chain = TranslationProviderChain(
+        providers={TranslationProvider.google: google, TranslationProvider.nllb: nllb},
+        metrics=metrics,
+        fallback_recorder=FallbackRecorder(),
+    )
+    service = TranslationService(
+        cache=TranslationCache(persistent=None, metrics=metrics),
+        provider_chain=chain,
+        metrics=metrics,
+    )
+
+    monkeypatch.setenv('TRANSLATION_SERVICE_MODELS', 'nllb')
+    monkeypatch.setenv('HOSTED_TRANSLATION_API_URL', 'http://nllb')
+    assert service.translate_text('es', 'First') == ('NLLB result', 'en')
+
+    monkeypatch.setenv('TRANSLATION_SERVICE_MODELS', 'google')
+    assert service.translate_text('es', 'Second') == ('Google result', 'en')
+    assert len(nllb.calls) == 1
+    assert len(google.calls) == 1
+
+
+class FakeResponse:
+    def __init__(self, body: object, status_code: int = 200) -> None:
+        self._body = body
+        self.status_code = status_code
+        self.request = httpx.Request('POST', 'http://nllb.test/v1/translate')
+
+    def json(self) -> object:
+        return self._body
+
+    def raise_for_status(self) -> None:
+        if self.status_code >= 400:
+            raise httpx.HTTPStatusError('provider failed', request=self.request, response=self.to_response())
+
+    def to_response(self) -> httpx.Response:
+        return httpx.Response(self.status_code, request=self.request)
+
+
+class FakeHttpClient:
+    def __init__(self, response: FakeResponse) -> None:
+        self.response = response
+        self.calls: list[tuple[str, dict[str, Any]]] = []
+
+    def post(self, path: str, json: dict[str, Any]) -> FakeResponse:
+        self.calls.append((path, json))
+        return self.response
+
+    def close(self) -> None:
+        return None
+
+
+def test_nllb_adapter_validates_and_maps_response_without_network():
+    client = FakeHttpClient(
+        FakeResponse({'translations': [{'translated_text': 'Hola', 'detected_language_code': 'en'}]})
+    )
+    provider = NllbTranslationProvider(client_factory=lambda _profile: client)
+
+    results = provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
+
+    assert results == translations(('Hola', 'en'))
+    assert client.calls == [
+        (
+            '/v1/translate',
+            {
+                'contents': ['Hello'],
+                'target_language_code': 'es',
+                'source_language_code': 'en',
+            },
+        )
+    ]
+
+
+@pytest.mark.parametrize(
+    ('status_code', 'reason'),
+    [(429, 'provider_429'), (503, 'provider_5xx'), (400, 'other')],
+)
+def test_nllb_adapter_classifies_http_failures(status_code, reason):
+    client = FakeHttpClient(FakeResponse({}, status_code=status_code))
+    provider = NllbTranslationProvider(client_factory=lambda _profile: client)
+
+    with pytest.raises(TranslationProviderError) as raised:
+        provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
+
+    assert raised.value.reason == reason
+
+
+@pytest.mark.parametrize(
+    'body',
+    [None, {}, {'translations': None}, {'translations': ['bad-item']}, {'translations': [{'translated_text': 3}]}],
+)
+def test_nllb_adapter_rejects_malformed_payloads(body):
+    provider = NllbTranslationProvider(client_factory=lambda _profile: FakeHttpClient(FakeResponse(body)))
+
+    with pytest.raises(TranslationProviderError, match='response|item|fields') as raised:
+        provider.translate(['Hello'], 'es', 'en', profile((TranslationProvider.nllb,)))
+
+    assert raised.value.reason == 'invalid_response'
+
+
+def test_nllb_adapter_detects_supported_source_only_when_not_supplied(monkeypatch):
+    client = FakeHttpClient(
+        FakeResponse({'translations': [{'translated_text': 'Hello', 'detected_language_code': 'fr'}]})
+    )
+    provider = NllbTranslationProvider(client_factory=lambda _profile: client)
+    monkeypatch.setattr(
+        'utils.translation_core.providers.detect_language_with_confidence',
+        lambda *_args, **_kwargs: ('fr', 0.99),
+    )
+
+    provider.translate(
+        ['Bonjour, ceci est une phrase suffisamment longue.'],
+        'en',
+        '',
+        profile((TranslationProvider.nllb,)),
+    )
+
+    assert client.calls[0][1]['source_language_code'] == 'fr'
+
+
+class FakeGoogleClient:
+    def __init__(self, response: object = None, error: Exception | None = None) -> None:
+        self.response = response
+        self.error = error
+        self.calls: list[dict[str, object]] = []
+
+    def translate_text(self, **kwargs):
+        self.calls.append(kwargs)
+        if self.error is not None:
+            raise self.error
+        return self.response
+
+
+def test_google_adapter_maps_request_and_response_without_network():
+    # The real proto-plus response exposes RepeatedComposite, not a list.
+    response = translate_v3.TranslateTextResponse(translations=[translate_v3.Translation(translated_text='Hola')])
+    client = FakeGoogleClient(response)
+    provider = GoogleTranslationProvider(client_factory=lambda: client)
+
+    result = provider.translate(['Hello'], 'es', 'en', profile())
+
+    assert result == translations(('Hola', ''))
+    assert client.calls == [
+        {
+            'contents': ['Hello'],
+            'parent': 'projects/test-project/locations/global',
+            'mime_type': 'text/plain',
+            'target_language_code': 'es',
+            'source_language_code': 'en',
         }
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            self.service._translate_nllb_batch(["Hello"], "es", source_language="en")
-            call_args = mock_client.post.call_args
-            payload = call_args[1]["json"]
-            self.assertEqual(payload["source_language_code"], "en")
-            self.assertEqual(payload["target_language_code"], "es")
-
-    def test_nllb_batch_omits_source_when_empty(self):
-        """When source_language is empty, payload should not include source_language_code."""
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "translations": [{"translated_text": "Hola", "detected_language_code": ""}],
-            "latency_ms": 10,
-        }
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            self.service._translate_nllb_batch(["Hello"], "es")
-            call_args = mock_client.post.call_args
-            payload = call_args[1]["json"]
-            self.assertNotIn("source_language_code", payload)
-
-    def test_nllb_batch_auto_detects_source_language(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "translations": [
-                {"translated_text": "Hello everyone, welcome to today's meeting", "detected_language_code": "es"}
-            ],
-            "latency_ms": 10,
-        }
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            with patch.object(self.service, '_detect_source_language', return_value="es"):
-                self.service._nllb_client = None
-                self.service._translate_nllb_batch(["Hola a todos, bienvenidos a la reunión de hoy"], "en")
-                call_args = mock_client.post.call_args
-                payload = call_args[1]["json"]
-                self.assertEqual(payload["source_language_code"], "es")
-
-    def test_detect_source_language_normalizes_zh_cn(self):
-        with patch("utils.translation.langdetect_detect", return_value="zh-cn"):
-            result = self.service._detect_source_language(["This is long enough text for detection"])
-            self.assertEqual(result, "zh-cn")
-
-    def test_detect_source_language_short_text_returns_empty(self):
-        result = self.service._detect_source_language(["short"])
-        self.assertEqual(result, "")
-
-    def test_detect_source_language_langdetect_exception_returns_empty(self):
-        with patch(
-            "utils.translation.langdetect_detect",
-            side_effect=_translation_module.LangDetectException(0, "fail"),
-        ):
-            result = self.service._detect_source_language(["This is enough text for language detection attempt"])
-            self.assertEqual(result, "")
-
-    def test_detect_source_language_unreliable_lang_returns_empty(self):
-        with patch("utils.translation.langdetect_detect", return_value="xx"):
-            result = self.service._detect_source_language(["This is enough text for detection but unreliable"])
-            self.assertEqual(result, "")
-
-    def test_detect_source_language_nllb_unsupported_returns_empty(self):
-        """langdetect returning a language not in NLLB's supported set should return empty."""
-        _set_translation_provider(_translation_module, "nllb")
-        with patch("utils.translation.langdetect_detect", return_value="so"):
-            result = self.service._detect_source_language(["This is enough text for Somali false detection"])
-            self.assertEqual(result, "")
-
-    def test_detect_source_language_nllb_supported_returns_lang(self):
-        """langdetect returning a language in NLLB's supported set should return it."""
-        _set_translation_provider(_translation_module, "nllb")
-        with patch("utils.translation.langdetect_detect", return_value="en"):
-            result = self.service._detect_source_language(["This is enough text for English detection"])
-            self.assertEqual(result, "en")
-
-    def test_nllb_batch_malformed_response_returns_empty(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"no_translations_key": []}
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            results = self.service._translate_nllb_batch(["Hello"], "es")
-            self.assertEqual(results, [])
-
-    def test_nllb_batch_truncated_response_returns_partial(self):
-        """NLLB returning fewer translations than requested should return partial results."""
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {
-            "translations": [
-                {"translated_text": "Hola", "detected_language_code": "en"},
-            ],
-            "model": "nllb",
-            "latency_ms": 10,
-        }
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            results = self.service._translate_nllb_batch(["Hello", "World", "Goodbye"], "es")
-            self.assertEqual(len(results), 1)
-            self.assertEqual(results[0], ("Hola", "en"))
-
-    def test_nllb_batch_empty_contents_returns_empty(self):
-        """Sending empty contents list should return empty results without API call."""
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        mock_client = MagicMock()
-        mock_resp = MagicMock()
-        mock_resp.status_code = 200
-        mock_resp.raise_for_status = MagicMock()
-        mock_resp.json.return_value = {"translations": [], "model": "nllb", "latency_ms": 0}
-        mock_client.post.return_value = mock_resp
-
-        with patch("utils.translation.httpx.Client", return_value=mock_client):
-            self.service._nllb_client = None
-            results = self.service._translate_nllb_batch([], "es")
-            self.assertEqual(results, [])
-
-    def test_translate_batch_nllb_truncated_falls_back_to_google(self):
-        """When NLLB returns truncated results, the batch should still succeed (partial is valid)."""
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
-            results = self.service._translate_batch(["Hello", "World"], "es")
-            mock_nllb.assert_called_once()
-            self.assertEqual(len(results), 1)
-
-    def test_nllb_fallback_both_fail_raises(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        with patch.object(self.service, '_translate_nllb_batch', side_effect=Exception("nllb down")):
-            with patch.object(self.service, '_translate_google_batch', side_effect=Exception("google down")):
-                with patch("utils.translation.record_fallback"):
-                    with self.assertRaises(Exception) as ctx:
-                        self.service._translate_batch(["Hello"], "es")
-                    self.assertIn("google down", str(ctx.exception))
-
-    def test_prometheus_idempotent_counter(self):
-        counter1 = _translation_module._counter("test_idempotent_counter", "Test counter", ["label1"])
-        counter2 = _translation_module._counter("test_idempotent_counter", "Test counter", ["label1"])
-        self.assertIs(counter1, counter2)
-
-    def test_prometheus_idempotent_histogram(self):
-        h1 = _translation_module._histogram("test_idempotent_histogram", "Test histogram", ["label1"], [0.1, 0.5, 1.0])
-        h2 = _translation_module._histogram("test_idempotent_histogram", "Test histogram", ["label1"], [0.1, 0.5, 1.0])
-        self.assertIs(h1, h2)
-
-    def test_translate_batch_uses_nllb_when_mode_nllb(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
-            with patch.object(self.service, '_translate_google_batch') as mock_google:
-                results = self.service._translate_batch(["Hello"], "es")
-                mock_nllb.assert_called_once_with(["Hello"], "es", source_language="")
-                mock_google.assert_not_called()
-                self.assertEqual(results, [("Hola", "en")])
-
-    def test_translate_batch_passes_source_language_to_nllb(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        with patch.object(self.service, '_translate_nllb_batch', return_value=[("Hola", "en")]) as mock_nllb:
-            results = self.service._translate_batch(["Hello"], "es", source_language="en")
-            mock_nllb.assert_called_once_with(["Hello"], "es", source_language="en")
-            self.assertEqual(results, [("Hola", "en")])
-
-    def test_translate_batch_falls_back_to_google_on_nllb_error(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-
-        with patch.object(self.service, '_translate_nllb_batch', side_effect=Exception("connection refused")):
-            with patch.object(self.service, '_translate_google_batch', return_value=[("Hola", "en")]) as mock_google:
-                with patch("utils.translation.record_fallback") as mock_fallback:
-                    results = self.service._translate_batch(["Hello"], "es")
-                    mock_google.assert_called_once()
-                    mock_fallback.assert_called_once()
-                    call_kwargs = mock_fallback.call_args[1]
-                    self.assertEqual(call_kwargs["from_mode"], "nllb")
-                    self.assertEqual(call_kwargs["to_mode"], "google")
-                    self.assertEqual(call_kwargs["outcome"], "recovered")
-                    self.assertEqual(results, [("Hola", "en")])
-
-    def test_translate_batch_uses_google_in_google_mode(self):
-        _set_translation_provider(_translation_module, "google")
-        _translation_module.HOSTED_TRANSLATION_API_URL = ""
-
-        with patch.object(self.service, '_translate_nllb_batch') as mock_nllb:
-            with patch.object(self.service, '_translate_google_batch', return_value=[("Hola", "en")]) as mock_google:
-                results = self.service._translate_batch(["Hello"], "es")
-                mock_google.assert_called_once()
-                mock_nllb.assert_not_called()
-
-    def test_translate_text_uses_nllb_in_nllb_mode(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-        _mock_redis.get.return_value = None
-
-        with patch.object(self.service, '_translate_batch', return_value=[("Hola mundo", "en")]) as mock_batch:
-            result = self.service.translate_text("es", "Hello world")
-            self.assertEqual(result[0], "Hola mundo")
-            mock_batch.assert_called_once()
-
-    def test_translate_units_batch_uses_nllb_in_nllb_mode(self):
-        _set_translation_provider(_translation_module, "nllb")
-        _translation_module.HOSTED_TRANSLATION_API_URL = "http://fake:8080"
-        _mock_redis.get.return_value = None
-
-        with patch.object(self.service, '_translate_batch', return_value=[("Hola mundo", "en")]) as mock_batch:
-            units = [("seg1", "Hello world")]
-            results = self.service.translate_units_batch("es", units)
-            self.assertEqual(len(results), 1)
-            self.assertEqual(results[0][0], "seg1")
-            self.assertEqual(results[0][1], "Hola mundo")
-            mock_batch.assert_called()
+    ]
 
 
-class TestTranslationProviderDefault(unittest.TestCase):
-    """Tests that default provider is always google — URL alone never changes provider."""
+def test_google_adapter_wraps_sdk_failures_as_typed_provider_errors():
+    provider = GoogleTranslationProvider(client_factory=lambda: FakeGoogleClient(error=RuntimeError('boom')))
 
-    def _reimport(self):
-        for mod_name in list(sys.modules.keys()):
-            if 'translation' in mod_name and 'test' not in mod_name:
-                del sys.modules[mod_name]
-        _restore_real_backend_package("utils")
-        import utils.translation as tm_fresh
+    with pytest.raises(TranslationProviderError) as raised:
+        provider.translate(['Hello'], 'es', 'en', profile())
 
-        return tm_fresh
-
-    def _cleanup(self, orig_envs):
-        for key, val in orig_envs.items():
-            if val is not None:
-                os.environ[key] = val
-            else:
-                os.environ.pop(key, None)
-        for mod_name in list(sys.modules.keys()):
-            if 'translation' in mod_name and 'test' not in mod_name:
-                del sys.modules[mod_name]
-        _restore_real_backend_package("utils")
-        from utils.translation import TranslationService
-        import utils.translation as tm_restored
-
-        globals()['_TranslationService'] = TranslationService
-        globals()['_translation_module'] = tm_restored
-
-    def test_default_google_even_with_nllb_url(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
-            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            tm_fresh = self._reimport()
-            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
-        finally:
-            self._cleanup(orig)
-
-    def test_default_google_without_url(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ.pop("TRANSLATION_SERVICE_MODELS", None)
-            os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            tm_fresh = self._reimport()
-            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
-        finally:
-            self._cleanup(orig)
-
-    def test_unmatched_service_models_defaults_to_google(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb"
-            os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            tm_fresh = self._reimport()
-            self.assertEqual(tm_fresh.TRANSLATION_PROVIDER.value, "google")
-        finally:
-            self._cleanup(orig)
-
-
-class TestTranslationServiceModels(unittest.TestCase):
-    """Tests for TRANSLATION_SERVICE_MODELS provider selection (STT-style config)."""
-
-    def _reimport(self):
-        for mod_name in list(sys.modules.keys()):
-            if 'translation' in mod_name and 'test' not in mod_name:
-                del sys.modules[mod_name]
-        _restore_real_backend_package("utils")
-        import utils.translation as tm_fresh
-
-        return tm_fresh
-
-    def _cleanup(self, orig_envs):
-        for key, val in orig_envs.items():
-            if val is not None:
-                os.environ[key] = val
-            else:
-                os.environ.pop(key, None)
-        for mod_name in list(sys.modules.keys()):
-            if 'translation' in mod_name and 'test' not in mod_name:
-                del sys.modules[mod_name]
-        _restore_real_backend_package("utils")
-        from utils.translation import TranslationService
-        import utils.translation as tm_restored
-
-        globals()['_TranslationService'] = TranslationService
-        globals()['_translation_module'] = tm_restored
-
-    def test_service_models_nllb_with_url(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb,google"
-            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            tm = self._reimport()
-            self.assertEqual(tm.TRANSLATION_PROVIDER.value, "nllb")
-        finally:
-            self._cleanup(orig)
-
-    def test_service_models_google_first(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ["TRANSLATION_SERVICE_MODELS"] = "google,nllb"
-            os.environ["HOSTED_TRANSLATION_API_URL"] = "http://nllb:8080"
-            tm = self._reimport()
-            self.assertEqual(tm.TRANSLATION_PROVIDER.value, "google")
-        finally:
-            self._cleanup(orig)
-
-    def test_service_models_nllb_skipped_without_url(self):
-        orig = {
-            "TRANSLATION_SERVICE_MODELS": os.environ.get("TRANSLATION_SERVICE_MODELS"),
-            "HOSTED_TRANSLATION_API_URL": os.environ.get("HOSTED_TRANSLATION_API_URL"),
-        }
-        try:
-            os.environ["TRANSLATION_SERVICE_MODELS"] = "nllb,google"
-            os.environ.pop("HOSTED_TRANSLATION_API_URL", None)
-            tm = self._reimport()
-            self.assertEqual(tm.TRANSLATION_PROVIDER.value, "google")
-        finally:
-            self._cleanup(orig)
-
-
-if __name__ == "__main__":
-    unittest.main()
+    assert raised.value.provider == TranslationProvider.google
+    assert raised.value.reason == 'other'

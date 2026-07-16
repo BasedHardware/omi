@@ -23,7 +23,7 @@ Prometheus exposes the selected source, fallback reason, pointer/LKG age, feed v
 
 ## Release lifecycle
 
-The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`. It then automatically verifies the published ZIP/DMG digests against the signed-smoke result, runs static release checks, hermetic T2, and the fault-injection suite, and promotes only the newest passing candidate to beta.
+The daily/manual candidate workflow batches changes on `main` and tags one candidate. Codemagic builds, signs, notarizes, smoke-tests, and uploads the candidate with `isLive: false` and `channel: candidate`, including the signed-smoke evidence asset. It then dispatches `desktop_qualify_beta.yml`. That workflow runs only on the administrator-managed `self-hosted`, `macos`, `omi-desktop-qualification` runner, where Docker Desktop supports the hermetic stack. It verifies the published ZIP/DMG digests against signed-smoke evidence, runs static release checks, hermetic T2, and the fault-injection suite, and requests beta promotion only for the newest passing candidate.
 
 | State | How to identify it | Customer visibility |
 | --- | --- | --- |
@@ -43,6 +43,14 @@ The automatic path calls the same script with `--automatic`, adding signed-artif
 Set `DESKTOP_AUTO_BETA_ENABLED=false` in either the Codemagic desktop environment or GitHub's `prod` environment to pause automatic beta. Failures leave the candidate non-live. Stable nomination and `desktop_promote_prod.yml` remain manual-only.
 
 After beta soak, an operator may run `desktop_nominate_stable_candidate.yml`. It verifies the tag is the current beta pointer, verifies the pointer's immutable manifest source SHA matches the tag commit, and requires explicit soak, telemetry, release-note, rationale, operator, and qualification-evidence fields. Nomination writes `stableCandidate*` metadata only: it never moves beta or stable, and it never deploys production. `desktop_promote_prod.yml` is the sole stable decision point; it requires that nomination plus `confirm=promote-stable`, with an audited typed break-glass path for emergencies.
+
+## Advisory release doctor
+
+Run **Desktop Release Doctor** with a macOS release tag to produce the first versioned release evidence artifact. It is read-only: it cannot change a pointer, release body, Cloud Run revision, traffic split, cache, or tracking tag.
+
+The workflow captures only release-control fields, never release prose, prompts, audio, transcripts, user identifiers, or credentials. Its evidence JSON reports `PASS`, `WARN`, or `FAIL` for the GitHub release, canonical manifest, beta/stable pointers, legacy Firestore bridge, Python and Rust appcasts, static route, backend health identity, tracking tag, Codemagic state, and operational metrics. A missing surface or metric is written as `unavailable` and changes the report to `WARN`; it is never interpreted as success.
+
+The doctor is advisory while the release controls migrate. Use its uploaded `desktop-release-evidence-v1.json` and text report during beta and before stable promotion. Fix `FAIL` drift before proceeding; use `WARN` entries to record missing observability or a deliberate exception. The next phase will consume a successful doctor report for pre-mutation identity gates after the V1 manifest is live in beta and stable.
 
 ## Immutable app/backend release-unit contract
 
@@ -127,7 +135,7 @@ Merging this control-plane change does not make a beta live. For the first rollo
 1. Deploy `main` to the production shared Python backend with `gcp_backend.yml` so manifest registration and pointer promotion endpoints exist.
 2. Wait for the weekday candidate workflow, or manually dispatch `desktop_auto_release.yml` when a candidate is wanted.
 3. Wait for Codemagic to publish the signed, notarized, non-live candidate and smoke evidence.
-4. Let Codemagic run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
+4. Let the dedicated trusted macOS runner run the automatic digest, static, T2, and fault-suite gates. Use `desktop/macos/scripts/qualify-desktop-beta.sh <tag>` only for manual recovery.
 5. Verify the beta appcast and the resolution/fallback/pointer-age metrics. Nominate a stable candidate only after reviewing soak, telemetry, and the stable release-note rollup; leave stable unchanged until the separately planned stable rollout.
 
 After the dual path has proven reliable, complete the removal and static CDN follow-ups tracked in issue `#9350`.

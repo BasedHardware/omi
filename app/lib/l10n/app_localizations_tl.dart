@@ -9665,6 +9665,27 @@ class AppLocalizationsTl extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Storage ng device';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% puno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used sa $total ang nagamit';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ang libre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Halos puno na ang device — mag-sync para magbakante ng espasyo.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.';
 }

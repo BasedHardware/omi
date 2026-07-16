@@ -56,7 +56,10 @@ from utils.chat import (
 )
 from utils.sync.files import retrieve_file_paths, decode_files_to_wav
 from utils.stt.streaming import process_audio_dg, get_stt_service_for_language
-from utils.stt.pre_recorded import PrerecordedSTTConfigurationError, get_prerecorded_service
+from utils.stt.pre_recorded import get_prerecorded_service
+from config.prerecorded_stt import TranscriptionOutcome
+from utils.stt.outcomes import TranscriptionFailure, failure_from_exception
+from utils.observability.transcription import TranscriptionAttempt
 from utils.llm.goals import extract_and_update_goal_progress
 from database.redis_db import try_acquire_goal_extraction_lock, check_rate_limit, store_chat_share, get_chat_share
 from database.users import set_chat_message_rating_score
@@ -64,11 +67,19 @@ from utils.rate_limit_config import get_effective_limit, RATE_LIMIT_SHADOW
 from utils.subscription import enforce_chat_quota, is_trial_paywalled
 from utils.other import endpoints as auth, storage
 from utils.other.chat_file import FileChatTool
+from utils.multipart import (
+    CHAT_FILE_MAX_PART_SIZE,
+    MultipartMaxPartSizeRoute,
+    VOICE_MESSAGE_MAX_PART_SIZE,
+    max_part_size,
+    parse_multipart_form,
+)
 from utils.retrieval.graph import execute_graph_chat, execute_chat_stream, execute_persona_chat_stream
 from utils.llm.usage_tracker import set_usage_context, reset_usage_context, Features
 from utils.users import get_user_display_name
 from utils.log_sanitizer import sanitize_pii
 from utils.observability import submit_langsmith_feedback
+from utils.observability.journeys import JourneyAttempt
 from utils.voice_duration_limiter import (
     compute_pcm_duration_ms,
     read_wav_duration_ms,
@@ -80,7 +91,7 @@ import logging
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter()
+router = APIRouter(route_class=MultipartMaxPartSizeRoute)
 
 # WS idle timeout: close if no audio bytes received for this long
 _WS_IDLE_TIMEOUT_S = 60
@@ -95,22 +106,38 @@ class VoiceMessageTranscriptionResponse(BaseModel):
     language: Optional[str] = None
     stt_provider: Optional[str] = None
     stt_model: Optional[str] = None
+    outcome: Optional[TranscriptionOutcome] = None
 
 
-def _stt_provider_configuration_error(error: PrerecordedSTTConfigurationError) -> HTTPException:
-    logger.error(
-        'PCM transcription provider configuration is incomplete: provider=%s missing=%s',
-        error.provider,
-        error.missing_env,
+class TranscriptionErrorDetail(BaseModel):
+    error: str
+    outcome: TranscriptionOutcome
+    provider: str
+    retryable: bool
+    message: str
+
+
+class TranscriptionErrorResponse(BaseModel):
+    detail: TranscriptionErrorDetail
+
+
+def _transcription_http_error(failure: TranscriptionFailure) -> HTTPException:
+    logger.warning(
+        'Transcription request failed: outcome=%s provider=%s retryable=%s',
+        failure.outcome.value,
+        failure.provider,
+        failure.retryable,
     )
-    return HTTPException(
-        status_code=503,
-        detail={
-            'error': 'stt_provider_configuration_error',
-            'provider': error.provider,
-            'missing': error.missing_env,
-        },
-    )
+    return HTTPException(status_code=failure.status_code, detail=failure.as_detail())
+
+
+def _cleanup_temp_voice_wavs(paths: List[str], uid: str) -> None:
+    for path in paths:
+        if path.startswith(f'/tmp/{uid}_'):
+            try:
+                Path(path).unlink()
+            except OSError:
+                pass
 
 
 class MessageReportResponse(BaseModel):
@@ -394,8 +421,11 @@ def send_message(
 
         return ai_message, ask_for_nps
 
+    journey_attempt = JourneyAttempt('chat_response')
+
     async def generate_stream():
         callback_data = {}
+        stream_exhausted = False
         # Set usage context for streaming (can't use 'with' across yields)
         usage_token = set_usage_context(uid, Features.CHAT)
         try:
@@ -421,9 +451,21 @@ def send_message(
                         encoded_response = base64.b64encode(bytes(response_message.model_dump_json(), 'utf-8')).decode(
                             'utf-8'
                         )
+                        # This is the furthest server-observable client boundary:
+                        # a yielded terminal frame is not a client-render acknowledgement.
+                        journey_attempt.finish('success')
                         yield f"done: {encoded_response}\n\n"
+            stream_exhausted = True
+        except asyncio.CancelledError:
+            journey_attempt.finish('cancelled')
+            raise
+        except Exception:
+            journey_attempt.finish('failure')
+            raise
         finally:
             reset_usage_context(usage_token)
+            if not journey_attempt.finished:
+                journey_attempt.finish('failure' if stream_exhausted else 'cancelled')
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
@@ -522,6 +564,7 @@ def get_messages(
         }
     },
 )
+@max_part_size(VOICE_MESSAGE_MAX_PART_SIZE)
 def create_voice_message_stream(
     files: List[UploadFile] = File(...),
     language: Optional[str] = Form(None),
@@ -530,52 +573,123 @@ def create_voice_message_stream(
 ):
     enforce_chat_quota(uid, platform=x_app_platform)
 
-    # wav
-    paths = retrieve_file_paths(files, uid)
-    if len(paths) == 0:
-        raise HTTPException(status_code=400, detail='Paths is invalid')
-
-    wav_paths = decode_files_to_wav(paths)
-    if len(wav_paths) == 0:
-        raise HTTPException(status_code=400, detail='Wav path is invalid')
-
-    # Daily budget check (first file only — matches actual DG usage)
-    first_wav = list(wav_paths)[0]
-    duration_ms = read_wav_duration_ms(first_wav)
-    if duration_ms is not None:
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
-        if not allowed:
-            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
-
     resolved_language = resolve_voice_message_language(uid, language)
+    stt_provider, _, _stt_model = get_prerecorded_service(resolved_language)
+    paths: List[str] = []
+    wav_paths: List[str] = []
+
+    def _record_preparation_failure(failure: TranscriptionFailure) -> None:
+        preparation_attempt = TranscriptionAttempt(
+            route='voice_chat_sse',
+            provider=stt_provider,
+            platform=x_app_platform,
+        )
+        preparation_attempt.finish(failure.outcome)
+
+    try:
+        paths = retrieve_file_paths(files, uid)
+        if not paths:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=stt_provider,
+                retryable=False,
+            )
+        wav_paths = decode_files_to_wav(paths)
+        if not wav_paths:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=stt_provider,
+                retryable=False,
+            )
+
+        # Daily budget check (first file only — matches actual DG usage).
+        # A quota rejection is not an STT attempt and therefore is not an
+        # invalid-input or provider-outcome metric.
+        first_wav = wav_paths[0]
+        duration_ms = read_wav_duration_ms(first_wav)
+        if duration_ms is not None:
+            allowed, used_ms, remaining_ms = try_consume_budget(uid, duration_ms)
+            if not allowed:
+                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+    except TranscriptionFailure as failure:
+        _record_preparation_failure(failure)
+        _cleanup_temp_voice_wavs(paths + wav_paths, uid)
+        raise _transcription_http_error(failure) from failure
+    except HTTPException as error:
+        _cleanup_temp_voice_wavs(paths + wav_paths, uid)
+        if error.status_code == 429:
+            raise
+        failure = TranscriptionFailure(
+            TranscriptionOutcome.INVALID_INPUT,
+            provider=stt_provider,
+            retryable=False,
+        )
+        _record_preparation_failure(failure)
+        raise _transcription_http_error(failure) from error
+    except Exception as error:
+        failure = failure_from_exception(error, provider=stt_provider)
+        _record_preparation_failure(failure)
+        _cleanup_temp_voice_wavs(paths + wav_paths, uid)
+        raise _transcription_http_error(failure) from error
 
     # process
     async def generate_stream():
+        attempt = TranscriptionAttempt(
+            route='voice_chat_sse',
+            provider=stt_provider,
+            platform=x_app_platform,
+        )
         quota_recorded = False
-        async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
-            if not quota_recorded and chunk.startswith('message: '):
-                payload = chunk.removeprefix('message: ').strip()
-                try:
-                    message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
-                    await run_blocking(
-                        db_executor,
-                        _record_chat_quota_question_safe,
-                        uid,
-                        idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
-                        source='v2_voice_messages',
-                        message_id=message_data.get('id'),
-                        chat_session_id=message_data.get('chat_session_id'),
-                        platform=x_app_platform,
-                    )
-                    quota_recorded = True
-                except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
-                    logger.warning('Failed to record voice chat quota question: %s', exc)
-            yield chunk
+        try:
+            async for chunk in process_voice_message_segment_stream(first_wav, uid, language=resolved_language):
+                if chunk.startswith('message: '):
+                    attempt.finish(TranscriptionOutcome.SUCCESS)
+                if not quota_recorded and chunk.startswith('message: '):
+                    payload = chunk.removeprefix('message: ').strip()
+                    try:
+                        message_data = json.loads(base64.b64decode(payload).decode('utf-8'))
+                        await run_blocking(
+                            db_executor,
+                            _record_chat_quota_question_safe,
+                            uid,
+                            idempotency_key=f"v2_voice_messages:{message_data.get('id') or first_wav}",
+                            source='v2_voice_messages',
+                            message_id=message_data.get('id'),
+                            chat_session_id=message_data.get('chat_session_id'),
+                            platform=x_app_platform,
+                        )
+                        quota_recorded = True
+                    except (binascii.Error, UnicodeDecodeError, ValueError, TypeError, json.JSONDecodeError) as exc:
+                        logger.warning('Failed to record voice chat quota question: %s', exc)
+                yield chunk
+            if not attempt.finished:
+                attempt.finish(TranscriptionOutcome.EXPECTED_SILENCE)
+        except Exception as error:
+            if attempt.finished:
+                raise
+            failure = failure_from_exception(error, provider=stt_provider)
+            attempt.finish(failure.outcome)
+            yield f"error: {json.dumps(failure.as_detail(), separators=(',', ':'))}\n\n"
+        finally:
+            if not attempt.finished:
+                attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+            await run_blocking(storage_executor, _cleanup_temp_voice_wavs, paths + wav_paths, uid)
+            paths.clear()
+            wav_paths.clear()
 
     return StreamingResponse(generate_stream(), media_type="text/event-stream")
 
 
-@router.post("/v2/voice-message/transcribe", response_model=VoiceMessageTranscriptionResponse)
+@router.post(
+    "/v2/voice-message/transcribe",
+    response_model=VoiceMessageTranscriptionResponse,
+    responses={
+        400: {"model": TranscriptionErrorResponse, "description": "Invalid audio input"},
+        502: {"model": TranscriptionErrorResponse, "description": "Upstream or unexpected-empty result"},
+        503: {"model": TranscriptionErrorResponse, "description": "Provider configuration unavailable"},
+        504: {"model": TranscriptionErrorResponse, "description": "Provider timeout"},
+    },
+)
 async def transcribe_voice_message(
     request: Request,
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "voice:transcribe")),
@@ -600,8 +714,18 @@ async def transcribe_voice_message(
     if "application/octet-stream" in content_type:
         # Check Content-Length before buffering to reject oversized payloads early
         content_length = request.headers.get("content-length")
-        if content_length and int(content_length) > _MAX_PCM_BODY_BYTES:
-            raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
+        if content_length:
+            try:
+                parsed_content_length = int(content_length)
+            except ValueError as error:
+                failure = TranscriptionFailure(
+                    TranscriptionOutcome.INVALID_INPUT,
+                    provider=None,
+                    retryable=False,
+                )
+                raise _transcription_http_error(failure) from error
+            if parsed_content_length > _MAX_PCM_BODY_BYTES:
+                raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         audio_bytes = await request.body()
         if not audio_bytes or len(audio_bytes) == 0:
@@ -612,18 +736,41 @@ async def transcribe_voice_message(
             raise HTTPException(status_code=413, detail=f'Body too large (max {_MAX_PCM_BODY_BYTES} bytes)')
 
         language = request.query_params.get("language")
+        resolved_language = await run_blocking(db_executor, resolve_voice_message_language, uid, language)
+        stt_provider, _, stt_model = get_prerecorded_service(resolved_language)
         context_keywords = _parse_context_keywords(request.query_params.get("keywords"))
         encoding = request.query_params.get("encoding", "linear16")
         try:
             sample_rate = int(request.query_params.get("sample_rate", "16000"))
             channels = int(request.query_params.get("channels", "1"))
         except ValueError:
-            raise HTTPException(status_code=422, detail='sample_rate and channels must be integers')
+            del audio_bytes
+            raise _transcription_http_error(
+                TranscriptionFailure(
+                    TranscriptionOutcome.INVALID_INPUT,
+                    provider=stt_provider,
+                    retryable=False,
+                )
+            )
 
         if sample_rate < 8000 or sample_rate > 48000:
-            raise HTTPException(status_code=422, detail='sample_rate must be between 8000 and 48000')
+            del audio_bytes
+            raise _transcription_http_error(
+                TranscriptionFailure(
+                    TranscriptionOutcome.INVALID_INPUT,
+                    provider=stt_provider,
+                    retryable=False,
+                )
+            )
         if channels < 1 or channels > 2:
-            raise HTTPException(status_code=422, detail='channels must be 1 or 2')
+            del audio_bytes
+            raise _transcription_http_error(
+                TranscriptionFailure(
+                    TranscriptionOutcome.INVALID_INPUT,
+                    provider=stt_provider,
+                    retryable=False,
+                )
+            )
 
         # Daily budget check
         duration_ms = compute_pcm_duration_ms(len(audio_bytes), sample_rate, channels)
@@ -632,8 +779,11 @@ async def transcribe_voice_message(
             del audio_bytes
             raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
-        resolved_language = resolve_voice_message_language(uid, language)
-        stt_provider, _, stt_model = get_prerecorded_service(resolved_language)
+        attempt = TranscriptionAttempt(
+            route='voice_rest_pcm',
+            provider=stt_provider,
+            platform=x_app_platform,
+        )
         try:
             transcript, detected_language = await run_blocking(
                 sync_executor,
@@ -646,81 +796,106 @@ async def transcribe_voice_message(
                 channels=channels,
                 keywords=context_keywords,
             )
-        except PrerecordedSTTConfigurationError as e:
-            raise _stt_provider_configuration_error(e)
-        except RuntimeError as e:
-            logger.error(f'PCM transcription failed: {e}')
-            raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
+            outcome = TranscriptionOutcome.SUCCESS if transcript else TranscriptionOutcome.EXPECTED_SILENCE
+            attempt.finish(outcome)
+        except Exception as error:
+            failure = failure_from_exception(error, provider=stt_provider)
+            attempt.finish(failure.outcome)
+            raise _transcription_http_error(failure) from error
         finally:
+            if not attempt.finished:
+                attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
             del audio_bytes
 
-        response = {"transcript": transcript or "", "stt_provider": stt_provider, "stt_model": stt_model}
+        response = {
+            "transcript": transcript or "",
+            "stt_provider": stt_provider,
+            "stt_model": stt_model,
+            "outcome": outcome.value,
+        }
         if detected_language:
             response["language"] = detected_language
         return response
 
     # Multipart file upload mode (original behavior)
-    form = await request.form()
+    form = await parse_multipart_form(request, max_part_size=VOICE_MESSAGE_MAX_PART_SIZE)
     files = form.getlist("files")
     language = form.get("language")
     upload_files = [f for f in files if hasattr(f, 'file')]
     if not upload_files:
         raise HTTPException(status_code=400, detail='No files provided')
+    if any(not file.filename for file in upload_files):
+        raise HTTPException(status_code=400, detail='Each uploaded file must have a filename')
 
     wav_paths = []
     other_file_paths = []
+    resolved_language = await run_blocking(db_executor, resolve_voice_message_language, uid, language)
+    stt_provider, _, stt_model = get_prerecorded_service(resolved_language)
+    transcripts = []
+    detected_languages = []
+    attempt: TranscriptionAttempt | None = None
+
+    def _record_multipart_preparation_failure(failure: TranscriptionFailure) -> None:
+        """Emit a typed terminal result for rejected multipart audio."""
+        preparation_attempt = TranscriptionAttempt(
+            route='voice_rest_multipart',
+            provider=stt_provider,
+            platform=x_app_platform,
+        )
+        preparation_attempt.finish(failure.outcome)
 
     # Process all files in a single loop
     def _save_wav(path, file_obj):
         with open(path, "wb") as buffer:
             shutil.copyfileobj(file_obj, buffer)
 
-    for file in upload_files:
-        filename = file.filename
-        if not filename:
-            raise HTTPException(status_code=400, detail='Each uploaded file must have a filename')
-        if filename.lower().endswith('.wav'):
-            # For WAV files, save directly to a temporary path
-            temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
-            await run_blocking(storage_executor, _save_wav, temp_path, file.file)
-            wav_paths.append(temp_path)
-        else:
-            # For other files, collect paths for later conversion
-            path = retrieve_file_paths([file], uid)
-            if path:
-                other_file_paths.extend(path)
+    try:
+        # Preprocessing belongs inside the same customer-visible failure
+        # boundary as provider work. In particular, decode_files_to_wav can
+        # reject corrupt input with HTTPException before a provider call.
+        for file in upload_files:
+            filename = file.filename
+            assert filename is not None
+            if filename.lower().endswith('.wav'):
+                temp_path = f"/tmp/{uid}_{uuid.uuid4()}.wav"
+                await run_blocking(storage_executor, _save_wav, temp_path, file.file)
+                wav_paths.append(temp_path)
+            else:
+                path = await run_blocking(storage_executor, retrieve_file_paths, [file], uid)
+                if path:
+                    other_file_paths.extend(path)
 
-    # Convert other files to WAV if needed
-    if other_file_paths:
-        converted_wav_paths = decode_files_to_wav(other_file_paths)
-        if converted_wav_paths:
-            wav_paths.extend(converted_wav_paths)
+        if other_file_paths:
+            converted_wav_paths = await run_blocking(storage_executor, decode_files_to_wav, other_file_paths)
+            if converted_wav_paths:
+                wav_paths.extend(converted_wav_paths)
 
-    # Daily budget check (sum all files)
-    total_duration_ms = 0
-    for wav_path in wav_paths:
-        dur = read_wav_duration_ms(wav_path)
-        if dur is not None:
-            total_duration_ms += dur
+        if not wav_paths:
+            raise TranscriptionFailure(
+                TranscriptionOutcome.INVALID_INPUT,
+                provider=stt_provider,
+                retryable=False,
+            )
 
-    if total_duration_ms > 0:
-        allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
-        if not allowed:
-            for p in wav_paths:
-                if p.startswith(f"/tmp/{uid}_"):
-                    try:
-                        Path(p).unlink()
-                    except Exception:
-                        pass
-            raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
+        # Daily budget check (sum all files). This is not a provider outcome,
+        # so do it before recording an accepted transcription attempt.
+        total_duration_ms = 0
+        for wav_path in wav_paths:
+            duration_ms = await run_blocking(storage_executor, read_wav_duration_ms, wav_path)
+            if duration_ms is not None:
+                total_duration_ms += duration_ms
+        if total_duration_ms > 0:
+            allowed, used_ms, remaining_ms = try_consume_budget(uid, total_duration_ms)
+            if not allowed:
+                raise HTTPException(status_code=429, detail='Daily transcription budget exhausted')
 
-    # Process all WAV files and collect transcripts
-    transcripts = []
-    detected_languages = []
-    resolved_language = resolve_voice_message_language(uid, language)
-    is_multi = resolved_language == 'multi'
-    for wav_path in wav_paths:
-        try:
+        is_multi = resolved_language == 'multi'
+        attempt = TranscriptionAttempt(
+            route='voice_rest_multipart',
+            provider=stt_provider,
+            platform=x_app_platform,
+        )
+        for wav_path in wav_paths:
             transcript, detected_language = await run_blocking(
                 sync_executor, transcribe_voice_message_segment, wav_path, uid, language=resolved_language
             )
@@ -728,62 +903,66 @@ async def transcribe_voice_message(
                 transcripts.append(transcript)
             if is_multi and detected_language:
                 detected_languages.append(detected_language)
-        except PrerecordedSTTConfigurationError as e:
-            for p in wav_paths:
-                if p.startswith(f"/tmp/{uid}_"):
-                    try:
-                        Path(p).unlink()
-                    except Exception:
-                        pass
-            raise _stt_provider_configuration_error(e)
-        except Exception as e:
-            logger.error(f"Error transcribing {wav_path}: {e}")
-            # Cleanup all remaining temp files before raising
-            for p in wav_paths:
-                if p.startswith(f"/tmp/{uid}_"):
-                    try:
-                        Path(p).unlink()
-                    except:
-                        pass
-            raise HTTPException(status_code=500, detail=f'Transcription failed: {str(e)}')
-        finally:
-            # Clean up current temporary WAV file
-            if wav_path.startswith(f"/tmp/{uid}_"):
-                try:
-                    Path(wav_path).unlink()
-                except:
-                    pass
 
-    if is_multi:
-        unique_languages = {lang for lang in detected_languages if lang}
-        detected_language = None
-        if len(unique_languages) == 1:
-            detected_language = unique_languages.pop()
-        elif len(unique_languages) > 1:
-            detected_language = "multi"
-    else:
-        detected_language = None
+        if is_multi:
+            unique_languages = {lang for lang in detected_languages if lang}
+            detected_language = None
+            if len(unique_languages) == 1:
+                detected_language = unique_languages.pop()
+            elif len(unique_languages) > 1:
+                detected_language = "multi"
+        else:
+            detected_language = None
 
-    # Combine all transcripts
-    if transcripts:
-        response = {"transcript": " ".join(transcripts)}
+        combined_transcript = " ".join(transcripts)
+        outcome = TranscriptionOutcome.SUCCESS if combined_transcript else TranscriptionOutcome.EXPECTED_SILENCE
+        attempt.finish(outcome)
+        response = {
+            "transcript": combined_transcript,
+            "stt_provider": stt_provider,
+            "stt_model": stt_model,
+            "outcome": outcome.value,
+        }
         if detected_language:
             response["language"] = detected_language
+        return response
+    except TranscriptionFailure as failure:
+        if attempt is None:
+            _record_multipart_preparation_failure(failure)
+        else:
+            attempt.finish(failure.outcome)
+        raise _transcription_http_error(failure) from failure
+    except HTTPException as error:
+        if error.status_code == 429:
+            raise
+        failure = TranscriptionFailure(
+            TranscriptionOutcome.INVALID_INPUT,
+            provider=stt_provider,
+            retryable=False,
+        )
+        if attempt is None:
+            _record_multipart_preparation_failure(failure)
+        else:
+            attempt.finish(failure.outcome)
+        raise _transcription_http_error(failure) from error
+    except Exception as error:
+        failure = failure_from_exception(error, provider=stt_provider)
+        if attempt is None:
+            _record_multipart_preparation_failure(failure)
+        else:
+            attempt.finish(failure.outcome)
+        raise _transcription_http_error(failure) from error
+    finally:
+        if attempt is not None and not attempt.finished:
+            attempt.finish(TranscriptionOutcome.UPSTREAM_ERROR)
+        # retrieve_file_paths and conversion can both allocate uid-scoped
+        # inputs. Clean every path even when preprocessing fails before the
+        # previous provider-only try/finally boundary.
+        await run_blocking(storage_executor, _cleanup_temp_voice_wavs, wav_paths + other_file_paths, uid)
         transcripts.clear()
         detected_languages.clear()
         wav_paths.clear()
         other_file_paths.clear()
-        return response
-
-    # If we got here, no transcript was produced
-    response = {"transcript": ""}
-    if detected_language:
-        response["language"] = detected_language
-    transcripts.clear()
-    detected_languages.clear()
-    wav_paths.clear()
-    other_file_paths.clear()
-    return response
 
 
 @router.websocket("/v2/voice-message/transcribe-stream")
@@ -866,7 +1045,11 @@ async def transcribe_voice_message_stream(
     dg_socket = None
     sender_task = None
     stt_audio_buffer = bytearray()
-    total_audio_bytes = 0  # Track cumulative bytes for budget recording
+    received_audio_bytes = 0  # Includes buffered bytes for admission/budget enforcement.
+    accepted_audio_bytes = 0  # Only bytes the provider explicitly accepted.
+    # A terminal provider failure after either audio handoff or finalization.
+    stt_send_failed = False
+    stt_finalized = False
     # 30ms flush threshold for Deepgram streaming quality (16-bit PCM = 2 bytes per sample per channel)
     bytes_per_second = sample_rate * channels * 2
     stt_buffer_flush_size = int(bytes_per_second * 0.03)
@@ -901,6 +1084,50 @@ async def transcribe_voice_message_stream(
                 logger.warning(f'transcribe-stream: segment_sender error uid={uid}: {e}')
                 websocket_active = False
                 break
+
+    async def close_stt_failure() -> None:
+        """Expose an unusable live-STT session before the caller drops audio."""
+        nonlocal websocket_active, stt_send_failed
+        if stt_send_failed:
+            return
+        stt_send_failed = True
+        websocket_active = False
+        logger.error('event=ptt_transcription_stream outcome=provider_terminal_failure')
+        try:
+            await websocket.close(code=1011, reason='Transcription service unavailable')
+        except Exception:
+            pass
+
+    async def send_stt_audio_or_close(audio: bytes) -> bool:
+        """Require the provider to accept audio before its caller discards it."""
+        if stt_send_failed:
+            return False
+        try:
+            accepted = dg_socket is not None and not dg_socket.is_connection_dead and dg_socket.send(audio) is True
+        except Exception:
+            accepted = False
+        if accepted:
+            return True
+
+        await close_stt_failure()
+        return False
+
+    async def finalize_stt_or_close() -> bool:
+        """Finalize exactly once and make a provider failure customer-visible."""
+        nonlocal stt_finalized
+        if stt_send_failed:
+            return False
+        if stt_finalized:
+            return True
+        try:
+            if dg_socket is None:
+                raise RuntimeError('missing STT socket')
+            dg_socket.finalize()
+        except Exception:
+            await close_stt_failure()
+            return False
+        stt_finalized = True
+        return True
 
     try:
         dg_socket = await process_audio_dg(
@@ -951,15 +1178,16 @@ async def transcribe_voice_message_stream(
             # Note: text frames do NOT reset the audio-idle timer.
             text_data = message.get("text")
             if text_data and text_data.strip() == "finalize":
-                if dg_socket and not dg_socket.is_connection_dead:
+                if dg_socket and not stt_send_failed:
                     if len(stt_audio_buffer) > 0:
-                        dg_socket.send(bytes(stt_audio_buffer))
+                        if not await send_stt_audio_or_close(bytes(stt_audio_buffer)):
+                            break
+                        accepted_audio_bytes += len(stt_audio_buffer)
                         stt_audio_buffer.clear()
-                    try:
-                        dg_socket.finalize()
+                    if await finalize_stt_or_close():
                         await asyncio.sleep(0.3)
-                    except Exception:
-                        pass
+                    else:
+                        break
                 continue
 
             data = message.get("bytes")
@@ -973,10 +1201,10 @@ async def transcribe_voice_message_stream(
                 logger.warning(f'transcribe-stream: oversized frame uid={uid} size={len(data)}')
                 continue
 
-            # In-session budget enforcement: check BEFORE incrementing total_audio_bytes
+            # In-session budget enforcement: check BEFORE incrementing received_audio_bytes
             # so that the triggering frame is not counted as consumed (it won't be sent to DG).
             if budget_remaining_ms is not None and bytes_per_second > 0:
-                prospective_ms = compute_pcm_duration_ms(total_audio_bytes + len(data), sample_rate, channels)
+                prospective_ms = compute_pcm_duration_ms(received_audio_bytes + len(data), sample_rate, channels)
                 if prospective_ms > budget_remaining_ms:
                     logger.info(
                         f'transcribe-stream: budget exhausted mid-session uid={uid} elapsed={prospective_ms}ms remaining={budget_remaining_ms}ms'
@@ -984,20 +1212,16 @@ async def transcribe_voice_message_stream(
                     await websocket.close(code=1008, reason='Daily transcription budget exhausted')
                     break
 
-            total_audio_bytes += len(data)
+            received_audio_bytes += len(data)
             stt_audio_buffer.extend(data)
 
             # Flush to Deepgram in 30ms chunks
             while len(stt_audio_buffer) >= stt_buffer_flush_size:
                 chunk = bytes(stt_audio_buffer[:stt_buffer_flush_size])
-                del stt_audio_buffer[:stt_buffer_flush_size]
-
-                if dg_socket.is_connection_dead:
-                    logger.error(f'transcribe-stream: DG connection died uid={uid} reason={dg_socket.death_reason}')
-                    websocket_active = False
+                if not await send_stt_audio_or_close(chunk):
                     break
-
-                dg_socket.send(chunk)
+                del stt_audio_buffer[:stt_buffer_flush_size]
+                accepted_audio_bytes += len(chunk)
 
     except WebSocketDisconnect:
         pass
@@ -1006,25 +1230,32 @@ async def transcribe_voice_message_stream(
     finally:
         websocket_active = False
 
-        # Record actual consumed duration against daily budget
-        if total_audio_bytes > 0 and bytes_per_second > 0:
-            actual_duration_ms = compute_pcm_duration_ms(total_audio_bytes, sample_rate, channels)
-            record_actual_duration(uid, actual_duration_ms)
-
         # Flush remaining audio buffer
-        if dg_socket and not dg_socket.is_connection_dead and len(stt_audio_buffer) > 0:
-            dg_socket.send(bytes(stt_audio_buffer))
-            stt_audio_buffer.clear()
+        if dg_socket and not stt_send_failed and len(stt_audio_buffer) > 0:
+            if await send_stt_audio_or_close(bytes(stt_audio_buffer)):
+                accepted_audio_bytes += len(stt_audio_buffer)
+                stt_audio_buffer.clear()
 
-        # Finalize to get last transcript segment, then close DG.
-        # Wrap each in try/except so finish() always runs even if finalize() fails.
+        # Finalize only healthy streams to get the last transcript segment, then
+        # always close DG. A rejected send can leave SafeDeepgramSocket's
+        # keepalive thread running, so it still needs finish() even though a
+        # final transcript would be misleading.
+        if dg_socket and not stt_send_failed:
+            finalized_before_teardown = stt_finalized
+            if await finalize_stt_or_close():
+                # Record only audio from a terminally successful stream,
+                # including a successful tail flush. Do this immediately after
+                # the provider accepts finalization: a disconnected client can
+                # cancel the transcript-drain sleep below, but it must not
+                # turn a successful provider handoff into missing usage.
+                if accepted_audio_bytes > 0 and bytes_per_second > 0:
+                    actual_duration_ms = compute_pcm_duration_ms(accepted_audio_bytes, sample_rate, channels)
+                    record_actual_duration(uid, actual_duration_ms)
+                if not finalized_before_teardown:
+                    # Brief wait for final transcript callback.
+                    await asyncio.sleep(0.3)
+
         if dg_socket:
-            try:
-                dg_socket.finalize()
-                # Brief wait for final transcript callback
-                await asyncio.sleep(0.3)
-            except Exception:
-                pass
             try:
                 dg_socket.finish()
             except Exception:
@@ -1046,6 +1277,7 @@ async def transcribe_voice_message_stream(
 
 
 @router.post('/v2/files', response_model=List[FileChat], tags=['chat'])
+@max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),
@@ -1105,6 +1337,7 @@ def upload_file_chat(
 
 
 @router.post('/v1/files', response_model=List[FileChat], tags=['chat'])
+@max_part_size(CHAT_FILE_MAX_PART_SIZE)
 def upload_file_chat(
     files: List[UploadFile] = File(...),
     uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "file:upload")),

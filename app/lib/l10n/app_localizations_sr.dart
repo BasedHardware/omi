@@ -9589,6 +9589,27 @@ class AppLocalizationsSr extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Меморија уређаја';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% попуњено';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used од $total искоришћено';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free слободно';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Уређај је скоро пун — синхронизујте да ослободите простор.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.';
 }

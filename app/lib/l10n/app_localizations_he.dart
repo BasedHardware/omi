@@ -9503,5 +9503,26 @@ class AppLocalizationsHe extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'אחסון המכשיר';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% מלא';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used מתוך $total בשימוש';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free פנוי';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'המכשיר כמעט מלא — סנכרן כדי לפנות מקום.';
+
+  @override
   String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
 }

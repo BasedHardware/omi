@@ -9597,6 +9597,27 @@ class AppLocalizationsEs extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Almacenamiento del dispositivo';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% lleno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used de $total usado';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free libre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'El dispositivo está casi lleno: sincroniza para liberar espacio.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Sin conexión: se está grabando localmente. Se transcribirá cuando vuelvas a estar en línea.';
 }

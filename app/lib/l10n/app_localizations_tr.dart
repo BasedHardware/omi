@@ -9587,6 +9587,27 @@ class AppLocalizationsTr extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Cihaz depolama';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '%$percent dolu';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total alanın $used kısmı kullanıldı';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free boş';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Cihaz neredeyse dolu — yer açmak için eşitleyin.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
 }

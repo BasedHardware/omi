@@ -9589,6 +9589,27 @@ class AppLocalizationsUr extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'آلے کا اسٹوریج';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% بھرا';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total میں سے $used استعمال شدہ';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free خالی';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔';
 }

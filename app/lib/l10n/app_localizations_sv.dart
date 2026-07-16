@@ -9581,6 +9581,27 @@ class AppLocalizationsSv extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Enhetens lagring';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% fullt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used av $total använt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ledigt';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Enheten är nästan full — synkronisera för att frigöra utrymme.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen.';
 }

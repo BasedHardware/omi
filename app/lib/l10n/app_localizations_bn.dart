@@ -9581,6 +9581,27 @@ class AppLocalizationsBn extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'ডিভাইস স্টোরেজ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% পূর্ণ';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total-এর মধ্যে $used ব্যবহৃত';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free খালি';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'ডিভাইস প্রায় পূর্ণ — জায়গা খালি করতে সিঙ্ক করুন।';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।';
 }

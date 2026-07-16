@@ -281,7 +281,7 @@ class TestSafeModulateSocket(unittest.TestCase):
             sock.set_wav_header(b'')
             sock._send_queue = asyncio.Queue(maxsize=1)
             sock._send_queue.put_nowait(b'fill')
-            sock.send(b'overflow')
+            assert sock.send(b'overflow') is False
             await asyncio.sleep(0)
             return sock
 
@@ -777,6 +777,24 @@ class _FakeParakeetWebSocket:
 
 
 class TestProcessAudioParakeet(unittest.TestCase):
+    def test_websocket_queue_full_reports_rejection(self):
+        from utils.stt.streaming import ParakeetWebSocketSocket
+
+        loop = asyncio.new_event_loop()
+        try:
+
+            async def run():
+                socket = ParakeetWebSocketSocket(lambda _segments: None, 'ws://parakeet.local/v3/stream', 16000)
+                socket._send_queue = asyncio.Queue(maxsize=1)
+                socket._send_queue.put_nowait(b'occupied')
+                assert socket.send(b'overflow') is False
+                assert socket.is_connection_dead is True
+                assert socket.death_reason == 'parakeet ws send queue full'
+
+            loop.run_until_complete(run())
+        finally:
+            loop.close()
+
     @patch.dict('os.environ', {'HOSTED_PARAKEET_API_URL': 'http://parakeet.local', 'ENCRYPTION_SECRET': 'secret'})
     @patch('utils.stt.streaming.websockets')
     def test_process_audio_parakeet_waits_for_websocket_connection(self, mock_ws_module):
@@ -803,7 +821,7 @@ class TestProcessAudioParakeet(unittest.TestCase):
 
                     allow_enter.set()
                     sock = await asyncio.wait_for(socket_task, timeout=1)
-                    sock.send(b'pcm')
+                    self.assertTrue(sock.send(b'pcm'))
                     await sock.drain_and_close()
 
                 self.assertEqual(ws.sent, [b'pcm', 'finalize'])
@@ -1284,7 +1302,6 @@ class TestLanguageRoutingExtended(unittest.TestCase):
 
 
 class TestPrerecordedServiceRouting(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
     def test_default_routes_to_deepgram(self):
         from utils.stt.pre_recorded import PrerecordedSTTService, get_prerecorded_service
@@ -1328,7 +1345,6 @@ class TestPrerecordedServiceRouting(unittest.TestCase):
 
 
 class TestPrerecordedProviderFactory(unittest.TestCase):
-
     @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('dg-nova-3',))
     def test_factory_returns_deepgram_by_default(self):
         from utils.stt.pre_recorded import DeepgramPrerecordedProvider, get_prerecorded_provider
@@ -1351,6 +1367,22 @@ class TestPrerecordedProviderFactory(unittest.TestCase):
 
         provider = get_prerecorded_provider()
         self.assertIsInstance(provider, ModulatePrerecordedProvider)
+
+    @patch('utils.stt.pre_recorded.get_prerecorded_models', new=lambda: ('modulate-velma-2', 'dg-nova-3'))
+    def test_unsupported_language_uses_same_deepgram_fallback_as_service_selection(self):
+        from utils.stt.pre_recorded import (
+            DeepgramPrerecordedProvider,
+            get_prerecorded_provider,
+            get_prerecorded_service,
+        )
+
+        service, _language, model = get_prerecorded_service('hi')
+        provider = get_prerecorded_provider('hi')
+
+        self.assertEqual(service, 'deepgram')
+        self.assertEqual(model, 'nova-3')
+        self.assertIsInstance(provider, DeepgramPrerecordedProvider)
+        self.assertEqual(provider._model, model)
 
     def test_providers_implement_abc(self):
         from utils.stt.pre_recorded import (

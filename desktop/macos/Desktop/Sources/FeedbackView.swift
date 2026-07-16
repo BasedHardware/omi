@@ -68,15 +68,15 @@ struct FeedbackView: View {
   }
 
   var body: some View {
-    VStack(alignment: .leading, spacing: 16) {
+    VStack(alignment: .leading, spacing: OmiSpacing.lg) {
       if showSuccess {
         // Success state
-        VStack(spacing: 12) {
+        VStack(spacing: OmiSpacing.md) {
           Image(systemName: "checkmark.circle.fill")
             .scaledFont(size: 48)
             .foregroundColor(.green)
 
-          Text("Report sent!")
+          Text("Report sent")
             .font(.headline)
 
           Text("We'll look into this issue.")
@@ -105,7 +105,7 @@ struct FeedbackView: View {
           .border(Color.gray.opacity(0.3), width: 1)
 
         HStack {
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Name (optional)")
               .font(.caption)
               .foregroundColor(.secondary)
@@ -113,7 +113,7 @@ struct FeedbackView: View {
               .textFieldStyle(.roundedBorder)
           }
 
-          VStack(alignment: .leading, spacing: 4) {
+          VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
             Text("Email")
               .font(.caption)
               .foregroundColor(.secondary)
@@ -143,7 +143,7 @@ struct FeedbackView: View {
         }
       }
     }
-    .padding(20)
+    .padding(OmiSpacing.xl)
     .frame(width: 400, height: 300)
   }
 
@@ -191,7 +191,7 @@ struct FeedbackView: View {
     )
 
     // Show success
-    withAnimation {
+    OmiMotion.withGated {
       showSuccess = true
       isSubmitting = false
     }

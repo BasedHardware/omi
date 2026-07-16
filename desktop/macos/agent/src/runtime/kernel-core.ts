@@ -5,8 +5,7 @@ import type {
   OpenedBinding,
   RuntimeAdapter,
 } from "../adapters/interface.js";
-import type { OutboundMessage, OutboundMessageDraft } from "../protocol.js";
-import { PROTOCOL_VERSION } from "../protocol.js";
+import type { ContextSnapshotProjection, OutboundMessage, OutboundMessageDraft } from "../protocol.js";
 import { AdapterRegistry } from "./adapter-registry.js";
 import { generateAgentId } from "./sqlite-store.js";
 import { AdapterRuntimeError, failureFromError, type RuntimeFailure } from "./failures.js";
@@ -18,18 +17,19 @@ import {
   type ResolveSurfaceSessionInput,
 } from "./surface-session.js";
 import {
-  advanceBindingTurnDelivery,
-  appendConversationTurn,
   conversationIdForSession,
-  importConversationTurnsForSurface,
-  recordSurfaceTurn as persistSurfaceTurn,
 } from "./conversation-turns.js";
 import {
-  acknowledgeCompletionDelta,
-  assembleTurnContext,
-  bindingCarriesNativeHistory,
-  getVoiceSeedContext,
-} from "./turn-context.js";
+  buildContextSnapshot,
+  inheritContextSnapshotForSession,
+  kernelSystemPolicy,
+  renderContextSnapshot,
+} from "./context-snapshot.js";
+import { repairPersistedAgentSpawnJournals } from "./agent-spawn-journal.js";
+import {
+  bindProducingJournalTurn,
+  validateProducingJournalTurnAdmission,
+} from "./conversation-journal.js";
 import type {
   AdapterBinding,
   AgentArtifact,
@@ -54,8 +54,8 @@ import type {
 } from "./types.js";
 import type { QueueRunInput } from "./desktop-action-queue.js";
 import { buildDesktopActionQueue } from "./desktop-action-queue.js";
-import { buildDesktopContextPacket, type DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
-import { routeDesktopIntent, type DesktopIntentRoute, type DesktopIntentRouteInput, type DesktopIntentSessionCandidate } from "./desktop-intent-router.js";
+import type { DesktopContextPacketBuildInput } from "./desktop-context-packet.js";
+import type { DesktopIntentSessionCandidate } from "./desktop-intent-router.js";
 import { OmiArtifactStorage } from "./artifact-storage.js";
 import { writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
@@ -130,13 +130,29 @@ import type {
   SpawnBackgroundAgentResult,
   DelegateAgentInput,
   DelegateAgentResult,
+  BeginExternalSurfaceRunInput,
+  BeginExternalSurfaceRunResult,
+  CompleteExternalSurfaceRunInput,
+  CompleteExternalSurfaceRunResult,
   KernelEventSubscriber,
   AgentRuntimeKernelOptions,
 } from "./kernel-types.js";
-import { StaleAdapterBindingError } from "./kernel-types.js";
+import { ExternalSurfaceAuthorityError, StaleAdapterBindingError } from "./kernel-types.js";
 import { providerBoundaryForAdapter, resolveAdapterWithinBoundary } from "./execution-policy.js";
 import type { SurfaceRef } from "./surface-session.js";
-import type { BuiltDesktopContextPacket } from "./desktop-context-packet.js";
+import {
+  RunToolCapabilityBroker,
+  type AuthorizedRunToolInvocation,
+  type RunToolExecutionLease,
+  type RunToolCapabilityRevocationReason,
+} from "./run-tool-capability.js";
+import type { ToolInvocationIdentity } from "./tool-invocation-ledger.js";
+import { normalizeOmiToolName } from "./omi-tool-manifest.js";
+import { routeExternalSurfaceTool } from "./external-surface-tool-policy.js";
+import {
+  applyExecutionProfileToSession,
+  readSessionExecutionProfile,
+} from "./session-execution-profile.js";
 
 
 interface ActiveExecution {
@@ -156,6 +172,7 @@ export class KernelCore {
   protected readonly subscribers = new Set<KernelEventSubscriber>();
   protected readonly activeExecutions = new Map<string, ActiveExecution>();
   protected readonly bindingResolutionLocks = new Map<string, Promise<void>>();
+  protected readonly toolCapabilities: RunToolCapabilityBroker;
   private transactionDepth = 0;
   private pendingSubscriberEvents: AgentEvent[] = [];
 
@@ -165,6 +182,511 @@ export class KernelCore {
     this.runtimeNodeId = options.runtimeNodeId ?? "desktop-local";
     this.artifactStorage = options.artifactStorage;
     this.recoverRunInput = options.recoverRunInput;
+    this.toolCapabilities = new RunToolCapabilityBroker({
+      store: this.store,
+      onRejected: options.onToolCapabilityRejected,
+      profileForSession: options.toolCapabilityProfileForSession ?? ((sessionId) => {
+        const profile = readSessionExecutionProfile(this.store, sessionId);
+        return {
+          generation: profile.generation,
+          adapterId: profile.adapterId,
+          executionRole: profile.executionRole,
+        };
+      }),
+    });
+    repairPersistedAgentSpawnJournals(this.store);
+  }
+
+  authorizeRunToolInvocation(input: {
+    capabilityRef: string;
+    invocationId: string;
+    runId: string;
+    attemptId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): AuthorizedRunToolInvocation {
+    return this.toolCapabilities.authorize(input);
+  }
+
+  authorizeRelayedRunToolInvocation(input: {
+    capabilityRef: string;
+    invocationId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): AuthorizedRunToolInvocation {
+    return this.toolCapabilities.authorizeRelayInvocation(input);
+  }
+
+  routeRelayedRunToolProposal(input: {
+    capabilityRef: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): { toolName: string; toolInput: Record<string, unknown>; recoveredFromDelegation: boolean } {
+    const capability = this.toolCapabilities.activeCapabilityForProposal(input.capabilityRef, input.activeOwnerId);
+    const adapter = capability.adapterId === "pi-mono" ? "pi-mono" : "omi-tools-stdio";
+    const canonicalToolName = normalizeOmiToolName(adapter, requiredExternalIdentity(input.toolName, "toolName"))
+      .canonicalName;
+    const decision = routeExternalSurfaceTool({
+      toolName: canonicalToolName,
+      toolInput: input.toolInput,
+      originatingPrompt: capability.originatingUserText,
+      precedingAssistantText: capability.precedingAssistantText,
+    });
+    if (decision.action === "reject") {
+      throw new ExternalSurfaceAuthorityError(decision.code, decision.message);
+    }
+    return decision;
+  }
+
+  markRunToolInvocationDispatched(invocation: AuthorizedRunToolInvocation): void {
+    this.toolCapabilities.markInvocationDispatched(invocation);
+  }
+
+  acquireRunToolExecutionLease(
+    invocation: AuthorizedRunToolInvocation,
+    activeOwnerId: () => string,
+  ): RunToolExecutionLease {
+    return this.toolCapabilities.acquireExecutionLease(invocation, activeOwnerId);
+  }
+
+  completeRunToolInvocation(input: ToolInvocationIdentity & {
+    capabilityRef: string;
+    activeOwnerId: string;
+    outcome: "succeeded" | "failed";
+    result: string;
+  }): void {
+    this.toolCapabilities.completeInvocation(input);
+  }
+
+  markRunToolInvocationOutcomeUnknown(
+    invocation: AuthorizedRunToolInvocation,
+    errorCode: string,
+  ): void {
+    this.toolCapabilities.markInvocationOutcomeUnknown(invocation, errorCode);
+  }
+
+  revokeRunToolCapabilities(reason: RunToolCapabilityRevocationReason = "runtime_stopped"): number {
+    return this.toolCapabilities.revokeAll(reason);
+  }
+
+  revokeRunToolCapabilitiesForOwner(
+    ownerId: string,
+    reason: RunToolCapabilityRevocationReason = "owner_changed",
+  ): number {
+    return this.toolCapabilities.revokeForOwner(ownerId, reason);
+  }
+
+  beginExternalSurfaceRun(input: BeginExternalSurfaceRunInput): BeginExternalSurfaceRunResult {
+    const ownerId = requiredExternalIdentity(input.ownerId, "ownerId");
+    const sessionId = requiredExternalIdentity(input.sessionId, "sessionId");
+    const turnId = requiredExternalIdentity(input.turnId, "turnId");
+    const clientId = requiredExternalIdentity(input.clientId, "clientId");
+    const requestId = requiredExternalIdentity(input.requestId, "requestId");
+    if (!input.prompt.trim()) {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface prompt is required");
+    }
+    if (input.mode !== "ask" && input.mode !== "act") {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface mode is invalid");
+    }
+    const session = this.readSession(sessionId);
+    if (session.ownerId !== ownerId) {
+      throw new ExternalSurfaceAuthorityError("owner_mismatch", "External surface session owner does not match");
+    }
+    this.assertExternalRealtimeMapping(sessionId, ownerId);
+
+    const idempotencyKey = `external_surface:${stableHash(turnId)}`;
+    const existingRow = this.store.getOptionalRow(
+      "SELECT * FROM runs WHERE session_id = ? AND idempotency_key = ?",
+      [sessionId, idempotencyKey],
+    );
+    let duplicate = false;
+    let run: AgentRun;
+    let attempt: RunAttempt;
+    if (existingRow) {
+      duplicate = true;
+      run = runFromRow(existingRow);
+      this.assertExternalRunIdentity(run, { ownerId, sessionId, turnId, prompt: input.prompt, mode: input.mode });
+      const latestAttemptRow = this.store.getOptionalRow(
+        "SELECT * FROM run_attempts WHERE run_id = ? ORDER BY attempt_no DESC LIMIT 1",
+        [run.runId],
+      );
+      if (TERMINAL_STATUSES.includes(run.status) && run.status !== "orphaned") {
+        if (!latestAttemptRow) {
+          throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run is terminal without an attempt");
+        }
+        attempt = attemptFromRow(latestAttemptRow);
+        return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+      }
+      const latestAttempt = latestAttemptRow ? attemptFromRow(latestAttemptRow) : undefined;
+      if (run.status === "orphaned" || !latestAttempt || TERMINAL_STATUSES.includes(latestAttempt.status)) {
+        this.withTransaction(() => {
+          this.updateRun(run.runId, {
+            status: "queued",
+            completedAtMs: null,
+            errorCode: null,
+            errorMessage: null,
+            updatedAtMs: Date.now(),
+          });
+        });
+        attempt = this.createAttempt({
+          runId: run.runId,
+          attemptNo: (latestAttempt?.attemptNo ?? 0) + 1,
+          adapterId: session.defaultAdapterId,
+          retryReason: latestAttempt ? "daemon_restart_external_surface" : null,
+          resumeFromAttemptId: latestAttempt?.attemptId ?? null,
+        });
+        this.markExternalAttemptRunning(session, attempt);
+      } else {
+        attempt = latestAttempt;
+      }
+    } else {
+      const accepted = this.createAcceptedRun({
+        ownerId,
+        sessionId,
+        surfaceKind: "realtime_voice",
+        clientId,
+        requestId,
+        idempotencyKey,
+        prompt: input.prompt,
+        mode: input.mode,
+        metadata: {
+          externalSurface: { authority: "swift_realtime", turnId },
+        },
+      });
+      run = accepted.run;
+      attempt = this.createAttempt({
+        runId: run.runId,
+        attemptNo: 1,
+        adapterId: session.defaultAdapterId,
+        retryReason: null,
+        resumeFromAttemptId: null,
+      });
+      this.markExternalAttemptRunning(session, attempt);
+    }
+    this.toolCapabilities.register({ ownerId, sessionId, runId: run.runId, attemptId: attempt.attemptId });
+    return { ownerId, sessionId, turnId, runId: run.runId, attemptId: attempt.attemptId, duplicate };
+  }
+
+  authorizeExternalSurfaceToolInvocation(input: {
+    ownerId: string;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    invocationId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+    activeOwnerId: string;
+  }): AuthorizedRunToolInvocation {
+    this.assertExternalRunTuple(input);
+    const capability = this.toolCapabilities.activeCapabilityForAttempt(input.attemptId)
+      ?? this.toolCapabilities.register({
+        ownerId: input.ownerId,
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+      });
+    return this.toolCapabilities.authorize({
+      capabilityRef: capability.capabilityRef,
+      invocationId: requiredExternalIdentity(input.invocationId, "invocationId"),
+      runId: input.runId,
+      attemptId: input.attemptId,
+      toolName: requiredExternalIdentity(input.toolName, "toolName"),
+      toolInput: input.toolInput,
+      activeOwnerId: input.activeOwnerId,
+    });
+  }
+
+  routeExternalSurfaceToolInvocation(input: {
+    ownerId: string;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    invocationId: string;
+    toolName: string;
+    toolInput: Record<string, unknown>;
+  }): { toolName: string; toolInput: Record<string, unknown>; recoveredFromDelegation: boolean } {
+    const { session, run } = this.assertExternalRunTuple(input);
+    const adapter = session.defaultAdapterId === "pi-mono" ? "pi-mono" : "omi-tools-stdio";
+    const canonicalToolName = normalizeOmiToolName(adapter, requiredExternalIdentity(input.toolName, "toolName"))
+      .canonicalName;
+    const runInput = parseJsonObject(run.inputJson);
+    const decision = routeExternalSurfaceTool({
+      toolName: canonicalToolName,
+      toolInput: input.toolInput,
+      originatingPrompt: typeof runInput.prompt === "string" ? runInput.prompt : "",
+      precedingAssistantText: this.toolCapabilities.activeCapabilityForAttempt(input.attemptId)?.precedingAssistantText,
+    });
+    if (decision.action === "reject") {
+      throw new ExternalSurfaceAuthorityError(decision.code, decision.message);
+    }
+    if (decision.toolName !== "spawn_agent") return decision;
+    const prepared = this.prepareAuthorizedSpawnAgentControlInvocation({
+      ownerId: input.ownerId,
+      sessionId: input.sessionId,
+      runId: input.runId,
+      attemptId: input.attemptId,
+      invocationId: input.invocationId,
+      surfaceKind: "realtime_voice",
+      toolInput: decision.toolInput,
+    });
+    return {
+      ...decision,
+      toolInput: prepared.toolInput,
+    };
+  }
+
+  prepareAuthorizedSpawnAgentControlInvocation(input: {
+    ownerId: string;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+    invocationId: string;
+    surfaceKind: string;
+    toolInput: Record<string, unknown>;
+  }): {
+    toolInput: Record<string, unknown>;
+    producerJournal: import("./agent-spawn-journal.js").AgentSpawnProducerJournalDescriptor;
+    parentRunId: string;
+  } {
+    const session = this.readSession(input.sessionId);
+    const run = this.readRun(input.runId);
+    const attempt = this.readAttempt(input.attemptId);
+    if (session.ownerId !== input.ownerId || run.sessionId !== session.sessionId || attempt.runId !== run.runId) {
+      throw new Error("Authorized spawn caller tuple is outside owner/session scope");
+    }
+    if (this.readLatestAttempt(run.runId).attemptId !== attempt.attemptId) {
+      throw new Error("Authorized spawn caller attempt was superseded");
+    }
+    const objective = typeof input.toolInput.objective === "string"
+      ? input.toolInput.objective.trim()
+      : typeof input.toolInput.brief === "string"
+        ? input.toolInput.brief.trim()
+        : "";
+    if (!objective) throw new Error("Authorized spawn objective is required");
+    const producerSurface = this.store.getOptionalRow(
+      `SELECT surface_kind, external_ref_kind, external_ref_id
+       FROM surface_conversations
+       WHERE owner_id = ? AND agent_session_id = ?
+       ORDER BY CASE WHEN surface_kind = ? THEN 0 ELSE 1 END,
+                last_active_at_ms DESC LIMIT 1`,
+      [input.ownerId, input.sessionId, input.surfaceKind],
+    );
+    if (!producerSurface) throw new Error("Authorized spawn caller has no exact journal surface");
+    const runInput = parseJsonObject(run.inputJson);
+    const runMetadata = runInput.metadata;
+    const externalSurface = runMetadata && typeof runMetadata === "object" && !Array.isArray(runMetadata)
+      ? (runMetadata as Record<string, unknown>).externalSurface
+      : undefined;
+    const externalTurnId = externalSurface && typeof externalSurface === "object" && !Array.isArray(externalSurface)
+      ? String((externalSurface as Record<string, unknown>).turnId ?? "").trim()
+      : "";
+    const producerTurnId = typeof runInput.producingTurnId === "string"
+      ? runInput.producingTurnId.trim()
+      : "";
+    const pillId = stableExternalSpawnPillId(requiredExternalIdentity(input.invocationId, "invocationId"));
+    const proposedTitle = typeof input.toolInput.title === "string" ? input.toolInput.title.trim() : "";
+    const title = proposedTitle || `Delegated: ${objective.slice(0, 80)}`;
+    const suppliedMetadata = input.toolInput.metadata;
+    const metadata = suppliedMetadata && typeof suppliedMetadata === "object" && !Array.isArray(suppliedMetadata)
+      ? { ...(suppliedMetadata as Record<string, unknown>) }
+      : {};
+    delete metadata.producerJournal;
+    const surfaceKind = String(producerSurface.surface_kind);
+    const originSurfaceKind = surfaceKind === "main_chat" ? "main_chat"
+      : surfaceKind === "task_chat" ? "task_chat"
+        : ["realtime", "realtime_voice"].includes(surfaceKind) ? "realtime"
+          : ["floating_chat", "floating_bar"].includes(surfaceKind) ? "floating_bar"
+            : "agent_control";
+    const producerJournal = {
+      schemaVersion: 1 as const,
+      surface: {
+        surfaceKind,
+        externalRefKind: String(producerSurface.external_ref_kind),
+        externalRefId: String(producerSurface.external_ref_id),
+      },
+      continuityKey: externalTurnId
+        ? `voice:${externalTurnId.toLowerCase()}`
+        : `agent_spawn:${input.invocationId}`,
+      pillId,
+      ...(producerTurnId ? { producerTurnId } : {}),
+      userText: typeof runInput.prompt === "string" ? runInput.prompt : "",
+      assistantText: "I started a background agent for that.",
+      objective,
+      title,
+    };
+    return {
+      parentRunId: run.runId,
+      producerJournal,
+      toolInput: {
+        ...input.toolInput,
+        originSurfaceKind,
+        parentRunId: run.runId,
+        externalRefId: pillId,
+        title,
+        metadata: { ...metadata, producerJournal },
+      },
+    };
+  }
+
+  completeExternalSurfaceRun(input: CompleteExternalSurfaceRunInput): CompleteExternalSurfaceRunResult {
+    if (!(["completed", "failed", "cancelled"] as const).includes(input.terminalStatus)) {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External terminalStatus is invalid");
+    }
+    const { run, attempt } = this.assertExternalRunTuple(input);
+    const persistedStatus = input.terminalStatus === "completed" ? "succeeded" : input.terminalStatus;
+    if (TERMINAL_STATUSES.includes(run.status) || TERMINAL_STATUSES.includes(attempt.status)) {
+      if (run.status === persistedStatus && attempt.status === persistedStatus) {
+        return { ...input, duplicate: true };
+      }
+      throw new ExternalSurfaceAuthorityError("run_terminal", "External surface run already has a different terminal state");
+    }
+    const pendingInvocations = Number(this.store.getRow(
+      `SELECT COUNT(*) AS count FROM tool_invocation_ledger
+       WHERE run_id = ? AND attempt_id = ? AND status IN ('prepared', 'dispatched')`,
+      [input.runId, input.attemptId],
+    ).count);
+    if (pendingInvocations > 0) {
+      throw new ExternalSurfaceAuthorityError(
+        "external_invocations_pending",
+        "External surface run cannot complete while tool invocations are pending",
+      );
+    }
+    const errorCode = input.errorCode?.trim();
+    if (errorCode && !/^[a-z0-9_]{1,64}$/.test(errorCode)) {
+      throw new ExternalSurfaceAuthorityError("invalid_external_request", "External surface errorCode is invalid");
+    }
+    this.withTransaction(() => {
+      this.finishAttemptAndRun({
+        sessionId: input.sessionId,
+        runId: input.runId,
+        attemptId: input.attemptId,
+        status: persistedStatus,
+        finalText: null,
+        errorCode: persistedStatus === "failed" ? errorCode ?? "external_surface_failed" : null,
+        errorMessage: persistedStatus === "failed" ? "External surface execution failed" : null,
+      });
+    });
+    return { ...input, duplicate: false };
+  }
+
+  private assertExternalRunIdentity(
+    run: AgentRun,
+    expected: { ownerId: string; sessionId: string; turnId: string; prompt: string; mode: "ask" | "act" },
+  ): void {
+    if (run.sessionId !== expected.sessionId || run.mode !== expected.mode) {
+      throw new ExternalSurfaceAuthorityError(
+        "external_run_identity_collision",
+        "External surface turn identity collides with a different run",
+      );
+    }
+    const input = parseJsonObject(run.inputJson);
+    const metadata = input.metadata;
+    const externalSurface = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>).externalSurface
+      : undefined;
+    if (
+      input.prompt !== expected.prompt
+      || !externalSurface
+      || typeof externalSurface !== "object"
+      || Array.isArray(externalSurface)
+      || (externalSurface as Record<string, unknown>).authority !== "swift_realtime"
+      || (externalSurface as Record<string, unknown>).turnId !== expected.turnId
+    ) {
+      throw new ExternalSurfaceAuthorityError(
+        "external_run_identity_collision",
+        "External surface turn identity was replayed with different input",
+      );
+    }
+    this.assertSessionOwner(this.readSession(run.sessionId), expected.ownerId);
+  }
+
+  private assertExternalRunTuple(input: {
+    ownerId: string;
+    sessionId: string;
+    runId: string;
+    attemptId: string;
+  }): { session: AgentSession; run: AgentRun; attempt: RunAttempt } {
+    const ownerId = requiredExternalIdentity(input.ownerId, "ownerId");
+    const sessionId = requiredExternalIdentity(input.sessionId, "sessionId");
+    const runId = requiredExternalIdentity(input.runId, "runId");
+    const attemptId = requiredExternalIdentity(input.attemptId, "attemptId");
+    const session = this.readSession(sessionId);
+    if (session.ownerId !== ownerId) {
+      throw new ExternalSurfaceAuthorityError("owner_mismatch", "External surface session owner does not match");
+    }
+    this.assertExternalRealtimeMapping(sessionId, ownerId);
+    const run = this.readRun(runId);
+    if (run.sessionId !== sessionId) {
+      throw new ExternalSurfaceAuthorityError("run_mismatch", "External surface run does not belong to the session");
+    }
+    const runInput = parseJsonObject(run.inputJson);
+    const metadata = runInput.metadata;
+    const externalSurface = metadata && typeof metadata === "object" && !Array.isArray(metadata)
+      ? (metadata as Record<string, unknown>).externalSurface
+      : undefined;
+    if (
+      !externalSurface
+      || typeof externalSurface !== "object"
+      || Array.isArray(externalSurface)
+      || (externalSurface as Record<string, unknown>).authority !== "swift_realtime"
+    ) {
+      throw new ExternalSurfaceAuthorityError("run_mismatch", "Run is not owned by external surface authority");
+    }
+    const attempt = this.readAttempt(attemptId);
+    if (attempt.runId !== runId) {
+      throw new ExternalSurfaceAuthorityError("attempt_mismatch", "External surface attempt does not belong to the run");
+    }
+    const latest = this.readLatestAttempt(runId);
+    if (latest.attemptId !== attemptId) {
+      throw new ExternalSurfaceAuthorityError("attempt_superseded", "External surface attempt has been superseded");
+    }
+    return { session, run, attempt };
+  }
+
+  private markExternalAttemptRunning(session: AgentSession, attempt: RunAttempt): void {
+    const now = Date.now();
+    this.withTransaction(() => {
+      this.updateRun(attempt.runId, { status: "running", updatedAtMs: now });
+      this.updateAttempt(attempt.attemptId, {
+        status: "running",
+        adapterInstanceId: "swift-realtime",
+        startedAtMs: now,
+        metadataJson: JSON.stringify({ externalSurfaceAuthority: "swift_realtime" }),
+        updatedAtMs: now,
+      });
+      this.appendEvent({
+        sessionId: session.sessionId,
+        runId: attempt.runId,
+        attemptId: attempt.attemptId,
+        type: "attempt.started",
+        payload: { attemptId: attempt.attemptId, authority: "swift_realtime" },
+      });
+      this.appendEvent({
+        sessionId: session.sessionId,
+        runId: attempt.runId,
+        attemptId: attempt.attemptId,
+        type: "run.running",
+        payload: { runId: attempt.runId, attemptId: attempt.attemptId, authority: "swift_realtime" },
+      });
+    });
+  }
+
+  private assertExternalRealtimeMapping(sessionId: string, ownerId: string): void {
+    const mapping = this.store.getOptionalRow(
+      `SELECT 1 FROM surface_conversations
+       WHERE agent_session_id = ? AND owner_id = ? AND surface_kind IN ('realtime_voice', 'realtime')
+       LIMIT 1`,
+      [sessionId, ownerId],
+    );
+    if (!mapping) {
+      throw new ExternalSurfaceAuthorityError(
+        "invalid_external_surface",
+        "External run authority requires a resolved realtime_voice surface mapping",
+      );
+    }
   }
 
   subscribe(subscriber: KernelEventSubscriber): () => void {
@@ -172,28 +694,92 @@ export class KernelCore {
     return () => this.subscribers.delete(subscriber);
   }
 
-  protected createAcceptedRun(input: ExecuteAgentRunInput): { session: AgentSession; run: AgentRun } {
+  protected createAcceptedRun(input: ExecuteAgentRunInput): {
+    session: AgentSession;
+    run: AgentRun;
+    contextSnapshot: ContextSnapshotProjection;
+  } {
     return this.withTransaction(() => {
-      const session = this.resolveSession(input);
+      const session = this.resolveSession({ ...input, modelProfile: input.model ?? input.modelProfile });
+      if (input.adapterId !== undefined && input.adapterId !== session.defaultAdapterId) {
+        throw new Error("Existing session execution profile rejects adapter override");
+      }
+      if (input.model !== undefined && input.model !== session.modelProfile) {
+        throw new Error("Existing session execution profile rejects model override");
+      }
       resolveAdapterWithinBoundary({
         providerBoundary: session.providerBoundary,
         defaultAdapterId: session.defaultAdapterId,
-        requestedAdapterId: input.adapterId ?? session.defaultAdapterId,
+        requestedAdapterId: session.defaultAdapterId,
       });
+      const contextSnapshot = input.admittedContextSnapshot
+        ? inheritContextSnapshotForSession(
+            this.store,
+            input.admittedContextSnapshot,
+            session.sessionId,
+            session.ownerId,
+          )
+        : buildContextSnapshot(
+            this.store,
+            session.sessionId,
+            session.ownerId,
+            Date.now(),
+            input.surfaceKind,
+          );
+      const expectationCount = [
+        input.expectedContextSnapshotVersion,
+        input.expectedContextSnapshotGeneration,
+        input.expectedContextRendererFingerprint,
+        input.expectedCapabilityVersion,
+      ].filter((value) => value !== undefined).length;
+      if (expectationCount !== 0 && expectationCount !== 4) {
+        throw new Error("Run admission context freshness requires version, generation, renderer, and capability");
+      }
+      if (
+        expectationCount === 4
+        && (
+          input.expectedContextSnapshotVersion !== contextSnapshot.version
+          || input.expectedContextSnapshotGeneration !== contextSnapshot.snapshotGeneration
+          || input.expectedContextRendererFingerprint !== contextSnapshot.rendererFingerprint
+          || input.expectedCapabilityVersion !== contextSnapshot.capabilityVersion
+        )
+      ) {
+        throw new Error("context_snapshot_projection_mismatch");
+      }
+      if (input.producingTurnId) {
+        const conversationId = conversationIdForSession(this.store, session.sessionId);
+        if (!conversationId) {
+          throw new Error("Producing turn admission requires a canonical session conversation");
+        }
+        validateProducingJournalTurnAdmission(this.store, {
+          ownerId: session.ownerId,
+          sessionId: session.sessionId,
+          conversationId,
+          turnId: input.producingTurnId,
+        });
+      }
       const run = this.store.insertRun({
         sessionId: session.sessionId,
         parentRunId: input.parentRunId ?? null,
         clientId: input.clientId,
         requestId: input.requestId,
+        idempotencyKey: input.idempotencyKey ?? null,
         status: "queued",
         mode: input.mode ?? "ask",
+        profileGeneration: session.executionProfileGeneration,
         inputJson: JSON.stringify({
           prompt: input.prompt,
-          systemPrompt: input.systemPrompt ?? "",
+          producingTurnId: input.producingTurnId ?? null,
           metadata: input.metadata ?? {},
+          contextSnapshotVersion: contextSnapshot.version,
+          contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
+          contextRendererFingerprint: contextSnapshot.rendererFingerprint,
+          contextCapabilityVersion: contextSnapshot.capabilityVersion,
+          admittedContextSnapshot: contextSnapshot,
         }),
-        requestedModelId: input.model ?? null,
-        cwd: input.cwd ?? session.defaultCwd,
+        modelProfile: session.modelProfile,
+        requestedModelId: session.modelProfile,
+        cwd: session.defaultCwd,
       });
       this.appendEvent({
         sessionId: session.sessionId,
@@ -202,16 +788,43 @@ export class KernelCore {
         payload: { runId: run.runId, requestId: run.requestId, clientId: run.clientId },
       });
       this.touchSession(session.sessionId);
-      return { session, run };
+      return { session, run, contextSnapshot };
     });
   }
 
   protected async executeAcceptedRun(
     input: ExecuteAgentRunInput,
-    accepted: { session: AgentSession; run: AgentRun }
+    accepted: { session: AgentSession; run: AgentRun; contextSnapshot: ContextSnapshotProjection }
   ): Promise<KernelRunResult> {
 
-    const adapterId = input.adapterId ?? accepted.session.defaultAdapterId;
+    const assertExecutionAuthority = (): void => {
+      if (!input.authoritySignal?.aborted) return;
+      throw input.authoritySignal.reason instanceof Error
+        ? input.authoritySignal.reason
+        : new Error("Run execution authority was revoked");
+    };
+    assertExecutionAuthority();
+    input.authoritySignal?.addEventListener("abort", () => {
+      this.activeExecutions.get(accepted.run.runId)?.abortController.abort(input.authoritySignal?.reason);
+    }, { once: true });
+
+    const adapterId = accepted.session.defaultAdapterId;
+    input = {
+      ...input,
+      defaultAdapterId: adapterId,
+      adapterId,
+      model: accepted.session.modelProfile ?? undefined,
+      cwd: accepted.session.defaultCwd ?? undefined,
+      systemPrompt: kernelSystemPolicy(
+        accepted.session.surfaceKind,
+        accepted.session.executionRole,
+        accepted.contextSnapshot.contextPlan,
+      ),
+      systemPromptCacheIdentity: accepted.contextSnapshot.contextPlan.stableCacheIdentity,
+      dynamicContextIdentity: accepted.contextSnapshot.contextPlan.dynamicContextIdentity,
+      contextPlanId: accepted.contextSnapshot.contextPlan.planId,
+      admittedContextSnapshot: accepted.contextSnapshot,
+    };
     if (!input.recoverAfterError) {
       const recovery = this.recoverRunInput?.(adapterId);
       if (recovery) {
@@ -229,16 +842,32 @@ export class KernelCore {
     let completionDeltaArtifacts: AgentArtifact[] = [];
     const surfaceRef = this.surfaceRefForInput(input);
     const conversationId = conversationIdForSession(this.store, accepted.session.sessionId);
+    if (input.producingTurnId && !conversationId) {
+      throw new Error("Producing turn admission lost its canonical session conversation");
+    }
 
     for (let attemptNo = 1; attemptNo <= maxAttempts; attemptNo += 1) {
+      assertExecutionAuthority();
       const attempt = this.createAttempt({
         runId: accepted.run.runId,
         attemptNo,
         adapterId,
         retryReason,
         resumeFromAttemptId,
+        producingTurn: input.producingTurnId ? {
+          ownerId: accepted.session.ownerId,
+          sessionId: accepted.session.sessionId,
+          conversationId: conversationId!,
+          turnId: input.producingTurnId,
+        } : undefined,
       });
       lastAttempt = attempt;
+      const toolCapability = this.toolCapabilities.register({
+        ownerId: accepted.session.ownerId,
+        sessionId: accepted.session.sessionId,
+        runId: accepted.run.runId,
+        attemptId: attempt.attemptId,
+      });
       const attemptInput = this.inputWithManagedArtifactCwd(input, accepted.session, accepted.run.runId, attempt.attemptId);
       if (attemptInput.cwd && attemptInput.cwd !== (input.cwd ?? accepted.session.defaultCwd ?? undefined)) {
         this.withTransaction(() => {
@@ -270,6 +899,7 @@ export class KernelCore {
       let handle: AdapterBindingHandle;
       let bindingResolutionProtectedBindingId: string | null = null;
       try {
+        assertExecutionAuthority();
         const resolved = await this.withBindingResolutionLock(accepted.session.sessionId, adapterId, async () => {
           const existingBinding = this.readActiveBinding(accepted.session.sessionId, adapterId);
           const bindingQueueKey = existingBinding ? this.handleForExistingBinding(existingBinding) : undefined;
@@ -307,9 +937,28 @@ export class KernelCore {
         });
         binding = resolved.binding;
         handle = resolved.handle;
+        assertExecutionAuthority();
         bindingResolutionProtectedBindingId = pool.requiresPinnedWorkers ? (handle.bindingId ?? null) : null;
       } catch (error) {
         pool.unprotectPinnedBinding(bindingResolutionProtectedBindingId);
+        if (input.authoritySignal?.aborted) {
+          if (!this.isTerminalRun(accepted.run.runId)) {
+            const failure = failureFromError(error, {
+              code: "execution_authority_revoked",
+              source: "runtime",
+              adapterId: attempt.adapterId,
+              retryable: false,
+            });
+            this.failAttemptBeforeExecution(
+              attempt,
+              "execution_authority_revoked",
+              failure.userMessage,
+              false,
+              failure,
+            );
+          }
+          break;
+        }
         if (isStaleBindingError(error)) {
           const failure = failureFromError(error, {
             code: "stale_binding",
@@ -343,55 +992,27 @@ export class KernelCore {
 
       let effectivePrompt = attemptInput.prompt;
       let effectivePromptBlocks = attemptInput.promptBlocks;
-      let acknowledgedCompletionDelta: { ids: string[]; completedAtHighWaterMs?: number } | null = null;
-      if (surfaceRef && conversationId) {
-        const assembled = assembleTurnContext({
-          store: this.store,
-          services: this.turnContextServices(),
-          ownerId: input.ownerId,
-          sessionId: accepted.session.sessionId,
-          conversationId,
-          surfaceRef,
-          executionRole: accepted.session.executionRole,
-          userText: input.prompt,
-          attachmentMetadataJson: input.attachmentMetadataJson,
-          surfaceContextJson: input.surfaceContextJson,
-          imagePresent: Boolean(input.imagePresent),
-          bindingCarriesNativeHistory: bindingCarriesNativeHistory(binding),
-          lastDeliveredTurnCreatedAtMs: binding.lastDeliveredTurnCreatedAtMs,
-          runId: accepted.run.runId,
-        });
-        effectivePrompt = assembled.prompt;
+      if (surfaceRef) {
+        const snapshot = attemptInput.admittedContextSnapshot;
+        if (!snapshot) throw new Error("Run is missing its admitted context snapshot");
+        const attachments = input.attachments?.length
+          ? `\n\n# Attachments\n${stableJsonStringify(input.attachments)}`
+          : "";
+        effectivePrompt = `${renderContextSnapshot(
+          snapshot,
+          accepted.session.surfaceKind,
+          accepted.session.executionRole,
+        )}${attachments}\n\n# User Message\n${input.prompt}`;
         effectivePromptBlocks = attemptInput.promptBlocks
           ? attemptInput.promptBlocks.map((block) =>
-              block.type === "text" ? { ...block, text: assembled.prompt } : block,
+              block.type === "text" ? { ...block, text: effectivePrompt } : block,
             )
           : undefined;
-        completionDeltaArtifacts = assembled.completionDeltaArtifacts;
-        if (assembled.acknowledgedCompletionDeltaIds.length > 0) {
-          acknowledgedCompletionDelta = {
-            ids: assembled.acknowledgedCompletionDeltaIds,
-            completedAtHighWaterMs: assembled.completionDeltaArtifacts
-              .map((artifact) => artifact.createdAtMs)
-              .reduce((max, value) => Math.max(max, value), 0) || undefined,
-          };
-        }
-      }
-
-      if (conversationId && surfaceRef && attemptNo === 1) {
-        appendConversationTurn(this.store, {
-          conversationId,
-          role: "user",
-          surfaceKind: surfaceRef.surfaceKind,
-          content: input.prompt,
-          createdAtMs: Date.now(),
-          metadataJson: JSON.stringify({ runId: accepted.run.runId }),
-        });
-        advanceBindingTurnDelivery(this.store, binding.bindingId, conversationId);
       }
 
       try {
         const result = await pool.runExclusiveQueued(handle, attempt.attemptId, async (worker) => {
+          assertExecutionAuthority();
           if (this.runStatus(accepted.run.runId) === "cancelling") {
             throw new Error("cancelled_before_adapter_dispatch");
           }
@@ -402,16 +1023,10 @@ export class KernelCore {
             attemptId: attempt.attemptId,
             sessionId: accepted.session.sessionId,
           });
-          refreshMcpAttemptContext(mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId), {
-            ownerId: input.ownerId,
-            requestId: accepted.run.requestId,
-            clientId: accepted.run.clientId,
-            protocolVersion: PROTOCOL_VERSION,
-            sessionId: accepted.session.sessionId,
-            runId: accepted.run.runId,
-            attemptId: attempt.attemptId,
-            adapterSessionId: handle.adapterNativeSessionId,
-          });
+          refreshMcpAttemptContext(
+            mcpServersForBinding(input.mcpServers ?? [], accepted.session.sessionId, adapterId, this.runtimeNodeId),
+            { capabilityRef: toolCapability.capabilityRef },
+          );
           this.markAttemptRunning(attempt, binding);
           return worker.adapter.executeAttempt(
             {
@@ -421,6 +1036,7 @@ export class KernelCore {
               clientId: accepted.run.clientId,
               runId: accepted.run.runId,
               attemptId: attempt.attemptId,
+              toolCapabilityRef: toolCapability.capabilityRef,
               binding: handle,
               prompt: effectivePromptBlocks ?? [{ type: "text", text: effectivePrompt }],
               mode: input.mode ?? "ask",
@@ -433,13 +1049,15 @@ export class KernelCore {
           );
         });
         this.activeExecutions.delete(accepted.run.runId);
-        if (acknowledgedCompletionDelta && surfaceRef) {
-          acknowledgeCompletionDelta(this.store, {
-            ownerId: input.ownerId,
-            surfaceRef,
-            ids: acknowledgedCompletionDelta.ids,
-            completedAtHighWaterMs: acknowledgedCompletionDelta.completedAtHighWaterMs ?? null,
-          });
+        assertExecutionAuthority();
+        if (
+          (
+            this.runStatus(accepted.run.runId) === "cancelling"
+            || this.readAttempt(attempt.attemptId).status === "cancelling"
+          )
+          && result.terminalStatus !== "cancelled"
+        ) {
+          throw new Error("cancelled_before_adapter_result_commit");
         }
         const completed = this.completeAttemptAndRun(
           accepted.session,
@@ -455,6 +1073,21 @@ export class KernelCore {
         return { ...completed, completionDeltaArtifacts };
       } catch (error) {
         this.activeExecutions.delete(accepted.run.runId);
+        if (input.authoritySignal?.aborted) {
+          if (!this.isTerminalRun(accepted.run.runId)) {
+            this.finishAttemptAndRun({
+              sessionId: accepted.session.sessionId,
+              runId: accepted.run.runId,
+              attemptId: attempt.attemptId,
+              status: "cancelled",
+              finalText: null,
+              errorCode: "execution_authority_revoked",
+              errorMessage: "Run execution authority was revoked",
+              failure: null,
+            });
+          }
+          break;
+        }
         if (isStaleBindingError(error)) {
           this.markBindingStale(binding, attempt, messageFrom(error));
           const failure = failureFromError(error, {
@@ -511,25 +1144,6 @@ export class KernelCore {
     };
   }
 
-  protected turnContextServices() {
-    const host = this as unknown as KernelCore & {
-      persistDesktopContextPacket(packetInput: DesktopContextPacketBuildInput): BuiltDesktopContextPacket;
-      routeDesktopIntent(
-        routeInput: Omit<DesktopIntentRouteInput, "nowMs" | "actionQueue" | "sessionCandidates"> & { ownerId?: string },
-      ): DesktopIntentRoute;
-      listSessions(listInput: ListSessionsInput): KernelSessionSummary[];
-      inspectArtifacts(inspectInput: InspectArtifactsInput): AgentArtifact[];
-    };
-    return {
-      persistDesktopContextPacket: (packetInput: DesktopContextPacketBuildInput) =>
-        host.persistDesktopContextPacket(packetInput),
-      routeDesktopIntent: (routeInput: Parameters<typeof host.routeDesktopIntent>[0]) =>
-        host.routeDesktopIntent(routeInput),
-      listSessions: (listInput: ListSessionsInput) => host.listSessions(listInput),
-      inspectArtifacts: (inspectInput: InspectArtifactsInput) => host.inspectArtifacts(inspectInput),
-    };
-  }
-
   protected surfaceRefForInput(input: ExecuteAgentRunInput): SurfaceRef | null {
     if (!input.surfaceKind || !input.externalRefKind || !input.externalRefId) return null;
     return {
@@ -565,17 +1179,41 @@ export class KernelCore {
       }
     }
   }
+  private admittedContextSnapshotForRun(run: AgentRun): ContextSnapshotProjection {
+    const input = parseJsonObject(run.inputJson);
+    const snapshot = input.admittedContextSnapshot;
+    if (
+      !snapshot
+      || typeof snapshot !== "object"
+      || Array.isArray(snapshot)
+      || typeof (snapshot as Record<string, unknown>).version !== "string"
+      || !Number.isSafeInteger((snapshot as Record<string, unknown>).snapshotGeneration)
+      || !Array.isArray((snapshot as Record<string, unknown>).recentTurns)
+      || !Array.isArray((snapshot as Record<string, unknown>).sourceOutcomes)
+      || !Array.isArray((snapshot as Record<string, unknown>).activeRuns)
+    ) {
+      throw new Error(`Parent run ${run.runId} is missing its admitted context snapshot`);
+    }
+    return snapshot as ContextSnapshotProjection;
+  }
+
   protected createDelegatedRun(
     parentSession: AgentSession,
     parentRun: AgentRun,
     childRunInput: ExecuteAgentRunInput,
     input: DelegateAgentInput
-  ): { session: AgentSession; run: AgentRun; delegation: AgentDelegation } {
+  ): { session: AgentSession; run: AgentRun; delegation: AgentDelegation; contextSnapshot: ContextSnapshotProjection } {
     return this.withTransaction(() => {
       const session = this.resolveSession(childRunInput);
       if (session.sessionId === parentSession.sessionId) {
         throw new Error("Delegated child session must be distinct from parent session");
       }
+      const contextSnapshot = inheritContextSnapshotForSession(
+        this.store,
+        this.admittedContextSnapshotForRun(parentRun),
+        session.sessionId,
+        session.ownerId,
+      );
       const run = this.store.insertRun({
         sessionId: session.sessionId,
         parentRunId: parentRun.runId,
@@ -585,8 +1223,12 @@ export class KernelCore {
         mode: childRunInput.mode ?? "ask",
         inputJson: JSON.stringify({
           prompt: childRunInput.prompt,
-          systemPrompt: childRunInput.systemPrompt ?? "",
           metadata: childRunInput.metadata ?? {},
+          contextSnapshotVersion: contextSnapshot.version,
+          contextSnapshotGeneration: contextSnapshot.snapshotGeneration,
+          contextRendererFingerprint: contextSnapshot.rendererFingerprint,
+          contextCapabilityVersion: contextSnapshot.capabilityVersion,
+          admittedContextSnapshot: contextSnapshot,
         }),
         requestedModelId: childRunInput.model ?? null,
         cwd: childRunInput.cwd ?? session.defaultCwd,
@@ -646,13 +1288,18 @@ export class KernelCore {
         },
       });
       this.touchSession(session.sessionId);
-      return { session, run, delegation };
+      return { session, run, delegation, contextSnapshot };
     });
   }
 
   protected async executeDelegationAsync(
     childRunInput: ExecuteAgentRunInput,
-    created: { session: AgentSession; run: AgentRun; delegation: AgentDelegation },
+    created: {
+      session: AgentSession;
+      run: AgentRun;
+      delegation: AgentDelegation;
+      contextSnapshot: ContextSnapshotProjection;
+    },
     markRunning = true
   ): Promise<DelegateAgentResult> {
     if (markRunning) {
@@ -661,6 +1308,7 @@ export class KernelCore {
     const result = await this.executeAcceptedRun(childRunInput, {
       session: created.session,
       run: created.run,
+      contextSnapshot: created.contextSnapshot,
     });
     const status = result.terminalStatus === "succeeded" ? "succeeded" : result.terminalStatus;
     const delegation = this.updateDelegationStatus(created.delegation, status);
@@ -751,6 +1399,9 @@ export class KernelCore {
           defaultAdapterId: input.defaultAdapterId,
           executionRole: input.executionRole,
           providerBoundary: input.providerBoundary,
+          modelProfile: input.modelProfile,
+          defaultCwd: "cwd" in input ? (input as ExecuteAgentRunInput).cwd ?? null : null,
+          executionProfileSource: input.executionProfileSource,
           title: input.title ?? null,
         },
         () => Date.now(),
@@ -781,6 +1432,9 @@ export class KernelCore {
       executionRole: input.executionRole ?? "coordinator",
       providerBoundary:
         input.providerBoundary ?? providerBoundaryForAdapter(input.defaultAdapterId ?? "acp"),
+      modelProfile: input.modelProfile ?? null,
+      defaultCwd: "cwd" in input ? (input as ExecuteAgentRunInput).cwd ?? null : null,
+      executionProfileSource: input.executionProfileSource,
     });
     this.appendEvent({
       sessionId: session.sessionId,
@@ -834,6 +1488,12 @@ export class KernelCore {
     adapterId: string;
     retryReason: string | null;
     resumeFromAttemptId: string | null;
+    producingTurn?: {
+      ownerId: string;
+      sessionId: string;
+      conversationId: string;
+      turnId: string;
+    };
   }): RunAttempt {
     return this.withTransaction(() => {
       const active = this.readActiveAttempt(input.runId);
@@ -845,9 +1505,11 @@ export class KernelCore {
         startedAtMs: input.attemptNo === 1 ? Date.now() : undefined,
         updatedAtMs: Date.now(),
       });
+      const run = this.readRun(input.runId);
       const attempt = this.store.insertAttempt({
         runId: input.runId,
         attemptNo: input.attemptNo,
+        profileGeneration: run.profileGeneration,
         status: "starting",
         adapterId: input.adapterId,
         adapterInstanceId: "",
@@ -856,7 +1518,13 @@ export class KernelCore {
         resumeFromAttemptId: input.resumeFromAttemptId,
         retryable: input.retryReason ? 1 : 0,
       });
-      const run = this.readRun(input.runId);
+      if (input.producingTurn) {
+        bindProducingJournalTurn(this.store, {
+          ...input.producingTurn,
+          runId: input.runId,
+          attemptId: attempt.attemptId,
+        });
+      }
       this.appendEvent({
         sessionId: run.sessionId,
         runId: input.runId,
@@ -917,6 +1585,9 @@ export class KernelCore {
       adapter?: RuntimeAdapter;
     }
   ): boolean {
+    if (binding.profileGeneration !== input.session.executionProfileGeneration) {
+      return false;
+    }
     const requestedCwd = input.input.cwd ?? input.session.defaultCwd ?? process.cwd();
     const bindingCwd = binding.cwd ?? process.cwd();
     if (bindingCwd !== requestedCwd) {
@@ -925,7 +1596,8 @@ export class KernelCore {
     if (input.input.model !== undefined && binding.modelId !== input.input.model) {
       return false;
     }
-    const requestedSystemPromptHash = stableHash(input.input.systemPrompt);
+    const requestedSystemPromptHash = stableHash(
+      input.input.systemPromptCacheIdentity ?? input.input.systemPrompt);
     if (binding.systemPromptHash !== null && binding.systemPromptHash !== requestedSystemPromptHash) {
       return false;
     }
@@ -983,7 +1655,7 @@ export class KernelCore {
           adapterInstanceId: this.runtimeNodeId,
           cwd: input.input.cwd ?? binding.cwd ?? input.session.defaultCwd ?? null,
           modelId: input.input.model ?? binding.modelId ?? null,
-          systemPromptHash: stableHash(input.input.systemPrompt),
+          systemPromptHash: stableHash(input.input.systemPromptCacheIdentity ?? input.input.systemPrompt),
           metadataJson: bindingMetadata(input.input, input.adapter),
           lastUsedAtMs: Date.now(),
           updatedAtMs: Date.now(),
@@ -997,6 +1669,9 @@ export class KernelCore {
             bindingId: binding.bindingId,
             adapterId: input.adapterId,
             bindingGeneration: binding.bindingGeneration,
+            systemPromptCacheIdentity: input.input.systemPromptCacheIdentity ?? null,
+            dynamicContextIdentity: input.input.dynamicContextIdentity ?? null,
+            contextPlanId: input.input.contextPlanId ?? null,
           },
         });
       });
@@ -1046,13 +1721,14 @@ export class KernelCore {
         sessionId: input.session.sessionId,
         adapterId: input.adapterId,
         bindingGeneration: generation,
+        profileGeneration: input.session.executionProfileGeneration,
         adapterNativeSessionId: opened.adapterNativeSessionId,
         adapterInstanceId: this.runtimeNodeId,
         resumeFidelity: opened.resumeFidelity,
         status: "active",
         cwd: opened.cwd,
         modelId: opened.model ?? input.input.model ?? null,
-        systemPromptHash: stableHash(input.input.systemPrompt),
+        systemPromptHash: stableHash(input.input.systemPromptCacheIdentity ?? input.input.systemPrompt),
         metadataJson: bindingMetadata(input.input, input.adapter),
         lastUsedAtMs: Date.now(),
       });
@@ -1067,6 +1743,9 @@ export class KernelCore {
           bindingGeneration: created.bindingGeneration,
           adapterId: input.adapterId,
           resumeFidelity: created.resumeFidelity,
+          systemPromptCacheIdentity: input.input.systemPromptCacheIdentity ?? null,
+          dynamicContextIdentity: input.input.dynamicContextIdentity ?? null,
+          contextPlanId: input.input.contextPlanId ?? null,
         },
       });
       return created;
@@ -1169,16 +1848,6 @@ export class KernelCore {
         errorMessage: status === "failed" ? result.failure?.userMessage ?? null : null,
         failure: result.failure,
       });
-      if (status === "succeeded" && turnRecord?.conversationId && result.text.trim()) {
-        appendConversationTurn(this.store, {
-          conversationId: turnRecord.conversationId,
-          role: "assistant",
-          surfaceKind: turnRecord.surfaceKind,
-          content: result.text,
-          createdAtMs: Date.now(),
-          metadataJson: JSON.stringify({ runId }),
-        });
-      }
     });
     return {
       session,
@@ -1542,6 +2211,7 @@ export class KernelCore {
       visibility: input.visibility ?? "ui",
       payloadJson: JSON.stringify(input.payload ?? {}),
     });
+    this.toolCapabilities.handleKernelEvent(event);
     if (this.transactionDepth > 0) {
       this.pendingSubscriberEvents.push(event);
       return event;
@@ -1611,7 +2281,8 @@ export class KernelCore {
   }
 
   protected readSession(sessionId: string): AgentSession {
-    return sessionFromRow(this.store.getRow("SELECT * FROM sessions WHERE session_id = ?", [sessionId]));
+    const session = sessionFromRow(this.store.getRow("SELECT * FROM sessions WHERE session_id = ?", [sessionId]));
+    return applyExecutionProfileToSession(session, readSessionExecutionProfile(this.store, sessionId));
   }
 
   protected readRun(runId: string): AgentRun {
@@ -1958,4 +2629,17 @@ export class KernelCore {
   protected updateBinding(bindingId: string, patch: Partial<AdapterBinding>): void {
     updateByColumns(this.store, "adapter_bindings", "binding_id", bindingId, bindingColumnMap, patch);
   }
+}
+
+function requiredExternalIdentity(value: string, field: string): string {
+  const normalized = value?.trim();
+  if (!normalized) {
+    throw new ExternalSurfaceAuthorityError("invalid_external_request", `External surface ${field} is required`);
+  }
+  return normalized;
+}
+
+function stableExternalSpawnPillId(invocationId: string): string {
+  const digest = stableHash(`external-spawn:${invocationId}`).replace(/^sha256:/, "").slice(0, 32);
+  return `${digest.slice(0, 8)}-${digest.slice(8, 12)}-${digest.slice(12, 16)}-${digest.slice(16, 20)}-${digest.slice(20)}`;
 }

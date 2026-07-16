@@ -3179,5 +3179,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Stockage de l'appareil",
+    "deviceStoragePercentFull": "{percent} % plein",
+    "deviceStorageUsedOfTotal": "{used} sur {total} utilisés",
+    "deviceStorageFree": "{free} libre",
+    "deviceStorageNearlyFull": "Appareil presque plein — synchronisez pour libérer de l'espace.",
     "phoneMicOfflineFallbackMessage": "Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne."
 }

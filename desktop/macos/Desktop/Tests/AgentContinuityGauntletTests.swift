@@ -32,10 +32,13 @@ final class AgentContinuityGauntletTests: XCTestCase {
       "ask_main_chat_no_wait",
       "main_chat_busy_state",
       "coordinator_awareness_snapshot",
+      "coordinator_inspect_run",
+      "coordinator_continue_agent",
       "swap_test_owner",
       "restore_test_owner",
       "clear_owner_surface_state",
       "kernel_turn_tail",
+      "ptt_manager_turn",
     ]
     for name in required {
       XCTAssertTrue(
@@ -48,12 +51,12 @@ final class AgentContinuityGauntletTests: XCTestCase {
         .appendingPathComponent("Desktop/Sources/FloatingControlBar/RealtimeHubController.swift"),
       encoding: .utf8
     )
-    XCTAssertTrue(hubSource.contains("name: \"ptt_test_turn\""))
     let providerSource = try String(
       contentsOf: desktopDir
         .appendingPathComponent("Desktop/Sources/Providers/ChatProvider.swift"),
       encoding: .utf8
     )
+    XCTAssertTrue(hubSource.contains("name: \"ptt_test_turn\""))
     XCTAssertTrue(providerSource.contains("automationMainChatSnapshot"))
     XCTAssertTrue(providerSource.contains("automationSwapTestOwner"))
     XCTAssertTrue(providerSource.contains("automationKernelTurnTail"))
@@ -80,7 +83,6 @@ final class AgentContinuityGauntletTests: XCTestCase {
         .appendingPathComponent("Desktop/Sources/DesktopAutomationBridge.swift"),
       encoding: .utf8
     )
-
     XCTAssertTrue(driverSource.contains("\"resilience\""))
     XCTAssertTrue(driverSource.contains("\"all\": {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
     XCTAssertTrue(driverSource.contains("SUITE_NAMES = {\"continuity\", \"agents\", \"owner\", \"prompts\", \"resilience\"}"))
@@ -108,10 +110,41 @@ final class AgentContinuityGauntletTests: XCTestCase {
     XCTAssertTrue(bridgeSource.contains("harnessBusyUntil"))
     XCTAssertTrue(bridgeSource.contains("hold_busy_ms is disabled on production bundles"))
     XCTAssertTrue(driverSource.contains("continuity_contract_self_check_failures"))
-    XCTAssertTrue(driverSource.contains("testStageOptimisticThenApplyPromotesInPlaceWithoutDuplicate"))
-    XCTAssertTrue(driverSource.contains("testMainAndFloatingAutomationSnapshotsAliasSameTimeline"))
+    XCTAssertTrue(
+      driverSource.contains("testRejectedJournalExchangeNeverCreatesAVisibleOrphan")
+    )
+    XCTAssertTrue(
+      driverSource.contains("testJournalAdmissionPublishesImmediateProjectionWithOneStableIdentity")
+    )
+    XCTAssertTrue(driverSource.contains("testStructuredBlocksResourcesAndContinuityMetadataSurviveProjection"))
     XCTAssertTrue(driverSource.contains("testHydratePreferencePrefersRunThenSessionThenPill"))
     XCTAssertTrue(driverSource.contains("--suite resilience"))
+    XCTAssertTrue(
+      driverSource.contains(
+        "Have an agent look through my memories today and surface one surprising insight."
+      )
+    )
+    XCTAssertTrue(driverSource.contains("def run_exact_voice_memory_agent_step(self) -> None"))
+    XCTAssertTrue(driverSource.contains("self.run_exact_voice_memory_agent_step()"))
+    XCTAssertTrue(driverSource.contains("coordinator_inspect_run"))
+    XCTAssertTrue(driverSource.contains("coordinator_continue_agent"))
+    XCTAssertTrue(driverSource.contains("def exact_voice_agent_turn_signature("))
+    XCTAssertTrue(driverSource.contains("PTT step 02 failed blind recall of the prior typed marker"))
+    XCTAssertTrue(driverSource.contains("PTT step 02b failed blind recall of the prior PTT marker"))
+    XCTAssertTrue(driverSource.contains("02b-ptt-followup"))
+    XCTAssertTrue(driverSource.contains("def restart_named_bundle_and_wait("))
+    XCTAssertTrue(driverSource.contains("producingTurnSurvivedRestart"))
+    XCTAssertTrue(driverSource.contains("agentSpawn"))
+    XCTAssertTrue(driverSource.contains("agentCompletion"))
+    XCTAssertTrue(driverSource.contains("quit_and_reopen"))
+    XCTAssertTrue(driverSource.contains("tool_invocation_contract_errors"))
+    XCTAssertTrue(driverSource.contains("successfulGetMemoriesInvocationIds"))
+    XCTAssertTrue(driverSource.contains("zero-legacy-jsonl-tool-routing-evidence.json"))
+    XCTAssertTrue(driverSource.contains("unrouted_tool_call"))
+    XCTAssertTrue(driverSource.contains("malformed jsonl"))
+    XCTAssertTrue(driverSource.contains("legacy_path_invoked"))
+    XCTAssertTrue(bridgeSource.contains("name: \"coordinator_inspect_run\""))
+    XCTAssertTrue(bridgeSource.contains("name: \"coordinator_continue_agent\""))
 
     XCTAssertTrue(scriptSource.contains("--suite resilience"))
     XCTAssertTrue(scriptSource.contains("--suite all"))

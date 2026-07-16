@@ -3240,5 +3240,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Eszköz tárhelye",
+    "deviceStoragePercentFull": "{percent}% megtelt",
+    "deviceStorageUsedOfTotal": "{used} / {total} felhasználva",
+    "deviceStorageFree": "{free} szabad",
+    "deviceStorageNearlyFull": "Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.",
     "phoneMicOfflineFallbackMessage": "Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy."
 }

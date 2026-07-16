@@ -131,19 +131,27 @@ final class APIClientRoutingTests: XCTestCase {
 
     // MARK: - URL property tests
 
-    func testBaseURLDefaultsToPythonBackend() async {
+    func testNonProductionAppDefaultsToDevelopmentPythonBackend() async {
         unsetenv("OMI_PYTHON_API_URL")
         let client = APIClient()
         let url = await client.baseURL
-        XCTAssertEqual(url, "https://api.omi.me/")
+        XCTAssertEqual(url, DesktopBackendEnvironment.developmentPythonAPIURL)
     }
 
-    func testBetaProductionBundleUsesDevelopmentPythonBackend() {
+    func testExplicitPythonBackendOverrideWinsOverDevelopmentDefault() {
         let url = DesktopBackendEnvironment.pythonBaseURL(
             useDevelopmentBackends: true,
             environmentValue: "https://api.omi.me"
         )
-        XCTAssertEqual(url, "https://api.omiapi.com/")
+        XCTAssertEqual(url, "https://api.omi.me/")
+    }
+
+    func testDevelopmentDefaultUsesDevelopmentPythonBackendWithoutOverride() {
+        let url = DesktopBackendEnvironment.pythonBaseURL(
+            useDevelopmentBackends: true,
+            environmentValue: nil
+        )
+        XCTAssertEqual(url, DesktopBackendEnvironment.developmentPythonAPIURL)
     }
 
     func testBetaProductionBundleKeepsProductionAuthBackendByDefault() {
@@ -164,13 +172,72 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "https://api.omi.me/")
     }
 
-    func testBetaProductionBundleUsesDevelopmentRustBackend() {
+    func testExplicitRustBackendOverrideWinsOverDevelopmentDefault() {
         let url = DesktopBackendEnvironment.rustBackendURL(
             useDevelopmentBackends: true,
             environmentValue: "https://desktop-backend-hhibjajaja-uc.a.run.app",
             launchEnvironmentValue: nil
         )
-        XCTAssertEqual(url, "https://desktop-backend-dt5lrfkkoa-uc.a.run.app/")
+        XCTAssertEqual(url, "https://desktop-backend-hhibjajaja-uc.a.run.app/")
+    }
+
+    func testDevelopmentDefaultUsesDevelopmentRustBackendWithoutOverride() {
+        let url = DesktopBackendEnvironment.rustBackendURL(
+            useDevelopmentBackends: true,
+            environmentValue: nil,
+            launchEnvironmentValue: nil
+        )
+        XCTAssertEqual(url, DesktopBackendEnvironment.developmentRustBackendURL)
+    }
+
+    func testDevelopmentDefaultsDoNotOverwriteExplicitBackendURLs() {
+        let originalPython = ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"]
+        let originalRust = ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"]
+        defer {
+            if let originalPython {
+                setenv("OMI_PYTHON_API_URL", originalPython, 1)
+            } else {
+                unsetenv("OMI_PYTHON_API_URL")
+            }
+            if let originalRust {
+                setenv("OMI_DESKTOP_API_URL", originalRust, 1)
+            } else {
+                unsetenv("OMI_DESKTOP_API_URL")
+            }
+        }
+
+        setenv("OMI_PYTHON_API_URL", "http://python-override:8080", 1)
+        setenv("OMI_DESKTOP_API_URL", "http://rust-override:10201", 1)
+        DesktopBackendEnvironment.applyReleaseChannelDefaults()
+
+        XCTAssertEqual(
+            ProcessInfo.processInfo.environment["OMI_PYTHON_API_URL"],
+            "http://python-override:8080"
+        )
+        XCTAssertEqual(
+            ProcessInfo.processInfo.environment["OMI_DESKTOP_API_URL"],
+            "http://rust-override:10201"
+        )
+    }
+
+    func testBundleEnvironmentDoesNotOverwriteExplicitLaunchBackendURLs() {
+        let launchEnvironment = [
+            "OMI_DESKTOP_API_URL": "http://127.0.0.1:10343",
+            "OMI_PYTHON_API_URL": "http://127.0.0.1:8080",
+        ]
+
+        XCTAssertFalse(BundleEnvironment.shouldApplyBundledValue(
+            for: "OMI_DESKTOP_API_URL",
+            launchEnvironment: launchEnvironment
+        ))
+        XCTAssertFalse(BundleEnvironment.shouldApplyBundledValue(
+            for: "OMI_PYTHON_API_URL",
+            launchEnvironment: launchEnvironment
+        ))
+        XCTAssertTrue(BundleEnvironment.shouldApplyBundledValue(
+            for: "FIREBASE_API_KEY",
+            launchEnvironment: launchEnvironment
+        ))
     }
 
     func testStableProductionBundleKeepsConfiguredRustBackend() {
@@ -201,16 +268,14 @@ final class APIClientRoutingTests: XCTestCase {
         ))
     }
 
-    func testNonProductionBundleSkipsAutomaticBetaRouting() {
-        // Dev bundle and named test bundles never trigger beta-to-dev routing
-        // automatically. They must opt in via OMI_FORCE_DEV_BACKENDS or env URLs.
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+    func testNonProductionBundlesDefaultToDevelopmentBackends() {
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.desktop-dev",
             updateChannel: "beta"
         ))
-        XCTAssertFalse(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
+        XCTAssertTrue(DesktopBackendEnvironment.shouldUseDevelopmentBackends(
             bundleIdentifier: "com.omi.omi-beta-dev-test",
-            updateChannel: "beta"
+            updateChannel: "stable"
         ))
     }
 
@@ -264,11 +329,11 @@ final class APIClientRoutingTests: XCTestCase {
         XCTAssertEqual(url, "http://localhost:8787/")
     }
 
-    func testRustBackendURLReturnsEmptyWhenNotSet() async {
+    func testNonProductionAppDefaultsToDevelopmentRustBackendWhenNotSet() async {
         unsetenv("OMI_DESKTOP_API_URL")
         let client = APIClient()
         let url = await client.rustBackendURL
-        XCTAssertEqual(url, "")
+        XCTAssertEqual(url, DesktopBackendEnvironment.developmentRustBackendURL)
     }
 
     func testBaseURLAndRustBackendURLAreIndependent() async {
@@ -285,6 +350,22 @@ final class APIClientRoutingTests: XCTestCase {
     }
 
     func testRealtimeMintStructuredFailurePreservesDiagnostics() async throws {
+        let previousOwner = UserDefaults.standard.object(forKey: .authUserId)
+        let previousOverride = UserDefaults.standard.object(forKey: .automationOwnerOverride)
+        UserDefaults.standard.set("realtime-routing-owner", forKey: .authUserId)
+        UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+        defer {
+            if let previousOwner {
+                UserDefaults.standard.set(previousOwner, forKey: .authUserId)
+            } else {
+                UserDefaults.standard.removeObject(forKey: .authUserId)
+            }
+            if let previousOverride {
+                UserDefaults.standard.set(previousOverride, forKey: .automationOwnerOverride)
+            } else {
+                UserDefaults.standard.removeObject(forKey: .automationOwnerOverride)
+            }
+        }
         let body = Data(
             """
             {
@@ -301,7 +382,9 @@ final class APIClientRoutingTests: XCTestCase {
         let client = await makeTestClient()
 
         do {
-            _ = try await client.mintRealtimeToken(provider: "openai")
+            _ = try await client.mintRealtimeToken(
+                provider: "openai",
+                expectedOwnerID: "realtime-routing-owner")
             XCTFail("Expected structured realtime mint failure")
         } catch let error as RealtimeTokenMintError {
             XCTAssertEqual(error.statusCode, 429)

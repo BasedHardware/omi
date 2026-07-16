@@ -1,18 +1,28 @@
+import uuid
 from datetime import datetime, timedelta, timezone
-from typing import Optional
+from typing import Literal, Optional, TypedDict
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter, transactional
-
 from ._client import db, document_id_from_seed
 from database.firestore_cache import CachePolicy, get_or_fetch, invalidate
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
+from models.other import Person
 from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
 DELETION_WIPE_RUNNING_STALE_AFTER = timedelta(hours=6)
+_DELETION_WIPE_TERMINAL_STATUSES = frozenset({'completed', 'cancelled'})
+_DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES = frozenset({'pending', 'retrying', 'running', 'failed'})
+
+
+class DeletionWipeTaskResolution(TypedDict):
+    outcome: Literal['resolved', 'missing', 'ambiguous', 'completed', 'not_actionable']
+    uid: str | None
+
 
 # Conservative low-risk user projections. Do NOT use these policies for
 # entitlement, BYOK, data-protection, privacy-consent, or full user-doc caching.
@@ -318,7 +328,21 @@ def mark_user_deletion_wipe_running(uid: str):
     )
 
 
-def mark_user_deletion_wipe_intent(uid: str):
+@transactional
+def _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id: str) -> str:
+    transaction.set(
+        doc_ref,
+        {
+            'wipe_status': 'deleting_auth',
+            'wipe_intent_at': datetime.now(timezone.utc),
+            'wipe_job_id': wipe_job_id,
+        },
+        merge=True,
+    )
+    return wipe_job_id
+
+
+def mark_user_deletion_wipe_intent(uid: str) -> str:
     """Persist a non-actionable deletion intent *before* auth deletion.
 
     Written BEFORE ``auth.delete_account()`` succeeds. The reconciler only
@@ -330,10 +354,10 @@ def mark_user_deletion_wipe_intent(uid: str):
     Call ``mark_user_deletion_wipe_started`` to transition the marker to the
     actionable ``'pending'`` state once auth deletion is confirmed.
     """
-    db.collection('account_deletions').document(uid).set(
-        {'wipe_status': 'deleting_auth', 'wipe_intent_at': datetime.now(timezone.utc)},
-        merge=True,
-    )
+    wipe_job_id = uuid.uuid4().hex
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _mark_user_deletion_wipe_intent_txn(transaction, doc_ref, wipe_job_id)
 
 
 def mark_user_deletion_wipe_completed(uid: str):
@@ -350,6 +374,66 @@ def mark_user_deletion_wipe_failed(uid: str):
         {'wipe_status': 'failed', 'wipe_failed_at': datetime.now(timezone.utc)},
         merge=True,
     )
+
+
+@transactional
+def _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, generated_job_id: str) -> str | None:
+    snapshot = doc_ref.get(transaction=transaction)
+    if not snapshot.exists:
+        return None
+    existing_job_id = (snapshot.to_dict() or {}).get('wipe_job_id')
+    if isinstance(existing_job_id, str) and existing_job_id:
+        return existing_job_id
+    transaction.update(doc_ref, {'wipe_job_id': generated_job_id})
+    return generated_job_id
+
+
+def ensure_deletion_wipe_job_id(uid: str) -> str | None:
+    """Backfill an opaque job id for a pre-job-id deletion record.
+
+    Records created before the job-scoped payload migration remain recoverable:
+    the reconciler claims the state first, then atomically assigns an opaque id
+    before it re-enqueues the task.
+    """
+    doc_ref = db.collection('account_deletions').document(uid)
+    transaction = db.transaction()
+    return _ensure_deletion_wipe_job_id_txn(transaction, doc_ref, uuid.uuid4().hex)
+
+
+def resolve_deletion_wipe_job_id(wipe_job_id: str) -> DeletionWipeTaskResolution:
+    """Resolve an opaque task id to one canonical deletion job document."""
+    docs = list(db.collection('account_deletions').where('wipe_job_id', '==', wipe_job_id).limit(2).stream())
+    if not docs:
+        return {'outcome': 'missing', 'uid': None}
+    if len(docs) != 1:
+        return {'outcome': 'ambiguous', 'uid': None}
+
+    doc = docs[0]
+    status = (doc.to_dict() or {}).get('wipe_status')
+    if status == 'completed':
+        return {'outcome': 'completed', 'uid': None}
+    if status in _DELETION_WIPE_TERMINAL_STATUSES:
+        return {'outcome': 'not_actionable', 'uid': None}
+    return {'outcome': 'resolved', 'uid': doc.id}
+
+
+def resolve_legacy_deletion_wipe_uid(legacy_uid: str) -> DeletionWipeTaskResolution:
+    """Resolve a bounded legacy payload through the persisted deletion record.
+
+    This compatibility path is deliberately narrower than the historical
+    handler: a UID from a queued legacy task is never executable on its own.
+    It must name a still-actionable canonical deletion record, and the handler
+    uses the document id returned here rather than the payload value.
+    """
+    doc = db.collection('account_deletions').document(legacy_uid).get()
+    if not doc.exists:
+        return {'outcome': 'missing', 'uid': None}
+    status = (doc.to_dict() or {}).get('wipe_status')
+    if status == 'completed':
+        return {'outcome': 'completed', 'uid': None}
+    if status not in _DELETION_WIPE_LEGACY_ACTIONABLE_STATUSES:
+        return {'outcome': 'not_actionable', 'uid': None}
+    return {'outcome': 'resolved', 'uid': doc.id}
 
 
 @transactional
@@ -672,7 +756,8 @@ def get_people_by_ids(uid: str, person_ids: list[str]):
         if doc.exists:
             data = doc.to_dict()
             data.setdefault('id', doc.id)
-            all_people.append(data)
+            if parse_snapshot_or_none(Person, doc, document_id_field='id') is not None:
+                all_people.append(data)
     return all_people
 
 
@@ -1327,11 +1412,22 @@ def get_user_subscription(uid: str) -> Subscription:
         user_data = user_doc.to_dict()
         if 'subscription' in user_data:
             sub_data = user_data['subscription']
-            # Handle migration for old 'free' plan identifier
-            if sub_data.get('plan') == 'free':
+            legacy_free_plan = isinstance(sub_data, dict) and sub_data.get('plan') == 'free'
+
+            def subscription_payload(_snapshot: object) -> dict:
+                if not isinstance(sub_data, dict):
+                    raise TypeError('Firestore subscription payload must be a mapping')
+                payload = dict(sub_data)
+                if legacy_free_plan:
+                    payload['plan'] = PlanType.basic.value
+                return payload
+
+            subscription = parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
+            # Handle migration for old 'free' plan identifier after validating the normalized payload.
+            if legacy_free_plan:
                 sub_data['plan'] = PlanType.basic.value
                 update_user_subscription(uid, sub_data)
-            return Subscription(**sub_data)
+            return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
     default_subscription = get_default_basic_subscription()
@@ -1355,9 +1451,16 @@ def get_existing_user_subscription(uid: str) -> Optional[Subscription]:
         return None
 
     sub_data = user_data['subscription']
-    if sub_data.get('plan') == 'free':
-        sub_data['plan'] = PlanType.basic.value
-    return Subscription(**sub_data)
+
+    def subscription_payload(_snapshot: object) -> dict:
+        if not isinstance(sub_data, dict):
+            raise TypeError('Firestore subscription payload must be a mapping')
+        payload = dict(sub_data)
+        if payload.get('plan') == 'free':
+            payload['plan'] = PlanType.basic.value
+        return payload
+
+    return parse_snapshot_strict(Subscription, user_doc, payload_from_snapshot=subscription_payload)
 
 
 def get_user_training_data_opt_in(uid: str) -> Optional[dict]:

@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:connectivity_plus_platform_interface/connectivity_plus_platform_interface.dart';
+import 'package:fake_async/fake_async.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
@@ -491,6 +492,18 @@ void main() {
   });
 
   group('external actions port', () {
+    test('repeated external-action updates do not schedule duplicate startup recovery', () {
+      fakeAsync((async) {
+        final provider = CaptureProvider();
+        final pendingTimersBeforeUpdates = async.pendingTimers.length;
+
+        provider.updateExternalActions(MockCaptureExternalActions());
+        provider.updateExternalActions(MockCaptureExternalActions());
+
+        expect(async.pendingTimers, hasLength(pendingTimersBeforeUpdates));
+      });
+    });
+
     test('topConversationId delegates through external actions', () {
       final provider = CaptureProvider();
       final mockExternalActions = MockCaptureExternalActions()..topConversationIdOverride = 'conversation-1';
@@ -581,6 +594,48 @@ void main() {
       expect(find.byType(SnackBar), findsNothing);
       expect(find.text(expectedText), findsNothing);
       provider.dispose();
+    });
+  });
+
+  group('terminal live transcription status', () {
+    test('preserves server STT failure across socket close until ready', () {
+      final provider = CaptureProvider();
+      final failure = MessageServiceStatusEvent(
+        status: 'stt_failed',
+        outcome: 'upstream_error',
+        provider: 'deepgram',
+        retryable: true,
+        reason: 'connection_lost',
+      );
+
+      provider.onMessageEventReceived(failure);
+      expect(provider.terminalTranscriptionFailure?.outcome, 'upstream_error');
+      expect(provider.terminalTranscriptionFailure?.retryable, isTrue);
+
+      provider.onClosed();
+      expect(provider.terminalTranscriptionFailure?.status, 'stt_failed');
+
+      provider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      expect(provider.terminalTranscriptionFailure, isNull);
+      provider.dispose();
+    });
+
+    test('parses legacy and populated service-status payloads additively', () {
+      final legacy = MessageServiceStatusEvent.fromJson({'type': 'service_status', 'status': 'ready'});
+      final failed = MessageServiceStatusEvent.fromJson({
+        'type': 'service_status',
+        'status': 'stt_failed',
+        'outcome': 'timeout',
+        'provider': 'parakeet',
+        'retryable': true,
+        'reason': 'send_failed',
+      });
+
+      expect(legacy.outcome, isNull);
+      expect(failed.outcome, 'timeout');
+      expect(failed.provider, 'parakeet');
+      expect(failed.retryable, isTrue);
+      expect(failed.reason, 'send_failed');
     });
   });
 

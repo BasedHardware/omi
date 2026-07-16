@@ -76,7 +76,7 @@ backend/modal/memory_maintenance_job.py
       canonical_kg_promotion.py            extract the knowledge-graph projection
 ```
 
-Consolidation and promotion mutate authoritative state only through `memory_apply_store.py`. Separately, stale vector hits and tombstone/delete paths create deterministic `vector_repair_purge` records with `backend/database/memory_vector_repair_outbox.py`. `memory_vector_repair_outbox_worker.py` leases, retries, dead-letters, and acknowledges those repairs. Repair/purge records share `memory_outbox` storage with normal apply events but are a different event contract.
+Consolidation and promotion mutate authoritative state only through `memory_apply_store.py`. The reviewed legacy-backfill remediation executor follows the same ledger path: it can only archive deterministic legacy artifacts, retains evidence, removes the keyword projection, refreshes the explicit archive vector, and invalidates KG citations. Separately, stale vector hits and tombstone/delete paths create deterministic `vector_repair_purge` records with `backend/database/memory_vector_repair_outbox.py`. `memory_vector_repair_outbox_worker.py` leases, retries, dead-letters, and acknowledges those repairs. Repair/purge records share `memory_outbox` storage with normal apply events but are a different event contract.
 
 ## Rollout and legacy sunset
 

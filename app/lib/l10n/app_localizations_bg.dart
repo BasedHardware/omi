@@ -9612,6 +9612,27 @@ class AppLocalizationsBg extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'Памет на устройството';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% запълнена';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used от $total използвани';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free свободни';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Устройството е почти пълно — синхронизирайте, за да освободите място.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн.';
 }

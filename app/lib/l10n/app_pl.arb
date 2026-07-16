@@ -3179,5 +3179,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Pamięć urządzenia",
+    "deviceStoragePercentFull": "zapełniono {percent}%",
+    "deviceStorageUsedOfTotal": "wykorzystano {used} z {total}",
+    "deviceStorageFree": "{free} wolne",
+    "deviceStorageNearlyFull": "Urządzenie jest prawie pełne — zsynchronizuj, aby zwolnić miejsce.",
     "phoneMicOfflineFallbackMessage": "Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią."
 }

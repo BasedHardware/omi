@@ -9645,6 +9645,27 @@ class AppLocalizationsTa extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => 'சாதன சேமிப்பு';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% நிரம்பியது';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total இல் $used பயன்படுத்தப்பட்டது';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free காலி';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'சாதனம் கிட்டத்தட்ட நிரம்பிவிட்டது — இடத்தைக் காலி செய்ய ஒத்திசைக்கவும்.';
+
+  @override
   String get phoneMicOfflineFallbackMessage =>
       'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
 }

@@ -6,7 +6,7 @@ struct AudioSourceSelector: View {
     @ObservedObject var appState: AppState
 
     var body: some View {
-        HStack(spacing: 12) {
+        HStack(spacing: OmiSpacing.md) {
             audioSourceButton(
                 source: .microphone,
                 isSelected: true,
@@ -28,16 +28,16 @@ struct AudioSourceSelector: View {
             guard isAvailable && !appState.isTranscribing else { return }
             appState.audioSource = source
         }) {
-            HStack(spacing: 8) {
+            HStack(spacing: OmiSpacing.sm) {
                 Image(systemName: source.iconName)
-                    .scaledFont(size: 14)
+                    .scaledFont(size: OmiType.body)
 
-                VStack(alignment: .leading, spacing: 2) {
+                VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
                     Text(source.displayName)
-                        .scaledFont(size: 13, weight: .medium)
+                        .scaledFont(size: OmiType.body, weight: .medium)
 
                     Text(AudioCaptureService.getCurrentMicrophoneName() ?? "Default")
-                        .scaledFont(size: 11)
+                        .scaledFont(size: OmiType.caption)
                         .foregroundColor(OmiColors.textTertiary)
                         .lineLimit(1)
                 }
@@ -46,17 +46,17 @@ struct AudioSourceSelector: View {
 
                 if isSelected {
                     Image(systemName: "checkmark.circle.fill")
-                        .foregroundColor(OmiColors.purplePrimary)
+                        .foregroundColor(OmiColors.accent)
                 }
             }
-            .padding(.horizontal, 12)
-            .padding(.vertical, 10)
+            .padding(.horizontal, OmiSpacing.md)
+            .padding(.vertical, OmiSpacing.sm)
             .background(
-                RoundedRectangle(cornerRadius: 10)
-                    .fill(isSelected ? OmiColors.purplePrimary.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.5))
+                RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                    .fill(isSelected ? OmiColors.accent.opacity(0.15) : OmiColors.backgroundTertiary.opacity(0.5))
                     .overlay(
-                        RoundedRectangle(cornerRadius: 10)
-                            .stroke(isSelected ? OmiColors.purplePrimary : Color.clear, lineWidth: 1.5)
+                        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+                            .stroke(isSelected ? OmiColors.accent : Color.clear, lineWidth: 1.5)
                     )
             )
             .foregroundColor(isAvailable ? OmiColors.textPrimary : OmiColors.textTertiary)
@@ -72,17 +72,17 @@ struct AudioSourceIndicator: View {
     @ObservedObject var appState: AppState
 
     var body: some View {
-        HStack(spacing: 6) {
+        HStack(spacing: OmiSpacing.xs) {
             Image(systemName: AudioSource.microphone.iconName)
-                .scaledFont(size: 12)
-                .foregroundColor(OmiColors.purplePrimary)
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.accent)
 
             Text("Mic")
-                .scaledFont(size: 12, weight: .medium)
+                .scaledFont(size: OmiType.caption, weight: .medium)
                 .foregroundColor(OmiColors.textSecondary)
         }
-        .padding(.horizontal, 8)
-        .padding(.vertical, 4)
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xxs)
         .background(
             Capsule()
                 .fill(OmiColors.backgroundTertiary.opacity(0.5))
@@ -94,7 +94,7 @@ struct AudioSourceIndicator: View {
 
 #if canImport(PreviewsMacros)
 #Preview("Audio Source Selector") {
-    VStack(spacing: 20) {
+    VStack(spacing: OmiSpacing.xl) {
         AudioSourceSelector(appState: AppState())
         AudioSourceIndicator(appState: AppState())
     }

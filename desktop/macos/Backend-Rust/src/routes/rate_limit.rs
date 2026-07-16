@@ -2,7 +2,7 @@
 //
 // Source of truth: Redis (shared across all instances via Lua script).
 // Local cache: Reduces Redis calls by caching recent decisions per user.
-//              NOT a fallback — if Redis is unavailable, requests pass through unmetered.
+//              NOT a fallback — server-key requests fail closed when Redis is unavailable.
 //
 // Tier 1 (Allow):   < DAILY_SOFT_LIMIT requests/day — Pro model allowed as-is
 // Tier 2 (Degrade): DAILY_SOFT_LIMIT..DAILY_HARD_LIMIT — rewrite Pro → Flash
@@ -21,7 +21,6 @@ use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::Mutex;
 
-use crate::fallback::{record_fallback, FallbackOutcome};
 use crate::services::RedisService;
 
 // Daily soft/hard limits are tier-aware — see crate::llm::model_qos.
@@ -53,6 +52,9 @@ pub enum RateDecision {
     DegradeToFlash,
     /// Over daily hard limit or burst cap exceeded.
     Reject,
+    /// The shared metering dependency is unavailable. Server-key callers must
+    /// return 503 rather than bypassing accounting.
+    Unavailable,
 }
 
 /// Snapshot of rate counters returned from Redis.
@@ -105,6 +107,12 @@ pub struct GeminiRateLimiter {
 
 pub type SharedRateLimiter = Arc<GeminiRateLimiter>;
 
+/// Server-managed provider keys require shared metering. A validated BYOK key
+/// is billed by the provider account and must remain usable during Redis outages.
+pub fn requires_server_metering(is_byok: bool) -> bool {
+    !is_byok
+}
+
 impl GeminiRateLimiter {
     /// Gemini proxy limiter: 30/min burst + daily soft/hard tiers, "gemini_rl" keys.
     pub fn new() -> SharedRateLimiter {
@@ -132,7 +140,7 @@ impl GeminiRateLimiter {
 
     /// Check rate limit for a user and record the request.
     ///
-    /// 1. No Redis configured → allow unmetered (no cache, no local enforcement).
+    /// 1. No Redis configured → unavailable (no cache, no local enforcement).
     /// 2. Local burst >= cap → reject without Redis (conservative, safe).
     /// 3. Cached Reject still fresh → reject without Redis (user already blocked).
     /// 4. All other cases → call Redis (ensures every request is recorded).
@@ -141,20 +149,16 @@ impl GeminiRateLimiter {
         uid: &str,
         redis: Option<&Arc<RedisService>>,
     ) -> RateDecision {
-        // Phase 1: No Redis → unmetered (skip cache entirely)
+        // Phase 1: No Redis → fail closed (skip cache entirely)
         let Some(redis) = redis else {
-            record_fallback(
-                "redis_ratelimit",
-                "enforced",
-                "unmetered",
-                "config_incomplete",
-                FallbackOutcome::Degraded,
-            );
             tracing::warn!(
-                "{} rate limit: Redis not configured, request unmetered",
+                event = "redis_metering_unavailable",
+                reason = "config_incomplete",
+                outcome = "exhausted",
+                "{} rate limit: Redis not configured, rejecting server-key request",
                 self.redis_ns
             );
-            return RateDecision::Allow;
+            return RateDecision::Unavailable;
         };
 
         let now = Instant::now();
@@ -231,19 +235,15 @@ impl GeminiRateLimiter {
                 decision
             }
             Err(e) => {
-                record_fallback(
-                    "redis_ratelimit",
-                    "enforced",
-                    "unmetered",
-                    "other",
-                    FallbackOutcome::Degraded,
-                );
                 tracing::error!(
-                    "{} rate limit: Redis error, request unmetered: {}",
+                    event = "redis_metering_unavailable",
+                    reason = "dependency_error",
+                    outcome = "exhausted",
+                    "{} rate limit: Redis error, rejecting server-key request: {}",
                     self.redis_ns,
                     e
                 );
-                RateDecision::Allow
+                RateDecision::Unavailable
             }
         }
     }
@@ -425,13 +425,19 @@ mod tests {
         let _ = GeminiRateLimiter::for_chat();
     }
 
-    // --- No Redis → unmetered (cache bypassed entirely) ---
+    #[test]
+    fn byok_bypasses_server_metering_but_managed_keys_do_not() {
+        assert!(!requires_server_metering(true));
+        assert!(requires_server_metering(false));
+    }
+
+    // --- No Redis → fail closed (cache bypassed entirely) ---
 
     #[tokio::test]
-    async fn no_redis_allows_unmetered() {
+    async fn no_redis_is_unavailable() {
         let limiter = GeminiRateLimiter::new();
         let decision = limiter.check_and_record("u1", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     #[tokio::test]
@@ -450,7 +456,7 @@ mod tests {
             );
         }
         let decision = limiter.check_and_record("u2", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     #[tokio::test]
@@ -469,7 +475,7 @@ mod tests {
             );
         }
         let decision = limiter.check_and_record("u3", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     #[tokio::test]
@@ -493,7 +499,7 @@ mod tests {
             );
         }
         let decision = limiter.check_and_record("u4", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     // --- Expired Reject cache falls through to Redis ---
@@ -512,9 +518,9 @@ mod tests {
                 },
             );
         }
-        // No Redis → falls through to unmetered Allow
+        // No Redis remains unavailable regardless of stale local cache state.
         let decision = limiter.check_and_record("u5", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     // --- Separate users don't interfere ---
@@ -533,9 +539,9 @@ mod tests {
                 },
             );
         }
-        // uB has no Redis → unmetered Allow
+        // uB has no Redis → unavailable, independent of uA's cache entry.
         let decision = limiter.check_and_record("uB", None).await;
-        assert_eq!(decision, RateDecision::Allow);
+        assert_eq!(decision, RateDecision::Unavailable);
     }
 
     // --- Evict stale ---

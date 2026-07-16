@@ -11,6 +11,11 @@ import yaml
 
 ROOT = Path(__file__).resolve().parents[2]
 SCRIPT = ROOT / 'scripts/validate-backend-runtime-env.py'
+READINESS_PROPOSAL_ARGS = (
+    ' --proposal-output "$FIRESTORE_PROPOSAL_PATH"'
+    ' --source-commit "$FIRESTORE_SOURCE_COMMIT"'
+    ' --proposal-ttl-seconds 3600'
+)
 
 
 def load_validator():
@@ -44,7 +49,7 @@ def with_memory_env(payload: str) -> str:
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID", "key": "latest"}}},
+        {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
         {"name": "POSTHOG_PROJECT_API_KEY", "valueFrom": {"secretKeyRef": {"name": "POSTHOG_PROJECT_API_KEY", "key": "latest"}}},
         {"name": "MEMORY_MODE", "value": "read"},
@@ -58,21 +63,40 @@ def with_memory_env(payload: str) -> str:
     )
 
 
+def with_sync_ledger_fence_mode(payload: str) -> str:
+    """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
+    return payload.replace(
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},',
+        '        {"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"},\n'
+        '        {"name": "SYNC_LEDGER_FENCE_MODE", "value": "legacy"},',
+    )
+
+
 GOOGLE_OAUTH_SECRETS = '''\
-        {"name": "GOOGLE_CLIENT_ID", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_ID"}}},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "STT_PRERECORDED_MODEL", "valueFrom": {"secretKeyRef": {"name": "STT_PRERECORDED_MODEL", "key": "latest"}}},
         {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_memory_env(payload)
+    payload = with_memory_env(with_sync_ledger_fence_mode(payload))
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
         payload,
         flags=re.MULTILINE,
+    )
+
+
+def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Path):
+    """Exercise a workflow fixture without unrelated full-manifest rollout contracts."""
+    manifest = validator._load_yaml(manifest_path)
+    return validator._validate_cloud_run_workflows(
+        env,
+        validator._get_env_config(manifest, env),
+        strict_provisional=False,
+        manifest_path=manifest_path,
+        manifest=manifest,
     )
 
 
@@ -125,6 +149,73 @@ def test_repo_prod_gke_values_match_manifest():
     assert errors == []
 
 
+def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profile():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+
+    assert validator._validate_account_deletion_dispatch_contract('prod', prod) == []
+
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    missing_entry = backend_env.pop('ACCOUNT_DELETION_DISPATCH_MODE')
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            'missing required account-deletion env ACCOUNT_DELETION_DISPATCH_MODE',
+        ) in validator._validate_account_deletion_dispatch_contract('prod', prod)
+    finally:
+        backend_env['ACCOUNT_DELETION_DISPATCH_MODE'] = missing_entry
+
+    dispatch_mode = prod['gke']['backend-listen']['env']['ACCOUNT_DELETION_DISPATCH_MODE']
+    original_mode = dispatch_mode['value']
+    dispatch_mode['value'] = 'inline'
+    try:
+        assert validator.ValidationError(
+            'prod/gke/backend-listen',
+            "account-deletion env ACCOUNT_DELETION_DISPATCH_MODE must be literal 'cloud_tasks'",
+        ) in validator._validate_account_deletion_dispatch_contract('prod', prod)
+    finally:
+        dispatch_mode['value'] = original_mode
+
+
+def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
+    validator = load_validator()
+    values_path = tmp_path / 'values.yaml'
+    write_yaml(
+        values_path,
+        {
+            'envFrom': [{'configMapRef': {'name': 'test-omi-backend-config'}}],
+            'env': [],
+        },
+    )
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'values_file': str(values_path),
+                'env': {
+                    'FAKE_RUNTIME_CONFIG': {
+                        'config_map': {
+                            'name': 'test-omi-backend-config',
+                            'key': 'FAKE_RUNTIME_CONFIG',
+                        }
+                    }
+                },
+            }
+        }
+    }
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == []
+
+    write_yaml(values_path, {'envFrom': [], 'env': []})
+
+    assert validator._validate_gke(env_config, strict_provisional=False) == [
+        validator.ValidationError(
+            'gke/backend-listen',
+            "env FAKE_RUNTIME_CONFIG must come from ConfigMap 'test-omi-backend-config'",
+        )
+    ]
+
+
 def test_repo_cloud_run_workflows_match_manifest():
     validator = load_validator()
 
@@ -159,6 +250,162 @@ def test_repo_prod_cloud_run_workflows_match_manifest(monkeypatch):
     )
 
     assert errors == []
+
+
+@pytest.mark.parametrize(
+    ('run', 'message'),
+    [
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS,
+            'Firestore index reconciliation must target vars.RUNTIME_GCP_PROJECT_ID',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py ' '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only'
+            + READINESS_PROPOSAL_ARGS.replace('3600', '7200'),
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only --provision-missing',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only --dry-run',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS + '\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            '# readiness check\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS + '\n'
+            '# the writer below must remain visible\n'
+            'python3 backend/scripts/reconcile_firestore_indexes.py '
+            '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}"',
+            'backend deploy Firestore reconciliation must use bounded --check-only proposal mode',
+        ),
+        (
+            'npx firebase deploy --only firestore:indexes',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'npx firebase deploy',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'npx firebase deploy --project prod --only=firestore:indexes',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+        (
+            'gcloud --project=prod firestore indexes composite create --collection-group=memories',
+            'backend deploy Firestore operations must be read-only (--check-only)',
+        ),
+    ],
+)
+def test_firestore_index_reconciliation_preserves_the_read_only_runtime_boundary(tmp_path, run, message):
+    validator = load_validator()
+    workflow_path = tmp_path / 'deploy.yml'
+    manifest_path = tmp_path / 'runtime_env.yaml'
+    workflow = {'jobs': {'deploy': {'steps': [{'run': run}]}}}
+    manifest = {
+        'schema_version': 1,
+        'environments': {
+            'dev': {
+                'gcp_project': 'deployment-project',
+                'runtime_gcp_project': 'serving-project',
+                'region': 'us-central1',
+                'gke': {},
+                'cloud_run': {
+                    'workflow_files': [str(workflow_path)],
+                    'services': {},
+                    'jobs': {},
+                },
+            }
+        },
+    }
+    write_yaml(workflow_path, workflow)
+    write_yaml(manifest_path, manifest)
+
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
+
+    assert errors == [
+        validator.ValidationError(
+            f'cloud_run_workflow/{workflow_path}',
+            message,
+        )
+    ]
+
+    workflow['jobs']['deploy']['steps'][0]['run'] = (
+        'python3 backend/scripts/reconcile_firestore_indexes.py '
+        '--project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" --check-only' + READINESS_PROPOSAL_ARGS
+    )
+    write_yaml(workflow_path, workflow)
+
+    assert validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path) == []
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_requires_isolated_job_dependency(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    workflow['jobs']['deploy'].pop('needs')
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('deploy must depend on the isolated Firestore readiness job' in error.message for error in errors)
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_requires_validation_before_artifact_upload(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    steps = workflow['jobs']['firestore_readiness']['steps']
+    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v4')
+    upload = steps.pop(upload_index)
+    validation_index = next(
+        index for index, step in enumerate(steps) if step.get('id') == 'validate_firestore_proposal'
+    )
+    steps.insert(validation_index, upload)
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('only a successfully validated bounded proposal may be uploaded' in error.message for error in errors)
+
+
+@pytest.mark.parametrize('workflow_name', ['gcp_backend.yml', 'gcp_backend_auto_dev.yml'])
+def test_firestore_readiness_contract_rejects_backend_deployment_credentials(workflow_name):
+    validator = load_validator()
+    workflow_path = ROOT.parent / '.github/workflows' / workflow_name
+    workflow = validator._load_yaml(workflow_path)
+    auth = next(
+        step
+        for step in workflow['jobs']['firestore_readiness']['steps']
+        if step.get('uses') == 'google-github-actions/auth@v2'
+    )
+    auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
+
+    errors = validator._validate_firestore_index_reconciliation_boundary(str(workflow_path), workflow)
+
+    assert any('must not receive backend deployment credentials' in error.message for error in errors)
 
 
 def test_repo_prod_rendered_cloud_run_state_matches_manifest():
@@ -498,7 +745,7 @@ def test_cloud_run_workflow_reports_missing_gateway_url(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(error.message == 'missing env OMI_LLM_GATEWAY_URL' for error in errors)
     assert any(error.scope == 'cloud_run_workflow/backend' for error in errors)
@@ -617,7 +864,7 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert errors == []
 
@@ -844,10 +1091,11 @@ def test_provisional_prod_endpoint_requires_presence_but_not_exact_value(tmp_pat
         encoding='utf-8',
     )
 
-    errors = validator.validate_runtime_env(
-        env='prod',
-        manifest_path=manifest_path,
-        cloud_run_state_path=state_path,
+    manifest = validator._load_yaml(manifest_path)
+    errors = validator._validate_cloud_run(
+        validator._get_env_config(manifest, 'prod'),
+        validator._load_json(state_path),
+        strict_provisional=False,
     )
 
     assert errors == []
@@ -966,6 +1214,49 @@ def test_memory_maintenance_job_contract_passes_for_repo_manifest():
     assert validator.validate_runtime_env(env='prod') == []
 
 
+def test_memory_maintenance_job_contract_rejects_missing_dev_capacity_flag():
+    validator = load_validator()
+    job = memory_maintenance_job_block()
+    job['flags'] = {
+        '--task-timeout': '3600s',
+        '--cpu': '2',
+        '--memory': '2Gi',
+    }
+    del job['flags']['--memory']
+
+    errors = validator._validate_memory_maintenance_job_contract(
+        'dev',
+        {'cloud_run': {'jobs': {'memory-maintenance-job': job}}},
+    )
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            'missing required dev Cloud Run flag --memory',
+        )
+        in errors
+    )
+
+
+def test_memory_maintenance_job_contract_rejects_wrong_dev_capacity_value(tmp_path):
+    validator = load_validator()
+    manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
+    job = manifest['environments']['dev']['cloud_run']['jobs']['memory-maintenance-job']
+    job['flags']['--cpu'] = '1'
+    path = tmp_path / 'runtime_env.yaml'
+    write_yaml(path, manifest)
+
+    errors = validator.validate_runtime_env(env='dev', manifest_path=path)
+
+    assert (
+        validator.ValidationError(
+            'dev/cloud_run/jobs/memory-maintenance-job',
+            "dev Cloud Run flag --cpu must be '2'",
+        )
+        in errors
+    )
+
+
 def test_memory_maintenance_job_contract_rejects_notifications_job_maintenance_config(tmp_path):
     validator = load_validator()
     manifest = validator._load_yaml(ROOT / 'deploy/runtime_env.yaml')
@@ -1081,7 +1372,10 @@ def test_memory_maintenance_auto_dev_workflow_is_listed_and_targets_job():
     assert "backend/**" in text
     assert 'Dockerfile.memory_maintenance_job' in text
     assert "id-token: 'write'" not in text
-    assert 'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }}' in text
+    assert (
+        'flags: ${{ steps.runtime-env.outputs.cloud_run_flags }} '
+        '${{ steps.runtime-env.outputs.memory_maintenance_job_flags }}'
+    ) in text
     manifest = yaml.safe_load((ROOT / 'deploy/runtime_env.yaml').read_text(encoding='utf-8'))
     assert (
         '.github/workflows/gcp_memory_maintenance_job_auto_dev.yml'
@@ -1169,7 +1463,7 @@ def test_sync_backfill_co_deploy_is_required_per_workflow(tmp_path):
         },
     )
 
-    errors = validator.validate_runtime_env(env='dev', manifest_path=manifest_path, check_workflows=True)
+    errors = validate_cloud_run_workflows_only(validator, env='dev', manifest_path=manifest_path)
 
     assert any(
         error.message == 'deploys backend-sync without backend-sync-backfill' and str(incomplete) in error.scope

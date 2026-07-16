@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "ಸಾಧನ ಸಂಗ್ರಹಣೆ",
+    "deviceStoragePercentFull": "{percent}% ತುಂಬಿದೆ",
+    "deviceStorageUsedOfTotal": "{total} ರಲ್ಲಿ {used} ಬಳಸಲಾಗಿದೆ",
+    "deviceStorageFree": "{free} ಖಾಲಿ",
+    "deviceStorageNearlyFull": "ಸಾಧನ ಬಹುತೇಕ ತುಂಬಿದೆ — ಸ್ಥಳವನ್ನು ಮುಕ್ತಗೊಳಿಸಲು ಸಿಂಕ್ ಮಾಡಿ.",
     "phoneMicOfflineFallbackMessage": "ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ."
 }

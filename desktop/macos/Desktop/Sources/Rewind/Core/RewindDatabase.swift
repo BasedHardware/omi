@@ -38,10 +38,6 @@ actor RewindDatabase {
     /// Static user ID for nonisolated markCleanShutdown (set by configure(userId:))
     nonisolated(unsafe) static var currentUserId: String?
 
-    /// Monotonic counter incremented by configure(). Used by closeIfStale() to detect
-    /// whether a new sign-in session has started since the close was requested.
-    nonisolated(unsafe) static var configureGeneration: Int = 0
-
     /// Runtime error tracking: consecutive SQLITE_IOERR/CORRUPT errors during normal queries.
     /// When this hits the threshold, we close the database so the next initialize() attempt
     /// goes through the full recovery path (WAL cleanup, corruption detection, fresh DB).
@@ -249,33 +245,42 @@ actor RewindDatabase {
         }
     }
 
-    /// Configure the database for a specific user.
-    /// Does NOT close or reopen the database — call initialize() after this.
-    /// initialize() will detect the user mismatch and reopen if needed.
-    func configure(userId: String?) {
+    /// Close the old effective owner's pool and configure the next owner.
+    ///
+    /// Production calls this only from `RuntimeOwnerIdentity` while the
+    /// exclusive effective-owner transition reservation is held. Opening is
+    /// intentionally lazy, but after this method returns no caller can obtain a
+    /// pool for the previous owner.
+    func retargetEffectiveOwner(to userId: String?) {
         let resolvedId = (userId?.isEmpty == false) ? userId! : "anonymous"
+        let targetChanged = configuredUserId != resolvedId
+            || (openedForUserId != nil && openedForUserId != resolvedId)
+        if targetChanged {
+            close()
+        }
         configuredUserId = resolvedId
         RewindDatabase.currentUserId = resolvedId
-        RewindDatabase.configureGeneration += 1
-        log("RewindDatabase: Configured for user \(resolvedId) (generation \(RewindDatabase.configureGeneration))")
+        log("RewindDatabase: Configured for user \(resolvedId)")
     }
 
-    /// Close the database only if no new session has started (configure() not called since).
-    /// Prevents a stale sign-out Task from closing a freshly opened database.
-    @discardableResult
-    func closeIfStale(generation: Int) -> Bool {
-        guard generation == RewindDatabase.configureGeneration else {
-            log("RewindDatabase: Skipping stale close (requested gen \(generation), current gen \(RewindDatabase.configureGeneration))")
-            return false
-        }
-        close()
-        return true
+    /// Direct configuration remains available to storage-isolation tests and
+    /// legacy callers, but it now has the same close-before-retarget semantics
+    /// as the production effective-owner boundary.
+    func configure(userId: String?) {
+        retargetEffectiveOwner(to: userId)
     }
 
     /// Close the database, allowing re-initialization for a different user.
     func close() {
         if let runningFlagPath {
             try? FileManager.default.removeItem(atPath: runningFlagPath)
+        }
+        if let dbQueue {
+            do {
+                try dbQueue.close()
+            } catch {
+                log("RewindDatabase: pool close reported an error; stale generation remains revoked")
+            }
         }
         dbQueue = nil
         initializationTask = nil
@@ -304,8 +309,8 @@ actor RewindDatabase {
         return configuredUserId ?? RewindDatabase.currentUserId ?? "anonymous"
     }
 
-    private func userBaseDirectory() -> URL {
-        let userId = targetUserId()
+    private func userBaseDirectory(for userId: String? = nil) -> URL {
+        let userId = userId ?? targetUserId()
         return DesktopLocalProfile.applicationSupportURL()
             .appendingPathComponent("users", isDirectory: true)
             .appendingPathComponent(userId, isDirectory: true)
@@ -356,6 +361,7 @@ actor RewindDatabase {
         // If initialization is in progress, wait for it then re-check
         if let existingTask = initializationTask {
             _ = try? await existingTask.value
+            guard targetUserId() == targetUser else { throw CancellationError() }
             // After waiting, check if the result is for the right user
             if dbQueue != nil && openedForUserId == targetUser {
                 return
@@ -369,7 +375,9 @@ actor RewindDatabase {
         // Start initialization
         let myGeneration = initGeneration
         let task = Task {
-            try await performInitialization()
+            try await performInitialization(
+                expectedUserId: targetUser,
+                expectedGeneration: myGeneration)
         }
         initializationTask = task
 
@@ -388,10 +396,16 @@ actor RewindDatabase {
     }
 
     /// Actual initialization logic (called only once at a time)
-    private func performInitialization() async throws {
+    private func performInitialization(
+        expectedUserId: String,
+        expectedGeneration: Int
+    ) async throws {
         guard dbQueue == nil else { return }
 
-        let omiDir = userBaseDirectory()
+        // Resolve the directory once. `retargetEffectiveOwner` may run while
+        // this method is suspended in GRDB/file I/O; a stale initializer must
+        // never drift to the next owner's path or publish its old pool later.
+        let omiDir = userBaseDirectory(for: expectedUserId)
 
         // Create directory if needed (withIntermediateDirectories creates parents too)
         try FileManager.default.createDirectory(at: omiDir, withIntermediateDirectories: true)
@@ -497,6 +511,13 @@ actor RewindDatabase {
             }
         }
 
+        guard initGeneration == expectedGeneration,
+              targetUserId() == expectedUserId
+        else {
+            try? activeQueue.close()
+            throw CancellationError()
+        }
+
         dbQueue = activeQueue
         // Bump the pool epoch on every (re)open so storage actors that cached the
         // previous pool revalidate and drop it — recovery may have replaced the
@@ -505,7 +526,7 @@ actor RewindDatabase {
         // initGeneration staying unchanged across a normal open to clear its
         // initializationTask.
         poolEpoch += 1
-        openedForUserId = targetUserId()
+        openedForUserId = expectedUserId
         consecutiveQueryIOErrors = 0
 
         try migrate(activeQueue)
@@ -564,6 +585,11 @@ actor RewindDatabase {
     }
 
     private func migrateFromLegacyPathIfNeeded(to userDir: URL) {
+        // The legacy `Omi` root is shared historical state. A named bundle that
+        // now has an identity-derived profile must never claim it: the first
+        // bundle to launch would otherwise move data belonging to Omi/Omi Dev
+        // or another old named bundle into its isolated root.
+        guard Self.shouldMigrateLegacyStorage(isolatedStorage: DesktopLocalProfile.usesIsolatedStorage) else { return }
         let fileManager = FileManager.default
         let appSupport = fileManager.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
         let omiDir = appSupport.appendingPathComponent("Omi", isDirectory: true)
@@ -688,6 +714,10 @@ actor RewindDatabase {
         }
 
         log("RewindDatabase: Legacy migration complete")
+    }
+
+    static func shouldMigrateLegacyStorage(isolatedStorage: Bool) -> Bool {
+        !isolatedStorage
     }
 
     // MARK: - Corruption Detection & Recovery
@@ -2568,6 +2598,57 @@ actor RewindDatabase {
             if record.imagePath == nil { record.imagePath = "" }
             try record.insert(db)
             return record
+        }
+    }
+
+    /// Atomically replace every database row reconstructed from one video chunk.
+    ///
+    /// Rebuilds can be retried, so inserting reconstructed rows one at a time would
+    /// duplicate the chunk on every run. The delete and complete replacement set
+    /// intentionally share one transaction: if any insert fails, SQLite restores
+    /// the previous rows instead of leaving a partially rebuilt chunk.
+    @discardableResult
+    func replaceScreenshotsForVideoChunk(path: String, screenshots: [Screenshot]) throws -> Int {
+        guard let dbQueue = dbQueue else {
+            throw RewindError.databaseNotInitialized
+        }
+        guard !path.isEmpty else {
+            throw RewindError.storageError("Cannot rebuild a video chunk with an empty path")
+        }
+        guard !screenshots.isEmpty else {
+            throw RewindError.storageError("Cannot replace a video chunk with an empty frame set")
+        }
+
+        var frameOffsets = Set<Int>()
+        for screenshot in screenshots {
+            guard screenshot.videoChunkPath == path else {
+                throw RewindError.storageError("Reconstructed frames must belong to the replaced video chunk")
+            }
+            guard let frameOffset = screenshot.frameOffset,
+                  frameOffset >= 0,
+                  frameOffsets.insert(frameOffset).inserted
+            else {
+                throw RewindError.storageError("Reconstructed frames must have unique non-negative offsets")
+            }
+        }
+
+        return try dbQueue.write { db in
+            try db.execute(
+                sql: "DELETE FROM screenshots WHERE videoChunkPath = ?",
+                arguments: [path]
+            )
+
+            for screenshot in screenshots {
+                var record = screenshot
+                // Reconstructed rows receive fresh local identities. Carrying an ID
+                // from another database or an earlier rebuild could collide with an
+                // unrelated screenshot.
+                record.id = nil
+                if record.imagePath == nil { record.imagePath = "" }
+                try record.insert(db)
+            }
+
+            return screenshots.count
         }
     }
 

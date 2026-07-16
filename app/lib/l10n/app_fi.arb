@@ -3144,5 +3144,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Laitteen tallennustila",
+    "deviceStoragePercentFull": "{percent} % täynnä",
+    "deviceStorageUsedOfTotal": "{used} / {total} käytössä",
+    "deviceStorageFree": "{free} vapaana",
+    "deviceStorageNearlyFull": "Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.",
     "phoneMicOfflineFallbackMessage": "Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa."
 }

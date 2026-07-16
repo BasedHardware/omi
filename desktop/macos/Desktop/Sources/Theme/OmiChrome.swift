@@ -6,6 +6,14 @@ package enum OmiChrome {
     package static let sectionRadius: CGFloat = 20
     package static let controlRadius: CGFloat = 16
     package static let chipRadius: CGFloat = 14
+    /// Small controls: compact buttons, inputs, thumbnails.
+    package static let smallControlRadius: CGFloat = 12
+    /// Small elements: badges, list chips, inline pills.
+    package static let elementRadius: CGFloat = 8
+    /// Tags and micro badges.
+    package static let badgeRadius: CGFloat = 6
+    /// Progress bars, underline indicators, hairline strips.
+    package static let stripRadius: CGFloat = 3
 }
 
 private struct OmiPanelModifier: ViewModifier {

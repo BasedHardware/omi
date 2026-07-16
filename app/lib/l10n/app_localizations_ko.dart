@@ -9419,5 +9419,26 @@ class AppLocalizationsKo extends AppLocalizations {
   }
 
   @override
+  String get deviceStorageTitle => '기기 저장 공간';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% 사용 중';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 중 $used 사용';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free 남음';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => '기기가 거의 가득 찼습니다 — 동기화하여 공간을 확보하세요.';
+
+  @override
   String get phoneMicOfflineFallbackMessage => '연결 없음 — 로컬에 녹음 중입니다. 다시 온라인 상태가 되면 텍스트로 변환됩니다.';
 }

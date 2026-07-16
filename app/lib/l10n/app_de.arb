@@ -3112,5 +3112,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Gerätespeicher",
+    "deviceStoragePercentFull": "{percent}% belegt",
+    "deviceStorageUsedOfTotal": "{used} von {total} belegt",
+    "deviceStorageFree": "{free} frei",
+    "deviceStorageNearlyFull": "Gerät fast voll — synchronisieren, um Speicher freizugeben.",
     "phoneMicOfflineFallbackMessage": "Keine Verbindung – Aufnahme erfolgt lokal. Sie wird transkribiert, sobald du wieder online bist."
 }

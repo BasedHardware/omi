@@ -4,15 +4,25 @@ tier: 2
 description: Real push-to-talk start/release lifecycle through the automation bridge
 app: non-prod
 covers:
+  - desktop/macos/Desktop/Sources/Chat/APIClient+HigherModel.swift
+  - desktop/macos/Desktop/Sources/Chat/ExternalSurfaceRunAuthority.swift
   - desktop/macos/Desktop/Sources/DefaultsKey.swift
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/LegacyVoiceJournalImporter.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RawWebSocket.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniService.swift
   - desktop/macos/Desktop/Sources/RealtimeOmni/RealtimeOmniTestHarness.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubInputAdmission.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeScreenEvidence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSessionPolicies.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeSpawnReceipt.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeToolAuthority.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeTurnPersistence.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/ScreenCaptureManager.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSettings.swift
-  - desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeVoiceTurnOutbox.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnCoordinator.swift
   - desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift
 preconditions:

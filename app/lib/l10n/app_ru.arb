@@ -3179,5 +3179,10 @@
             }
         }
     },
+    "deviceStorageTitle": "Хранилище устройства",
+    "deviceStoragePercentFull": "заполнено {percent}%",
+    "deviceStorageUsedOfTotal": "использовано {used} из {total}",
+    "deviceStorageFree": "{free} свободно",
+    "deviceStorageNearlyFull": "Устройство почти заполнено — синхронизируйте, чтобы освободить место.",
     "phoneMicOfflineFallbackMessage": "Нет подключения — запись ведётся локально. Расшифровка выполнится, когда вы снова будете в сети."
 }

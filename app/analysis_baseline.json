@@ -6,7 +6,7 @@
   "constant_identifier_names": 8,
   "curly_braces_in_flow_control_structures": 6,
   "dangling_library_doc_comments": 1,
-  "depend_on_referenced_packages": 5,
+  "depend_on_referenced_packages": 4,
   "deprecated_member_use": 34,
   "experimental_member_use": 13,
   "library_private_types_in_public_api": 4,

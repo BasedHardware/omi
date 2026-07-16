@@ -1,0 +1,45 @@
+name: OpenTofu Development WIF Pilot
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: opentofu-development-wif-pilot
+  cancel-in-progress: false
+
+jobs:
+  read-only-plan:
+    environment: development
+    runs-on: ubuntu-latest
+    env:
+      TF_IN_AUTOMATION: "true"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+
+      - name: Authenticate with development WIF plan identity
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-opentofu-9842-dev/providers/github
+          service_account: omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com
+
+      - uses: opentofu/setup-opentofu@v1
+        with:
+          tofu_version: 1.12.4
+          tofu_wrapper: false
+
+      - name: Run a development-only read-only OpenTofu probe
+        run: |
+          export TF_DATA_DIR="${RUNNER_TEMP}/opentofu-development-wif-pilot"
+          tofu -chdir=infrastructure/opentofu/probes/development-project-read init -backend=false -input=false -no-color
+          tofu -chdir=infrastructure/opentofu/probes/development-project-read validate -no-color
+          tofu -chdir=infrastructure/opentofu/probes/development-project-read plan \
+            -input=false \
+            -lock=false \
+            -refresh=false \
+            -no-color

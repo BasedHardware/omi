@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timezone, tzinfo
 from typing import TYPE_CHECKING, Any, Dict, List, Optional, Sequence, Set, cast
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
@@ -28,6 +28,31 @@ def resolve_display_tz(tz: Optional[str]) -> Any:
         except (ZoneInfoNotFoundError, ValueError):
             logger.warning(f"resolve_display_tz: invalid timezone '{tz}', falling back to UTC")
     return timezone.utc, "UTC"
+
+
+def _as_utc(dt: datetime) -> datetime:
+    """Treat a naive timestamp as UTC so ``astimezone`` cannot reinterpret it as server-local."""
+    return dt.replace(tzinfo=timezone.utc) if dt.tzinfo is None else dt
+
+
+def format_local_time(dt: datetime, display_tz: tzinfo, tz_label: str) -> str:
+    """Render a stored timestamp as a labelled wall clock in the user's timezone.
+
+    Every timestamp a chat tool hands the model must carry a timezone label. An unlabelled
+    UTC wall clock reads as local time to the model, which then states the wrong time of day
+    ("tonight" for a mid-afternoon due date) — issues #4643 and #6214.
+    """
+    return f"{_as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d %H:%M:%S')} {tz_label}"
+
+
+def format_local_date(dt: datetime, display_tz: tzinfo) -> str:
+    """Render a stored timestamp as a calendar date in the user's timezone.
+
+    Needed because the UTC date rolls over at a different instant than the user's: a memory
+    captured at 21:00 in Sao Paulo is stored as the next UTC day, so a raw UTC date is a day
+    late for anyone west of Greenwich in the evening (issue #6214).
+    """
+    return _as_utc(dt).astimezone(display_tz).strftime('%Y-%m-%d')
 
 
 # ---------------------------------------------------------------------------

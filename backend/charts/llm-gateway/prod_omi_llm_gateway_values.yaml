@@ -34,11 +34,24 @@ podLabels: {}
 
 service:
   type: ClusterIP
-  backendConfig: ""
+  backendConfig: prod-llm-gateway-backend-config
   port: 8080
+  annotations:
+    cloud.google.com/neg: '{"ingress": true}'
+    cloud.google.com/backend-config: '{"default": "prod-llm-gateway-backend-config"}'
 
 ingress:
-  enabled: false
+  enabled: true
+  className: ""
+  annotations:
+    kubernetes.io/ingress.class: "gce-internal"
+    kubernetes.io/ingress.regional-static-ip-name: "prod-omi-self-hosted-llm-ip-address"
+    kubernetes.io/ingress.allow-http: "true"
+  hosts:
+    - paths:
+        - path: /
+          pathType: Prefix
+  tls: []
 
 env:
   - name: OMI_LLM_GATEWAY_PROD
@@ -60,6 +73,16 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ANTHROPIC_API_KEY
+  - name: GEMINI_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: GEMINI_API_KEY
+  - name: OPENROUTER_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: OPENROUTER_API_KEY
   - name: METRICS_SECRET
     valueFrom:
       secretKeyRef:

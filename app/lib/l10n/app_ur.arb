@@ -10722,5 +10722,10 @@
             }
         }
     },
+    "deviceStorageTitle": "آلے کا اسٹوریج",
+    "deviceStoragePercentFull": "{percent}% بھرا",
+    "deviceStorageUsedOfTotal": "{total} میں سے {used} استعمال شدہ",
+    "deviceStorageFree": "{free} خالی",
+    "deviceStorageNearlyFull": "آلہ تقریباً بھر چکا ہے — جگہ خالی کرنے کے لیے سنک کریں۔",
     "phoneMicOfflineFallbackMessage": "کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔"
 }
