@@ -22,6 +22,7 @@ import { usePushToTalk } from '../../hooks/usePushToTalk'
 import { useCodingAgents } from '../../hooks/useCodingAgents'
 import { Orb } from '../orb/Orb'
 import { BarChatSurface } from './BarChatSurface'
+import { BarHintStrip } from './BarHintStrip'
 import { createBarSender } from './barSend'
 import {
   deriveOrbState,
@@ -205,10 +206,12 @@ export function BarApp(): React.JSX.Element {
     }
   })
   // A capture that FAILS (mic unavailable → the machine cancels, so no
-  // captureEnded ever fires; or a batch/pipeline error) leaves the bar silent —
-  // the pill shows no error strip by design. Relay the message so the onboarding
-  // voice step can say what went wrong rather than waiting forever for a capture
-  // that will never arrive.
+  // captureEnded ever fires; or a batch/pipeline error) used to leave the bar
+  // silent. It now surfaces the reason two ways: a transient chip below the pill
+  // (BarHintStrip, driven by ptt.hint/ptt.error — Mac parity: FloatingControlBarView
+  // renders pttHintText in the notch), and this relay so the ONBOARDING voice step
+  // can still say what went wrong rather than waiting forever for a capture that
+  // will never arrive. The chip and the relay are independent — leave this effect.
   useEffect(() => {
     if (ptt.error) window.omiOverlay.notifyVoiceFailed(ptt.error)
   }, [ptt.error])
@@ -504,6 +507,7 @@ export function BarApp(): React.JSX.Element {
                     setDraft={setDraft}
                     onSubmit={(text) => sendFromBar(text, typedVoice)}
                     limitNotice={limitNotice}
+                    pttNotice={ptt.hint || ptt.error}
                     pttKeyDown={ptt.onKeyDown}
                     pttKeyUp={ptt.onKeyUp}
                     recording={ptt.recording}
@@ -535,6 +539,15 @@ export function BarApp(): React.JSX.Element {
           </div>
         </div>
       </div>
+      {/* Failed-hold feedback below the collapsed pill (Mac notch parity). Hidden
+          while expanded — the panel surfaces the same notice inline above the input
+          (BarChatSurface pttNotice) — and while the bar is sliding OUT, so a chip
+          whose self-clear timer outlasts the dismiss can't linger detached from the
+          pill as it retracts (this chip lives outside .bar-slide, so it doesn't
+          share the pill's fade). Renders nothing when there is no hint/error, so the
+          success path is untouched. hint is the Mac-parity guidance ("Hold longer to
+          record"); error is the failure line. */}
+      <BarHintStrip text={expanded || sliding === 'out' ? null : ptt.hint || ptt.error} />
     </div>
   )
 }

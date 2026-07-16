@@ -217,6 +217,24 @@ describe('BarChatSurface', () => {
     expect(input.value).toBe('second question')
   })
 
+  it('conversation: a failed PTT hold surfaces its hint/error inline above the input', () => {
+    // While the panel is open, holding Space in the textarea can fail (too short,
+    // dead mic, mic unavailable, transcription failed). The hook computes the copy;
+    // the panel must show it (the collapsed pill shows it below the pill instead).
+    renderSurface({ view: 'conversation', pttNotice: 'Hold longer to record' })
+    expect(screen.getByText('Hold longer to record')).toBeTruthy()
+    cleanup()
+    renderSurface({ view: 'conversation', pttNotice: 'Microphone unavailable' })
+    expect(screen.getByText('Microphone unavailable')).toBeTruthy()
+  })
+
+  it('conversation: no PTT notice → no strip renders (success path unchanged)', () => {
+    renderSurface({ view: 'conversation', pttNotice: null })
+    expect(screen.queryByText('Hold longer to record')).toBeNull()
+    // A clean conversation has no status line at all (no notice of either kind).
+    expect(screen.queryByRole('status')).toBeNull()
+  })
+
   it('conversation: an empty thread invites instead of dead-ending', () => {
     renderSurface({ view: 'conversation', chat: { messages: [], sending: false, status: 'idle' } })
     expect(screen.getByText(/Ask Omi anything/i)).toBeTruthy()
