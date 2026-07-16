@@ -15,6 +15,7 @@ import { POST_HISTORY_KEY } from './sync/backfillStorageKey'
 import { resetByokKeys } from './byokKeys'
 import { clearAllPersistedCaches } from './persistentCache'
 import { resetMemoriesCache } from './memoriesCache'
+import { resetGoalsCache } from './goalsCache'
 
 // Standalone user-scoped localStorage keys (the device-prefs blob and sidebar
 // collapse state are machine-scoped and NOT listed here).
@@ -60,6 +61,7 @@ export async function teardownUserData(): Promise<void> {
   clearPendingConversations()
   clearMemoryCache()
   resetMemoriesCache()
+  resetGoalsCache()
   // 4. Per-uid cold-start snapshots (persistentCache): the last-known page data
   //    mirrored to localStorage so surfaces render instantly on the next launch.
   //    Keys are already uid-scoped, but purge them all so a second account on this
