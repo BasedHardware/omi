@@ -3,6 +3,7 @@ import { History, Plus } from 'lucide-react'
 import { useAppState } from '../../state/appState'
 import { useChatSessions } from '../../hooks/useChatSessions'
 import { getPreferences, onPreferencesChange } from '../../lib/preferences'
+import { deleteAndRethread } from './chatSessionDelete'
 import { Pill } from '../ui/Pill'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/Popover'
 import { ChatHistoryPopover } from './ChatHistoryPopover'
@@ -61,6 +62,9 @@ function HubChatHeaderInner(): React.JSX.Element {
       if (created) chat.switchThread(created.id)
     })
   }
+  const handleDelete = (id: string): void => {
+    void deleteAndRethread(sessions.removeSession, chat.currentThreadId, chat.switchThread, id)
+  }
 
   return (
     <div className="mb-3 flex items-center gap-2">
@@ -103,6 +107,7 @@ function HubChatHeaderInner(): React.JSX.Element {
             currentThreadId={chat.currentThreadId}
             onSelect={handleSelect}
             onCreate={handleCreate}
+            onDelete={handleDelete}
           />
         </PopoverContent>
       </Popover>

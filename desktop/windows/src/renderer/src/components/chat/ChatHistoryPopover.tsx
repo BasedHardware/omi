@@ -17,8 +17,12 @@ export function ChatHistoryPopover(props: {
   currentThreadId: string | null
   onSelect: (id: string | null) => void
   onCreate: () => void
+  // Delete is routed through the container (not called on the hook directly)
+  // because deleting the ACTIVE session must also re-thread the engine back to
+  // the default thread — see HubChatHeader.handleDelete.
+  onDelete: (id: string) => void
 }): React.JSX.Element {
-  const { sessions: s, currentThreadId, onSelect, onCreate } = props
+  const { sessions: s, currentThreadId, onSelect, onCreate, onDelete } = props
 
   return (
     <div className="flex max-h-[min(70vh,480px)] flex-col">
@@ -114,7 +118,7 @@ export function ChatHistoryPopover(props: {
                     onSelect={() => onSelect(session.id)}
                     onRename={(title) => void s.renameSession(session.id, title)}
                     onToggleStar={() => void s.toggleStar(session.id)}
-                    onDelete={() => void s.removeSession(session.id).catch(() => {})}
+                    onDelete={() => onDelete(session.id)}
                   />
                 ))}
               </div>
