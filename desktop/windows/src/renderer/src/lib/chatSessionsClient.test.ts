@@ -184,6 +184,48 @@ describe('getMessages / deleteMessages', () => {
     expect(msgs[0].sessionId).toBe('sess-9')
   })
 
+  it('maps a wire message`s files → attachments (with the public thumbnail URL)', async () => {
+    api.get.mockResolvedValue({
+      data: [
+        {
+          id: 'm3',
+          text: 'here',
+          created_at: '2026-07-14T12:10:00Z',
+          sender: 'human',
+          files: [
+            {
+              id: 'srv-img',
+              name: 'photo.png',
+              mime_type: 'image/png',
+              thumbnail: 'https://cdn/x.png'
+            },
+            { id: 'srv-doc', name: 'report.pdf', mime_type: 'application/pdf', thumbnail: null }
+          ]
+        }
+      ]
+    })
+
+    const msgs = await getMessages({ sessionId: 'sess-9' })
+
+    expect(msgs[0].attachments).toEqual([
+      {
+        id: 'srv-img',
+        name: 'photo.png',
+        mimeType: 'image/png',
+        thumbnailUrl: 'https://cdn/x.png'
+      },
+      { id: 'srv-doc', name: 'report.pdf', mimeType: 'application/pdf', thumbnailUrl: undefined }
+    ])
+  })
+
+  it('omits attachments entirely when the wire message has no files', async () => {
+    api.get.mockResolvedValue({
+      data: [{ id: 'm4', text: 'plain', created_at: '2026-07-14T12:11:00Z', sender: 'human' }]
+    })
+    const msgs = await getMessages()
+    expect('attachments' in msgs[0]).toBe(false)
+  })
+
   it('DELETEs a session thread and returns the deleted count', async () => {
     api.delete.mockResolvedValue({ data: { status: 'ok', deleted_count: 7 } })
 

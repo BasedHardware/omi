@@ -118,6 +118,25 @@ describe('chatAttachments — upload lifecycle', () => {
   })
 })
 
+describe('chatAttachments — thumbnail capture', () => {
+  it('captures the public thumbnail URL from the upload response (images)', async () => {
+    const upload = async (f: { name: string }): Promise<FileChat> => ({
+      ...fileChat(f.name),
+      mime_type: 'image/png',
+      thumbnail: 'https://cdn.omi/thumb.png'
+    })
+    addAttachments([pick('img')], { upload })
+    await awaitUploadsSettled()
+    expect(getPendingAttachments()[0].thumbnailUrl).toBe('https://cdn.omi/thumb.png')
+  })
+
+  it('leaves thumbnailUrl undefined when the response carries no thumbnail (documents)', async () => {
+    addAttachments([pick('doc')], { upload: immediateUpload })
+    await awaitUploadsSettled()
+    expect(getPendingAttachments()[0].thumbnailUrl).toBeUndefined()
+  })
+})
+
 describe('chatAttachments — await settling', () => {
   it('awaitUploadsSettled blocks until in-flight uploads finish', async () => {
     const { upload, resolve } = deferredUpload()
