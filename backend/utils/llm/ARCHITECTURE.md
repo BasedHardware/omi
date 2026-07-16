@@ -1,42 +1,73 @@
-# LLM orchestration utilities
+# `backend/utils/llm`
 
-Prompt construction and LLM-call helpers for chat, conversation
-post-processing, memory extraction, notifications, and app generation. Callers
-in `routers/` and the background workers own request auth, persistence, and
-response shaping; this package owns prompt shape and model invocation only.
+LLM-backed feature layer for the backend. Every module here turns a product
+feature (chat, memory extraction, notifications, personas, app generation, …)
+into one or more model calls, and routes those calls through a shared
+**gateway-first** transport with a legacy direct-provider fallback.
 
-## Boundaries
+The package is large because it collects *all* per-feature LLM prompts and
+response parsers in one place. New code should join the matching group below
+rather than adding another top-level concern.
 
-- **Model access** — `clients.py`, `model_config.py`, and `providers.py` build
-  model instances and resolve model/provider tokens. Every LLM call routes
-  through these; do not construct SDK clients elsewhere in the package.
-- **Managed gateway lane** — `gateway_client.py`, `gateway_serving.py`,
-  `gateway_anthropic.py`, `gateway_byok.py`, `gateway_shadow.py`, and
-  `gateway_observability.py` route Omi-managed and BYOK traffic through the
-  internal `llm_gateway/` service with legacy-transport fallback. `byok_errors.py`
-  turns provider-key failures into user-facing notifications.
-- **Chat and conversation** — `chat.py` runs chat-message processing;
-  `conversation_processing.py` and `conversation_folder.py` post-process and
-  categorize persisted conversations. `followup.py` and `trends.py` derive
-  follow-ups and trends from that content.
-- **Memory** — `memories.py`, `working_memory.py`, `working_observations.py`,
-  `durable_memory_patches.py`, `knowledge_graph.py`, and `l2_memory_routes.py`
-  extract and maintain user facts; `promotion_proposals.py` and
-  `promotion_routes.py` propose ST→LT promotions. Durable maintenance ownership
-  stays in the memory-maintenance job, not here.
-- **Proactive surfaces** — `proactive_notification.py` and `notifications.py`
-  compose notification copy; `goals.py` tracks goal progress; `temporal.py`
-  grounds insights and extraction in the caller's current date.
-- **Apps and personas** — `app_generator.py` with `app_generation_prompts.py`
-  generate apps from prompts; `persona.py` manages persona generation;
-  `openglass.py` and `external_integrations.py` cover their respective surfaces.
-- **Usage** — `fair_use_classifier.py` classifies usage against soft caps and
-  `usage_tracker.py` records LLM usage. Enforcement and billing state live in
-  `database/fair_use.py` and the payment surfaces, not here.
+## Transport & routing core
 
-## Data and credential safety
+The shared plumbing every feature call goes through.
 
-Prompts here receive already-authorized user content. Request-scoped BYOK keys
-may reach the gateway helpers for a single call but must never be persisted,
-placed in durable task payloads, or logged. Sanitize any model or provider
-response before logging (`utils.log_sanitizer`).
+- `gateway_client.py` — resolves the LLM gateway base URL / service token and
+  low-level request helpers.
+- `gateway_serving.py` — gateway-first serving with fallback to a legacy
+  provider on hard transport failures.
+- `gateway_anthropic.py` — gateway-first Anthropic Messages client with a
+  direct-transport fallback.
+- `gateway_byok.py` — BYOK (bring-your-own-key) credential envelope helpers for
+  gateway routing.
+- `gateway_shadow.py` — dev/shadow comparison wrapping (sampled, prod-gated).
+- `gateway_observability.py` — records gateway vs. direct outcomes for
+  comparison and health.
+- `clients.py` — LLM client construction plus the shared error callback wiring.
+- `providers.py` / `model_config.py` — provider-specific chat-model
+  construction and model/profile selection per feature.
+- `byok_errors.py` — classifies and normalizes BYOK/provider LLM errors.
+- `usage_tracker.py` — feature-level token-usage accounting.
+
+## Chat & conversation
+
+- `chat.py` — chat prompt assembly, context handling, response normalization.
+- `conversation_processing.py` — post-conversation structuring (speaker id
+  matching, discard detection, summarization).
+- `conversation_folder.py` — conversation → folder assignment.
+- `followup.py` — follow-up question generation.
+- `persona.py` — persona chat, memory condensation for personas.
+- `openglass.py` — vision (image description) model calls.
+
+## Memory & knowledge graph
+
+- `memories.py` — memory extraction (standard + high-recall).
+- `working_observations.py` — working-observation batch synthesis
+  (`working_memory.py` is a backward-compatible shim, WS-G11).
+- `knowledge_graph.py` — node/edge extraction from memories.
+- `promotion_proposals.py` / `promotion_routes.py` — durable-memory patch
+  proposals and their routing (`durable_memory_patches.py` and
+  `l2_memory_routes.py` are backward-compatible shims, WS-G11).
+
+## Proactive, notifications & insights
+
+- `notifications.py` — relevance retrieval and notification content.
+- `proactive_notification.py` — proactive notification drafting + validation.
+- `goals.py` — goal-tracking LLM utilities.
+- `trends.py` — trend extraction.
+- `temporal.py` — current-date grounding injected into prompts.
+
+## Apps, integrations & policy
+
+- `app_generator.py` / `app_generation_prompts.py` — AI app generation.
+- `external_integrations.py` — structured summaries for external integrations.
+- `fair_use_classifier.py` — LLM-based purpose detection for fair-use policy.
+
+## Conventions
+
+- Prefer routing new calls through the gateway core above; do not add a new
+  direct-provider path.
+- Backward-compatible shims (`working_memory.py`, `durable_memory_patches.py`,
+  `l2_memory_routes.py`) only re-export from their real modules — put
+  implementation in the target module, not the shim.

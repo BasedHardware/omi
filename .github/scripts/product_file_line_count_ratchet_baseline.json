@@ -31,7 +31,7 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": 1572,
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": 1790,
     "desktop/macos/Desktop/Sources/MainWindow/Components/ChatBubble.swift": 1915,
-    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3586,
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": 3615,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift": 4430,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/MemoriesPage.swift": 3216,
     "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift": 5401,
@@ -58,11 +58,12 @@
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift": "Controller growth predates this ratchet; new pure policies are extracted and separately guarded by the hub ratchet.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubSession.swift": "Provider completion now exposes typed bounded continuation outcomes instead of inferred callback state.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift": "Turn reducers now encode terminal provenance needed to distinguish completion, continuation, and recovery.",
-    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Ambient turns without Screen Recording now carry an honest screen-unavailable payload instead of silence.",
+    "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift": "Ambient turns without Screen Recording now carry an honest screen-unavailable payload instead of silence; explicit current-screen chat questions attach one turn-scoped live image rather than historical metadata.",
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple sign-in name capture now signals observers and persists the first-auth name that Apple sends only once.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/FloatingControlBarView.swift": "Onboarding bar glow and the actionable reach-error card (Retry/Skip) render on the shared bar surface.",
     "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding now adopts the async-arriving auth name instead of freezing the 'there' placeholder; deinit now cancels the local file memory import task alongside its siblings; goal/task generation prompts carry the sharpened instructions.",
-    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Already-granted permissions no longer reopen System Settings: the screen-recording and full-disk-access requests gate their Settings/drag-card opens behind the granted result."
+    "desktop/macos/Desktop/Sources/Providers/ChatToolExecutor.swift": "Already-granted permissions no longer reopen System Settings: the screen-recording and full-disk-access requests gate their Settings/drag-card opens behind the granted result.",
+    "desktop/macos/Desktop/Sources/MainWindow/Pages/AppsPage.swift": "Fix destructive app-detail 'Open' button (uninstalled enabled non-integration apps): pure primaryAppAction helper + button gating + unit test; splitting this 3.6k-line view is out of scope for a bug fix"
   },
   "threshold": 1500
 }

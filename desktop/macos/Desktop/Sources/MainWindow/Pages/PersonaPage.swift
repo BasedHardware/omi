@@ -17,6 +17,10 @@ struct PersonaPage: View {
     @State private var isCheckingUsername = false
     @State private var usernameAvailable: Bool?
     @State private var isCreating = false
+    /// Create-sheet-scoped error. Kept separate from the page-wide `errorMessage`
+    /// so a failed creation shows feedback inside the sheet instead of flipping
+    /// the whole page (which has no persona yet) to the full-page error view.
+    @State private var createErrorMessage: String?
 
     // Edit state
     @State private var isEditing = false
@@ -506,10 +510,14 @@ struct PersonaPage: View {
             isCheckingUsername: $isCheckingUsername,
             usernameAvailable: $usernameAvailable,
             isCreating: $isCreating,
+            errorMessage: $createErrorMessage,
             onCheckUsername: checkUsername,
             onCreate: createPersona,
             canCreate: canCreate,
-            onDismiss: { showingCreateForm = false }
+            onDismiss: {
+                showingCreateForm = false
+                createErrorMessage = nil
+            }
         )
     }
 
@@ -535,16 +543,20 @@ struct PersonaPage: View {
 
     private func createPersona() async {
         isCreating = true
+        createErrorMessage = nil
 
         do {
             let username = newPersonaUsername.isEmpty ? nil : newPersonaUsername
             persona = try await APIClient.shared.createPersona(name: newPersonaName, username: username)
             showingCreateForm = false
+            createErrorMessage = nil
             newPersonaName = ""
             newPersonaUsername = ""
         } catch {
-            // Show error in sheet
-            errorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
+            // Show the error inside the create sheet — never write the page-wide
+            // errorMessage here, or the still-persona-less page flips to the
+            // full-page error view behind the sheet.
+            createErrorMessage = UserFacingErrorPresentation.message(for: error, while: .persona)
         }
 
         isCreating = false
@@ -616,6 +628,7 @@ private struct CreatePersonaSheetContent: View {
     @Binding var isCheckingUsername: Bool
     @Binding var usernameAvailable: Bool?
     @Binding var isCreating: Bool
+    @Binding var errorMessage: String?
     let onCheckUsername: () async -> Void
     let onCreate: () async -> Void
     let canCreate: Bool
@@ -727,6 +740,22 @@ private struct CreatePersonaSheetContent: View {
                 .cornerRadius(OmiChrome.elementRadius)
 
                 Spacer()
+
+                // Create error (sheet-scoped)
+                if let errorMessage {
+                    HStack(spacing: OmiSpacing.sm) {
+                        Image(systemName: "exclamationmark.triangle.fill")
+                            .foregroundColor(OmiColors.error)
+                        Text(errorMessage)
+                            .scaledFont(size: OmiType.caption)
+                            .foregroundColor(OmiColors.error)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(OmiSpacing.md)
+                    .background(OmiColors.error.opacity(0.1))
+                    .cornerRadius(OmiChrome.elementRadius)
+                }
 
                 // Create button
                 Button {

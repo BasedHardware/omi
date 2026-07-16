@@ -10,6 +10,31 @@ struct LocalSendToken: Equatable {
     let generation: Int
 }
 
+/// Pure duplicate-detection for the chat transcript. Extracted so it is unit
+/// testable and so the fingerprint can't silently collide distinct messages.
+enum ChatMessageDeduplicator {
+    /// IDs of long messages that are exact duplicates of an earlier message in
+    /// the same list. The fingerprint is sender + the FULL body: an earlier
+    /// implementation keyed only on the first 200 characters, so two genuinely
+    /// distinct long messages that shared an opening (same preamble, different
+    /// answer) collided and the later one was hidden. Only true whole-message
+    /// duplicates (sync/poll replay) should collapse.
+    static func duplicateIDs(in messages: [ChatMessage]) -> Set<String> {
+        var seen: [String: String] = [:]  // sender+full-text fingerprint → first message ID
+        var dupes = Set<String>()
+        for msg in messages {
+            guard msg.text.count > 200 else { continue }  // only dedup long messages
+            let fingerprint = "\(msg.sender)\u{1}\(msg.text)"
+            if seen[fingerprint] != nil {
+                dupes.insert(msg.id)
+            } else {
+                seen[fingerprint] = msg.id
+            }
+        }
+        return dupes
+    }
+}
+
 /// Reusable chat messages scroll view extracted from ChatPage.
 /// Used by both ChatPage (main chat) and TaskChatPanel (task sidebar chat).
 struct ChatMessagesView<WelcomeContent: View>: View {
@@ -46,19 +71,7 @@ struct ChatMessagesView<WelcomeContent: View>: View {
     /// IDs of messages that are near-duplicates of an earlier message in the same session.
     /// Computed once per messages change to avoid O(n^2) per render.
     private var duplicateMessageIds: Set<String> {
-        var seen: [String: String] = [:]  // truncated text → first message ID
-        var dupes = Set<String>()
-        for msg in messages {
-            guard msg.text.count > 200 else { continue }  // only dedup long messages
-            // Use first 200 chars as fingerprint (handles minor trailing diffs)
-            let fingerprint = String(msg.text.prefix(200))
-            if let _ = seen[fingerprint] {
-                dupes.insert(msg.id)
-            } else {
-                seen[fingerprint] = msg.id
-            }
-        }
-        return dupes
+        ChatMessageDeduplicator.duplicateIDs(in: messages)
     }
 
     // MARK: - Scroll State

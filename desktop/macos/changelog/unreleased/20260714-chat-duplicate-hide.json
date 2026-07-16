@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat hiding a long message that happened to share its opening with an earlier one"
+}
