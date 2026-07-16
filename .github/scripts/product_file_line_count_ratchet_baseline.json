@@ -17,7 +17,7 @@
     "backend/utils/sync/pipeline.py": 2296,
     "desktop/macos/Backend-Rust/src/routes/chat_completions.rs": 3309,
     "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2741,
-    "desktop/macos/Desktop/Sources/APIClient.swift": 6458,
+    "desktop/macos/Desktop/Sources/APIClient.swift": 6481,
     "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2109,
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4242,
@@ -50,7 +50,7 @@
     "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2155
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/APIClient.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
+    "desktop/macos/Desktop/Sources/APIClient.swift": "Adds updateOnboardingAcquisitionSource so the how-did-you-hear answer persists to the backend user record, on top of strict-concurrency annotations.",
     "desktop/macos/Desktop/Sources/AuthService.swift": "Apple sign-in name capture signals observers and persists the first-auth name Apple sends only once, on top of the pinned swift-format layout.",
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",

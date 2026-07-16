@@ -368,6 +368,7 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  @MainActor
   func testHowDidYouHearKeepsOtherLast() {
     XCTAssertEqual(OnboardingHowDidYouHearStepView.sources.last?.name, "Other")
     XCTAssertEqual(

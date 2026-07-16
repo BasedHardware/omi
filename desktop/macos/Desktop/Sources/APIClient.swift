@@ -4315,6 +4315,29 @@ extension APIClient {
       authorizationSnapshot: authorizationSnapshot)
   }
 
+  /// Persists the "how did you hear about Omi" answer to the user's backend
+  /// onboarding state (`acquisition_source`). Previously the desktop only wrote
+  /// this to local `@AppStorage` + analytics, so the answer never reached the
+  /// user record and was lost on reinstall / other devices.
+  @discardableResult
+  func updateOnboardingAcquisitionSource(
+    _ source: String,
+    expectedOwnerId: String? = nil,
+    authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
+  ) async throws -> String {
+    struct UpdateRequest: Encodable {
+      let acquisitionSource: String
+      enum CodingKeys: String, CodingKey { case acquisitionSource = "acquisition_source" }
+    }
+    struct StatusResponse: Decodable { let status: String }
+    let response: StatusResponse = try await patch(
+      "v1/users/onboarding",
+      body: UpdateRequest(acquisitionSource: source),
+      expectedOwnerId: expectedOwnerId,
+      authorizationSnapshot: authorizationSnapshot)
+    return response.status
+  }
+
   /// Fetches recording permission status
   func getRecordingPermission() async throws -> RecordingPermissionResponse {
     return try await get("v1/users/store-recording-permission")
