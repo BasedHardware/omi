@@ -8,9 +8,19 @@
 import { EventEmitter } from 'node:events'
 import { PassThrough } from 'node:stream'
 import { existsSync, readFileSync, writeFileSync } from 'node:fs'
+import { dirname, join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 import { spawn } from 'child_process'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { PiMonoAdapter, PiMonoRuntimeAdapter, HarnessFeature } from './piMono'
+import {
+  PiMonoAdapter,
+  PiMonoRuntimeAdapter,
+  HarnessFeature,
+  resolveBundledPi,
+  piCliCandidates,
+  resolveBundledExtension,
+  piExtensionCandidates
+} from './piMono'
 import type { AdapterAttemptContext, AdapterStreamEvent } from './interface'
 
 vi.mock('child_process', async () => {
@@ -881,5 +891,86 @@ describe('PiMonoRuntimeAdapter binding + capabilities', () => {
     expect(adapter.supportsFeature(HarnessFeature.SESSION_RESUME)).toBe(false)
     expect(adapter.supportsFeature(HarnessFeature.BIDIRECTIONAL_RPC)).toBe(true)
     expect(adapter.supportsFeature(HarnessFeature.COST_TRACKING)).toBe(true)
+  })
+})
+
+// Regression guard for the "(void 0) is not a function" adapter-construction crash:
+// resolveBundledPi() used `import.meta.resolve`, which esbuild compiles to `(void 0)`
+// in the CJS main bundle, throwing before any adapter catch could fire. The prior
+// tests never caught it because they always inject an explicit `piPath`, so the
+// real resolver was never exercised — and under vitest `import.meta.resolve` works
+// anyway. These tests exercise the resolver directly and ban the unusable API.
+describe('resolveBundledPi', () => {
+  it('resolves a real, existing dist/cli.js on the filesystem (no import.meta.resolve)', () => {
+    const cli = resolveBundledPi()
+    expect(existsSync(cli)).toBe(true)
+    expect(cli.replace(/\\/g, '/')).toMatch(
+      /node_modules\/@earendil-works\/pi-coding-agent\/dist\/cli\.js$/
+    )
+  })
+
+  it('constructing the adapter without a piPath override does not throw', () => {
+    // This is the exact path that crashed at runtime: no options.piPath and no
+    // PI_MONO_PATH → the constructor calls resolveBundledPi().
+    const prev = process.env.PI_MONO_PATH
+    delete process.env.PI_MONO_PATH
+    try {
+      expect(() => new PiMonoAdapter({ authToken: 'test-token' })).not.toThrow()
+    } finally {
+      if (prev !== undefined) process.env.PI_MONO_PATH = prev
+    }
+  })
+
+  it('lists the asar-unpacked packaged path first, then walks up for dev', () => {
+    const packaged = piCliCandidates('/anything', '/app/resources')
+    expect(packaged[0].replace(/\\/g, '/')).toBe(
+      '/app/resources/app.asar.unpacked/node_modules/@earendil-works/pi-coding-agent/dist/cli.js'
+    )
+
+    // With no resourcesPath (outside Electron) it walks up from moduleDir toward
+    // the hoisted node_modules — one candidate per ancestor directory.
+    const dev = piCliCandidates('/a/b/c', undefined)
+    expect(dev.every((p) => p.replace(/\\/g, '/').endsWith('/cli.js'))).toBe(true)
+    expect(dev.map((p) => p.replace(/\\/g, '/'))).toContain(
+      '/a/b/c/node_modules/@earendil-works/pi-coding-agent/dist/cli.js'
+    )
+    expect(dev.map((p) => p.replace(/\\/g, '/'))).toContain(
+      '/a/node_modules/@earendil-works/pi-coding-agent/dist/cli.js'
+    )
+  })
+
+  it('source code never uses import.meta.resolve (breaks in the CJS main bundle)', () => {
+    const src = readFileSync(join(dirname(fileURLToPath(import.meta.url)), 'piMono.ts'), 'utf8')
+    // Strip comments so this catches real usage, not the doc-comment that explains
+    // why the API is banned.
+    const code = src.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+    expect(code).not.toMatch(/import\.meta\.resolve/)
+  })
+})
+
+// The omi-provider extension had the same class of bug: it derived its path from
+// `dirname(import.meta.url)` (→ out/main in the bundle), but the raw .ts extension
+// is not copied there in dev — it lives at its source location. A wrong path made
+// pi reject the "omi" provider and exit code 1.
+describe('resolveBundledExtension', () => {
+  it('resolves a real, existing pi-mono-extension/index.ts on the filesystem', () => {
+    const ext = resolveBundledExtension()
+    expect(existsSync(ext)).toBe(true)
+    expect(ext.replace(/\\/g, '/')).toMatch(/pi-mono-extension\/index\.ts$/)
+  })
+
+  it('lists the asar-unpacked packaged path first, then the dev source', () => {
+    const packaged = piExtensionCandidates('/anything', '/app/resources')
+    expect(packaged[0].replace(/\\/g, '/')).toBe(
+      '/app/resources/app.asar.unpacked/out/main/pi-mono-extension/index.ts'
+    )
+
+    const dev = piExtensionCandidates('/w/out/main', undefined)
+    expect(dev.every((p) => p.replace(/\\/g, '/').endsWith('/pi-mono-extension/index.ts'))).toBe(
+      true
+    )
+    expect(dev.map((p) => p.replace(/\\/g, '/'))).toContain(
+      '/w/src/main/codingAgent/pi-mono-extension/index.ts'
+    )
   })
 })

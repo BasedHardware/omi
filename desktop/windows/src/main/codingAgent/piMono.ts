@@ -271,45 +271,114 @@ function mapModel(model: string): string {
   return MODEL_MAP[model] ?? model
 }
 
-/** Resolve the pi CLI bundled inside the app.
+/** Ordered candidate paths for pi's `dist/cli.js`, resolved on the filesystem.
  *
- *  Resolution order:
- *  1. $PI_MONO_PATH (test/dev override)
- *  2. `@earendil-works/pi-coding-agent/dist/cli.js` via Node module resolution.
+ *  Pure so it can be unit-tested without a running Electron app. `moduleDir` is
+ *  this module's directory; `resourcesPath` is Electron's `process.resourcesPath`
+ *  (undefined outside Electron → the packaged candidate is skipped).
  *
- *  Unlike macOS, Windows has no ditto `.bin` symlink quirk, so we resolve the
- *  real cli.js directly and spawn it under ELECTRON_RUN_AS_NODE. createRequire
- *  is the same seam agentKernel/store.ts uses for better-sqlite3; it works in
- *  both dev (out/) and packaged (asar-unpacked) builds. The package must be
- *  asar-unpacked (electron-builder.yml) so the plain-Node child can read it.
+ *   - Packaged: `<resourcesPath>/app.asar.unpacked/node_modules/@earendil-works/
+ *     pi-coding-agent/dist/cli.js` (the package is asar-unpacked in
+ *     electron-builder.yml so the plain-Node child can read it).
+ *   - Dev / vitest: walk up from `moduleDir` to the hoisted node_modules.
  */
-function resolveBundledPi(): string {
-  // The package's `exports` map exposes only the ESM `import` condition for "."
-  // (→ dist/index.js) and "./rpc-entry"; it defines NO CJS `require` condition
-  // and does NOT expose ./dist/cli.js. So a `createRequire().resolve` fails on
-  // both counts — we must use ESM resolution of the package root and derive the
-  // sibling cli.js (bin.pi = dist/cli.js, same dist/ directory as index.js).
-  // import.meta.resolve is synchronous and preserved through the electron-vite
-  // ESM main bundle.
-  const indexUrl = import.meta.resolve('@earendil-works/pi-coding-agent')
-  return join(dirname(fileURLToPath(indexUrl)), 'cli.js')
+export function piCliCandidates(
+  moduleDir: string,
+  resourcesPath: string | undefined = process.resourcesPath
+): string[] {
+  const rel = join('node_modules', '@earendil-works', 'pi-coding-agent', 'dist', 'cli.js')
+  const candidates: string[] = []
+  if (resourcesPath) {
+    candidates.push(join(resourcesPath, 'app.asar.unpacked', rel))
+  }
+  for (let dir = moduleDir; ; ) {
+    candidates.push(join(dir, rel))
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return candidates
 }
 
-/** Resolve the omi-provider extension file bundled alongside the app.
+/** Resolve the pi CLI (`dist/cli.js`) bundled inside the app, on the filesystem.
  *
- *  The pi-mono-extension (omi provider registration + Windows denylist + the
- *  OMI_BRIDGE_PIPE relay client) lives at ./pi-mono-extension/index.ts, a raw
- *  `.ts` file pi loads on the fly via jiti (no precompile). This resolver
- *  returns its on-disk path relative to this module's source.
+ *  We CANNOT use `import.meta.resolve` here: the electron-vite MAIN bundle is CJS,
+ *  and esbuild compiles `import.meta.resolve(x)` to `(void 0)(x)` — calling it
+ *  throws "(void 0) is not a function" at adapter construction (before openBinding,
+ *  so the adapter's own catch never fires). Nor can we use
+ *  `createRequire(...).resolve(...)`: pi's package.json `exports` map exposes only
+ *  the ESM `import` condition for "." (→ dist/index.js) and "./rpc-entry" — no CJS
+ *  `require` condition, no `./package.json`, no `./dist/*` subpath — so every
+ *  bare/subpath resolve throws ERR_PACKAGE_PATH_NOT_EXPORTED.
  *
- *  DARK: the adapter is still unregistered, so this resolver is never called in
- *  production yet — every production path either injects an explicit
- *  extensionPath or does not spawn pi at all. Final packaging (asar-unpack of
- *  the extension source + its .ts dep tree so the plain-Node child can read it)
- *  is finished when the adapter is activated in PR-D/E.
+ *  So we resolve on the filesystem (see piCliCandidates), which the exports map
+ *  can't gate, and which works in dev, vitest, and packaged builds. First existing
+ *  candidate wins. `import.meta.url` (not `.resolve`) is safe — esbuild shims it to
+ *  `pathToFileURL(__filename)` in the CJS bundle.
  */
-function resolveBundledExtension(): string {
-  return join(dirname(fileURLToPath(import.meta.url)), 'pi-mono-extension', 'index.ts')
+export function resolveBundledPi(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const candidates = piCliCandidates(moduleDir)
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  throw new Error(
+    `resolveBundledPi: @earendil-works/pi-coding-agent/dist/cli.js not found. Looked in:\n  ${candidates.join('\n  ')}`
+  )
+}
+
+/** Ordered candidate paths for the omi-provider extension's `index.ts`.
+ *
+ *  Pure so it can be unit-tested. `moduleDir` is this module's directory;
+ *  `resourcesPath` is Electron's `process.resourcesPath`.
+ *
+ *   - Packaged: the extension is bundled to `out/main/pi-mono-extension/index.ts`
+ *     (scripts/bundle-pimono-extension.mjs) and asar-unpacked (electron-builder)
+ *     so pi's plain-Node child can read it →
+ *     `<resourcesPath>/app.asar.unpacked/out/main/pi-mono-extension/index.ts`.
+ *   - Dev / vitest: the bundle step does NOT run, so pi loads the raw `.ts` from
+ *     its SOURCE location (jiti resolves the relative `./node-tools` etc. imports
+ *     from there). We can't use `dirname(import.meta.url)` — in the electron-vite
+ *     bundle that is `out/main`, where nothing was copied in dev. So walk up to the
+ *     checkout that holds `src/main/codingAgent/pi-mono-extension/index.ts`.
+ */
+export function piExtensionCandidates(
+  moduleDir: string,
+  resourcesPath: string | undefined = process.resourcesPath
+): string[] {
+  const candidates: string[] = []
+  if (resourcesPath) {
+    candidates.push(
+      join(resourcesPath, 'app.asar.unpacked', 'out', 'main', 'pi-mono-extension', 'index.ts')
+    )
+  }
+  const srcRel = join('src', 'main', 'codingAgent', 'pi-mono-extension', 'index.ts')
+  for (let dir = moduleDir; ; ) {
+    candidates.push(join(dir, srcRel))
+    const parent = dirname(dir)
+    if (parent === dir) break
+    dir = parent
+  }
+  return candidates
+}
+
+/** Resolve the omi-provider extension file (`index.ts`) pi loads via jiti.
+ *
+ *  The pi-mono-extension registers the `omi` provider + Windows denylist + the
+ *  OMI_BRIDGE_PIPE relay client. Resolved on the filesystem (see
+ *  piExtensionCandidates) so it works in dev, vitest, and packaged builds; first
+ *  existing candidate wins. `import.meta.url` (not `.resolve`) is safe — esbuild
+ *  shims it to `pathToFileURL(__filename)` in the CJS bundle.
+ */
+export function resolveBundledExtension(): string {
+  const moduleDir = dirname(fileURLToPath(import.meta.url))
+  const candidates = piExtensionCandidates(moduleDir)
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) return candidate
+  }
+  throw new Error(
+    `resolveBundledExtension: pi-mono-extension/index.ts not found. Looked in:\n  ${candidates.join('\n  ')}`
+  )
 }
 
 /**
