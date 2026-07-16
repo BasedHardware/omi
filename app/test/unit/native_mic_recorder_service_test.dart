@@ -24,9 +24,6 @@ class FakePhoneMicHostApi extends PhoneMicHostApi {
 
   @override
   Future<bool> isRecording() async => false;
-
-  @override
-  Future<String> debugEncodeWavToBin(String wavPath, String marker) async => '';
 }
 
 class Callbacks {

@@ -154,10 +154,6 @@ protocol PhoneMicHostApi {
   func start(mode: PhoneMicCaptureMode, completion: @escaping (Result<Void, Error>) -> Void)
   func stop(completion: @escaping (Result<Void, Error>) -> Void)
   func isRecording() throws -> Bool
-  /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-  /// WAV through the batch opus encoder + writer and returns the produced .bin
-  /// path, so the native encode+WAL round-trip can be validated end to end.
-  func debugEncodeWavToBin(wavPath: String, marker: String, completion: @escaping (Result<String, Error>) -> Void)
 }
 
 /// Generated setup class from Pigeon to handle messages through the `binaryMessenger`.
@@ -210,27 +206,6 @@ class PhoneMicHostApiSetup {
       }
     } else {
       isRecordingChannel.setMessageHandler(nil)
-    }
-    /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-    /// WAV through the batch opus encoder + writer and returns the produced .bin
-    /// path, so the native encode+WAL round-trip can be validated end to end.
-    let debugEncodeWavToBinChannel = FlutterBasicMessageChannel(name: "dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.debugEncodeWavToBin\(channelSuffix)", binaryMessenger: binaryMessenger, codec: codec)
-    if let api = api {
-      debugEncodeWavToBinChannel.setMessageHandler { message, reply in
-        let args = message as! [Any?]
-        let wavPathArg = args[0] as! String
-        let markerArg = args[1] as! String
-        api.debugEncodeWavToBin(wavPath: wavPathArg, marker: markerArg) { result in
-          switch result {
-          case .success(let res):
-            reply(wrapResult(res))
-          case .failure(let error):
-            reply(wrapError(error))
-          }
-        }
-      }
-    } else {
-      debugEncodeWavToBinChannel.setMessageHandler(nil)
     }
   }
 }

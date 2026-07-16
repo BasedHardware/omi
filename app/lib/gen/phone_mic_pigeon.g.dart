@@ -174,37 +174,6 @@ class PhoneMicHostApi {
       return (pigeonVar_replyList[0] as bool?)!;
     }
   }
-
-  /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-  /// WAV through the batch opus encoder + writer and returns the produced .bin
-  /// path, so the native encode+WAL round-trip can be validated end to end.
-  Future<String> debugEncodeWavToBin(String wavPath, String marker) async {
-    final String pigeonVar_channelName = 'dev.flutter.pigeon.omi_phone_mic.PhoneMicHostApi.debugEncodeWavToBin$pigeonVar_messageChannelSuffix';
-    final BasicMessageChannel<Object?> pigeonVar_channel = BasicMessageChannel<Object?>(
-      pigeonVar_channelName,
-      pigeonChannelCodec,
-      binaryMessenger: pigeonVar_binaryMessenger,
-    );
-    final Future<Object?> pigeonVar_sendFuture = pigeonVar_channel.send(<Object?>[wavPath, marker]);
-    final List<Object?>? pigeonVar_replyList =
-        await pigeonVar_sendFuture as List<Object?>?;
-    if (pigeonVar_replyList == null) {
-      throw _createConnectionError(pigeonVar_channelName);
-    } else if (pigeonVar_replyList.length > 1) {
-      throw PlatformException(
-        code: pigeonVar_replyList[0]! as String,
-        message: pigeonVar_replyList[1] as String?,
-        details: pigeonVar_replyList[2],
-      );
-    } else if (pigeonVar_replyList[0] == null) {
-      throw PlatformException(
-        code: 'null-error',
-        message: 'Host platform returned null value for non-null return value.',
-      );
-    } else {
-      return (pigeonVar_replyList[0] as String?)!;
-    }
-  }
 }
 
 /// Native -> Dart.

@@ -53,12 +53,6 @@ abstract class PhoneMicHostApi {
   void stop();
 
   bool isRecording();
-
-  /// DEBUG VERIFICATION ONLY — removed before merge. Encodes a 16kHz mono PCM16
-  /// WAV through the batch opus encoder + writer and returns the produced .bin
-  /// path, so the native encode+WAL round-trip can be validated end to end.
-  @async
-  String debugEncodeWavToBin(String wavPath, String marker);
 }
 
 /// Native -> Dart.
