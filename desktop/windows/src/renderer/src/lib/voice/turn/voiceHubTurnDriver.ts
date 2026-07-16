@@ -195,6 +195,17 @@ export class VoiceHubTurnDriver {
     void this.hub.ensureWarm()
   }
 
+  /** A7c item E — the machine woke / unlocked. A socket warmed before suspend is
+   *  likely a zombie (the OS killed the TCP connection), so the next press would commit
+   *  onto a dead session and hang. Proactively refresh the idle warm session. Gated on
+   *  the same `pttHubEnabled` opt-out as `warm()` so wake never opens a socket for a
+   *  disabled hub; the controller further no-ops when there's no session or a turn is
+   *  active (deferring the refresh to that turn's termination). */
+  requestSessionRefresh(reason: string): void {
+    if (this.prefs().pttHubEnabled !== true) return
+    this.hub.requestSessionRefresh(reason)
+  }
+
   /** Drop the warm socket (kill-switch toggled off, or sign-out) without destroying
    *  the driver — a later `warm()` reconnects. Abandons any live turn first so its
    *  reducer state is released. Idempotent. */

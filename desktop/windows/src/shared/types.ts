@@ -1054,6 +1054,10 @@ export type OmiBridgeApi = {
   onVoiceHubEnd: (cb: () => void) => () => void
   /** The delegated hold was aborted — cancel the main-owned turn. */
   onVoiceHubCancel: (cb: () => void) => () => void
+  /** The machine resumed from sleep / unlocked — refresh the (likely-zombie) warm hub
+   *  socket so the next PTT press isn't the one that discovers the dead session (A7c
+   *  item E). Main-window renderer only. */
+  onVoiceHubWake: (cb: () => void) => () => void
   /** Push the projected warm-hub turn state to the bar orb (main → bar). */
   publishVoiceHubState: (state: VoiceHubBarState) => void
   // --- Tray + lifecycle (Phase 1) ---

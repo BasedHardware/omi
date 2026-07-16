@@ -382,6 +382,82 @@ describe('HubController — turn lifecycle', () => {
   })
 })
 
+describe('HubController — requestSessionRefresh (A7c wake / zombie-session refresh)', () => {
+  it('idle + warm: drops the possibly-dead socket and re-warms a fresh session', async () => {
+    const h = harness()
+    await warmed(h)
+    const stale = h.getSession()
+    expect(stale.isWarm()).toBe(true)
+
+    h.controller.requestSessionRefresh('system_wake')
+
+    // The zombie socket is dropped immediately (teardown), not reused as "already warm".
+    expect(stale.toreDown).toBe(1)
+    expect(h.controller.isWarm()).toBe(false)
+
+    // A fresh session is minted + connected so the NEXT press lands on a warm socket.
+    await tick()
+    const fresh = h.getSession()
+    expect(fresh).not.toBe(stale)
+    fresh.connect()
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+    expect(h.createSession).toHaveBeenCalledTimes(2)
+    expect(h.controller.isWarm()).toBe(true)
+  })
+
+  it('mid-turn: defers (never tears down a live turn) and re-warms once the turn terminates', async () => {
+    const h = harness()
+    await warmed(h)
+    const stale = h.getSession()
+    h.controller.beginTurn(t1) // already warm → an ACTIVE turn is in flight
+
+    h.controller.requestSessionRefresh('system_wake')
+
+    // Deferred: the live turn's socket is untouched — no teardown, no re-mint.
+    expect(stale.toreDown).toBe(0)
+    expect(h.controller.isWarm()).toBe(true)
+    expect(h.mintToken).toHaveBeenCalledTimes(1)
+
+    // The turn ends → the deferred refresh fires: stale socket dropped, fresh warm.
+    h.controller.voiceTurnDidTerminate(t1)
+    expect(stale.toreDown).toBe(1)
+    await tick()
+    h.getSession().connect()
+    expect(h.mintToken).toHaveBeenCalledTimes(2)
+    expect(h.createSession).toHaveBeenCalledTimes(2)
+    expect(h.controller.isWarm()).toBe(true)
+  })
+
+  it('no warm session: is a no-op — wake never force-warms a disabled / signed-out hub', () => {
+    const h = harness()
+    // Never warmed (kill-switch off / signed out) → no session to refresh.
+    h.controller.requestSessionRefresh('system_wake')
+    expect(h.mintToken).not.toHaveBeenCalled()
+    expect(h.createSession).not.toHaveBeenCalled()
+    expect(h.controller.isWarm()).toBe(false)
+    expect(h.controller.isAvailable()).toBe(false)
+  })
+
+  it('mid-connect: is a no-op — an in-flight warm is already building a fresh socket', async () => {
+    const h = harness()
+    const p = h.controller.ensureWarm() // warm in flight (session created, still connecting)
+    await tick()
+    const connecting = h.getSession()
+
+    h.controller.requestSessionRefresh('system_wake')
+
+    // The in-flight warm is left to finish — not torn down, no second mint that would
+    // race it.
+    expect(connecting.toreDown).toBe(0)
+    expect(h.mintToken).toHaveBeenCalledTimes(1)
+
+    connecting.connect()
+    await p
+    expect(h.controller.isWarm()).toBe(true)
+    expect(h.createSession).toHaveBeenCalledTimes(1)
+  })
+})
+
 describe('HubController — connect/error surface (A7c seam)', () => {
   it('passes provider content events straight through to the host', async () => {
     const h = harness()
