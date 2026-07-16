@@ -80,7 +80,8 @@ jobs:
           scripts/pr-preflight \
             --base "${{ needs.changes.outputs.diff_base }}" \
             --repository "${{ github.repository }}" \
-            --pr-number "${{ github.event.pull_request.number }}"
+            --pr-number "${{ github.event.pull_request.number }}" \
+            --event-payload-file "$GITHUB_EVENT_PATH"
 
       - name: Run deterministic check manifest on main pushes
         if: github.event_name != 'pull_request'
