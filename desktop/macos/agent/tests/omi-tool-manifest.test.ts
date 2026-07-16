@@ -76,13 +76,15 @@ describe("omi tool manifest", () => {
     expect(screenshot?.executor).toEqual({ kind: "swiftTool", executorName: "realtimeHub" });
   });
 
-  it("routes current-screen questions to work context before raw screenshots", () => {
+  it("keeps current-screen evidence live and work context historical", () => {
     const workContext = toolsForAdapter("pi-mono").find((tool) => tool.name === "get_work_context");
     const captureScreen = toolsForAdapter("pi-mono").find((tool) => tool.name === "capture_screen");
     const requestPermission = toolsForAdapter("pi-mono").find((tool) => tool.name === "request_permission");
 
-    expect(workContext?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
-    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("Call get_work_context first");
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("not for direct current-screen questions");
+    expect(workContext?.promptGuidelines?.join("\n")).toContain("historical unless this turn separately attached a live image");
+    expect(captureScreen?.promptGuidelines?.join("\n")).toContain("capture a live image");
+    expect(captureScreen?.promptGuidelines?.join("\n")).not.toContain("get_work_context first");
     expect(captureScreen?.promptGuidelines?.join("\n")).toContain("requires explicit approval");
     expect(requestPermission?.promptGuidelines?.join("\n")).toContain("current user message explicitly requests one named permission");
   });
@@ -109,7 +111,8 @@ describe("omi tool manifest", () => {
     const run = omiToolManifest.find((tool) => tool.name === "get_agent_run");
 
     expect(list?.promptGuidelines?.join("\n")).toContain("do not infer run completion from session status");
-    expect(list?.voice?.realtimeDescription).toContain("restrict discovery to status='open'");
+    expect(list?.voice?.realtimeDescription).toContain("omit status filters");
+    expect(list?.voice?.realtimeDescription).toContain("latestRun.finalText");
     expect(run?.promptGuidelines?.join("\n")).toContain("run.finalText");
     expect(run?.voice?.realtimeDescription).toContain("run.finalText");
     expect(run?.voice?.realtimeDescription).toContain("do not expose the internal id");

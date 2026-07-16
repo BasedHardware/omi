@@ -74,6 +74,13 @@ must name the invariant they affect and update the matching guard test.
   persisted run inputs, surface context, results, or metadata. Detail remains an
   explicit run lookup, and realtime provider responses enforce a byte ceiling so
   one oversized tool result cannot tear down the voice session.
+- Session archival state is not run lifecycle. A PTT or chat request for a
+  completed child must discover the recent canonical child run and answer from
+  its bounded final result (or explicit run inspection); it must never infer
+  completion from `sessions.status` or filter away an open reusable session as
+  though it were still running. Legacy child-discovery requests that say
+  `closed` retain that user intent by selecting terminal runs, not archived
+  sessions.
 - A realtime spawn acknowledgement is an admission receipt, not a child
   completion claim. The kernel derives that acknowledgement deterministically;
   only the canonical child run's terminal lifecycle may report completion,

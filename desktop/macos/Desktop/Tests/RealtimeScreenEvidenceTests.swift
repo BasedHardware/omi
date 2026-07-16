@@ -62,6 +62,43 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       RealtimeScreenGroundingState.awaitingScreenshot(request()).suppressesProviderOutput)
   }
 
+  func testAcceptedScreenEvidenceReopensProviderOutputForTheGroundedAnswer() {
+    XCTAssertTrue(
+      RealtimeScreenGroundingState.awaitingReport(receipt()).suppressesProviderOutput,
+      "output stays gated until the provider proves it used the current evidence")
+    XCTAssertFalse(
+      RealtimeScreenGroundingState.accepted(receipt()).suppressesProviderOutput,
+      "the verified provider continuation is the user-facing answer and must not be discarded")
+  }
+
+  func testProviderOutputPresentationHasOneContractForAudioAndText() {
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .awaitingReport(receipt()),
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: false),
+      .suppressScreenGrounding)
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .accepted(receipt()),
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: false),
+      .present,
+      "the verified continuation must reach both native audio and text presentation")
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        hasCanonicalSpawnReceipt: true,
+        reducerOutputSuppressed: false),
+      .suppressCanonicalLocalResult)
+    XCTAssertEqual(
+      RealtimeProviderOutputPresentationPolicy.decide(
+        screenGroundingState: .inactive,
+        hasCanonicalSpawnReceipt: false,
+        reducerOutputSuppressed: true),
+      .suppressReducerOwnedOutput)
+  }
+
   func testProtocolTokenSurvivesTransportReceiptAndLocalRejection() {
     let request = request()
     let receipt = RealtimeScreenObservationReceipt(request: request, descriptor: evidence())
@@ -70,6 +107,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingState.rejected(receipt.descriptor, receipt.protocolToken).protocolToken,
       request.protocolToken)
+    XCTAssertEqual(RealtimeScreenGroundingState.awaitingReport(receipt).diagnosticsLabel, "awaiting_report")
   }
 
   func testFreshnessRemainingLifetimeEndsAtTheSameFiveSecondBoundary() {
@@ -94,7 +132,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -109,7 +147,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -123,7 +161,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: state,
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
@@ -223,37 +261,53 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
       .notAdmitted)
   }
 
-  func testReportFailsClosedWhenEvidenceExpiresAfterTransportReceipt() {
+  func testReportRemainsAdmissibleAfterFreshTransportReceiptExpires() {
+    // The JPEG crossed into the provider transport at <5 seconds. Its later model report must
+    // be bounded by the dedicated report deadline, not reclassified as an older screen.
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt()),
-        answer: "A dark editor window.",
+        observation: "A dark editor window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
         now: Date(timeIntervalSince1970: 1_005)),
-      .evidenceExpired)
+      .accepted)
   }
 
-  func testContradictoryApplicationTextCannotReachNativePresentation() {
+  func testReportDeadlineIsIndependentOfCaptureFreshness() {
+    XCTAssertEqual(RealtimeScreenEvidenceProtocolPolicy.maximumReportWait, 8)
+    XCTAssertLessThan(
+      RealtimeScreenEvidenceFreshnessPolicy.maximumAge,
+      RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)
+  }
+
+  func testContradictoryApplicationTextCannotVerifyScreenGrounding() {
     let descriptor = evidence()
     let decision = RealtimeScreenGroundingPolicy.reportDecision(
       state: .awaitingReport(receipt(descriptor: descriptor)),
-      answer: "You are in Cursor.",
+      observation: "You are in Cursor.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Codex", "Cursor"],
         now: freshNow)
-
     XCTAssertEqual(decision, .contradictoryApplication)
+  }
+
+  func testFrozenReceiptDoesNotDependOnLaterAmbientApplicationState() {
     XCTAssertEqual(
-      RealtimeScreenGroundingPolicy.presentedAnswer(
-        evidence: descriptor,
-        answer: "A dark editor window."),
-      "The frontmost app is Codex. A dark editor window.")
+      RealtimeScreenGroundingPolicy.reportDecision(
+        state: .awaitingReport(receipt()),
+        observation: "You are in Codex.",
+        sourceObjectID: sessionObjectID,
+        activeTurnID: turnID,
+        activeResponseID: responseID,
+        currentTurnEpoch: 7,
+        now: freshNow),
+      .accepted,
+      "only the frontmost app stored in the frozen receipt may participate in verification")
   }
 
   func testGenericApplicationLanguageDoesNotRejectFinderGroundedVisualDetail() {
@@ -262,12 +316,11 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt(descriptor: descriptor)),
-        answer: "I see a file manager window with multiple application windows on the left.",
+        observation: "I see a file manager window with multiple application windows on the left.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Codex", "Cursor"],
         now: freshNow),
       .accepted)
   }
@@ -278,12 +331,11 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt(descriptor: descriptor)),
-        answer: "A Cursor document is visible behind the Finder window.",
+        observation: "A Cursor document is visible behind the Finder window.",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,
         currentTurnEpoch: 7,
-        knownApplicationNames: ["Finder", "Cursor"],
         now: freshNow),
       .accepted)
   }
@@ -292,7 +344,7 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.reportDecision(
         state: .awaitingReport(receipt()),
-        answer: " ",
+        observation: " ",
         sourceObjectID: sessionObjectID,
         activeTurnID: turnID,
         activeResponseID: responseID,

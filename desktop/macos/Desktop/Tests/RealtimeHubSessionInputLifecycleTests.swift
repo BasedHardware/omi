@@ -176,6 +176,67 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
     XCTAssertEqual(inlineData?["displayName"], "live-screenshot.jpg")
   }
 
+  func testGeminiPostToolContinuationOpensASeparateInternalActivityTurn() {
+    let wires = RealtimeHubSession.geminiPostToolContinuationWires()
+
+    XCTAssertEqual(wires.count, 3)
+    XCTAssertNotNil((wires[0]["realtimeInput"] as? [String: Any])?["activityStart"])
+    XCTAssertEqual(
+      (wires[1]["realtimeInput"] as? [String: String])?["text"],
+      RealtimeHubSession.geminiPostToolContinuationInstruction)
+    XCTAssertNotNil((wires[2]["realtimeInput"] as? [String: Any])?["activityEnd"])
+    XCTAssertFalse(
+      RealtimeHubSession.geminiPostToolContinuationInstruction.localizedCaseInsensitiveContains("screenshot"),
+      "the continuation must work for every synchronous Gemini tool, not only visual evidence")
+  }
+
+  func testOpenAIPostToolContinuationCreatesExactlyOneToolDisabledAudioResponse() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let session = makeSession(provider: .openai, delegate: delegate)
+    let identity = RealtimeHubEventIdentity(turnID: VoiceTurnID(), responseID: VoiceResponseID("voice-response"))
+    session.markReadyForTesting()
+    _ = await session.inputLifecycleSnapshot()
+    session.beginInputTurn(turnID: identity.turnID, responseID: identity.responseID)
+    _ = await session.inputLifecycleSnapshot()
+
+    let first = await resumePostToolCycle(session, identity: identity)
+    let second = await resumePostToolCycle(session, identity: identity)
+    let snapshot = await session.inputLifecycleSnapshot()
+
+    XCTAssertEqual(first, .started)
+    XCTAssertEqual(second, .alreadyInFlight, "a tool-only cycle gets one bounded continuation, never a retry loop")
+    XCTAssertEqual(snapshot.testingResponseCreateCount, 1)
+    XCTAssertEqual(snapshot.testingLastResponseToolChoice, "none")
+    XCTAssertEqual(snapshot.testingLastResponseInstruction, RealtimeHubSession.openAIPostToolContinuationInstruction)
+    XCTAssertFalse(
+      RealtimeHubSession.openAIPostToolContinuationInstruction.localizedCaseInsensitiveContains("screenshot"),
+      "the continuation must work for every OpenAI tool, not only visual evidence")
+  }
+
+  func testPostToolContinuationClassifiesUnavailableAndStaleSessionsWithoutGuessing() async {
+    let delegate = RealtimeHubSessionDelegateSpy()
+    let unavailable = makeSession(provider: .openai, delegate: delegate)
+    let identity = RealtimeHubEventIdentity(turnID: VoiceTurnID(), responseID: VoiceResponseID("voice-response"))
+    unavailable.beginInputTurn(turnID: identity.turnID, responseID: identity.responseID)
+    _ = await unavailable.inputLifecycleSnapshot()
+    let unavailableResult = await resumePostToolCycle(unavailable, identity: identity)
+    XCTAssertEqual(
+      unavailableResult,
+      .transportUnavailable)
+
+    let active = makeSession(provider: .openai, delegate: delegate)
+    active.markReadyForTesting()
+    _ = await active.inputLifecycleSnapshot()
+    active.beginInputTurn(turnID: identity.turnID, responseID: identity.responseID)
+    _ = await active.inputLifecycleSnapshot()
+    let staleResult = await resumePostToolCycle(
+      active,
+      identity: RealtimeHubEventIdentity(turnID: VoiceTurnID(), responseID: VoiceResponseID("replacement")))
+    XCTAssertEqual(
+      staleResult,
+      .stale)
+  }
+
   func testScreenToolWireFailureTerminatesInsteadOfLeavingAReceiptPending() async {
     let delegate = RealtimeHubSessionDelegateSpy()
     let session = makeSession(provider: .openai, delegate: delegate)
@@ -308,6 +369,15 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
       auth: .byokKey("fixture"),
       instructions: "fixture",
       delegate: delegate)
+  }
+
+  private func resumePostToolCycle(
+    _ session: RealtimeHubSession,
+    identity: RealtimeHubEventIdentity
+  ) async -> RealtimePostToolContinuationStartResult {
+    await withCheckedContinuation { continuation in
+      session.resumeAfterToolOnlyCycle(identity: identity) { continuation.resume(returning: $0) }
+    }
   }
 }
 

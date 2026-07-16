@@ -74,9 +74,10 @@ struct RealtimeScreenEvidenceAttachment {
   let jpeg: Data
 }
 
-/// A PTT-down image is current-screen authority only for a short, bounded interval. Both
-/// receipt minting and native report admission use this same policy so a transport or provider
-/// stall cannot turn an old frozen image into a present-tense answer.
+/// A PTT-down image is current-screen authority only for a short, bounded interval. Freshness
+/// is checked at the physical-capture → provider-transport boundary: after the exact immutable
+/// JPEG is locally enqueued while fresh, provider reasoning latency cannot retroactively turn
+/// that already-authorized image into a different screen observation.
 enum RealtimeScreenEvidenceFreshnessPolicy {
   static let maximumAge: TimeInterval = 5
 
@@ -88,6 +89,13 @@ enum RealtimeScreenEvidenceFreshnessPolicy {
   static func remainingLifetime(_ descriptor: RealtimeScreenEvidenceDescriptor, now: Date) -> TimeInterval {
     max(0, descriptor.capturedAt.addingTimeInterval(maximumAge).timeIntervalSince(now))
   }
+}
+
+/// The report half of an already-admitted screen protocol has its own bounded deadline. This is
+/// intentionally separate from capture freshness: the provider must be given time to inspect the
+/// JPEG that was dispatched while fresh, but a missing report still cannot hold a PTT turn open.
+enum RealtimeScreenEvidenceProtocolPolicy {
+  static let maximumReportWait: TimeInterval = 8
 }
 
 /// Bridges the post-capture JPEG worker to an authorized tool call without blocking the
@@ -140,9 +148,13 @@ enum RealtimeScreenGroundingState: Equatable {
 
   var suppressesProviderOutput: Bool {
     switch self {
-    case .awaitingScreenshot, .awaitingReport, .accepted, .rejected:
+    // Before the provider proves it used the one current screenshot, any output can
+    // be speculative or stale. Once the report is accepted, however, the next model
+    // message is precisely the grounded answer we must surface; keeping the gate
+    // closed there turns a successful verification into a silent PTT turn.
+    case .awaitingScreenshot, .awaitingReport, .rejected:
       return true
-    case .inactive:
+    case .inactive, .accepted:
       return false
     }
   }
@@ -159,6 +171,31 @@ enum RealtimeScreenGroundingState: Equatable {
       return token
     }
   }
+
+  /// Safe, bounded state for the automation bridge. It deliberately excludes raw evidence IDs,
+  /// app names, captured pixels, and model text so a failed PTT turn can be diagnosed remotely.
+  var diagnosticsLabel: String {
+    switch self {
+    case .inactive: return "inactive"
+    case .awaitingScreenshot: return "awaiting_screenshot"
+    case .awaitingReport: return "awaiting_report"
+    case .accepted: return "accepted"
+    case .rejected: return "rejected"
+    }
+  }
+}
+
+/// Screen-evidence completion must never silently leave the reducer-owned screenshot tool
+/// pending. Keep each fail-closed reason typed so the live PTT probe can distinguish a provider
+/// stall from an ownership or reducer transition failure without exposing user content.
+enum RealtimeScreenEvidenceProtocolCompletion: String, Equatable, Sendable {
+  case notRun = "not_run"
+  case completed
+  case turnNotActive = "turn_not_active"
+  case protocolNotActive = "protocol_not_active"
+  case ownerNotCurrent = "owner_not_current"
+  case emptyAnswer = "empty_answer"
+  case reducerDidNotResolve = "reducer_did_not_resolve"
 }
 
 /// A screenshot request belongs to one provider response and one tool epoch. The model never
@@ -233,7 +270,6 @@ enum RealtimeScreenReportDecision: Equatable {
   case evidenceUnavailable
   case transportNotDispatched
   case staleReceipt
-  case evidenceExpired
   case contradictoryApplication
   case emptyAnswer
 }
@@ -302,13 +338,12 @@ enum RealtimeScreenGroundingPolicy {
 
   static func reportDecision(
     state: RealtimeScreenGroundingState,
-    answer: String,
+    observation: String,
     sourceObjectID: ObjectIdentifier,
     activeTurnID: VoiceTurnID?,
     activeResponseID: VoiceResponseID?,
     currentTurnEpoch: Int,
-    knownApplicationNames: [String] = [],
-    now: Date = Date()
+    now _: Date = Date()
   ) -> RealtimeScreenReportDecision {
     guard case .awaitingReport(let receipt) = state else {
       return .evidenceUnavailable
@@ -321,48 +356,37 @@ enum RealtimeScreenGroundingPolicy {
       activeResponseID: activeResponseID,
       currentTurnEpoch: currentTurnEpoch)
     else { return .staleReceipt }
-    guard RealtimeScreenEvidenceFreshnessPolicy.isFresh(evidence, now: now) else {
-      return .evidenceExpired
-    }
-    guard !answer.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
-    guard !answerClaimsDifferentApplication(
-      answer,
-      frontmostApp: evidence.frontmostApp ?? "",
-      knownApplicationNames: knownApplicationNames)
+    guard !observation.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return .emptyAnswer }
+    guard !observationClaimsDifferentApplication(
+      observation,
+      frontmostApp: evidence.frontmostApp ?? "")
     else { return .contradictoryApplication }
     return .accepted
   }
 
   /// The native descriptor—not model prose—owns application identity. The model can supply
-  /// detail from the image, but an answer that names a different active app fails closed.
-  static func presentedAnswer(
-    evidence: RealtimeScreenEvidenceDescriptor,
-    answer: String
-  ) -> String {
-    let app = evidence.frontmostApp?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-    let detail = answer.trimmingCharacters(in: .whitespacesAndNewlines)
-    return detail.isEmpty ? "The frontmost app is \(app)." : "The frontmost app is \(app). \(detail)"
-  }
-
-  private static func answerClaimsDifferentApplication(
-    _ answer: String,
-    frontmostApp: String,
-    knownApplicationNames: [String]
+  /// a visual grounding observation, but one that directly claims a different active app fails
+  /// closed before the provider continues to its conversational answer.
+  private static func observationClaimsDifferentApplication(
+    _ observation: String,
+    frontmostApp: String
   ) -> Bool {
-    let normalizedAnswer = RealtimeScreenEvidenceDescriptor.normalizedAppName(answer)
+    let normalizedObservation = RealtimeScreenEvidenceDescriptor.normalizedAppName(observation)
     let normalizedFrontmost = RealtimeScreenEvidenceDescriptor.normalizedAppName(frontmostApp)
     let commonDesktopApps = [
       "cursor", "codex", "xcode", "finder", "terminal", "safari", "google chrome",
       "visual studio code", "vs code", "slack", "notion", "figma",
     ]
-    let candidates = Set((knownApplicationNames + commonDesktopApps)
+    // The frozen descriptor is the only app identity that belongs to this receipt.
+    // Sampling the current process list here made a valid capture depend on a later
+    // focus change, which is the same ambient-state leak this protocol exists to avoid.
+    let candidates = Set(commonDesktopApps
       .map(RealtimeScreenEvidenceDescriptor.normalizedAppName)
       .filter { !$0.isEmpty && $0 != normalizedFrontmost })
     // Only reject a direct statement about which app is foreground. A screenshot description
     // naturally says things such as "application windows" or can mention an app visible inside
-    // content; neither statement contradicts the native frontmost-app fact. The app prepends the
-    // native identity itself in `presentedAnswer`, so this guard protects provenance without
-    // requiring a model to repeat it.
+    // content; neither statement contradicts the native frontmost-app fact. This guard protects
+    // the report's grounding role without constraining the provider's later conversational answer.
     let foregroundClaimPrefixes = [
       "you are in ", "you're in ", "currently in ",
       "frontmost app is ", "frontmost application is ",
@@ -370,7 +394,7 @@ enum RealtimeScreenGroundingPolicy {
     ]
     return candidates.contains { candidate in
       foregroundClaimPrefixes.contains { prefix in
-        normalizedAnswer.contains(prefix + candidate)
+        normalizedObservation.contains(prefix + candidate)
       }
     }
   }

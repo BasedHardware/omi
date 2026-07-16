@@ -941,12 +941,16 @@ final class AgentRuntimeProcessTests: XCTestCase {
       .appendingPathComponent("Sources/Chat/AgentRuntimeProcess.swift")
     let source = try String(contentsOf: sourceURL, encoding: .utf8)
 
-    XCTAssertTrue(source.contains("handle.readabilityHandler = { [weak self] handle in"))
+    let readerStart = try XCTUnwrap(source.range(of: "private func startReadingStdout()"))
+    let readerEnd = try XCTUnwrap(source.range(of: "private func processStdoutData("))
+    let reader = String(source[readerStart.lowerBound..<readerEnd.lowerBound])
+
+    XCTAssertTrue(reader.contains("handle.readabilityHandler = { [weak self] handle in"))
     // The implementation now uses a generation-guarded signature; match the current
     // function name without coupling the test to the exact parameter list.
     XCTAssertTrue(source.contains("func processStdoutData("))
-    XCTAssertFalse(source.contains("Task.detached { [weak self] in"))
-    XCTAssertFalse(source.contains("while !Task.isCancelled"))
+    XCTAssertFalse(reader.contains("Task.detached { [weak self] in"))
+    XCTAssertFalse(reader.contains("while !Task.isCancelled"))
   }
 
   func testStdoutChunksAreReorderedBeforeJSONLFraming() {
@@ -1054,7 +1058,7 @@ final class AgentRuntimeProcessTests: XCTestCase {
     XCTAssertTrue(source.contains("func directControlTool("))
     XCTAssertTrue(source.contains("activeControlRequests[requestKey]"))
     XCTAssertTrue(source.contains("completeControlRequest(message)"))
-    XCTAssertTrue(source.contains("if !sent, let request = activeControlRequests.removeValue(forKey: requestKey)"))
+    XCTAssertTrue(source.contains("if !sent, let request = takeActiveControlRequest(requestKey)"))
     XCTAssertTrue(source.contains("failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw)"))
     XCTAssertTrue(source.contains("request.continuation.resume(returning: queryResult(from: message))"))
     XCTAssertFalse(source.contains(#"terminalStatus: payload["terminalStatus"] as? String ?? "succeeded""#))

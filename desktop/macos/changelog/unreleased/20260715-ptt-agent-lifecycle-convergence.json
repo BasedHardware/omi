@@ -1,0 +1,3 @@
+{
+  "change": "Fixed background-agent completion states and results staying out of sync between push-to-talk and the agent list"
+}

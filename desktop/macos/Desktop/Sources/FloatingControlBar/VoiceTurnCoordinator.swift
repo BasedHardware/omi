@@ -270,6 +270,20 @@ final class VoiceTurnCoordinator {
     return true
   }
 
+  /// Refresh the native-output inactivity watchdog after a successfully
+  /// scheduled PCM chunk. A matching lease is required so delayed audio from a
+  /// replaced turn cannot prolong the current response.
+  @discardableResult
+  func noteOutputProgress(_ lease: VoiceOutputLease) -> Bool {
+    guard activeTurn?.activeLease == lease else { return false }
+    send(
+      .playbackProgressScoped(
+        turnID: lease.turnID,
+        identity: lease.identity,
+        leaseID: lease.id))
+    return activeTurn?.activeLease == lease
+  }
+
   func configure(barState: FloatingControlBarState) {
     presenter = FloatingControlBarState.PTTBarPresenter(barState: barState)
     presenter?.apply(projection)
