@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the onboarding Disk Access, Accessibility, and Automation pages not noticing an already-granted permission until the grant button was clicked"
+}

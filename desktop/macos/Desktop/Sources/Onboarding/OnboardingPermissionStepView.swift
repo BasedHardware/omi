@@ -182,6 +182,17 @@ struct OnboardingPermissionStepView: View {
   private func refreshPermissionState() {
     coordinator.refreshPermissions(appState: appState)
 
+    // checkAllPermissions() skips the FDA/accessibility/automation probes in
+    // lazy dev mode, which froze this page's status on named dev bundles even
+    // after the user granted in System Settings. On a permission's own page,
+    // probing that permission is the point — all three probes are silent.
+    switch permissionType {
+    case "full_disk_access": appState.checkFullDiskAccess()
+    case "accessibility": appState.checkAccessibilityPermission()
+    case "automation": appState.checkAutomationPermission()
+    default: break
+    }
+
     guard permissionType == "screen_recording", !appState.hasScreenRecordingPermission else {
       return
     }

@@ -323,6 +323,24 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  /// Regression: lazy dev mode makes checkAllPermissions() skip the
+  /// FDA/accessibility/automation probes, so the permission page's status froze
+  /// on named dev bundles. The page must probe its own permission directly.
+  func testPermissionPageProbesItsOwnPermission() throws {
+    // omi-test-quality: source-inspection -- static contract: the probes hit
+    // live TCC/AX/AppleEvents APIs and cannot be exercised hermetically.
+    let source = try onboardingSourceFile("OnboardingPermissionStepView.swift")
+    guard let refresh = source.range(of: "private func refreshPermissionState()") else {
+      return XCTFail("refreshPermissionState must exist")
+    }
+    let body = String(source[refresh.lowerBound...].prefix(1200))
+    for probe in ["checkFullDiskAccess()", "checkAccessibilityPermission()", "checkAutomationPermission()"] {
+      XCTAssertTrue(
+        body.contains(probe),
+        "refreshPermissionState must call \(probe) so lazy dev mode can't freeze the page status")
+    }
+  }
+
   func testPermissionContinueAdvancesWhenGrantAlreadyApplies() {
     XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: false), .advance)
   }
