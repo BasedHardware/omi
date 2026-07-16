@@ -69,6 +69,7 @@ import { registerRewindHandlers } from './ipc/rewind'
 import { registerScreenHandlers } from './ipc/screen'
 import { registerChatPrivacyHandlers } from './ipc/chatPrivacy'
 import { registerBillingIpc } from './billing/checkoutWindow'
+import { registerAppsIpc } from './apps/checkAppSetup'
 import { helperProcess } from './ocr/helperProcess'
 import { registerInsightHandlers } from './ipc/insight'
 import {
@@ -808,6 +809,7 @@ app.whenReady().then(async () => {
   registerScreenHandlers()
   registerChatPrivacyHandlers()
   registerBillingIpc()
+  registerAppsIpc()
   // Cross-window conversations refresh: any renderer that writes a local
   // conversation (main window OR overlay) notifies here; rebroadcast to every
   // window so each invalidates its own per-process conversations cache (e.g. an

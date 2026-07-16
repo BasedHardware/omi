@@ -32,6 +32,7 @@ import type {
 } from '../lib/omiApi.generated'
 import { getCacheUid, readPersistedValue, writePersistedValue } from '../lib/persistentCache'
 import { toast } from '../lib/toast'
+import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '../lib/appInstall'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -81,11 +82,13 @@ const AppCard = memo(function AppCard({
   app,
   isOn,
   isBusy,
+  isSettingUp,
   onToggle
 }: {
   app: AppCatalogItem
   isOn: boolean
   isBusy: boolean
+  isSettingUp: boolean
   onToggle: (a: AppCatalogItem) => void
 }): React.JSX.Element {
   return (
@@ -136,21 +139,21 @@ const AppCard = memo(function AppCard({
         </div>
         <button
           onClick={() => onToggle(app)}
-          disabled={isBusy}
+          disabled={isBusy || isSettingUp}
           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
             isOn
               ? 'border-white/20 bg-white/10 text-white'
               : 'border-white/15 bg-transparent text-white/70 hover:bg-white/5 hover:text-white'
-          } ${isBusy ? 'opacity-60' : ''}`}
+          } ${isBusy || isSettingUp ? 'opacity-60' : ''}`}
         >
-          {isBusy ? (
+          {isBusy || isSettingUp ? (
             <Loader2 className="h-3 w-3 animate-spin" />
           ) : isOn ? (
             <Check className="h-3 w-3" />
           ) : (
             <Plus className="h-3 w-3" />
           )}
-          {isOn ? 'Installed' : 'Install'}
+          {isSettingUp ? 'Setting up…' : isOn ? 'Installed' : 'Install'}
         </button>
       </div>
     </div>
@@ -163,11 +166,13 @@ function AppGrid({
   apps,
   enabled,
   busy,
+  settingUp,
   onToggle
 }: {
   apps: AppCatalogItem[]
   enabled: Set<string>
   busy: Set<string>
+  settingUp: Set<string>
   onToggle: (a: AppCatalogItem) => void
 }): React.JSX.Element {
   return (
@@ -178,6 +183,7 @@ function AppGrid({
           app={a}
           isOn={enabled.has(a.id)}
           isBusy={busy.has(a.id)}
+          isSettingUp={settingUp.has(a.id)}
           onToggle={onToggle}
         />
       ))}
@@ -218,6 +224,11 @@ export function Apps(): React.JSX.Element {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   const [tab, setTab] = useState<'all' | 'installed'>('all')
   const [busy, setBusy] = useState<Set<string>>(new Set())
+  // Apps mid-setup (external-integration install: browser opened, polling the
+  // developer's setup-completed webhook). Renders an inline "Setting up…" on the
+  // card. Per-app cancel functions are held in a ref so unmount can stop every poll.
+  const [settingUp, setSettingUp] = useState<Set<string>>(new Set())
+  const pollCancels = useRef<Map<string, () => void>>(new Map())
   const [selectedCats, setSelectedCats] = useState<Set<string>>(new Set())
   const [filterOpen, setFilterOpen] = useState(false)
   const [expanded, setExpanded] = useState<Set<string>>(new Set())
@@ -370,50 +381,120 @@ export function Apps(): React.JSX.Element {
     enabledRef.current = enabled
   }, [enabled])
 
-  // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
-  // user types in search or toggles another app.
-  const toggle = useCallback(async (a: AppCatalogItem): Promise<void> => {
-    if (busyRef.current.has(a.id)) return
-    setBusy((s) => new Set(s).add(a.id))
-    const wasEnabled = enabledRef.current.has(a.id)
-    // Optimistic
-    setEnabled((s) => {
-      const next = new Set(s)
-      if (wasEnabled) next.delete(a.id)
-      else next.add(a.id)
-      return next
-    })
-    try {
-      if (wasEnabled) {
-        await omiApi.post('/v1/apps/disable', null, { params: { app_id: a.id } })
-      } else {
-        await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
-      }
-    } catch (e) {
-      console.error('Toggle app failed:', e)
-      // Revert the optimistic flip so the row reflects the real (unchanged) state.
-      setEnabled((s) => {
-        const next = new Set(s)
-        if (wasEnabled) next.add(a.id)
-        else next.delete(a.id)
-        return next
-      })
-      // Surface what macOS swallows: an enable/disable that failed now raises a real
-      // error toast instead of only a console.error + silent revert. The user sees a
-      // paid-gate 403, a private-app 403, a "currently unavailable" 400, or a network
-      // failure — no more phantom "Installed" that quietly snaps back.
-      toast(`Couldn’t ${wasEnabled ? 'uninstall' : 'install'} ${a.name}`, {
-        tone: 'error',
-        body: userSafeDetail(e)
-      })
-    } finally {
-      setBusy((s) => {
+  // Stop every in-flight setup poll on unmount so a resolved check can't call
+  // setState after the page is gone (and no orphaned 3s webhook loop survives a
+  // navigation away from Apps).
+  useEffect(() => {
+    const cancels = pollCancels.current
+    return () => {
+      for (const cancel of cancels.values()) cancel()
+      cancels.clear()
+    }
+  }, [])
+
+  // External-integration setup flow (port of macOS navigateToSetup + startSetupPolling).
+  // Reached when an install attempt fails on an app whose capabilities include
+  // 'external_integration': open the developer's setup URL in the browser, mark the
+  // card "Setting up…", and poll `setup_completed_url` every 3s (≤100 ticks / 5 min).
+  // On completion, enable again; on timeout, silently revert to Install (macOS does
+  // the same — no error). Stable identity (empty deps): reads only setters/refs.
+  const beginSetupFlow = useCallback((a: AppCatalogItem): void => {
+    const uid = getCacheUid() ?? ''
+    const integration = a.external_integration ?? null
+    const url = setupUrl(integration, uid)
+    if (url) void window.omi.openExternalUrl(url)
+    const completedUrl = integration?.setup_completed_url
+    // No webhook to poll → macOS just opens the browser and leaves the app as
+    // Install (the user re-attempts after finishing in the browser). Nothing else.
+    if (!completedUrl) return
+    setSettingUp((s) => new Set(s).add(a.id))
+    const finish = (): void => {
+      pollCancels.current.delete(a.id)
+      setSettingUp((s) => {
         const next = new Set(s)
         next.delete(a.id)
         return next
       })
     }
+    const cancel = startSetupPolling({
+      setupCompletedUrl: completedUrl,
+      uid,
+      check: isSetupCompleted,
+      onSuccess: () => {
+        finish()
+        void (async () => {
+          try {
+            await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
+            setEnabled((s) => new Set(s).add(a.id))
+            toast(`${a.name} is set up`, { tone: 'success' })
+          } catch {
+            toast(`Couldn’t finish setting up ${a.name}`, { tone: 'error' })
+          }
+        })()
+      },
+      onTimeout: finish
+    })
+    pollCancels.current.set(a.id, cancel)
   }, [])
+
+  // Stable identity (empty deps) so memoized AppCards skip reconciliation while the
+  // user types in search or toggles another app.
+  const toggle = useCallback(
+    async (a: AppCatalogItem): Promise<void> => {
+      if (busyRef.current.has(a.id) || pollCancels.current.has(a.id)) return
+      const wasEnabled = enabledRef.current.has(a.id)
+
+      if (wasEnabled) {
+        // Uninstall: optimistic flip → POST disable → revert + toast on failure.
+        setBusy((s) => new Set(s).add(a.id))
+        setEnabled((s) => {
+          const next = new Set(s)
+          next.delete(a.id)
+          return next
+        })
+        try {
+          await omiApi.post('/v1/apps/disable', null, { params: { app_id: a.id } })
+        } catch (e) {
+          console.error('Disable app failed:', e)
+          setEnabled((s) => new Set(s).add(a.id))
+          toast(`Couldn’t uninstall ${a.name}`, { tone: 'error', body: userSafeDetail(e) })
+        } finally {
+          setBusy((s) => {
+            const next = new Set(s)
+            next.delete(a.id)
+            return next
+          })
+        }
+        return
+      }
+
+      // Install — attempt-first (macOS handleInstall): POST enable, and only if it
+      // fails route an external-integration app into its setup flow (open browser +
+      // poll) instead of surfacing the 400. A non-external failure toasts the error
+      // (surfacing what macOS swallows: paid/private 403, "currently unavailable" 400,
+      // or a network failure). No optimistic flip here — the button spins until the
+      // real outcome is known, so it never flickers Installed→Install→Setting up.
+      setBusy((s) => new Set(s).add(a.id))
+      try {
+        await omiApi.post('/v1/apps/enable', null, { params: { app_id: a.id } })
+        setEnabled((s) => new Set(s).add(a.id))
+      } catch (e) {
+        if (worksExternally(a)) {
+          beginSetupFlow(a)
+        } else {
+          console.error('Enable app failed:', e)
+          toast(`Couldn’t install ${a.name}`, { tone: 'error', body: userSafeDetail(e) })
+        }
+      } finally {
+        setBusy((s) => {
+          const next = new Set(s)
+          next.delete(a.id)
+          return next
+        })
+      }
+    },
+    [beginSetupFlow]
+  )
 
   // Unique categories present across the catalog, sorted by their display name.
   const allCategories = useMemo(() => {
@@ -717,6 +798,7 @@ export function Apps(): React.JSX.Element {
                       apps={view.apps.slice(0, SEARCH_LIMIT)}
                       enabled={enabled}
                       busy={busy}
+                      settingUp={settingUp}
                       onToggle={toggle}
                     />
                     {view.apps.length > SEARCH_LIMIT && (
@@ -764,6 +846,7 @@ export function Apps(): React.JSX.Element {
                       apps={sectionPreview(section.apps, isExpanded)}
                       enabled={enabled}
                       busy={busy}
+                      settingUp={settingUp}
                       onToggle={toggle}
                     />
                     {isExpanded && section.truncated && (
