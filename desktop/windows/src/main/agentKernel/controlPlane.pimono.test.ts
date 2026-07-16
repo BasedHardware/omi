@@ -41,9 +41,12 @@ vi.mock('../codingAgent/piMono', () => ({
 import { PiMonoAdapter } from '../codingAgent/piMono'
 import {
   buildPiMonoRuntimeAdapter,
+  callAgentControlTool,
   ensurePiMonoAdapterRegistered,
   getAgentAdapterRegistry,
-  resetControlPlaneForTests
+  hasKnownControlPlaneOwner,
+  resetControlPlaneForTests,
+  setControlPlaneOwner
 } from './controlPlane'
 import {
   __resetPiMonoSessionForTests,
@@ -142,5 +145,39 @@ describe('ensurePiMonoAdapterRegistered', () => {
     configurePiMonoSession({ token: 'tok1', desktopApiBase: 'https://api.omi.me/' })
     buildPiMonoRuntimeAdapter()
     expect(lastPiMonoBaseUrl()).toBe('https://api.omi.me/v2')
+  })
+})
+
+describe('callAgentControlTool — cold-start owner gate', () => {
+  beforeEach(() => {
+    resetControlPlaneForTests()
+    __resetPiMonoSessionForTests()
+    __setByokKeyStoreForTests(noByok)
+  })
+
+  afterEach(() => {
+    resetControlPlaneForTests()
+    __resetPiMonoSessionForTests()
+  })
+
+  it('refuses with owner_not_ready while the owner is the default constant', async () => {
+    expect(hasKnownControlPlaneOwner()).toBe(false)
+    const parsed = JSON.parse(await callAgentControlTool('list_agent_sessions', {})) as {
+      ok: boolean
+      error?: { code?: string }
+    }
+    expect(parsed.ok).toBe(false)
+    expect(parsed.error?.code).toBe('owner_not_ready')
+  })
+
+  it('passes the gate once a real owner is wired (no owner_not_ready)', async () => {
+    setControlPlaneOwner('uid-A')
+    expect(hasKnownControlPlaneOwner()).toBe(true)
+    // The tool may still succeed or fail on the mocked kernel — the assertion is
+    // only that the owner gate no longer short-circuits it.
+    const parsed = JSON.parse(await callAgentControlTool('list_agent_sessions', {})) as {
+      error?: { code?: string }
+    }
+    expect(parsed.error?.code).not.toBe('owner_not_ready')
   })
 })

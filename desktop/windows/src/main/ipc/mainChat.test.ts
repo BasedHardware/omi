@@ -32,6 +32,7 @@ import type {
   RuntimeAdapter
 } from '../codingAgent/interface'
 import type { MainChatEvent } from '../../shared/types'
+import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
 import { projectKernelEvent, runMainChatTurn } from './mainChat'
 
 const nodeSqliteFactory = DatabaseSync as unknown as DatabaseFactory
@@ -583,5 +584,37 @@ describe('runMainChatTurn', () => {
     const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
     expect(terminal.status).toBe('failed')
     expect(terminal.error).toBe('the model exploded')
+  })
+
+  it('cold-start gate: refuses under the default owner without touching the kernel', async () => {
+    // Before the auth relay wires the signed-in uid the owner is the shared
+    // DEFAULT_LOCAL_OWNER_ID constant. A turn here must fail closed — never reach
+    // resolveSurfaceSession, which would key a session under that constant and
+    // collide across accounts. Use a kernel whose every method throws, proving the
+    // gate refuses before any kernel call.
+    const exploding = new Proxy(
+      {},
+      {
+        get() {
+          throw new Error('kernel must not be touched under an unknown owner')
+        }
+      }
+    ) as unknown as AgentRuntimeKernel
+    const events: MainChatEvent[] = []
+
+    const result = await runMainChatTurn(
+      { requestId: 'req-cold', prompt: 'hi', cleanUserText: 'hi' },
+      (e) => events.push(e),
+      { kernel: exploding, ownerId: DEFAULT_LOCAL_OWNER_ID }
+    )
+
+    expect(result.ok).toBe(false)
+    expect(result.terminalStatus).toBe('failed')
+    expect(result.error).toMatch(/sign-in has not completed/i)
+    // No session was ever accepted — the gate fired before dispatch.
+    expect(events.some((e) => e.type === 'accepted')).toBe(false)
+    const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
+    expect(terminal.status).toBe('failed')
+    expect(terminal.error).toMatch(/sign-in has not completed/i)
   })
 })
