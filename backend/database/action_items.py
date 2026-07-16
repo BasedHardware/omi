@@ -145,6 +145,11 @@ def _prepare_action_item_for_write(action_item_data: Dict[str, Any], *, partial:
 
 def _prepare_action_item_for_read(action_item_data: Dict[str, Any]) -> Dict[str, Any]:
     """Prepare action item data for reading from database"""
+    # `completed` may be missing OR explicitly null (legacy/partial writes). setdefault
+    # won't overwrite an existing null, so drop it first and let status derive a concrete
+    # bool — strict client parsers reject a null `completed` and drop the whole page.
+    if action_item_data.get('completed') is None:
+        action_item_data.pop('completed', None)
     action_item_data.setdefault('status', 'completed' if action_item_data.get('completed') else 'active')
     action_item_data.setdefault('completed', action_item_data['status'] == 'completed')
     action_item_data.setdefault('owner', 'unknown')
@@ -457,12 +462,17 @@ def get_action_items(
         action_item = _prepare_action_item_for_read(data)
         action_items.append(action_item)
 
-    # Sort results by due_at first (items without due_at come last), then by created_at.
+    # Sort: incomplete items first, then by due_at (items without due_at come last), then
+    # by created_at. Active-first is load-bearing for the default (completed=None) fetch:
+    # clients page this list (e.g. limit=100) and filter client-side, so without it a user
+    # with 100+ completed items that have due dates would have every active item pushed off
+    # page 1 — the task list then looks empty / all-done (see the reported regression).
     # The final order differs from the Firestore order_by (due_at/created_at DESC), so pagination
     # must be applied AFTER this sort. Slicing the Firestore-ordered set with offset/limit and then
     # re-sorting only that slice returns the wrong items for any page (even page 0 with a limit).
     action_items.sort(
         key=lambda x: (
+            bool(x.get('completed')),
             x.get('due_at') is None,
             x.get('due_at') or datetime.max.replace(tzinfo=timezone.utc),
             -(x.get('created_at', datetime.min.replace(tzinfo=timezone.utc)).timestamp()),
