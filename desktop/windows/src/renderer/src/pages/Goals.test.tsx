@@ -28,6 +28,7 @@ const goal = (over: Partial<Goal>): Goal =>
 
 beforeEach(() => {
   getMock.mockReset()
+  localStorage.clear()
   // onGoalsChanged is optional-chained in the page; provide a no-op subscription
   // so the effect's cleanup is a real function.
   ;(window as unknown as { omi: unknown }).omi = {
@@ -78,5 +79,23 @@ describe('Goals — error vs empty', () => {
 
     await waitFor(() => expect(screen.queryByText('Read more')).not.toBeNull())
     expect(screen.queryByText('Couldn’t load your goals.')).toBeNull()
+  })
+
+  it('a failed revalidation over cached goals stays silent (cache-first, no alarm)', async () => {
+    // A prior session persisted goals; on cold start they hydrate immediately.
+    localStorage.setItem('omi.lastSignedInUid', 'u1')
+    localStorage.setItem(
+      'omi.cache.goals.u1',
+      JSON.stringify([goal({ id: 'cached', title: 'Cached goal' })])
+    )
+    // The revalidating fetch fails (offline restart).
+    getMock.mockRejectedValue(new Error('offline'))
+    await renderGoals()
+
+    // The cached goal is on screen...
+    await waitFor(() => expect(screen.queryByText('Cached goal')).not.toBeNull())
+    // ...and the failed revalidation does NOT show the alarming banner or empty state.
+    expect(screen.queryByText('Couldn’t load your goals.')).toBeNull()
+    expect(screen.queryByText('No goals yet')).toBeNull()
   })
 })
