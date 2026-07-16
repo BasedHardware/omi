@@ -19,6 +19,7 @@ import {
   getPendingConversations,
   reconcilePending,
   publishConversationsCache,
+  hydrateConversationsFromDisk,
   type ConversationRow
 } from '../lib/pageCache'
 import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
@@ -132,8 +133,16 @@ function ConversationSkeleton(): React.JSX.Element {
 
 export function Conversations(): React.JSX.Element {
   const navigate = useNavigate()
+  // Seed the shared cache from the per-uid cold-start snapshot before the initial
+  // state is read, so the list paints last-known rows immediately on app restart
+  // instead of a spinner. The revalidating fetch still runs (silently) below.
+  hydrateConversationsFromDisk()
   const [rows, setRows] = useState<ConversationRow[]>(conversationsCache.rows ?? [])
-  const [loading, setLoading] = useState(!conversationsCache.loaded)
+  // Show the loading state only when there is genuinely nothing to paint. When a
+  // snapshot (or an in-session warm cache) already has rows, skip the spinner.
+  const [loading, setLoading] = useState(
+    !conversationsCache.loaded && (conversationsCache.rows?.length ?? 0) === 0
+  )
   const [error, setError] = useState<string | null>(conversationsCache.error)
   const [query, setQuery] = useState('')
   const [type, setType] = useState<FilterKind>('all')
@@ -248,6 +257,23 @@ export function Conversations(): React.JSX.Element {
       // A superseded fetch (a newer loadAll already started) must not overwrite the
       // fresher state — but still return its cloud ids so a caller can inspect them.
       if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
+      // Cache-first resilience: a SILENT revalidation whose cloud fetch failed
+      // (offline cold start, transient blip) must not wipe the already-shown
+      // default-view rows — a hydrated cold-start snapshot or a prior load — down to
+      // local-only. Keep the last-known list on screen (the whole point of cache
+      // first). An explicit loading fetch (true cold start / filter change) still
+      // commits its result, and a new local recording still surfaces via the
+      // subscribeConversations live-refresh path.
+      const cloudFailed = cloudIds === null
+      if (
+        cloudFailed &&
+        !showLoading &&
+        isDefaultView(folderFilter, dateRange) &&
+        (conversationsCache.rows?.length ?? 0) > 0
+      ) {
+        setLoading(false)
+        return cloudIds
+      }
       // Only the default view is the canonical shared cache.
       if (isDefaultView(folderFilter, dateRange)) {
         publishConversationsCache(merged)
@@ -279,15 +305,16 @@ export function Conversations(): React.JSX.Element {
   useEffect(() => {
     const firstMount = !didInitRef.current
     didInitRef.current = true
-    if (
-      firstMount &&
-      isDefaultView(folderFilter, dateRange) &&
-      conversationsCache.loaded &&
-      (conversationsCache.rows?.length ?? 0) > 0
-    ) {
+    const defaultView = isDefaultView(folderFilter, dateRange)
+    // In-session warm cache: skip the fetch entirely (instant paint from the seed).
+    if (firstMount && defaultView && conversationsCache.loaded && (conversationsCache.rows?.length ?? 0) > 0) {
       return
     }
-    void loadAll(true)
+    // Cold start with a persisted snapshot already seeded: revalidate WITHOUT the
+    // spinner so the cached rows stay on screen. Otherwise show the loading state
+    // (a true cold start with no cache, or a filter change — behavior unchanged).
+    const haveSnapshot = firstMount && defaultView && (conversationsCache.rows?.length ?? 0) > 0
+    void loadAll(!haveSnapshot)
     // eslint-disable-next-line react-hooks/exhaustive-deps -- folder/date read once for the first-mount check; loadAll owns the fetch + its own deps
   }, [loadAll])
 

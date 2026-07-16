@@ -1,3 +1,5 @@
+import { readPersistedCache, writePersistedCache } from './persistentCache'
+
 export type ConversationRow = {
   id: string
   title: string
@@ -32,6 +34,14 @@ export const conversationsCache = {
   loaded: false
 }
 
+// Persist at most this many rows to the per-uid cold-start snapshot — enough to
+// fill the first screen instantly on the next launch; revalidation loads the rest.
+const CONV_PERSIST_CAP = 200
+const CONV_SURFACE = 'conversations'
+// Set once hydrateConversationsFromDisk has run this session; reset on
+// invalidate so the next account re-hydrates from its own (post-teardown) state.
+let hydratedConversations = false
+
 // Readers that only want the CONTENT of the cache (the Hub's stat ribbon counts
 // conversations off it). The Conversations page owns the fetch; this lets another
 // surface observe the result instead of firing a second identical request.
@@ -41,7 +51,28 @@ const cacheSubscribers = new Set<(rows: ConversationRow[]) => void>()
 export function publishConversationsCache(rows: ConversationRow[]): void {
   conversationsCache.rows = rows
   conversationsCache.loaded = true
+  // Mirror the canonical default-view list to the per-uid cold-start snapshot so
+  // the next launch paints it instantly (see hydrateConversationsFromDisk).
+  // Optimistic "pending" placeholders are transient, so they're excluded.
+  // Best-effort and bounded.
+  writePersistedCache(
+    CONV_SURFACE,
+    rows.filter((r) => !r.pending).slice(0, CONV_PERSIST_CAP)
+  )
   cacheSubscribers.forEach((cb) => cb(rows))
+}
+
+// Cold-start hydration: seed the in-memory cache from the per-uid snapshot on the
+// first mount of the session so the Conversations list paints last-known rows
+// immediately instead of a spinner. `loaded` stays false, so the revalidating
+// fetch still runs (silently — see the Conversations mount effect). Runs at
+// component-mount time (not module load) so the signed-in uid is already set.
+export function hydrateConversationsFromDisk(): void {
+  if (hydratedConversations) return
+  hydratedConversations = true
+  if (conversationsCache.rows !== null) return
+  const persisted = readPersistedCache<ConversationRow>(CONV_SURFACE)
+  if (persisted && persisted.length > 0) conversationsCache.rows = persisted
 }
 
 export function subscribeConversationsCache(cb: (rows: ConversationRow[]) => void): () => void {
@@ -67,6 +98,7 @@ export function invalidateConversationsCache(): void {
   conversationsCache.loaded = false
   conversationsCache.rows = null
   conversationsCache.error = null
+  hydratedConversations = false
   subscribers.forEach((cb) => cb())
 }
 

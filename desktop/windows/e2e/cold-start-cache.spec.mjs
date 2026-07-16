@@ -155,3 +155,93 @@ describe('Cold-start cache-first — Memories renders from the persisted snapsho
     await app.close()
   })
 })
+
+// ── Conversations ────────────────────────────────────────────────────────────
+const CONV_SNAPSHOT_KEY = `omi.cache.conversations.${TEST_UID}`
+const CONVOS = [
+  {
+    id: 'cv-1',
+    structured: { title: 'COLDSTART-CONV-ALPHA', overview: 'first cached conversation' },
+    created_at: '2026-07-01T14:30:00Z'
+  },
+  {
+    id: 'cv-2',
+    structured: { title: 'COLDSTART-CONV-BRAVO', overview: 'second cached conversation' },
+    created_at: '2026-07-02T09:00:00Z'
+  }
+]
+
+const openConversations = (page) =>
+  page.evaluate(() => {
+    window.location.hash = '#/conversations'
+  })
+
+// Match GET /v1/conversations exactly (not the folders sub-route) regardless of
+// query string.
+const isConversationsList = (url) => url.pathname.replace(/\/+$/, '') === '/v1/conversations'
+
+describe('Cold-start cache-first — Conversations renders from the persisted snapshot', () => {
+  test('launch 1 persists; launch 2 keeps the cached list with the cloud fetch down', async (t) => {
+    mkdirSync(shotsDir, { recursive: true })
+    const userDataDir = mkdtempSync(path.join(tmpdir(), 'omi-coldstart-conv-e2e-'))
+    t.after(() => {
+      try {
+        rmSync(userDataDir, { recursive: true, force: true })
+      } catch {
+        /* best-effort */
+      }
+    })
+
+    // ── Launch 1: populate + persist ─────────────────────────────────────────
+    let app = await launch(userDataDir)
+    {
+      const page = await mainPage(app)
+      await page.setViewportSize({ width: 1280, height: 800 })
+      await page.evaluate((uid) => localStorage.setItem('omi.lastSignedInUid', uid), TEST_UID)
+      // Serve just the conversations list; other startup calls fail gracefully
+      // (fake auth, no tunnel) — narrow stub mirrors the Memories scenario.
+      await page.route(isConversationsList, (route) => json(route, CONVOS))
+
+      await openConversations(page)
+      await page
+        .getByText(/COLDSTART-CONV-ALPHA/)
+        .waitFor({ state: 'visible', timeout: 20000 })
+
+      const snapshot = await page.evaluate((k) => localStorage.getItem(k), CONV_SNAPSHOT_KEY)
+      assert.ok(snapshot, `launch 1 must persist the snapshot under ${CONV_SNAPSHOT_KEY}`)
+      const ids = JSON.parse(snapshot).map((r) => r.id)
+      assert.deepEqual(ids.sort(), ['cv-1', 'cv-2'], 'snapshot must hold the fetched conversations')
+      await page.screenshot({ path: path.join(shotsDir, '03-conv-launch1-populated.png') })
+    }
+    await app.close()
+
+    // ── Launch 2: cloud fetch down, must KEEP the cached list (no wipe) ───────
+    app = await launch(userDataDir)
+    {
+      const page = await mainPage(app)
+      await page.setViewportSize({ width: 1280, height: 800 })
+      // Abort just the conversations list so the revalidation's cloud fetch fails;
+      // the resilience guard must keep the hydrated rows shown.
+      await page.route(isConversationsList, (route) => route.abort())
+
+      await openConversations(page)
+      await page
+        .getByText(/COLDSTART-CONV-ALPHA/)
+        .waitFor({ state: 'visible', timeout: 20000 })
+
+      // Let the failing revalidation complete, then assert the rows did NOT get
+      // wiped down to empty (the bug the guard prevents).
+      await page.waitForTimeout(1500)
+      assert.ok(
+        await page.getByText(/COLDSTART-CONV-ALPHA/).isVisible(),
+        'cached conversation must stay on screen after a failed revalidation'
+      )
+      assert.ok(
+        await page.getByText(/COLDSTART-CONV-BRAVO/).isVisible(),
+        'all cached conversations must stay on screen after a failed revalidation'
+      )
+      await page.screenshot({ path: path.join(shotsDir, '04-conv-launch2-from-cache.png') })
+    }
+    await app.close()
+  })
+})
