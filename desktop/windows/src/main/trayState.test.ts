@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { describeTray, isTrayState, TRAY_STATES } from './trayState'
+import { describe, it, expect, vi } from 'vitest'
+import {
+  buildTrayMenuTemplate,
+  describeTray,
+  isTrayState,
+  TRAY_STATES,
+  type TrayMenuActions
+} from './trayState'
 
 describe('trayState', () => {
   it('lists exactly the three states', () => {
@@ -46,5 +52,89 @@ describe('trayState', () => {
     for (const s of TRAY_STATES) {
       expect(describeTray(s, { updateReady: true }).tooltip.length).toBeLessThan(127)
     }
+  })
+})
+
+describe('buildTrayMenuTemplate', () => {
+  const noopActions = (): TrayMenuActions => ({
+    showMainWindow: vi.fn(),
+    toggleListening: vi.fn(),
+    openSettings: vi.fn(),
+    checkForUpdates: vi.fn(),
+    toggleScreenCapture: vi.fn(),
+    quit: vi.fn()
+  })
+
+  // A menu item's label with the runtime-narrowed shape the template produces.
+  type Item = { label?: string; type?: string; checked?: boolean; click?: () => void }
+  const labels = (items: Item[]): (string | undefined)[] =>
+    items.filter((i) => i.type !== 'separator').map((i) => i.label)
+  const byLabel = (items: Item[], label: string): Item =>
+    items.find((i) => i.label === label) as Item
+
+  it('lists all items in Mac order (capture toggle first, updates before quit)', () => {
+    const items = buildTrayMenuTemplate(
+      { toggleLabel: 'Pause listening', screenCaptureEnabled: true },
+      noopActions()
+    ) as Item[]
+    expect(labels(items)).toEqual([
+      'Screen Capture',
+      'Open Omi',
+      'Pause listening',
+      'Settings',
+      'Check for Updates',
+      'Quit Omi'
+    ])
+  })
+
+  it('uses the passed pause/resume label', () => {
+    const items = buildTrayMenuTemplate(
+      { toggleLabel: 'Resume listening', screenCaptureEnabled: false },
+      noopActions()
+    ) as Item[]
+    expect(labels(items)).toContain('Resume listening')
+    expect(labels(items)).not.toContain('Pause listening')
+  })
+
+  it('renders Screen Capture as a checkbox reflecting the enabled state', () => {
+    const on = byLabel(
+      buildTrayMenuTemplate(
+        { toggleLabel: 'Pause listening', screenCaptureEnabled: true },
+        noopActions()
+      ) as Item[],
+      'Screen Capture'
+    )
+    expect(on.type).toBe('checkbox')
+    expect(on.checked).toBe(true)
+
+    const off = byLabel(
+      buildTrayMenuTemplate(
+        { toggleLabel: 'Pause listening', screenCaptureEnabled: false },
+        noopActions()
+      ) as Item[],
+      'Screen Capture'
+    )
+    expect(off.type).toBe('checkbox')
+    expect(off.checked).toBe(false)
+  })
+
+  it('routes each click to its injected action', () => {
+    const actions = noopActions()
+    const items = buildTrayMenuTemplate(
+      { toggleLabel: 'Pause listening', screenCaptureEnabled: true },
+      actions
+    ) as Item[]
+    byLabel(items, 'Screen Capture').click?.()
+    byLabel(items, 'Open Omi').click?.()
+    byLabel(items, 'Pause listening').click?.()
+    byLabel(items, 'Settings').click?.()
+    byLabel(items, 'Check for Updates').click?.()
+    byLabel(items, 'Quit Omi').click?.()
+    expect(actions.toggleScreenCapture).toHaveBeenCalledOnce()
+    expect(actions.showMainWindow).toHaveBeenCalledOnce()
+    expect(actions.toggleListening).toHaveBeenCalledOnce()
+    expect(actions.openSettings).toHaveBeenCalledOnce()
+    expect(actions.checkForUpdates).toHaveBeenCalledOnce()
+    expect(actions.quit).toHaveBeenCalledOnce()
   })
 })
