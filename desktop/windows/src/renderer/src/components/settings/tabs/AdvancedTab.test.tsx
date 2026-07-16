@@ -54,7 +54,13 @@ beforeEach(() => {
     byokGetAll: vi.fn().mockResolvedValue({}),
     byokSet: vi.fn().mockResolvedValue(undefined),
     byokClearAll: vi.fn().mockResolvedValue(undefined),
-    byokEnroll: vi.fn().mockResolvedValue({ active: false, results: {} })
+    byokEnroll: vi.fn().mockResolvedValue({ active: false, results: {} }),
+    // AdvancedTab now embeds the AI profile subsection, which reads the latest
+    // record on mount.
+    aiProfileGetLatest: vi.fn().mockResolvedValue(null),
+    aiProfileGenerateNow: vi.fn(),
+    aiProfileEdit: vi.fn(),
+    aiProfileDelete: vi.fn()
   }
 })
 

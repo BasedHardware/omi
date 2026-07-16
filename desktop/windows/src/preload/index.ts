@@ -206,7 +206,8 @@ const omi: OmiBridgeApi = {
   ) => ipcRenderer.invoke('aiProfile:setSession', session),
   aiProfileGenerateNow: (session?: { apiBase: string; desktopApiBase: string; token: string }) =>
     ipcRenderer.invoke('aiProfile:generateNow', session) as Promise<AiUserProfileRecord>,
-  aiProfileGetLatest: () => ipcRenderer.invoke('aiProfile:getLatest') as Promise<string | null>,
+  aiProfileGetLatest: () =>
+    ipcRenderer.invoke('aiProfile:getLatest') as Promise<AiUserProfileRecord | null>,
   aiProfileEdit: (id: number, text: string) => ipcRenderer.invoke('aiProfile:edit', id, text),
   aiProfileDelete: (id: number) => ipcRenderer.invoke('aiProfile:delete', id),
   aiProfileDeleteAll: () => ipcRenderer.invoke('aiProfile:deleteAll'),
