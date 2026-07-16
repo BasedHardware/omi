@@ -10,6 +10,7 @@ import {
 } from '../../shared/types'
 import { ByokKeyStore } from '../agentKernel/byokStore'
 import { isByokActive, withByokHeaders } from '../../shared/byok'
+import { decodeUidFromIdToken } from '../auth/omiAuth'
 
 // Lazy so this module stays import-pure (ByokKeyStore's default path needs
 // app.getPath('userData'), only ready after the app is).
@@ -286,19 +287,11 @@ function startSession(args: ListenStartArgs, owner: WebContents): void {
   let url = base
   if (mode === 'conversation') {
     // Decode (not verify) the JWT to derive the uid for the query param; the
-    // backend verifies the token from the Authorization header.
-    let uid = ''
-    try {
-      const payload = JSON.parse(
-        Buffer.from(args.token.split('.')[1] ?? '', 'base64').toString('utf8')
-      )
-      uid = payload.user_id ?? payload.sub ?? ''
-    } catch {
-      // Token not decodable; uid stays empty (the backend also reads the
-      // Authorization header).
-    }
-    // Official docs require `uid` as a query param; backend source also reads the
-    // Firebase token from the Authorization header. Send both.
+    // backend verifies the token from the Authorization header. uid stays empty
+    // when the token is undecodable (the backend also reads the Authorization
+    // header). Official docs require `uid` as a query param; backend source reads
+    // the token from the Authorization header too — send both.
+    const uid = decodeUidFromIdToken(args.token)
     if (uid) url = `${base}&uid=${encodeURIComponent(uid)}`
   }
   // PTT is header-auth only (no uid query param, matching the macOS client) since
