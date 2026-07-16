@@ -19,6 +19,7 @@ vi.mock('./preferences', () => ({ clearUserScopedPreferences: h.clearUserScopedP
 vi.mock('./localAgentMemoryCache', () => ({ clearMemoryCache: h.clearMemoryCache }))
 
 import { reconcileAccountForSignIn, teardownUserData } from './authTeardown'
+import { cache as memoriesCache } from './memoriesCache'
 
 const LAST_UID_KEY = 'omi.lastSignedInUid'
 
@@ -74,6 +75,25 @@ describe('teardownUserData', () => {
 
     expect(h.invalidateConversationsCache).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem('omi-chat-infinite-id')).toBeNull()
+  })
+
+  it('resets the Memories module cache and purges per-uid cold-start snapshots (cross-account leak fix)', async () => {
+    // Simulate an in-session account with a warm Memories cache + persisted snapshot.
+    memoriesCache.list = [{ id: 'a-secret' }] as never
+    memoriesCache.loaded = true
+    localStorage.setItem('omi.cache.memories.userA', JSON.stringify([{ id: 'a-secret' }]))
+    localStorage.setItem('omi.cache.conversations.userA', JSON.stringify([{ id: 'c1' }]))
+
+    await teardownUserData()
+
+    // In-memory singleton reset so a second account can't read it before refetch.
+    expect(memoriesCache.list).toBeNull()
+    expect(memoriesCache.loaded).toBe(false)
+    // Every per-uid cold-start snapshot is purged from localStorage.
+    expect(localStorage.getItem('omi.cache.memories.userA')).toBeNull()
+    expect(localStorage.getItem('omi.cache.conversations.userA')).toBeNull()
+    // The device-prefs blob (non-cache) still survives.
+    expect(localStorage.getItem('omi-windows-prefs-v1')).toBe('{"language":"en"}')
   })
 })
 
