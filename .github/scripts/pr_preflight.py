@@ -36,7 +36,14 @@ def run_git(root: Path, *args: str) -> str:
 
 
 def changed_files(root: Path, base: str, head: str) -> list[str]:
-    output = run_git(root, "diff", "--name-only", "--diff-filter=ACMR", f"{base}...{head}")
+    output = run_git(
+        root,
+        "diff",
+        "--name-only",
+        "--no-renames",
+        "--diff-filter=ACMRTD",
+        f"{base}...{head}",
+    )
     return [line for line in output.splitlines() if line]
 
 
