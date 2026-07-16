@@ -426,6 +426,49 @@ enum ScreenContextWorkContextBuilder {
   static let staleCaptureThresholdSeconds = 60
   static let voiceTurnStaleCaptureThresholdSeconds = 15
 
+  /// Direct “what is on my screen?” requests are a turn-scoped visual action,
+  /// not a request for Rewind history. The caller attaches the same image bytes
+  /// to the model request; this envelope makes that provenance explicit.
+  static func explicitCurrentScreenPayload(
+    screenRecordingGranted: Bool,
+    imageAttached: Bool,
+    capturedAt: Date = Date(),
+    formatter: ISO8601DateFormatter = ISO8601DateFormatter()
+  ) -> [String: Any] {
+    guard screenRecordingGranted else {
+      return permissionDeniedPayload(windowMinutes: 1)
+    }
+    guard imageAttached else {
+      return [
+        "ok": false,
+        "name": "get_work_context",
+        "failure_code": ScreenContextFailureCode.imageUnavailable.rawValue,
+        "screen_now": [
+          "available": false,
+          "failure_code": ScreenContextFailureCode.imageUnavailable.rawValue,
+          "source": "turn_scoped_live_capture",
+        ],
+        "timeline": [],
+        "guidance":
+          "A live capture for this request failed. Do not answer from screen history; explain that current screen evidence was unavailable.",
+      ]
+    }
+    return [
+      "ok": true,
+      "name": "get_work_context",
+      "screen_now": [
+        "available": true,
+        "source": "turn_scoped_live_capture",
+        "captured_at": formatter.string(from: capturedAt),
+        "image_delivered_to_model": true,
+        "latest_capture_age_seconds": 0,
+      ],
+      "timeline": [],
+      "guidance":
+        "The attached image is the only current-screen evidence for this turn. Answer the user's question from it; do not substitute stored history or OCR metadata.",
+    ]
+  }
+
   static func payload(arguments: [String: Any]) async -> [String: Any] {
     let minutes = max(1, min(120, Int(parseInt64(arguments["minutes"]) ?? 10)))
     let staleThresholdSeconds = max(
@@ -577,7 +620,7 @@ enum ScreenContextWorkContextBuilder {
       "timeline": timeline,
       "memories_hint": "For the user's operating principles/preferences, also call search_memories (omi-memory).",
       "guidance":
-        "This is the user's recent on-screen activity. Act on it directly instead of asking them to screenshot or re-explain what they were doing.",
+        "This is recent historical on-screen activity, not proof of the current visible screen. Use it for history; for a direct current-screen question, obtain a live capture instead of answering from this payload.",
     ]
     if let failureCode {
       payload["failure_code"] = failureCode.rawValue

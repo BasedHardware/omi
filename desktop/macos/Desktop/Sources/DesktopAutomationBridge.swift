@@ -1278,22 +1278,46 @@ final class DesktopAutomationActionRegistry {
       PushToTalkManager.shared.endPushToTalkForAutomation()
     }
 
+    // Manager-level PTT harness: this crosses the real shortcut lifecycle,
+    // routing decision, realtime admission, warm buffering, and replay seam.
+    // Unlike `ptt_test_turn`, it does not bypass PushToTalkManager; unlike a
+    // physical test, it needs neither microphone permission nor a device.
+    register(
+      name: "ptt_manager_turn",
+      summary: "Inject a PCM16/16k mono hold through PushToTalkManager and realtime admission; returns lifecycle diagnostics",
+      params: ["pcm"]
+    ) { params in
+      guard let path = params["pcm"],
+        let pcm16k = try? Data(contentsOf: URL(fileURLWithPath: path)),
+        !pcm16k.isEmpty
+      else { return ["error": "missing or unreadable 'pcm' file (expected raw s16le 16k mono)"] }
+
+      var result = PushToTalkManager.shared.beginRealtimePushToTalkForAutomation()
+      guard result["listening"] == "true" else { return result }
+      let chunkSize = 3_200
+      var offset = 0
+      var injected = 0
+      while offset < pcm16k.count {
+        let end = min(offset + chunkSize, pcm16k.count)
+        if PushToTalkManager.shared.injectRealtimePTTAutomationAudio(pcm16k.subdata(in: offset..<end)) {
+          injected += end - offset
+        }
+        offset = end
+      }
+      let stopped = PushToTalkManager.shared.endPushToTalkForAutomation()
+      result["injected_bytes"] = "\(injected)"
+      result["finalized"] = stopped["finalized"] ?? "false"
+      for (key, value) in RealtimeHubController.shared.automationPTTDiagnostics() {
+        result[key] = value
+      }
+      return result
+    }
+
     register(
       name: "ptt_turn_snapshot",
-      summary: "Return the typed PTT lifecycle state and bounded diagnostic counters"
+      summary: "Return typed PTT lifecycle state, pending-tool fences, and safe screen-evidence diagnostics"
     ) { _ in
-      let coordinator = VoiceTurnCoordinator.shared
-      let turn = coordinator.model.turn
-      let terminalReason = turn?.terminalReason?.rawValue ?? ""
-      let phase = turn.map { VoiceTurnCoordinator.phaseLabel($0.phase) } ?? "idle"
-      let route = turn.map { VoiceTurnCoordinator.routeLabel($0.route) } ?? "none"
-      return [
-        "phase": phase,
-        "route": route,
-        "terminal_reason": terminalReason,
-        "stale_event_count": "\(coordinator.model.staleEventCount)",
-        "invalid_transition_count": "\(coordinator.model.invalidTransitionCount)",
-      ]
+      RealtimeHubController.shared.automationPTTDiagnostics()
     }
 
     // Fake-voice end-to-end test: inject a raw PCM16/16kHz-mono file through the
@@ -2142,6 +2166,24 @@ final class DesktopAutomationActionRegistry {
       let limit = max(1, min(200, intParam(params["limit"], default: 50)))
       let snapshot = try await DesktopCoordinatorService.shared.awarenessSnapshotJSON(limit: limit)
       return ["snapshot": snapshot]
+    }
+
+    register(
+      name: "agent_lifecycle_convergence_snapshot",
+      summary: "Read canonical child-run status alongside the rendered pill and journal-completion projection",
+      params: ["runIds"],
+      category: "read",
+      surfaces: ["floating_bar", "main_chat", "realtime"],
+      safety: "read_only"
+    ) { params in
+      let runIDs = Set(
+        (params["runIds"] ?? "")
+          .split(separator: ",")
+          .map { String($0).trimmingCharacters(in: .whitespacesAndNewlines) }
+          .filter { !$0.isEmpty }
+          .prefix(20)
+      )
+      return ["snapshot": await AgentPillsManager.shared.lifecycleConvergenceSnapshot(runIDs: runIDs)]
     }
 
     register(

@@ -80,11 +80,19 @@ enum RealtimeHubTools {
     real or guessed — before the tool returns, NEVER skip the \
     tool call, and never read tool JSON or ids aloud. You cannot see the user's data or screen \
     without calling a tool. When the screenshot tool succeeds for a current-screen question, the \
-    attached image is the only current visual source of truth. Disregard conflicting kernel \
-    context, OCR, work summaries, and earlier screen descriptions. You MUST then call \
-    report_screen_observation with concise visual detail only. Never name or identify an app in \
-    the answer: the desktop renders app identity from native evidence. Do not speak or answer a \
-    current-screen question outside that report; the app will present an accepted report itself.
+    attached image and, when present, its locally captured foreground-application context are \
+    the only current visual source of truth. The foreground-application context is trustworthy \
+    only for identifying the app active at capture time; it never replaces visual reasoning. \
+    Disregard conflicting kernel context, OCR, work summaries, and earlier screen descriptions. \
+    You MUST then call \
+    report_screen_observation with a concise grounding observation. That report is internal \
+    verification, not your user-facing reply. Once it succeeds, answer the user's original \
+    current-screen question naturally and conversationally from the attached image. Do not let \
+    the report replace the answer or fall back to a generic screen description when the user \
+    asked a specific question. Omi's own floating bar, chat bubble, or window may also be \
+    visible in the image: treat that as assistant chrome, not as the subject of the user's \
+    screen question, unless the user specifically asks about Omi. Answer about the user's \
+    visible work and intent, not the assistant UI.
 
     Keep latency low: prefer answering directly when you can.
     """
@@ -94,7 +102,8 @@ enum RealtimeHubTools {
   /// the tool result as well as the session instruction so a warm session cannot prefer an older
   /// context summary over the pixels it just received.
   static func screenshotToolResult(
-    capturedBytes: Int?
+    capturedBytes: Int?,
+    frontmostApplication: String? = nil
   ) -> String {
     guard capturedBytes != nil else {
       return jsonToolResult([
@@ -102,15 +111,27 @@ enum RealtimeHubTools {
         "error": ["code": "screen_evidence_unavailable"],
       ])
     }
-    return jsonToolResult([
+    var result: [String: Any] = [
       "ok": true,
-      "instruction": "Use the attached image as the only current visual source. Call report_screen_observation with concise visual detail before answering.",
-    ])
+      "instruction": "Use the attached image and any locally captured foreground-application context as the only current visual source. Call report_screen_observation with a concise grounding observation, then answer the user's original request naturally from this evidence.",
+    ]
+    if let frontmostApplication = frontmostApplication?.trimmingCharacters(in: .whitespacesAndNewlines),
+      !frontmostApplication.isEmpty
+    {
+      // This is sampled with the frozen screenshot and sent only through the matching
+      // provider tool result. It is not persisted, logged, or reused as ambient context.
+      result["capture_context"] = ["foreground_application": frontmostApplication]
+    }
+    return jsonToolResult(result)
   }
 
   static func screenObservationResult(accepted: Bool) -> String {
     jsonToolResult(accepted
-      ? ["ok": true, "status": "screen_observation_accepted"]
+      ? [
+        "ok": true,
+        "status": "screen_observation_accepted",
+        "instruction": "Grounding verified. Now answer the user's original request naturally using the attached image; the observation was not the user-facing answer.",
+      ]
       : ["ok": false, "error": ["code": "screen_observation_rejected"]])
   }
 

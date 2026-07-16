@@ -450,7 +450,8 @@ final class ScreenCaptureService: Sendable {
     AppState.relaunchCommand(
       appPath: appPath,
       isNonProduction: AppBuild.isNonProduction,
-      automationPort: DesktopAutomationLaunchOptions.port
+      automationPort: DesktopAutomationLaunchOptions.port,
+      terminatingProcessIdentifier: ProcessInfo.processInfo.processIdentifier
     )
   }
 

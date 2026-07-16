@@ -561,18 +561,6 @@ final class DesktopCoordinatorService {
     return try AgentArtifactProjection.parseList(fromToolResult: raw)
   }
 
-  func completedAgentDeltaPrompt(surfaceKind: String, limit: Int = 5) async -> String? {
-    guard let delta = await peekCompletedAgentDelta(surfaceKind: surfaceKind, limit: limit) else {
-      return nil
-    }
-    acknowledgeCompletedAgentDelta(
-      surfaceKind: surfaceKind,
-      ids: delta.ids,
-      completedAtHighWaterMs: delta.completedAtHighWaterMs
-    )
-    return delta.prompt
-  }
-
   func peekCompletedAgentDelta(surfaceKind: String, limit: Int = 5) async -> DesktopCoordinatorCompletionDelta? {
     await peekCompletedAgentDelta(surfaceKey: surfaceKind, surfaceLabel: surfaceKind, limit: limit)
   }

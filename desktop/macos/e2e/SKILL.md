@@ -63,6 +63,49 @@ ones, or `register(name:summary:params:handler:)` from a view model for screen-s
 ones). `GET /actions` lists them; `POST /action {name, params}` runs one and returns
 the resulting state snapshot.
 
+For a background-agent/voice regression, use the read-only cross-surface probe after
+the child run reaches a terminal state:
+```bash
+./scripts/omi-ctl action agent_lifecycle_convergence_snapshot runIds=<canonical-run-id>
+```
+It reports only run identity and state—not prompts or output—and passes only when the
+canonical terminal run, visible pill, and producing journal completion have converged.
+The continuity gauntlet uses this before it asserts the exact one-spawn/one-completion
+journal receipt, so new PTT work should extend that contract rather than add UI sleeps.
+
+### 2b.1 Probe a current-screen PTT turn
+
+`ptt_test_turn` is the non-production controller probe. It captures the same one pre-overlay
+screen image used by a physical PTT press and drives the real hub turn. Its added screen-protocol
+diagnostics expose only safe lifecycle state—never pixels, app names, or evidence IDs. Use it to
+reproduce and diagnose a screen-answer stall without coordinate clicking:
+
+```bash
+cd desktop/macos
+OMI_AUTOMATION_PORT=47920 bash ./scripts/ptt-screen-probe.sh
+```
+
+The probe emits only the safe state needed to diagnose its result. For a successful screen report,
+expect `screen_evidence_last_completion=completed`, `screen_evidence_protocol_active=false`,
+and `pending_tool_count=0`. A non-`completed` completion class identifies the local fail-closed
+boundary; `terminal_reason=tool_timeout` is always a regression. This validates the controller
+and capture/transport lifecycle.
+
+For a regression in first-press admission, reconnect, or warm buffering, use the separate
+manager-level probe. It drives `PushToTalkManager`'s actual route selection and injects a raw
+PCM file through its capture callback equivalent; it intentionally does not perform the
+controller-only auto-redrive or forced-text behavior:
+
+```bash
+cd desktop/macos
+./scripts/omi-ctl action ptt_manager_turn pcm=/absolute/path/to/clip.pcm
+./scripts/omi-ctl action ptt_turn_snapshot
+```
+
+Assert `injected_bytes` equals the clip length, then inspect only the typed diagnostics (admission,
+route, pending deadlines, terminal reason). This is the first automated surface for the actual PTT
+manager; use a natural authenticated physical PTT press as the final UX validation.
+
 ### 2c. Verify SD-card WAL cloud upload (WiFi / BLE)
 After a device SD-card download (WiFi or BLE), confirm the WAL uploaded — not just
 saved locally. Both `StorageSyncService` and `WifiSyncService` call `syncToCloud()`
@@ -233,9 +276,10 @@ The permission "Quit & Reopen" flow (shown after granting Accessibility / Screen
 calls `AppState.restartApp()` — relaunch the same bundle, keep the auth/onboarding session.
 `quit_and_reopen` (non-prod) triggers that exact path (not the onboarding-mutating
 `reset_onboarding`), delayed so the action's HTTP response flushes before the process
-terminates. The relaunch is `open <bundle>` and drops argv/env — but on non-prod builds
-`restartApp()` re-passes `--automation-port=<current port>` as an argv, so the reopened
-app **rebinds the SAME port** you launched with (argv beats any launchd-inherited
+terminates. The relaunch waits for the old PID to exit before invoking `open <bundle>`;
+on non-prod it uses `open -n` only after that handoff and re-passes
+`--automation-port=<current port>` as an argv. The reopened app therefore **rebinds the
+SAME port** you launched with (argv beats any launchd-inherited
 `OMI_AUTOMATION_PORT`). Keep polling the original `OMI_AUTOMATION_PORT`; no rediscovery.
 
 Two traps make a naive `wait-ready` lie, so the recipe below guards against both:

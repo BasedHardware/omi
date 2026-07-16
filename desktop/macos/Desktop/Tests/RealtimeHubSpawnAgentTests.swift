@@ -381,7 +381,7 @@ final class RealtimeHubSpawnAgentTests: XCTestCase {
       source.contains("toolCallKey(callId: callId, name: name, turnEpoch: toolTurnEpoch)"))
     XCTAssertTrue(source.contains("toolEffectIdentityByTransportKey.removeValue(forKey: key)"))
     XCTAssertTrue(source.contains("turnEpoch == realtimeToolTurnEpoch"))
-    XCTAssertTrue(source.contains("waiting for post-tool continuation"))
+    XCTAssertTrue(source.contains("waiting for provider tool delivery"))
     XCTAssertTrue(source.contains("authorizedRealtimeInvocations"))
     XCTAssertTrue(source.contains("private func clearRealtimeToolTracking()"))
     XCTAssertTrue(source.contains("realtimeToolTurnEpoch += 1"))

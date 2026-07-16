@@ -16,6 +16,7 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertTrue(instr.contains("kernel makes the authoritative route"))
         XCTAssertFalse(instr.contains("evidence_id"))
         XCTAssertTrue(instr.contains("report_screen_observation"))
+        XCTAssertTrue(instr.contains("locally captured foreground-application context"))
     }
 
     func testLiveScreenshotResultRequiresAValidatedObservationReport() {
@@ -31,6 +32,44 @@ final class HubSystemInstructionTests: XCTestCase {
         XCTAssertNil(validPayload?["frontmost_app"])
         XCTAssertEqual(invalidPayload?["ok"] as? Bool, false)
         XCTAssertEqual((invalidPayload?["error"] as? [String: String])?["code"], "screen_evidence_unavailable")
+    }
+
+    func testLiveScreenshotResultCarriesOnlySameCaptureForegroundContext() {
+        let result = RealtimeHubTools.screenshotToolResult(
+            capturedBytes: 1,
+            frontmostApplication: "Example App")
+        let payload = try? JSONSerialization.jsonObject(with: Data(result.utf8)) as? [String: Any]
+        let context = payload?["capture_context"] as? [String: String]
+
+        XCTAssertEqual(context?["foreground_application"], "Example App")
+        XCTAssertNil(payload?["frontmost_app"], "legacy ambient app fields must remain unavailable")
+    }
+
+    func testValidatedScreenObservationContinuesToTheOriginalUserAnswer() {
+        let instruction = RealtimeHubTools.systemInstruction()
+        let accepted = RealtimeHubTools.screenObservationResult(accepted: true)
+        let acceptedPayload = try? JSONSerialization.jsonObject(with: Data(accepted.utf8)) as? [String: Any]
+
+        XCTAssertTrue(instruction.contains("internal verification, not your user-facing reply"))
+        XCTAssertTrue(instruction.contains("answer the user's original"))
+        XCTAssertTrue(instruction.contains("foreground-application context"))
+        XCTAssertTrue(instruction.contains("assistant chrome, not as the subject"))
+        XCTAssertTrue(instruction.contains("visible work and intent"))
+        XCTAssertFalse(instruction.contains("app will present an accepted report itself"))
+        XCTAssertEqual(acceptedPayload?["ok"] as? Bool, true)
+        XCTAssertTrue((acceptedPayload?["instruction"] as? String ?? "").contains("original request naturally"))
+    }
+
+    func testScreenObservationSchemaCarriesGroundingInsteadOfAUserFacingAnswer() {
+        let tool = RealtimeHubTools.openAITools.first {
+            ($0["name"] as? String) == HubTool.reportScreenObservation.rawValue
+        }
+        let parameters = tool?["parameters"] as? [String: Any]
+        let properties = parameters?["properties"] as? [String: Any]
+
+        XCTAssertNotNil(properties?["observation"])
+        XCTAssertNil(properties?["answer"])
+        XCTAssertEqual(parameters?["required"] as? [String], ["observation"])
     }
 
     func testScreenEvidenceToolResultSurvivesTheProviderEnvelopeBoundary() {

@@ -1,4 +1,15 @@
 import Foundation
+
+/// A provider continuation is recovery work for one already-owned physical turn. Expose why it
+/// did not start so the controller can distinguish a healthy in-flight cycle from a terminal
+/// transport/exhaustion failure instead of waiting blindly for the ordinary response deadline.
+enum RealtimePostToolContinuationStartResult: Equatable {
+  case started
+  case alreadyInFlight
+  case stale
+  case exhausted
+  case transportUnavailable
+}
 import Network
 
 // MARK: - Realtime Hub Session
@@ -102,6 +113,9 @@ struct RealtimeHubInputLifecycleSnapshot: Equatable {
   let pendingCommit: Bool
   let responseIdentityCount: Int
   let inputIdentityCount: Int
+  let testingResponseCreateCount: Int
+  let testingLastResponseToolChoice: String?
+  let testingLastResponseInstruction: String?
 }
 #endif
 
@@ -142,6 +156,9 @@ final class RealtimeHubSession: NSObject {
   // explicit readiness seam is a successful local transport boundary, not a
   // disconnected production session.
   private var acceptsTestingTransport = false
+  private var testingResponseCreateCount = 0
+  private var testingLastResponseToolChoice: String?
+  private var testingLastResponseInstruction: String?
 #endif
   private var activeEventIdentity: RealtimeHubEventIdentity?
   private var completedGeminiEventIdentity: RealtimeHubEventIdentity?
@@ -178,6 +195,10 @@ final class RealtimeHubSession: NSObject {
   private var geminiResponsePending = false
   private var pendingOpenAIToolCallIds = Set<String>()
   private var pendingGeminiToolCallIds = Set<String>()
+  /// A provider may close the function-call cycle without producing a user-facing
+  /// response. One explicit internal continuation is permitted for that exact voice
+  /// turn; further retries would create an unbounded tool/turn loop.
+  private var postToolContinuationAttempted = false
   private var geminiSyntheticToolCallCounter = 0
 
   // Per-turn token usage for managed (ephemeral) billing — client-reported. Reset at
@@ -301,6 +322,7 @@ final class RealtimeHubSession: NSObject {
     openAIPendingInputIdentities.removeAll()
     openAIInputItemIdentities.removeAll()
     geminiResponsePending = false
+    postToolContinuationAttempted = false
     activeEventIdentity = nil
     completedGeminiEventIdentity = nil
   }
@@ -376,7 +398,10 @@ final class RealtimeHubSession: NSObject {
             pendingVideoFrameCount: self.pendingVideo.count,
             pendingCommit: self.pendingCommit,
             responseIdentityCount: self.openAIResponseIdentities.count,
-            inputIdentityCount: self.openAIInputItemIdentities.count))
+            inputIdentityCount: self.openAIInputItemIdentities.count,
+            testingResponseCreateCount: self.testingResponseCreateCount,
+            testingLastResponseToolChoice: self.testingLastResponseToolChoice,
+            testingLastResponseInstruction: self.testingLastResponseInstruction))
       }
     }
   }
@@ -462,6 +487,85 @@ final class RealtimeHubSession: NSObject {
     await sendTextInput(text, logLabel: "test text input")
   }
 
+  /// A provider can complete a tool-only response after accepting the final tool
+  /// result without emitting a user-facing reply. Continue the same physical turn
+  /// once, never as a synthetic user request. The continuation is bounded here so
+  /// every caller shares the same no-loop contract.
+  func resumeAfterToolOnlyCycle(
+    identity: RealtimeHubEventIdentity,
+    completion: @escaping (RealtimePostToolContinuationStartResult) -> Void
+  ) {
+    q.async { [weak self] in
+      guard let self else {
+        completion(.transportUnavailable)
+        return
+      }
+
+      guard self.activeEventIdentity == identity else {
+        completion(.stale)
+        return
+      }
+      guard self.isOpen else {
+        completion(.transportUnavailable)
+        return
+      }
+
+      let providerHasResponseInFlight: Bool
+      switch self.provider {
+      case .openai:
+        providerHasResponseInFlight = self.openAIResponseActive || !self.pendingOpenAIToolCallIds.isEmpty
+      case .gemini:
+        providerHasResponseInFlight = self.activityOpen || self.geminiResponsePending || !self.pendingGeminiToolCallIds.isEmpty
+      }
+      if self.postToolContinuationAttempted {
+        completion(providerHasResponseInFlight ? .alreadyInFlight : .exhausted)
+        return
+      }
+      guard !providerHasResponseInFlight else {
+        completion(.alreadyInFlight)
+        return
+      }
+
+      switch self.provider {
+      case .openai:
+        self.postToolContinuationAttempted = true
+        self.requestResponse(
+          audio: true,
+          toolChoice: "none",
+          instructions: Self.openAIPostToolContinuationInstruction,
+          reason: "post_tool_continuation")
+        log("\(self.tag): requested explicit OpenAI post-tool continuation")
+      case .gemini:
+        self.postToolContinuationAttempted = true
+        self.completedGeminiEventIdentity = nil
+        self.activityOpen = true
+        for wire in Self.geminiPostToolContinuationWires() {
+          self.send(json: wire)
+        }
+        self.activityOpen = false
+        self.geminiResponsePending = true
+        log("\(self.tag): requested explicit Gemini post-tool continuation")
+      }
+      completion(.started)
+    }
+  }
+
+  static let geminiPostToolContinuationInstruction =
+    "The tool work for the user's most recent request is complete. Do not call any more tools. "
+      + "Now give the concise, natural spoken answer to that same request using the tool result already provided."
+
+  static let openAIPostToolContinuationInstruction =
+    "The tool work for the user's most recent request is complete. Give the concise, natural spoken "
+      + "answer to that same request now, using the tool result already provided. Do not call any tools."
+
+  static func geminiPostToolContinuationWires() -> [[String: Any]] {
+    [
+      ["realtimeInput": ["activityStart": [:]]],
+      ["realtimeInput": ["text": geminiPostToolContinuationInstruction]],
+      ["realtimeInput": ["activityEnd": [:]]],
+    ]
+  }
+
   private func sendTextInput(_ text: String, logLabel: String) async -> Bool {
     await withCheckedContinuation { continuation in
       q.async { [weak self] in
@@ -534,6 +638,7 @@ final class RealtimeHubSession: NSObject {
       } else {
         self.activeEventIdentity = nil
       }
+      self.postToolContinuationAttempted = false
       guard self.provider == .gemini else { return }
       // Barge-in on a live Gemini generation uses a fresh session at the controller
       // boundary. This same-session flag is only a local gate for abandoned/stale
@@ -761,7 +866,12 @@ final class RealtimeHubSession: NSObject {
   }
 
   // OpenAI: ask for a response with the given modality (audio for spoken turns).
-  private func requestResponse(audio: Bool) {
+  private func requestResponse(
+    audio: Bool,
+    toolChoice: String? = nil,
+    instructions: String? = nil,
+    reason: String = "turn"
+  ) {
     guard provider == .openai else { return }
     guard !openAIResponseActive else {
       log("\(tag): skip response.create — a response is already in progress")
@@ -774,7 +884,15 @@ final class RealtimeHubSession: NSObject {
       openAIPendingResponseIdentities.append(
         PendingOpenAIResponseIdentity(identity: identity, canceled: false))
     }
-    send(json: ["type": "response.create", "response": ["output_modalities": [audio ? "audio" : "text"]]])
+    var response: [String: Any] = ["output_modalities": [audio ? "audio" : "text"]]
+    if let toolChoice {
+      response["tool_choice"] = toolChoice
+    }
+    if let instructions {
+      response["instructions"] = instructions
+    }
+    log("\(tag): response.create reason=\(reason) tool_choice=\(toolChoice ?? "session_default")")
+    send(json: ["type": "response.create", "response": response])
   }
 
   // MARK: - Request / setup
@@ -1233,7 +1351,13 @@ final class RealtimeHubSession: NSObject {
     if let usage = (e["response"] as? [String: Any])?["usage"] as? [String: Any] {
       accumulateOpenAIUsage(usage)
     }
-    let output = (e["response"] as? [String: Any])?["output"] as? [[String: Any]] ?? []
+    let response = e["response"] as? [String: Any]
+    let output = response?["output"] as? [[String: Any]] ?? []
+    let status = response?["status"] as? String ?? "unknown"
+    let outputKinds = output.compactMap { $0["type"] as? String }.joined(separator: ",")
+    let statusDetail = ((response?["status_details"] as? [String: Any])?["type"] as? String) ?? "none"
+    let outputSummary = outputKinds.isEmpty ? "none" : outputKinds
+    log("\(tag): response.done status=\(status) detail=\(statusDetail) output=\(outputSummary)")
     var firedTool = false
     for item in output where (item["type"] as? String) == "function_call" {
       guard let callId = item["call_id"] as? String, !dispatchedToolItems.contains(callId) else {
@@ -1363,6 +1487,11 @@ final class RealtimeHubSession: NSObject {
     }
 #if DEBUG
     if acceptsTestingTransport {
+      if (json["type"] as? String) == "response.create" {
+        testingResponseCreateCount += 1
+        testingLastResponseToolChoice = (json["response"] as? [String: Any])?["tool_choice"] as? String
+        testingLastResponseInstruction = (json["response"] as? [String: Any])?["instructions"] as? String
+      }
       completion?(nil)
       return
     }
