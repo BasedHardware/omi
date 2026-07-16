@@ -5042,22 +5042,15 @@ private var activeBridgeSendGeneration: Int?
         return normalizedParts.joined(separator: "`")
     }
 
-    // Compiled once and reused: normalizeAssistantSentenceSpacing runs per line
-    // segment on every ~100ms streaming flush, so recompiling these on each call
-    // was avoidable work on a hot path. NSRegularExpression is thread-safe for
-    // matching.
-    private static let sentenceSpacingRegex = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#)
-    private static let sentenceSpacingQuotedRegex = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#)
-
     private static func applySentenceSpacing(_ text: String) -> String {
         var normalized = text
 
-        if let punctuationUpper = sentenceSpacingRegex {
+        if let punctuationUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[A-Z])"#) {
             let range = NSRange(normalized.startIndex..., in: normalized)
             normalized = punctuationUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
         }
 
-        if let punctuationQuotedUpper = sentenceSpacingQuotedRegex {
+        if let punctuationQuotedUpper = try? NSRegularExpression(pattern: #"([.!?])(?=[\"“'‘][A-Z])"#) {
             let range = NSRange(normalized.startIndex..., in: normalized)
             normalized = punctuationQuotedUpper.stringByReplacingMatches(in: normalized, options: [], range: range, withTemplate: "$1 ")
         }
