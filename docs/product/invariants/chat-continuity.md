@@ -76,6 +76,11 @@ rollback window; this is migration input, not a second store.
   session/run/attempt lifecycle plus a matching semantic digest for the provider.
   A parent journal receipt without that child is failure; legacy raw
   session/run/attempt payload aliases are never provider-visible.
+- A local Hermes or OpenClaw override is selected only when the current user
+  explicitly names that exact provider. A provider value proposed by a model,
+  stale context, or a generic delegation request is not authority and is
+  stripped before child-session admission, leaving the child on regular Omi
+  managed routing.
 - Each terminal canonical child run converges into exactly one visible pill
   status and one `agentCompletion` block on its producing journal turn. A
   continuation reuses its child session but has a new run identity, so its own
