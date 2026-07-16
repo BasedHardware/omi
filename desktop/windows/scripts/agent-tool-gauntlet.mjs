@@ -31,10 +31,14 @@
 //     model can SELECT and REACH each tool end-to-end. Because Phase 1 already
 //     proved the tool WORKS, a Phase-2 miss on a product tool is a DISPATCH-MISS
 //     (the model chatted / picked another tool), reported but NOT scored as a broken
-//     tool. CODING tools (bash/read/write) run only in the pi-mono cloud sandbox and
-//     are never host tools: they are SKIP when they don't fire (no connected coding
-//     agent), PASS when the sandbox runs them. spawn_agent on the managed-cloud lane
-//     is an expected SKIP (pi-mono cannot spawn a local agent).
+//     tool. CODING tools (bash/read/write) are pi-mono's OWN built-in tools that run
+//     LOCALLY in the app working dir (NOT host tools, NOT a cloud sandbox) — they are
+//     independent of the Claude Code OAuth connect. They FIRE(local) when pi-mono runs
+//     them, SKIP when they don't; the write probe targets an OS-temp path (never the
+//     repo) and is swept in teardown. spawn_agent (spawning a SEPARATE local Claude
+//     Code agent) is an expected SKIP — the managed-cloud lane refuses it and it needs
+//     the (currently broken) connect stack; it is probed with empty args so nothing
+//     actually spawns.
 //
 // TEST-DATA HYGIENE (real account): Phase 1 runs a self-contained task CRUD
 // lifecycle whose final delete removes its own marker task, plus a REST sweep as a
@@ -67,6 +71,10 @@ const RUN_ID = Date.now().toString(36)
 const TASK_MARKER = `GAUNTLET-${RUN_ID}` // Phase 1 CRUD lifecycle marker
 const P2_MARKER = `GAUNTLET2-${RUN_ID}` // Phase 2 LLM-dispatch marker (separate task)
 const KG_NODE_ID = 'omi-gauntlet-selftest-node' // STABLE → idempotent, never accumulates
+// pi-mono runs its built-in bash/read/write in the LOCAL working dir, so the write
+// dispatch probe targets an OS-temp path (never the repo) and is swept in teardown.
+const WRITE_PROBE_PATH = path.join(os.tmpdir(), `omi-gauntlet-write-${RUN_ID}.txt`)
+const WRITE_PROBE_PROMPT_PATH = WRITE_PROBE_PATH.replace(/\\/g, '/')
 const TURN_TERMINAL_MS = 180_000
 const DIRECT_TIMEOUT_MS = 60_000
 const BACKEND_SYNC_TIMEOUT_MS = 60_000 // wait for a created task to get its backend_id
@@ -122,10 +130,10 @@ async function injectAuth(page, { apiKey, idToken, refreshToken }) {
     apiKey,
     appName: '[DEFAULT]'
   }
-  await page.evaluate(
-    ({ key, value }) => localStorage.setItem(key, JSON.stringify(value)),
-    { key: `firebase:authUser:${apiKey}:[DEFAULT]`, value: user }
-  )
+  await page.evaluate(({ key, value }) => localStorage.setItem(key, JSON.stringify(value)), {
+    key: `firebase:authUser:${apiKey}:[DEFAULT]`,
+    value: user
+  })
 }
 
 // Read the per-run audit log; return the set of tools with a phase:'after' line.
@@ -158,7 +166,9 @@ async function directExec(page, name, args = {}) {
   return page.evaluate(
     async ({ name, argumentsJSON, timeoutMs }) => {
       const call = window.omi.voiceToolExecute({ name, argumentsJSON })
-      const timeout = new Promise((res) => setTimeout(() => res(`Error: direct-exec timeout`), timeoutMs))
+      const timeout = new Promise((res) =>
+        setTimeout(() => res(`Error: direct-exec timeout`), timeoutMs)
+      )
       try {
         return await Promise.race([call, timeout])
       } catch (e) {
@@ -225,18 +235,33 @@ async function sendTurn(page, prompt, auditLog) {
   }
   await new Promise((r) => setTimeout(r, 800))
 
-  const evts = await page.evaluate((rid) => (window.__tev || []).filter((e) => e.requestId === rid), requestId)
+  const evts = await page.evaluate(
+    (rid) => (window.__tev || []).filter((e) => e.requestId === rid),
+    requestId
+  )
   const result = await page.evaluate(() => window.__result)
   const toolActivity = evts.filter((e) => e.type === 'tool_activity')
   const completedTools = [
-    ...new Set(toolActivity.filter((e) => e.status === 'completed').map((e) => e.name).filter(Boolean))
+    ...new Set(
+      toolActivity
+        .filter((e) => e.status === 'completed')
+        .map((e) => e.name)
+        .filter(Boolean)
+    )
   ]
   const toolOutputs = evts
     .filter((e) => e.type === 'tool_result_display')
     .map((e) => ({ name: e.name, output: e.output || '' }))
   const replyText =
-    evts.filter((e) => e.type === 'completed').map((e) => e.text).filter(Boolean).pop() ||
-    evts.filter((e) => e.type === 'text_delta').map((e) => e.text).join('')
+    evts
+      .filter((e) => e.type === 'completed')
+      .map((e) => e.text)
+      .filter(Boolean)
+      .pop() ||
+    evts
+      .filter((e) => e.type === 'text_delta')
+      .map((e) => e.text)
+      .join('')
   const rf = evts.find((e) => e.type === 'run_finished')
   const terminalStatus = rf?.status || result?.terminalStatus || 'unknown'
   const runError = rf?.error || (terminalStatus === 'failed' ? result?.error : undefined)
@@ -269,7 +294,13 @@ const NOT_ERROR = (out) => !/^Error:/.test(out) && !/^POLICY_DENIED/.test(out)
 async function runPhase1(page, restBases, idToken) {
   const rows = []
   const push = (tool, verdict, detail, out) => {
-    rows.push({ tool, layer: 'direct', verdict, detail, out: (out || '').slice(0, 160).replace(/\s+/g, ' ') })
+    rows.push({
+      tool,
+      layer: 'direct',
+      verdict,
+      detail,
+      out: (out || '').slice(0, 160).replace(/\s+/g, ' ')
+    })
     log(`  P1 ${verdict.padEnd(8)} ${tool.padEnd(22)} ${detail}`)
   }
 
@@ -317,7 +348,11 @@ async function runPhase1(page, restBases, idToken) {
       ok: (o) => {
         try {
           const j = JSON.parse(o)
-          return j && j.name === 'get_work_context' && (j.ok === true || typeof j.failure_code === 'string')
+          return (
+            j &&
+            j.name === 'get_work_context' &&
+            (j.ok === true || typeof j.failure_code === 'string')
+          )
         } catch {
           return false
         }
@@ -327,14 +362,26 @@ async function runPhase1(page, restBases, idToken) {
   ]
   for (const r of reads) {
     const out = await directExec(page, r.tool, r.args)
-    push(r.tool, r.ok(out) ? 'PASS' : 'BROKEN', r.ok(out) ? r.why : `bad output: ${out.slice(0, 80)}`, out)
+    push(
+      r.tool,
+      r.ok(out) ? 'PASS' : 'BROKEN',
+      r.ok(out) ? r.why : `bad output: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // — execute_sql (deterministic allowlisted query returns a result set) —
   {
-    const out = await directExec(page, 'execute_sql', { query: 'SELECT COUNT(*) AS n FROM action_items' })
+    const out = await directExec(page, 'execute_sql', {
+      query: 'SELECT COUNT(*) AS n FROM action_items'
+    })
     const ok = NOT_ERROR(out) && /row\(s\)/.test(out)
-    push('execute_sql', ok ? 'PASS' : 'BROKEN', ok ? 'returns a result set' : `bad output: ${out.slice(0, 80)}`, out)
+    push(
+      'execute_sql',
+      ok ? 'PASS' : 'BROKEN',
+      ok ? 'returns a result set' : `bad output: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // — capture_screen (a path, or POLICY_DENIED when sharing is off — both prove it ran) —
@@ -342,7 +389,16 @@ async function runPhase1(page, restBases, idToken) {
     const out = await directExec(page, 'capture_screen', {})
     const ok = /POLICY_DENIED/.test(out) || /\.png|screenshot|[A-Za-z]:\\/.test(out)
     const denied = /POLICY_DENIED/.test(out)
-    push('capture_screen', ok ? 'PASS' : 'BROKEN', ok ? (denied ? 'ran (screen-sharing off → policy denied)' : 'captured a screenshot path') : `bad output: ${out.slice(0, 80)}`, out)
+    push(
+      'capture_screen',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? denied
+          ? 'ran (screen-sharing off → policy denied)'
+          : 'captured a screenshot path'
+        : `bad output: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // — list_agent_sessions (control tool: JSON {ok, sessions[]}) —
@@ -355,7 +411,12 @@ async function runPhase1(page, restBases, idToken) {
     } catch {
       ok = false
     }
-    push('list_agent_sessions', ok ? 'PASS' : 'BROKEN', ok ? 'returns the sessions manifest' : `bad output: ${out.slice(0, 80)}`, out)
+    push(
+      'list_agent_sessions',
+      ok ? 'PASS' : 'BROKEN',
+      ok ? 'returns the sessions manifest' : `bad output: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // — spawn_agent (the coding-agent door: boots a real local Claude Code session).
@@ -386,9 +447,19 @@ async function runPhase1(page, restBases, idToken) {
       edges: []
     })
     const okStr = /^OK: saved \d+ entit/.test(out)
-    const { count } = await sqlCount(page, `SELECT COUNT(*) AS n FROM onboarding_kg_nodes WHERE node_id = '${KG_NODE_ID}'`)
+    const { count } = await sqlCount(
+      page,
+      `SELECT COUNT(*) AS n FROM onboarding_kg_nodes WHERE node_id = '${KG_NODE_ID}'`
+    )
     const ok = okStr && count != null && count >= 1
-    push('save_knowledge_graph', ok ? 'PASS' : 'BROKEN', ok ? `saved + confirmed in DB (node present)` : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`, out)
+    push(
+      'save_knowledge_graph',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? `saved + confirmed in DB (node present)`
+        : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`,
+      out
+    )
   }
 
   // — TASK CRUD LIFECYCLE (create → get → search → update → complete → delete),
@@ -398,16 +469,25 @@ async function runPhase1(page, restBases, idToken) {
 
   // create_action_item
   {
-    const out = await directExec(page, 'create_action_item', { description: `${TASK_MARKER} milk`, due_at: tomorrow })
+    const out = await directExec(page, 'create_action_item', {
+      description: `${TASK_MARKER} milk`,
+      due_at: tomorrow
+    })
     const okStr = /^OK: task .* created/.test(out)
     // Wait for the local row (+ its backend_id from background sync) to exist.
     const deadline = Date.now() + BACKEND_SYNC_TIMEOUT_MS
     let localCount = 0
     for (;;) {
-      const c = await sqlCount(page, `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND deleted = 0`)
+      const c = await sqlCount(
+        page,
+        `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND deleted = 0`
+      )
       localCount = c.count ?? 0
       if (localCount >= 1) {
-        const bid = await sqlScalar(page, `SELECT backend_id FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND backend_id IS NOT NULL ORDER BY id DESC LIMIT 1`)
+        const bid = await sqlScalar(
+          page,
+          `SELECT backend_id FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND backend_id IS NOT NULL ORDER BY id DESC LIMIT 1`
+        )
         if (bid.value && bid.value !== '') {
           backendId = bid.value
           break
@@ -417,14 +497,26 @@ async function runPhase1(page, restBases, idToken) {
       await new Promise((r) => setTimeout(r, 1500))
     }
     const ok = okStr && localCount >= 1
-    push('create_action_item', ok ? 'PASS' : 'BROKEN', ok ? `created + confirmed in DB (backend_id=${backendId ?? 'pending'})` : `okStr=${okStr} dbCount=${localCount} out=${out.slice(0, 60)}`, out)
+    push(
+      'create_action_item',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? `created + confirmed in DB (backend_id=${backendId ?? 'pending'})`
+        : `okStr=${okStr} dbCount=${localCount} out=${out.slice(0, 60)}`,
+      out
+    )
   }
 
   // get_action_items — proves the read returns the real row we just created
   {
     const out = await directExec(page, 'get_action_items', {})
     const ok = NOT_ERROR(out) && /^Found \d+ task/.test(out) && out.includes(TASK_MARKER)
-    push('get_action_items', ok ? 'PASS' : 'BROKEN', ok ? 'lists the created marker task' : `did not list marker: ${out.slice(0, 80)}`, out)
+    push(
+      'get_action_items',
+      ok ? 'PASS' : 'BROKEN',
+      ok ? 'lists the created marker task' : `did not list marker: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // search_tasks — valid shape (embeddings may lag, so empty is acceptable-but-noted)
@@ -432,27 +524,64 @@ async function runPhase1(page, restBases, idToken) {
     const out = await directExec(page, 'search_tasks', { query: 'milk' })
     const validShape = NOT_ERROR(out) && /^(Found \d+ task|No tasks found matching)/.test(out)
     const empty = /^No tasks found/.test(out)
-    push('search_tasks', validShape ? 'PASS' : 'BROKEN', validShape ? (empty ? 'ran (no embedding match yet)' : 'returned matches') : `bad output: ${out.slice(0, 80)}`, out)
+    push(
+      'search_tasks',
+      validShape ? 'PASS' : 'BROKEN',
+      validShape
+        ? empty
+          ? 'ran (no embedding match yet)'
+          : 'returned matches'
+        : `bad output: ${out.slice(0, 80)}`,
+      out
+    )
   }
 
   // update_action_item — needs the backend_id; confirm new description landed
   if (backendId) {
-    const out = await directExec(page, 'update_action_item', { action_item_id: backendId, description: `${TASK_MARKER} oat milk` })
+    const out = await directExec(page, 'update_action_item', {
+      action_item_id: backendId,
+      description: `${TASK_MARKER} oat milk`
+    })
     const okStr = /^OK: task .* updated/.test(out)
-    const { count } = await sqlCount(page, `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER + ' oat milk')}' AND deleted = 0`)
+    const { count } = await sqlCount(
+      page,
+      `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER + ' oat milk')}' AND deleted = 0`
+    )
     const ok = okStr && count != null && count >= 1
-    push('update_action_item', ok ? 'PASS' : 'BROKEN', ok ? 'updated + confirmed new description in DB' : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`, out)
+    push(
+      'update_action_item',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? 'updated + confirmed new description in DB'
+        : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`,
+      out
+    )
   } else {
-    push('update_action_item', 'INCONCL', 'task never synced a backend_id (backend sync down?) — cannot target by id', '')
+    push(
+      'update_action_item',
+      'INCONCL',
+      'task never synced a backend_id (backend sync down?) — cannot target by id',
+      ''
+    )
   }
 
   // complete_task — confirm completed=1
   if (backendId) {
     const out = await directExec(page, 'complete_task', { task_id: backendId })
     const okStr = /^OK: task .* (marked as completed|is already completed)/.test(out)
-    const { count } = await sqlCount(page, `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND completed = 1 AND deleted = 0`)
+    const { count } = await sqlCount(
+      page,
+      `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND completed = 1 AND deleted = 0`
+    )
     const ok = okStr && count != null && count >= 1
-    push('complete_task', ok ? 'PASS' : 'BROKEN', ok ? 'completed + confirmed completed=1 in DB' : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`, out)
+    push(
+      'complete_task',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? 'completed + confirmed completed=1 in DB'
+        : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`,
+      out
+    )
   } else {
     push('complete_task', 'INCONCL', 'no backend_id to target', '')
   }
@@ -461,9 +590,19 @@ async function runPhase1(page, restBases, idToken) {
   if (backendId) {
     const out = await directExec(page, 'delete_task', { task_id: backendId })
     const okStr = /^OK: task .* deleted/.test(out)
-    const { count } = await sqlCount(page, `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND deleted = 0`)
+    const { count } = await sqlCount(
+      page,
+      `SELECT COUNT(*) AS n FROM action_items WHERE description LIKE '${like(TASK_MARKER)}' AND deleted = 0`
+    )
     const ok = okStr && count === 0
-    push('delete_task', ok ? 'PASS' : 'BROKEN', ok ? 'deleted + confirmed 0 rows in DB' : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`, out)
+    push(
+      'delete_task',
+      ok ? 'PASS' : 'BROKEN',
+      ok
+        ? 'deleted + confirmed 0 rows in DB'
+        : `okStr=${okStr} dbCount=${count} out=${out.slice(0, 60)}`,
+      out
+    )
   } else {
     push('delete_task', 'INCONCL', 'no backend_id to target', '')
   }
@@ -476,27 +615,206 @@ async function runPhase1(page, restBases, idToken) {
 
 // ── Phase 2: LLM dispatch matrix ────────────────────────────────────────────────
 const PHASE2 = [
-  { id: 'get_action_items', kind: 'product', expect: ['get_action_items'], alt: ['search_tasks', 'execute_sql'], prompts: ['What are my tasks / action items?', 'Use get_action_items to list my current tasks.'] },
-  { id: 'create_action_item', kind: 'product', expect: ['create_action_item'], prompts: [`Add a task to my list: "${P2_MARKER} draft".`, `Use create_action_item to create a task whose description is exactly "${P2_MARKER} draft".`] },
-  { id: 'update_action_item', kind: 'product', expect: ['update_action_item'], alt: ['search_tasks', 'get_action_items'], prompts: [`Change my task containing "${P2_MARKER}" to "${P2_MARKER} final draft".`, `Use get_action_items to find the task whose description contains "${P2_MARKER}", then update_action_item to set its description to "${P2_MARKER} final draft".`] },
-  { id: 'complete_task', kind: 'product', expect: ['complete_task'], alt: ['update_action_item'], prompts: [`Mark my "${P2_MARKER}" task as done.`, `Find the task containing "${P2_MARKER}" and use complete_task to mark it completed.`] },
-  { id: 'search_tasks', kind: 'product', expect: ['search_tasks'], alt: ['execute_sql', 'get_action_items'], prompts: ['Search my tasks for anything about drafts.', 'Use the search_tasks tool with the query "draft".'] },
-  { id: 'delete_task', kind: 'product', expect: ['delete_task'], alt: ['get_action_items'], prompts: [`Delete my task containing "${P2_MARKER}".`, `Find the task whose description contains "${P2_MARKER}" and permanently delete it with delete_task.`] },
-  { id: 'get_memories', kind: 'product', expect: ['get_memories'], alt: ['search_memories'], prompts: ['What do you know about me? Check my memories.', 'Use get_memories to retrieve what Omi knows about me.'] },
-  { id: 'search_memories', kind: 'product', expect: ['search_memories'], alt: ['get_memories'], prompts: ['Search my memories for anything about coffee.', 'Use the search_memories tool with the query "coffee".'] },
-  { id: 'get_conversations', kind: 'product', expect: ['get_conversations'], alt: ['search_conversations'], prompts: ["What's my most recent conversation? Summarize it.", 'Use get_conversations to fetch my most recent conversation.'] },
-  { id: 'search_conversations', kind: 'product', expect: ['search_conversations'], alt: ['get_conversations'], prompts: ['Search my conversations for anything about launch.', 'Use the search_conversations tool with the query "launch".'] },
-  { id: 'semantic_search', kind: 'product', expect: ['semantic_search', 'search_screen_history'], alt: ['execute_sql'], prompts: ['When was I reading about machine learning? Search my screen history.', 'Use the semantic_search tool with the query "machine learning".'] },
-  { id: 'execute_sql', kind: 'product', expect: ['execute_sql'], prompts: ['How many rewind frames do I have? Query the local database.', 'Use execute_sql to run SELECT COUNT(*) over my rewind_frames table.'] },
-  { id: 'get_daily_recap', kind: 'product', expect: ['get_daily_recap'], alt: ['execute_sql', 'get_work_context'], prompts: ['What did I do today? Give me a recap.', 'Use the get_daily_recap tool for today (days_ago 0).'] },
-  { id: 'get_work_context', kind: 'product', expect: ['get_work_context'], alt: ['capture_screen'], prompts: ["What's on my screen right now?", 'Use the get_work_context tool to see my current screen and recent activity.'] },
-  { id: 'save_knowledge_graph', kind: 'product', expect: ['save_knowledge_graph'], prompts: [`Remember this entity in my knowledge graph: a concept called "${P2_MARKER} Topic".`, `Use save_knowledge_graph to save one node: id "${KG_NODE_ID}", label "Omi Gauntlet Self-Test", node_type concept.`] },
-  { id: 'capture_screen', kind: 'product', expect: ['capture_screen'], alt: ['get_work_context'], allowDenied: true, prompts: ['Take a screenshot of my screen right now.', 'Use the capture_screen tool to capture my screen this instant.'] },
-  { id: 'list_agent_sessions', kind: 'control', expect: ['list_agent_sessions'], prompts: ['List my running agent sessions.', 'Call list_agent_sessions and tell me what sessions exist.'] },
-  { id: 'bash', kind: 'coding', expect: ['bash'], prompts: ['Run the shell command: echo hello-gauntlet', 'Use your bash/shell tool to run exactly `echo hello-gauntlet`.'] },
-  { id: 'read', kind: 'coding', expect: ['read'], prompts: ['Read the first lines of any small text file you can find in the working directory.', 'Use your read/read-file tool to read a file and show its contents.'] },
-  { id: 'write', kind: 'coding', expect: ['write'], prompts: ['Create a file gauntlet-probe.txt containing the text hello.', 'Use your write/write-file tool to create gauntlet-probe.txt with the text hello.'] },
-  { id: 'spawn_agent', kind: 'spawn', expect: ['spawn_agent', 'spawn_background_agent'], prompts: ['Spin up a background agent to research the printing press.', 'Use spawn_agent to start a background agent researching the printing press.'] }
+  {
+    id: 'get_action_items',
+    kind: 'product',
+    expect: ['get_action_items'],
+    alt: ['search_tasks', 'execute_sql'],
+    prompts: ['What are my tasks / action items?', 'Use get_action_items to list my current tasks.']
+  },
+  {
+    id: 'create_action_item',
+    kind: 'product',
+    expect: ['create_action_item'],
+    prompts: [
+      `Add a task to my list: "${P2_MARKER} draft".`,
+      `Use create_action_item to create a task whose description is exactly "${P2_MARKER} draft".`
+    ]
+  },
+  {
+    id: 'update_action_item',
+    kind: 'product',
+    expect: ['update_action_item'],
+    alt: ['search_tasks', 'get_action_items'],
+    prompts: [
+      `Change my task containing "${P2_MARKER}" to "${P2_MARKER} final draft".`,
+      `Use get_action_items to find the task whose description contains "${P2_MARKER}", then update_action_item to set its description to "${P2_MARKER} final draft".`
+    ]
+  },
+  {
+    id: 'complete_task',
+    kind: 'product',
+    expect: ['complete_task'],
+    alt: ['update_action_item'],
+    prompts: [
+      `Mark my "${P2_MARKER}" task as done.`,
+      `Find the task containing "${P2_MARKER}" and use complete_task to mark it completed.`
+    ]
+  },
+  {
+    id: 'search_tasks',
+    kind: 'product',
+    expect: ['search_tasks'],
+    alt: ['execute_sql', 'get_action_items'],
+    prompts: [
+      'Search my tasks for anything about drafts.',
+      'Use the search_tasks tool with the query "draft".'
+    ]
+  },
+  {
+    id: 'delete_task',
+    kind: 'product',
+    expect: ['delete_task'],
+    alt: ['get_action_items'],
+    prompts: [
+      `Delete my task containing "${P2_MARKER}".`,
+      `Find the task whose description contains "${P2_MARKER}" and permanently delete it with delete_task.`
+    ]
+  },
+  {
+    id: 'get_memories',
+    kind: 'product',
+    expect: ['get_memories'],
+    alt: ['search_memories'],
+    prompts: [
+      'What do you know about me? Check my memories.',
+      'Use get_memories to retrieve what Omi knows about me.'
+    ]
+  },
+  {
+    id: 'search_memories',
+    kind: 'product',
+    expect: ['search_memories'],
+    alt: ['get_memories'],
+    prompts: [
+      'Search my memories for anything about coffee.',
+      'Use the search_memories tool with the query "coffee".'
+    ]
+  },
+  {
+    id: 'get_conversations',
+    kind: 'product',
+    expect: ['get_conversations'],
+    alt: ['search_conversations'],
+    prompts: [
+      "What's my most recent conversation? Summarize it.",
+      'Use get_conversations to fetch my most recent conversation.'
+    ]
+  },
+  {
+    id: 'search_conversations',
+    kind: 'product',
+    expect: ['search_conversations'],
+    alt: ['get_conversations'],
+    prompts: [
+      'Search my conversations for anything about launch.',
+      'Use the search_conversations tool with the query "launch".'
+    ]
+  },
+  {
+    id: 'semantic_search',
+    kind: 'product',
+    expect: ['semantic_search', 'search_screen_history'],
+    alt: ['execute_sql'],
+    prompts: [
+      'When was I reading about machine learning? Search my screen history.',
+      'Use the semantic_search tool with the query "machine learning".'
+    ]
+  },
+  {
+    id: 'execute_sql',
+    kind: 'product',
+    expect: ['execute_sql'],
+    prompts: [
+      'How many rewind frames do I have? Query the local database.',
+      'Use execute_sql to run SELECT COUNT(*) over my rewind_frames table.'
+    ]
+  },
+  {
+    id: 'get_daily_recap',
+    kind: 'product',
+    expect: ['get_daily_recap'],
+    alt: ['execute_sql', 'get_work_context'],
+    prompts: [
+      'What did I do today? Give me a recap.',
+      'Use the get_daily_recap tool for today (days_ago 0).'
+    ]
+  },
+  {
+    id: 'get_work_context',
+    kind: 'product',
+    expect: ['get_work_context'],
+    alt: ['capture_screen'],
+    prompts: [
+      "What's on my screen right now?",
+      'Use the get_work_context tool to see my current screen and recent activity.'
+    ]
+  },
+  {
+    id: 'save_knowledge_graph',
+    kind: 'product',
+    expect: ['save_knowledge_graph'],
+    prompts: [
+      `Remember this entity in my knowledge graph: a concept called "${P2_MARKER} Topic".`,
+      `Use save_knowledge_graph to save one node: id "${KG_NODE_ID}", label "Omi Gauntlet Self-Test", node_type concept.`
+    ]
+  },
+  {
+    id: 'capture_screen',
+    kind: 'product',
+    expect: ['capture_screen'],
+    alt: ['get_work_context'],
+    allowDenied: true,
+    prompts: [
+      'Take a screenshot of my screen right now.',
+      'Use the capture_screen tool to capture my screen this instant.'
+    ]
+  },
+  {
+    id: 'list_agent_sessions',
+    kind: 'control',
+    expect: ['list_agent_sessions'],
+    prompts: [
+      'List my running agent sessions.',
+      'Call list_agent_sessions and tell me what sessions exist.'
+    ]
+  },
+  {
+    id: 'bash',
+    kind: 'coding',
+    expect: ['bash'],
+    prompts: [
+      'Run the shell command: echo hello-gauntlet',
+      'Use your bash/shell tool to run exactly `echo hello-gauntlet`.'
+    ]
+  },
+  {
+    id: 'read',
+    kind: 'coding',
+    expect: ['read'],
+    prompts: [
+      'Read the first lines of any small text file you can find in the working directory.',
+      'Use your read/read-file tool to read a file and show its contents.'
+    ]
+  },
+  {
+    id: 'write',
+    kind: 'coding',
+    expect: ['write'],
+    prompts: [
+      `Create a file at ${WRITE_PROBE_PROMPT_PATH} containing exactly the text hello.`,
+      `Use your write/write-file tool to create the file ${WRITE_PROBE_PROMPT_PATH} with the contents hello.`
+    ]
+  },
+  {
+    id: 'spawn_agent',
+    kind: 'spawn',
+    expect: ['spawn_agent', 'spawn_background_agent'],
+    prompts: [
+      'Spin up a background agent to research the printing press.',
+      'Use spawn_agent to start a background agent researching the printing press.'
+    ]
+  }
 ]
 
 async function runPhase2(page, auditLog) {
@@ -513,7 +831,9 @@ async function runPhase2(page, auditLog) {
       outcome = await sendTurn(page, prompt, auditLog)
       const hit = outcome.completedTools.find((n) => accepted.has(n))
       const anyTool = outcome.completedTools[0]
-      log(`  P2 [${t.id}] t${turn + 1} tools=[${outcome.completedTools.join(',') || '-'}] status=${outcome.terminalStatus}${outcome.runError ? ` err=${outcome.runError.slice(0, 50)}` : ''}`)
+      log(
+        `  P2 [${t.id}] t${turn + 1} tools=[${outcome.completedTools.join(',') || '-'}] status=${outcome.terminalStatus}${outcome.runError ? ` err=${outcome.runError.slice(0, 50)}` : ''}`
+      )
       if (hit) {
         fired = hit
         break
@@ -522,7 +842,10 @@ async function runPhase2(page, auditLog) {
         fired = `~${anyTool}`
         break
       } // a different valid tool still proves dispatch reached the plane
-      const failed = outcome.terminalStatus === 'failed' || outcome.terminalStatus === 'unknown' || !!outcome.runError
+      const failed =
+        outcome.terminalStatus === 'failed' ||
+        outcome.terminalStatus === 'unknown' ||
+        !!outcome.runError
       if (failed && isTransientOutcome(outcome)) {
         if (transient >= MAX_TRANSIENT_RETRIES) break
         transient++
@@ -541,19 +864,36 @@ async function runPhase2(page, auditLog) {
     const exactFire = fired && !fired.startsWith('~')
     let verdict
     if (t.kind === 'product' || t.kind === 'control') {
-      verdict = didFire ? (exactFire ? 'FIRED' : 'FIRED(alt)') : isTransientOutcome(outcome || {}) ? 'TRANSIENT' : 'DISPATCH-MISS'
+      verdict = didFire
+        ? exactFire
+          ? 'FIRED'
+          : 'FIRED(alt)'
+        : isTransientOutcome(outcome || {})
+          ? 'TRANSIENT'
+          : 'DISPATCH-MISS'
     } else if (t.kind === 'coding') {
-      verdict = didFire ? 'FIRED(sandbox)' : 'SKIP' // no connected coding agent
+      verdict = didFire ? 'FIRED(local)' : 'SKIP' // pi-mono built-in, local working dir
     } else {
       // spawn on managed-cloud lane
       verdict = didFire ? 'FIRED' : 'SKIP'
     }
-    rows.push({ tool: t.id, layer: 'llm', kind: t.kind, verdict, fired: fired || '-', reply: (outcome?.reply || '').slice(0, 80) })
+    rows.push({
+      tool: t.id,
+      layer: 'llm',
+      kind: t.kind,
+      verdict,
+      fired: fired || '-',
+      reply: (outcome?.reply || '').slice(0, 80)
+    })
     log(`  P2 => ${verdict.padEnd(14)} ${t.id}`)
 
     // spawn_agent that fired → cancel it.
     if (t.kind === 'spawn' && didFire) {
-      await sendTurn(page, 'Cancel that background agent run now using cancel_agent_run (list_agent_sessions first if you need the run id).', auditLog).catch(() => {})
+      await sendTurn(
+        page,
+        'Cancel that background agent run now using cancel_agent_run (list_agent_sessions first if you need the run id).',
+        auditLog
+      ).catch(() => {})
     }
   }
   return rows
@@ -652,8 +992,18 @@ async function main() {
     await new Promise((r) => setTimeout(r, 3000))
     page = await findMainWindow(app)
     await page.waitForLoadState('domcontentloaded')
-    await waitFor(page, () => typeof globalThis.__omiVoice?.getAuthUid === 'function', 30_000, 'e2e hook')
-    const signedUid = await waitFor(page, () => globalThis.__omiVoice.getAuthUid(), 30_000, 'signed-in uid')
+    await waitFor(
+      page,
+      () => typeof globalThis.__omiVoice?.getAuthUid === 'function',
+      30_000,
+      'e2e hook'
+    )
+    const signedUid = await waitFor(
+      page,
+      () => globalThis.__omiVoice.getAuthUid(),
+      30_000,
+      'signed-in uid'
+    )
     log(`app signed in as ${signedUid}`)
 
     await page.evaluate(() => {
@@ -674,7 +1024,10 @@ async function main() {
         await new Promise((r) => setTimeout(r, 2000))
       }
     }
-    if (!warmed) throw new Error('control-plane owner never wired (voiceToolExecute kept failing the sign-in gate)')
+    if (!warmed)
+      throw new Error(
+        'control-plane owner never wired (voiceToolExecute kept failing the sign-in gate)'
+      )
 
     // ── PHASE 1 ──
     if (!PHASE2_ONLY) {
@@ -687,8 +1040,25 @@ async function main() {
       log('══════════ PHASE 2: LLM dispatch proof ══════════')
       phase2 = await runPhase2(page, auditLog)
       // Clean up the Phase-2 marker task (chat delete first, REST sweep as net).
-      await sendTurn(page, `Find the task whose description contains "${P2_MARKER}" (use get_action_items) and permanently delete it with delete_task.`, auditLog).catch(() => {})
+      await sendTurn(
+        page,
+        `Find the task whose description contains "${P2_MARKER}" (use get_action_items) and permanently delete it with delete_task.`,
+        auditLog
+      ).catch(() => {})
       await restDeleteMarked(restBases, idToken, P2_MARKER)
+      // Sweep the coding-tool write artifact (pi-mono writes to the LOCAL working
+      // dir, so a stray gauntlet-probe.txt can land at the repo/cwd root too).
+      for (const p of [
+        WRITE_PROBE_PATH,
+        path.join(root, 'gauntlet-probe.txt'),
+        path.join(process.cwd(), 'gauntlet-probe.txt')
+      ]) {
+        try {
+          fs.rmSync(p, { force: true })
+        } catch {
+          /* best effort */
+        }
+      }
     }
   } catch (e) {
     log(`ERROR: ${e?.stack || e}`)
@@ -715,17 +1085,25 @@ async function main() {
 
     log('── PHASE 1 (deterministic — authoritative) ──')
     for (const r of phase1) log(`  ${r.verdict.padEnd(8)} ${r.tool.padEnd(22)} ${r.detail}`)
-    log(`  Phase 1: ${p1pass.length} PASS · ${broken.length} BROKEN · ${p1skip.length} SKIP · ${inconcl.length} INCONCL`)
+    log(
+      `  Phase 1: ${p1pass.length} PASS · ${broken.length} BROKEN · ${p1skip.length} SKIP · ${inconcl.length} INCONCL`
+    )
 
     if (phase2.length) {
       log('── PHASE 2 (LLM dispatch — corroborating) ──')
-      for (const r of phase2) log(`  ${r.verdict.padEnd(14)} ${r.tool.padEnd(22)} fired=[${r.fired}]`)
+      for (const r of phase2)
+        log(`  ${r.verdict.padEnd(14)} ${r.tool.padEnd(22)} fired=[${r.fired}]`)
       const fired2 = phase2.filter((r) => r.verdict.startsWith('FIRED'))
       const miss2 = phase2.filter((r) => r.verdict === 'DISPATCH-MISS')
       const skip2 = phase2.filter((r) => r.verdict === 'SKIP')
       const trans2 = phase2.filter((r) => r.verdict === 'TRANSIENT')
-      log(`  Phase 2: ${fired2.length} FIRED · ${miss2.length} DISPATCH-MISS · ${skip2.length} SKIP · ${trans2.length} TRANSIENT`)
-      if (miss2.length) log(`  Dispatch-misses (model didn't call it; tool itself proven in P1): ${miss2.map((r) => r.tool).join(', ')}`)
+      log(
+        `  Phase 2: ${fired2.length} FIRED · ${miss2.length} DISPATCH-MISS · ${skip2.length} SKIP · ${trans2.length} TRANSIENT`
+      )
+      if (miss2.length)
+        log(
+          `  Dispatch-misses (model didn't call it; tool itself proven in P1): ${miss2.map((r) => r.tool).join(', ')}`
+        )
     }
 
     log('───────────────────────────────────────────────────────────────')
@@ -733,7 +1111,9 @@ async function main() {
       log(`  ❌ BROKEN PRODUCT TOOLS: ${broken.map((r) => r.tool).join(', ')}`)
       exitCode = 1
     } else if (inconcl.length) {
-      log(`  ⚠ INCONCLUSIVE (env/backend-sync, not a tool bug): ${inconcl.map((r) => r.tool).join(', ')}`)
+      log(
+        `  ⚠ INCONCLUSIVE (env/backend-sync, not a tool bug): ${inconcl.map((r) => r.tool).join(', ')}`
+      )
       if (exitCode === 0) exitCode = 3
     } else {
       log('  ✅ Every product/control tool PROVEN working end-to-end.')

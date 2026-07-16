@@ -79,3 +79,4 @@ orb-harness/dist/
 tool-gauntlet-report.json
 voice-tool-gauntlet-report.json
 soak-report.json
+gauntlet-probe.txt
