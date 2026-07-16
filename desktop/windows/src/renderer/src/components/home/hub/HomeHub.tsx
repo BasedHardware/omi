@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { createElement, useCallback, useEffect, useRef, useState } from 'react'
 import { useAppState } from '../../../state/appState'
 import { cn } from '../../../lib/utils'
 import { HomeCanvasBackground } from '../HomeCanvasBackground'
@@ -10,6 +10,7 @@ import { HubStatRibbon } from './HubStatRibbon'
 import { HubChatPanel } from './HubChatPanel'
 import { HubChatHeader } from '../../chat/HubChatHeader'
 import { HubConnectPanel } from './HubConnectPanel'
+import { getHubHomeWidgets } from './hubHomeWidgetsSlot'
 import { useHubStats } from './useHubStats'
 import { nextStage, isPanelMode } from './hubStage'
 import type { HomeStageEvent, HomeStageMode } from './hubStage'
@@ -59,6 +60,10 @@ const WORDMARK_H = 76
 export function HomeHub(): React.JSX.Element {
   const { chat } = useAppState()
   const stats = useHubStats()
+  // Track 3's resting-hub widget row (focused-goals chips), or null if unregistered.
+  // Rendered via createElement (not <JSX/>) since it is fetched at render time —
+  // mirrors HubConnectPanel's slot pattern and satisfies react-hooks/static-components.
+  const homeWidgets = getHubHomeWidgets()
   const [mode, setMode] = useState<HomeStageMode>('hub')
   // The draft is LOCAL (not in the app-wide chat hook) so typing re-renders only
   // the ask bar, not the shell and every mounted page.
@@ -239,6 +244,11 @@ export function HomeHub(): React.JSX.Element {
                 style={{ maxWidth: ASK_MAX_HUB }}
                 data-testid="hub-cluster"
               >
+                {/* Mac order: wordmark → FocusedGoals → stat ribbon. The chip row is
+                    one line + shrink-0, so it does not disturb the no-scroll flow. */}
+                {homeWidgets && (
+                  <div className="mb-[14px] w-full">{createElement(homeWidgets)}</div>
+                )}
                 <div className="mb-[14px] w-full">
                   <HubStatRibbon counts={stats} />
                 </div>
