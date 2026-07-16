@@ -833,6 +833,29 @@ export class PiMonoAdapter {
     return this.pendingRequests.size === 0
   }
 
+  /** Whether the pi subprocess is currently spawned. */
+  get isRunning(): boolean {
+    return this.process !== null
+  }
+
+  /** Force pi to start a fresh conversation, discarding all accumulated turns.
+   *
+   *  pi holds ONE accumulating conversation per subprocess (rpc.md: every
+   *  `prompt` continues the same message list). When a pinned worker's live
+   *  subprocess is reassigned to a DIFFERENT chat binding (pool eviction under
+   *  multichat load), reusing it without a reset would let the new chat's model
+   *  see the evicted chat's turns — a narrow same-user context bleed. pi
+   *  natively supports `new_session` (rpc.md) and the omi extension registers no
+   *  `session_before_switch` handler, so it is never cancelled. No-op when the
+   *  subprocess is not running (a fresh spawn already starts with no history);
+   *  the kernel's full-tail injection (resumeFidelity:'none') then re-seeds the
+   *  reassigned chat's own history from the durable transcript. */
+  resetConversation(): void {
+    if (!this.process) return
+    this.sendCommand({ type: 'new_session' })
+    process.stderr.write('[pi-mono] new_session sent (worker reassigned to a new chat)\n')
+  }
+
   /** Whether a deferred restart is pending (token or system prompt) */
   get hasPendingRestart(): boolean {
     return this.pendingTokenRefresh || this.pendingSystemPromptRefresh
@@ -1226,6 +1249,18 @@ export class PiMonoRuntimeAdapter implements RuntimeAdapter {
   }
 
   async openBinding(input: OpenBindingInput): Promise<OpenedBinding> {
+    // Pool-eviction reassignment guard. Opening a binding on a worker whose pi
+    // subprocess is ALREADY running means the pool evicted this pinned worker
+    // from a prior chat and reassigned it here (a chat that keeps its own worker
+    // resumes — resumeBinding — and never re-opens, so a live process at
+    // openBinding time is always a different-chat reassignment). Reset pi's
+    // accumulated conversation before the new chat's first prompt so it cannot
+    // inherit the evicted chat's turns; the kernel re-seeds this chat's own
+    // history via the full-tail injection (resumeFidelity:'none'). No-op on a
+    // fresh worker (subprocess not yet spawned → nothing accumulated).
+    if (this.harness.isRunning) {
+      this.harness.resetConversation()
+    }
     const adapterNativeSessionId = await this.harness.createSession({
       cwd: input.cwd,
       model: input.model,
