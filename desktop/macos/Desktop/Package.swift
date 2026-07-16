@@ -116,6 +116,9 @@ let package = Package(
         "OmiSupportTests",
         "OmiWALTests",
         "VoiceTurnDomainTests",
+      ],
+      swiftSettings: [
+        .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
       ]
     ),
     .testTarget(

@@ -14,7 +14,7 @@ final class DeviceSessionCoordinatorTests: XCTestCase {
     connection.suspendConnect = true
     let coordinator = makeCoordinator(connection: connection)
 
-    let connectTask = Task { try await coordinator.connect(to: bluetoothReliabilityTestDevice) }
+    let connectTask = Task { _ = try await coordinator.connect(to: bluetoothReliabilityTestDevice) }
     await waitForBluetoothReliabilityCondition { connection.connectCallCount == 1 }
 
     await coordinator.disconnect(reconnectAfter: nil)
@@ -34,7 +34,7 @@ final class DeviceSessionCoordinatorTests: XCTestCase {
     connection.suspendConnect = true
     let coordinator = makeCoordinator(connection: connection)
 
-    let connectTask = Task { try await coordinator.connect(to: bluetoothReliabilityTestDevice) }
+    let connectTask = Task { _ = try await coordinator.connect(to: bluetoothReliabilityTestDevice) }
     await waitForBluetoothReliabilityCondition { connection.connectCallCount == 1 }
 
     await coordinator.unpair()
@@ -102,7 +102,7 @@ final class DeviceSessionCoordinatorTests: XCTestCase {
     let request = try XCTUnwrap(capturedRequest)
 
     await coordinator.unpair()
-    let reconnect = Task { try await coordinator.reconnect(request) }
+    let reconnect = Task { _ = try await coordinator.reconnect(request) }
     await assertSuperseded(reconnect)
     XCTAssertNil(coordinator.snapshot.pairedDevice)
     XCTAssertEqual(connection.connectCallCount, 1)
@@ -132,7 +132,7 @@ final class DeviceSessionCoordinatorTests: XCTestCase {
     let request = try XCTUnwrap(capturedRequest)
 
     coordinator.stopReconnecting()
-    let reconnect = Task { try await coordinator.reconnect(request) }
+    let reconnect = Task { _ = try await coordinator.reconnect(request) }
     await assertSuperseded(reconnect)
     XCTAssertEqual(coordinator.snapshot.phase, .idle)
     XCTAssertEqual(connection.connectCallCount, 1)
@@ -274,7 +274,7 @@ final class DeviceSessionCoordinatorTests: XCTestCase {
   }
 
   private func assertSuperseded(
-    _ task: Task<DeviceConnection, Error>,
+    _ task: Task<Void, Error>,
     file: StaticString = #filePath,
     line: UInt = #line
   ) async {

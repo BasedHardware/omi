@@ -16,9 +16,9 @@ private struct CapturedRequest {
 /// so APIClient throws .httpError (not 401, which triggers AuthService refresh).
 private final class URLCapture: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _requests: [CapturedRequest] = []
-  private static var _statusCode = 403
-  private static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
+  private nonisolated(unsafe) static var _requests: [CapturedRequest] = []
+  private nonisolated(unsafe) static var _statusCode = 403
+  private nonisolated(unsafe) static var _responseBody = Data("{\"detail\":\"test\"}".utf8)
 
   static var capturedRequests: [CapturedRequest] {
     lock.lock()

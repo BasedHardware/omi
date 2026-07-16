@@ -4,10 +4,10 @@ import XCTest
 
 private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var deleteAttempts = 0
-  private static var alwaysUnauthorized = false
-  private static var forcedStatus: Int?
-  private static var forcedBody = Data()
+  private nonisolated(unsafe) static var deleteAttempts = 0
+  private nonisolated(unsafe) static var alwaysUnauthorized = false
+  private nonisolated(unsafe) static var forcedStatus: Int?
+  private nonisolated(unsafe) static var forcedBody = Data()
 
   static func reset() {
     lock.lock()
@@ -65,8 +65,8 @@ private final class AuthRetryURLStub: URLProtocol, @unchecked Sendable {
 
 private final class SuspendedOwnerBoundURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var pending: SuspendedOwnerBoundURLStub?
-  private static var started = false
+  private nonisolated(unsafe) static var pending: SuspendedOwnerBoundURLStub?
+  private nonisolated(unsafe) static var started = false
 
   static func reset() {
     lock.withLock {

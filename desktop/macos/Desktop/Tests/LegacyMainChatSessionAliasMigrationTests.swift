@@ -80,6 +80,12 @@ private actor HeldAliasOwnerTransition {
   }
 }
 
+/// UserDefaults is documented thread-safe; boxing it lets it cross into a
+/// `@Sendable` `Task` closure (mirrors production's RuntimeOwnerDefaultsReference).
+private struct SendableUserDefaults: @unchecked Sendable {
+  let value: UserDefaults
+}
+
 final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
   private let defaultsKey = LegacyMainChatSessionAliasMigration.defaultsKey
 
@@ -217,10 +223,11 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     let authorization = MigrationAuthorizationFlag()
     let importer = DelayedLegacyAliasImporter()
 
+    let sendableDefaults = SendableUserDefaults(value: defaults)
     let migration = Task {
       await LegacyMainChatSessionAliasMigration.migrate(
         ownerId: "owner-a",
-        defaults: defaults,
+        defaults: sendableDefaults.value,
         isAuthorizationCurrent: { authorization.isCurrent() }
       ) { entries in
         try await importer.importEntries(entries)
@@ -248,10 +255,11 @@ final class LegacyMainChatSessionAliasMigrationTests: XCTestCase {
     let importer = DelayedLegacyAliasImporter()
     let transitionGate = HeldAliasOwnerTransition()
 
+    let sendableDefaults = SendableUserDefaults(value: defaults)
     let migration = Task {
       await LegacyMainChatSessionAliasMigration.migrate(
         ownerId: "owner-a",
-        defaults: defaults,
+        defaults: sendableDefaults.value,
         isAuthorizationCurrent: { authorization.isCurrent() }
       ) { entries in
         try await importer.importEntries(entries)

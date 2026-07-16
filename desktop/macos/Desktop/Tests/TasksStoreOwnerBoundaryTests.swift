@@ -693,10 +693,12 @@ final class TasksStoreOwnerBoundaryTests: XCTestCase {
       automationOverrideID: automationOverrideID)
   }
 
+  @MainActor
   private func transitionEffectiveOwner(to ownerID: String?) async {
     await transitionEffectiveOwner(authOwnerID: ownerID, automationOverrideID: nil)
   }
 
+  @MainActor
   private func transitionEffectiveOwner(
     authOwnerID: String?,
     automationOverrideID: String?

@@ -277,7 +277,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     let transitionTask = Task { @MainActor in
       await RuntimeOwnerIdentity.applyAutomationOwnerOverride(
         "owner-b",
-        defaults: defaults
+        defaults: defaultsReference.value
       )
     }
     await EffectiveOwnerTransitionFence.shared.waitUntilTransitionIsPending()
@@ -302,7 +302,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
 
   @MainActor
   func testKernelStampedReadOnlySQLRejectsPhysicalMutationInput() async {
-    await establishStandardOwner("sql-owner")
+    await Self.establishStandardOwner("sql-owner")
     let result = await ChatToolExecutor.execute(
       ToolCall(
         name: "execute_sql",
@@ -321,13 +321,13 @@ final class ChatToolExecutorSQLTests: XCTestCase {
     )
   }
 
-  private func establishStandardOwner(_ ownerID: String?) async {
+  private static func establishStandardOwner(_ ownerID: String?) async {
     let bootstrapOwner = "chat-tool-sql-owner-bootstrap"
-    await transitionStandardOwner(to: ownerID == bootstrapOwner ? nil : bootstrapOwner)
-    await transitionStandardOwner(to: ownerID)
+    await Self.transitionStandardOwner(to: ownerID == bootstrapOwner ? nil : bootstrapOwner)
+    await Self.transitionStandardOwner(to: ownerID)
   }
 
-  private func transitionStandardOwner(to ownerID: String?) async {
+  private static func transitionStandardOwner(to ownerID: String?) async {
     await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
       defaults: .standard,
       allowAutomationOverride: false,
@@ -355,7 +355,7 @@ final class ChatToolExecutorSQLTests: XCTestCase {
       ownerOverride?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty == false
       ? ownerOverride
       : authOwner
-    await transitionStandardOwner(to: "chat-tool-sql-owner-restore")
+    await Self.transitionStandardOwner(to: "chat-tool-sql-owner-restore")
     await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
       defaults: .standard,
       allowAutomationOverride: true,

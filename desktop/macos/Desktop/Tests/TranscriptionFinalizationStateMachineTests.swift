@@ -11,7 +11,7 @@ private struct FinalizationRecoveryRequest {
 
 private final class FinalizationRecoveryURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _requests: [FinalizationRecoveryRequest] = []
+  private nonisolated(unsafe) static var _requests: [FinalizationRecoveryRequest] = []
 
   static var requests: [FinalizationRecoveryRequest] {
     lock.lock()

@@ -2,6 +2,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ v: T) { self.value = v }
+}
+
 // MARK: - ConferencingApps
 
 final class ConferencingAppsTests: XCTestCase {
@@ -199,7 +204,7 @@ final class MeetingDetectorTests: XCTestCase {
     let releaseSecondProbe = DispatchSemaphore(value: 0)
     let unexpectedChange = DispatchSemaphore(value: 0)
     let probeLock = NSLock()
-    var probeCount = 0
+    let probeCount = Box(0)
     var changes = [Bool]()
     var initialObservedCount = 0
     let detector = MeetingDetector(
@@ -207,8 +212,8 @@ final class MeetingDetectorTests: XCTestCase {
       offGracePeriod: 8.0,
       isMeetingNow: {
         probeLock.lock()
-        probeCount += 1
-        let probeIndex = probeCount
+        probeCount.value += 1
+        let probeIndex = probeCount.value
         probeLock.unlock()
 
         if probeIndex == 1 {

@@ -7,7 +7,7 @@ import XCTest
 /// companions (e.g. Clicky) park windows at .popUpMenu (101) and full-screen
 /// overlays at .screenSaver (1000). The bar buried at .statusBar (25) is the
 /// bug this pins down — its level must clear every common overlay level.
-final class FloatingBarWindowLevelTests: XCTestCase {
+@MainActor final class FloatingBarWindowLevelTests: XCTestCase {
   func testBarLevelClearsCommonOverlayLevels() {
     let level = FloatingControlBarWindow.alwaysOnTopLevel
     XCTAssertGreaterThan(level.rawValue, NSWindow.Level.statusBar.rawValue)

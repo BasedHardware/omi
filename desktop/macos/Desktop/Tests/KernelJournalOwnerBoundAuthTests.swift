@@ -5,7 +5,7 @@ import XCTest
 
 private final class InitialGreetingOwnerURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var requestCount = 0
+  private nonisolated(unsafe) static var requestCount = 0
 
   static func reset() {
     lock.lock()

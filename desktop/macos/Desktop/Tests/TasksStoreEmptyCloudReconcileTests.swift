@@ -433,6 +433,7 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       automationOverrideID: automationOverrideID)
   }
 
+  @MainActor
   private func transitionEffectiveOwner(
     authOwnerID: String?,
     automationOverrideID: String?

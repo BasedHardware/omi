@@ -3,6 +3,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ v: T) { self.value = v }
+}
+
 final class MemoryTaskInterruptionLedger: TaskInterruptionLedgerPersisting {
   var ledger = TaskInterruptionLedger()
   func load() -> TaskInterruptionLedger { ledger }
@@ -482,11 +487,11 @@ final class TaskContextualResurfacingTests: XCTestCase {
   func testOwnerSwitchInvalidatesLocalEvaluationCache() async throws {
     let client = FakeTaskContextualResurfacingClient()
     let subject = TaskContextSubject(kind: .task, id: "task-owner-switch", workstreamID: nil)
-    var ownerID = "owner-a"
+    let ownerID = Box("owner-a")
     let service = TaskContextualResurfacingService(
       client: client,
       debounceInterval: 60,
-      ownerIDProvider: { ownerID }
+      ownerIDProvider: { ownerID.value }
     )
     let event = try XCTUnwrap(
       TaskLocalContextEvent.normalized(
@@ -497,7 +502,7 @@ final class TaskContextualResurfacingTests: XCTestCase {
 
     await service.observe(event)
     await service.flush()
-    ownerID = "owner-b"
+    ownerID.value = "owner-b"
     await service.observe(event)
     await service.flush()
 
@@ -508,11 +513,11 @@ final class TaskContextualResurfacingTests: XCTestCase {
   @MainActor
   func testQueuedContextIsClearedWhenOwnerChangesBeforeFlush() async throws {
     let client = FakeTaskContextualResurfacingClient()
-    var ownerID = "owner-a"
+    let ownerID = Box("owner-a")
     let service = TaskContextualResurfacingService(
       client: client,
       debounceInterval: 60,
-      ownerIDProvider: { ownerID }
+      ownerIDProvider: { ownerID.value }
     )
     let ownerAEvent = try XCTUnwrap(
       TaskLocalContextEvent.normalized(
@@ -528,7 +533,7 @@ final class TaskContextualResurfacingTests: XCTestCase {
       ))
 
     await service.observe(ownerAEvent)
-    ownerID = "owner-b"
+    ownerID.value = "owner-b"
     await service.observe(ownerBEvent)
     await service.flush()
 
@@ -539,14 +544,14 @@ final class TaskContextualResurfacingTests: XCTestCase {
   @MainActor
   func testOwnerSwitchDuringControlAbortsSnapshotEvaluationAndInterruption() async throws {
     let client = FakeTaskContextualResurfacingClient()
-    var ownerID = "owner-a"
-    client.onControl = { ownerID = "owner-b" }
+    let ownerID = Box("owner-a")
+    client.onControl = { ownerID.value = "owner-b" }
     client.recommendations = [recommendation(id: "task-owner-a")]
     var interruptions: [TaskInterruptionCandidate] = []
     let service = TaskContextualResurfacingService(
       client: client,
       debounceInterval: 60,
-      ownerIDProvider: { ownerID },
+      ownerIDProvider: { ownerID.value },
       sendInterruption: { interruptions.append($0) }
     )
     let event = try XCTUnwrap(
@@ -569,14 +574,14 @@ final class TaskContextualResurfacingTests: XCTestCase {
   @MainActor
   func testOwnerSwitchDuringSnapshotAbortsEvaluationAndInterruption() async throws {
     let client = FakeTaskContextualResurfacingClient()
-    var ownerID = "owner-a"
-    client.onSnapshot = { ownerID = "owner-b" }
+    let ownerID = Box("owner-a")
+    client.onSnapshot = { ownerID.value = "owner-b" }
     client.recommendations = [recommendation(id: "task-owner-a")]
     var interruptions: [TaskInterruptionCandidate] = []
     let service = TaskContextualResurfacingService(
       client: client,
       debounceInterval: 60,
-      ownerIDProvider: { ownerID },
+      ownerIDProvider: { ownerID.value },
       sendInterruption: { interruptions.append($0) }
     )
     let event = try XCTUnwrap(

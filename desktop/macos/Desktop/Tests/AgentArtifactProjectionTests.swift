@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class AgentArtifactProjectionTests: XCTestCase {
+@MainActor final class AgentArtifactProjectionTests: XCTestCase {
   func testParsesArtifactMetadataProjection() throws {
     let result = """
       {
@@ -102,7 +102,7 @@ final class AgentArtifactProjectionTests: XCTestCase {
 }
 
 @MainActor
-private final class DelayedArtifactProjectionLoader: AgentArtifactProjectionLoading {
+private final class DelayedArtifactProjectionLoader: @preconcurrency AgentArtifactProjectionLoading {
   private var staleStartedContinuation: CheckedContinuation<Void, Never>?
   private var staleReleaseContinuation: CheckedContinuation<Void, Never>?
   private var staleRequestStarted = false

@@ -10,9 +10,9 @@ private struct StagedScoreBatchRequest {
 
 private final class StagedScoreBatchURLProtocol: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var requests: [StagedScoreBatchRequest] = []
+  private nonisolated(unsafe) static var requests: [StagedScoreBatchRequest] = []
 
-  private static var failingRequestNumber: Int?
+  private nonisolated(unsafe) static var failingRequestNumber: Int?
 
   static func reset() {
     lock.withLock {

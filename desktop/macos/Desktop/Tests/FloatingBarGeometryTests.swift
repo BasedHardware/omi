@@ -3,6 +3,7 @@ import XCTest
 
 @testable import Omi_Computer
 
+@MainActor
 final class FloatingBarGeometryTests: XCTestCase {
   private let visibleFrame = NSRect(x: 0, y: 0, width: 1440, height: 900)
   private let compactSize = NSSize(width: 40, height: 14)

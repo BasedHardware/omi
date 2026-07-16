@@ -2,7 +2,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class TranscriptSpeakerAssignmentTests: XCTestCase {
+@MainActor final class TranscriptSpeakerAssignmentTests: XCTestCase {
   func testTranscriptSegmentDecodingPreservesBackendId() throws {
     let json = """
       {

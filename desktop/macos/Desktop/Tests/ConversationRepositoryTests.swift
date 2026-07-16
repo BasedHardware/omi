@@ -810,6 +810,7 @@ private enum TestFailure: Error {
   case offline
 }
 
+@MainActor
 private final class FakeConversationRemote: ConversationRemoteDataSource {
   var listResult: Result<[ServerConversation], Error>
   var countResult: Result<Int, Error>
@@ -880,6 +881,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   }
 }
 
+@MainActor
 private final class FakeConversationLocal: ConversationLocalDataSource {
   var listResult: [ServerConversation]
   var countValue: Int

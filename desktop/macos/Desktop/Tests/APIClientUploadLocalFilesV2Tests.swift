@@ -103,11 +103,11 @@ final class APIClientUploadLocalFilesV2Tests: XCTestCase {
 
 private final class SyncUploadURLProtocol: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var statusCode = 403
-  private static var body = Data()
-  private static var responseHeaders: [String: String] = [:]
-  static var lastRequestURL: URL?
-  static var lastRequestMethod: String?
+  private nonisolated(unsafe) static var statusCode = 403
+  private nonisolated(unsafe) static var body = Data()
+  private nonisolated(unsafe) static var responseHeaders: [String: String] = [:]
+  nonisolated(unsafe) static var lastRequestURL: URL?
+  nonisolated(unsafe) static var lastRequestMethod: String?
 
   static func reset() {
     lock.lock()

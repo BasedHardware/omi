@@ -4,7 +4,7 @@ import XCTest
 
 private final class MemoryLifecycleURLStub: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _headers: [String: String] = [:]
+  private nonisolated(unsafe) static var _headers: [String: String] = [:]
 
   static var headers: [String: String] {
     get {

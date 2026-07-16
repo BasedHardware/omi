@@ -4,7 +4,7 @@ import XCTest
 
 @testable import Omi_Computer
 
-final class AgentPillLifecycleTests: XCTestCase {
+@MainActor final class AgentPillLifecycleTests: XCTestCase {
   @MainActor
   func testHydratedPillUsesKernelProviderIdentityForRendering() {
     let pill = AgentPill(query: "fixture", model: "fixture", ownerID: "owner")

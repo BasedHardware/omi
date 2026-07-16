@@ -2,6 +2,11 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ value: T) { self.value = value }
+}
+
 private actor SuspendedJournalListGate {
   private var ownerAStarted = false
   private var ownerAStartedWaiters: [CheckedContinuation<Void, Never>] = []
@@ -205,16 +210,16 @@ final class KernelTurnRecordedProjectionTests: XCTestCase {
   }
 
   func testLegacyBackendCollectorReadsEveryBoundedPageBeforeCheckpoint() async throws {
-    var requested: [(limit: Int, offset: Int)] = []
+    let requested = Box<[(limit: Int, offset: Int)]>([])
     let rows = try await ChatLegacyPageCollector.all { limit, offset in
-      requested.append((limit, offset))
+      requested.value.append((limit, offset))
       let end = min(offset + limit, 235)
       return offset < end ? Array(offset..<end) : []
     }
 
     XCTAssertEqual(rows, Array(0..<235))
-    XCTAssertEqual(requested.map(\.limit), [100, 100, 100])
-    XCTAssertEqual(requested.map(\.offset), [0, 100, 200])
+    XCTAssertEqual(requested.value.map(\.limit), [100, 100, 100])
+    XCTAssertEqual(requested.value.map(\.offset), [0, 100, 200])
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.owner, "desktop-main-chat")
     XCTAssertFalse(ChatLegacyCompatibilityMetadata.removalCondition.isEmpty)
     XCTAssertEqual(ChatLegacyCompatibilityMetadata.removeBy, "2026-10-01")

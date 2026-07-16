@@ -5,8 +5,7 @@ import XCTest
 /// Verifies the BYOK-vs-paywall precedence fix: a user with all four BYOK
 /// keys configured locally is never paywalled, regardless of the persisted
 /// `desktop_isPaywalled` flag.
-@MainActor
-final class BYOKPaywallTests: XCTestCase {
+@MainActor final class BYOKPaywallTests: XCTestCase {
   private let paywallKey = "desktop_isPaywalled"
 
   private func setAllBYOKKeys() {
@@ -21,11 +20,11 @@ final class BYOKPaywallTests: XCTestCase {
     }
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     CredentialHealthManager.shared.reset()
     clearAllBYOKKeys()
     UserDefaults.standard.removeObject(forKey: paywallKey)
-    super.tearDown()
+    try await super.tearDown()
   }
 
   func testByokActiveRequiresAllFourKeys() {

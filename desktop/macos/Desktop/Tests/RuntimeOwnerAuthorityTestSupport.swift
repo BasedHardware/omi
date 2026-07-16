@@ -2,6 +2,14 @@ import Foundation
 
 @testable import Omi_Computer
 
+/// Sendable carrier for a thread-safe `UserDefaults` instance so it can cross
+/// the actor boundary into the nonisolated owner-transition boundary. Mirrors
+/// the production `RuntimeOwnerDefaultsReference` wrapper; `UserDefaults` is
+/// documented thread-safe, hence `@unchecked Sendable`.
+private struct RuntimeOwnerDefaultsTestReference: @unchecked Sendable {
+  let value: UserDefaults
+}
+
 /// Keeps process-wide runtime-owner authorization aligned with the defaults a
 /// test exposes. Raw defaults restoration is insufficient after any production
 /// path has captured an authorization snapshot: the authority deliberately
@@ -48,27 +56,28 @@ final class RuntimeOwnerAuthorityTestFixture: @unchecked Sendable {
       finalOwner == "runtime-owner-test-bootstrap-a"
       ? "runtime-owner-test-bootstrap-b"
       : "runtime-owner-test-bootstrap-a"
+    let reference = RuntimeOwnerDefaultsTestReference(value: defaults)
     await transition(
-      defaults: defaults,
+      defaults: reference,
       authOwnerID: bootstrapOwner,
       automationOverrideID: nil,
       automationBackupID: nil)
     await transition(
-      defaults: defaults,
+      defaults: reference,
       authOwnerID: authOwnerID,
       automationOverrideID: automationOverrideID,
       automationBackupID: automationBackupID)
   }
 
-  private static func transition(
-    defaults: UserDefaults,
+  nonisolated private static func transition(
+    defaults: RuntimeOwnerDefaultsTestReference,
     authOwnerID: String?,
     automationOverrideID: String?,
     automationBackupID: String?
   ) async {
     let nextOwner = normalized(automationOverrideID) ?? normalized(authOwnerID)
     await RuntimeOwnerIdentity.performEffectiveOwnerTransition(
-      defaults: defaults,
+      defaults: defaults.value,
       allowAutomationOverride: true,
       plannedNextOwner: { _, _ in nextOwner },
       quiesceVoice: { _, _ in },

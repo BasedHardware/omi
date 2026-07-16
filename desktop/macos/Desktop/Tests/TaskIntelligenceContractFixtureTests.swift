@@ -10,7 +10,7 @@ private actor LegacyEffectSpy {
   func callCount() -> Int { calls }
 }
 
-private actor FakeCanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
+private final class FakeCanonicalScreenCandidateClient: CanonicalScreenCandidateClient {
   private var idempotencyKeys: [String] = []
   private var acceptCalls = 0
 
@@ -405,7 +405,7 @@ final class TaskIntelligenceContractFixtureTests: XCTestCase {
       deviceID: "device-hash",
       accountGeneration: 7
     )
-    let snapshot = await client.snapshot()
+    let snapshot = client.snapshot()
 
     XCTAssertEqual(beforeCrash?.candidateID, "candidate-1")
     XCTAssertEqual(afterRestart?.candidateID, "candidate-1")

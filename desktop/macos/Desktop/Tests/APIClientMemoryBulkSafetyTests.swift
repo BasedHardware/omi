@@ -11,7 +11,7 @@ private struct BulkCapturedRequest {
 
 private final class BulkURLCapture: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _requests: [BulkCapturedRequest] = []
+  private nonisolated(unsafe) static var _requests: [BulkCapturedRequest] = []
 
   static var capturedRequests: [BulkCapturedRequest] {
     lock.lock()

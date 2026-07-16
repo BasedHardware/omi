@@ -4,9 +4,9 @@ import XCTest
 
 private final class MemoryMutationURLCapture: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var _request: URLRequest?
-  private static var _body: Data?
-  private static var _requests: [(method: String, path: String)] = []
+  private nonisolated(unsafe) static var _request: URLRequest?
+  private nonisolated(unsafe) static var _body: Data?
+  private nonisolated(unsafe) static var _requests: [(method: String, path: String)] = []
 
   static var request: URLRequest? {
     lock.lock()
