@@ -167,6 +167,28 @@ final class ScreenRecordingPermissionPolicyTests: XCTestCase {
     XCTAssertFalse(ScreenRecordingPermissionPolicy.shouldMarkCaptureKitBroken(tccGranted: false))
   }
 
+  /// Regression: the onboarding "Reopen Omi" prompt looped forever because the
+  /// offer was static step config with no memory of restarts. The offer must
+  /// fire only for a grant that arrived during this process's lifetime.
+  func testRelaunchOfferedOnlyForGrantsArrivingWhileRunning() {
+    XCTAssertTrue(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: false),
+      "granted while running → capture is dead until relaunch, offer the reopen")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: true, grantedAtLaunch: true),
+      "already granted at launch (incl. right after a reopen) → never re-offer")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: false),
+      "not granted → nothing to apply")
+    XCTAssertFalse(
+      ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+        grantedNow: false, grantedAtLaunch: true),
+      "revoked while running → a relaunch can't help; the grant flow handles it")
+  }
+
   func testScreenCaptureRestartsUseSharedRelaunchCommand() throws {
     let src = try sourceFile("Sources/ScreenCaptureService.swift")
     XCTAssertTrue(src.contains("static func screenCaptureRelaunchCommand(appPath: String) -> String"))

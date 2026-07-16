@@ -291,6 +291,14 @@ extension AppState {
     }  // end DispatchQueue.main.async
   }
 
+  /// Screen recording was granted while this process was running, so capture
+  /// stays dead until the app relaunches. Drives the "Reopen Omi" offer.
+  var screenRecordingNeedsRelaunch: Bool {
+    ScreenRecordingPermissionPolicy.needsRelaunchToApply(
+      grantedNow: hasScreenRecordingPermission,
+      grantedAtLaunch: screenRecordingGrantedAtLaunch)
+  }
+
   /// Check screen recording permission status
   func checkScreenRecordingPermission() {
     let permissionGranted = ScreenCaptureService.checkPermission()

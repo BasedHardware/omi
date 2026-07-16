@@ -18,7 +18,6 @@ struct OnboardingPermissionStepView: View {
   let reasonTitle: String
   let reasonDetail: String
   let primaryActionLabel: String
-  let requiresRestart: Bool
   let onContinue: () -> Void
   let onSkip: () -> Void
   let onForceComplete: (() -> Void)?
@@ -102,7 +101,9 @@ struct OnboardingPermissionStepView: View {
 
           if isGranted {
             Button("Continue") {
-              switch OnboardingFlow.permissionContinueAction(requiresRestart: requiresRestart) {
+              switch OnboardingFlow.permissionContinueAction(
+                needsRelaunchToApply: needsRelaunchToApply)
+              {
               case .offerReopen:
                 showReopenPrompt = true
               case .advance:
@@ -141,7 +142,12 @@ struct OnboardingPermissionStepView: View {
         }
       }
       .alert("Reopen Omi to finish", isPresented: $showReopenPrompt) {
-        Button("Reopen Omi") { appState.restartApp() }
+        // Advance the persisted step BEFORE restarting — otherwise the
+        // relaunched app resumes on this same step and re-offers the reopen.
+        Button("Reopen Omi") {
+          onContinue()
+          appState.restartApp()
+        }
         Button("Later", role: .cancel) { onContinue() }
       } message: {
         Text("Omi needs to reopen to apply the permissions you just granted.")
@@ -159,6 +165,14 @@ struct OnboardingPermissionStepView: View {
 
   private var isGranted: Bool {
     coordinator.isPermissionGranted(permissionType, appState: appState)
+  }
+
+  /// Screen recording is the only permission whose grant can't apply to the
+  /// running process (macOS evaluates it per window-server connection, at
+  /// launch). Everything else — including Full Disk Access, which tccd checks
+  /// per file operation — advances without any reopen offer.
+  private var needsRelaunchToApply: Bool {
+    permissionType == "screen_recording" && appState.screenRecordingNeedsRelaunch
   }
 
   private var statusText: String {

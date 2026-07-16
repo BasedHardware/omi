@@ -195,7 +195,6 @@ struct OnboardingView: View {
           reasonTitle: "Screen Recording",
           reasonDetail: "Screen Recording lets Omi see what you're working on.",
           primaryActionLabel: "Open Screen Recording settings",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
             if !AppBuild.usesLazyDevPermissions {
@@ -225,7 +224,6 @@ struct OnboardingView: View {
           reasonTitle: "Disk Access",
           reasonDetail: "This lets Omi scan your projects and recent files.",
           primaryActionLabel: "Open Disk Access",
-          requiresRestart: true,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
             currentStep = 6
@@ -269,7 +267,6 @@ struct OnboardingView: View {
           reasonTitle: "Microphone",
           reasonDetail: "This lets Omi transcribe meetings and voice notes.",
           primaryActionLabel: "Grant microphone access",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
             currentStep = 8
@@ -295,7 +292,6 @@ struct OnboardingView: View {
           reasonTitle: "Accessibility",
           reasonDetail: "This lets Omi know which app you are using.",
           primaryActionLabel: "Open Accessibility settings",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
             currentStep = 9
@@ -322,7 +318,6 @@ struct OnboardingView: View {
           reasonTitle: "Automation",
           reasonDetail: "This lets Omi take actions when you ask.",
           primaryActionLabel: "Grant automation access",
-          requiresRestart: false,
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
             currentStep = 10

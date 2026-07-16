@@ -204,14 +204,16 @@ enum OnboardingFlow {
 
   /// What pressing Continue does on a granted permission step. Granting alone
   /// never navigates: the user stays on the page until they explicitly
-  /// continue. The restart-carrying step offers the deferred "Reopen Omi"
-  /// prompt instead of advancing directly (one restart applies every grant).
+  /// continue. The reopen offer is a runtime decision — it fires only when a
+  /// grant can't apply to the running process (screen recording granted after
+  /// launch), never from static step config: a process that already relaunched
+  /// after the grant advances like any other step.
   enum PermissionContinueAction: Equatable {
     case advance
     case offerReopen
   }
 
-  static func permissionContinueAction(requiresRestart: Bool) -> PermissionContinueAction {
-    requiresRestart ? .offerReopen : .advance
+  static func permissionContinueAction(needsRelaunchToApply: Bool) -> PermissionContinueAction {
+    needsRelaunchToApply ? .offerReopen : .advance
   }
 }

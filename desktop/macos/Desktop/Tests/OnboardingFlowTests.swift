@@ -323,12 +323,12 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
-  func testPermissionContinueAdvancesWithoutPendingRestart() {
-    XCTAssertEqual(OnboardingFlow.permissionContinueAction(requiresRestart: false), .advance)
+  func testPermissionContinueAdvancesWhenGrantAlreadyApplies() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: false), .advance)
   }
 
-  func testPermissionContinueOffersReopenForRestartCarryingStep() {
-    XCTAssertEqual(OnboardingFlow.permissionContinueAction(requiresRestart: true), .offerReopen)
+  func testPermissionContinueOffersReopenOnlyWhenGrantNeedsRelaunch() {
+    XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: true), .offerReopen)
   }
 
   func testPermissionStepNeverAutoAdvancesOnGrant() throws {
