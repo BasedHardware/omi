@@ -124,6 +124,7 @@ import { registerMicPermissionHandlers } from './ipc/micPermission'
 import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSentinel'
 import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
+import { isHideWindowShortcut } from './windowShortcuts'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
@@ -500,9 +501,17 @@ function createWindow(): BrowserWindow {
   })
 
   // Ctrl+Q quits for real while the window is focused (tray Quit and the
-  // app:quit IPC are the other real-quit paths).
-  mainWindow.webContents.on('before-input-event', (_e, input) => {
+  // app:quit IPC are the other real-quit paths). Ctrl+W hides to tray — the
+  // keyboard equivalent of the close button (macOS gets Cmd+W for free from its
+  // Window scene). Both are scoped to the main window via its own webContents.
+  mainWindow.webContents.on('before-input-event', (event, input) => {
     if (input.type === 'keyDown' && input.control && input.key.toLowerCase() === 'q') quitApp()
+    // Route through mainWindow.close() so it reuses the exact hide-to-tray path in
+    // the 'close' handler above — hides, never quits or destroys the window.
+    if (isHideWindowShortcut(input)) {
+      event.preventDefault()
+      mainWindow.close()
+    }
   })
   perfMark('window:created')
 
