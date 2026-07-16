@@ -531,6 +531,20 @@ class CaptureController extends ChangeNotifier
     await SharedPreferencesUtil().saveBool('nativeBleStreamingEnabled', enableNativeStreaming);
     await _applyLimitlessRealtimeSuppression(enabled);
     notifyListeners();
+    // A phone-mic session's mode is fixed at start, so a mid-session toggle
+    // must roll the session into a fresh one — otherwise _resetState() tears
+    // the socket down under a still-running Live session (no transcript, audio
+    // silently diverted to the offline WAL) and the UI keeps the Live card.
+    final phoneMicSessionActive = _phoneMicBatchActive || _activeSource is PhoneMicSource;
+    if (phoneMicSessionActive) {
+      try {
+        await stopStreamRecording();
+        await streamRecording();
+      } catch (e, st) {
+        Logger.error('[CaptureProvider] mode-switch session roll failed: $e\n$st');
+      }
+      return true;
+    }
     try {
       await onRecordProfileSettingChanged();
     } catch (_) {}
