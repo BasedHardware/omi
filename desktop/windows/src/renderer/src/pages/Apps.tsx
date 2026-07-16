@@ -33,6 +33,7 @@ import type {
 import { getCacheUid, readPersistedValue, writePersistedValue } from '../lib/persistentCache'
 import { toast } from '../lib/toast'
 import { worksExternally, setupUrl, isSetupCompleted, startSetupPolling } from '../lib/appInstall'
+import { AppDetailSheet } from '../components/apps/AppDetailSheet'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -83,16 +84,29 @@ const AppCard = memo(function AppCard({
   isOn,
   isBusy,
   isSettingUp,
-  onToggle
+  onToggle,
+  onOpen
 }: {
   app: AppCatalogItem
   isOn: boolean
   isBusy: boolean
   isSettingUp: boolean
   onToggle: (a: AppCatalogItem) => void
+  onOpen: (a: AppCatalogItem) => void
 }): React.JSX.Element {
   return (
-    <div className="surface-card-flat flex flex-col p-5 animate-fade-in">
+    <div
+      role="button"
+      tabIndex={0}
+      onClick={() => onOpen(app)}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault()
+          onOpen(app)
+        }
+      }}
+      className="surface-card-flat flex cursor-pointer flex-col p-5 animate-fade-in text-left"
+    >
       <div className="mb-3 flex items-start gap-3">
         {app.image ? (
           <img
@@ -138,7 +152,10 @@ const AppCard = memo(function AppCard({
           )}
         </div>
         <button
-          onClick={() => onToggle(app)}
+          onClick={(e) => {
+            e.stopPropagation()
+            onToggle(app)
+          }}
           disabled={isBusy || isSettingUp}
           className={`inline-flex items-center gap-1.5 rounded-xl border px-3 py-1.5 text-xs font-medium transition-all duration-200 ${
             isOn
@@ -167,13 +184,15 @@ function AppGrid({
   enabled,
   busy,
   settingUp,
-  onToggle
+  onToggle,
+  onOpen
 }: {
   apps: AppCatalogItem[]
   enabled: Set<string>
   busy: Set<string>
   settingUp: Set<string>
   onToggle: (a: AppCatalogItem) => void
+  onOpen: (a: AppCatalogItem) => void
 }): React.JSX.Element {
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -185,6 +204,7 @@ function AppGrid({
           isBusy={busy.has(a.id)}
           isSettingUp={settingUp.has(a.id)}
           onToggle={onToggle}
+          onOpen={onOpen}
         />
       ))}
     </div>
@@ -235,6 +255,11 @@ export function Apps(): React.JSX.Element {
   const [searchResults, setSearchResults] = useState<AppCatalogItem[] | null>(null)
   const [searchLoading, setSearchLoading] = useState(false)
   const [searchFallback, setSearchFallback] = useState(false)
+  // The app whose detail sheet is open (null = closed). The sheet is an in-page
+  // overlay (no route change), mounted keyed on the app id so switching apps
+  // remounts it fresh. Reuses the page's install state + toggle so card and sheet
+  // stay in sync.
+  const [selectedApp, setSelectedApp] = useState<AppCatalogItem | null>(null)
   const filterRef = useRef<HTMLDivElement>(null)
 
   const load = async (): Promise<void> => {
@@ -800,6 +825,7 @@ export function Apps(): React.JSX.Element {
                       busy={busy}
                       settingUp={settingUp}
                       onToggle={toggle}
+                      onOpen={setSelectedApp}
                     />
                     {view.apps.length > SEARCH_LIMIT && (
                       <p className="mt-3 text-center text-xs text-white/45">
@@ -848,6 +874,7 @@ export function Apps(): React.JSX.Element {
                       busy={busy}
                       settingUp={settingUp}
                       onToggle={toggle}
+                      onOpen={setSelectedApp}
                     />
                     {isExpanded && section.truncated && (
                       <p className="text-xs text-white/45">
@@ -862,6 +889,17 @@ export function Apps(): React.JSX.Element {
           </div>
         )}
       </div>
+      {selectedApp && (
+        <AppDetailSheet
+          key={selectedApp.id}
+          app={selectedApp}
+          enabled={enabled.has(selectedApp.id)}
+          busy={busy.has(selectedApp.id)}
+          settingUp={settingUp.has(selectedApp.id)}
+          onToggle={toggle}
+          onClose={() => setSelectedApp(null)}
+        />
+      )}
     </div>
   )
 }
