@@ -31,9 +31,9 @@ while read -r local_ref local_oid remote_ref remote_oid; do
 done
 
 if [ "${#PUSH_UPDATES[@]}" -gt 0 ]; then
-  echo "Running fast pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
+  echo "Running bounded pre-push checks for ${#PUSH_UPDATES[@]} pushed ref(s) against ${BASE_REMOTE_REF#refs/remotes/}."
 else
-  echo "Running fast pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
+  echo "Running bounded pre-push checks against ${BASE_REMOTE_REF#refs/remotes/} (merge-base ${BASE_REF:0:12})"
 fi
 
 declare -a CHANGED_FILES=()
@@ -328,6 +328,8 @@ check_backend_unit_tests_if_needed() {
     return
   fi
 
+  # #9440: pre-push is intentionally a bounded local-feedback gate, not a CI clone.
+  # Keep this cap: a broad selector must not turn ordinary pushes into the full suite.
   max_pre_push_tests="${PRE_PUSH_MAX_BACKEND_UNIT_TEST_FILES:-40}"
   if [ "$selected_count" -gt "$max_pre_push_tests" ]; then
     : > "$FAST_BACKEND_TESTS"
@@ -490,6 +492,8 @@ check_desktop_swift_if_needed() {
     return 1
   fi
 
+  # #9440: keep pre-push to this fast compile. The pinned-toolchain full suite and
+  # release compile belong to CI; adding them here causes push-time budget bloat.
   (
     cd desktop/macos
     xcrun swift build -c debug --package-path Desktop
@@ -595,4 +599,4 @@ run_step check_desktop_tool_surfaces_if_needed
 run_step check_gauntlet_evidence_if_needed
 run_step check_optional_formatters
 
-echo "Fast pre-push checks passed."
+echo "Bounded pre-push gate passed; CI remains the full test authority."
