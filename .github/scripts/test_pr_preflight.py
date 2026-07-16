@@ -12,9 +12,10 @@ import tempfile
 import time
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 from pr_metadata import load_from_api
-from pr_preflight import format_failure_class_suggest, select_checks
+from pr_preflight import changed_files, format_failure_class_suggest, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -59,6 +60,22 @@ class MetadataTests(unittest.TestCase):
 
 
 class SelectionTests(unittest.TestCase):
+    def test_changed_files_disables_rename_detection_to_preserve_both_move_paths(self) -> None:
+        root = Path("/repo")
+        source = "desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurnStateMachine.swift"
+        destination = "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift"
+        with patch("pr_preflight.run_git", return_value=f"{source}\n{destination}\n") as run_git:
+            self.assertEqual(changed_files(root, "base", "head"), [source, destination])
+
+        run_git.assert_called_once_with(
+            root,
+            "diff",
+            "--name-only",
+            "--no-renames",
+            "--diff-filter=ACMRTD",
+            "base...head",
+        )
+
     def test_make_preflight_resolves_pr_metadata_before_running_checks(self) -> None:
         result = subprocess.run(
             ["make", "-n", "preflight"],
@@ -79,7 +96,8 @@ class SelectionTests(unittest.TestCase):
             [
                 "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift",
                 "desktop/macos/agent/src/runtime/control-tools.ts",
-            ]
+            ],
+            platform="macos",
         )
         names = {check.name for check in checks}
         self.assertIn("product-invariants", names)
