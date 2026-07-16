@@ -293,4 +293,41 @@ final class OnboardingFlowTests: XCTestCase {
       )
     )
   }
+
+  /// Static tripwire (source inspection, not behavioral coverage): a step's
+  /// deferred completion callback must not fire after the user navigates away.
+  /// Each step that schedules "advance later" work stores it in a cancellable
+  /// Task and cancels it in .onDisappear — an uncancellable asyncAfter here
+  /// yanks the user forward after they pressed Back (free-navigation regression).
+  func testDeferredStepAdvanceCallbacksAreCancellableAndCancelledOnDisappear() throws {
+    let sites: [(file: String, task: String)] = [
+      ("OnboardingGoalStepView.swift", "saveTask"),
+      ("OnboardingHowDidYouHearStepView.swift", "advanceTask"),
+      ("OnboardingPermissionStepView.swift", "advanceTask"),
+    ]
+    for site in sites {
+      let source = try onboardingSourceFile(site.file)
+      XCTAssertTrue(
+        source.contains("@State private var \(site.task): Task<Void, Never>?"),
+        "\(site.file): deferred advance must be a stored cancellable Task")
+      XCTAssertTrue(
+        source.contains(".onDisappear"), "\(site.file): must cancel on disappear")
+      XCTAssertTrue(
+        source.contains("\(site.task)?.cancel()"),
+        "\(site.file): stored task must be cancelled")
+      XCTAssertFalse(
+        source.contains("asyncAfter"),
+        "\(site.file): asyncAfter is uncancellable — use a stored Task")
+    }
+  }
+
+  private func onboardingSourceFile(_ name: String) throws -> String {
+    let sourceURL = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
+      .deletingLastPathComponent()
+      .appendingPathComponent("Sources/Onboarding")
+      .appendingPathComponent(name)
+    // omi-test-quality: source-inspection -- static contract: forbids uncancellable deferred-advance patterns in step views
+    return try String(contentsOf: sourceURL, encoding: .utf8)
+  }
 }

@@ -12,6 +12,7 @@ struct OnboardingGoalStepView: View {
   let onForceComplete: (() -> Void)?
 
   @State private var customGoalSelected = false
+  @State private var saveTask: Task<Void, Never>?
 
   private static let customGoalOption = "Type my own"
 
@@ -87,6 +88,9 @@ struct OnboardingGoalStepView: View {
         customGoalSelected =
           !coordinator.goalDraft.isEmpty && !baseSuggestions.contains(coordinator.goalDraft)
       }
+      .onDisappear {
+        saveTask?.cancel()
+      }
     }
   }
 
@@ -115,14 +119,17 @@ struct OnboardingGoalStepView: View {
 
   private func saveGoalAndContinue() {
     guard shouldShowContinue, !coordinator.isSavingGoal else { return }
-    Task {
+    saveTask?.cancel()
+    saveTask = Task {
       coordinator.goalSaved = false
-      await coordinator.saveGoalIfNeeded()
-      guard coordinator.goalSaved else { return }
+      // Run the save in an unstructured child task so navigating away (which
+      // cancels saveTask in .onDisappear) never aborts the in-flight write —
+      // only the navigation side effects below are dropped.
+      await Task { await coordinator.saveGoalIfNeeded() }.value
+      guard coordinator.goalSaved, !Task.isCancelled else { return }
       let completed = await coordinator.completeIntro(appState: appState)
-      if completed {
-        onContinue()
-      }
+      guard completed, !Task.isCancelled else { return }
+      onContinue()
     }
   }
 }

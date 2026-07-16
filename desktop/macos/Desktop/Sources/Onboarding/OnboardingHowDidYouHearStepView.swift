@@ -14,6 +14,7 @@ struct OnboardingHowDidYouHearStepView: View {
   /// Only the first-ever selection auto-advances; revisits use Continue so
   /// changing your saved answer doesn't yank you forward.
   @State private var hadSelectionOnAppear = false
+  @State private var advanceTask: Task<Void, Never>?
 
   private static let sources = [
     "Social media",
@@ -52,7 +53,10 @@ struct OnboardingHowDidYouHearStepView: View {
               // First-ever answer auto-advances; on a revisit the user changes
               // the saved selection and moves on with the Continue button.
               if !hadSelectionOnAppear {
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                advanceTask?.cancel()
+                advanceTask = Task {
+                  try? await Task.sleep(nanoseconds: 250_000_000)
+                  guard !Task.isCancelled else { return }
                   onContinue()
                 }
               }
@@ -77,6 +81,9 @@ struct OnboardingHowDidYouHearStepView: View {
         if shuffledSources.isEmpty {
           shuffledSources = Self.sources.shuffled()
         }
+      }
+      .onDisappear {
+        advanceTask?.cancel()
       }
     }
   }
