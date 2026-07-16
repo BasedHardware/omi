@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { ChevronRight, X } from 'lucide-react'
 import { useGoogleConnection } from '../../../../hooks/useGoogleConnection'
 import { getCalendarStatus, type CalendarStatus } from '../../../../lib/calendarConnect'
+import { getXSession } from '../../../../lib/xSession'
+import type { XStatus } from '../../../../../../shared/types'
 import { TrayTile } from './TrayTile'
 
 // The Connections tray — the top level of the Connect stage, and the faithful port
@@ -16,7 +18,7 @@ import { TrayTile } from './TrayTile'
 
 export interface ConnectTrayCallbacks {
   /** LEFT brand tile → that import connector's detail (drill-in). */
-  onOpenSource: (id: 'gmail' | 'calendar' | 'sticky') => void
+  onOpenSource: (id: 'gmail' | 'calendar' | 'sticky' | 'x') => void
   /** LEFT "+ More" → the full Imports list. */
   onOpenImports: () => void
   /** RIGHT Claude/ChatGPT tiles AND "+ More" → the Exports (memory-pack) list. */
@@ -78,6 +80,29 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
     }
   }, [])
 
+  // X status via the main-process xStatus (see lib/xSession + XConnector). Signed out
+  // or an unconfigured backend just leaves the tile without a "Connected" label.
+  // Own cancellation ref (not the Calendar effect's) so this effect stays correct
+  // independently of it.
+  const [xConnected, setXConnected] = useState(false)
+  const xCanceled = useRef(false)
+  useEffect(() => {
+    xCanceled.current = false
+    void (async () => {
+      const session = await getXSession()
+      if (!session || xCanceled.current) return
+      try {
+        const s: XStatus = await window.omi.xStatus(session)
+        if (!xCanceled.current) setXConnected(s.connected)
+      } catch {
+        /* not configured / not connected — leave the label off */
+      }
+    })()
+    return () => {
+      xCanceled.current = true
+    }
+  }, [])
+
   return (
     <div className="relative flex h-full w-full flex-col" data-testid="connect-tray">
       <button
@@ -113,8 +138,12 @@ export function ConnectTray(props: ConnectTrayCallbacks): React.JSX.Element {
                   brand="sticky"
                   onClick={() => onOpenSource('sticky')}
                 />
-                {/* X (Twitter) tile lands here in the stacked follow-up connector PR
-                    (feat/win-x-connector), between Sticky Notes and Omi Device. */}
+                <TrayTile
+                  title="X (Twitter)"
+                  brand="x"
+                  connected={xConnected}
+                  onClick={() => onOpenSource('x')}
+                />
                 <TrayTile title="Omi Device" brand="omi" onClick={onOpenDevice} />
                 <TrayTile
                   title="More"

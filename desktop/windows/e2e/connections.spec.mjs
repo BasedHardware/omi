@@ -120,6 +120,7 @@ describe('Connections panel', () => {
         'tray-tile-gmail',
         'tray-tile-calendar',
         'tray-tile-sticky-notes',
+        'tray-tile-x-twitter',
         'tray-tile-omi-device',
         'tray-tile-more-imports',
         'tray-tile-ask-omi',
@@ -152,6 +153,9 @@ describe('Connections panel', () => {
         'Calendar',
         'Email',
         'Sticky Notes',
+        'X (Twitter)',
+        'ChatGPT',
+        'Claude',
         'Browse the App Marketplace'
       ]) {
         assert.ok(await hasText(page, text), `Imports list shows "${text}"`)
