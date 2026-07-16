@@ -224,6 +224,59 @@ describe('device-change handling (A7a)', () => {
   })
 })
 
+describe('rebuild ↔ warm race — no orphaned graph under PTT stress', () => {
+  // A key-down calls touchMic() → warmPttMic() on every press. If one lands while a
+  // rebuild ladder (device-change A7a / silent-mic A7b) is mid-createGraph — warmGraph
+  // momentarily null, reconfiguring true — warmPttMic must NOT start a second,
+  // competing createGraph. If it does, whichever resolves last wins warmGraph and the
+  // other graph is orphaned: a live mic stream + AudioContext + ScriptProcessorNode
+  // that is never torn down. Under PTT stress those leaked capture graphs accumulate
+  // and crash the audio service.
+  it('a key-down warm during the rebuild createGraph does not leak a second graph', async () => {
+    const mod = await freshModule()
+
+    // Deferred acquire: each createGraph parks on its own resolver, so we can hold the
+    // rebuild's createGraph in flight and slip a warmPttMic() (a key-down) in beside it.
+    const resolvers: Array<() => void> = []
+    h.acquire.mockReset().mockImplementation(
+      () =>
+        new Promise<MediaStream>((resolve) => {
+          resolvers.push(() => resolve({ getTracks: () => [] } as unknown as MediaStream))
+        })
+    )
+    const settleOne = async (): Promise<void> => {
+      const r = resolvers.shift()
+      if (!r) return
+      r()
+      // Flush createGraph's continuation + the awaiting caller's continuation.
+      for (let i = 0; i < 8; i++) await Promise.resolve()
+    }
+
+    // 1) Warm the mic → first graph G1.
+    const warm1 = mod.warmPttMic()
+    await settleOne()
+    await warm1
+
+    // 2) Rebuild: after the 0.3s settle it tears down G1 and parks on createGraph.
+    mod.rebuildWarmGraph('silent_mic', false)
+    await vi.advanceTimersByTimeAsync(300)
+    expect(h.teardown).toHaveBeenCalledTimes(1) // G1 gone; rebuild awaiting acquire
+
+    // 3) A key-down warms the mic WHILE the rebuild's createGraph is still in flight.
+    const warm2 = mod.warmPttMic()
+
+    // 4) Resolve every in-flight acquire and let all chains settle.
+    while (resolvers.length) await settleOne()
+    await warm2
+
+    // Exactly one live warm graph must remain: every graph created is either the
+    // current warm graph or was torn down. A leak shows up as acquires outrunning
+    // teardowns by more than one.
+    const live = h.acquire.mock.calls.length - h.teardown.mock.calls.length
+    expect(live).toBe(1)
+  })
+})
+
 describe('rebuild safety — never yanks an active hold', () => {
   it('defers when a hold is already attached, then runs on detach', async () => {
     const mod = await freshModule()
