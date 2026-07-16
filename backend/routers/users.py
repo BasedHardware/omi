@@ -31,6 +31,7 @@ from database.conversations import get_in_progress_conversation, get_conversatio
 from database.redis_db import (
     cache_user_geolocation,
     get_cached_user_geolocation,
+    refresh_user_geolocation_ttl,
     set_user_webhook_db,
     get_user_webhook_db,
     disable_user_webhook_db,
@@ -429,6 +430,9 @@ def set_user_geolocation(geolocation: Geolocation, uid: str = Depends(auth.get_c
 
             # Only update if location has changed up to 4 decimal places
             if last_lat == new_lat and last_lon == new_lon:
+                # Refresh the TTL so a stationary user's location doesn't expire; otherwise
+                # conversations/daily-recap created while the user hasn't moved lose their location.
+                refresh_user_geolocation_ttl(uid)
                 return {'status': 'ok', 'message': 'Location not changed significantly.'}
 
             cache_user_geolocation(uid, geolocation.model_dump())

@@ -7,7 +7,7 @@
     "backend/routers/mcp_sse.py": 1857,
     "backend/routers/sync.py": 1981,
     "backend/routers/transcribe.py": 3110,
-    "backend/routers/users.py": 2040,
+    "backend/routers/users.py": 2044,
     "backend/scripts/validate-backend-runtime-env.py": 1694,
     "backend/utils/apps.py": 1641,
     "backend/utils/memory/legacy_backfill.py": 1816,
@@ -50,6 +50,7 @@
     "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2892
   },
   "raise_justifications": {
+    "backend/routers/users.py": "Geolocation dedup path now refreshes the cache TTL (#9782) so a stationary user's location doesn't expire.",
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "PTT lifecycle ownership now passes explicit terminal and bounded completed-agent context through the runtime boundary.",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "PTT continuity work adds durable bridge seams and exact-turn automation evidence rather than parallel callbacks.",
     "desktop/macos/Desktop/Sources/FloatingControlBar/AgentPill.swift": "Agent completion presentation now follows the canonical terminal lifecycle used by PTT and chat.",

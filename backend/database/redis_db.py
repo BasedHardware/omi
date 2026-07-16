@@ -344,9 +344,19 @@ def get_cached_signed_url(blob_path: str) -> str:
     return signed_url.decode()
 
 
+GEOLOCATION_CACHE_TTL = 60 * 30  # 30 minutes
+
+
 def cache_user_geolocation(uid: str, geolocation: Dict[str, Any]) -> None:
     r.set(f'users:{uid}:geolocation', _serialize_cache_value(geolocation))
-    r.expire(f'users:{uid}:geolocation', 60 * 30)  # FIXME: too much?
+    r.expire(f'users:{uid}:geolocation', GEOLOCATION_CACHE_TTL)
+
+
+def refresh_user_geolocation_ttl(uid: str) -> None:
+    # A stationary user keeps re-sending the same coordinates, which set_user_geolocation
+    # dedups without rewriting the value. Refresh the TTL on that path so the cached location
+    # doesn't expire out from under conversations/daily-recap while the user hasn't moved.
+    r.expire(f'users:{uid}:geolocation', GEOLOCATION_CACHE_TTL)
 
 
 def get_cached_user_geolocation(uid: str) -> Optional[Dict[str, Any]]:
@@ -830,7 +840,8 @@ def remove_conversation_summary_app_id(app_id: str) -> bool:
 # Lua script: atomic increment + TTL in a single round-trip.
 # Returns [current_count, ttl_remaining].  Sets TTL on first hit
 # and self-heals any key that lost its TTL (prevents permanent buckets).
-_RATE_LIMIT_LUA = r.register_script("""
+_RATE_LIMIT_LUA = r.register_script(
+    """
 local key = KEYS[1]
 local window = tonumber(ARGV[1])
 local current = redis.call('INCR', key)
@@ -843,7 +854,8 @@ if ttl < 0 then
     ttl = window
 end
 return {current, ttl}
-""")
+"""
+)
 
 
 def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> tuple[bool, int, int]:
@@ -872,7 +884,8 @@ def check_rate_limit(key: str, policy: str, max_requests: int, window: int) -> t
 # Burst uses a sorted set keyed by timestamp-ms for sliding-window accuracy,
 # trimmed on every call (O(log n)). Daily char counter auto-expires at midnight
 # UTC (caller passes seconds_until_midnight_utc as the TTL).
-_TTS_RATE_LIMIT_LUA = r.register_script("""
+_TTS_RATE_LIMIT_LUA = r.register_script(
+    """
 local burst_key = KEYS[1]
 local daily_key = KEYS[2]
 local now_ms = tonumber(ARGV[1])
@@ -900,7 +913,8 @@ if new_daily == char_count then
     redis.call('EXPIRE', daily_key, daily_ttl)
 end
 return {0, 0}
-""")
+"""
+)
 
 
 def _seconds_until_midnight_utc() -> int:
