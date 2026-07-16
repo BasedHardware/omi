@@ -32,4 +32,22 @@ Its expected proof is successful GitHub OIDC exchange plus a `google_project`
 read of `based-hardware-dev`. Record the workflow URL and metadata-only
 read-back on [issue #9842](https://github.com/BasedHardware/omi/issues/9842).
 
+## Known partial-apply recovery
+
+If the #9842 bootstrap stops after creating only `google_service_account.plan`
+and `google_project_iam_member.plan_project_browser`, preserve that remote
+state. Do not import, delete, or reapply it with an unreviewed plan. After the
+display-name fix is merged, a separately approved development operator may
+create a fresh saved plan and check it with:
+
+```sh
+python3 .github/scripts/check_opentofu_development_wif_pilot.py \
+  --partial-recovery-plan-json <saved-plan.json>
+```
+
+The recovery check accepts only that exact two-resource prior state, those two
+resources as no-ops, and creates for the WIF pool, provider, and impersonation
+binding. It rejects every update, replacement, deletion, unexpected state
+entry, or IAM change. Apply only the saved plan that passes this check.
+
 Do not import existing resources, add a production backend config, or run this module against `based-hardware`.
