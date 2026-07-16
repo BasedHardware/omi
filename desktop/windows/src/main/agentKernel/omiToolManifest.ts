@@ -10,9 +10,9 @@
 // store, no Electron, no I/O, no native imports. Same nature as
 // ./controlToolManifest.
 //
-// DARK / additive: nothing in production imports this yet. It exists so PR-C2 can
-// wire it into desktopToolPolicy.ts (`descriptorFromToolName` →
-// `descriptorFromOmiTool(productManifestEntry(name))`) and the pi-mono relay.
+// LIVE: this manifest is imported by desktopToolPolicy.ts (`descriptorFromToolName`
+// → `descriptorFromOmiTool(productManifestEntry(name))`), the toolRelayBridge, and
+// the pi-mono relay extension — it drives the live tool plane, not just tests.
 // macOS exports the single-entry lookup as `toolManifestEntry`; Windows renames
 // it `productManifestEntry` to match the wiring pointer in desktopToolPolicy.ts's
 // header comment.

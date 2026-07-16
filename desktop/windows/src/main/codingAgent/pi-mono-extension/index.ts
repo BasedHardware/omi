@@ -707,6 +707,16 @@ async function callSwiftTool(
   // Lazy connect: resolve this turn's host bridge target and (re)connect on demand.
   // When no target is present but a socket is already live (e.g. an env-injection
   // host, or a pre-connected test), reuse it. When neither exists, degrade.
+  //
+  // NOTE (audit M2, considered + rejected): failing closed here — destroying the
+  // live socket whenever the target is null — is NOT applied on purpose. A token
+  // re-mint (pool eviction / resume) always writes the fresh {pipe,token} into the
+  // per-turn context file, so a null target never coexists with a *stale* token:
+  // the live socket's token is always the most recent valid one. And a context file
+  // may legitimately carry correlation data with no bridge target while the socket
+  // arrives via env injection, so a blanket fail-closed would regress that intended
+  // reuse path (covered by index.test.ts). ensureOmiConnection already drops+reconnects
+  // on any token change, which is where the real stale-authority window is closed.
   const target = await omiBridgeTarget()
   if (signal?.aborted) return Promise.resolve('Error: tool call aborted')
   if (target) {

@@ -67,9 +67,9 @@ import type {
 } from './interface'
 
 // === Harness-config types (trimmed from Windows interface.ts) ================
-// Re-declared locally so the pi-mono port stays self-contained and DARK — it
-// does not widen the shared adapter contract. These mirror the macOS
-// interface.ts definitions the harness class depends on.
+// Re-declared locally so the pi-mono port stays self-contained — it does not widen
+// the shared adapter contract. These mirror the macOS interface.ts definitions the
+// harness class depends on.
 
 /** Configuration for creating the pi-mono harness adapter. */
 export interface HarnessConfig {
@@ -957,12 +957,15 @@ export class PiMonoAdapter {
       return
     }
     mkdirSync(dirname(this.contextFilePath), { recursive: true })
+    // 0o600: the context file carries this turn's bridge token (an authority
+    // credential), so keep it owner-only on POSIX. No-op on Windows FS, harmless.
     writeFileSync(
       this.contextFilePath,
       JSON.stringify({
         adapterId: 'pi-mono',
         ...context
-      })
+      }),
+      { mode: 0o600 }
     )
   }
 

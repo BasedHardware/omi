@@ -16,9 +16,10 @@
 // from the token binding, plus an AbortSignal that fires on client disconnect).
 // They add no authority surface: task writes go through the same taskSyncEngine the
 // Tasks UI uses (local-first + background REST under the relayed session), and every
-// read is local. Errors are RETURNED as `"Error: …"` strings, never thrown past the
-// relay's tool_result contract. The one network-touching read (semantic_search's
-// query embedding) honors ctx.signal.
+// read is local. Executors aim to RETURN `"Error: …"` strings rather than throw, so
+// the relay's tool_result contract holds; the relay bridge also catches a stray
+// throw as a final backstop. The one network-touching read (semantic_search's query
+// embedding) honors ctx.signal.
 
 import type { ProductToolContext, ProductToolExecutor } from './toolRelayBridge'
 import type {
@@ -370,7 +371,15 @@ export function createUpdateActionItemExecutor(
     const task = await d.findByBackendId(id)
     if (!task) return `Error: task not found with id '${id}'`
 
-    const description = typeof input.description === 'string' ? input.description : undefined
+    // A provided description is trimmed and must be non-empty — never let an update
+    // blank out a task's description (matches create_action_item's stringArg gate).
+    // An absent description leaves it unchanged.
+    let description: string | undefined
+    if (typeof input.description === 'string') {
+      const trimmed = input.description.trim()
+      if (trimmed.length === 0) return 'Error: description cannot be empty'
+      description = trimmed
+    }
     const fields: { description?: string; dueAt?: number | null; clearDueAt?: boolean } = {}
     if (description !== undefined) fields.description = description
     if (due.ms !== undefined) fields.dueAt = due.ms

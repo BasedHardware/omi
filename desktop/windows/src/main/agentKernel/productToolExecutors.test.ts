@@ -293,6 +293,23 @@ describe('update_action_item', () => {
     expect(d.toggleTask).toHaveBeenCalledWith('b1', true)
     expect(out).toBe("OK: task 'old' updated")
   })
+
+  it('rejects an empty/whitespace description instead of blanking the task', async () => {
+    for (const description of ['', '   ']) {
+      const d = mutate(action({ backendId: 'b1', description: 'keep me' }))
+      const exec = createUpdateActionItemExecutor(d)
+      const out = await exec({ action_item_id: 'b1', description }, ctx())
+      expect(out).toBe('Error: description cannot be empty')
+      expect(d.updateTask).not.toHaveBeenCalled()
+    }
+  })
+
+  it('trims a provided description before updating', async () => {
+    const d = mutate(action({ backendId: 'b1', description: 'old' }))
+    const exec = createUpdateActionItemExecutor(d)
+    await exec({ action_item_id: 'b1', description: '  tidy  ' }, ctx())
+    expect(d.updateTask).toHaveBeenCalledWith('b1', { description: 'tidy' })
+  })
 })
 
 // --- complete_task -----------------------------------------------------------

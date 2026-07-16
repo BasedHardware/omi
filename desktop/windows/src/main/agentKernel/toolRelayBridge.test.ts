@@ -248,6 +248,36 @@ describe('the token handshake gates the connection', () => {
   })
 })
 
+// === per-binding eviction =====================================================
+
+describe('closeBinding evicts a binding so the maps stay bounded', () => {
+  it('re-minting after closeBinding yields a fresh token, and the old one is dead', async () => {
+    const { kernel } = newKernel()
+    const bridge = await startBridge(kernel)
+
+    const first = bridge.register('sess-1', 'pi-mono')
+    // register is idempotent while the binding is live.
+    expect(bridge.register('sess-1', 'pi-mono').token).toBe(first.token)
+
+    bridge.closeBinding('sess-1', 'pi-mono')
+
+    // After eviction a re-register mints a NEW token (proof the entry was removed).
+    const second = bridge.register('sess-1', 'pi-mono')
+    expect(second.token).not.toBe(first.token)
+
+    // The evicted token no longer authenticates.
+    const client = new RelayClient(first.pipePath)
+    openClients.push(client)
+    await expect(client.hello(first.token)).rejects.toThrow()
+  })
+
+  it('is a no-op for an unknown binding', async () => {
+    const { kernel } = newKernel()
+    const bridge = await startBridge(kernel)
+    expect(() => bridge.closeBinding('nope', 'pi-mono')).not.toThrow()
+  })
+})
+
 // === control-tool dispatch with host-derived context ==========================
 
 describe('control tools dispatch through handleAgentControlToolCall', () => {
