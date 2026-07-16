@@ -507,7 +507,7 @@ def check_repository() -> list[str]:
     return errors
 
 
-def run_self_test() -> None:
+def _self_test_firestore_schema_ownership() -> None:
     firestore_read_only = """name: fixture
 jobs:
   verify:
@@ -610,6 +610,7 @@ jobs:
     ):
         raise PolicyError("a missing canonical Firestore schema writer bypassed ownership enforcement")
 
+def _self_test_workflow_lock() -> None:
     good = """name: fixture
 concurrency:
   group: deploy-fixture-development
@@ -649,6 +650,7 @@ jobs:
     ):
         raise PolicyError("cancel-in-progress: true satisfied the deploy contract")
 
+def _self_test_deploy_guards() -> None:
     in_deploy_acceptance = """name: fixture
 jobs:
   deploy:
@@ -766,6 +768,14 @@ jobs:
 """
     if not validate_pusher_config_preflight("fixture.yml", masked_preflight):
         raise PolicyError("masked pusher ConfigMap preflight satisfied the deploy contract")
+
+
+def run_self_test() -> None:
+    """Exercise independent policy fixtures without creating a monolithic test body."""
+
+    _self_test_firestore_schema_ownership()
+    _self_test_workflow_lock()
+    _self_test_deploy_guards()
 
 
 def main() -> int:
