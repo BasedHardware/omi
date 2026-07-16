@@ -163,27 +163,69 @@ describe('Connections panel', () => {
       await new Promise((r) => setTimeout(r, 300))
       await page.screenshot({ path: path.join(shotsDir, 'connections-02-imports.png') })
 
-      // Back to the tray, then the OpenClaw "coming soon" detail.
+      // Back to the tray, then the Claude / Claude Code export destination —
+      // now a REAL connect detail (Claude Code config row + the assisted Claude
+      // OAuth card + the memory-pack row), not a "coming soon" placeholder.
+      await clickTestId(page, 'connections-back')
+      await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 10000 })
+      await clickTestId(page, 'tray-tile-claude-claude-code')
+      await page.waitForFunction(
+        () => document.querySelector('[data-testid="connections-detail"]'),
+        { timeout: 10000 }
+      )
+      // Each row resolves — never a dead button.
+      for (const id of [
+        'connector-claude-claude-code',
+        'connector-claude',
+        'connector-memory-pack-for-claude'
+      ]) {
+        const present = await page.evaluate(
+          (t) => !!document.querySelector(`[data-testid="${t}"]`),
+          id
+        )
+        assert.ok(present, `Claude detail shows row ${id}`)
+      }
+      await new Promise((r) => setTimeout(r, 400))
+      await page.screenshot({ path: path.join(shotsDir, 'connections-03-claude-detail.png') })
+
+      // Expand the assisted Claude OAuth card to reveal the copy-rows guide.
+      await page.evaluate(() => {
+        const row = document.querySelector('[data-testid="connector-claude"]')
+        const btn = row?.querySelector('button')
+        btn?.click()
+      })
+      await new Promise((r) => setTimeout(r, 400))
+      await page.screenshot({ path: path.join(shotsDir, 'connections-04-claude-oauth-card.png') })
+
+      // Back, then ChatGPT / Codex — Codex config row + ChatGPT OAuth card + pack.
+      await clickTestId(page, 'connections-back')
+      await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 10000 })
+      await clickTestId(page, 'tray-tile-chatgpt-codex')
+      await page.waitForFunction(
+        () => document.querySelector('[data-testid="connections-detail"]'),
+        { timeout: 10000 }
+      )
+      await new Promise((r) => setTimeout(r, 400))
+      await page.screenshot({ path: path.join(shotsDir, 'connections-05-chatgpt-detail.png') })
+
+      // Back, then OpenClaw — a gated CLI connector: "Requires OpenClaw", no dead button.
       await clickTestId(page, 'connections-back')
       await page.waitForSelector('[data-testid="connect-tray"]', { timeout: 10000 })
       await clickTestId(page, 'tray-tile-openclaw')
       await page.waitForFunction(
-        () =>
-          !![...document.querySelectorAll('*')].find(
-            (el) => el.textContent === 'Live connection setup is coming soon.'
-          ),
+        () => document.querySelector('[data-testid="connector-openclaw"]'),
         { timeout: 10000 }
       )
       await new Promise((r) => setTimeout(r, 300))
-      await page.screenshot({ path: path.join(shotsDir, 'connections-03-comingsoon.png') })
+      await page.screenshot({ path: path.join(shotsDir, 'connections-06-openclaw-gated.png') })
 
-      // The App Marketplace link (in the coming-soon detail) navigates to /apps.
+      // The App Marketplace link (in an export detail) navigates to /apps.
       await clickTestId(page, 'connector-browse-the-app-marketplace')
       await page.waitForFunction(() => window.location.hash.includes('/apps'), undefined, {
         timeout: 10000
       })
       await new Promise((r) => setTimeout(r, 400))
-      await page.screenshot({ path: path.join(shotsDir, 'connections-04-apps-nav.png') })
+      await page.screenshot({ path: path.join(shotsDir, 'connections-07-apps-nav.png') })
     } finally {
       await cleanup()
     }

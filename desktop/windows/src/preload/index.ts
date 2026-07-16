@@ -56,6 +56,7 @@ import type { ByokEnrollResult, ByokProvider } from '../shared/byok'
 import type {
   McpConnectorId,
   McpExportsSnapshot,
+  McpConnectResult,
   McpCloudConnectorInfo
 } from '../shared/mcpExports'
 import { GPU_CONTEXT_LOST_CHANNEL } from '../shared/types'
@@ -354,7 +355,7 @@ const omi: OmiBridgeApi = {
     connectorId: McpConnectorId,
     token: string,
     ownerUserId: string
-  ): Promise<McpExportsSnapshot> =>
+  ): Promise<McpConnectResult> =>
     ipcRenderer.invoke('mcp:connect', connectorId, token, ownerUserId),
   mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string): Promise<McpExportsSnapshot> =>
     ipcRenderer.invoke('mcp:disconnect', connectorId, ownerUserId),
@@ -365,10 +366,8 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('mcp:changed', listener)
     return () => ipcRenderer.removeListener('mcp:changed', listener)
   },
-  // Cloud (OAuth) connector cards + connected state. `token` (nullable) is
-  // relayed for the grants lookup; the cards themselves carry no secret.
-  mcpCloudInfo: (token: string | null): Promise<McpCloudConnectorInfo[]> =>
-    ipcRenderer.invoke('mcp:cloudInfo', token),
+  // Cloud (OAuth) connector cards — static field values (no secret, no key).
+  mcpCloudInfo: (): Promise<McpCloudConnectorInfo[]> => ipcRenderer.invoke('mcp:cloudInfo'),
   mcpOpenCloudConnector: (url: string): Promise<void> =>
     ipcRenderer.invoke('mcp:openCloudConnector', url),
   // Memory-PACK variant: main formats the pack, copies it to the clipboard, and

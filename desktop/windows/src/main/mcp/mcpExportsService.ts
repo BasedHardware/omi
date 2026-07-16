@@ -23,6 +23,10 @@ export interface McpKeyStoreLike {
 }
 
 export class McpExportsService {
+  // In-flight mint per owner, so a rapid double-connect mints ONCE and both
+  // callers share the result (no duplicate backend keys).
+  private minting = new Map<string, Promise<McpKeyRecord>>()
+
   constructor(
     private readonly store: McpKeyStoreLike,
     private readonly fetchImpl: FetchLike = fetch
@@ -32,15 +36,26 @@ export class McpExportsService {
   async ensureKey(ownerUserId: string, token: string, apiBase: string): Promise<McpKeyRecord> {
     const existing = this.store.read(ownerUserId)
     if (existing) return existing
-    const minted = await mintMcpKey(apiBase, token, MCP_KEY_NAME, this.fetchImpl)
-    const record: McpKeyRecord = { id: minted.id, name: minted.name, key: minted.key }
-    this.store.write(ownerUserId, record)
-    return record
+    const inflight = this.minting.get(ownerUserId)
+    if (inflight) return inflight
+    const promise = (async (): Promise<McpKeyRecord> => {
+      const minted = await mintMcpKey(apiBase, token, MCP_KEY_NAME, this.fetchImpl)
+      const record: McpKeyRecord = { id: minted.id, name: minted.name, key: minted.key }
+      this.store.write(ownerUserId, record)
+      return record
+    })().finally(() => this.minting.delete(ownerUserId))
+    this.minting.set(ownerUserId, promise)
+    return promise
   }
 
   /** True when this account already has a stored key (no network). */
   hasKey(ownerUserId: string): boolean {
     return this.store.read(ownerUserId) !== null
+  }
+
+  /** The stored key record for this account (owner-guarded), or null. No network. */
+  storedKey(ownerUserId: string): McpKeyRecord | null {
+    return this.store.read(ownerUserId)
   }
 
   /**

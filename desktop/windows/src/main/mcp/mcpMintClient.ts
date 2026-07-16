@@ -87,40 +87,6 @@ export async function listMcpKeys(
     .map((r) => ({ id: r.id, name: r.name ?? '' }))
 }
 
-/**
- * List the user's granted MCP OAuth clients (GET /v1/mcp/oauth/grants). Used to
- * detect whether a cloud connector (ChatGPT/Claude) has completed its OAuth
- * handshake — a grant whose client_id matches the connector means "connected".
- * Returns the set of granted client_ids; empty on any error (treated as none).
- */
-export async function listOauthGrantClientIds(
-  apiBase: string,
-  token: string,
-  fetchImpl: FetchLike = fetch
-): Promise<Set<string>> {
-  try {
-    const url = `${apiBase.replace(/\/+$/, '')}/v1/mcp/oauth/grants`
-    const res = await fetchImpl(url, { method: 'GET', headers: authHeaders(token) })
-    if (!res.ok) return new Set()
-    const data = (await res.json()) as unknown
-    const rows = Array.isArray(data)
-      ? data
-      : Array.isArray((data as { grants?: unknown[] })?.grants)
-        ? (data as { grants: unknown[] }).grants
-        : []
-    const ids = new Set<string>()
-    for (const r of rows) {
-      const cid =
-        (r as { client_id?: unknown; clientId?: unknown })?.client_id ??
-        (r as { clientId?: unknown })?.clientId
-      if (typeof cid === 'string') ids.add(cid)
-    }
-    return ids
-  } catch {
-    return new Set()
-  }
-}
-
 /** Revoke a hosted MCP key by id. A 404 is treated as already-gone (idempotent). */
 export async function deleteMcpKey(
   apiBase: string,

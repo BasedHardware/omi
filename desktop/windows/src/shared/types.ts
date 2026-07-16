@@ -1,6 +1,11 @@
 // BYOK provider key types used by the OmiBridgeApi surface below.
 import type { ByokEnrollResult, ByokKeys, ByokProvider } from './byok'
-import type { McpConnectorId, McpExportsSnapshot, McpCloudConnectorInfo } from './mcpExports'
+import type {
+  McpConnectorId,
+  McpExportsSnapshot,
+  McpConnectResult,
+  McpCloudConnectorInfo
+} from './mcpExports'
 
 /** Cap for PCM chunks queued while an audio lane is becoming ready (~5s of
  *  16kHz mono int16). Shared by BOTH pre-ready buffers — the renderer's
@@ -1164,21 +1169,22 @@ export type OmiBridgeApi = {
    *  Firebase uid (owner-uid guard on the key). */
   mcpStatus: (ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Mint-or-reuse the hosted key and write the connector's MCP config. The
-   *  Firebase token + uid are relayed from the renderer; the key stays in main. */
+   *  Firebase token + uid are relayed from the renderer; the key stays in main.
+   *  Returns the fresh snapshot plus a manual setup card when CLI automation
+   *  failed and the user should run the copy-command instead. */
   mcpConnect: (
     connectorId: McpConnectorId,
     token: string,
     ownerUserId: string
-  ) => Promise<McpExportsSnapshot>
+  ) => Promise<McpConnectResult>
   /** Remove the connector's MCP config entry. */
   mcpDisconnect: (connectorId: McpConnectorId, ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Rotate the hosted key and rewrite any already-connected configs. */
   mcpRotateKey: (token: string, ownerUserId: string) => Promise<McpExportsSnapshot>
   /** Fires when any connector's status changed. Returns an unsubscribe fn. */
   onMcpChanged: (cb: () => void) => () => void
-  /** ChatGPT/Claude assisted-connector cards + connected state. `token` (nullable)
-   *  is relayed for the OAuth grants lookup; the cards carry no secret. */
-  mcpCloudInfo: (token: string | null) => Promise<McpCloudConnectorInfo[]>
+  /** ChatGPT/Claude assisted-connector cards (static field values, no secret). */
+  mcpCloudInfo: () => Promise<McpCloudConnectorInfo[]>
   /** Open a cloud connector's provider connector page (assisted "open & guide"). */
   mcpOpenCloudConnector: (url: string) => Promise<void>
   /** Memory-PACK variant: format the pack, copy to clipboard, open the provider

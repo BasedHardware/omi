@@ -11,7 +11,7 @@
 import { ipcMain, webContents, clipboard, shell } from 'electron'
 import { McpKeyStore } from '../mcp/mcpKeyStore'
 import { McpExportsService } from '../mcp/mcpExportsService'
-import { buildCloudConnectors, connectedCloudConnectors } from '../mcp/cloudConnectors'
+import { buildCloudConnectors } from '../mcp/cloudConnectors'
 import { buildMemoryPack, memoryPackChatUrl, type MemoryPackProvider } from '../mcp/memoryPack'
 import type { ExportMemory } from '../../shared/types'
 import type { McpCloudConnectorInfo } from '../../shared/mcpExports'
@@ -24,15 +24,24 @@ import {
 } from '../mcp/claudeConfig'
 import {
   probeCliConnector,
-  connectCodex,
-  disconnectCodex,
-  codexConnected
+  connectCli,
+  disconnectCli,
+  cliConnected,
+  buildSetupCard,
+  type CliConnectorId
 } from '../mcp/cliConnectors'
 import type {
   McpConnectorId,
   McpConnectorStatus,
+  McpConnectResult,
   McpExportsSnapshot
 } from '../../shared/mcpExports'
+
+const CLI_IDS: readonly CliConnectorId[] = ['codex', 'openclaw', 'hermes']
+
+function isCliConnector(id: McpConnectorId): id is CliConnectorId {
+  return (CLI_IDS as readonly string[]).includes(id)
+}
 
 let service: McpExportsService | null = null
 
@@ -52,8 +61,14 @@ function broadcastChanged(): void {
   }
 }
 
-async function claudeStatus(base: string): Promise<McpConnectorStatus> {
-  const connected = claudeMcpConnected(base)
+// The current account's stored key (for the key-aware "connected" re-scan). No
+// network — null until the account has minted one via a connect.
+function storedKey(ownerUserId: string): string | undefined {
+  return getService().storedKey(ownerUserId)?.key ?? undefined
+}
+
+function claudeStatus(base: string, key: string | undefined): McpConnectorStatus {
+  const connected = claudeMcpConnected(base, claudeConfigPath(), key)
   const detected = detectClaudeCode()
   return {
     id: 'claudeCode',
@@ -62,51 +77,57 @@ async function claudeStatus(base: string): Promise<McpConnectorStatus> {
   }
 }
 
-async function codexStatus(): Promise<McpConnectorStatus> {
-  const probe = probeCliConnector('codex')
-  const connected = probe.detected ? await codexConnected() : false
+function cliStatus(id: CliConnectorId, base: string, key: string | undefined): McpConnectorStatus {
+  const probe = probeCliConnector(id)
+  if (!probe.detected) return { id, kind: 'requiresTool' }
+  const connected = key ? cliConnected(id, base, key) : false
+  return { id, kind: connected ? 'connected' : 'available' }
+}
+
+function snapshot(ownerUserId: string): McpExportsSnapshot {
+  const base = apiBase()
+  const key = storedKey(ownerUserId)
   return {
-    id: 'codex',
-    kind: connected ? 'connected' : probe.detected && probe.writable ? 'available' : 'requiresTool'
+    hasKey: getService().hasKey(ownerUserId),
+    connectors: [
+      claudeStatus(base, key),
+      cliStatus('codex', base, key),
+      cliStatus('openclaw', base, key),
+      cliStatus('hermes', base, key)
+    ]
   }
 }
 
-function cliOnlyStatus(id: 'openclaw' | 'hermes'): McpConnectorStatus {
-  const probe = probeCliConnector(id)
-  // OpenClaw/Hermes config-write is not yet ported (needs the exact macOS
-  // syntax), so they are never 'available' — a detected-but-unported tool still
-  // reports 'requiresTool' rather than offering a Connect action that no-ops.
-  return { id, kind: probe.detected && probe.writable ? 'available' : 'requiresTool' }
-}
-
-async function snapshot(ownerUserId: string): Promise<McpExportsSnapshot> {
-  const base = apiBase()
-  const connectors = await Promise.all([
-    claudeStatus(base),
-    codexStatus(),
-    Promise.resolve(cliOnlyStatus('openclaw')),
-    Promise.resolve(cliOnlyStatus('hermes'))
-  ])
-  return { hasKey: getService().hasKey(ownerUserId), connectors }
-}
-
-/** Mint-or-reuse the hosted key, then write the connector's config. */
+/**
+ * Mint-or-reuse the hosted key, then write the connector's config. For a CLI
+ * connector whose automation FAILS, return its manual setup card so the UI can
+ * show the copy-command fallback (Mac's manual path).
+ */
 async function connect(
   connectorId: McpConnectorId,
   token: string,
   ownerUserId: string
-): Promise<McpExportsSnapshot> {
+): Promise<McpConnectResult> {
   const base = apiBase()
   const record = await getService().ensureKey(ownerUserId, token, base)
   if (connectorId === 'claudeCode') {
     writeClaudeMcpEntry(base, record.key)
-  } else if (connectorId === 'codex') {
-    await connectCodex(base, record.key)
+  } else if (isCliConnector(connectorId)) {
+    try {
+      await connectCli(connectorId, base, record.key)
+    } catch {
+      // Automation failed (tool quirk / permissions) — fall back to the manual card.
+      broadcastChanged()
+      return {
+        snapshot: snapshot(ownerUserId),
+        setupCard: buildSetupCard(connectorId, base, record.key)
+      }
+    }
   } else {
-    throw new Error(`Connector ${connectorId} is not yet available for connect`)
+    throw new Error(`Unknown connector ${connectorId}`)
   }
   broadcastChanged()
-  return snapshot(ownerUserId)
+  return { snapshot: snapshot(ownerUserId) }
 }
 
 async function disconnect(
@@ -114,7 +135,7 @@ async function disconnect(
   ownerUserId: string
 ): Promise<McpExportsSnapshot> {
   if (connectorId === 'claudeCode') removeClaudeMcpEntry()
-  else if (connectorId === 'codex') await disconnectCodex()
+  else if (isCliConnector(connectorId)) await disconnectCli(connectorId)
   broadcastChanged()
   return snapshot(ownerUserId)
 }
@@ -122,20 +143,27 @@ async function disconnect(
 /** Rotate the hosted key and rewrite any already-connected config connectors. */
 async function rotate(token: string, ownerUserId: string): Promise<McpExportsSnapshot> {
   const base = apiBase()
+  const oldKey = storedKey(ownerUserId)
+  // Which connectors were pointing at the OLD key (rewrite only those).
+  const claudeWas = claudeMcpConnected(base, claudeConfigPath(), oldKey)
+  const cliWas = CLI_IDS.filter((id) => (oldKey ? cliConnected(id, base, oldKey) : false))
   const record = await getService().rotateKey(ownerUserId, token, base)
-  // Re-point every connector that was pointing at the old key.
-  if (claudeMcpConnected(base)) writeClaudeMcpEntry(base, record.key)
-  if (await codexConnected()) await connectCodex(base, record.key)
+  if (claudeWas) writeClaudeMcpEntry(base, record.key)
+  for (const id of cliWas) {
+    try {
+      await connectCli(id, base, record.key)
+    } catch {
+      /* best-effort re-point; the manual card still reflects the new key */
+    }
+  }
   broadcastChanged()
   return snapshot(ownerUserId)
 }
 
-/** Cloud (OAuth) connector cards + their connected state (grants lookup). */
-async function cloudInfo(token: string | null): Promise<McpCloudConnectorInfo[]> {
-  const base = apiBase()
-  const infos = buildCloudConnectors(base)
-  const connected = await connectedCloudConnectors(base, token)
-  return infos.map((info) => ({ ...info, connected: connected.has(info.id) }))
+/** Cloud (OAuth) connector cards — static field values. Connected-state is a
+ *  local renderer latch (Mac has no reliable probe; we replicate that gap). */
+function cloudInfo(): McpCloudConnectorInfo[] {
+  return buildCloudConnectors(apiBase())
 }
 
 /**
@@ -146,18 +174,19 @@ async function cloudInfo(token: string | null): Promise<McpCloudConnectorInfo[]>
 function openMemoryPack(provider: MemoryPackProvider, memories: ExportMemory[]): string {
   clipboard.writeText(buildMemoryPack(provider, memories))
   const url = memoryPackChatUrl(provider)
-  void shell.openExternal(url)
+  // Don't spawn a real browser under E2E (keeps the screenshot harness hermetic).
+  if (!process.env.OMI_E2E) void shell.openExternal(url)
   return url
 }
 
 /** Open a cloud connector's provider connector page (the assisted "open & guide"). */
 function openCloudConnector(url: string): void {
-  void shell.openExternal(url)
+  if (!process.env.OMI_E2E) void shell.openExternal(url)
 }
 
 export function registerMcpExportsHandlers(): void {
   ipcMain.handle('mcp:status', (_e, ownerUserId: string) => snapshot(ownerUserId))
-  ipcMain.handle('mcp:cloudInfo', (_e, token: string | null) => cloudInfo(token))
+  ipcMain.handle('mcp:cloudInfo', () => cloudInfo())
   ipcMain.handle('mcp:openCloudConnector', (_e, url: string) => openCloudConnector(url))
   ipcMain.handle('mcp:memoryPack', (_e, provider: MemoryPackProvider, memories: ExportMemory[]) =>
     openMemoryPack(provider, memories)

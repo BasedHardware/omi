@@ -18,8 +18,9 @@ import { MemoryPackRow } from './MemoryPackRow'
 // endpoint. When this account has a hosted key, a quiet "Rotate key" control
 // lets the user revoke + re-mint (rewriting any connected configs).
 //
-// The cloud (ChatGPT/Claude OAuth) and memory-pack variants attach as additional
-// rows here once their flows land; the config connectors are the shipped path.
+// ChatGPT/Claude also get the assisted cloud (OAuth) connector card and a
+// memory-pack row beneath the config connector; OpenClaw/Hermes show only their
+// gated config connector.
 
 // Which config connectors belong under each export destination tile.
 const CONNECTORS_FOR: Record<string, McpConnectorId[]> = {

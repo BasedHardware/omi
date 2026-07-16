@@ -1,5 +1,10 @@
 import { useEffect, useState } from 'react'
-import { getCloudInfo, openCloudConnector } from '../../../../lib/mcpConnect'
+import {
+  getCloudInfo,
+  openCloudConnector,
+  markCloudConnectorOpened,
+  isCloudConnectorOpened
+} from '../../../../lib/mcpConnect'
 import type {
   McpCloudConnectorId,
   McpCloudConnectorInfo
@@ -13,11 +18,13 @@ import { McpCopyRow } from './McpCopyRow'
 // Omi can't drive the provider's form, so "Open & guide me" opens the provider's
 // connector page and reveals a guide card of copy-rows the user pastes in
 // (mirrors macOS's guidance overlay — the parked browser automation is NOT
-// ported). Connected state comes from the backend OAuth grants list.
+// ported). Connected state is a LOCAL "opened" latch, matching Mac's unclosed
+// connected-detection gap (there is no reliable probe — see cloudConnectors.ts).
 
 export function McpCloudConnectorCard({ id }: { id: McpCloudConnectorId }): React.JSX.Element {
   const [info, setInfo] = useState<McpCloudConnectorInfo | undefined>()
   const [open, setOpen] = useState(false)
+  const [opened, setOpened] = useState(() => isCloudConnectorOpened(id))
 
   useEffect(() => {
     let alive = true
@@ -35,15 +42,15 @@ export function McpCloudConnectorCard({ id }: { id: McpCloudConnectorId }): Reac
     }
   }, [id])
 
-  const connected = info?.connected ?? false
-
   const openGuide = (): void => {
     setOpen(true)
+    markCloudConnectorOpened(id)
+    setOpened(true)
     if (info) void openCloudConnector(info.connectorUrl)
   }
 
-  const description = connected
-    ? `Connected — your Omi memory is available in ${info?.title ?? 'this app'}`
+  const description = opened
+    ? `Guide opened — finish adding the connector in ${info?.title ?? 'the app'}`
     : `Connect over OAuth — no key needed`
 
   return (
@@ -52,8 +59,8 @@ export function McpCloudConnectorCard({ id }: { id: McpCloudConnectorId }): Reac
       title={info?.title ?? (id === 'claude' ? 'Claude' : 'ChatGPT')}
       description={description}
       action={
-        <PillButton tone={connected ? 'neutral' : 'primary'} onClick={openGuide}>
-          {connected ? 'Reconnect' : 'Open & guide'}
+        <PillButton tone={opened ? 'neutral' : 'primary'} onClick={openGuide}>
+          {opened ? 'Reopen guide' : 'Open & guide'}
         </PillButton>
       }
     >

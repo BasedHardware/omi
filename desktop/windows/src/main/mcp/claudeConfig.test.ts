@@ -49,8 +49,19 @@ function read(): ReadConfig {
   return JSON.parse(readFileSync(path, 'utf8')) as ReadConfig
 }
 
+// Backups live under <home>/.claude/backups/ (Mac parity). `dir` is the fake home.
+function backupsDir(): string {
+  return join(dir, '.claude', 'backups')
+}
+function listBackups(): string[] {
+  try {
+    return readdirSync(backupsDir()).filter((f) => f.startsWith('.claude.json.backup.'))
+  } catch {
+    return []
+  }
+}
 function backupCount(): number {
-  return readdirSync(dir).filter((f) => f.includes('.omi-backup-')).length
+  return listBackups().length
 }
 
 describe('writeClaudeMcpEntry', () => {
@@ -94,9 +105,11 @@ describe('writeClaudeMcpEntry', () => {
   it('backs up the prior config before a changing write', () => {
     writeFileSync(path, JSON.stringify({ theme: 'light' }), 'utf8')
     writeClaudeMcpEntry(API, KEY, path)
-    const backups = readdirSync(dir).filter((f) => f.includes('.omi-backup-'))
+    const backups = listBackups()
     expect(backups.length).toBe(1)
-    expect(JSON.parse(readFileSync(join(dir, backups[0]), 'utf8'))).toEqual({ theme: 'light' })
+    expect(JSON.parse(readFileSync(join(backupsDir(), backups[0]), 'utf8'))).toEqual({
+      theme: 'light'
+    })
   })
 
   it('keeps only the newest 5 backups', () => {
@@ -158,6 +171,13 @@ describe('detectClaudeCode + path', () => {
     const cfg = join(home, '.claude.json')
     mkdirSync(home, { recursive: true })
     writeFileSync(cfg, '{}', 'utf8')
+    expect(detectClaudeCode(home)).toBe(true)
+  })
+
+  it('detects via ~/.claude/settings.json when there is no top-level config', () => {
+    const home = join(root, 'home-with-settings')
+    mkdirSync(join(home, '.claude'), { recursive: true })
+    writeFileSync(join(home, '.claude', 'settings.json'), '{}', 'utf8')
     expect(detectClaudeCode(home)).toBe(true)
   })
 

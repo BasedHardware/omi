@@ -6,12 +6,17 @@
 //
 // Every value here is ported verbatim from macOS MemoryExportService.swift
 // (cloudOAuthClientID / cloudTokenAuthMethod / mcpAuthorizeURL / mcpTokenURL /
-// the mcpSetup steps). The client ids are registered + enforced on prod
-// (backend check_mcp_oauth_deploy_contract.py): omi-chatgpt-prod (public PKCE,
-// secret rejected → blank, token_auth_method "none") and omi-claude-prod.
+// the mcpSetup steps). The client ids are public PKCE clients registered on prod
+// (backend check_mcp_oauth_deploy_contract.py + mcp_oauth.py hardcoded fallbacks):
+// omi-chatgpt-prod (secret rejected → blank, token_auth_method "none") and
+// omi-claude-prod.
+//
+// CONNECTED-STATE: Mac has an UNCLOSED connected-detection gap for cloud
+// connectors (its latch is only set by a dead automation path) — we replicate
+// that gap rather than invent a probe. The card carries no connected flag; the
+// renderer keeps a local "opened" latch so a returning user sees "Reconnect".
 
 import { mcpServerUrl, type McpCloudConnectorInfo } from '../../shared/mcpExports'
-import { listOauthGrantClientIds } from './mcpMintClient'
 
 function trimBase(apiBase: string): string {
   return apiBase.replace(/\/+$/, '')
@@ -57,26 +62,4 @@ export function buildCloudConnectors(apiBase: string): McpCloudConnectorInfo[] {
   }
 
   return [claude, chatgpt]
-}
-
-/** The client id a cloud connector's OAuth grant would carry, for connected-detection. */
-export function cloudConnectorClientId(id: 'chatgpt' | 'claude', apiBase: string): string {
-  return id === 'claude' ? CLAUDE_CLIENT_ID : chatgptClientId(trimBase(apiBase))
-}
-
-/**
- * Return the set of cloud connector ids ('chatgpt'/'claude') that have completed
- * their OAuth grant for this account. Empty when signed out or on any error.
- */
-export async function connectedCloudConnectors(
-  apiBase: string,
-  token: string | null
-): Promise<Set<'chatgpt' | 'claude'>> {
-  const out = new Set<'chatgpt' | 'claude'>()
-  if (!token) return out
-  const granted = await listOauthGrantClientIds(trimBase(apiBase), token)
-  for (const id of ['chatgpt', 'claude'] as const) {
-    if (granted.has(cloudConnectorClientId(id, apiBase))) out.add(id)
-  }
-  return out
 }

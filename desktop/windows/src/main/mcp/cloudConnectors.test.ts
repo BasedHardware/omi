@@ -1,9 +1,5 @@
-import { describe, it, expect, afterEach, vi } from 'vitest'
-import {
-  buildCloudConnectors,
-  cloudConnectorClientId,
-  connectedCloudConnectors
-} from './cloudConnectors'
+import { describe, it, expect } from 'vitest'
+import { buildCloudConnectors } from './cloudConnectors'
 
 function rowValue(rows: { label: string; value: string; blank?: boolean }[], label: string) {
   return rows.find((r) => r.label === label)
@@ -33,33 +29,8 @@ describe('buildCloudConnectors (field correctness — Mac parity)', () => {
     expect(rowValue(chatgpt.rows, 'Token URL')?.value).toBe('https://api.omi.me/token')
   })
 
-  it('non-prod base uses the dev ChatGPT client id', () => {
-    expect(cloudConnectorClientId('chatgpt', 'https://dev.example.com')).toBe('omi-chatgpt-dev')
-    expect(cloudConnectorClientId('chatgpt', 'https://api.omi.me')).toBe('omi-chatgpt-prod')
-    expect(cloudConnectorClientId('claude', 'https://api.omi.me')).toBe('omi-claude-prod')
-  })
-})
-
-describe('connectedCloudConnectors', () => {
-  afterEach(() => vi.unstubAllGlobals())
-
-  it('returns the ids whose client_id appears in the grants list', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn(async () => ({
-        ok: true,
-        status: 200,
-        json: async () => ({ grants: [{ client_id: 'omi-claude-prod' }] }),
-        text: async () => ''
-      }))
-    )
-    const connected = await connectedCloudConnectors('https://api.omi.me', 'token')
-    expect(connected.has('claude')).toBe(true)
-    expect(connected.has('chatgpt')).toBe(false)
-  })
-
-  it('is empty when signed out (no token)', async () => {
-    const connected = await connectedCloudConnectors('https://api.omi.me', null)
-    expect(connected.size).toBe(0)
+  it('uses the dev ChatGPT client id on a non-prod base', () => {
+    const chatgpt = buildCloudConnectors('https://dev.example.com')[1]
+    expect(chatgpt.rows.find((r) => r.label === 'OAuth Client ID')?.value).toBe('omi-chatgpt-dev')
   })
 })

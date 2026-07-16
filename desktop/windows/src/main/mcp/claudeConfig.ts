@@ -15,22 +15,27 @@
 // The hosted key is a credential: it lives inside this file's headers, so nothing
 // here is ever logged.
 
-import { existsSync, readFileSync, writeFileSync, copyFileSync, readdirSync, rmSync } from 'fs'
+import {
+  existsSync,
+  readFileSync,
+  writeFileSync,
+  copyFileSync,
+  readdirSync,
+  rmSync,
+  mkdirSync
+} from 'fs'
 import { homedir } from 'os'
-import { join, basename, dirname } from 'path'
+import { randomUUID } from 'crypto'
+import { join, dirname } from 'path'
 import {
   MCP_SERVER_KEY,
   buildHttpServerEntry,
   mcpServerUrl,
   type McpHttpServerEntry
 } from '../../shared/mcpExports'
-import { fileExists, dirExists, commandOnPath } from './cliPresence'
+import { fileExists, commandOnPath } from './cliPresence'
 
 const MAX_BACKUPS = 5
-
-// Monotonic tie-breaker so two backups taken in the same millisecond get
-// distinct, chronologically-sortable filenames (rapid key rotations).
-let backupSeq = 0
 
 /** ~/.claude.json — the Claude Code config path (identical layout on Windows). */
 export function claudeConfigPath(home = homedir()): string {
@@ -45,7 +50,7 @@ export function claudeConfigPath(home = homedir()): string {
 export function detectClaudeCode(home = homedir()): boolean {
   return (
     fileExists(claudeConfigPath(home)) ||
-    dirExists(join(home, '.claude')) ||
+    fileExists(join(home, '.claude', 'settings.json')) ||
     commandOnPath('claude')
   )
 }
@@ -89,22 +94,30 @@ function entryMatches(existing: unknown, target: McpHttpServerEntry): boolean {
   )
 }
 
+// Backups live under ~/.claude/backups/ named .claude.json.backup.<epochMs>-<uuid>
+// (Mac parity). epochMs sorts chronologically; the uuid makes same-ms rotations
+// distinct. Pruned to the newest MAX_BACKUPS.
+const BACKUP_PREFIX = '.claude.json.backup.'
+
+function backupDir(path: string): string {
+  return join(dirname(path), '.claude', 'backups')
+}
+
 /** Copy the config aside before a changing write, pruning to the newest MAX_BACKUPS. */
 function backupConfig(path: string): void {
   if (!existsSync(path)) return
-  const stamp = new Date().toISOString().replace(/[:.]/g, '-')
-  const seq = String(backupSeq++).padStart(6, '0')
-  copyFileSync(path, `${path}.omi-backup-${stamp}-${seq}`)
+  const dir = backupDir(path)
+  mkdirSync(dir, { recursive: true })
+  copyFileSync(path, join(dir, `${BACKUP_PREFIX}${Date.now()}-${randomUUID()}`))
   pruneBackups(path)
 }
 
 function pruneBackups(path: string): void {
-  const dir = dirname(path)
-  const prefix = `${basename(path)}.omi-backup-`
+  const dir = backupDir(path)
   try {
     const backups = readdirSync(dir)
-      .filter((n) => n.startsWith(prefix))
-      .sort() // ISO-ish timestamps sort chronologically
+      .filter((n) => n.startsWith(BACKUP_PREFIX))
+      .sort() // epochMs prefix sorts chronologically
     for (const stale of backups.slice(0, Math.max(0, backups.length - MAX_BACKUPS))) {
       rmSync(join(dir, stale), { force: true })
     }
@@ -153,12 +166,25 @@ export function writeClaudeMcpEntry(
   return { changed: true, configPath: path }
 }
 
-/** True when ~/.claude.json already has an omi-memory entry for `apiBase`. */
-export function claudeMcpConnected(apiBase: string, path = claudeConfigPath()): boolean {
+/**
+ * True when ~/.claude.json has an omi-memory entry whose URL matches `apiBase`.
+ * When `key` is given, ALSO require the entry's Bearer to equal it — so a
+ * rotated/stale key reads as disconnected (Mac's key-aware re-scan). Omit `key`
+ * to test only that an entry exists (used to decide whether to rewrite on rotate).
+ */
+export function claudeMcpConnected(
+  apiBase: string,
+  path = claudeConfigPath(),
+  key?: string
+): boolean {
   try {
     const servers = (readConfig(path).mcpServers ?? {}) as Record<string, unknown>
-    const entry = servers[MCP_SERVER_KEY] as { url?: unknown } | undefined
-    return entry?.url === mcpServerUrl(apiBase)
+    const entry = servers[MCP_SERVER_KEY] as
+      | { url?: unknown; headers?: { Authorization?: unknown } }
+      | undefined
+    if (entry?.url !== mcpServerUrl(apiBase)) return false
+    if (key === undefined) return true
+    return entry.headers?.Authorization === `Bearer ${key}`
   } catch {
     return false
   }

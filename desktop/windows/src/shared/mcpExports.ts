@@ -107,6 +107,27 @@ export interface McpExportsSnapshot {
   connectors: McpConnectorStatus[]
 }
 
+/**
+ * A copy-command/config card — the MANUAL setup path a CLI connector shows when
+ * its one-click automation fails (or as Mac's fallback). Carries the hosted key
+ * inside `copyText`, so it is only ever sent to the app's own renderer.
+ */
+export interface McpSetupCard {
+  /** e.g. "Copy command" / "Copy config". */
+  copyTitle: string
+  /** The exact command or config block to run/paste (key embedded). */
+  copyText: string
+  /** Short numbered steps shown under the copy block. */
+  steps: string[]
+}
+
+/** Result of a connect attempt: the fresh snapshot, plus a fallback setup card
+ *  when a CLI connector's automation failed and the user should run it manually. */
+export interface McpConnectResult {
+  snapshot: McpExportsSnapshot
+  setupCard?: McpSetupCard
+}
+
 // --- Cloud (OAuth) connectors -----------------------------------------------
 // ChatGPT and Claude connect to Omi's hosted MCP via the provider's OWN OAuth
 // flow against public OAuth clients (no hosted key). Omi can't drive the
@@ -129,6 +150,4 @@ export interface McpCloudConnectorInfo {
   connectorUrl: string
   /** The copy-rows shown on the guide card (Name, server URL, client id, …). */
   rows: McpCloudCopyRow[]
-  /** True when this account has completed the provider's OAuth grant. */
-  connected?: boolean
 }

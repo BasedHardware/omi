@@ -3,8 +3,8 @@ import { buildMemoryPack, memoryPackChatUrl } from './memoryPack'
 import type { ExportMemory } from '../../shared/types'
 
 const MEMS: ExportMemory[] = [
-  { content: 'Likes espresso', category: 'Preferences', createdAt: 0 },
-  { content: 'Building Omi', category: 'Projects', createdAt: 0 }
+  { content: 'Likes espresso', category: 'Preferences', createdAt: '2026-01-01T00:00:00Z' },
+  { content: 'Building Omi', category: 'Projects', createdAt: '2026-01-01T00:00:00Z' }
 ]
 
 describe('buildMemoryPack', () => {
