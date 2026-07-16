@@ -125,6 +125,7 @@ import { initCrashSentinel, crashDetectedOnBoot, markCleanExit } from './crashSe
 import { isQuitting, quitApp } from './lifecycle'
 import { classifyChildProcessGone } from './childProcessGone'
 import { isHideWindowShortcut } from './windowShortcuts'
+import { shouldBlockNavigation } from './navigationGuard'
 import { createTray, updateTrayState, destroyTray, isTrayCreated } from './tray'
 import { initAutoUpdater, getPendingUpdate, checkForUpdatesNow } from './updater'
 import {
@@ -324,6 +325,19 @@ app.on('web-contents-created', (_e, wc) => {
   // skips clean exits) so crash.log stays a log of things that actually went wrong.
   wc.on('responsive', () => {
     console.log(`[lifecycle] renderer responsive again: url=${urlOf()} webContents=${wc.id}`)
+  })
+  // Stray file drop guard: a file dropped anywhere outside an HTML5 drop zone
+  // makes Electron navigate the window to that local file:// URL, blanking the
+  // app until reload. Cancel that here for every window (main/bar/capture/glow/
+  // insight-toast) uniformly. Only foreign file:// navigations are cancelled —
+  // in-app HashRouter routing and the initial load never fire will-navigate, and
+  // http(s)/mailto links keep their existing handling. See navigationGuard.ts.
+  wc.on('will-navigate', (event, url) => {
+    if (shouldBlockNavigation(url, urlOf())) {
+      event.preventDefault()
+      // Never log the raw URL — a dropped-file path can contain personal data.
+      console.warn(`[main] blocked stray in-window navigation to a local file (webContents ${wc.id})`)
+    }
   })
 })
 
