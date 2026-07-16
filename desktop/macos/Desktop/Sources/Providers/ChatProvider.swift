@@ -662,7 +662,7 @@ struct MessageMetadata {
     var seen = Set<String>()
 
     // Find all <tag>...</tag> pairs
-    let pattern = try! NSRegularExpression(pattern: #"<([a-z][a-z0-9_]*)>"#, options: [])
+    guard let pattern = try? NSRegularExpression(pattern: #"<([a-z][a-z0-9_]*)>"#, options: []) else { return [] }
     let matches = pattern.matches(in: prompt, range: NSRange(prompt.startIndex..., in: prompt))
 
     for match in matches {
