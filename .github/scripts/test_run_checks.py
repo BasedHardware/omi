@@ -8,13 +8,22 @@ import sys
 import tempfile
 import unittest
 import importlib.util
+from collections import Counter
 from contextlib import redirect_stderr, redirect_stdout
 from io import StringIO
 from pathlib import Path
-from unittest import mock
 
-from run_checks import Check, changed_files, execute_checks, load_manifest, resolve_checks, validate_manifest
-
+from run_checks import (
+    VALID_PLATFORMS,
+    Check,
+    Manifest,
+    detect_platform,
+    execute_checks,
+    load_manifest,
+    resolve_checks,
+    skipped_platform_checks,
+    validate_manifest,
+)
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 REPO_ROOT = SCRIPT_DIR.parents[1]
@@ -39,7 +48,10 @@ def deterministic_workflow_references(workflows_dir: Path) -> set[str]:
             path = match.group("path")
             name = Path(path).name
             if (
-                (path.startswith(".github/scripts/") and (name.startswith(("check_", "check-")) or name.endswith("-count.py")))
+                (
+                    path.startswith(".github/scripts/")
+                    and (name.startswith(("check_", "check-")) or name.endswith("-count.py"))
+                )
                 or (path.startswith("backend/scripts/") and name.startswith(("scan_", "check_")))
                 or (path.startswith("desktop/macos/scripts/") and name.startswith(("check_", "check-")))
             ):
@@ -107,21 +119,6 @@ class ManifestContractTests(unittest.TestCase):
 
 
 class RunnerBehaviorTests(unittest.TestCase):
-    def test_changed_files_keeps_deleted_paths_for_baseline_ratchets(self) -> None:
-        commands: list[tuple[str, ...]] = []
-
-        def fake_run_git(_root: Path, *args: str) -> str:
-            commands.append(args)
-            if args[0] == "merge-base":
-                return "merge-base"
-            return "desktop/macos/Backend-Rust/src/routes/chat_completions.rs"
-
-        with mock.patch("run_checks.run_git", side_effect=fake_run_git):
-            files = changed_files(REPO_ROOT, "origin/main", "HEAD")
-
-        self.assertEqual(files, ["desktop/macos/Backend-Rust/src/routes/chat_completions.rs"])
-        self.assertIn(("diff", "--name-only", "--diff-filter=ACMRD", "merge-base...HEAD"), commands)
-
     def test_trigger_matching_selects_only_relevant_checks(self) -> None:
         manifest = load_manifest(MANIFEST_PATH)
         selected = {check.id for check in resolve_checks(manifest, ["app/lib/widgets/example.dart"], "ci")}
@@ -185,6 +182,70 @@ class RunnerBehaviorTests(unittest.TestCase):
             self.assertEqual(result, 1)
 
 
+class PlatformTests(unittest.TestCase):
+    """Tests for the platform-aware manifest model (#9843 Ticket 02)."""
+
+    def test_macos_check_selected_on_macos(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)
+                ),
+            ),
+            exempt=(),
+        )
+        selected = resolve_checks(manifest, ["any/file"], "ci", platform="macos")
+        self.assertEqual([c.id for c in selected], ["mac-only"])
+
+    def test_macos_check_skipped_on_linux(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)
+                ),
+            ),
+            exempt=(),
+        )
+        selected = resolve_checks(manifest, ["any/file"], "ci", platform="linux")
+        self.assertEqual(selected, [])
+
+    def test_no_platforms_means_all_platforms(self):
+        manifest = Manifest(
+            checks=(Check(id="portable", command=("true",), triggers=("all",), lanes=("ci",), reason="t"),), exempt=()
+        )
+        for plat in ("macos", "linux"):
+            selected = resolve_checks(manifest, ["any/file"], "ci", platform=plat)
+            self.assertEqual([c.id for c in selected], ["portable"])
+
+    def test_skipped_platform_checks_reports_macos_on_linux(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="mac-only", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("macos",)
+                ),
+            ),
+            exempt=(),
+        )
+        skipped = skipped_platform_checks(manifest, ["any/file"], "ci", "linux")
+        self.assertEqual([c.id for c in skipped], ["mac-only"])
+
+    def test_invalid_platform_rejected_by_validation(self):
+        manifest = Manifest(
+            checks=(
+                Check(
+                    id="bad", command=("true",), triggers=("all",), lanes=("ci",), reason="t", platforms=("windows",)
+                ),
+            ),
+            exempt=(),
+        )
+        errors = validate_manifest(manifest, REPO_ROOT)
+        self.assertTrue(any("invalid platforms" in e for e in errors))
+
+    def test_detect_platform_returns_known_value(self):
+        plat = detect_platform()
+        self.assertIn(plat, VALID_PLATFORMS - {"all"})
+
+
 class DeferredMarkerTests(unittest.TestCase):
     def test_new_marker_requires_tracking_issue(self) -> None:
         module = load_deferred_marker_module()
@@ -196,13 +257,25 @@ class DeferredMarkerTests(unittest.TestCase):
             relative = candidate.relative_to(REPO_ROOT).as_posix()
             changed.write_text(f"{relative}\n", encoding="utf-8")
 
-            candidate.write_text(f"{marker}: missing owner\n", encoding="utf-8")
+            candidate.write_text(f"// {marker}: missing owner\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 1)
 
-            candidate.write_text(f"{marker}(#9448): owned follow-up\n", encoding="utf-8")
+            candidate.write_text(f"// {marker}(#9448): owned follow-up\n", encoding="utf-8")
             with redirect_stdout(StringIO()), redirect_stderr(StringIO()):
                 self.assertEqual(module.check_new_markers("origin/main", changed), 0)
+
+    def test_marker_guard_ignores_product_text_and_reformatted_existing_comments(self) -> None:
+        module = load_deferred_marker_module()
+        self.assertIsNone(module.marker_signature('let status = item.completed ? "done" : "todo"'))
+        original = "    // TODO: Implement when adding watchOS support"
+        reformatted = "  // TODO: Implement when adding watchOS support"
+        signature = module.marker_signature(original)
+        assert signature is not None
+        self.assertEqual(
+            module.new_marker_violations([(88, reformatted)], Counter({signature: 1})),
+            [],
+        )
 
 
 if __name__ == "__main__":
