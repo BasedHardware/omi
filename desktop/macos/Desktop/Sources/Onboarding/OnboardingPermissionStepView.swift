@@ -16,7 +16,6 @@ struct OnboardingPermissionStepView: View {
   let permissionType: String
   let icon: String
   let reasonTitle: String
-  let reasonDetail: String
   let primaryActionLabel: String
   let onContinue: () -> Void
   let onSkip: () -> Void
@@ -67,15 +66,6 @@ struct OnboardingPermissionStepView: View {
             }
 
             Spacer()
-          }
-
-          // Skip the reason line when it just repeats the page description
-          // (the Screen Recording step's copy was accidentally duplicated).
-          if reasonDetail != description {
-            Text(reasonDetail)
-              .font(.system(size: 14))
-              .foregroundColor(OmiColors.textSecondary)
-              .lineSpacing(4)
           }
 
           if permissionType == "screen_recording", appState.isScreenRecordingStale {

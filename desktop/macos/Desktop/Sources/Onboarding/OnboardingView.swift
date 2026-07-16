@@ -193,7 +193,6 @@ struct OnboardingView: View {
           permissionType: "screen_recording",
           icon: "display.and.arrow.down",
           reasonTitle: "Screen Recording",
-          reasonDetail: "Screen Recording lets Omi see what you're working on.",
           primaryActionLabel: "Open Screen Recording settings",
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 4, stepName: "ScreenRecording")
@@ -222,7 +221,6 @@ struct OnboardingView: View {
           permissionType: "full_disk_access",
           icon: "externaldrive.fill.badge.person.crop",
           reasonTitle: "Disk Access",
-          reasonDetail: "This lets Omi scan your projects and recent files.",
           primaryActionLabel: "Open Disk Access",
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 5, stepName: "FullDiskAccess")
@@ -261,11 +259,10 @@ struct OnboardingView: View {
           totalSteps: OnboardingFlow.steps.count,
           eyebrow: "Permission",
           title: "Let Omi use your mic.",
-          description: "Microphone lets Omi transcribe meetings.",
+          description: "Microphone lets Omi transcribe meetings and voice notes.",
           permissionType: "microphone",
           icon: "mic.fill",
           reasonTitle: "Microphone",
-          reasonDetail: "This lets Omi transcribe meetings and voice notes.",
           primaryActionLabel: "Grant microphone access",
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 7, stepName: "Microphone")
@@ -290,7 +287,6 @@ struct OnboardingView: View {
           permissionType: "accessibility",
           icon: "figure.wave",
           reasonTitle: "Accessibility",
-          reasonDetail: "This lets Omi know which app you are using.",
           primaryActionLabel: "Open Accessibility settings",
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 8, stepName: "Accessibility")
@@ -316,7 +312,6 @@ struct OnboardingView: View {
           permissionType: "automation",
           icon: "bolt.horizontal.circle.fill",
           reasonTitle: "Automation",
-          reasonDetail: "This lets Omi take actions when you ask.",
           primaryActionLabel: "Grant automation access",
           onContinue: {
             AnalyticsManager.shared.onboardingStepCompleted(step: 9, stepName: "Automation")
