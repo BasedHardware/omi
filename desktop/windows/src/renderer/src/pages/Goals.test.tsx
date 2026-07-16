@@ -98,4 +98,19 @@ describe('Goals — error vs empty', () => {
     expect(screen.queryByText('Couldn’t load your goals.')).toBeNull()
     expect(screen.queryByText('No goals yet')).toBeNull()
   })
+
+  it('does not persist goals cross-account when the account switches mid-fetch', async () => {
+    localStorage.setItem('omi.lastSignedInUid', 'userA')
+    // The fetch resolves AFTER a switch to userB (teardown already ran, uid flipped).
+    getMock.mockImplementation(async () => {
+      localStorage.setItem('omi.lastSignedInUid', 'userB')
+      return { data: [goal({ id: 'a-goal', title: 'A goal' })] }
+    })
+    await renderGoals()
+    await waitFor(() => expect(getMock).toHaveBeenCalled())
+
+    // A's goals must NOT be written under B's uid (nor re-created under A's).
+    expect(localStorage.getItem('omi.cache.goals.userB')).toBeNull()
+    expect(localStorage.getItem('omi.cache.goals.userA')).toBeNull()
+  })
 })

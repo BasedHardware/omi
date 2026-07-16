@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { omiApi } from '../lib/apiClient'
 import { fetchAllMemoriesPaged } from '../lib/memoriesBulk'
 import { cache, hydrateFromDisk, publish, subscribers } from '../lib/memoriesCache'
+import { getCacheUid } from '../lib/persistentCache'
 
 export type Memory = {
   id: string
@@ -116,10 +117,14 @@ export function useMemories(): {
     if (cache.loaded) return
 
     let cancelled = false
+    const originUid = getCacheUid()
     ;(async () => {
       try {
         const list = await fetchMemories()
-        if (!cancelled) {
+        // Account-switch guard (belt-and-suspenders alongside `cancelled`): drop the
+        // publish if the account changed while the fetch was in flight, so it can't
+        // write A's memories under B's uid on a future in-place switch.
+        if (!cancelled && getCacheUid() === originUid) {
           cache.error = null
           publish(list)
         }

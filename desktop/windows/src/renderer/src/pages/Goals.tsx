@@ -24,6 +24,7 @@ import { GoalCelebration } from '../components/goals/GoalCelebration'
 import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
 import type { GoalResponse as Goal } from '../lib/omiApi.generated'
 import { cache, writeCache, hydrateGoalsFromDisk } from '../lib/goalsCache'
+import { getCacheUid } from '../lib/persistentCache'
 
 type GoalPatch = Partial<Pick<Goal, 'title' | 'target_value' | 'unit'>>
 
@@ -43,12 +44,17 @@ function asList(data: unknown): Goal[] {
 // /v1/goals/all returns both active and completed goals; we split them by
 // is_active locally. (There is no /v1/goals/completed GET endpoint.)
 async function fetchAll(): Promise<Goal[]> {
+  const originUid = getCacheUid()
   const res = await omiApi.get('/v1/goals/all')
   const list = asList(res.data)
-  // writeCache mirrors the list to the per-uid cold-start snapshot; loaded is set
-  // here (only a successful fetch is authoritative, not an optimistic writeCache).
-  writeCache(list)
-  cache.loaded = true
+  // Account-switch guard: if the account changed while this fetch was in flight,
+  // don't cache/persist — writeCache would land under the new account's uid.
+  if (getCacheUid() === originUid) {
+    // writeCache mirrors the list to the per-uid cold-start snapshot; loaded is set
+    // here (only a successful fetch is authoritative, not an optimistic writeCache).
+    writeCache(list)
+    cache.loaded = true
+  }
   return list
 }
 

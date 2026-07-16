@@ -414,7 +414,10 @@ export function Memories(): React.JSX.Element {
       )}
 
       <div className="flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        {error && (
+        {/* Silent revalidation: only surface the error when there's nothing cached
+            to show. A failed revalidation over already-visible memories (offline
+            cold start) stays quiet — the last-known list is on screen. */}
+        {error && memories.length === 0 && (
           <div className="glass-subtle mb-5 px-4 py-3 text-sm text-white/60">
             Failed to load memories: {error}
           </div>

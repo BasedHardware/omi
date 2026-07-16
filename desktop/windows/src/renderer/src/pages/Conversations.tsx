@@ -22,6 +22,7 @@ import {
   hydrateConversationsFromDisk,
   type ConversationRow
 } from '../lib/pageCache'
+import { getCacheUid } from '../lib/persistentCache'
 import { hideSyncedLocals, reconcileSyncedLocals } from '../lib/sync/conversationsReconcile'
 import { resyncConversation, retryUnsyncedConversations } from '../lib/sync/conversationSync'
 import { backfillCandidates, runBackfill, type BackfillProgress } from '../lib/sync/backfill'
@@ -187,6 +188,9 @@ export function Conversations(): React.JSX.Element {
   const loadAll = useCallback(
     async (showLoading = false): Promise<Set<string> | null> => {
       const gen = ++loadGenRef.current
+      // The account this fetch belongs to; re-checked before committing so a fetch
+      // that resolves after an account switch can't publish A's rows under B.
+      const originUid = getCacheUid()
       if (showLoading) setLoading(true)
       conversationsCache.error = null
       setError(null)
@@ -257,6 +261,11 @@ export function Conversations(): React.JSX.Element {
       // A superseded fetch (a newer loadAll already started) must not overwrite the
       // fresher state — but still return its cloud ids so a caller can inspect them.
       if (!shouldCommit(gen, loadGenRef.current)) return cloudIds
+      // Account-switch guard: if the signed-in account changed while this fetch was
+      // in flight, drop the result entirely — teardown already purged the outgoing
+      // account, and committing here would repopulate its conversations (in memory
+      // AND in the per-uid disk snapshot) under the new account's uid.
+      if (getCacheUid() !== originUid) return cloudIds
       // Cache-first resilience: a SILENT revalidation whose cloud fetch failed
       // (offline cold start, transient blip) must not wipe the already-shown
       // default-view rows — a hydrated cold-start snapshot or a prior load — down to
@@ -307,7 +316,12 @@ export function Conversations(): React.JSX.Element {
     didInitRef.current = true
     const defaultView = isDefaultView(folderFilter, dateRange)
     // In-session warm cache: skip the fetch entirely (instant paint from the seed).
-    if (firstMount && defaultView && conversationsCache.loaded && (conversationsCache.rows?.length ?? 0) > 0) {
+    if (
+      firstMount &&
+      defaultView &&
+      conversationsCache.loaded &&
+      (conversationsCache.rows?.length ?? 0) > 0
+    ) {
       return
     }
     // Cold start with a persisted snapshot already seeded: revalidate WITHOUT the
@@ -653,7 +667,10 @@ export function Conversations(): React.JSX.Element {
       />
 
       <div className="min-h-0 flex-1 overflow-y-auto px-6 py-6 lg:px-10 lg:py-8">
-        {error && (
+        {/* Silent revalidation: only surface the cloud error when there's nothing
+            cached to show. A failed revalidation over already-visible rows (offline
+            cold start) stays quiet — the last-known list is on screen. */}
+        {error && rows.length === 0 && (
           <div className="surface-panel mb-5 px-4 py-3 text-sm text-white/60">
             Cloud conversations: {error}
           </div>

@@ -31,6 +31,16 @@ function keyFor(surface: string, uid: string): string {
   return `${PREFIX}${surface}.${uid}`
 }
 
+// The uid the persistent caches are currently scoped to (the last signed-in uid,
+// null when signed out). Async fetch paths capture this at fetch START and re-check
+// it before committing their result, so a fetch that resolves AFTER an account
+// switch is dropped instead of writing the prior account's data — in memory or to
+// disk — under the new uid. The teardown purge alone can't catch this: the switch
+// runs teardown first, then the stale fetch resolves and writes after it.
+export function getCacheUid(): string | null {
+  return currentUid()
+}
+
 // Last-known persisted rows for a surface, scoped to the current uid. Returns null
 // on a miss, when signed out, on a parse error, or when the payload is not an array
 // (tolerant of shape drift across app versions). Callers treat null as "no cache".

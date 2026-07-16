@@ -30,7 +30,7 @@ import type {
   AppCatalogResponse,
   AppSearchResponse
 } from '../lib/omiApi.generated'
-import { readPersistedValue, writePersistedValue } from '../lib/persistentCache'
+import { getCacheUid, readPersistedValue, writePersistedValue } from '../lib/persistentCache'
 
 // Cap rendered search results so a broad query (e.g. "a") can't mount the whole
 // catalog at once. Users refine rather than scroll hundreds of cards.
@@ -213,6 +213,7 @@ export function Apps(): React.JSX.Element {
 
   const load = async (): Promise<void> => {
     setError(null)
+    const originUid = getCacheUid()
     try {
       // v2 = approved-only capability catalog (marketplace sections). v1 /apps is the
       // per-user list (includes the user's private/unapproved/tester apps) and backs
@@ -238,6 +239,9 @@ export function Apps(): React.JSX.Element {
           )
         }
       }
+      // Account-switch guard: if the account changed while this fetch was in flight,
+      // drop the result — persisting here would write it under the new account's uid.
+      if (getCacheUid() !== originUid) return
       const v1Apps = Array.isArray(v1Res.data) ? v1Res.data : []
       const nextInstalledPool = mergeAppPool(nextApps, v1Apps)
       const nextEnabled = Array.isArray(enabledRes.data) ? enabledRes.data : []

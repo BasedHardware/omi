@@ -96,4 +96,20 @@ describe('useMemories — cold-start cache-first', () => {
     })
     expect(result.current.memories).toEqual([])
   })
+
+  it('does not persist memories cross-account when the account switches mid-fetch', async () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    // The fetch resolves AFTER a switch to userB (teardown already ran, uid flipped).
+    fetchAllMemoriesPaged.mockImplementation(async () => {
+      localStorage.setItem(LAST_UID_KEY, 'userB')
+      return [mem('a-memory')]
+    })
+
+    renderHook(() => useMemories())
+    await waitFor(() => expect(fetchAllMemoriesPaged).toHaveBeenCalled())
+
+    // A's memories must NOT be written under B's uid (nor re-created under A's).
+    expect(localStorage.getItem('omi.cache.memories.userB')).toBeNull()
+    expect(localStorage.getItem('omi.cache.memories.userA')).toBeNull()
+  })
 })
