@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
   - desktop/macos/Desktop/Sources/ScreenCaptureService.swift
+  - desktop/macos/Desktop/Sources/ScreenRecordingPermissionPolicy.swift
   - desktop/macos/Desktop/Sources/Onboarding/PermissionDragGuidance.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/PermissionsPage.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+SystemActions.swift
