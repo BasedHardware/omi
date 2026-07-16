@@ -1,5 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { Target, Check, RefreshCw, Plus, Trash2, Loader2, Trophy, Sparkles, X } from 'lucide-react'
+import {
+  Target,
+  Check,
+  RefreshCw,
+  Plus,
+  Trash2,
+  Loader2,
+  Trophy,
+  Sparkles,
+  Lightbulb,
+  X
+} from 'lucide-react'
 import { omiApi } from '../lib/apiClient'
 import { PageHeader } from '../components/layout/PageHeader'
 import { TasksGoalsToggle } from '../components/layout/TasksGoalsToggle'
@@ -9,6 +20,7 @@ import { toast } from '../lib/toast'
 import { goalEmoji } from '../lib/goalEmoji'
 import { isCompleted, progressColor, progressLabel, progressPct } from '../lib/goalVisuals'
 import { GoalCelebration } from '../components/goals/GoalCelebration'
+import { GoalInsightPanel } from '../components/goals/GoalInsightPanel'
 import type {
   GoalResponse as Goal,
   GoalSuggestionResponse as GoalSuggestion
@@ -81,6 +93,8 @@ export function Goals(): React.JSX.Element {
   // confetti overlay). Set when progress reaches the target; cleared when the
   // celebration finishes.
   const [celebrating, setCelebrating] = useState<Goal | null>(null)
+  // The goal whose "Goal Insight" panel is open (per-card lightbulb button).
+  const [insightGoal, setInsightGoal] = useState<Goal | null>(null)
 
   const load = useCallback(async (): Promise<void> => {
     setError(null)
@@ -414,14 +428,28 @@ export function Goals(): React.JSX.Element {
             </div>
           </div>
 
-          <button
-            onClick={() => void deleteGoal(g.id)}
-            className="mt-0.5 shrink-0 rounded-md p-1 text-white/30 opacity-0 transition-all hover:bg-white/5 hover:text-rose-300/80 group-hover:opacity-100"
-            title="Delete goal"
-            aria-label="Delete goal"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+          <div className="mt-0.5 flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover:opacity-100">
+            {/* Insight is only worthwhile on goals with a real target; a 0-target
+                yes/no goal has little for the advice model to reason about. */}
+            {(g.target_value ?? 0) > 0 && (
+              <button
+                onClick={() => setInsightGoal(g)}
+                className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-white/70"
+                title="Get goal insight"
+                aria-label="Get goal insight"
+              >
+                <Lightbulb className="h-4 w-4" />
+              </button>
+            )}
+            <button
+              onClick={() => void deleteGoal(g.id)}
+              className="rounded-md p-1 text-white/30 transition-colors hover:bg-white/5 hover:text-rose-300/80"
+              title="Delete goal"
+              aria-label="Delete goal"
+            >
+              <Trash2 className="h-4 w-4" />
+            </button>
+          </div>
         </div>
       </li>
     )
@@ -656,6 +684,7 @@ export function Goals(): React.JSX.Element {
       </div>
 
       {celebrating && <GoalCelebration goal={celebrating} onDone={() => setCelebrating(null)} />}
+      {insightGoal && <GoalInsightPanel goal={insightGoal} onClose={() => setInsightGoal(null)} />}
     </div>
   )
 }
