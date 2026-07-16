@@ -232,6 +232,12 @@ checks:
     triggers: ["desktop/macos/scripts/check-swiftlint-baseline.py", ".github/scripts/test_swiftlint_baseline_guard.py"]
     lanes: ["local", "ci"]
     reason: "#9843 Ticket 07: adversarial fixtures for baseline guard and disable policy"
+  - id: desktop-feature-sentinels
+    command: ["bash", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    triggers: ["desktop/macos/Desktop/Package.swift", "desktop/macos/Desktop/Tests/SemanticFeatureSentinels/**/*.swift", "desktop/macos/tests/test-feature-sentinel-negative-control.sh"]
+    lanes: ["local", "ci"]
+    platforms: ["macos"]
+    reason: "#9843 Ticket 09: semantic feature sentinels prove flags are active; negative control proves silent-acceptance trap"
   - id: desktop-hub-controller-ratchet
     command: ["python3", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
     triggers: ["desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift", "desktop/macos/scripts/check-hub-controller-ratchet.py"]
