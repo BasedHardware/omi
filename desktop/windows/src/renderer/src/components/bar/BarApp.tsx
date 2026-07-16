@@ -227,12 +227,16 @@ export function BarApp(): React.JSX.Element {
       }),
     []
   )
-  // A failed hub turn (provider dies post-commit / providerNoResponse) surfaces as
-  // the reducer projection's `hint` going '' → non-empty. That is the ONLY reader
-  // of `hint` today; edge-detect the rising transition and bump failNonce so the
-  // collapsed orb plays a brief "failed" tremor instead of dropping silently to
-  // idle (indistinguishable from success). Tracks the previous hint in a ref so a
-  // hint that merely persists (or auto-dismisses back to '') never re-fires.
+  // Any NON-SUCCESS turn end surfaces as the reducer projection's `hint` going
+  // '' → non-empty — the provider-failure family (provider dies post-commit /
+  // providerNoResponse / timeout), a capture/transcription/playback failure, AND
+  // benign guidance like `tooShort` ("hold longer to record"). We deliberately
+  // fire the tremor on ALL of them (reviewed with Chris): the collapsed pill shows
+  // no text, so the shake is the only "that didn't produce a reply" feedback for
+  // any of these — otherwise the orb drops silently to idle (indistinguishable
+  // from success). `hint` is the ONLY reader today; edge-detect the rising
+  // transition and bump failNonce. Tracks the previous hint in a ref so a hint that
+  // merely persists (or auto-dismisses back to '') never re-fires.
   const prevHintRef = useRef('')
   useEffect(() => {
     const rising = prevHintRef.current === '' && hubOrb.hint !== ''
