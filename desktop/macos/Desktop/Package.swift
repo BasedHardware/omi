@@ -16,7 +16,6 @@ let package = Package(
     .package(
       url: "https://github.com/microsoft/onnxruntime-swift-package-manager.git", from: "1.20.0"),
     .package(url: "https://github.com/FluidInference/FluidAudio.git", from: "0.14.8"),
-    .package(url: "https://github.com/SimplyDanny/SwiftLintPlugins", exact: "0.65.0"),
   ],
   targets: [
     .target(
@@ -37,32 +36,28 @@ let package = Package(
       path: "Sources/OmiSupport",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .target(
       name: "OmiTheme",
       path: "Sources/Theme",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .target(
       name: "OmiWAL",
       path: "Sources/OmiWAL",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .target(
       name: "VoiceTurnDomain",
       path: "Sources/VoiceTurnDomain",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .executableTarget(
       name: "Omi Computer",
@@ -126,8 +121,7 @@ let package = Package(
       path: "Tests/OmiSupportTests",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .testTarget(
       name: "OmiWALTests",
@@ -135,8 +129,7 @@ let package = Package(
       path: "Tests/OmiWALTests",
       swiftSettings: [
         .unsafeFlags(["-strict-concurrency=complete", "-warnings-as-errors"])
-      ],
-      plugins: [.plugin(name: "SwiftLintBuildToolPlugin", package: "SwiftLintPlugins")]
+      ]
     ),
     .testTarget(
       name: "VoiceTurnDomainTests",
