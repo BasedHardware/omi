@@ -1502,8 +1502,15 @@ def upload_app_logo(file_path: str, app_id: str):
 
 
 def delete_app_logo(img_url: str):
+    prefix = f'https://storage.googleapis.com/{omi_apps_bucket}/'
+    if prefix not in img_url:
+        # The URL is not an object in the app-logo bucket (e.g. a different or legacy bucket), so
+        # there is nothing to delete here. Return instead of letting split(...)[1] raise IndexError
+        # (callers only guard with the looser startswith('https://storage.googleapis.com/')).
+        logger.warning(f'delete_app_logo: url not in {omi_apps_bucket}, skipping')
+        return
     bucket = _get_storage_client().bucket(omi_apps_bucket)
-    path = img_url.split(f'https://storage.googleapis.com/{omi_apps_bucket}/')[1]
+    path = img_url.split(prefix, 1)[1]
     logger.info(f'delete_app_logo {path}')
     blob = bucket.blob(path)
     blob.delete()
