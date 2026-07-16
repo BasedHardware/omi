@@ -1,8 +1,20 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import * as Dialog from '@radix-ui/react-dialog'
-import { X, Star, Check, Plus, Loader2, Trash2, LayoutGrid, ArrowUpRight } from 'lucide-react'
+import {
+  X,
+  Star,
+  Check,
+  Plus,
+  Loader2,
+  Trash2,
+  LayoutGrid,
+  ArrowUpRight,
+  CreditCard
+} from 'lucide-react'
 import { omiApi } from '../../lib/apiClient'
 import { getCacheUid } from '../../lib/persistentCache'
+import { toast } from '../../lib/toast'
+import { startSetupPolling, worksExternally } from '../../lib/appInstall'
 import type { App, AppCatalogItem, AppReview } from '../../lib/omiApi.generated'
 import { AddReviewDialog } from './AddReviewDialog'
 
@@ -115,6 +127,8 @@ export function AppDetailSheet({
   const [detail, setDetail] = useState<App | null>(null)
   const [reviews, setReviews] = useState<AppReview[]>([])
   const [showAddReview, setShowAddReview] = useState(false)
+  const mounted = useRef(true)
+  const purchasePoll = useRef<(() => void) | null>(null)
   const currentUid = getCacheUid() ?? ''
 
   // Prefer freshly fetched detail fields; fall back to the catalog card so the sheet
@@ -130,6 +144,21 @@ export function AppDetailSheet({
   const installs = detail?.installs ?? app.installs ?? 0
   const integration = detail?.external_integration ?? app.external_integration ?? null
   const authSteps = integration?.auth_steps ?? []
+  // macOS worksExternally = capabilities include 'external_integration'. Gates the
+  // "Open" affordance for an installed integration (an installed non-external app just
+  // reads "Installed").
+  const external = worksExternally({ capabilities })
+
+  // Paid-app state (Windows goes BEYOND macOS, which decodes is_paid but never shows a
+  // purchase affordance and silently swallows the paid-gate 403). `is_user_paid` and
+  // `payment_link` live only on the full detail fetch; the catalog card carries just
+  // `is_paid`/`price`. Until detail resolves, assume the user owns it so we never flash
+  // a Purchase CTA (or open payment) for an app they already bought.
+  const isPaid = detail?.is_paid ?? app.is_paid ?? false
+  const isUserPaid = detail ? (detail.is_user_paid ?? false) : true
+  const paymentLink = detail?.payment_link ?? null
+  const price = detail?.price ?? app.price ?? null
+  const needsPurchase = isPaid && !isUserPaid && !enabled
 
   // The user's own review: the detail payload's user_review, else the one in the list
   // whose uid matches the current user. Gates the Add/Edit button (no install gate).
@@ -183,11 +212,96 @@ export function AppDetailSheet({
     void loadReviews()
   }
 
-  // Primary button tri-state (macOS AppDetailView): "Setting up…" while polling an
-  // external setup, "Installed" once enabled (disable is the separate trash icon),
-  // else "Install". (Open-installed and paid-purchase affordances are their own PRs.)
-  const primaryDisabled = busy || settingUp
-  const primaryLabel = settingUp ? 'Setting up…' : enabled ? 'Installed' : 'Install'
+  // Self-heal a stale paid state: refetch the full app when the window regains focus —
+  // e.g. the user returns from completing a purchase (or setup) in the browser — so the
+  // Purchase CTA hides once is_user_paid has flipped server-side.
+  useEffect(() => {
+    const refetch = (): void => {
+      void (async () => {
+        try {
+          const res = await omiApi.get<App>(`/v1/apps/${app.id}`)
+          if (mounted.current) setDetail(res.data)
+        } catch {
+          // Keep the current detail on any failure (macOS fails silently too).
+        }
+      })()
+    }
+    window.addEventListener('focus', refetch)
+    return () => window.removeEventListener('focus', refetch)
+  }, [app.id])
+
+  // Stop any in-flight purchase poll and mark unmounted on teardown so a resolved tick
+  // can't setState after the sheet closes (and no orphaned 3s webhook loop survives).
+  useEffect(() => {
+    return () => {
+      mounted.current = false
+      purchasePoll.current?.()
+      purchasePoll.current = null
+    }
+  }, [])
+
+  // After opening the payment link, poll the app every 3s until is_user_paid flips, then
+  // enable it via the page's install handler. Reuses the setup-poll state machine (same
+  // 3s / 100-tick cadence, same cancel-on-unmount contract).
+  const startPurchasePoll = (): void => {
+    purchasePoll.current?.()
+    const cancel = startSetupPolling({
+      setupCompletedUrl: app.id, // opaque token; the check below ignores it
+      uid: currentUid,
+      check: async () => {
+        try {
+          const res = await omiApi.get<App>(`/v1/apps/${app.id}`)
+          if (mounted.current) setDetail(res.data)
+          return res.data.is_user_paid === true
+        } catch {
+          return false
+        }
+      },
+      onSuccess: () => {
+        purchasePoll.current = null
+        onToggle(app)
+      },
+      onTimeout: () => {
+        purchasePoll.current = null
+      }
+    })
+    purchasePoll.current = cancel
+  }
+
+  // Purchase affordance click. The backend already appends ?client_reference_id=uid_… to
+  // payment_link, so we open it verbatim (never re-append uid). No link → the app is only
+  // purchasable in the mobile app; say so instead of silently no-op'ing (the macOS bug).
+  const onPurchase = (): void => {
+    if (paymentLink) {
+      void window.omi.openExternalUrl(paymentLink)
+      startPurchasePoll()
+    } else {
+      toast(`${name} is a paid app`, {
+        tone: 'info',
+        body: 'Purchase it in the Omi mobile app to unlock it here.'
+      })
+    }
+  }
+
+  // Open an installed external-integration app (port of macOS openExternalApp): prefer
+  // app_home_url, else the first auth step carrying the user's uid. The auth-step
+  // fallback needs a signed-in uid; when there is neither a home url nor a resolvable
+  // step, do nothing (no dead link).
+  const onOpenApp = (): void => {
+    const homeUrl = integration?.app_home_url
+    const target =
+      homeUrl || (currentUid && authSteps[0]?.url ? `${authSteps[0].url}?uid=${currentUid}` : null)
+    if (!target) return
+    void window.omi.openExternalUrl(target).then((ok) => {
+      if (!ok) toast("This app's link is unavailable.", { tone: 'warn' })
+    })
+  }
+
+  // Primary button states: "Setting up…" while polling an external setup, "Installed"
+  // once enabled (disable is the separate trash icon), a real "Purchase — $x" affordance
+  // for an unowned paid app (beyond macOS), else "Install". Disable-in-flight uses `busy`.
+  const primaryBusy = busy || settingUp
+  const purchaseLabel = typeof price === 'number' ? `Purchase — $${price.toFixed(2)}` : 'Purchase'
 
   return (
     <>
@@ -245,24 +359,63 @@ export function AppDetailSheet({
                     </div>
                   </div>
                   <div className="flex shrink-0 items-center gap-2">
-                    <button
-                      onClick={() => onToggle(app)}
-                      disabled={primaryDisabled || enabled}
-                      className={`inline-flex items-center gap-1.5 rounded-xl border px-4 py-2 text-sm font-medium transition-all duration-200 ${
-                        enabled
-                          ? 'border-white/20 bg-white/10 text-white'
-                          : 'border-white/15 bg-transparent text-white/80 hover:bg-white/5 hover:text-white'
-                      } ${primaryDisabled ? 'opacity-60' : ''} ${enabled ? 'cursor-default' : ''}`}
-                    >
-                      {settingUp || busy ? (
+                    {settingUp ? (
+                      <button
+                        disabled
+                        className="inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-transparent px-4 py-2 text-sm font-medium text-white/80 opacity-60"
+                      >
                         <Loader2 className="h-4 w-4 animate-spin" />
-                      ) : enabled ? (
-                        <Check className="h-4 w-4" />
+                        Setting up…
+                      </button>
+                    ) : enabled ? (
+                      external ? (
+                        <button
+                          onClick={onOpenApp}
+                          className="inline-flex items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-white/15"
+                        >
+                          <ArrowUpRight className="h-4 w-4" />
+                          Open
+                        </button>
                       ) : (
-                        <Plus className="h-4 w-4" />
-                      )}
-                      {primaryLabel}
-                    </button>
+                        <button
+                          disabled
+                          className="inline-flex cursor-default items-center gap-1.5 rounded-xl border border-white/20 bg-white/10 px-4 py-2 text-sm font-medium text-white"
+                        >
+                          <Check className="h-4 w-4" />
+                          Installed
+                        </button>
+                      )
+                    ) : needsPurchase ? (
+                      <button
+                        onClick={onPurchase}
+                        disabled={primaryBusy}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border border-white/25 bg-white/10 px-4 py-2 text-sm font-medium text-white transition-all duration-200 hover:bg-white/15 ${
+                          primaryBusy ? 'opacity-60' : ''
+                        }`}
+                      >
+                        {primaryBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <CreditCard className="h-4 w-4" />
+                        )}
+                        {purchaseLabel}
+                      </button>
+                    ) : (
+                      <button
+                        onClick={() => onToggle(app)}
+                        disabled={primaryBusy}
+                        className={`inline-flex items-center gap-1.5 rounded-xl border border-white/15 bg-transparent px-4 py-2 text-sm font-medium text-white/80 transition-all duration-200 hover:bg-white/5 hover:text-white ${
+                          primaryBusy ? 'opacity-60' : ''
+                        }`}
+                      >
+                        {primaryBusy ? (
+                          <Loader2 className="h-4 w-4 animate-spin" />
+                        ) : (
+                          <Plus className="h-4 w-4" />
+                        )}
+                        Install
+                      </button>
+                    )}
                     {enabled && !settingUp && (
                       <button
                         onClick={() => onToggle(app)}

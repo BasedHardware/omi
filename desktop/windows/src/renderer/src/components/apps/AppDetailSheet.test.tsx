@@ -10,8 +10,13 @@ vi.mock('../../lib/apiClient', () => ({
   omiApi: { get: omiGet, post: omiPost },
   desktopApi: { post: vi.fn() }
 }))
-// Stable current-user id so the "your review" match + optimistic build are deterministic.
-vi.mock('../../lib/persistentCache', () => ({ getCacheUid: () => 'me' }))
+// Current-user id — defaults to 'me' (stable for the review + optimistic-build cases);
+// overridable per-test so the open-installed uid guard can simulate a signed-out user.
+const { getCacheUidMock } = vi.hoisted(() => ({ getCacheUidMock: vi.fn(() => 'me') }))
+vi.mock('../../lib/persistentCache', () => ({ getCacheUid: getCacheUidMock }))
+// Spy on toasts so the paid/open error-surfacing paths can be asserted (never silent).
+const { toastFn } = vi.hoisted(() => ({ toastFn: vi.fn() }))
+vi.mock('../../lib/toast', () => ({ toast: toastFn }))
 
 import { AppDetailSheet } from './AppDetailSheet'
 import type { App, AppCatalogItem, AppReview } from '../../lib/omiApi.generated'
@@ -81,6 +86,8 @@ function renderSheet(props: Partial<React.ComponentProps<typeof AppDetailSheet>>
 beforeEach(() => {
   omiGet.mockReset()
   omiPost.mockReset()
+  toastFn.mockReset()
+  getCacheUidMock.mockReturnValue('me')
   omiPost.mockResolvedValue({ data: { status: 'ok' } })
   ;(window as unknown as { omi: Record<string, unknown> }).omi = {
     openExternalUrl: vi.fn().mockResolvedValue(true),
@@ -147,8 +154,8 @@ describe('AppDetailSheet primary button (tri-state)', () => {
     expect(screen.queryByLabelText('Disable app')).toBeNull()
   })
 
-  it('shows Installed + a disable trash when enabled', async () => {
-    mockGets(DETAIL, [])
+  it('shows Installed + a disable trash when an enabled app is not external', async () => {
+    mockGets({ ...DETAIL, capabilities: ['chat'], external_integration: null }, [])
     const { onToggle } = renderSheet({ enabled: true })
     await waitFor(() => expect(screen.getByText('Installed')).toBeTruthy())
     const trash = screen.getByLabelText('Disable app')
@@ -160,6 +167,117 @@ describe('AppDetailSheet primary button (tri-state)', () => {
     mockGets(DETAIL, [])
     renderSheet({ settingUp: true })
     await waitFor(() => expect(screen.getByText('Setting up…')).toBeTruthy())
+  })
+})
+
+function openSpy(): ReturnType<typeof vi.fn> {
+  return (window as unknown as { omi: { openExternalUrl: ReturnType<typeof vi.fn> } }).omi
+    .openExternalUrl
+}
+
+// Windows goes BEYOND macOS here: macOS decodes is_paid but shows no purchase UX and
+// silently swallows the paid-gate 403. Windows renders a real Purchase affordance and
+// never fails silently.
+describe('AppDetailSheet paid apps (beyond macOS)', () => {
+  const PAID_LINK = 'https://buy.example.com/x?client_reference_id=uid_abc'
+
+  it('shows a "Purchase — $price" CTA and opens payment_link verbatim (no double client_reference_id)', async () => {
+    mockGets(
+      { ...DETAIL, is_paid: true, is_user_paid: false, payment_link: PAID_LINK, price: 4.99 },
+      []
+    )
+    renderSheet({ enabled: false })
+    const btn = await screen.findByText('Purchase — $4.99')
+    fireEvent.click(btn)
+    expect(openSpy()).toHaveBeenCalledWith(PAID_LINK)
+    // Opened exactly as the backend built it — client_reference_id appears once.
+    expect(PAID_LINK.match(/client_reference_id/g)!.length).toBe(1)
+  })
+
+  it('hides the Purchase CTA once is_user_paid is true (falls back to Install)', async () => {
+    mockGets(
+      { ...DETAIL, is_paid: true, is_user_paid: true, payment_link: PAID_LINK, price: 4.99 },
+      []
+    )
+    renderSheet({ enabled: false })
+    await waitFor(() => expect(screen.getByText('About')).toBeTruthy())
+    expect(screen.queryByText(/Purchase/)).toBeNull()
+    expect(screen.getByRole('button', { name: /^Install$/ })).toBeTruthy()
+  })
+
+  it('a paid app with no payment_link never silently no-ops — toasts to buy in the mobile app', async () => {
+    mockGets({ ...DETAIL, is_paid: true, is_user_paid: false, payment_link: null, price: 2 }, [])
+    renderSheet({ enabled: false })
+    const btn = await screen.findByText(/^Purchase/)
+    fireEvent.click(btn)
+    expect(toastFn).toHaveBeenCalled()
+    const [title, opts] = toastFn.mock.calls[0]
+    expect(String(title)).toMatch(/paid app/)
+    expect(String(opts.body)).toMatch(/mobile app/)
+    expect(openSpy()).not.toHaveBeenCalled()
+  })
+})
+
+// PR5 — Open an installed external-integration app (port of macOS openExternalApp).
+describe('AppDetailSheet open installed (external integrations)', () => {
+  it('an enabled external app shows Open and opens app_home_url', async () => {
+    mockGets(
+      {
+        ...DETAIL,
+        external_integration: {
+          app_home_url: 'https://home.example.com/app',
+          auth_steps: [{ name: 'Connect account', url: 'https://ex.com/setup' }]
+        }
+      },
+      []
+    )
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    expect(openSpy()).toHaveBeenCalledWith('https://home.example.com/app')
+    // Disable is still reachable via the trash affordance.
+    expect(screen.getByLabelText('Disable app')).toBeTruthy()
+  })
+
+  it('falls back to the first auth step with ?uid= when there is no app_home_url', async () => {
+    mockGets(
+      {
+        ...DETAIL,
+        external_integration: {
+          auth_steps: [{ name: 'Connect account', url: 'https://ex.com/setup' }]
+        }
+      },
+      []
+    )
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    expect(openSpy()).toHaveBeenCalledWith('https://ex.com/setup?uid=me')
+  })
+
+  it('with no signed-in uid the auth-step fallback is guarded (no-op)', async () => {
+    getCacheUidMock.mockReturnValue('')
+    mockGets(
+      {
+        ...DETAIL,
+        external_integration: {
+          auth_steps: [{ name: 'Connect account', url: 'https://ex.com/setup' }]
+        }
+      },
+      []
+    )
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    expect(openSpy()).not.toHaveBeenCalled()
+  })
+
+  it('no-ops when there is neither an app_home_url nor an auth step', async () => {
+    mockGets({ ...DETAIL, external_integration: { app_home_url: null, auth_steps: [] } }, [])
+    renderSheet({ enabled: true })
+    const btn = await screen.findByRole('button', { name: /^Open$/ })
+    fireEvent.click(btn)
+    expect(openSpy()).not.toHaveBeenCalled()
   })
 })
 
