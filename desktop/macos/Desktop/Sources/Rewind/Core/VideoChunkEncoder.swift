@@ -405,7 +405,7 @@ actor VideoChunkEncoder {
     try await waitForWriterInputReady(input)
 
     let pixelBuffer: CVPixelBuffer = try autoreleasepool {
-      try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
+      try Self.createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
     }
 
     // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
@@ -560,7 +560,7 @@ actor VideoChunkEncoder {
     return max(350_000, min(8_000_000, Int(bitrate)))
   }
 
-  private func createPixelBuffer(
+  private nonisolated static func createPixelBuffer(
     from image: CGImage,
     size: CGSize,
     adaptor: AVAssetWriterInputPixelBufferAdaptor

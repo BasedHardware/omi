@@ -1,7 +1,7 @@
-import SwiftUI
+import OSLog
 import OmiSupport
 import OmiTheme
-import OSLog
+import SwiftUI
 
 private let memoryAtlasLogger = Logger(
   subsystem: Bundle.main.bundleIdentifier ?? "com.omi.desktop",
@@ -348,54 +348,64 @@ enum MemoryAtlasRenderPlanner {
       nodeCount: snapshot.nodes.count
     )
     let isFullyLabelled = !compact && zoom >= fullyLabelledZoom
-    let usesCanvasLabels = !compact && zoom >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
-      nodeCount: snapshot.nodes.count
-    )
-    let detailLevel: MemoryAtlasDetailLevel = if zoom < 1.35 {
-      .overview
-    } else if zoom < 1.9 {
-      .neighborhood
-    } else if zoom < MemoryAtlasZoomPolicy.focusModeZoom {
-      .detail
-    } else if zoom < MemoryAtlasZoomPolicy.inspectModeZoom {
-      .focus
-    } else {
-      .inspect
-    }
+    let usesCanvasLabels =
+      !compact
+      && zoom
+        >= MemoryAtlasZoomPolicy.automaticCanvasLabelZoom(
+          nodeCount: snapshot.nodes.count
+        )
+    let detailLevel: MemoryAtlasDetailLevel =
+      if zoom < 1.35 {
+        .overview
+      } else if zoom < 1.9 {
+        .neighborhood
+      } else if zoom < MemoryAtlasZoomPolicy.focusModeZoom {
+        .detail
+      } else if zoom < MemoryAtlasZoomPolicy.inspectModeZoom {
+        .focus
+      } else {
+        .inspect
+      }
 
     // Detail must be additive. The previous planner reduced the node budget
     // from 1,200 to 600 immediately after overview, which made visible dots
     // disappear on a small zoom-in. Keep a stable, salience-ordered cohort and
     // only add more of it as fidelity increases.
-    let maximumNodeLimit: Int = if isFullyLabelled {
-      snapshot.nodes.count
-    } else { switch detailLevel {
-    case .overview: 1_200
-    case .neighborhood: 1_600
-    case .detail: 2_400
-    case .focus, .inspect: 3_200
-    } }
-    let edgeLimit: Int = switch detailLevel {
-    case .overview: 36
-    case .neighborhood: 96
-    case .detail: 160
-    case .focus: 260
-    case .inspect: 360
-    }
-    let labelsPerCluster: Int = switch detailLevel {
-    case .overview: compact ? 2 : 3
-    case .neighborhood: compact ? 4 : 7
-    case .detail: compact ? 5 : 11
-    case .focus: compact ? 5 : 24
-    case .inspect: compact ? 5 : 96
-    }
-    let labelLimit: Int = switch detailLevel {
-    case .overview: 12
-    case .neighborhood: 24
-    case .detail: 36
-    case .focus: 72
-    case .inspect: 96
-    }
+    let maximumNodeLimit: Int =
+      if isFullyLabelled {
+        snapshot.nodes.count
+      } else {
+        switch detailLevel {
+        case .overview: 1_200
+        case .neighborhood: 1_600
+        case .detail: 2_400
+        case .focus, .inspect: 3_200
+        }
+      }
+    let edgeLimit: Int =
+      switch detailLevel {
+      case .overview: 36
+      case .neighborhood: 96
+      case .detail: 160
+      case .focus: 260
+      case .inspect: 360
+      }
+    let labelsPerCluster: Int =
+      switch detailLevel {
+      case .overview: compact ? 2 : 3
+      case .neighborhood: compact ? 4 : 7
+      case .detail: compact ? 5 : 11
+      case .focus: compact ? 5 : 24
+      case .inspect: compact ? 5 : 96
+      }
+    let labelLimit: Int =
+      switch detailLevel {
+      case .overview: 12
+      case .neighborhood: 24
+      case .detail: 36
+      case .focus: 72
+      case .inspect: 96
+      }
 
     var relatedNodeIDs: Set<String> = []
     if let selectedNodeID {
@@ -435,9 +445,11 @@ enum MemoryAtlasRenderPlanner {
     if let selectedNodeID {
       edgeCandidates = snapshot.edgesByNodeID[selectedNodeID] ?? []
     } else if let matchingNodeIDs {
-      edgeCandidates = matchingEdges ?? snapshot.rankedEdges.filter { edge in
-        matchingNodeIDs.contains(edge.edge.sourceId) || matchingNodeIDs.contains(edge.edge.targetId)
-      }
+      edgeCandidates =
+        matchingEdges
+        ?? snapshot.rankedEdges.filter { edge in
+          matchingNodeIDs.contains(edge.edge.sourceId) || matchingNodeIDs.contains(edge.edge.targetId)
+        }
     } else {
       edgeCandidates = snapshot.rankedEdges
     }
@@ -692,13 +704,15 @@ enum MemoryAtlasLayoutEngine {
     }
 
     let normalizedUserName = userName?.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
-    let anchor = nodes.first {
-      $0.nodeType == .person && normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
-    } ?? nodes.filter { $0.nodeType == .person }.max {
-      (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
-    } ?? nodes.max {
-      (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
-    }
+    let anchor =
+      nodes.first {
+        $0.nodeType == .person && normalizedUserName != nil && $0.label.lowercased() == normalizedUserName
+      } ?? nodes.filter { $0.nodeType == .person }.max {
+        (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
+      }
+      ?? nodes.max {
+        (degree[$0.id] ?? 0) < (degree[$1.id] ?? 0)
+      }
 
     // Collapse every entity that stands in for the account holder — a generic
     // "User"/"Me" node, or a second person node sharing the user's name — into
@@ -768,9 +782,10 @@ enum MemoryAtlasLayoutEngine {
     }
 
     let positions = Dictionary(lastWriteWins: placements.map { ($0.id, $0.normalizedPosition) })
-    let clusters = Dictionary(lastWriteWins: placements.compactMap { placement in
-      placement.cluster.map { (placement.id, $0) }
-    })
+    let clusters = Dictionary(
+      lastWriteWins: placements.compactMap { placement in
+        placement.cluster.map { (placement.id, $0) }
+      })
     let canonicalID: (String) -> String = { id in
       guard let anchorID = anchor?.id, collapsedIDs.contains(id) else { return id }
       return anchorID
@@ -1116,19 +1131,21 @@ private struct CanonicalMemoryAtlasPreview: View {
       for placement in plan.visibleNodes where placement.cluster == cluster {
         let radius: CGFloat = placement.clusterRank == 0 ? 4 : 1.8
         let center = point(for: placement.normalizedPosition, in: size)
-        path.addEllipse(in: CGRect(
-          x: center.x - radius,
-          y: center.y - radius,
-          width: radius * 2,
-          height: radius * 2
-        ))
+        path.addEllipse(
+          in: CGRect(
+            x: center.x - radius,
+            y: center.y - radius,
+            width: radius * 2,
+            height: radius * 2
+          ))
       }
       guard !path.isEmpty else { continue }
       context.fill(path, with: .color(cluster.color.opacity(0.8)))
     }
 
     if let anchorNodeID = snapshot.anchorNodeID,
-       let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID }) {
+      let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID })
+    {
       let center = point(for: anchor.normalizedPosition, in: size)
       context.fill(
         Path(ellipseIn: CGRect(x: center.x - 6, y: center.y - 6, width: 12, height: 12)),
@@ -1393,7 +1410,7 @@ private struct CanonicalMemoryAtlasSurface: View {
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textTertiary)
 
-      TextField("Search your entities", text: $searchText)
+        TextField("Search your entities", text: $searchText)
           .textFieldStyle(.plain)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textPrimary)
@@ -1446,10 +1463,11 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private func drawClusterContours(context: inout GraphicsContext, size: CGSize) {
-    let diameter = min(
-      size.width * (snapshot.activeClusters.count >= 4 ? 0.22 : 0.27),
-      size.height * (compact ? 0.36 : 0.44)
-    ) * zoom
+    let diameter =
+      min(
+        size.width * (snapshot.activeClusters.count >= 4 ? 0.22 : 0.27),
+        size.height * (compact ? 0.36 : 0.44)
+      ) * zoom
     for cluster in snapshot.activeClusters {
       let center = point(for: snapshot.center(for: cluster), in: size)
       for inset in 0..<3 {
@@ -1519,9 +1537,10 @@ private struct CanonicalMemoryAtlasSurface: View {
           radius *= CGFloat(1 + 0.9 * pop)
           let bloom = radius * 2.6
           context.fill(
-            Path(ellipseIn: CGRect(
-              x: center.x - bloom / 2, y: center.y - bloom / 2, width: bloom, height: bloom
-            )),
+            Path(
+              ellipseIn: CGRect(
+                x: center.x - bloom / 2, y: center.y - bloom / 2, width: bloom, height: bloom
+              )),
             with: .color(cluster.color.opacity(0.3 * pop))
           )
         }
@@ -1547,7 +1566,8 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
 
     if let anchorNodeID = snapshot.anchorNodeID,
-       let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID }) {
+      let anchor = plan.visibleNodes.first(where: { $0.id == anchorNodeID })
+    {
       drawSpecialNode(
         anchor,
         radius: compact ? 6 : (isInspectMode ? 18 : (isFocusMode ? 12 : 7)),
@@ -1616,13 +1636,14 @@ private struct CanonicalMemoryAtlasSurface: View {
       let text = Text(placement.node.label)
         .font(.system(size: 11, weight: placement.id == snapshot.anchorNodeID ? .semibold : .medium))
         .foregroundStyle(OmiColors.textPrimary)
-      let labelOffset: CGFloat = if placement.id == selectedNodeID {
-        34
-      } else if placement.id == snapshot.anchorNodeID {
-        24
-      } else {
-        nodeRadius(for: placement) + 5
-      }
+      let labelOffset: CGFloat =
+        if placement.id == selectedNodeID {
+          34
+        } else if placement.id == snapshot.anchorNodeID {
+          24
+        } else {
+          nodeRadius(for: placement) + 5
+        }
       context.draw(text, at: CGPoint(x: labelCenterX, y: center.y + labelOffset), anchor: .top)
 
       // A small leading color marker keeps labels scannable while preserving
@@ -1736,7 +1757,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       guard let primaryEdge, let sourceNode, let targetNode else {
         return "\(placement.degree) connection\(placement.degree == 1 ? "" : "s")"
       }
-      return "\(sourceNode.node.label) \(MemoryAtlasLayoutEngine.relationshipDisplayName(primaryEdge.edge.label)) \(targetNode.node.label)"
+      return
+        "\(sourceNode.node.label) \(MemoryAtlasLayoutEngine.relationshipDisplayName(primaryEdge.edge.label)) \(targetNode.node.label)"
     }()
 
     return HStack(spacing: 14) {
@@ -2031,18 +2053,24 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private var zoomControls: some View {
     HStack(spacing: 1) {
-      Button { zoomOut() } label: {
+      Button {
+        zoomOut()
+      } label: {
         Image(systemName: "minus").frame(width: 28, height: 28)
       }
       .accessibilityIdentifier("memory_atlas_zoom_out")
-      Button { resetViewport() } label: {
+      Button {
+        resetViewport()
+      } label: {
         Text("\(Int(zoom * 100))%")
           .scaledFont(size: 9, weight: .medium)
           .frame(width: 40, height: 28)
       }
       .help("Return to overview")
       .accessibilityIdentifier("memory_atlas_reset_viewport")
-      Button { zoomIn() } label: {
+      Button {
+        zoomIn()
+      } label: {
         Image(systemName: "plus").frame(width: 28, height: 28)
       }
       .disabled(zoom >= maximumZoom)
@@ -2051,7 +2079,9 @@ private struct CanonicalMemoryAtlasSurface: View {
     }
     .scaledFont(size: 10)
     .foregroundColor(OmiColors.textSecondary)
-    .omiControlSurface(fill: OmiColors.backgroundRaised.opacity(0.96), radius: 10, stroke: OmiColors.border.opacity(0.3))
+    .omiControlSurface(
+      fill: OmiColors.backgroundRaised.opacity(0.96), radius: 10, stroke: OmiColors.border.opacity(0.3)
+    )
     .buttonStyle(.plain)
   }
 
@@ -2153,10 +2183,11 @@ private struct CanonicalMemoryAtlasSurface: View {
       matchingEdges = nil
       return
     }
-    let matches = Set(snapshot.nodes.lazy.filter { placement in
-      placement.node.label.localizedCaseInsensitiveContains(query)
-        || placement.node.aliases.contains { $0.localizedCaseInsensitiveContains(query) }
-    }.map(\.id))
+    let matches = Set(
+      snapshot.nodes.lazy.filter { placement in
+        placement.node.label.localizedCaseInsensitiveContains(query)
+          || placement.node.aliases.contains { $0.localizedCaseInsensitiveContains(query) }
+      }.map(\.id))
     matchingNodeIDs = matches
     matchingEdges = snapshot.rankedEdges.filter { edge in
       matches.contains(edge.edge.sourceId) || matches.contains(edge.edge.targetId)
@@ -2242,6 +2273,7 @@ private struct CanonicalMemoryAtlasSurface: View {
 /// live atlas needs a signed-in account and a server graph, so QA has no way to
 /// visually regression-test the timeline without this fixed sample. Same file as
 /// the private surface so it can construct it directly.
+@MainActor
 enum MemoryAtlasExportPreview {
   static func surface(timeCursor: Double = 0.55) -> AnyView {
     AnyView(
