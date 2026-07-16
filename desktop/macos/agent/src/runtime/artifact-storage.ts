@@ -16,13 +16,23 @@ export interface ArtifactStorageScope {
 
 export interface ArtifactStorageOptions {
   rootDir?: string;
+  /** Overrides the signed-in Desktop root in isolated integration tests. */
+  reportedDesktopRoots?: readonly string[];
 }
 
 export class OmiArtifactStorage {
   readonly rootDir: string;
+  private readonly temporaryArtifactRoots: readonly string[];
+  private readonly reportedDesktopRoots: readonly string[];
 
   constructor(options: ArtifactStorageOptions = {}) {
     this.rootDir = resolve(options.rootDir ?? defaultArtifactRoot());
+    this.reportedDesktopRoots = uniqueResolvedPaths(options.reportedDesktopRoots ?? [join(homedir(), "Desktop")]);
+    this.temporaryArtifactRoots = uniqueResolvedPaths([
+      "/tmp",
+      "/private/tmp",
+      tmpdir(),
+    ]);
   }
 
   normalizeArtifact(
@@ -158,11 +168,12 @@ export class OmiArtifactStorage {
    * adapter path. Recover that narrow, user-visible case without treating every
    * pathname mentioned in model text as an artifact.
    *
-   * We accept only a file that is both explicitly presented as a deliverable
-   * and present in a temporary directory. The latter is where providers that
-   * do not honor Omi's managed working directory convention place generated
-   * files, and keeps an untrusted completion from importing arbitrary user
-   * files merely because it names their paths.
+   * Absolute paths are eligible only under a temporary directory, covering
+   * providers that do not honor Omi's managed working directory convention.
+   * Desktop uses its own stricter "I built file.html on your Desktop" grammar,
+   * which resolves only a simple filename beneath the signed-in user's Desktop.
+   * Neither path lets a completion import arbitrary user files merely because
+   * it names their paths.
    */
   discoverReportedTerminalArtifacts(
     finalText: string,
@@ -173,11 +184,22 @@ export class OmiArtifactStorage {
     const seenPaths = new Set<string>();
 
     for (const line of finalText.slice(0, MAX_REPORTED_TERMINAL_TEXT_CHARS).split(/\r?\n/)) {
-      if (!EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(line)) continue;
+      const desktopCandidates = reportedDesktopFileCandidates(line, this.reportedDesktopRoots);
+      if (!EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE.test(line) && desktopCandidates.length === 0) continue;
 
-      for (const candidate of reportedLocalFileCandidates(line)) {
+      const candidates = [
+        ...reportedLocalFileCandidates(line).map((candidate) => ({
+          candidate,
+          allowedRoots: this.temporaryArtifactRoots,
+        })),
+        ...desktopCandidates.map((candidate) => ({
+          candidate,
+          allowedRoots: this.reportedDesktopRoots,
+        })),
+      ];
+      for (const { candidate, allowedRoots } of candidates) {
         const path = localPathFromReportedCandidate(candidate);
-        if (!path || !isTemporaryArtifactPath(path) || seenPaths.has(path)) continue;
+        if (!path || !this.isReportableArtifactPath(path, allowedRoots) || seenPaths.has(path)) continue;
         seenPaths.add(path);
 
         const uri = pathToFileURL(path).toString();
@@ -207,6 +229,10 @@ export class OmiArtifactStorage {
       }
     }
     return discovered;
+  }
+
+  private isReportableArtifactPath(path: string, allowedRoots: readonly string[]): boolean {
+    return allowedRoots.some((root) => path !== root && isInside(path, root));
   }
 
   directoryFor(scope: ArtifactStorageScope): string {
@@ -259,9 +285,17 @@ const MAX_REPORTED_TERMINAL_TEXT_CHARS = 64 * 1024;
 const MAX_REPORTED_TERMINAL_ARTIFACTS = 8;
 const EXPLICIT_ARTIFACT_DELIVERY_LANGUAGE = /(?:\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b[^\n]{0,120}\b(?:lives?|saved|written|created|generated|produced|ready|available|located)\b|\b(?:saved|written|created|generated|produced)\b[^\n]{0,120}\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b|\b(?:file|artifact|deliverable|output|result|report|page|document|site)\b\s*:)/i;
 const REPORTED_LOCAL_FILE_CANDIDATE = /file:\/\/[^\s`<>"']+|\/(?:[^\s`<>"']+)/g;
+const REPORTED_DESKTOP_FILE_CANDIDATE = /\b(?:built|created|generated|saved|wrote)\b[^\n]{0,120}?\b([A-Za-z0-9][A-Za-z0-9._-]{0,127})(?:[`*_]+)?\s+on\s+your\s+desktop\b/gi;
 
 function reportedLocalFileCandidates(line: string): string[] {
   return line.match(REPORTED_LOCAL_FILE_CANDIDATE) ?? [];
+}
+
+function reportedDesktopFileCandidates(line: string, desktopRoots: readonly string[]): string[] {
+  return [...line.matchAll(REPORTED_DESKTOP_FILE_CANDIDATE)].flatMap((match) => {
+    const fileName = match[1];
+    return fileName ? desktopRoots.map((root) => join(root, fileName)) : [];
+  });
 }
 
 function localPathFromReportedCandidate(candidate: string): string | null {
@@ -274,11 +308,8 @@ function localPathFromReportedCandidate(candidate: string): string | null {
   }
 }
 
-function isTemporaryArtifactPath(path: string): boolean {
-  return ["/tmp", "/private/tmp", tmpdir()].some((root) => {
-    const resolvedRoot = resolve(root);
-    return path !== resolvedRoot && isInside(path, resolvedRoot);
-  });
+function uniqueResolvedPaths(paths: readonly string[]): string[] {
+  return [...new Set(paths.map((path) => resolve(path)))];
 }
 
 function sanitizePathComponent(value: string): string {
