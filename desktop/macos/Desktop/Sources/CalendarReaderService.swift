@@ -305,15 +305,12 @@ actor CalendarReaderService {
       }
 
       RULES:
-      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life)
-      - Extract 3-5 tasks (upcoming preparation, follow-ups, deadlines from future events)
-      - Focus on PATTERNS (weekly standups, regular gym, recurring 1-on-1s) not one-off events
-      - Each memory should be a single clear factual statement in third person ("The user...")
-      - Tasks should only reference FUTURE events with ISO date in due_at
+      - Extract 10-15 memories (facts about their role, recurring meetings, relationships, routines, interests, work schedule, hobbies, social life). Memories generalize PATTERNS (weekly standups, regular gym, recurring 1-on-1s), not one-off events, in third person ("The user...").
+      - Extract 0-3 tasks. A task is a SPECIFIC preparation the user still owes for a real upcoming event: name the event and what's owed ("Prep the demo for Thursday's call with Daniel"), with an ISO date in due_at. Never a vague "follow up" or a task for a past event.
+      - Prefer 0 tasks over a weak or generic one. An empty tasks array is correct when nothing genuine is owed.
       - Task priorities: "high", "medium", or "low"
       - Profile should summarize professional identity and schedule patterns
-      - Do NOT include raw event details — synthesize and generalize
-      - Do NOT include sensitive medical or financial details
+      - Do NOT include sensitive medical, financial, or religious details in tasks
       """
 
     // Retry the synthesis on transient failure instead of silently dropping the import.

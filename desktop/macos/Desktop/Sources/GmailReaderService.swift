@@ -234,12 +234,12 @@ actor GmailReaderService {
       }
 
       RULES:
-      - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns)
-      - Extract 2-3 tasks (pending replies, upcoming deadlines, things to follow up on)
-      - Each memory should be a single clear factual statement
+      - Extract exactly 10 memories (facts about their role, company, projects, relationships, interests, tools, communication patterns). Memories should be generalized — no raw email content.
+      - Extract 0-3 tasks. A task is a SPECIFIC thing the user personally still owes: a reply they haven't sent, a promise they made, a message that bounced, a deadline addressed to them. Name the real person/subject in the description ("Reply to Daniel about the Thursday demo"), not a generic "follow up".
+      - Only real, still-open loops. EXCLUDE: newsletters and marketing, automated/no-reply/notification mail, receipts, and the user's OWN mass or templated outbound (identical messages sent to many people are a campaign, not a task). If a thread already has a later reply from the user, it is handled — skip it.
+      - Prefer 0 tasks over a weak one. An empty tasks array is correct when nothing is genuinely owed.
       - Task priorities: "high", "medium", or "low"
-      - Profile should summarize professional identity and key interests
-      - Do NOT include raw email content — synthesize and generalize
+      - Profile should summarize professional identity and key interests in 2-3 sentences
       - Output ONLY the JSON object, nothing else
       """
 

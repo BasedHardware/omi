@@ -1125,9 +1125,11 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       - entities: at most 12
       - node_type must be one of: person, organization, place, thing, concept
       - relation must connect the user to the entity, like works_on, uses, works_with, follows, plans_with, researches
-      - goals: at most 6, concrete and specific, not generic
-      - Prefer project names, organizations, tools, products, repositories, and recurring commitments
-      - Favor labels that will make a graph visually informative, not generic filler
+      - goals: exactly 4, each a short first-person objective of 3-6 words the user would pick as their focus (e.g. "Ship the desktop launch", "Land the billing migration")
+      - Every goal must name something real from the context — a specific project, product, company, deadline, or repository. Never a generic self-improvement line.
+      - Banned: "Be more productive", "Stay focused", "Organize my work", or any goal that could apply to anyone. If the context can't ground 4, return fewer.
+      - No trailing punctuation, no filler adjectives, phrased so it reads well as a selectable chip
+      - Favor entity labels that will make a graph visually informative, not generic filler
       """
 
     do {
@@ -1162,9 +1164,9 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
         }
         return EnrichmentEntity(label: label, nodeType: nodeType, relation: relation)
       }
-      let goals = (parsed["goals"] as? [String] ?? []).filter {
-        !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-      }
+      let goals = (parsed["goals"] as? [String] ?? [])
+        .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+        .filter { !$0.isEmpty }
 
       return EnrichmentAnalysis(summary: summary, entities: entities, goals: goals)
     } catch {
