@@ -9355,7 +9355,7 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Za sada radi sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
+      'Radi sa mikrofonom telefona i sa Omi i Limitless uređajima. Zvuk ostaje na vašem telefonu dok ne odlučite da ga otpremite.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9608,4 +9608,8 @@ class AppLocalizationsSr extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Уређај је скоро пун — синхронизујте да ослободите простор.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nema veze — snima se lokalno. Biće transkribovano kada ponovo budete na mreži.';
 }

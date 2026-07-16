@@ -216,11 +216,15 @@ npm run test:listen-lifecycle:emulator  # Real Firestore transaction contention 
 
 **Tests are selector-driven.** Local `test.sh` runs the full discovered set from `tests/unit/`, `tests/services/`, and `tests/routers/` via `scripts/select_backend_unit_tests.py`; CI uses the same selector but may run only a changed-file subset on PRs. Tests that need live services (Redis, Firebase, real API keys) go in `tests/integration/`, which is not part of selector auto-discovery; note in the PR how you ran them.
 
+**Runtime image contracts.** `runtime_images.json` registers each deployed Python image, its Dockerfile, build context, entrypoints, and deployment workflows. Run `make runtime-image-source-closure` to verify final-stage first-party source closure and that every registered deployment workflow smokes its declared Dockerfile; it is the fast pre-push and CI gate. `make runtime-image-smoke SERVICE=pusher` builds one image, checks every reachable third-party module is installed offline, then imports the registered isolated entrypoint. PR CI builds every registry-selected CPU image; deployment workflows build, smoke, then publish. GPU images use the same dependency-presence probe after their deployment build but defer full import until model initialization is lazy. Do not add a hand-maintained image-layout test or workflow mapping; add the service to the registry instead.
+
 **OpenAPI contract runner** — OpenAPI contract checks use `backend/scripts/openapi_runner.sh`, which syncs the pinned `backend/openapi-requirements.txt` runner env and prewarms `tiktoken`; CI and `scripts/pre-push` must use this same path.
 
 **Released app-client compatibility** — `docs/api-reference/app-client-openapi.json` is a compatibility boundary, not only a generated snapshot. PR CI compares it directionally with the merge-base via `scripts/check_app_client_openapi_compatibility.py`: requests accepted by the released contract must remain accepted, and new responses must remain decodable by released clients. Additive optional request fields and response fields are allowed. Do not allowlist breaking changes; retain a deprecated boundary field/parameter or version the endpoint.
 
 **Test isolation / import purity** — never mutate `sys.modules` at module scope in tests; production modules must not construct clients or do IO at import time. Sanctioned seams: `monkeypatch.setattr` on a lazy-held singleton, FastAPI `app.dependency_overrides`. Enforced by `python scripts/check_module_stub_pollution.py` and `python scripts/scan_import_time_side_effects.py`. Full prescription: `backend/docs/test_isolation.md`.
+
+**Firestore transaction fakes** — a fake at this service boundary must enforce its ordering and constraint semantics. Use `tests.unit.fixtures.strict_firestore_transaction.StrictFirestore` for transaction tests that need document-reference reads plus `set`/`update`: it rejects reads after the first write, the production rule that #9739's lenient fake missed. If an incident requires queries, deletes, retry, or contention behavior, first cover it with the Firestore emulator; extend the fixture only for a proven hermetic guard.
 
 Pre-mock heavy deps before importing the module under test. Use `patch.object(target_module, "func")` not string-based `patch("module.func")` — the string form silently patches the wrong reference if the function was already imported. When modules construct objects at import time, use lazy getters to avoid triggering heavy init in tests.
 
@@ -313,7 +317,7 @@ WS handlers in `transcribe.py` and `pusher.py` manage 5-11 concurrent tasks per 
 3. **Sync `requests` in async is silent poison** — no error raised, just blocks the entire event loop. All connections freeze, health checks fail, HPA can't scale.
 4. **Semaphores are event-loop-bound** — `http_client.py` handles this via `(loop_id, name)` keying. Don't create raw `asyncio.Semaphore` outside that module.
 5. **Webhook timeout = 30s** — partner integrations depend on this window. Don't change `httpx.Timeout(30.0, connect=2.0)`.
-6. **WAL files must be opus-encoded** — opus decoder silently errors on raw PCM but returns HTTP 200
+6. **Sync WAL codec is filename-driven** — `decode_files_to_wav` routes on the filename codec token (`utils/sync/files.py`): `_pcm16_`/`_pcm8_` → PCM decoder, otherwise opus. PCM is fully supported; the real gotcha is a mislabeled/missing codec token silently decodes as the wrong codec (garbage audio, still HTTP 200) — name the codec correctly in the filename
 7. **Firestore collection group queries** need explicit indexes — 500 with no useful error
 8. **Mutable WebSocket state races** — snapshot `nonlocal` variables before spawning async work
 9. **Silent fire-and-forget drops** — functions gating on connection state must log when dropping work

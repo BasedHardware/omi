@@ -245,10 +245,14 @@ Respond with ONLY the JSON output, no other text."""
         result = json.loads(content.strip())
 
         # Validate and clamp
-        result['misuse_score'] = max(0.0, min(1.0, float(result.get('misuse_score', 0.0))))
-        result['confidence'] = max(0.0, min(1.0, float(result.get('confidence', 0.0))))
-        result['usage_type'] = result.get('usage_type', 'none')
-        result['evidence'] = result.get('evidence', [])[:10]  # Cap evidence entries
+        # get(k, default) only defaults an ABSENT key, so a present-but-null field (the LLM emitting
+        # misuse_score / confidence / evidence: null) would slip through and raise (float(None),
+        # None[:10]); the broad except below then swallows it and returns default_result
+        # (misuse_score 0.0 = "not abuse"), silently disabling abuse detection for that run.
+        result['misuse_score'] = max(0.0, min(1.0, float(result.get('misuse_score') or 0.0)))
+        result['confidence'] = max(0.0, min(1.0, float(result.get('confidence') or 0.0)))
+        result['usage_type'] = result.get('usage_type') or 'none'
+        result['evidence'] = (result.get('evidence') or [])[:10]  # Cap evidence entries
         result['model'] = CLASSIFIER_ROUTE
         result['prompt_version'] = 'v2'
 

@@ -1,3 +1,0 @@
-{
-  "change": "Fixed task prioritization syncing large score updates by sending them in backend-safe batches"
-}

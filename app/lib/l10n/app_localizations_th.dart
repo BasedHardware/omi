@@ -9293,7 +9293,7 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'ขณะนี้รองรับอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
+      'รองรับไมโครโฟนของโทรศัพท์ รวมถึงอุปกรณ์ Omi และ Limitless เสียงจะอยู่ในเครื่องของคุณจนกว่าคุณจะเลือกอัปโหลด';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9543,4 +9543,8 @@ class AppLocalizationsTh extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'อุปกรณ์เกือบเต็มแล้ว — ซิงค์เพื่อเพิ่มพื้นที่ว่าง';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'ไม่มีการเชื่อมต่อ — กำลังบันทึกในเครื่อง จะถอดเสียงเมื่อคุณกลับมาออนไลน์';
 }

@@ -31,28 +31,9 @@ extension RealtimeHubController {
     return player
   }
 
-  /// Replaces the provider's post-tool narration with the kernel's durable
-  /// admission fact. A spawn receipt is not a child completion receipt, so this
-  /// is the only spoken acknowledgement for a PTT spawn turn.
-  func playCanonicalSpawnAcknowledgement(_ text: String) {
-    let acknowledgement = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !acknowledgement.isEmpty else { return }
-
-    // A provider can begin a speculative response before its tool call returns.
-    // Once the kernel accepts the spawn, that narration can no longer make
-    // lifecycle claims. Stop it before taking the deterministic acknowledgement
-    // lease so no stale audio competes with the canonical fact.
-    takeOverVoiceOutputForAuthoritativeLocalResult()
-    guard let lease = acquireVoiceOutput(.deterministicAgentAck, reason: "canonical_spawn_receipt")
-    else { return }
-    responseGlowGate.markPlaybackActive(lease: lease)
-    FloatingBarVoicePlaybackService.shared.speakOneShot(acknowledgement, lease: lease)
-  }
-
-  /// Local results such as accepted agent receipts and verified/fail-closed
-  /// screen evidence supersede any speculative provider narration for this
-  /// turn. Keep the physical preemption and reducer lease release together so
-  /// every authoritative answer can acquire its own deterministic lease.
+  /// A verified, fail-closed screen result supersedes provider narration for
+  /// this turn. Keep physical preemption and reducer lease release together so
+  /// that local error can acquire its own deterministic lease.
   func takeOverVoiceOutputForAuthoritativeLocalResult() {
     if let activeLease = VoiceTurnCoordinator.shared.outputSnapshot.activeLease {
       FloatingBarVoicePlaybackService.shared.interruptCurrentResponse(leaseID: activeLease.id)

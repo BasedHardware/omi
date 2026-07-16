@@ -9345,7 +9345,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
+      'با میکروفون گوشی و دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9596,4 +9596,8 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.';
 }

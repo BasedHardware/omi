@@ -279,6 +279,19 @@ abstract class IMicRecorderService {
     // mirrors the state.
     Function(bool began)? onInterruption,
   });
+
+  // Transcribe Later capture: audio is opus-encoded and written to WAL-compatible
+  // .bin files natively (no onByteReceived — nothing streams to Dart). onBatchStalled
+  // fires when the native liveness feed (onBatchProgress) goes silent; onError
+  // forwards non-fatal native failures (e.g. batch_storage_full). iOS-only — the
+  // flutter_sound stacks throw UnsupportedError.
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  });
+
   void stop();
 }
 
@@ -309,6 +322,16 @@ class MicRecorderBackgroundService implements IMicRecorderService {
     );
 
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native iOS recorder');
   }
 
   @override
@@ -412,6 +435,16 @@ class MicRecorderService implements IMicRecorderService {
 
     _status = RecorderServiceStatus.recording;
     return;
+  }
+
+  @override
+  Future<void> startBatch({
+    Function()? onStop,
+    Function(bool began)? onInterruption,
+    Function()? onBatchStalled,
+    Function(String code, String message)? onError,
+  }) async {
+    throw UnsupportedError('batch capture requires the native iOS recorder');
   }
 
   @override

@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
 from typing import Any, Mapping
 
 from database import conversation_finalization_jobs as jobs_db
@@ -204,6 +205,51 @@ def complete(uid: str, conversation_id: str) -> bool:
         ConversationStatus.merging,
         ConversationStatus.completed,
     )
+
+
+def rollback_processing_admission(uid: str, conversation_id: str) -> bool:
+    """Return a failed synchronous finalization's admission to in_progress.
+
+    The HTTP finalize endpoints admit processing and then run the processor
+    inside the request itself, with no durable job for the reconciler to
+    replay. If that processor raises, the admission must be undone — otherwise
+    the conversation is stranded on ``processing`` forever and every client
+    shows a stuck "Processing" card. The compare-and-swap only rolls back a
+    generation that is still processing, so a concurrent completion, discard,
+    or newer generation always wins.
+    """
+    return conversations_db.claim_conversation_status(
+        uid,
+        conversation_id,
+        ConversationStatus.processing,
+        ConversationStatus.in_progress,
+    )
+
+
+@contextmanager
+def processing_admission_guard(uid: str, conversation_id: str):
+    """Guard an inline (in-request) processing run against stranding its admission.
+
+    Wrap the synchronous ``process_conversation`` call with this; if it raises,
+    the lifecycle owner rolls the admission back to ``in_progress`` and re-raises.
+    A rollback error (e.g. the conversation was deleted mid-processing) is
+    logged instead of replacing the original processing exception.
+    """
+    try:
+        yield
+    except Exception:
+        try:
+            rolled_back = rollback_processing_admission(uid, conversation_id)
+        except Exception:
+            logger.exception('processing admission rollback failed uid=%s conversation=%s', uid, conversation_id)
+            rolled_back = False
+        logger.exception(
+            'synchronous conversation processing failed uid=%s conversation=%s rolled_back=%s',
+            uid,
+            conversation_id,
+            rolled_back,
+        )
+        raise
 
 
 def fail_and_discard_processing(uid: str, conversation_id: str) -> bool:

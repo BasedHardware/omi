@@ -118,13 +118,8 @@ extension SettingsContentView {
           }
           Spacer()
           Text("\(String(format: "%.1f", currentSpeed))×")
-            .font(.system(size: 22, weight: .bold, design: .rounded))
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.accent)
-            .frame(width: 52, height: 52)
-            .background(
-              RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
-                .fill(OmiColors.accent.opacity(0.15))
-            )
         }
 
         VStack(spacing: OmiSpacing.xs) {

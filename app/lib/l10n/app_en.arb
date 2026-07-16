@@ -11043,7 +11043,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11318,5 +11318,9 @@
     "deviceStorageNearlyFull": "Device nearly full — sync to free space.",
     "@deviceStorageNearlyFull": {
         "description": "Warning shown when on-device storage is 95% or more full"
+    },
+    "phoneMicOfflineFallbackMessage": "No connection — recording locally. It will be transcribed when you're back online.",
+    "@phoneMicOfflineFallbackMessage": {
+        "description": "Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline"
     }
 }

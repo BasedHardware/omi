@@ -9174,7 +9174,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get transcribeLaterDescription => '先录音，之后再按需转写，无需实时进行。录音会保存在手机上，上传后即可生成对话。';
 
   @override
-  String get transcribeLaterNote => '目前支持 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
+  String get transcribeLaterNote => '支持手机麦克风以及 Omi 和 Limitless 设备。在你主动上传之前，音频会一直保留在手机上。';
 
   @override
   String get transcribeLaterStorageFull => '手机存储空间不足，录音已暂停。请清理空间或上传录音，之后会自动恢复。';
@@ -9419,4 +9419,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => '设备快满了 — 请同步以释放空间。';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => '无网络连接 — 正在本地录制。恢复联网后将自动转写。';
 }

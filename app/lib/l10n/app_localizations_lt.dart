@@ -9357,7 +9357,7 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Kol kas veikia su Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
+      'Veikia su telefono mikrofonu bei Omi ir Limitless įrenginiais. Garsas lieka jūsų telefone, kol nuspręsite jį įkelti.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9611,4 +9611,8 @@ class AppLocalizationsLt extends AppLocalizations {
 
   @override
   String get deviceStorageNearlyFull => 'Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.';
 }

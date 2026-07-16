@@ -195,8 +195,7 @@ extension SettingsContentView {
 
               Spacer()
 
-              Picker(
-                "",
+              SettingsMenuPicker(
                 selection: Binding(
                   get: { systemAudioCaptureMode },
                   set: { newValue in
@@ -210,9 +209,6 @@ extension SettingsContentView {
                   AssistantSettings.SystemAudioCaptureMode.onlyDuringMeetings)
                 Text("Never").tag(AssistantSettings.SystemAudioCaptureMode.never)
               }
-              .pickerStyle(.menu)
-              .labelsHidden()
-              .frame(width: 200)
             }
 
             if systemAudioCaptureMode == .onlyDuringMeetings {
