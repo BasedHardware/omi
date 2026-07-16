@@ -57,6 +57,7 @@ import {
   clickEdge
 } from './watchdog'
 import { makeKeySampler, makePrimaryMouseButtonSampler } from './keyState'
+import { installBarContextMenu } from './barContextMenu'
 import { getAppSettings, setAppSettings } from '../appSettings'
 import type { BarUsageLimitPayload } from '../../shared/types'
 
@@ -207,6 +208,10 @@ export function createBarWindow(): BrowserWindow {
   // renderer can manage its interactive islands + hover grace.
   win.setIgnoreMouseEvents(true, { forward: true })
   applyBarContentProtection(win)
+  // Native right-click menu (edit/select/link + a bar-level "Disable for 2 hours"
+  // snooze) — ported from macOS FloatingControlBarView.barContextMenu. The bar
+  // had none before.
+  installBarContextMenu(win)
 
   win.on('focus', () => {
     send('overlay:active', true)
