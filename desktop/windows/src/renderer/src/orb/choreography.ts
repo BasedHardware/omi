@@ -613,7 +613,10 @@ export function genesisSettled(tSinceSummon: number, p: OrbParams = DEFAULT_ORB_
  *   FAIL_GESTURE_OSCILLATIONS — number of full side-to-side swings.
  */
 export const FAIL_GESTURE_MS = 500
-export const FAIL_GESTURE_AMPLITUDE = 0.06
+// 0.2 (≈3px peak on the 34px bar orb) is the amplitude reviewed live and approved
+// by Chris — a clear side-to-side "no" that reads as failure without the orb
+// sliding off. 0.06 (the initial value) was ~0.9px and effectively invisible.
+export const FAIL_GESTURE_AMPLITUDE = 0.2
 export const FAIL_GESTURE_OSCILLATIONS = 2
 
 /**
