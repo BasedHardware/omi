@@ -96,7 +96,8 @@ class SelectionTests(unittest.TestCase):
             [
                 "desktop/macos/Desktop/Sources/Providers/ChatProvider.swift",
                 "desktop/macos/agent/src/runtime/control-tools.ts",
-            ]
+            ],
+            platform="macos",
         )
         names = {check.name for check in checks}
         self.assertIn("product-invariants", names)
