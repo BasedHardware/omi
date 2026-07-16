@@ -116,6 +116,24 @@ case "$cmd" in
     bootstrap >&2
     exec "$BINARY" lint --strict --configuration "$CONFIG_FILE" "$@"
     ;;
+  lint-scope)
+    # Verify the tree is formatter-clean: format must be a no-op on every
+    # file in scope.  This catches true formatting drift — the lint command
+    # also reports advisory rules the formatter cannot auto-fix, so we use
+    # format idempotency as the enforcement signal.
+    bootstrap >&2
+    drift=0
+    while IFS= read -r f; do
+      if ! "$BINARY" format --configuration "$CONFIG_FILE" "$f" 2>/dev/null | diff -q "$f" - >/dev/null 2>&1; then
+        echo "FORMAT DRIFT: $f" >&2
+        drift=1
+      fi
+    done < <("$0" scope)
+    if [ "$drift" -eq 0 ]; then
+      echo "swift-format: clean (no formatting drift in scope)" >&2
+    fi
+    exit "$drift"
+    ;;
   format)
     shift
     bootstrap >&2

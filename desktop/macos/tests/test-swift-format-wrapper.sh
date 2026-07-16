@@ -105,6 +105,37 @@ if grep -q 'Tests/' <<< "$SCOPE"; then
 else
   nok "scope should include Tests/"
 fi
+# --- enforcement fixtures (require bootstrapped binary; skip on non-macOS) ---
+if command -v xcrun >/dev/null 2>&1 && [ -x "$("$WRAPPER" binary-path)" ]; then
+  TMP_SWIFT="$(mktemp -d)/test.swift"
+  echo 'struct Foo{let x:Int}' > "$TMP_SWIFT"
+
+  # Malformed Swift fails lint
+  if "$WRAPPER" lint "$TMP_SWIFT" >/dev/null 2>&1; then
+    nok "lint should fail on malformed Swift"
+  else
+    ok "lint fails on malformed Swift"
+  fi
+
+  # Format corrects it
+  "$WRAPPER" format -i "$TMP_SWIFT" >/dev/null 2>&1
+  if grep -q '^struct Foo {' "$TMP_SWIFT"; then
+    ok "format corrects spacing in struct declaration"
+  else
+    nok "format did not correct struct spacing"
+  fi
+
+  # Lint passes after format (idempotent)
+  if "$WRAPPER" lint "$TMP_SWIFT" >/dev/null 2>&1; then
+    ok "lint passes after format (clean)"
+  else
+    nok "lint should pass after format"
+  fi
+
+  rm -rf "$(dirname "$TMP_SWIFT")"
+else
+  echo "  skip: formatter enforcement fixtures (no bootstrapped binary)"
+fi
 
 echo "== ${PASS} passed, ${FAIL} failed"
 [ "$FAIL" -eq 0 ] || exit 1
