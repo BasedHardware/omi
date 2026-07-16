@@ -1,3 +1,0 @@
-{
-  "change": "Fixed voice input attempting to use a connection that had already closed"
-}
