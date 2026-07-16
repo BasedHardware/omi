@@ -601,6 +601,19 @@ class FlashPageWalSyncImpl implements FlashPageWalSync {
       if (!reachedEnd && !_cancelRequested) {
         final statusAfterStall = await _getStorageStatus(deviceId);
         _lastStallReason = classifyStall(endPageAtEnumeration: endPage, statusAfterStall: statusAfterStall);
+        // Persist the evidence behind the classification: the post-stall status
+        // read is the single signal that decides which message (if any) the user
+        // sees. If a real full-pendant stall ever classifies as `unknown`
+        // (silent success), this record shows whether the read came back null,
+        // lacked `free_capture_pages`, or reported free pages we didn't expect —
+        // the difference between "fix didn't engage" and "assumption was wrong".
+        DebugLogManager.logEvent('flash_page_stall_classified', {
+          'reason': _lastStallReason.name,
+          'endPageAtEnumeration': endPage,
+          'statusReadNull': statusAfterStall == null,
+          'freeCapturePages': statusAfterStall?['free_capture_pages'],
+          'newestFlashPage': statusAfterStall?['newest_flash_page'],
+        });
       }
 
       await limitlessConnection.enableRealTimeMode();
