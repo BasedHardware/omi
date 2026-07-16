@@ -52,14 +52,15 @@ describe('appSettings', () => {
     expect(s.recordHotkey).toBe('Ctrl+Space')
   })
 
-  it('chatEngine defaults to legacy_sse and round-trips the pi_mono opt-in', () => {
-    expect(getAppSettings().chatEngine).toBe('legacy_sse')
-    setAppSettings({ chatEngine: 'pi_mono' })
-    _resetForTests()
+  it('chatEngine defaults to pi_mono and round-trips the legacy_sse opt-out', () => {
     expect(getAppSettings().chatEngine).toBe('pi_mono')
-    // Junk / unknown values fall back to the safe legacy path, never to pi_mono.
-    expect(sanitizeAppSettings({ chatEngine: 'nope' } as never).chatEngine).toBe('legacy_sse')
-    expect(sanitizeAppSettings(null).chatEngine).toBe('legacy_sse')
+    setAppSettings({ chatEngine: 'legacy_sse' })
+    _resetForTests()
+    expect(getAppSettings().chatEngine).toBe('legacy_sse')
+    // Junk / unknown values fall back to the default pi_mono path, never silently
+    // to legacy. Only the exact 'legacy_sse' string opts out.
+    expect(sanitizeAppSettings({ chatEngine: 'nope' } as never).chatEngine).toBe('pi_mono')
+    expect(sanitizeAppSettings(null).chatEngine).toBe('pi_mono')
   })
 
   it('chatScreenshotSharingEnabled defaults ON and round-trips an explicit off', () => {
@@ -130,7 +131,7 @@ describe('appSettings', () => {
       taskFallbackIntervalMin: 10,
       taskMinConfidence: 0.75,
       taskExcludedApps: [],
-      chatEngine: 'legacy_sse',
+      chatEngine: 'pi_mono',
       chatScreenshotSharingEnabled: true
     })
     // Proactive notifications default to Off (level 0) — an assistant may only
