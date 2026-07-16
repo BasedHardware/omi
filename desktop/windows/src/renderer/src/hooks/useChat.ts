@@ -580,6 +580,18 @@ export function useChat(): UseChat {
 
     const assistantId = crypto.randomUUID()
     let assistantText = ''
+    // The latest running tool surfaces as a transient italic line in the bubble,
+    // mirroring the coding-agent door (:457-468 `_${name}…_`) so main + bar read the
+    // same. DISPLAY-ONLY: it is composed into the live bubble but never folded into
+    // `assistantText`, so persistChat and BOTH INV-CHAT-1 saveDesktopMessage calls
+    // (which store plain `assistantText`) never carry it. Reset per attempt alongside
+    // `assistantText`. Without this the pi_mono door dropped tool_activity entirely, so
+    // a long tool run looked like dead air / a stuck spinner.
+    let toolActivity: string | null = null
+    const composeLive = (): string =>
+      toolActivity
+        ? `${assistantText}${assistantText ? '\n\n' : ''}_${toolActivity}…_`
+        : assistantText
 
     // INV-CHAT-1 site 1: persist the RAW user message at turn start (never the
     // context-prepended prompt). Fire-and-forget. session_id is OMITTED on the
@@ -628,6 +640,7 @@ export function useChat(): UseChat {
     const attempt = async (reqId: string, textToSend: string): Promise<MainChatResult> => {
       let attemptRunId: string | null = null
       assistantText = ''
+      toolActivity = null
       const unsubscribe = window.omi.onMainChatEvent((event: MainChatEvent) => {
         if (event.requestId !== reqId) return
         // A dismissed turn (reset bumped the generation) drops all further renders
@@ -638,11 +651,21 @@ export function useChat(): UseChat {
           activeKernelRunRef.current = event.runId
         } else if (event.type === 'text_delta') {
           assistantText += event.text
-          writeAssistant(assistantText)
+          // Real reply text supersedes the transient tool line (clear on text_delta OR
+          // tool completion — see below), matching the coding-agent door's phases.
+          toolActivity = null
+          writeAssistant(composeLive())
+        } else if (event.type === 'tool_activity') {
+          // pi_mono tool lifecycle → transient display line only. `started` shows the
+          // running tool; `completed`/`failed` clears it. The terminal reply is still
+          // driven by the awaited mainChatSend result — this only fills the visual gap
+          // during a long tool run so it no longer reads as dead air.
+          toolActivity = event.status === 'started' ? event.name : null
+          writeAssistant(composeLive())
         }
-        // status / thinking_delta / tool_* / completed / run_finished are covered by
-        // the authoritative awaited mainChatSend result below (terminal + final
-        // text), exactly as tryAgentTask relies on codingAgentRun's return.
+        // status / thinking_delta / tool_result_display / completed / run_finished are
+        // covered by the authoritative awaited mainChatSend result below (terminal +
+        // final text), exactly as tryAgentTask relies on codingAgentRun's return.
         if (Date.now() - lastPersist > 1500) {
           lastPersist = Date.now()
           void persistChat(
