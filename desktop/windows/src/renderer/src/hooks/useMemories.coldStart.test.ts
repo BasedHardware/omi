@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { renderHook, cleanup, waitFor } from '@testing-library/react'
+import { renderHook, cleanup, waitFor, act } from '@testing-library/react'
 
 // The hook fetches via memoriesBulk.fetchAllMemoriesPaged; stub that seam so the
 // revalidating fetch resolves deterministically without a network call.
@@ -79,5 +79,21 @@ describe('useMemories — cold-start cache-first', () => {
     const { result } = renderHook(() => useMemories())
     expect(result.current.memories).toEqual([])
     await waitFor(() => expect(result.current.loading).toBe(false))
+  })
+
+  it('clears a mounted Memories view immediately when teardown resets the cache', async () => {
+    localStorage.setItem(LAST_UID_KEY, 'userA')
+    localStorage.setItem(KEY_A, JSON.stringify([mem('a-visible')]))
+
+    const { result } = renderHook(() => useMemories())
+    // The mounted view shows account A's cached memory.
+    expect(result.current.memories.map((m) => m.id)).toEqual(['a-visible'])
+
+    // Teardown (sign-out / account switch) must clear it in-place, not leave A's
+    // list on screen until a remount.
+    await act(async () => {
+      resetMemoriesCache()
+    })
+    expect(result.current.memories).toEqual([])
   })
 })

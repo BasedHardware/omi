@@ -68,4 +68,8 @@ export function resetMemoriesCache(): void {
   cache.loaded = false
   cache.canonicalLifecycleExposed = false
   hydratedFromDisk = false
+  // Notify any mounted Memories view so it clears the prior user's list without a
+  // relaunch, matching invalidateConversationsCache's teardown broadcast (the
+  // teardown's whole point is to reflect the wipe in the current window).
+  subscribers.forEach((fn) => fn([]))
 }
