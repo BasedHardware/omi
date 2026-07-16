@@ -123,6 +123,27 @@ enforces this via `scripts/check-sources-root-layout.py`.
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
 
+### Swift Formatting
+
+Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
+`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
+config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
+Generated sources under `Desktop/Sources/Generated/` are excluded from the
+formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
+Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
+
+### SwiftLint
+
+SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
+upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
+verified binary under `~/.cache/omi-swiftlint`; use
+`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
+Generated sources and test fixtures remain excluded and the committed baseline
+is down-only. SwiftLint baseline locations are absolute, so the wrapper
+materializes a temporary baseline rooted at the current checkout before linting;
+do not hand-edit those paths to match a specific machine.
+
 ### Synchronous state-machine callbacks
 
 - A reducer transition is atomic through model assignment, effect delivery, UI

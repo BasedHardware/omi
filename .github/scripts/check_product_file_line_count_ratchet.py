@@ -181,7 +181,7 @@ def baseline_transition_errors(
         if new_count is not None and new_count >= old_count:
             continue
         actual = source_count(root, relative)
-        if relative not in changed:
+        if relative not in changed and actual is not None:
             failures.append(f"{relative}: lowering or removing a baseline requires the source file in the PR diff")
         if new_count is None:
             if actual is not None and actual >= THRESHOLD:

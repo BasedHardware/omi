@@ -1,7 +1,7 @@
-import SceneKit
-import SwiftUI
 import OmiSupport
 import OmiTheme
+import SceneKit
+import SwiftUI
 
 // MARK: - Memory Graph Page
 
@@ -181,8 +181,9 @@ struct MemoryGraphSceneView: NSViewRepresentable {
       // Throttle to ~30fps for physics updates
       guard time - lastUpdateTime > 0.033 else { return }
       lastUpdateTime = time
+      let vm = viewModel
       Task { @MainActor in
-        viewModel.updateSimulation()
+        vm.updateSimulation()
       }
     }
   }
@@ -1015,8 +1016,8 @@ extension SCNVector3 {
 // MARK: - Preview
 
 #if canImport(PreviewsMacros)
-#Preview {
-  MemoryGraphPage(viewModel: MemoryGraphViewModel())
-    .frame(width: 800, height: 600)
-}
+  #Preview {
+    MemoryGraphPage(viewModel: MemoryGraphViewModel())
+      .frame(width: 800, height: 600)
+  }
 #endif

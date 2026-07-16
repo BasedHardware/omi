@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct SuggestedTasksSection: View {
   @ObservedObject var store: SuggestedTasksStore
@@ -193,7 +193,10 @@ private struct SuggestedCandidateCard: View {
       ForEach(dismissReasonChoices, id: \.label) { choice in
         Button(choice.label) {
           selectedDismissReason = true
-          Task { await onDismiss(choice.reason) }
+          let reasonRaw = choice.reason.rawValue
+          Task {
+            await onDismiss(OmiAPI.TaskIntelligenceFeedbackReason(rawValue: reasonRaw))
+          }
           showDismissReasons = false
         }
         .buttonStyle(.bordered)

@@ -883,31 +883,31 @@ final class DashboardFeedbackOutboxOwnerIsolationTests: XCTestCase {
 }
 
 private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient {
-  var workflowMode = OmiAPI.TaskWorkflowMode.read
-  var projection: OmiAPI.WhatMattersNowProjection!
-  var goals: [OmiAPI.GoalResponse] = []
-  var detail: OmiAPI.GoalDetailProjection?
-  var projectionLoads = 0
-  var projectionError: Error?
-  var projectionSuspensionsRemaining = 0
-  var projectionRelease: CheckedContinuation<Void, Never>?
-  var controlError: Error?
-  var goalsError: Error?
-  var detailLoads = 0
-  var focusRequests: [(goalID: String, replacementID: String?)] = []
-  var focusError: Error?
-  var failFeedback = false
-  var feedbackKeys: [String] = []
-  var feedbackSuspensionsRemaining = 0
-  var feedbackRelease: CheckedContinuation<Void, Never>?
-  var outcomeRequests: [OmiAPI.OutcomeCreate] = []
-  var outcomeKeys: [String] = []
-  var failOutcome = false
-  var lastDeviceID: String?
-  var createdGoal:
+  nonisolated(unsafe) var workflowMode = OmiAPI.TaskWorkflowMode.read
+  nonisolated(unsafe) var projection: OmiAPI.WhatMattersNowProjection
+  nonisolated(unsafe) var goals: [OmiAPI.GoalResponse] = []
+  nonisolated(unsafe) var detail: OmiAPI.GoalDetailProjection?
+  nonisolated(unsafe) var projectionLoads = 0
+  nonisolated(unsafe) var projectionError: Error?
+  nonisolated(unsafe) var projectionSuspensionsRemaining = 0
+  nonisolated(unsafe) var projectionRelease: CheckedContinuation<Void, Never>?
+  nonisolated(unsafe) var controlError: Error?
+  nonisolated(unsafe) var goalsError: Error?
+  nonisolated(unsafe) var detailLoads = 0
+  nonisolated(unsafe) var focusRequests: [(goalID: String, replacementID: String?)] = []
+  nonisolated(unsafe) var focusError: Error?
+  nonisolated(unsafe) var failFeedback = false
+  nonisolated(unsafe) var feedbackKeys: [String] = []
+  nonisolated(unsafe) var feedbackSuspensionsRemaining = 0
+  nonisolated(unsafe) var feedbackRelease: CheckedContinuation<Void, Never>?
+  nonisolated(unsafe) var outcomeRequests: [OmiAPI.OutcomeCreate] = []
+  nonisolated(unsafe) var outcomeKeys: [String] = []
+  nonisolated(unsafe) var failOutcome = false
+  nonisolated(unsafe) var lastDeviceID: String?
+  nonisolated(unsafe) var createdGoal:
     (desiredOutcome: String, successCriteria: [String], generation: Int, idempotencyKey: String)?
-  var exactCandidate: OmiAPI.CandidateRecord?
-  var exactTask: TaskActionItem?
+  nonisolated(unsafe) var exactCandidate: OmiAPI.CandidateRecord?
+  nonisolated(unsafe) var exactTask: TaskActionItem?
 
   init() {
     projection = OmiAPI.WhatMattersNowProjection(
@@ -929,7 +929,7 @@ private final class FakeDashboardIntelligenceClient: DashboardIntelligenceClient
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection {
     projectionLoads += 1
     lastDeviceID = deviceID
-    let result = projection!
+    let result = projection
     let resultError = projectionError
     if projectionSuspensionsRemaining > 0 {
       projectionSuspensionsRemaining -= 1

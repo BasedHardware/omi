@@ -46,9 +46,10 @@ final class ChatErrorStateMappingTests: XCTestCase {
     XCTAssertNil(ChatErrorState.from(BridgeError.encodingError))
     XCTAssertNil(ChatErrorState.from(BridgeError.agentError("foo")))
     XCTAssertNil(ChatErrorState.from(BridgeError.requestAlreadyActive))
-    XCTAssertNil(ChatErrorState.from(
-      BridgeError.quotaExceeded(plan: "free", unit: "msg", used: 100, limit: 100, resetAtUnix: nil)
-    ))
+    XCTAssertNil(
+      ChatErrorState.from(
+        BridgeError.quotaExceeded(plan: "free", unit: "msg", used: 100, limit: 100, resetAtUnix: nil)
+      ))
   }
 }
 
@@ -252,7 +253,7 @@ final class ChatErrorStateTests: XCTestCase {
     XCTAssertTrue(source.contains("onAccepted: (@MainActor () -> Void)? = nil"))
     XCTAssertTrue(source.contains("onAccepted?()"))
     XCTAssertTrue(source.contains("self.draftRevision == submittedRevision"))
-    XCTAssertTrue(source.contains("self.draftText == text else { return }"))
+    XCTAssertTrue(source.contains("self.draftText == text\n        else { return }"))
     XCTAssertFalse(source.contains("draftText = trimmedText"))
   }
 
@@ -343,7 +344,8 @@ final class ChatErrorStateTests: XCTestCase {
 
   func testRestoredSessionValidationDoesNotClearPersistedTokensOnTransientFailure() throws {
     let source = try sourceFile("AuthService.swift")
-    let validationBlockRange = source.range(of: "Restored session validation deferred - preserving credentials for retry")
+    let validationBlockRange = source.range(
+      of: "Restored session validation deferred - preserving credentials for retry")
     XCTAssertNotNil(validationBlockRange)
     let snippet = String(source[validationBlockRange!.lowerBound...])
     let catchBlock = String(snippet[..<(snippet.range(of: "} catch {")?.lowerBound ?? snippet.endIndex)])

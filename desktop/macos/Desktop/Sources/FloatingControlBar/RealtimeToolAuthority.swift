@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import VoiceTurnDomain
 
 struct RealtimeAuthorizedToolInvocation {
   let invocationID: String
@@ -89,7 +90,8 @@ enum RealtimeExternalRunPromptPolicy {
     }
     guard !isPermissionTool(toolName, arguments: arguments) else { return nil }
     return Selection(
-      prompt: "A realtime voice provider has already authorized one tool invocation for this active turn. Execute only that separately authorized invocation. Do not infer, expand, or perform any additional user request.",
+      prompt:
+        "A realtime voice provider has already authorized one tool invocation for this active turn. Execute only that separately authorized invocation. Do not infer, expand, or perform any additional user request.",
       source: .authorizedToolFallback)
   }
 
@@ -141,7 +143,7 @@ enum RealtimeAutomationTurnHarness {
   /// capture-start deadline terminalize before their provider commit.
   static func begin(on coordinator: VoiceTurnCoordinator) -> VoiceTurnID {
     let turnID = coordinator.begin(intent: .automation)
-    coordinator.send(.captureStarted(turnID: turnID, captureID: VoiceCaptureID(1)))
+    coordinator.publish(.captureStarted(turnID: turnID, captureID: VoiceCaptureID(1)))
     return turnID
   }
 }

@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Connect sheet for a grouped agent (Claude → Claude Code + Cloud, ChatGPT →
 /// Codex + directory app). Both options are shown on screen at once as cards — no
@@ -201,7 +201,8 @@ private struct ConnectOptionCard: View {
         .fill(OmiColors.backgroundSecondary)
     )
     .task {
-      statuses[destination] = destination == .chatgpt
+      statuses[destination] =
+        destination == .chatgpt
         ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
         : await MemoryExportService.shared.status(for: destination)
       await prepareMCPKeyIfNeeded()
@@ -209,8 +210,7 @@ private struct ConnectOptionCard: View {
     .onReceive(permissionRefreshTimer) { _ in
       refreshPermissionStateIfNeeded()
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       refreshPermissionStateIfNeeded()
       refreshChatGPTDirectoryConnectionIfNeeded()
     }
@@ -263,7 +263,8 @@ private struct ConnectOptionCard: View {
         case .completed:
           resultMessage = .success(outcome.taskTitle)
         }
-        statuses[destination] = destination == .chatgpt
+        statuses[destination] =
+          destination == .chatgpt
           ? await MemoryExportService.shared.refreshChatGPTDirectoryConnectionStatus()
           : await MemoryExportService.shared.status(for: destination)
       } catch {

@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -18,7 +18,8 @@ final class StagedTaskSyncIntegrityTests: XCTestCase {
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    userDir = appSupport
+    userDir =
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)

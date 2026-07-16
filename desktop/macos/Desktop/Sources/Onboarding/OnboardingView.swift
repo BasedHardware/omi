@@ -1,8 +1,8 @@
 import AVKit
 import AppKit
+import OmiTheme
 import SceneKit
 import SwiftUI
-import OmiTheme
 
 struct OnboardingView: View {
   @ObservedObject var appState: AppState

@@ -2,6 +2,7 @@ import AppKit
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// Fast, deterministic contract coverage that joins the production seams shared
 /// by main chat, realtime voice, and the floating-bar presentation.  Keep this
@@ -78,13 +79,14 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
     XCTAssertEqual(provider.messages.map(\.id), [userID, assistantID])
 
     // A replay of the same canonical turn IDs cannot duplicate a visible row.
-    provider.projectJournalTurn(try journalTurn(
-      surface: voice,
-      turnID: assistantID,
-      sequence: 3,
-      role: "assistant",
-      content: "One canonical exchange."
-    ))
+    provider.projectJournalTurn(
+      try journalTurn(
+        surface: voice,
+        turnID: assistantID,
+        sequence: 3,
+        role: "assistant",
+        content: "One canonical exchange."
+      ))
     XCTAssertEqual(provider.messages.map(\.id), [userID, assistantID])
   }
 
@@ -116,14 +118,15 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
     model = reconnect.model
     XCTAssertEqual(model.turn?.phase, .finalizing)
     let reconnectedSession = VoiceSessionID()
-    model = reducer.reduce(
-      model,
-      .providerReconnected(
-        turnID: second,
-        identity: reconnectReservation.identity,
-        sessionID: reconnectedSession
-      )
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .providerReconnected(
+          turnID: second,
+          identity: reconnectReservation.identity,
+          sessionID: reconnectedSession
+        )
+      ).model
     XCTAssertEqual(model.turn?.phase, .finalizing)
     XCTAssertEqual(model.turn?.sessionID, reconnectedSession)
     model = try claimAndCompleteHubTurn(model, turnID: second)
@@ -136,10 +139,11 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
     let interruptedSession = VoiceSessionID()
     model = startHubTurn(model, turnID: interrupted, sessionID: interruptedSession)
     model = claimHubTurn(model, turnID: interrupted)
-    model = reducer.reduce(
-      model,
-      .hubCommitAccepted(turnID: interrupted, sessionID: interruptedSession, responseID: nil)
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .hubCommitAccepted(turnID: interrupted, sessionID: interruptedSession, responseID: nil)
+      ).model
     XCTAssertEqual(model.turn?.phase, .awaitingResponse)
     XCTAssertTrue(PushToTalkManager.admitsListeningStart(activeTurnID: interrupted, phase: .awaitingResponse))
 
@@ -156,10 +160,11 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
     XCTAssertTrue(shortcutGate.hasStartedTurn)
 
     let thirdSession = VoiceSessionID()
-    model = reducer.reduce(
-      model,
-      .selectRoute(turnID: third, route: .hub(sessionID: thirdSession))
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .selectRoute(turnID: third, route: .hub(sessionID: thirdSession))
+      ).model
     model = reducer.reduce(model, .finalize(turnID: third)).model
     model = try claimAndCompleteHubTurn(model, turnID: third)
     XCTAssertEqual(model.turn?.phase, .terminal(.success))
@@ -169,12 +174,14 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
   func testTerminalRuntimeProjectionFailsClosedAndNotchChromeStaysPinned() throws {
     let store = AgentRuntimeStatusStore()
     let surface = AgentSurfaceReference.floatingPill(pillId: UUID())
-    let failure = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"error","protocolVersion":2,"sessionId":"session-contract","runId":"run-contract","message":"failed","failure":{"code":"provider_failed","source":"adapter_process","userMessage":"Provider failed"}}"#
-    ))
-    let staleDelta = try XCTUnwrap(AgentRuntimeProcess.RuntimeMessage.parse(
-      #"{"type":"text_delta","protocolVersion":2,"sessionId":"session-contract","runId":"run-contract","delta":"late"}"#
-    ))
+    let failure = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"error","protocolVersion":2,"sessionId":"session-contract","runId":"run-contract","message":"failed","failure":{"code":"provider_failed","source":"adapter_process","userMessage":"Provider failed"}}"#
+      ))
+    let staleDelta = try XCTUnwrap(
+      AgentRuntimeProcess.RuntimeMessage.parse(
+        #"{"type":"text_delta","protocolVersion":2,"sessionId":"session-contract","runId":"run-contract","delta":"late"}"#
+      ))
     store.ingest(message: failure, surface: surface)
     store.ingest(message: staleDelta, surface: surface)
     XCTAssertEqual(store.projection(for: surface)?.status, .failed)
@@ -237,20 +244,22 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
       return model
     }
     let sessionID = try XCTUnwrap(routedSessionID)
-    model = reducer.reduce(
-      model,
-      .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: nil)
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .hubCommitAccepted(turnID: turnID, sessionID: sessionID, responseID: nil)
+      ).model
     let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
-    model = reducer.reduce(
-      model,
-      .providerTurnFinishedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: sessionID,
-        responseID: nil
-      )
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: nil
+        )
+      ).model
     guard case .writing(let journalIdentity) = model.turn?.journalFinalization else {
       XCTFail("Provider completion must open the journal fence")
       return model
@@ -279,26 +288,28 @@ final class CrossSurfaceContractSmokeTests: XCTestCase {
     role: String,
     content: String
   ) throws -> KernelJournalTurn {
-    try XCTUnwrap(KernelJournalTurn(dictionary: [
-      "conversationId": surface.externalRefId,
-      "turnId": turnID,
-      "turnSeq": sequence,
-      "conversationGeneration": 1,
-      "generationBaseTurnSeq": 0,
-      "producerId": "producer:\(turnID)",
-      "payloadHash": "sha256:\(turnID)",
-      "role": role,
-      "surfaceKind": surface.surfaceKind,
-      "externalRefKind": surface.externalRefKind,
-      "externalRefId": surface.externalRefId,
-      "content": content,
-      "createdAtMs": sequence,
-      "updatedAtMs": sequence,
-      "origin": role == "user" ? "typed_chat" : "realtime_voice",
-      "status": "completed",
-      "contentBlocks": [],
-      "resources": [],
-      "metadataJson": "{}",
-    ], surfaceFallback: surface))
+    try XCTUnwrap(
+      KernelJournalTurn(
+        dictionary: [
+          "conversationId": surface.externalRefId,
+          "turnId": turnID,
+          "turnSeq": sequence,
+          "conversationGeneration": 1,
+          "generationBaseTurnSeq": 0,
+          "producerId": "producer:\(turnID)",
+          "payloadHash": "sha256:\(turnID)",
+          "role": role,
+          "surfaceKind": surface.surfaceKind,
+          "externalRefKind": surface.externalRefKind,
+          "externalRefId": surface.externalRefId,
+          "content": content,
+          "createdAtMs": sequence,
+          "updatedAtMs": sequence,
+          "origin": role == "user" ? "typed_chat" : "realtime_voice",
+          "status": "completed",
+          "contentBlocks": [],
+          "resources": [],
+          "metadataJson": "{}",
+        ], surfaceFallback: surface))
   }
 }

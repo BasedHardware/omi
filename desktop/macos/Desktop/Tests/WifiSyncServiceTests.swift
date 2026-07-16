@@ -1,6 +1,7 @@
-import XCTest
-@testable import Omi_Computer
 import OmiWAL
+import XCTest
+
+@testable import Omi_Computer
 
 @MainActor
 final class WifiSyncServiceTests: XCTestCase {

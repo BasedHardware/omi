@@ -2,6 +2,7 @@ import Network
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 /// S-04 — Transcription transport truthfulness (BL-011–014).
 /// Behavioral tests where the object is constructible; source-scrape guards
@@ -100,15 +101,17 @@ final class TranscriptionTransportTests: XCTestCase {
     let reducer = VoiceTurnReducer()
     let turnID = VoiceTurnID()
     var model = reducer.reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reducer.reduce(
-      model,
-      .hintChanged(turnID: turnID, text: "Recording too long — keep it under 5 min")
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .hintChanged(turnID: turnID, text: "Recording too long — keep it under 5 min")
+      ).model
     XCTAssertTrue(model.turn?.deadlines.contains(.hintVisibility) == true)
-    model = reducer.reduce(
-      model,
-      .deadlineFired(turnID: turnID, deadline: .hintVisibility)
-    ).model
+    model =
+      reducer.reduce(
+        model,
+        .deadlineFired(turnID: turnID, deadline: .hintVisibility)
+      ).model
     XCTAssertEqual(model.turn?.projection.hint, "")
   }
 
@@ -199,6 +202,7 @@ final class TranscriptionTransportTests: XCTestCase {
 
   private func source(relativePath: String) throws -> String {
     let url = URL(fileURLWithPath: #filePath)
+      .deletingLastPathComponent()
       .deletingLastPathComponent()
       .deletingLastPathComponent()
       .appendingPathComponent(relativePath)

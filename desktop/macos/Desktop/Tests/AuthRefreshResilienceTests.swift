@@ -6,15 +6,14 @@ import XCTest
 final class AuthRefreshResilienceTests: XCTestCase {
   private var priorFirebaseApiKey: String?
 
-  override func setUp() {
-    super.setUp()
+  override func setUp() async throws {
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingUTF8: $0) }
+    priorFirebaseApiKey = getenv("FIREBASE_API_KEY").flatMap { String(validatingCString: $0) }
     setenv("FIREBASE_API_KEY", "test-firebase-api-key", 1)
   }
 
-  override func tearDown() {
+  override func tearDown() async throws {
     if let priorFirebaseApiKey {
       setenv("FIREBASE_API_KEY", priorFirebaseApiKey, 1)
     } else {
@@ -22,7 +21,6 @@ final class AuthRefreshResilienceTests: XCTestCase {
     }
     clearAuthDefaults()
     DesktopDiagnosticsManager.shared.resetForTests()
-    super.tearDown()
   }
 
   func testRefresh400WithNonAuthBodyPreservesTokens() async {

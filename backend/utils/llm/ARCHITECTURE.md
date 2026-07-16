@@ -71,3 +71,8 @@ The shared plumbing every feature call goes through.
 - Backward-compatible shims (`working_memory.py`, `durable_memory_patches.py`,
   `l2_memory_routes.py`) only re-export from their real modules — put
   implementation in the target module, not the shim.
+- Keep prompts and provider selection separate from route and auth handling.
+- Construct provider clients lazily and sanitize provider responses before
+  logging them.
+- Add hermetic backend-unit coverage for routing and fallback changes; fallback
+  branches use the shared fallback telemetry helper.

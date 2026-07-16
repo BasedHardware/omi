@@ -130,27 +130,30 @@ final class ChatQueryTelemetryTests: XCTestCase {
     )
 
     elapsedMs = 2_000
-    XCTAssertTrue(attempt.complete(metrics: ChatQueryCompletionMetrics(
-      toolCallCount: 1,
-      toolNames: ["get_memories"],
-      costUsd: 0.01,
-      responseLength: 42,
-      screenToolRequested: false,
-      screenToolSucceeded: false,
-      screenToolApprovalRequired: false,
-      screenToolFailureCodes: []
-    )))
+    XCTAssertTrue(
+      attempt.complete(
+        metrics: ChatQueryCompletionMetrics(
+          toolCallCount: 1,
+          toolNames: ["get_memories"],
+          costUsd: 0.01,
+          responseLength: 42,
+          screenToolRequested: false,
+          screenToolSucceeded: false,
+          screenToolApprovalRequired: false,
+          screenToolFailureCodes: []
+        )))
     XCTAssertFalse(attempt.fail(errorClass: .timeout))
 
     XCTAssertEqual(events.count, 2)
     XCTAssertEqual(
       events[0],
-      .started(ChatQueryTelemetryContext(
-        attemptId: "attempt-1",
-        surface: "main_chat",
-        harness: "pimono",
-        inputLengthBucket: "0_99"
-      ))
+      .started(
+        ChatQueryTelemetryContext(
+          attemptId: "attempt-1",
+          surface: "main_chat",
+          harness: "pimono",
+          inputLengthBucket: "0_99"
+        ))
     )
     guard case .completed(let context, let durationMs, _) = events[1] else {
       return XCTFail("expected completed terminal event")
@@ -160,39 +163,44 @@ final class ChatQueryTelemetryTests: XCTestCase {
   }
 
   func testLateOrRevokedResultsAreNeverAuthoritative() {
-    XCTAssertFalse(ChatQueryResultAuthority.acceptsContinuation(
-      currentGeneration: 4,
-      turnGeneration: 4,
-      turnAcceptsResult: false
-    ), "same-generation work must stop as soon as product authority is revoked")
-    XCTAssertTrue(ChatQueryResultAuthority.accepts(
-      currentGeneration: 4,
-      resultGeneration: 4,
-      turnAcceptsResult: true,
-      watchdogFired: false,
-      toolStallAbortFired: false
-    ))
-    XCTAssertFalse(ChatQueryResultAuthority.accepts(
-      currentGeneration: 5,
-      resultGeneration: 4,
-      turnAcceptsResult: true,
-      watchdogFired: false,
-      toolStallAbortFired: false
-    ))
-    XCTAssertFalse(ChatQueryResultAuthority.accepts(
-      currentGeneration: 4,
-      resultGeneration: 4,
-      turnAcceptsResult: false,
-      watchdogFired: false,
-      toolStallAbortFired: false
-    ))
-    XCTAssertFalse(ChatQueryResultAuthority.accepts(
-      currentGeneration: 4,
-      resultGeneration: 4,
-      turnAcceptsResult: true,
-      watchdogFired: true,
-      toolStallAbortFired: false
-    ))
+    XCTAssertFalse(
+      ChatQueryResultAuthority.acceptsContinuation(
+        currentGeneration: 4,
+        turnGeneration: 4,
+        turnAcceptsResult: false
+      ), "same-generation work must stop as soon as product authority is revoked")
+    XCTAssertTrue(
+      ChatQueryResultAuthority.accepts(
+        currentGeneration: 4,
+        resultGeneration: 4,
+        turnAcceptsResult: true,
+        watchdogFired: false,
+        toolStallAbortFired: false
+      ))
+    XCTAssertFalse(
+      ChatQueryResultAuthority.accepts(
+        currentGeneration: 5,
+        resultGeneration: 4,
+        turnAcceptsResult: true,
+        watchdogFired: false,
+        toolStallAbortFired: false
+      ))
+    XCTAssertFalse(
+      ChatQueryResultAuthority.accepts(
+        currentGeneration: 4,
+        resultGeneration: 4,
+        turnAcceptsResult: false,
+        watchdogFired: false,
+        toolStallAbortFired: false
+      ))
+    XCTAssertFalse(
+      ChatQueryResultAuthority.accepts(
+        currentGeneration: 4,
+        resultGeneration: 4,
+        turnAcceptsResult: true,
+        watchdogFired: true,
+        toolStallAbortFired: false
+      ))
   }
 
   func testFloatingOriginWinsOverCanonicalMainRuntimeSurface() {
@@ -267,20 +275,23 @@ final class ChatQueryTelemetryTests: XCTestCase {
     var order: [String] = []
     var postTerminalKernelAttempts = 0
 
-    XCTAssertTrue(coordinator.schedule(messageID: "assistant-1") {
-      await Task.yield()
-      order.append("streaming_update")
-    })
+    XCTAssertTrue(
+      coordinator.schedule(messageID: "assistant-1") {
+        await Task.yield()
+        order.append("streaming_update")
+      })
 
     let beganTerminalization = await coordinator.beginTerminalization(messageID: "assistant-1")
     XCTAssertTrue(beganTerminalization)
-    XCTAssertFalse(coordinator.schedule(messageID: "assistant-1") {
-      postTerminalKernelAttempts += 1
-    })
+    XCTAssertFalse(
+      coordinator.schedule(messageID: "assistant-1") {
+        postTerminalKernelAttempts += 1
+      })
     order.append("terminalize")
-    XCTAssertFalse(coordinator.schedule(messageID: "assistant-1") {
-      postTerminalKernelAttempts += 1
-    })
+    XCTAssertFalse(
+      coordinator.schedule(messageID: "assistant-1") {
+        postTerminalKernelAttempts += 1
+      })
     await Task.yield()
 
     XCTAssertEqual(order, ["streaming_update", "terminalize"])
@@ -293,30 +304,32 @@ final class ChatQueryTelemetryTests: XCTestCase {
     var capturedWrites: [KernelJournalTurnWrite] = []
     let surface = AgentSurfaceReference.mainChat(chatId: nil)
     let recordedTurns = try [
-      XCTUnwrap(KernelJournalTurn(dictionary: [
-        "conversationId": "conversation-b",
-        "turnId": "user-b",
-        "turnSeq": 1,
-        "role": "user",
-        "content": "PROBE request",
-        "origin": "typed_chat",
-        "status": "completed",
-        "surfaceKind": surface.surfaceKind,
-        "externalRefKind": surface.externalRefKind,
-        "externalRefId": surface.externalRefId,
-      ])),
-      XCTUnwrap(KernelJournalTurn(dictionary: [
-        "conversationId": "conversation-b",
-        "turnId": "assistant-b",
-        "turnSeq": 2,
-        "role": "assistant",
-        "content": "PROBE",
-        "origin": "typed_chat",
-        "status": "completed",
-        "surfaceKind": surface.surfaceKind,
-        "externalRefKind": surface.externalRefKind,
-        "externalRefId": surface.externalRefId,
-      ])),
+      XCTUnwrap(
+        KernelJournalTurn(dictionary: [
+          "conversationId": "conversation-b",
+          "turnId": "user-b",
+          "turnSeq": 1,
+          "role": "user",
+          "content": "PROBE request",
+          "origin": "typed_chat",
+          "status": "completed",
+          "surfaceKind": surface.surfaceKind,
+          "externalRefKind": surface.externalRefKind,
+          "externalRefId": surface.externalRefId,
+        ])),
+      XCTUnwrap(
+        KernelJournalTurn(dictionary: [
+          "conversationId": "conversation-b",
+          "turnId": "assistant-b",
+          "turnSeq": 2,
+          "role": "assistant",
+          "content": "PROBE",
+          "origin": "typed_chat",
+          "status": "completed",
+          "surfaceKind": surface.surfaceKind,
+          "externalRefKind": surface.externalRefKind,
+          "externalRefId": surface.externalRefId,
+        ])),
     ]
 
     let receipt = try await OwnerIsolationKernelProbe.run(

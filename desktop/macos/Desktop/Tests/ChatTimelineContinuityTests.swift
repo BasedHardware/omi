@@ -79,9 +79,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let pillID = UUID()
     let runID = "run_5f35b43bf8a646f29b548a1306cf663f"
     let spawnProse = """
-    Subagent spawned! It's running as a floating pill titled \"Sleep 5 seconds\" (\(runID)).
-    It'll execute sleep 5 and report back once complete.
-    """
+      Subagent spawned! It's running as a floating pill titled \"Sleep 5 seconds\" (\(runID)).
+      It'll execute sleep 5 and report back once complete.
+      """
     let canonical = ChatMessage(
       id: "spawn-message",
       text: spawnProse,
@@ -105,8 +105,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
     // notch-pill linking.
     XCTAssertEqual(canonical.text, spawnProse)
     guard case .text(_, let canonicalProse) = canonical.contentBlocks[0],
-          case .agentSpawn(_, let canonicalPillID, let canonicalSessionID, let canonicalRunID, _, _, _) =
-            canonical.contentBlocks[1]
+      case .agentSpawn(_, let canonicalPillID, let canonicalSessionID, let canonicalRunID, _, _, _) =
+        canonical.contentBlocks[1]
     else {
       return XCTFail("expected canonical spawn prose and structured receipt")
     }
@@ -148,7 +148,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
 
@@ -233,7 +233,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
 
@@ -255,7 +255,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     XCTAssertEqual(groups.count, 1)
     guard case .toolCalls(_, let calls) = groups[0],
-          case .toolCall(_, let name, let status, _, _, _) = calls[0]
+      case .toolCall(_, let name, let status, _, _, _) = calls[0]
     else {
       return XCTFail("expected only the active progress tool")
     }
@@ -354,8 +354,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let record = TaskChatMessageRecord.from(message, taskId: "task-roundtrip")
     let restored = record.toChatMessage()
     XCTAssertEqual(restored.contentBlocks.count, 1)
-    guard case .agentCompletion(_, let restoredPill, let restoredSession, let restoredRun, _, _, let restoredOutput, _) =
-      restored.contentBlocks.first
+    guard
+      case .agentCompletion(_, let restoredPill, let restoredSession, let restoredRun, _, _, let restoredOutput, _) =
+        restored.contentBlocks.first
     else {
       return XCTFail("agentCompletion must round-trip through contentBlocksJson")
     }
@@ -379,7 +380,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Research Notes",
           objective: "Research the release notes"
-        ),
+        )
       ]
     )
     let artifact = ChatResource.localGeneratedFile(
@@ -403,7 +404,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Research the release notes",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ],
       resources: [artifact]
     )
@@ -417,15 +418,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertTrue(canonical[0].resources.isEmpty)
     XCTAssertEqual(canonical[1].resources.map(\.id), ["artifact-1"])
     guard case .agentSpawn = canonical[0].contentBlocks.first,
-          case .agentCompletion = canonical[1].contentBlocks.first
+      case .agentCompletion = canonical[1].contentBlocks.first
     else {
       return XCTFail("the projection must not mutate canonical lifecycle blocks")
     }
     XCTAssertEqual(projected.count, 1)
     XCTAssertEqual(projected[0].id, "spawn-message")
     XCTAssertEqual(projected[0].resources.map(\.id), ["artifact-1"])
-    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
-      projected[0].contentBlocks.first
+    guard
+      case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+        projected[0].contentBlocks.first
     else {
       return XCTFail("matched lifecycle must render its terminal completion in the spawn row")
     }
@@ -467,15 +469,16 @@ final class ChatTimelineContinuityTests: XCTestCase {
     // The structured canonical event still records both lifecycle facts.
     XCTAssertEqual(sameRowLifecycle.contentBlocks.count, 2)
     guard case .agentSpawn = sameRowLifecycle.contentBlocks[0],
-          case .agentCompletion = sameRowLifecycle.contentBlocks[1]
+      case .agentCompletion = sameRowLifecycle.contentBlocks[1]
     else {
       return XCTFail("same-row canonical lifecycle facts must remain intact")
     }
 
     XCTAssertEqual(projected.count, 1)
     XCTAssertEqual(projected[0].contentBlocks.count, 1)
-    guard case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
-      projected[0].contentBlocks[0]
+    guard
+      case .agentCompletion(_, let renderedPill, _, let renderedRun, _, _, let output, _) =
+        projected[0].contentBlocks[0]
     else {
       return XCTFail("same-row lifecycle must render the terminal card")
     }
@@ -496,9 +499,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
           name: "spawn_agent",
           status: .completed,
           output: """
-          id: \(pillID.uuidString)
-          runId: run-1
-          """
+            id: \(pillID.uuidString)
+            runId: run-1
+            """
         ),
         .agentSpawn(
           id: "spawn-block",
@@ -552,7 +555,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "First Agent",
           objective: "First objective"
-        ),
+        )
       ]
     )
     let conflictingCompletion = ChatMessage(
@@ -569,7 +572,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Second objective",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
     XCTAssertEqual(
@@ -590,7 +593,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "",
           title: "Legacy Agent",
           objective: "Legacy objective"
-        ),
+        )
       ]
     )
     let legacyCompletion = ChatMessage(
@@ -607,7 +610,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           promptSnippet: "Legacy objective",
           output: "Done.",
           status: "completed"
-        ),
+        )
       ]
     )
     XCTAssertEqual(
@@ -631,7 +634,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Agent",
           objective: "Objective"
-        ),
+        )
       ]
     )
     func completion(id: String, output: String, resourceID: String) -> ChatMessage {
@@ -649,7 +652,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
             promptSnippet: "Objective",
             output: output,
             status: "completed"
-          ),
+          )
         ],
         resources: [
           .localGeneratedFile(
@@ -658,7 +661,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
             subtitle: "text/plain",
             mimeType: "text/plain",
             uri: "file:///tmp/\(resourceID).txt"
-          ),
+          )
         ]
       )
     }
@@ -691,7 +694,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "Agent",
           objective: "Objective"
-        ),
+        )
       ]
     )
     let artifact = ChatResource.localGeneratedFile(
@@ -767,7 +770,7 @@ final class ChatTimelineContinuityTests: XCTestCase {
           runId: "run-1",
           title: "First Agent",
           objective: "First objective"
-        ),
+        )
       ]
     )
     let mixedCompletions = ChatMessage(
@@ -802,16 +805,18 @@ final class ChatTimelineContinuityTests: XCTestCase {
     let projected = AgentLifecycleDisplayProjection.project([spawn, mixedCompletions])
 
     XCTAssertEqual(projected.count, 2)
-    guard case .agentCompletion(_, _, _, let renderedRun, _, _, let renderedOutput, _) =
-      projected[0].contentBlocks.first
+    guard
+      case .agentCompletion(_, _, _, let renderedRun, _, _, let renderedOutput, _) =
+        projected[0].contentBlocks.first
     else {
       return XCTFail("the matching completion must replace the spawn row")
     }
     XCTAssertEqual(renderedRun, "run-1")
     XCTAssertEqual(renderedOutput, "First result")
     XCTAssertEqual(projected[1].contentBlocks.count, 2)
-    guard case .agentCompletion(_, _, _, let retainedRun, _, _, let retainedOutput, _) =
-      projected[1].contentBlocks[0]
+    guard
+      case .agentCompletion(_, _, _, let retainedRun, _, _, let retainedOutput, _) =
+        projected[1].contentBlocks[0]
     else {
       return XCTFail("an unmatched completion must remain in its source row")
     }
@@ -858,8 +863,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
 
     let restored = ChatContentBlockCodec.decodeFromMessageMetadata(metadata)
     XCTAssertEqual(restored.count, 2)
-    guard case .agentSpawn(_, let spawnPill, let spawnSession, let spawnRun, let title, let objective, let provider) =
-      restored[0]
+    guard
+      case .agentSpawn(_, let spawnPill, let spawnSession, let spawnRun, let title, let objective, let provider) =
+        restored[0]
     else {
       return XCTFail("expected agentSpawn in metadata round-trip")
     }
@@ -899,20 +905,20 @@ final class ChatTimelineContinuityTests: XCTestCase {
         toolUseId: "tu-1",
         input: ToolCallInput(summary: "Sleep Agent", details: "sleep five seconds"),
         output: """
-        Agent started as a floating agent pill.
-        id: \(pillId.uuidString)
-        sessionId: sess-abc
-        runId: run-xyz
-        title: Sleep Agent
-        status: running
-        """
+          Agent started as a floating agent pill.
+          id: \(pillId.uuidString)
+          sessionId: sess-abc
+          runId: run-xyz
+          title: Sleep Agent
+          status: running
+          """
       )
     ]
 
     let projection = ChatProvider.materializeAgentSpawnBlockIfNeeded(
-        in: &blocks,
-        toolUseId: "tu-1",
-        toolName: "spawn_agent"
+      in: &blocks,
+      toolUseId: "tu-1",
+      toolName: "spawn_agent"
     )
     XCTAssertEqual(
       projection,
@@ -926,8 +932,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
       )
     )
     XCTAssertEqual(blocks.count, 2)
-    guard case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective, let provider) =
-      blocks[1]
+    guard
+      case .agentSpawn(_, let spawnPill, let sessionId, let runId, let title, let objective, let provider) =
+        blocks[1]
     else {
       return XCTFail("spawn_agent tool result must emit .agentSpawn")
     }
@@ -959,7 +966,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
   func testMaterializeAgentSpawnBlockFromCanonicalProductionJSONResult() throws {
     let pillId = UUID(uuidString: "C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48")!
     // Exact compact response shape returned by control-tools.ts stringifyToolResult.
-    let output = #"{"ok":true,"routeDecision":{"effect":"spawn_background_agent"},"requestedAgentCount":1,"agents":[{"kind":"background","delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}],"delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}"#
+    let output =
+      #"{"ok":true,"routeDecision":{"effect":"spawn_background_agent"},"requestedAgentCount":1,"agents":[{"kind":"background","delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}],"delegation":null,"session":{"sessionId":"sess-prod","ownerId":"owner-1","title":"Memory Insight","surfaceKind":"floating_agent","externalRefKind":"pill","externalRefId":"C7CBA329-65C4-4A5C-96A6-1A0A5FEECC48","defaultAdapterId":"hermes","metadata":{}},"run":{"runId":"run-prod","sessionId":"sess-prod"},"attempt":null}"#
     var blocks: [ChatContentBlock] = [
       .toolCall(
         id: "tool-prod",
@@ -980,7 +988,9 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(blocks[0].spawnedAgentProvider, "hermes")
 
     XCTAssertEqual(blocks.count, 2)
-    guard case .agentSpawn(let blockId, let actualPill, let sessionId, let runId, let title, let objective, let provider) = blocks[1]
+    guard
+      case .agentSpawn(let blockId, let actualPill, let sessionId, let runId, let title, let objective, let provider) =
+        blocks[1]
     else { return XCTFail("canonical production result must materialize agentSpawn") }
     XCTAssertEqual(blockId, "agent_spawn_run-prod")
     XCTAssertEqual(actualPill, pillId)
@@ -1005,13 +1015,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       name: "spawn_agent",
       status: .completed,
       output: """
-      Agent started as a floating agent pill.
-      id: \(pillId.uuidString)
-      sessionId: sess-abc
-      runId: run-xyz
-      title: Sleep Agent
-      status: running
-      """
+        Agent started as a floating agent pill.
+        id: \(pillId.uuidString)
+        sessionId: sess-abc
+        runId: run-xyz
+        title: Sleep Agent
+        status: running
+        """
     )
 
     XCTAssertEqual(block.spawnedAgentID, pillId)
@@ -1030,11 +1040,13 @@ final class ChatTimelineContinuityTests: XCTestCase {
       sessionId: " sess-1 ",
       runId: "run-1"
     )
-    XCTAssertEqual(preference.keys, [
-      .runId("run-1"),
-      .sessionId("sess-1"),
-      .pillId(pillId),
-    ])
+    XCTAssertEqual(
+      preference.keys,
+      [
+        .runId("run-1"),
+        .sessionId("sess-1"),
+        .pillId(pillId),
+      ])
 
     let pillOnly = AgentTimelineHydratePreference.make(
       pillId: pillId,
@@ -1047,8 +1059,14 @@ final class ChatTimelineContinuityTests: XCTestCase {
     XCTAssertEqual(
       preference.firstMatchingKey(
         runIdMatches: { $0 == "run-1" },
-        sessionIdMatches: { _ in XCTFail("session should not be checked after run match"); return false },
-        pillIdMatches: { _ in XCTFail("pill should not be checked after run match"); return false }
+        sessionIdMatches: { _ in
+          XCTFail("session should not be checked after run match")
+          return false
+        },
+        pillIdMatches: { _ in
+          XCTFail("pill should not be checked after run match")
+          return false
+        }
       ),
       .runId("run-1")
     )
@@ -1056,7 +1074,10 @@ final class ChatTimelineContinuityTests: XCTestCase {
       preference.firstMatchingKey(
         runIdMatches: { _ in false },
         sessionIdMatches: { $0 == "sess-1" },
-        pillIdMatches: { _ in XCTFail("pill should not be checked after session match"); return false }
+        pillIdMatches: { _ in
+          XCTFail("pill should not be checked after session match")
+          return false
+        }
       ),
       .sessionId("sess-1")
     )
@@ -1308,7 +1329,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
       "currentAIMessage must prefer provider-bound answerMessageId over localAnswerOverride"
     )
     let answerIdPreferIndex = floatingState.range(of: "if let answerId = chatViewport.answerMessageId,")?.lowerBound
-    let overrideFallbackIndex = floatingState.range(of: "if let localAnswerOverride { return localAnswerOverride }")?.lowerBound
+    let overrideFallbackIndex = floatingState.range(of: "if let localAnswerOverride { return localAnswerOverride }")?
+      .lowerBound
     XCTAssertNotNil(answerIdPreferIndex)
     XCTAssertNotNil(overrideFallbackIndex)
     if let answerIdPreferIndex, let overrideFallbackIndex {
@@ -1561,8 +1583,8 @@ final class ChatTimelineContinuityTests: XCTestCase {
   }
 }
 
-private extension Array where Element == ChatContentBlock {
-  var spawnedAgentIDs: [UUID] {
+extension Array where Element == ChatContentBlock {
+  fileprivate var spawnedAgentIDs: [UUID] {
     compactMap { block in
       block.spawnedAgentID
     }

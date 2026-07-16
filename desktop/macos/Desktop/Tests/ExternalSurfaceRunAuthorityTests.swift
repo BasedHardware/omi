@@ -65,10 +65,11 @@ final class ExternalSurfaceRunAuthorityTests: XCTestCase {
   }
 
   func testStructuredErrorUsesCodeWithoutTrustingDisplayMessage() {
-    let error = ExternalSurfaceAuthorityError.from([
-      "ok": false,
-      "error": ["code": "stale_attempt", "message": "untrusted detail"],
-    ], fallback: "fallback")
+    let error = ExternalSurfaceAuthorityError.from(
+      [
+        "ok": false,
+        "error": ["code": "stale_attempt", "message": "untrusted detail"],
+      ], fallback: "fallback")
     XCTAssertEqual(error.code, "stale_attempt")
     XCTAssertFalse(error.localizedDescription.contains("untrusted detail"))
   }

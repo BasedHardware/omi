@@ -1,6 +1,6 @@
 import Foundation
 
-protocol DashboardIntelligenceClient: AnyObject {
+protocol DashboardIntelligenceClient: AnyObject, Sendable {
   func getCandidateWorkflowControl() async throws -> OmiAPI.TaskWorkflowControl
   func getWhatMattersNow(deviceID: String?) async throws -> OmiAPI.WhatMattersNowProjection
   func getCanonicalGoals(includeEnded: Bool) async throws -> [OmiAPI.GoalResponse]
@@ -30,7 +30,7 @@ protocol DashboardIntelligenceClient: AnyObject {
   ) async throws -> OmiAPI.GoalResponse
 }
 
-extension APIClient: DashboardIntelligenceClient {}
+extension APIClient: @preconcurrency DashboardIntelligenceClient {}
 
 @MainActor
 final class TaskNavigationRequestStore {

@@ -10,22 +10,22 @@ import XCTest
 /// behavior cannot diverge.
 final class AppsPagePrimaryActionTests: XCTestCase {
 
-    func testNotEnabledInstalls() {
-        XCTAssertEqual(
-            AppDetailSheet.primaryAppAction(isEnabled: false, worksExternally: false), .install)
-        XCTAssertEqual(
-            AppDetailSheet.primaryAppAction(isEnabled: false, worksExternally: true), .install)
-    }
+  func testNotEnabledInstalls() {
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(isEnabled: false, worksExternally: false), .install)
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(isEnabled: false, worksExternally: true), .install)
+  }
 
-    func testEnabledExternalOpens() {
-        XCTAssertEqual(
-            AppDetailSheet.primaryAppAction(isEnabled: true, worksExternally: true), .open)
-    }
+  func testEnabledExternalOpens() {
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(isEnabled: true, worksExternally: true), .open)
+  }
 
-    func testEnabledNonExternalHasNoPrimaryAction() {
-        // The regression case: previously "Open" → destructive disable. There is
-        // no open target for an enabled non-external app, so no primary button.
-        XCTAssertEqual(
-            AppDetailSheet.primaryAppAction(isEnabled: true, worksExternally: false), .hidden)
-    }
+  func testEnabledNonExternalHasNoPrimaryAction() {
+    // The regression case: previously "Open" → destructive disable. There is
+    // no open target for an enabled non-external app, so no primary button.
+    XCTAssertEqual(
+      AppDetailSheet.primaryAppAction(isEnabled: true, worksExternally: false), .hidden)
+  }
 }

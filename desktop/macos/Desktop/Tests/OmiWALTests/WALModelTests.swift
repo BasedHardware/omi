@@ -1,5 +1,5 @@
-import XCTest
 import OmiWAL
+import XCTest
 
 final class WALModelTests: XCTestCase {
 

@@ -1,6 +1,7 @@
 import XCTest
 
 @testable import Omi_Computer
+@testable import VoiceTurnDomain
 
 // Test-only convenience. Production leases have no initializer that can mint
 // an identity outside VoiceTurnCoordinator.
@@ -160,10 +161,11 @@ final class VoiceTurnReducerTests: XCTestCase {
     var model = reduce(.idle, .start(turnID: oldTurnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: oldTurnID, route: .hub(sessionID: sessionID))).model
     model = reduce(model, .finalize(turnID: oldTurnID)).model
-    model = reduce(
-      model,
-      .hubCommitAccepted(turnID: oldTurnID, sessionID: sessionID, responseID: nil)
-    ).model
+    model =
+      reduce(
+        model,
+        .hubCommitAccepted(turnID: oldTurnID, sessionID: sessionID, responseID: nil)
+      ).model
     XCTAssertEqual(model.turn?.phase, .awaitingResponse)
     XCTAssertTrue(
       PushToTalkManager.admitsListeningStart(
@@ -261,12 +263,14 @@ final class VoiceTurnReducerTests: XCTestCase {
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
     model = reduce(model, .selectRoute(turnID: turnID, route: .hubWarmWait)).model
     let reservation = reserveIdentity(model, turnID: turnID)
-    model = reduce(
-      reservation.model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: nil)).model
+    model =
+      reduce(
+        reservation.model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: nil)
+      ).model
 
     let reconnected = reduce(
       model,
@@ -596,14 +600,17 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: providerIdentity,
         sessionID: sessionID,
-        responseID: responseID)).model
-    continuation = reduce(
-      continuation,
-      .providerTurnFinishedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: sessionID,
-        responseID: responseID)).model
+        responseID: responseID)
+    ).model
+    continuation =
+      reduce(
+        continuation,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
     guard case .writing = continuation.turn?.journalFinalization else {
       return XCTFail("the post-tool answer must open the journal fence")
     }
@@ -637,15 +644,18 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: providerIdentity,
         sessionID: sessionID,
-        responseID: responseID)).model
+        responseID: responseID)
+    ).model
     XCTAssertFalse(continuation.turn?.postToolContinuationRequired == true)
-    continuation = reduce(
-      continuation,
-      .providerTurnFinishedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: sessionID,
-        responseID: responseID)).model
+    continuation =
+      reduce(
+        continuation,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
     guard case .writing = continuation.turn?.journalFinalization else {
       return XCTFail("only the post-tool answer may open the journal fence")
     }
@@ -682,14 +692,17 @@ final class VoiceTurnReducerTests: XCTestCase {
         turnID: turnID,
         identity: providerIdentity,
         sessionID: sessionID,
-        responseID: responseID)).model
-    continuation = reduce(
-      continuation,
-      .providerTurnFinishedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: sessionID,
-        responseID: responseID)).model
+        responseID: responseID)
+    ).model
+    continuation =
+      reduce(
+        continuation,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
     XCTAssertEqual(acceptJournal(continuation).model.turn?.phase, .terminal(.success))
   }
 
@@ -760,42 +773,50 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: screenshotIdentity,
-        callID: screenshotCallID)).model
+        callID: screenshotCallID)
+    ).model
     let token = VoiceScreenEvidenceProtocolToken(
       turnID: turnID,
       screenshotCallID: screenshotCallID,
       screenshotIdentity: screenshotIdentity)
-    model = reduce(
-      model,
-      .screenEvidenceProtocolStartedScoped(
-        turnID: turnID,
-        token: token,
-        expiresAfter: 5)).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: 5)
+      ).model
 
     let reportReservation = reserveIdentity(model, turnID: turnID)
     let reportIdentity = reportReservation.identity
     let reportCallID = VoiceToolCallID("report")
-    model = reduce(
-      reportReservation.model,
-      .toolStartedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)).model
+    model =
+      reduce(
+        reportReservation.model,
+        .toolStartedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
+      ).model
     let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
-    model = reduce(
-      model,
-      .providerTurnFinishedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: sessionID,
-        responseID: responseID)).model
+    model =
+      reduce(
+        model,
+        .providerTurnFinishedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: sessionID,
+          responseID: responseID)
+      ).model
     XCTAssertEqual(model.turn?.phase, .awaitingTools)
-    model = reduce(
-      model,
-      .screenEvidenceReportVerifiedScoped(
-        turnID: turnID,
-        screenshotIdentity: screenshotIdentity,
-        screenshotCallID: screenshotCallID,
-        reportIdentity: reportIdentity,
-        reportCallID: reportCallID)
-    ).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceReportVerifiedScoped(
+          turnID: turnID,
+          screenshotIdentity: screenshotIdentity,
+          screenshotCallID: screenshotCallID,
+          reportIdentity: reportIdentity,
+          reportCallID: reportCallID)
+      ).model
 
     XCTAssertNil(model.turn?.screenEvidenceProtocol)
     XCTAssertFalse(model.turn?.providerFinished == true)
@@ -803,14 +824,16 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
     XCTAssertEqual(model.turn?.journalFinalization, .pending)
 
-    model = reduce(
-      model,
-      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
-    ).model
-    model = reduce(
-      model,
-      .toolFinishedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
-    ).model
+    model =
+      reduce(
+        model,
+        .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+      ).model
+    model =
+      reduce(
+        model,
+        .toolFinishedScoped(turnID: turnID, identity: reportIdentity, callID: reportCallID)
+      ).model
     XCTAssertEqual(model.turn?.phase, .awaitingResponse)
     XCTAssertTrue(model.turn?.deadlines.contains(.providerResponse) == true)
     XCTAssertEqual(model.turn?.journalFinalization, .pending)
@@ -826,35 +849,40 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: screenshotIdentity,
-        callID: screenshotCallID)).model
+        callID: screenshotCallID)
+    ).model
     let token = VoiceScreenEvidenceProtocolToken(
       turnID: turnID,
       screenshotCallID: screenshotCallID,
       screenshotIdentity: screenshotIdentity)
-    model = reduce(
-      model,
-      .screenEvidenceProtocolStartedScoped(
-        turnID: turnID,
-        token: token,
-        expiresAfter: 5)).model
-    model = reduce(
-      model,
-      .authoritativeLocalResultAcceptedScoped(
-        turnID: turnID,
-        identity: screenshotIdentity,
-        callID: screenshotCallID,
-        kind: .screenEvidenceFailure)
-    ).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: 5)
+      ).model
+    model =
+      reduce(
+        model,
+        .authoritativeLocalResultAcceptedScoped(
+          turnID: turnID,
+          identity: screenshotIdentity,
+          callID: screenshotCallID,
+          kind: .screenEvidenceFailure)
+      ).model
 
     XCTAssertNil(model.turn?.screenEvidenceProtocol)
     XCTAssertTrue(model.turn?.providerFinished == true)
     XCTAssertFalse(model.turn?.postToolContinuationRequired == true)
     XCTAssertFalse(model.turn?.deadlines.contains(.providerResponse) == true)
 
-    model = reduce(
-      model,
-      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
-    ).model
+    model =
+      reduce(
+        model,
+        .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+      ).model
     XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
   }
 
@@ -868,25 +896,29 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: screenshotIdentity,
-        callID: screenshotCallID)).model
+        callID: screenshotCallID)
+    ).model
     let token = VoiceScreenEvidenceProtocolToken(
       turnID: turnID,
       screenshotCallID: screenshotCallID,
       screenshotIdentity: screenshotIdentity)
-    model = reduce(
-      model,
-      .screenEvidenceProtocolStartedScoped(
-        turnID: turnID,
-        token: token,
-        expiresAfter: RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)).model
-    model = reduce(
-      model,
-      .authoritativeLocalResultAcceptedScoped(
-        turnID: turnID,
-        identity: screenshotIdentity,
-        callID: screenshotCallID,
-        kind: .screenEvidenceFailure)
-    ).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: RealtimeScreenEvidenceProtocolPolicy.maximumReportWait)
+      ).model
+    model =
+      reduce(
+        model,
+        .authoritativeLocalResultAcceptedScoped(
+          turnID: turnID,
+          identity: screenshotIdentity,
+          callID: screenshotCallID,
+          kind: .screenEvidenceFailure)
+      ).model
 
     let lateReportReservation = reserveIdentity(model, turnID: turnID)
     let lateReport = reduce(
@@ -901,10 +933,11 @@ final class VoiceTurnReducerTests: XCTestCase {
     XCTAssertTrue(lateReport.model.turn?.providerFinished == true)
     XCTAssertFalse(lateReport.model.turn?.postToolContinuationRequired == true)
 
-    model = reduce(
-      lateReport.model,
-      .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
-    ).model
+    model =
+      reduce(
+        lateReport.model,
+        .toolFinishedScoped(turnID: turnID, identity: screenshotIdentity, callID: screenshotCallID)
+      ).model
     XCTAssertEqual(acceptJournal(model).model.turn?.phase, .terminal(.success))
   }
 
@@ -918,17 +951,20 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: screenshotIdentity,
-        callID: screenshotCallID)).model
+        callID: screenshotCallID)
+    ).model
     let token = VoiceScreenEvidenceProtocolToken(
       turnID: turnID,
       screenshotCallID: screenshotCallID,
       screenshotIdentity: screenshotIdentity)
-    model = reduce(
-      model,
-      .screenEvidenceProtocolStartedScoped(
-        turnID: turnID,
-        token: token,
-        expiresAfter: 5)).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: 5)
+      ).model
 
     let expiration = reduce(
       model,
@@ -951,17 +987,20 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: screenshotIdentity,
-        callID: screenshotCallID)).model
+        callID: screenshotCallID)
+    ).model
     let token = VoiceScreenEvidenceProtocolToken(
       turnID: turnID,
       screenshotCallID: screenshotCallID,
       screenshotIdentity: screenshotIdentity)
-    model = reduce(
-      model,
-      .screenEvidenceProtocolStartedScoped(
-        turnID: turnID,
-        token: token,
-        expiresAfter: 5)).model
+    model =
+      reduce(
+        model,
+        .screenEvidenceProtocolStartedScoped(
+          turnID: turnID,
+          token: token,
+          expiresAfter: 5)
+      ).model
     let replacementID = VoiceTurnID()
     model = reduce(model, .start(turnID: replacementID, ownerID: nil, intent: .hold)).model
 
@@ -1387,13 +1426,15 @@ final class VoiceTurnReducerTests: XCTestCase {
     model = reduce(model, .transcriptionStarted(turnID: turnID)).model
     model = reduce(model, .transcriptionFinal(turnID: turnID, text: "hello")).model
     let providerIdentity = try XCTUnwrap(model.turn?.providerEffectIdentity)
-    model = reduce(
-      model,
-      .providerResponseStartedScoped(
-        turnID: turnID,
-        identity: providerIdentity,
-        sessionID: nil,
-        responseID: nil)).model
+    model =
+      reduce(
+        model,
+        .providerResponseStartedScoped(
+          turnID: turnID,
+          identity: providerIdentity,
+          sessionID: nil,
+          responseID: nil)
+      ).model
     let requestedLease = VoiceOutputLease(
       id: VoiceLeaseID(), turnID: turnID, lane: .selectedVoiceFallback)
     model = reduce(model, .playbackStarted(turnID: turnID, lease: requestedLease)).model
@@ -1434,21 +1475,25 @@ final class VoiceTurnReducerTests: XCTestCase {
     var reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
     let first = reservation.identity
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: first,
-        previousSessionID: nil)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: first,
+          previousSessionID: nil)
+      ).model
     reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
     let second = reservation.identity
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: second,
-        previousSessionID: nil)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: second,
+          previousSessionID: nil)
+      ).model
 
     let stale = reduce(
       model,
@@ -1472,18 +1517,22 @@ final class VoiceTurnReducerTests: XCTestCase {
     let turnID = VoiceTurnID()
     let existingSessionID = VoiceSessionID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reduce(
-      model,
-      .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))).model
+    model =
+      reduce(
+        model,
+        .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))
+      ).model
     let reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
 
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: existingSessionID)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: existingSessionID)
+      ).model
     let reconnected = reduce(
       model,
       .providerReconnected(
@@ -1500,9 +1549,11 @@ final class VoiceTurnReducerTests: XCTestCase {
     let turnID = VoiceTurnID()
     let existingSessionID = VoiceSessionID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reduce(
-      model,
-      .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))).model
+    model =
+      reduce(
+        model,
+        .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))
+      ).model
     model = reduce(model, .finalize(turnID: turnID)).model
     let reservation = reserveIdentity(model, turnID: turnID)
     let reconnecting = reduce(
@@ -1513,9 +1564,11 @@ final class VoiceTurnReducerTests: XCTestCase {
         previousSessionID: existingSessionID))
 
     XCTAssertEqual(reconnecting.model.turn?.phase, .finalizing)
-    XCTAssertEqual(reconnecting.model.turn?.providerConnection, .reconnecting(
-      identity: reservation.identity,
-      previousSessionID: existingSessionID))
+    XCTAssertEqual(
+      reconnecting.model.turn?.providerConnection,
+      .reconnecting(
+        identity: reservation.identity,
+        previousSessionID: existingSessionID))
 
     let reconnectedSessionID = VoiceSessionID()
     let reconnected = reduce(
@@ -1553,9 +1606,11 @@ final class VoiceTurnReducerTests: XCTestCase {
     let existingSessionID = VoiceSessionID()
     let replacementResponseID = VoiceResponseID("replacement-response")
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reduce(
-      model,
-      .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))).model
+    model =
+      reduce(
+        model,
+        .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))
+      ).model
     model = reduce(model, .finalize(turnID: turnID)).model
     let reservation = reserveIdentity(model, turnID: turnID)
     let replacing = reduce(
@@ -1567,9 +1622,11 @@ final class VoiceTurnReducerTests: XCTestCase {
         nextResponseID: replacementResponseID))
 
     XCTAssertEqual(replacing.model.turn?.phase, .finalizing)
-    XCTAssertEqual(replacing.model.turn?.providerConnection, .replacing(
-      identity: reservation.identity,
-      previousResponseID: nil))
+    XCTAssertEqual(
+      replacing.model.turn?.providerConnection,
+      .replacing(
+        identity: reservation.identity,
+        previousResponseID: nil))
 
     let replacementSessionID = VoiceSessionID()
     let replacementReady = reduce(
@@ -1594,17 +1651,21 @@ final class VoiceTurnReducerTests: XCTestCase {
     let turnID = VoiceTurnID()
     let existingSessionID = VoiceSessionID()
     var model = reduce(.idle, .start(turnID: turnID, ownerID: nil, intent: .hold)).model
-    model = reduce(
-      model,
-      .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))).model
+    model =
+      reduce(
+        model,
+        .selectRoute(turnID: turnID, route: .hub(sessionID: existingSessionID))
+      ).model
     let reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: existingSessionID)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: existingSessionID)
+      ).model
 
     model = reduce(model, .finalize(turnID: turnID)).model
     model = reduce(model, .hubCommitDeferred(turnID: turnID)).model
@@ -1627,12 +1688,14 @@ final class VoiceTurnReducerTests: XCTestCase {
     model = reduce(model, .selectRoute(turnID: turnID, route: .hub(sessionID: VoiceSessionID()))).model
     let reservation = reserveIdentity(model, turnID: turnID)
     model = reservation.model
-    model = reduce(
-      model,
-      .providerReconnectStarted(
-        turnID: turnID,
-        identity: reservation.identity,
-        previousSessionID: nil)).model
+    model =
+      reduce(
+        model,
+        .providerReconnectStarted(
+          turnID: turnID,
+          identity: reservation.identity,
+          previousSessionID: nil)
+      ).model
     model = reduce(model, .finalize(turnID: turnID)).model
     model = reduce(model, .hubCommitDeferred(turnID: turnID)).model
 
@@ -1660,7 +1723,8 @@ final class VoiceTurnReducerTests: XCTestCase {
       .toolStartedScoped(
         turnID: turnID,
         identity: toolIdentity,
-        callID: callID)).model
+        callID: callID)
+    ).model
     XCTAssertEqual(model.turn?.phase, .awaitingTools)
 
     model = reduce(model, .interrupt(turnID: turnID)).model
@@ -1702,14 +1766,16 @@ final class VoiceTurnReducerTests: XCTestCase {
     var model = initial
     switch fact {
     case .providerResponseStarted(let turnID, let sessionID, let responseID):
-      let identity = model.turn?.providerEffectIdentity
+      let identity =
+        model.turn?.providerEffectIdentity
         ?? VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max)
       return reducer.reduce(
         model,
         .providerResponseStartedScoped(
           turnID: turnID, identity: identity, sessionID: sessionID, responseID: responseID))
     case .providerTurnFinished(let turnID, let sessionID, let responseID):
-      let identity = model.turn?.providerEffectIdentity
+      let identity =
+        model.turn?.providerEffectIdentity
         ?? VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max)
       return reducer.reduce(
         model,
@@ -1723,7 +1789,8 @@ final class VoiceTurnReducerTests: XCTestCase {
         .toolStartedScoped(
           turnID: turnID, identity: reservation.identity, callID: callID))
     case .toolFinished(let turnID, let callID):
-      let identity = model.turn?.toolEffectIdentities[callID]
+      let identity =
+        model.turn?.toolEffectIdentities[callID]
         ?? VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max)
       return reducer.reduce(
         model,
@@ -1738,13 +1805,15 @@ final class VoiceTurnReducerTests: XCTestCase {
         identity: reservation.identity)
       return reducer.reduce(model, .playbackStartedScoped(turnID: turnID, lease: lease))
     case .playbackDrained(let turnID, let leaseID):
-      let identity = model.turn?.activeLease?.identity
+      let identity =
+        model.turn?.activeLease?.identity
         ?? VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max)
       return reducer.reduce(
         model,
         .playbackDrainedScoped(turnID: turnID, identity: identity, leaseID: leaseID))
     case .playbackFailed(let turnID, let leaseID, let message):
-      let identity = model.turn?.activeLease?.identity
+      let identity =
+        model.turn?.activeLease?.identity
         ?? VoiceEffectIdentity(turnID: turnID, effectID: UInt64.max)
       return reducer.reduce(
         model,

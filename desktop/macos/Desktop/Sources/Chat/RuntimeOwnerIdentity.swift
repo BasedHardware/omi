@@ -134,9 +134,7 @@ private final class RuntimeOwnerTransitionCleanupAuthority: @unchecked Sendable 
     }
   }
 
-  func activeCapability(forPreviousOwnerID ownerID: String) ->
-    RuntimeOwnerTransitionCleanupCapability?
-  {
+  func activeCapability(forPreviousOwnerID ownerID: String) -> RuntimeOwnerTransitionCleanupCapability? {
     lock.withLock {
       guard let activeCapability, activeCapability.previousOwnerID == ownerID else { return nil }
       return activeCapability
@@ -226,26 +224,31 @@ enum RuntimeOwnerIdentity {
   static func performEffectiveOwnerTransition<T: Sendable>(
     defaults: UserDefaults = .standard,
     allowAutomationOverride: Bool = AppBuild.isNonProduction,
-    plannedNextOwner: @escaping @Sendable (
-      _ defaults: UserDefaults, _ previousOwner: String?
-    ) -> String?,
-    quiesceVoice: @escaping @Sendable (
-      _ previousOwner: String?, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
-    ) async -> Void = { previousOwner, cleanupCapability in
-      await PushToTalkManager.shared.quiesceForEffectiveOwnerTransition(
-        previousOwnerID: previousOwner,
-        cleanupCapability: cleanupCapability)
-    },
-    revokeKernelOwner: (@Sendable (
-      _ previousOwner: String, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
-    ) async -> Void)? = nil,
-    retargetLocalStorage: @escaping @Sendable (
-      _ previousOwner: String?, _ nextOwner: String?
-    ) async -> Void = { previousOwner, nextOwner in
-      await RuntimeOwnerIdentity.retargetOwnerBoundLocalStorage(
-        previousOwner: previousOwner,
-        nextOwner: nextOwner)
-    },
+    plannedNextOwner:
+      @escaping @Sendable (
+        _ defaults: UserDefaults, _ previousOwner: String?
+      ) -> String?,
+    quiesceVoice:
+      @escaping @Sendable (
+        _ previousOwner: String?, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+      ) async -> Void = { previousOwner, cleanupCapability in
+        await PushToTalkManager.shared.quiesceForEffectiveOwnerTransition(
+          previousOwnerID: previousOwner,
+          cleanupCapability: cleanupCapability)
+      },
+    revokeKernelOwner: (
+      @Sendable (
+        _ previousOwner: String, _ cleanupCapability: RuntimeOwnerTransitionCleanupCapability
+      ) async -> Void
+    )? = nil,
+    retargetLocalStorage:
+      @escaping @Sendable (
+        _ previousOwner: String?, _ nextOwner: String?
+      ) async -> Void = { previousOwner, nextOwner in
+        await RuntimeOwnerIdentity.retargetOwnerBoundLocalStorage(
+          previousOwner: previousOwner,
+          nextOwner: nextOwner)
+      },
     ownerDidChange: @escaping @Sendable () async -> Void = {
       await MainActor.run {
         NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
@@ -280,9 +283,10 @@ enum RuntimeOwnerIdentity {
         } else {
           assertionFailure("Effective-owner cleanup capability was not installed")
         }
-        RuntimeOwnerAuthorizationAuthority.shared.endTransition(ownerID: persistedOwnerId(
-          defaults: defaultsReference.value,
-          allowAutomationOverride: allowAutomationOverride))
+        RuntimeOwnerAuthorizationAuthority.shared.endTransition(
+          ownerID: persistedOwnerId(
+            defaults: defaultsReference.value,
+            allowAutomationOverride: allowAutomationOverride))
         EffectiveOwnerAuthorizationRevocation.shared.end()
       },
       quiescePreviousOwner: { previousOwner, _ in
