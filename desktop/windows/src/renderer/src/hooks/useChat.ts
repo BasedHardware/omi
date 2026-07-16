@@ -719,16 +719,12 @@ export function useChat(): UseChat {
     // planner and normal chat; tryAgentTask owns the latch when it handles one.
     if (await tryAgentTask(text, baseHistory, userMsg)) return
 
-    // pi_mono engine (DARK by default; the flag ships 'legacy_sse'): route default
-    // chat through the kernel instead of the legacy /v2/messages block below. A
-    // single early return — with the flag OFF this whole branch is skipped and the
-    // legacy path runs byte-identically. Attachment sends fall through to legacy:
-    // the kernel prompt has no PromptBlock/file_ids equivalent yet (§6 out of scope),
-    // so a message carrying attachments keeps using /v2/messages.
-    if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
-      return tryKernelChat(baseHistory, userMsg, fromVoice)
-    }
-
+    // Desktop automation planner runs BEFORE the pi_mono engine branch: with
+    // pi_mono the default chat engine, a keyword-action message ("just do X in
+    // the app") must still be caught by tryPlan and NOT silently routed to the
+    // kernel. tryPlan no-ops (returns {kind:'chat'}) when automation isn't
+    // enabled/consented or the text doesn't look like an action, so a plain
+    // message falls straight through to the pi_mono branch below.
     const verdict = await tryPlan(text)
     if (verdict.kind === 'planned') {
       // Consent + execution happen in a NATIVE Windows dialog (main process), so
@@ -763,6 +759,19 @@ export function useChat(): UseChat {
       setBusy(false)
       return
     }
+
+    // pi_mono engine (now the default): route plain chat through the kernel
+    // instead of the legacy /v2/messages block below. A single early return —
+    // reached only for a {kind:'chat'} verdict, so a planned/errored automation
+    // message never lands here. With the engine set to 'legacy_sse' this branch
+    // is skipped and the legacy path runs byte-identically. Attachment sends fall
+    // through to legacy: the kernel prompt has no PromptBlock/file_ids equivalent
+    // yet (§6 out of scope), so a message carrying attachments keeps using
+    // /v2/messages.
+    if (engineRef.current === 'pi_mono' && sendFileIds.length === 0) {
+      return tryKernelChat(baseHistory, userMsg, fromVoice)
+    }
+
     const assistantId = crypto.randomUUID()
     const assistantMsg = (content: string): ChatMsg => ({
       id: assistantId,
