@@ -44,6 +44,20 @@ def test_delete_app_logo_ignores_url_from_other_bucket(monkeypatch):
     assert sink == []  # nothing deleted
 
 
+def test_delete_app_logo_ignores_url_that_embeds_prefix_later(monkeypatch):
+    sink = []
+    monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
+    # A foreign-bucket URL that embeds the app-logo prefix later in the path must NOT delete: the
+    # guard requires the URL to start with the prefix, not merely contain it.
+    embedded = (
+        f'https://storage.googleapis.com/other-bucket/https://storage.googleapis.com/{storage.omi_apps_bucket}/x.png'
+    )
+
+    storage.delete_app_logo(embedded)
+
+    assert sink == []  # nothing deleted
+
+
 def test_delete_app_logo_deletes_matching_url(monkeypatch):
     sink = []
     monkeypatch.setattr(storage, '_get_storage_client', lambda: _FakeClient(sink))
