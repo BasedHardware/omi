@@ -129,7 +129,7 @@ struct OnboardingStepScaffold<Content: View>: View {
               .frame(maxHeight: .infinity)
             Image(systemName: "arrow.right.circle.fill")
               .scaledFont(size: 24)
-              .foregroundColor(OmiColors.backgroundSecondary)
+              .foregroundColor(OmiColors.textTertiary)
               .padding(4)
               .background(Circle().fill(OmiColors.backgroundPrimary))
               // Raised to sit at the vertical middle of the graph, which centers
