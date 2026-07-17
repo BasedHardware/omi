@@ -96,21 +96,21 @@ struct OMIApp: App {
   @StateObject private var authState = AuthState.shared
   @Environment(\.openWindow) private var openWindow
 
-  /// Launch mode determined at startup from command-line arguments
   static let launchMode = LaunchMode.fromCommandLine()
 
-  /// Window title with version number (different for rewind mode)
   private var windowTitle: String {
-    // Keep a distinct title in non-production builds so custom test apps are easy to identify.
-    if AppBuild.isNonProduction {
-      let baseName = AppBuild.displayName
-      return Self.launchMode == .rewind ? "\(baseName) Rewind" : baseName
-    }
+    Self.windowTitle(
+      displayName: AppBuild.displayName,
+      version: Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "",
+      launchMode: Self.launchMode,
+      isNonProduction: AppBuild.isNonProduction)
+  }
 
-    let version =
-      Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? ""
-    let baseName = Self.launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
-    return version.isEmpty ? baseName : "\(baseName) v\(version)"
+  static func windowTitle(displayName: String, version: String, launchMode: LaunchMode, isNonProduction: Bool) -> String
+  {
+    let baseName = isNonProduction ? displayName : launchMode == .rewind ? "omi Rewind" : UpdateChannel.appDisplayName
+    let title = isNonProduction && launchMode == .rewind ? "\(baseName) Rewind" : baseName
+    return version.isEmpty ? title : "\(title) v\(version)"
   }
 
   /// Window size based on launch mode
