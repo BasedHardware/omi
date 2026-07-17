@@ -42,3 +42,20 @@ def test_split_alert_exports_preserve_error_count_no_data_contract():
     assert ERROR_COUNT_RULES <= split.keys()
     for uid in ERROR_COUNT_RULES:
         assert combined[uid]["noDataState"] == split[uid]["noDataState"] == "OK"
+
+
+def test_llm_gateway_alerts_cover_client_black_holes_and_ready_endpoints():
+    split = _rules(MONITORING / "alerts" / "resilience.json")
+    combined = _rules(MONITORING / "alert-rules.json")
+    expected = {"omi-llm-gateway-client-reachability", "omi-llm-gateway-no-ready-endpoints"}
+
+    assert expected <= split.keys()
+    assert expected <= combined.keys()
+    reachability_expr = split["omi-llm-gateway-client-reachability"]["data"][0]["model"]["expr"]
+    assert "llm_gateway_chat_extraction_requests_total" in reachability_expr
+    assert "llm_gateway_circuit_open" in reachability_expr
+    assert 'outcome="success"' in reachability_expr
+    assert "llm_gateway_client_first_byte_seconds_bucket" in reachability_expr
+    endpoint_rule = split["omi-llm-gateway-no-ready-endpoints"]
+    assert endpoint_rule["noDataState"] == "Alerting"
+    assert "kube_endpoint_address_available" in endpoint_rule["data"][0]["model"]["expr"]

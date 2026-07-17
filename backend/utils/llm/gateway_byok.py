@@ -8,6 +8,7 @@ from typing import Any, Dict, Optional
 from pydantic import SecretStr
 
 from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_resilience import gateway_transport_timeout
 from utils.llm.usage_tracker import get_usage_callback
 
 _BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
@@ -50,6 +51,8 @@ def get_or_create_omi_gateway_llm_for_byok(
 
     options = options or {}
     base_url = f'{get_llm_gateway_base_url()}/v1'
+    request_timeout = options.get('request_timeout', gateway_transport_timeout())
+    max_retries = options.get('max_retries', 0)
     service_token = get_llm_gateway_service_token()
     default_headers: dict[str, str] = {
         'X-Omi-Service-Caller': 'backend',
@@ -68,8 +71,8 @@ def get_or_create_omi_gateway_llm_for_byok(
         service_token_cache_key,
         provider,
         key_fingerprint,
-        options.get('request_timeout', 120),
-        options.get('max_retries', 1),
+        repr(request_timeout),
+        max_retries,
         feature,
     )
     cached = _byok_gateway_llm_cache.get(cache_key)
@@ -80,8 +83,8 @@ def get_or_create_omi_gateway_llm_for_byok(
         'base_url': base_url,
         'callbacks': [_usage_callback],
         'default_headers': default_headers,
-        'request_timeout': options.get('request_timeout', 120),
-        'max_retries': options.get('max_retries', 1),
+        'request_timeout': request_timeout,
+        'max_retries': max_retries,
     }
     if streaming:
         kwargs['streaming'] = True

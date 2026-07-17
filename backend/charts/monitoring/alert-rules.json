@@ -7328,5 +7328,73 @@
       "receiver": "Omi - Services Alerting (Telegram)"
     },
     "record": null
+  },
+  {
+    "uid": "omi-llm-gateway-client-reachability",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM Gateway",
+    "title": "LLM Gateway - client reachability degraded",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 900, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "(sum(rate(llm_gateway_chat_extraction_requests_total{mode=\"fallback\"}[15m])) / clamp_min(sum(rate(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])), 1e-9) > bool 0.05) or (max(llm_gateway_circuit_open) > bool 0) or ((sum(increase(llm_gateway_chat_extraction_requests_total{mode=~\"serving|fallback\"}[15m])) >= bool 10) and (sum(increase(llm_gateway_chat_extraction_requests_total{mode=\"serving\",outcome=\"success\"}[15m])) == bool 0)) or (histogram_quantile(0.95, sum(rate(llm_gateway_client_first_byte_seconds_bucket[5m])) by (le)) > bool 5)", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B", "type": "threshold"}
+      }
+    ],
+    "updated": "2026-07-17T00:00:00Z",
+    "noDataState": "OK",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {"runbook": "backend/docs/runbooks/llm-gateway-fallback.md", "summary": "Client fallback, open circuit, zero gateway successes under traffic, or p95 first-byte latency indicates the gateway is unreachable or stalling", "threshold": "fallback >5%, circuit open, no serving success for 10 requests, or p95 first byte >5s"},
+    "labels": {"severity": "warning", "instatus_component": "ai-chat"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "record": null
+  },
+  {
+    "uid": "omi-llm-gateway-no-ready-endpoints",
+    "orgID": 1,
+    "folderUID": "betdycdziadc0e",
+    "ruleGroup": "LLM Gateway",
+    "title": "LLM Gateway - no ready production endpoints",
+    "condition": "B",
+    "data": [
+      {
+        "refId": "A",
+        "queryType": "",
+        "relativeTimeRange": {"from": 300, "to": 0},
+        "datasourceUid": "prometheus",
+        "model": {"datasource": {"type": "prometheus", "uid": "prometheus"}, "expr": "sum(kube_endpoint_address_available{namespace=\"prod-omi-backend\",endpoint=\"prod-omi-llm-gateway\"}) < bool 1", "instant": true, "intervalMs": 1000, "maxDataPoints": 43200, "refId": "A"}
+      },
+      {
+        "refId": "B",
+        "queryType": "",
+        "relativeTimeRange": {"from": 0, "to": 0},
+        "datasourceUid": "__expr__",
+        "model": {"conditions": [{"evaluator": {"params": [0], "type": "gt"}, "operator": {"type": "and"}, "query": {"params": ["B"]}, "reducer": {"params": [], "type": "last"}, "type": "query"}], "datasource": {"type": "__expr__", "uid": "__expr__"}, "expression": "A", "intervalMs": 1000, "maxDataPoints": 43200, "refId": "B", "type": "threshold"}
+      }
+    ],
+    "updated": "2026-07-17T00:00:00Z",
+    "noDataState": "Alerting",
+    "execErrState": "Error",
+    "for": "5m",
+    "keep_firing_for": "0s",
+    "annotations": {"runbook": "backend/docs/runbooks/llm-gateway-fallback.md", "summary": "The production LLM Gateway Service has no ready EndpointSlice address or kube-state-metrics is absent", "threshold": "ready endpoint count <1"},
+    "labels": {"severity": "warning", "instatus_component": "ai-chat"},
+    "isPaused": false,
+    "notification_settings": {"receiver": "Omi - Services Alerting (Telegram)"},
+    "record": null
   }
 ]
