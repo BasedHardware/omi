@@ -1,0 +1,15 @@
+{
+  "schema_version": 1,
+  "id": "FC-unprovisioned-rollout-target",
+  "violated_contract": "A rollout flag that routes production traffic to a service endpoint must not be enabled for an environment until that endpoint is provisioned and reachable there.",
+  "canonical_prevention": "Before enabling a routing flag for an environment, verify the referenced endpoint exists in that environment (deployed release, attached forwarding rule or resolvable service) with a deploy-lane check; keep the flag off with wiring declared until that proof exists.",
+  "evidence_prs": [
+    9651
+  ],
+  "scope_hints": [
+    "backend/deploy/**",
+    "backend/charts/**",
+    ".github/workflows/**"
+  ],
+  "status": "open"
+}

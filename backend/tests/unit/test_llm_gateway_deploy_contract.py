@@ -58,14 +58,20 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
 
-def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
+def test_prod_gateway_wiring_declared_but_serving_off_until_gateway_deployed():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     gke_env = prod['gke']['backend-listen']['env']
     assert (
         gke_env['OMI_LLM_GATEWAY_URL']['value'] == 'http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080'
     )
-    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+    # 'off' until the llm-gateway is actually deployed in prod: the 2026-07-17 prod
+    # deploy shipped FEATURE_MODE=gateway pointing at an unattached static IP (Cloud
+    # Run) / nonexistent cluster service (GKE), and every chat LLM call hung through
+    # connect timeouts + retries (2-9 min per /v2/messages POST). Flip back to
+    # 'gateway' only once a reachable prod gateway exists (helm release + ingress
+    # bound to the reserved IP).
+    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
     assert gke_env['USE_VERTEX_AI']['value'] == 'true'
@@ -75,7 +81,7 @@ def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
     for service in ('backend', 'backend-sync', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
         assert service_config['env']['OMI_LLM_GATEWAY_URL']['value'] == 'http://172.16.160.108'
-        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
