@@ -345,6 +345,20 @@ jobs:
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
 
+      # Strips Secret Manager bindings left on services for settings the manifest
+      # now declares as public literals; gcloud cannot flip a binding's type in
+      # place. No-ops once a service carries no legacy binding.
+      - name: Migrate legacy public Cloud Run bindings
+        run: >-
+          python3 backend/scripts/preflight-cloud-run-deploy.py
+          --env ${{ vars.ENV }}
+          --project="${{ vars.GCP_PROJECT_ID }}"
+          --region="${{ env.REGION }}"
+          --migrate-legacy-public-binding backend
+          --migrate-legacy-public-binding backend-sync
+          --migrate-legacy-public-binding backend-sync-backfill
+          --migrate-legacy-public-binding backend-integration
+
       - name: Deploy ${{ env.SERVICE }} to Cloud Run
         id: deploy-backend
         uses: google-github-actions/deploy-cloudrun@v3
