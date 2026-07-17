@@ -346,6 +346,8 @@ class SelectionTests(unittest.TestCase):
             self.assertIn(event, hygiene_job)
         self.assertIn("scripts/pr-preflight", metadata_job)
         self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn("astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84", metadata_job)
+        self.assertLess(metadata_job.index("Set up uv"), metadata_job.index("Run current PR metadata preflight"))
         self.assertIn("github.event_name != 'pull_request'", changes_job)
         self.assertIn("github.event_name != 'pull_request'", hygiene_job)
 
