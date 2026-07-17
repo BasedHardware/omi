@@ -357,7 +357,7 @@ def check_workflow(text: str) -> list[str]:
         "environment: development",
         "contents: read",
         "id-token: write",
-        "google-github-actions/auth@v2",
+        "google-github-actions/auth@v3",
         "workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-opentofu-9842-dev/providers/github",
         "service_account: omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com",
         "ref: main",
