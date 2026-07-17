@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr
 import io
 import json
 import os
@@ -15,8 +16,8 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from pr_metadata import load_from_api
-from pr_preflight import changed_files, format_failure_class_suggest, select_checks
+from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
+from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -74,9 +75,7 @@ class MetadataTests(unittest.TestCase):
                 raise outcome
             return outcome  # type: ignore[return-value]
 
-        metadata = load_from_api(
-            "BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=sleeps.append
-        )
+        metadata = load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=sleeps.append)
         self.assertEqual(metadata.number, 9847)
         self.assertEqual(sleeps, [2.0, 4.0])
 
@@ -87,9 +86,12 @@ class MetadataTests(unittest.TestCase):
             calls["count"] += 1
             raise urllib.error.HTTPError("url", 404, "not found", None, None)  # type: ignore[arg-type]
 
-        with self.assertRaisesRegex(RuntimeError, "HTTP 404"):
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
         self.assertEqual(calls["count"], 1)
+        cause = raised.exception.__cause__
+        self.assertIsInstance(cause, urllib.error.HTTPError)
+        cause.close()  # type: ignore[union-attr]
 
     def test_api_loader_raises_after_exhausting_transient_retries(self) -> None:
         calls = {"count": 0}
@@ -98,9 +100,62 @@ class MetadataTests(unittest.TestCase):
             calls["count"] += 1
             raise TimeoutError("timed out")
 
-        with self.assertRaisesRegex(RuntimeError, "request failed"):
+        with self.assertRaisesRegex(TransientPRMetadataError, "request failed"):
             load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
         self.assertEqual(calls["count"], 3)
+
+    def test_event_payload_loader_uses_top_level_pr_number(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps(
+                    {
+                        "number": 9847,
+                        "pull_request": {
+                            "body": "INV-MEM-1",
+                            "updated_at": "2026-07-16T23:30:00Z",
+                            "labels": [{"name": "no-changelog-needed"}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = load_from_event_file(event_path, 9847)
+
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(metadata.body, "INV-MEM-1")
+        self.assertEqual(metadata.labels, ("no-changelog-needed",))
+
+    def test_event_payload_loader_rejects_missing_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(json.dumps({"number": 9847}), encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "pull_request"):
+                load_from_event_file(event_path, 9847)
+
+    def test_pr_metadata_uses_event_payload_only_after_transient_api_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps({"number": 9847, "pull_request": {"body": "current", "labels": []}}),
+                encoding="utf-8",
+            )
+            warnings = io.StringIO()
+            with patch(
+                "pr_preflight.load_from_api", side_effect=TransientPRMetadataError("GitHub API unavailable")
+            ), redirect_stderr(warnings):
+                metadata = resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, event_path)
+
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.body, "current")
+        self.assertIn("using the PR snapshot", warnings.getvalue())
+
+    def test_pr_metadata_does_not_use_event_payload_after_permanent_api_failure(self) -> None:
+        with patch("pr_preflight.load_from_api", side_effect=RuntimeError("GitHub API returned HTTP 403")):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+                resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, Path("event.json"))
 
 
 class SelectionTests(unittest.TestCase):
@@ -277,6 +332,67 @@ class SelectionTests(unittest.TestCase):
             )
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn(str(body.resolve()), result.stdout)
+
+    def test_repo_checks_routes_metadata_events_to_the_narrow_preflight(self) -> None:
+        """Metadata-only PR updates must not restart the full hygiene suite."""
+        workflow = (REPO_ROOT / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+        metadata_job = workflow.split("  metadata-preflight:\n", 1)[1].split("\n  changes:\n", 1)[0]
+        changes_job = workflow.split("  changes:\n", 1)[1].split("\n  hygiene:\n", 1)[0]
+        hygiene_job = workflow.split("  hygiene:\n", 1)[1].split("\n  formatting:\n", 1)[0]
+
+        for event in ("edited", "labeled", "unlabeled"):
+            self.assertIn(event, metadata_job)
+            self.assertIn(event, changes_job)
+            self.assertIn(event, hygiene_job)
+        self.assertIn("scripts/pr-preflight", metadata_job)
+        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn("github.event_name != 'pull_request'", changes_job)
+        self.assertIn("github.event_name != 'pull_request'", hygiene_job)
+
+    def test_issue_sync_action_is_pinned(self) -> None:
+        workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
+
+        self.assertIn("paritytech/github-issue-sync@34a24348bf2f2a73924e322f43d6132e0c276b5f", workflow)
+        self.assertNotIn("paritytech/github-issue-sync@master", workflow)
+
+    def test_standard_actions_no_longer_use_node_20_majors(self) -> None:
+        deprecated_references = (
+            "actions/checkout@v3",
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+            "actions/setup-node@v3",
+            "actions/setup-node@v4",
+            "actions/cache@v4",
+            "actions/cache/restore@v4",
+            "actions/cache/save@v4",
+            "actions/upload-artifact@v4",
+            "actions/download-artifact@v4",
+            "actions/github-script@v6",
+            "actions/github-script@v7",
+            "actions/create-github-app-token@v1",
+            "actions/configure-pages@v3",
+            "actions/deploy-pages@v4",
+            "actions/upload-pages-artifact@v3",
+            "actions/setup-dotnet@v4",
+            "google-github-actions/auth@v2",
+            "google-github-actions/setup-gcloud@v2",
+            "google-github-actions/get-gke-credentials@v2",
+            "google-github-actions/deploy-cloudrun@v2",
+            "docker/build-push-action@v6",
+            "docker/setup-buildx-action@v3",
+            "azure/setup-helm@v3",
+            "gradle/actions/setup-gradle@v4",
+            "pnpm/action-setup@v4",
+            "opentofu/setup-opentofu@v1",
+            "peter-evans/create-pull-request@v5",
+            "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+        )
+        workflow_files = (*REPO_ROOT.glob(".github/workflows/*.yml"), *REPO_ROOT.glob(".github/actions/*/action.yml"))
+
+        for path in workflow_files:
+            text = path.read_text(encoding="utf-8")
+            for reference in deprecated_references:
+                self.assertNotIn(reference, text, f"{path}: update {reference} to a non-Node-20 action")
 
 
 class SingleFlightTests(unittest.TestCase):
