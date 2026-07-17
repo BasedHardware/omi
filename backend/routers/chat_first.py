@@ -28,7 +28,6 @@ from models.chat_first import (
     GoalLinkSpec,
     MaterializePromptsRequest,
     MaterializePromptsResponse,
-    QuestionCardSpec,
     TaskCardSpec,
     stable_block_id,
 )
@@ -73,7 +72,7 @@ def _require_materialization_capability(uid: str, *, owner_fence: str, control_g
     return eligibility
 
 
-def _daily_opener_blocks(uid: str) -> tuple[list, ChatFirstSubject | None]:
+def _daily_opener_blocks(uid: str) -> tuple[list[ChatFirstBlockSpec], ChatFirstSubject | None]:
     """Build the closed deterministic opener from canonical task/goal facts."""
 
     focused_goal = goals_db.get_user_goal(uid)
@@ -84,7 +83,7 @@ def _daily_opener_blocks(uid: str) -> tuple[list, ChatFirstSubject | None]:
         return [], None
     title = focused_goal.get('title')
     summary = title if isinstance(title, str) and title.strip() else 'Today’s focus'
-    blocks = [GoalLinkSpec(type='goalLink', goal_id=goal_id, summary=summary[:200])]
+    blocks: list[ChatFirstBlockSpec] = [GoalLinkSpec(type='goalLink', goal_id=goal_id, summary=summary[:200])]
     for task in action_items_db.get_action_items(uid, completed=False, limit=3):
         task_id = task.get('id')
         if isinstance(task_id, str) and task_id:
@@ -166,20 +165,18 @@ def _entity_available(uid: str, block: ChatFirstBlockSpec) -> bool:
     if isinstance(block, CaptureLinkSpec):
         capture = conversations_db.get_conversation(uid, block.conversation_id)
         return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
-    if isinstance(block, QuestionCardSpec):
-        subject = block.subject
-        if subject.kind == 'cold_start':
-            # Synthetic cold-start subjects are admitted only through the
-            # deterministic materialization endpoint, never agent tool input.
-            return False
-        if subject.kind == 'task':
-            task = action_items_db.get_action_item(uid, subject.id)
-            return bool(task and not task.get('is_locked', False))
-        if subject.kind == 'goal':
-            return goals_db.get_goal_by_id(uid, subject.id) is not None
-        capture = conversations_db.get_conversation(uid, subject.id)
-        return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
-    return False
+    subject = block.subject
+    if subject.kind == 'cold_start':
+        # Synthetic cold-start subjects are admitted only through the
+        # deterministic materialization endpoint, never agent tool input.
+        return False
+    if subject.kind == 'task':
+        task = action_items_db.get_action_item(uid, subject.id)
+        return bool(task and not task.get('is_locked', False))
+    if subject.kind == 'goal':
+        return goals_db.get_goal_by_id(uid, subject.id) is not None
+    capture = conversations_db.get_conversation(uid, subject.id)
+    return bool(capture and capture.get('source') == 'omi' and not capture.get('discarded', False))
 
 
 @router.post(

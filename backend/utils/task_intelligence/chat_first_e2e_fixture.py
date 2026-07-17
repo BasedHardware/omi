@@ -1,10 +1,10 @@
 """Server-authoritative fixture state for the local Chat-first E2E bundle.
 
-This module deliberately does not alter the normal Chat-first routes.  The
-harness writes only two fixed local/offline accounts, uses the existing
-canonical document builders and intent contracts, and returns no fixture text
-or entity data.  Its clock advance makes fixture deferrals due; production
-materialization continues to read its normal wall clock.
+This module deliberately does not alter the normal Chat-first routes. The
+harness writes only two fixed local/offline accounts using complete canonical
+document and intent contracts, and returns no fixture text or entity data. Its
+clock advance makes fixture deferrals due; production materialization continues
+to read its normal wall clock.
 """
 
 from copy import deepcopy
@@ -19,9 +19,7 @@ from config.chat_first_e2e_fixture import (
     is_chat_first_e2e_harness_runtime,
 )
 from database._client import get_firestore_client
-import database.action_items as action_items_db
 import database.chat_first_intents as intents_db
-import database.goals as goals_db
 from models.chat_first import (
     ChatFirstSubject,
     ColdStartSequence,
@@ -87,10 +85,29 @@ def _user_ref(uid: str, *, firestore_client: Any):
 
 def _entity_refs(uid: str, *, firestore_client: Any) -> dict[str, Any]:
     user_ref = _user_ref(uid, firestore_client=firestore_client)
-    question_intent_id = intents_db._stable_id('cfi', uid, 1, 'deferral_reraise', _QUESTION_CONTINUITY_KEY)
-    cold_start_intent_id = intents_db._stable_id('cfi', uid, 1, 'cold_start', _COLD_START_CONTINUITY_KEY)
-    daily_opener_intent_id = intents_db._stable_id('cfi', uid, 1, 'daily_opener', 'daily:chat-first-e2e')
-    question_deferral_id = intents_db._stable_id('cfd', uid, 1, _QUESTION_CONTINUITY_KEY)
+    question_intent_id = intents_db.proactive_intent_id(
+        uid,
+        account_generation=1,
+        source_key='deferral_reraise',
+        continuity_key=_QUESTION_CONTINUITY_KEY,
+    )
+    cold_start_intent_id = intents_db.proactive_intent_id(
+        uid,
+        account_generation=1,
+        source_key='cold_start',
+        continuity_key=_COLD_START_CONTINUITY_KEY,
+    )
+    daily_opener_intent_id = intents_db.proactive_intent_id(
+        uid,
+        account_generation=1,
+        source_key='daily_opener',
+        continuity_key='daily:chat-first-e2e',
+    )
+    question_deferral_id = intents_db.proactive_deferral_id(
+        uid,
+        account_generation=1,
+        continuity_key=_QUESTION_CONTINUITY_KEY,
+    )
     return {
         'control': user_ref.collection('task_intelligence_control').document('state'),
         'goal': user_ref.collection('goals').document(_GOAL_ID),
@@ -158,50 +175,49 @@ def _control_for_case(fixture_case: ChatFirstE2EFixtureCase) -> TaskWorkflowCont
 
 
 def _goal_payload(*, goal_id: str, title: str, focused: bool, now: datetime) -> dict[str, Any]:
-    payload = goals_db._new_goal_payload(
-        {
-            'goal_id': goal_id,
-            'title': title,
-            'desired_outcome': 'Validate the Chat-first fixture loop',
-            'status': GoalStatus.background.value,
-            'source': 'user',
-        },
-        goal_id=goal_id,
-        now=now,
-        account_generation=1,
-    )
-    payload.update(
-        {
-            'status': GoalStatus.focused.value if focused else GoalStatus.background.value,
-            'focus_rank': 0 if focused else None,
-            'is_active': True,
-        }
-    )
-    return payload
+    """Build the complete canonical storage shape for one fixture goal."""
+
+    return {
+        'id': goal_id,
+        'goal_id': goal_id,
+        'title': title,
+        'desired_outcome': 'Validate the Chat-first fixture loop',
+        'why_it_matters': None,
+        'success_criteria': [],
+        'horizon_at': None,
+        'status': GoalStatus.focused.value if focused else GoalStatus.background.value,
+        'focus_rank': 0 if focused else None,
+        'metric': None,
+        'source': 'user',
+        'latest_progress_sequence': 0,
+        'is_active': True,
+        'created_at': now,
+        'updated_at': now,
+        'account_generation': 1,
+    }
 
 
 def _task_payload(*, now: datetime) -> dict[str, Any]:
-    return action_items_db._prepare_action_item_for_write(
-        {
-            'id': _TASK_ID,
-            'description': 'E2E fixture task',
-            'goal_id': _GOAL_ID,
-            'completed': False,
-            'owner': 'user',
-            # This is deliberately the one task provenance which the cohort
-            # archive can resolve. The resulting task-card badge exercises
-            # the production fail-closed capture-link policy instead of
-            # merely asserting its helper against a synthetic Swift value.
-            'source': 'transcription:omi',
-            'conversation_id': _CAPTURE_ID,
-            'provenance': [],
-            'sort_order': 0,
-            'indent_level': 0,
-            'created_at': now,
-            'updated_at': now,
-            'account_generation': 1,
-        }
-    )
+    return {
+        'id': _TASK_ID,
+        'description': 'E2E fixture task',
+        'goal_id': _GOAL_ID,
+        'status': 'active',
+        'completed': False,
+        'owner': 'user',
+        # This is deliberately the one task provenance which the cohort
+        # archive can resolve. The resulting task-card badge exercises
+        # the production fail-closed capture-link policy instead of
+        # merely asserting its helper against a synthetic Swift value.
+        'source': 'transcription:omi',
+        'conversation_id': _CAPTURE_ID,
+        'provenance': [],
+        'sort_order': 0,
+        'indent_level': 0,
+        'created_at': now,
+        'updated_at': now,
+        'account_generation': 1,
+    }
 
 
 def _capture_payload(*, now: datetime) -> dict[str, Any]:
@@ -236,7 +252,12 @@ def _question() -> QuestionCardSpec:
 
 def _question_intent(uid: str, *, now: datetime) -> ProactiveIntent:
     return ProactiveIntent(
-        intent_id=intents_db._stable_id('cfi', uid, 1, 'deferral_reraise', _QUESTION_CONTINUITY_KEY),
+        intent_id=intents_db.proactive_intent_id(
+            uid,
+            account_generation=1,
+            source_key='deferral_reraise',
+            continuity_key=_QUESTION_CONTINUITY_KEY,
+        ),
         continuity_key=_QUESTION_CONTINUITY_KEY,
         account_generation=1,
         source='deferral_reraise',
@@ -257,7 +278,12 @@ def _cold_start_intent(uid: str, *, now: datetime) -> ProactiveIntent:
         cold_start_sequence=ColdStartSequence(sequence_id=sequence_id, step=1),
     )
     return ProactiveIntent(
-        intent_id=intents_db._stable_id('cfi', uid, 1, 'cold_start', sequence_id),
+        intent_id=intents_db.proactive_intent_id(
+            uid,
+            account_generation=1,
+            source_key='cold_start',
+            continuity_key=sequence_id,
+        ),
         continuity_key=sequence_id,
         account_generation=1,
         source='cold_start_sparse',
@@ -279,7 +305,12 @@ def _daily_opener_intent(uid: str, *, now: datetime) -> ProactiveIntent:
 
     continuity_key = 'daily:chat-first-e2e'
     return ProactiveIntent(
-        intent_id=intents_db._stable_id('cfi', uid, 1, 'daily_opener', continuity_key),
+        intent_id=intents_db.proactive_intent_id(
+            uid,
+            account_generation=1,
+            source_key='daily_opener',
+            continuity_key=continuity_key,
+        ),
         continuity_key=continuity_key,
         account_generation=1,
         source='daily_opener',
@@ -304,7 +335,12 @@ def _completed_rich_cold_start_intent(uid: str, *, now: datetime) -> ProactiveIn
 
     sequence_id = _COLD_START_CONTINUITY_KEY
     return ProactiveIntent(
-        intent_id=intents_db._stable_id('cfi', uid, 1, 'cold_start', sequence_id),
+        intent_id=intents_db.proactive_intent_id(
+            uid,
+            account_generation=1,
+            source_key='cold_start',
+            continuity_key=sequence_id,
+        ),
         continuity_key=sequence_id,
         account_generation=1,
         source='cold_start_rich',

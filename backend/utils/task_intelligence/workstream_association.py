@@ -407,7 +407,7 @@ def consume_recurrence_signals_for_maintenance(
     complete: Callable[..., None] = recurrence_inbox_db.complete_recurrence_receipt,
     retry: Callable[..., None] = recurrence_inbox_db.retry_recurrence_receipt,
 ) -> int:
-    evaluated_or_persisted = persist_recurrence_signals_for_maintenance(
+    persist_recurrence_signals_for_maintenance(
         uid,
         signals,
         firestore_client=firestore_client,

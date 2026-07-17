@@ -351,7 +351,7 @@ def persist_cold_start_intent(
         subject = rich_subject
     else:
         source = 'cold_start_sparse'
-        blocks = [cold_start_sparse_question(sequence_id=sequence_id)]
+        blocks: list[ChatFirstBlockSpec] = [cold_start_sparse_question(sequence_id=sequence_id)]
         subject = ChatFirstSubject(kind='cold_start', id=sequence_id)
     intent, created = intent_db.get_or_create_cold_start_intent(
         uid,
