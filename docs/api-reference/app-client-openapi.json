@@ -4439,7 +4439,7 @@
             "type": "string"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -4455,7 +4455,7 @@
         "properties": {
           "files": {
             "items": {
-              "contentMediaType": "application/octet-stream",
+              "format": "binary",
               "type": "string"
             },
             "title": "Files",
@@ -4482,7 +4482,7 @@
       "Body_import_limitless_data_v1_import_limitless_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -4497,7 +4497,7 @@
         "properties": {
           "files": {
             "items": {
-              "contentMediaType": "application/octet-stream",
+              "format": "binary",
               "type": "string"
             },
             "title": "Files",
@@ -4517,7 +4517,7 @@
             "type": "string"
           },
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -4531,7 +4531,7 @@
       "Body_upload_app_thumbnail_endpoint_v1_app_thumbnails_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -4546,7 +4546,7 @@
         "properties": {
           "files": {
             "items": {
-              "contentMediaType": "application/octet-stream",
+              "format": "binary",
               "type": "string"
             },
             "title": "Files",
@@ -4562,7 +4562,7 @@
       "Body_upload_profile_v3_upload_audio_post": {
         "properties": {
           "file": {
-            "contentMediaType": "application/octet-stream",
+            "format": "binary",
             "title": "File",
             "type": "string"
           }
@@ -5235,7 +5235,7 @@
                 "type": "null"
               },
               "workstream_proposal": {
-                "$ref": "#/components/schemas/WorkstreamProposal"
+                "$ref": "#/components/schemas/WorkstreamProposal-Output"
               }
             },
             "required": [
@@ -5415,7 +5415,7 @@
           "workstream_proposal": {
             "anyOf": [
               {
-                "$ref": "#/components/schemas/WorkstreamProposal"
+                "$ref": "#/components/schemas/WorkstreamProposal-Output"
               },
               {
                 "type": "null"
@@ -17916,7 +17916,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",
@@ -21567,13 +21573,6 @@
       },
       "ValidationError": {
         "properties": {
-          "ctx": {
-            "title": "Context",
-            "type": "object"
-          },
-          "input": {
-            "title": "Input"
-          },
           "loc": {
             "items": {
               "anyOf": [
@@ -22166,6 +22165,33 @@
         "type": "string"
       },
       "WorkstreamProposal": {
+        "additionalProperties": false,
+        "properties": {
+          "anchor_task": {
+            "$ref": "#/components/schemas/TaskCreatePayload"
+          },
+          "objective": {
+            "maxLength": 2048,
+            "minLength": 1,
+            "title": "Objective",
+            "type": "string"
+          },
+          "title": {
+            "maxLength": 256,
+            "minLength": 1,
+            "title": "Title",
+            "type": "string"
+          }
+        },
+        "required": [
+          "title",
+          "objective",
+          "anchor_task"
+        ],
+        "title": "WorkstreamProposal",
+        "type": "object"
+      },
+      "WorkstreamProposal-Output": {
         "additionalProperties": false,
         "properties": {
           "anchor_task": {

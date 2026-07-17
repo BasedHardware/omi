@@ -2519,7 +2519,7 @@ export interface PlanLimits {
   words_transcribed?: number | null;
 }
 
-export type PlanType = "basic" | "unlimited" | "architect" | "operator";
+export type PlanType = "basic" | "unlimited" | "architect" | "operator" | "plus" | "unlimited_v2";
 
 export interface PluginResult {
   content: string;
