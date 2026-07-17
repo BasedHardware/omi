@@ -39,12 +39,11 @@ export function renderAboutUserCard({ name, facts, overdue, dueToday }: AboutUse
       ? 'Right now: nothing overdue or due today.'
       : `Right now: ${overdue} overdue, ${dueToday} due today.`
   )
-  // macOS ends this card with "(This is a quick snapshot — for the exact or
-  // current list, call get_tasks / get_action_items.)". Those tools do not exist
-  // on Windows yet (Phase A is tool-less), and naming a tool the model cannot
-  // call would only confuse it — so the hedge stays, the tool names go. Restore
-  // the exact macOS line when Phase B lands the read tools.
-  lines.push('(This is a quick snapshot, not the exact current list.)')
+  // macOS ends this card with "(… call get_tasks / get_action_items.)". Windows'
+  // voice surface advertises get_action_items but NOT get_tasks (no host executor —
+  // see buildVoiceHubToolCatalog), so the pointer names only the tool the model can
+  // actually call here.
+  lines.push('(This is a quick snapshot — for the exact or current list, call get_action_items.)')
   lines.push('</about_user>')
   return lines.join('\n')
 }
