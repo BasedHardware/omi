@@ -1,7 +1,18 @@
 // Claude Code sign-in — the Windows port of macOS's agent/src/oauth-flow.ts.
-// Reimplements the `setup-token` PKCE + loopback flow the Claude Code CLI uses,
-// so a fresh-install user can authenticate the built-in Claude Code agent from
+// Implements the PKCE + loopback login flow of the Claude Code CLI, so a
+// fresh-install user can authenticate the built-in Claude Code agent from
 // inside Omi (no CLI install, no manual `claude /login`).
+//
+// GROUND TRUTH (2026-07-17): every constant and parameter below was extracted
+// from the bundled real CLI (claude.exe v2.1.205, `buildAuthUrl`/`startOAuthFlow`
+// in the binary's embedded JS) and confirmed at runtime by running
+// `claude.exe auth login` and capturing the URL it prints. The authorize
+// request must match the CLI byte-for-byte: earlier variants that omitted
+// `code=true` or requested a smaller scope set rendered the consent screen
+// fine but died on Authorize with "Invalid request format" at code-issuance.
+// Note the request/grant asymmetry: we REQUEST the CLI's 6-scope union
+// (including `org:create_api_key`), and claude.ai GRANTS the 5 `user:*`
+// scopes for subscription accounts — the granted set lands in `scopes`.
 //
 // This module is deliberately Electron-free (node builtins + global `fetch`
 // only) so the URL builder/validator, token-exchange request shape, and the
@@ -11,29 +22,40 @@
 // Credential storage: the @anthropic-ai/claude-agent-sdk (pinned in
 // node_modules) reads `<CLAUDE_CONFIG_DIR or ~/.claude>/.credentials.json` with
 // the shape `{ claudeAiOauth: { accessToken, refreshToken, expiresAt, scopes } }`
-// (verified against sdk.mjs) and self-refreshes from the stored refresh token —
-// Omi never refreshes. We write that file directly (the SDK-native path, same
-// as the Claude Code CLI itself), not macOS's Keychain, and we MERGE so any
-// other top-level keys (e.g. `mcpOAuth`) and extra `claudeAiOauth` subkeys the
-// SDK maintains (`subscriptionType`, `rateLimitTier`, `refreshTokenExpiresAt`)
-// survive a re-sign-in. `expiresAt` is stored as epoch milliseconds (a NUMBER),
-// matching the real on-disk file the SDK produces — a deliberate, verified
-// deviation from the macOS port, which wrote an ISO string.
+// (verified against sdk.mjs, and against the real file the CLI writes on
+// Windows) and self-refreshes from the stored refresh token — Omi never
+// refreshes. We write that file directly (the SDK-native path, same as the
+// Claude Code CLI itself on Windows), and we MERGE so any other top-level keys
+// (e.g. `mcpOAuth`) and extra `claudeAiOauth` subkeys the SDK maintains
+// (`subscriptionType`, `rateLimitTier`, `refreshTokenExpiresAt`) survive a
+// re-sign-in. `expiresAt` is stored as epoch milliseconds (a NUMBER), matching
+// the real on-disk file.
 
 import { createServer, type Server, type IncomingMessage, type ServerResponse } from 'http'
 import { readFileSync, writeFileSync, mkdirSync } from 'fs'
+import { randomBytes } from 'crypto'
 import { homedir } from 'os'
 import { join, dirname } from 'path'
-import { generateVerifier, challengeFromVerifier, generateState } from '../integrations/oauthPkce'
+import { generateVerifier, challengeFromVerifier, base64url } from '../integrations/oauthPkce'
 
-// --- Constants (from the Claude Code CLI setup-token flow) ---
+// --- Constants (extracted from claude.exe v2.1.205 and runtime-verified) ---
 
 const CLIENT_ID = '9d1c250a-e61b-44d9-88ed-5944d1962f5e'
-const AUTHORIZE_URL = 'https://claude.ai/oauth/authorize'
-const TOKEN_URL = 'https://console.anthropic.com/v1/oauth/token'
-const SUCCESS_URL = 'https://console.anthropic.com/oauth/code/success?app=claude-code'
-const SCOPES = 'user:inference'
-const TOKEN_EXPIRY_SECONDS = 31536000 // 1 year
+// CLAUDE_AI_AUTHORIZE_URL in the CLI — the subscription (claude.ai) login lane.
+// It 307s to claude.ai's authorize page with the query preserved; the CLI links
+// users to this claude.com host, so we do too.
+const AUTHORIZE_URL = 'https://claude.com/cai/oauth/authorize'
+const TOKEN_URL = 'https://platform.claude.com/v1/oauth/token'
+// CLAUDEAI_SUCCESS_URL — where the CLI redirects the loopback response.
+const SUCCESS_URL = 'https://platform.claude.com/oauth/code/success?app=claude-code'
+// The EXACT scope string the CLI requests for a default login: the deduped
+// union of its console scopes [org:create_api_key, user:profile] and claude.ai
+// scopes [user:profile, user:inference, user:sessions:claude_code,
+// user:mcp_servers, user:file_upload]. Requesting a subset (just
+// `user:inference`, or the 5 `user:*` scopes without `org:create_api_key`)
+// renders consent but fails code-issuance with "Invalid request format".
+const SCOPES =
+  'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload'
 const CALLBACK_TIMEOUT_MS = 2 * 60 * 1000
 
 // --- Credential file location + shape ---
@@ -105,7 +127,10 @@ export function claudeAuthStatus(env: NodeJS.ProcessEnv = process.env): ClaudeAu
  * Persist a `claudeAiOauth` block, preserving every other top-level key and any
  * extra subkeys the SDK maintains. Never clobbers `mcpOAuth` or other content.
  */
-export function writeClaudeCredentials(oauth: ClaudeAiOauth, env: NodeJS.ProcessEnv = process.env): void {
+export function writeClaudeCredentials(
+  oauth: ClaudeAiOauth,
+  env: NodeJS.ProcessEnv = process.env
+): void {
   const existing = readCredentialsFile(env) ?? {}
   const priorOauth =
     existing.claudeAiOauth && typeof existing.claudeAiOauth === 'object'
@@ -131,30 +156,37 @@ export function removeClaudeCredentials(env: NodeJS.ProcessEnv = process.env): v
 
 // --- Authorization URL (build + validate) ---
 
-/** Build the claude.ai authorize URL for a PKCE loopback attempt. */
+/**
+ * Build the authorize URL for a PKCE loopback attempt — an exact replica of
+ * the CLI's `buildAuthUrl` (same params, same order, same URLSearchParams
+ * encoding: spaces as `+`, colons as `%3A`).
+ */
 export function buildClaudeAuthUrl(params: {
   redirectUri: string
   challenge: string
   state: string
 }): string {
   const url = new URL(AUTHORIZE_URL)
-  url.searchParams.set('code', 'true')
-  url.searchParams.set('client_id', CLIENT_ID)
-  url.searchParams.set('response_type', 'code')
-  url.searchParams.set('redirect_uri', params.redirectUri)
-  url.searchParams.set('scope', SCOPES)
-  url.searchParams.set('code_challenge', params.challenge)
-  url.searchParams.set('code_challenge_method', 'S256')
-  url.searchParams.set('state', params.state)
+  // `code=true` is appended UNCONDITIONALLY by the real CLI, for both the
+  // loopback and manual flows (it makes the success page display the code as a
+  // copy-paste fallback). Omitting it was one of the "Invalid request format"
+  // divergences.
+  url.searchParams.append('code', 'true')
+  url.searchParams.append('client_id', CLIENT_ID)
+  url.searchParams.append('response_type', 'code')
+  url.searchParams.append('redirect_uri', params.redirectUri)
+  url.searchParams.append('scope', SCOPES)
+  url.searchParams.append('code_challenge', params.challenge)
+  url.searchParams.append('code_challenge_method', 'S256')
+  url.searchParams.append('state', params.state)
   return url.toString()
 }
 
 /**
  * Validate a Claude OAuth authorize URL before opening it in the browser —
  * port of macOS ChatProvider.validatedClaudeOAuthURL. Returns the parsed URL
- * when it is exactly an https://claude.ai/oauth/authorize PKCE request with a
- * localhost loopback redirect, else null. Guards against opening an attacker-
- * substituted URL.
+ * when it is exactly a claude.com/cai PKCE request with a localhost loopback
+ * redirect, else null. Guards against opening an attacker-substituted URL.
  */
 export function validateClaudeOAuthUrl(urlString: string | null | undefined): URL | null {
   if (!urlString) return null
@@ -166,9 +198,9 @@ export function validateClaudeOAuthUrl(urlString: string | null | undefined): UR
   }
   if (
     url.protocol !== 'https:' ||
-    url.hostname.toLowerCase() !== 'claude.ai' ||
+    url.hostname.toLowerCase() !== 'claude.com' ||
     url.port !== '' ||
-    url.pathname !== '/oauth/authorize' ||
+    url.pathname !== '/cai/oauth/authorize' ||
     url.username !== '' ||
     url.password !== '' ||
     url.hash !== ''
@@ -184,6 +216,7 @@ export function validateClaudeOAuthUrl(urlString: string | null | undefined): UR
     return value && value.length > 0 ? value : null
   }
   if (
+    singleValue('code') !== 'true' ||
     singleValue('response_type') !== 'code' ||
     singleValue('client_id') === null ||
     singleValue('state') === null ||
@@ -243,8 +276,11 @@ interface RawTokenResponse {
 
 /**
  * Exchange an authorization code for tokens at the Claude token endpoint. Body
- * shape matches the CLI setup-token flow (JSON, including `expires_in` and the
- * echoed `state`). Uses global `fetch` so it can be tested against a local mock.
+ * shape matches the CLI's `exchangeCodeForTokens` exactly: a JSON body of
+ * `{grant_type, code, redirect_uri, client_id, code_verifier, state}` — no
+ * `expires_in` (the CLI only adds it for `setup-token` long-lived tokens; the
+ * normal login omits it and the server picks the expiry). Uses global `fetch`
+ * so it can be tested against a local mock.
  */
 export async function exchangeClaudeCodeForToken(
   code: string,
@@ -253,26 +289,33 @@ export async function exchangeClaudeCodeForToken(
   redirectUri: string,
   tokenUrl: string = TOKEN_URL
 ): Promise<ClaudeOAuthResult> {
+  const jsonBody = JSON.stringify({
+    grant_type: 'authorization_code',
+    code,
+    redirect_uri: redirectUri,
+    client_id: CLIENT_ID,
+    code_verifier: codeVerifier,
+    state
+  })
+  console.error(`[claudeOAuth][diag] POST ${tokenUrl} (json) code.len=${code.length}`)
   const res = await fetch(tokenUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      grant_type: 'authorization_code',
-      code,
-      redirect_uri: redirectUri,
-      client_id: CLIENT_ID,
-      code_verifier: codeVerifier,
-      state,
-      expires_in: TOKEN_EXPIRY_SECONDS
-    })
+    body: jsonBody
   })
+  const respText = await res.text()
+  // Diag keeps status + body head on failure; success bodies (tokens) are
+  // never logged.
+  console.error(
+    `[claudeOAuth][diag] token response status=${res.status}${res.ok ? '' : ` body=${respText.slice(0, 600)}`}`
+  )
   if (res.status === 401) {
     throw new Error('Authentication failed: invalid authorization code')
   }
   if (!res.ok) {
-    throw new Error(`Token exchange failed (${res.status}): ${await res.text()}`)
+    throw new Error(`Token exchange failed (${res.status}): ${respText}`)
   }
-  const data = (await res.json()) as RawTokenResponse
+  const data = JSON.parse(respText) as RawTokenResponse
   return {
     accessToken: data.access_token,
     refreshToken: data.refresh_token,
@@ -296,8 +339,9 @@ function startCallbackServer(): Promise<{ server: Server; port: number }> {
   return new Promise((resolve, reject) => {
     const server = createServer()
     server.once('error', reject)
-    // localhost (not 127.0.0.1) so the redirect_uri host matches the validator.
-    server.listen(0, 'localhost', () => {
+    // The CLI binds 127.0.0.1 while advertising `localhost` in redirect_uri;
+    // match it (proven working on Windows by the real CLI).
+    server.listen(0, '127.0.0.1', () => {
       const addr = server.address()
       if (!addr || typeof addr === 'string') {
         reject(new Error('Failed to get callback server address'))
@@ -308,11 +352,19 @@ function startCallbackServer(): Promise<{ server: Server; port: number }> {
   })
 }
 
+interface CallbackHit {
+  code: string
+  /** Finish the browser's pending request: redirect to the success page (CLI behavior). */
+  respondSuccess: () => void
+  /** Finish the browser's pending request with a plain failure message. */
+  respondFailure: () => void
+}
+
 function waitForCallback(
   server: Server,
   expectedState: string,
   logErr: (msg: string) => void
-): Promise<string> {
+): Promise<CallbackHit> {
   return new Promise((resolve, reject) => {
     const timeout = setTimeout(() => {
       reject(new Error('Claude sign-in timed out (2 minutes). Try again.'))
@@ -343,10 +395,20 @@ function waitForCallback(
         return
       }
       logErr('Claude OAuth callback received with valid code')
-      res.writeHead(302, { Location: SUCCESS_URL })
-      res.end()
       clearTimeout(timeout)
-      resolve(code)
+      // Hold the response pending (as the CLI does) so the browser only lands
+      // on the success page after the token exchange actually succeeded.
+      resolve({
+        code,
+        respondSuccess: () => {
+          res.writeHead(302, { Location: SUCCESS_URL })
+          res.end()
+        },
+        respondFailure: () => {
+          res.writeHead(500)
+          res.end('Sign-in failed. Return to Omi and try again.')
+        }
+      })
     })
   })
 }
@@ -359,16 +421,19 @@ function waitForCallback(
  */
 export async function startClaudeOAuthFlow(
   logErr: (msg: string) => void,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = process.env,
+  tokenUrl: string = TOKEN_URL
 ): Promise<ClaudeOAuthFlowHandle> {
   const codeVerifier = generateVerifier()
   const codeChallenge = challengeFromVerifier(codeVerifier)
-  const state = generateState()
+  // 32-byte state, matching the CLI's generator (same size as the verifier).
+  const state = base64url(randomBytes(32))
 
   const { server, port } = await startCallbackServer()
   logErr(`Claude OAuth callback server listening on port ${port}`)
   const redirectUri = `http://localhost:${port}/callback`
   const authUrl = buildClaudeAuthUrl({ redirectUri, challenge: codeChallenge, state })
+  logErr(`[diag] authorize scopes="${SCOPES}" url=${authUrl}`)
 
   let cancelled = false
   let cancelReject: ((err: Error) => void) | null = null
@@ -376,21 +441,34 @@ export async function startClaudeOAuthFlow(
   const complete = new Promise<ClaudeOAuthResult>((resolve, reject) => {
     cancelReject = reject
     waitForCallback(server, state, logErr)
-      .then(async (code) => {
+      .then(async (hit) => {
         if (cancelled) return
+        logErr(`[diag] callback code received len=${hit.code.length}`)
         logErr('Exchanging Claude authorization code for tokens...')
-        const tokens = await exchangeClaudeCodeForToken(code, codeVerifier, state, redirectUri)
-        writeClaudeCredentials(
-          {
-            accessToken: tokens.accessToken,
-            refreshToken: tokens.refreshToken ?? null,
-            expiresAt: tokens.expiresAt,
-            scopes: tokens.scopes
-          },
-          env
-        )
-        logErr('Claude credentials written')
-        resolve(tokens)
+        try {
+          const tokens = await exchangeClaudeCodeForToken(
+            hit.code,
+            codeVerifier,
+            state,
+            redirectUri,
+            tokenUrl
+          )
+          writeClaudeCredentials(
+            {
+              accessToken: tokens.accessToken,
+              refreshToken: tokens.refreshToken ?? null,
+              expiresAt: tokens.expiresAt,
+              scopes: tokens.scopes
+            },
+            env
+          )
+          logErr('Claude credentials written')
+          hit.respondSuccess()
+          resolve(tokens)
+        } catch (err) {
+          hit.respondFailure()
+          throw err
+        }
       })
       .catch((err) => {
         if (!cancelled) reject(err)
