@@ -11,6 +11,12 @@
 /** App base background — the flat canvas / Mica tint base. Equals --bg-primary. */
 export const APP_BG_HEX = '#0f0f0f'
 
+/** Home "stage" background — the DARKER paper the Hub paints (equals --home-paper).
+ *  Home is the one route whose canvas is darker than the app base, so on Home the
+ *  caption overlay switches to this tone; otherwise the WCO cluster reads as a
+ *  lighter box over the near-black stage. Every other route uses APP_BG_HEX. */
+export const HOME_BG_HEX = '#050505'
+
 /** Caption-button glyph color — deliberately distinct from the seamless
  *  background so min/maximize/close stay legible. Equals --text-tertiary. */
 export const WCO_SYMBOL_HEX = '#b0b0b0'

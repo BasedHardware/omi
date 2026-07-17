@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
-import { HashRouter, Routes, Route, Navigate, useNavigate } from 'react-router-dom'
+import { HashRouter, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom'
+import { HOME_PATH } from './routes/manifest'
 import { useAuth } from './hooks/useAuth'
 import { Login } from './pages/Login'
 import { AppChrome } from './components/layout/AppChrome'
@@ -56,6 +57,15 @@ const IS_SECONDARY_WINDOW = isSecondaryWindow()
 function AppShellInner(): React.JSX.Element {
   const { recorder, pickerOpen, setPickerOpen } = useAppState()
   const navigate = useNavigate()
+  // Home paints a darker stage than the app base; tell the title-bar strip so it
+  // matches that stage instead of floating as a lighter band above it (see TitleBar).
+  const isHome = useLocation().pathname === HOME_PATH
+  // The transparent strip blends via CSS, but the native WCO caption cluster can't
+  // be transparent — flip its tone to the home stage on Home (and back elsewhere)
+  // so the min/max/close buttons don't sit as a lighter box. Main window only.
+  useEffect(() => {
+    window.omi?.setTitleBarSurface?.(isHome)
+  }, [isHome])
 
   // Honor a one-shot destination requested by onboarding (e.g. the final
   // "Take me to my tasks" button). The shell mounts at /home after the
@@ -103,7 +113,7 @@ function AppShellInner(): React.JSX.Element {
   return (
     <div className="app-canvas flex h-full min-h-0 flex-col">
       {/* Native-caption drag strip (Window Controls Overlay). */}
-      <TitleBar />
+      <TitleBar onHome={isHome} />
       {/* Only renders when omi.db was found corrupt and repaired at startup. */}
       <DbRecoveryNotice />
       <AppChrome>

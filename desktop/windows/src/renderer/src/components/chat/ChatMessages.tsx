@@ -3,6 +3,7 @@ import { Check, Copy } from 'lucide-react'
 import type { ChatMsg } from '../../hooks/useChat'
 import { RevealMarkdown } from './RevealMarkdown'
 import { ChatAttachmentStrip } from './ChatAttachmentStrip'
+import { OmiThinkingSpinner } from './OmiThinkingSpinner'
 
 const BUBBLE: Record<'main' | 'overlay', { user: string; assistant: string }> = {
   main: {
@@ -90,6 +91,14 @@ export function ChatMessages({
     <>
       {messages.map((m, i) => {
         const isLast = i === messages.length - 1
+        // Bar chat (overlay): while Omi's reply is still pending — the last
+        // assistant turn exists as an empty placeholder — show a standalone
+        // spinning Omi mark instead of a bubble of dots. A distinct key means the
+        // real bubble mounts fresh (bubble-in pop-in) the moment content lands and
+        // this loader is unmounted. The main window keeps its own indicators.
+        if (variant === 'overlay' && isLast && sending && m.role === 'assistant' && !m.content) {
+          return <OmiThinkingSpinner key={`omi-thinking-${m.id ?? i}`} />
+        }
         // Never offer copy on the reply that is still streaming in (or on an
         // empty placeholder) — only once there is settled text to copy.
         const streaming = isLast && sending && m.role === 'assistant'

@@ -45,6 +45,9 @@ describe('helperProcess.dispose (C7 — no orphaned OCR helper on quit)', () => 
     // rejects it below).
     void helperProcess.windowInfo().catch(() => {})
     expect(spawnMock).toHaveBeenCalledTimes(1)
+    // The helper is a console-subsystem exe; it must be spawned with
+    // windowsHide so it never flashes a stray console window in the taskbar.
+    expect(spawnMock.mock.calls[0][2]).toMatchObject({ windowsHide: true })
 
     helperProcess.dispose()
     expect(child.kill).toHaveBeenCalledTimes(1)

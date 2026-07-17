@@ -9,6 +9,7 @@ import { ClaudeCodeRuntimeAdapter } from './claudeCode'
 import { OpenClawRuntimeAdapter } from './openclaw'
 import { HermesRuntimeAdapter } from './hermes'
 import { CodexRuntimeAdapter } from './codex'
+import { getCodexApiKey } from './codexAuth'
 import { PiMonoAdapter, PiMonoRuntimeAdapter } from './piMono'
 import { getPiMonoByokEnv, getPiMonoSession, piMonoManagedApiBaseUrl } from './piMonoSession'
 import {
@@ -66,7 +67,10 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     displayName: 'Codex',
     activationEnv: ADAPTER_ACTIVATION_ENV.codex,
     capabilities: adapterCapabilitiesFor('codex'),
-    createAdapter: ({ log, command }) => new CodexRuntimeAdapter({ log, command })
+    // Inject the stored OpenAI key (if any) so the API-key auth path works for
+    // both the Test handshake and real task runs without a separate codex login.
+    createAdapter: ({ log, command }) =>
+      new CodexRuntimeAdapter({ log, command, openAiApiKey: getCodexApiKey() ?? undefined })
   },
   // pi-mono is the managed-cloud default-chat engine, present only to satisfy the
   // `Record<ProductionAdapterId, …>` totality (matrix membership forces it). It is

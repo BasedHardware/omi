@@ -9,6 +9,8 @@
 import { app, type BrowserWindow } from 'electron'
 import { autoUpdater } from 'electron-updater'
 import { setTrayUpdateReady } from './tray'
+import { getAppSettings, onAppSettingsChanged } from './appSettings'
+import { betaOptInToAllowPrerelease, resolveBetaChannelChange } from './updaterChannel'
 import type { UpdateCheckResult } from '../shared/types'
 
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000 // every 4h
@@ -56,6 +58,14 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
   autoUpdater.autoInstallOnAppQuit = true
   if (devForced) autoUpdater.forceDevUpdateConfig = true
 
+  // Beta opt-in (Mac's "beta" update channel). GitHub provider only: when the
+  // user opts in we serve GitHub *prerelease* builds (our betas); otherwise only
+  // promoted stable releases. Read the persisted pref at startup, then keep it in
+  // lock-step with live Settings flips (onAppSettingsChanged fires for every
+  // write, so resolveBetaChannelChange filters to actual beta-toggle changes and
+  // triggers an immediate re-check — opting in shouldn't wait for the 4h timer).
+  autoUpdater.allowPrerelease = betaOptInToAllowPrerelease(getAppSettings().betaUpdatesEnabled)
+
   autoUpdater.on('update-downloaded', (info) => {
     const version = typeof info?.version === 'string' ? info.version : ''
     pendingUpdate = { version }
@@ -79,4 +89,21 @@ export function initAutoUpdater(getMainWindow: () => BrowserWindow | null): void
   // fresh update can trigger a full background download.
   setTimeout(check, 45_000)
   setInterval(check, CHECK_INTERVAL_MS)
+
+  // Apply a live "receive beta updates" flip: flip allowPrerelease and re-check
+  // now so the newer channel is picked up immediately, not on the next timer.
+  onAppSettingsChanged((s) => {
+    const { allowPrerelease, changed } = resolveBetaChannelChange(
+      autoUpdater.allowPrerelease,
+      s.betaUpdatesEnabled
+    )
+    if (!changed) return
+    autoUpdater.allowPrerelease = allowPrerelease
+    console.log(
+      '[updater] beta channel',
+      allowPrerelease ? 'ON (prereleases included)' : 'OFF (stable only)',
+      '→ re-checking'
+    )
+    check()
+  })
 }

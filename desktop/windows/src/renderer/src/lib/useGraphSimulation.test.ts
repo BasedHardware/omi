@@ -92,4 +92,46 @@ describe('GraphSimulation', () => {
     // (already-settled) must differ — otherwise there is nothing to animate.
     expect(rendered.x === settled.x && rendered.y === settled.y).toBe(false)
   })
+
+  // A user-centered graph with several leaves — enough for the layout to spread.
+  const gBig: KnowledgeGraph = {
+    nodes: [
+      { id: 'user', label: 'Ander', nodeType: 'person', aliases: [], memoryIds: [] },
+      ...Array.from({ length: 8 }, (_, i) => ({
+        id: `n${i}`,
+        label: `Node ${i}`,
+        nodeType: 'thing',
+        aliases: [],
+        memoryIds: []
+      }))
+    ],
+    edges: Array.from({ length: 8 }, (_, i) => ({
+      id: `e${i}`,
+      sourceId: 'user',
+      targetId: `n${i}`,
+      label: 'rel',
+      memoryIds: []
+    }))
+  }
+
+  it('spreads nodes through depth (non-zero z variance) on the 3D interactive path', () => {
+    const sim = new GraphSimulation('user', 3)
+    sim.setGraph(gBig)
+    sim.settle(60)
+    const zs = gBig.nodes.filter((n) => n.id !== 'user').map((n) => sim.liveNode(n.id)!.z ?? 0)
+    const mean = zs.reduce((a, b) => a + b, 0) / zs.length
+    const variance = zs.reduce((a, b) => a + (b - mean) ** 2, 0) / zs.length
+    // Real 3D: the cloud has depth, and at least one node is well off the z=0 plane.
+    expect(variance).toBeGreaterThan(1)
+    expect(Math.max(...zs.map((z) => Math.abs(z)))).toBeGreaterThan(5)
+  })
+
+  it('keeps the layout planar (z ≈ 0) on the default 2D path', () => {
+    const sim = new GraphSimulation('user') // default dimensions = 2
+    sim.setGraph(gBig)
+    sim.settle(60)
+    for (const n of gBig.nodes) {
+      expect(Math.abs(sim.liveNode(n.id)!.z ?? 0)).toBeLessThan(1e-9)
+    }
+  })
 })

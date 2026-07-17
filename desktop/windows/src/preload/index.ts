@@ -349,6 +349,9 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
   },
+  codingAgentDetect: () => ipcRenderer.invoke('codingAgent:detect'),
+  codingAgentCodexKeyStatus: () => ipcRenderer.invoke('codingAgent:codexKeyStatus'),
+  codingAgentSetCodexKey: (key: string) => ipcRenderer.invoke('codingAgent:setCodexKey', key),
   chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
   mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
   mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
@@ -493,6 +496,10 @@ const omi: OmiBridgeApi = {
   getMicPermissionState: () => ipcRenderer.invoke('permissions:micState'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
+  // Main-window WCO caption tone. Home paints a darker stage than the app base, so
+  // the shell flips the native caption cluster to the home tone on Home (and back
+  // elsewhere) to keep it seamless. Main-window only; a no-op on other windows.
+  setTitleBarSurface: (onHome: boolean) => ipcRenderer.send('chrome:titleBarSurface', onHome),
   // Main-window chrome: whether the window was created with a Windows 11 Mica
   // background material (renderer goes translucent so the material shows).
   // Passed via additionalArguments at window construction.
@@ -609,6 +616,8 @@ const omi: OmiBridgeApi = {
   setSummonHotkey: (accelerator: string) => ipcRenderer.invoke('shortcuts:set-summon', accelerator),
   getAppVersion: () => ipcRenderer.invoke('app:get-version'),
   checkForUpdates: () => ipcRenderer.invoke('update:check'),
+  getBetaUpdatesOptIn: () => ipcRenderer.invoke('update:get-beta-optin'),
+  setBetaUpdatesOptIn: (enabled: boolean) => ipcRenderer.invoke('update:set-beta-optin', enabled),
   getPendingUpdate: () => ipcRenderer.invoke('update:get-pending'),
   suspendShortcutCapture: () => ipcRenderer.send('shortcuts:suspend-capture'),
   resumeShortcutCapture: () => ipcRenderer.send('shortcuts:resume-capture'),

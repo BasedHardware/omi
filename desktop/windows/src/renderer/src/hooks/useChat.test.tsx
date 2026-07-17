@@ -640,16 +640,63 @@ describe('useChat — recordVoiceTurn (native hub turn → one timeline, no LLM/
     await act(async () => {
       await flush()
     })
-    const sources = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { messageSource: string }).messageSource)
+    const sources = saveDesktopMessageSpy.mock.calls.map(
+      (c) => (c[0] as { messageSource: string }).messageSource
+    )
     expect(sources).toEqual(['realtime_voice', 'realtime_voice'])
     const senders = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { sender: string }).sender)
     expect(senders).toEqual(['human', 'ai'])
   })
 
-  it('ignores an empty turn (missing user or assistant text) — nothing recorded anywhere', () => {
+  it('records a one-sided turn (assistant text only) — one bubble, no empty user bubble', async () => {
     const { result } = renderHook(() => useChat())
-    act(() => result.current.recordVoiceTurn('', 'orphan'))
-    act(() => result.current.recordVoiceTurn('orphan', '   '))
+    // A near-silent hold yields no provider input transcription; the reply still
+    // exists. macOS records it; Windows must too ("my message never sent" fix).
+    act(() => result.current.recordVoiceTurn('', 'here you go', false, 'turn-a'))
+    await act(async () => {
+      await flush()
+    })
+    // Only the assistant bubble is rendered — no empty user bubble.
+    expect(result.current.history.map((m) => [m.role, m.content])).toEqual([
+      ['assistant', 'here you go']
+    ])
+    // The kernel still receives the pair (empty user side); it dedups/records.
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userText: '',
+        assistantText: 'here you go',
+        idempotencyKey: 'turn-a'
+      })
+    )
+    // Only the present side is echoed to mobile (no empty message).
+    const senders = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { sender: string }).sender)
+    expect(senders).toEqual(['ai'])
+  })
+
+  it('records a one-sided turn (user text only) — one bubble, no empty assistant bubble', async () => {
+    const { result } = renderHook(() => useChat())
+    // Whitespace-only assistant trims to empty; the user utterance must still appear.
+    act(() => result.current.recordVoiceTurn('did it work', '   ', false, 'turn-b'))
+    await act(async () => {
+      await flush()
+    })
+    expect(result.current.history.map((m) => [m.role, m.content])).toEqual([
+      ['user', 'did it work']
+    ])
+    expect(voiceHubRecordTurnSpy).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userText: 'did it work',
+        assistantText: '',
+        idempotencyKey: 'turn-b'
+      })
+    )
+    const senders = saveDesktopMessageSpy.mock.calls.map((c) => (c[0] as { sender: string }).sender)
+    expect(senders).toEqual(['human'])
+  })
+
+  it('ignores a BOTH-empty turn — nothing recorded anywhere', () => {
+    const { result } = renderHook(() => useChat())
+    act(() => result.current.recordVoiceTurn('', '   '))
     expect(result.current.history).toHaveLength(0)
     expect(voiceHubRecordTurnSpy).not.toHaveBeenCalled()
     expect(saveDesktopMessageSpy).not.toHaveBeenCalled()

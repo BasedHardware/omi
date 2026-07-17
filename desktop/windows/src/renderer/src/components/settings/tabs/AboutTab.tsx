@@ -22,11 +22,13 @@ import {
   Newspaper,
   RefreshCw,
   Download,
+  FlaskConical,
   ExternalLink,
   ChevronRight
 } from 'lucide-react'
 import type { UpdateCheckResult } from '../../../../../shared/types'
 import { SettingRow } from '../SettingRow'
+import { Toggle } from '../Toggle'
 
 type Link = { label: string; icon: typeof Globe } & ({ href: string } | { onClick: () => void })
 
@@ -58,6 +60,7 @@ export function AboutTab(): React.JSX.Element {
   const [pending, setPending] = useState<string | null>(null)
   const [checking, setChecking] = useState(false)
   const [checkMsg, setCheckMsg] = useState<string | null>(null)
+  const [beta, setBeta] = useState<boolean | null>(null)
 
   useEffect(() => {
     void window.omi?.getAppVersion?.().then((v) => {
@@ -70,6 +73,7 @@ export function AboutTab(): React.JSX.Element {
     void window.omi?.getPendingUpdate?.().then((p) => {
       if (p?.version) setPending(p.version)
     })
+    void window.omi?.getBetaUpdatesOptIn?.().then((v) => setBeta(!!v))
     return window.omi?.onUpdateReady?.((info) => setPending(info.version))
   }, [])
 
@@ -85,6 +89,16 @@ export function AboutTab(): React.JSX.Element {
     } finally {
       setChecking(false)
     }
+  }
+
+  // Opt in/out of pre-release (beta) builds. The pref is persisted in main and the
+  // updater flips its channel + re-checks live; opting IN also kicks a UI check so
+  // a newer beta shows up here immediately rather than on the next background poll.
+  const toggleBeta = async (on: boolean): Promise<void> => {
+    setBeta(on)
+    const next = await window.omi?.setBetaUpdatesOptIn?.(on)
+    if (typeof next === 'boolean') setBeta(next)
+    if (on) void checkForUpdates()
   }
 
   return (
@@ -151,6 +165,22 @@ export function AboutTab(): React.JSX.Element {
           >
             {checking ? 'Checking…' : 'Check for updates'}
           </button>
+        }
+      />
+
+      <SettingRow
+        icon={FlaskConical}
+        dot={beta ? 'on' : 'off'}
+        title="Receive beta updates"
+        subtitle="Get pre-release versions early. Beta builds get new features first but may be less stable. Turn off to stay on stable releases."
+        keywords="beta prerelease pre-release channel early access insider unstable updates test"
+        control={
+          <Toggle
+            on={!!beta}
+            onChange={(on) => void toggleBeta(on)}
+            disabled={beta === null}
+            label="Receive beta updates"
+          />
         }
       />
 

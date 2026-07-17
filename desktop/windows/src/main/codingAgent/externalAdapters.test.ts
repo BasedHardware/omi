@@ -129,11 +129,10 @@ describe('external adapter subprocesses (OpenClaw / Hermes / Codex)', () => {
     try {
       const proc = createMockProcess()
       vi.mocked(spawn).mockReturnValue(proc as never)
-      vi.mocked(execFile).mockImplementation(((
-        _cmd: string,
-        _args: string[],
-        callback?: (error: Error | null) => void
-      ) => {
+      vi.mocked(execFile).mockImplementation(((...args: unknown[]) => {
+        const callback = args.find((arg) => typeof arg === 'function') as
+          | ((error: Error | null) => void)
+          | undefined
         // taskkill terminates the tree → the child exits.
         proc.emit('exit', 0)
         callback?.(null)
@@ -144,9 +143,11 @@ describe('external adapter subprocesses (OpenClaw / Hermes / Codex)', () => {
       await adapter.start()
       await adapter.stop()
 
+      // windowsHide so the console-subsystem taskkill.exe never flashes a window.
       expect(execFile).toHaveBeenCalledWith(
         'taskkill',
         ['/pid', String(proc.pid), '/t', '/f'],
+        expect.objectContaining({ windowsHide: true }),
         expect.any(Function)
       )
     } finally {

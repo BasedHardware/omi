@@ -9,6 +9,7 @@ import {
   validateClaudeOAuthUrl,
   isNewClaudeOAuthAttempt,
   exchangeClaudeCodeForToken,
+  startClaudeOAuthFlow,
   writeClaudeCredentials,
   removeClaudeCredentials,
   readClaudeOauth,
@@ -29,54 +30,80 @@ afterEach(() => {
 
 // A valid loopback authorize URL, matching what buildClaudeAuthUrl emits.
 const VALID_URL =
-  'https://claude.ai/oauth/authorize?response_type=code&client_id=test-client&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=test-state&code_challenge=test-challenge&code_challenge_method=S256'
+  'https://claude.com/cai/oauth/authorize?code=true&client_id=test-client&response_type=code&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&scope=user%3Ainference&code_challenge=test-challenge&code_challenge_method=S256&state=test-state'
 
 describe('buildClaudeAuthUrl', () => {
-  it('emits a claude.ai PKCE authorize URL its own validator accepts', () => {
+  // GROUND-TRUTH REGRESSION: the real claude.exe v2.1.205 prints this exact
+  // URL shape from `claude auth login` (captured 2026-07-17; the loopback
+  // variant differs from the printed manual variant only in redirect_uri).
+  // Drift from the CLI's byte encoding is what caused "Invalid request format"
+  // at code-issuance, so this asserts the FULL serialized URL, not just params.
+  it('byte-matches the captured real-CLI authorize URL (loopback variant)', () => {
     const url = buildClaudeAuthUrl({
       redirectUri: 'http://localhost:51000/callback',
       challenge: 'CHAL',
       state: 'STATE'
     })
-    const u = new URL(url)
-    expect(u.origin + u.pathname).toBe('https://claude.ai/oauth/authorize')
-    expect(u.searchParams.get('response_type')).toBe('code')
-    expect(u.searchParams.get('code_challenge')).toBe('CHAL')
-    expect(u.searchParams.get('code_challenge_method')).toBe('S256')
-    expect(u.searchParams.get('state')).toBe('STATE')
-    expect(u.searchParams.get('redirect_uri')).toBe('http://localhost:51000/callback')
-    expect(u.searchParams.get('scope')).toBe('user:inference')
+    expect(url).toBe(
+      'https://claude.com/cai/oauth/authorize' +
+        '?code=true' +
+        '&client_id=9d1c250a-e61b-44d9-88ed-5944d1962f5e' +
+        '&response_type=code' +
+        '&redirect_uri=http%3A%2F%2Flocalhost%3A51000%2Fcallback' +
+        '&scope=org%3Acreate_api_key+user%3Aprofile+user%3Ainference+user%3Asessions%3Aclaude_code+user%3Amcp_servers+user%3Afile_upload' +
+        '&code_challenge=CHAL' +
+        '&code_challenge_method=S256' +
+        '&state=STATE'
+    )
     // Round-trips through the validator.
     expect(validateClaudeOAuthUrl(url)).not.toBeNull()
+  })
+
+  it('requests the 6-scope union including org:create_api_key (request ≠ grant)', () => {
+    const u = new URL(
+      buildClaudeAuthUrl({
+        redirectUri: 'http://localhost:51000/callback',
+        challenge: 'c',
+        state: 's'
+      })
+    )
+    expect(u.searchParams.get('scope')).toBe(
+      'org:create_api_key user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload'
+    )
+    expect(u.searchParams.get('code')).toBe('true')
   })
 })
 
 describe('validateClaudeOAuthUrl', () => {
-  it('accepts the canonical claude.ai loopback authorize URL', () => {
+  it('accepts the canonical claude.com/cai loopback authorize URL', () => {
     const url = validateClaudeOAuthUrl(VALID_URL)
-    expect(url?.host).toBe('claude.ai')
-    expect(url?.pathname).toBe('/oauth/authorize')
+    expect(url?.host).toBe('claude.com')
+    expect(url?.pathname).toBe('/cai/oauth/authorize')
   })
 
-  it('rejects unexpected hosts, paths, missing PKCE params, and non-loopback redirects', () => {
+  it('rejects unexpected hosts, paths, missing params, and non-loopback redirects', () => {
     const invalid = [
       null,
       undefined,
       'not a url',
       // wrong host
-      'https://evil.example/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      'https://evil.example/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      // legacy claude.ai host (no longer what we build)
+      'https://claude.ai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
       // wrong path
-      'https://claude.ai/other?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      'https://claude.com/other?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      // missing code=true (the CLI always sends it; we must too)
+      'https://claude.com/cai/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
       // missing code_challenge_method
-      'https://claude.ai/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c',
+      'https://claude.com/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c',
       // wrong code_challenge_method
-      'https://claude.ai/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=plain',
+      'https://claude.com/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=plain',
       // non-loopback redirect host
-      'https://claude.ai/oauth/authorize?response_type=code&client_id=c&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      'https://claude.com/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=https%3A%2F%2Fexample.com%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
       // http (not https) authorize
-      'http://claude.ai/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
-      // explicit port on claude.ai
-      'https://claude.ai:8443/oauth/authorize?response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256'
+      'http://claude.com/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256',
+      // explicit port on claude.com
+      'https://claude.com:8443/cai/oauth/authorize?code=true&response_type=code&client_id=c&redirect_uri=http%3A%2F%2Flocalhost%3A43123%2Fcallback&state=s&code_challenge=c&code_challenge_method=S256'
     ]
     for (const u of invalid) {
       expect(validateClaudeOAuthUrl(u), `expected reject: ${u}`).toBeNull()
@@ -88,14 +115,14 @@ describe('isNewClaudeOAuthAttempt (one-launch latch reset)', () => {
   it('same URL is the same in-flight attempt; a different URL is a new attempt', () => {
     expect(
       isNewClaudeOAuthAttempt(
-        'https://claude.ai/oauth/authorize?state=current',
-        'https://claude.ai/oauth/authorize?state=current'
+        'https://claude.com/cai/oauth/authorize?state=current',
+        'https://claude.com/cai/oauth/authorize?state=current'
       )
     ).toBe(false)
     expect(
       isNewClaudeOAuthAttempt(
-        'https://claude.ai/oauth/authorize?state=expired',
-        'https://claude.ai/oauth/authorize?state=retry'
+        'https://claude.com/cai/oauth/authorize?state=expired',
+        'https://claude.com/cai/oauth/authorize?state=retry'
       )
     ).toBe(true)
   })
@@ -196,7 +223,7 @@ describe('exchangeClaudeCodeForToken (request shape + response mapping)', () => 
     }
   })
 
-  it('POSTs the setup-token JSON body and maps the response to epoch-ms expiresAt', async () => {
+  it('POSTs the CLI-exact JSON body (no expires_in) and maps the response to epoch-ms expiresAt', async () => {
     let seen: { headers: Record<string, unknown>; body: Record<string, unknown> } | null = null
     server = createServer((req, res) => {
       let raw = ''
@@ -228,14 +255,15 @@ describe('exchangeClaudeCodeForToken (request shape + response mapping)', () => 
 
     expect(seen).not.toBeNull()
     expect(seen!.headers['content-type']).toContain('application/json')
-    expect(seen!.body).toMatchObject({
+    // The CLI's exchangeCodeForTokens body, exactly — in particular NO
+    // expires_in (that is a setup-token-only field).
+    expect(seen!.body).toEqual({
       grant_type: 'authorization_code',
       code: 'the-code',
       redirect_uri: 'http://localhost:43123/callback',
       client_id: '9d1c250a-e61b-44d9-88ed-5944d1962f5e',
       code_verifier: 'the-verifier',
-      state: 'the-state',
-      expires_in: 31536000
+      state: 'the-state'
     })
     expect(result.accessToken).toBe('AT')
     expect(result.refreshToken).toBe('RT')
@@ -252,7 +280,93 @@ describe('exchangeClaudeCodeForToken (request shape + response mapping)', () => 
     await new Promise<void>((r) => server!.listen(0, '127.0.0.1', r))
     const port = (server.address() as { port: number }).port
     await expect(
-      exchangeClaudeCodeForToken('c', 'v', 's', 'http://localhost:1/callback', `http://127.0.0.1:${port}/token`)
+      exchangeClaudeCodeForToken(
+        'c',
+        'v',
+        's',
+        'http://localhost:1/callback',
+        `http://127.0.0.1:${port}/token`
+      )
     ).rejects.toThrow(/Token exchange failed \(400\)/)
+  })
+})
+
+describe('startClaudeOAuthFlow (full loopback round-trip against a mock token endpoint)', () => {
+  let tokenServer: Server | null = null
+  afterEach(async () => {
+    if (tokenServer) {
+      tokenServer.close()
+      await once(tokenServer, 'close').catch(() => {})
+      tokenServer = null
+    }
+  })
+
+  it('receives the callback, exchanges the code, writes creds, then 302s to the success page', async () => {
+    const env = tempConfigEnv()
+    // Mock Anthropic token endpoint.
+    let tokenBody: Record<string, unknown> | null = null
+    tokenServer = createServer((req, res) => {
+      let raw = ''
+      req.on('data', (c) => (raw += c))
+      req.on('end', () => {
+        tokenBody = JSON.parse(raw)
+        res.writeHead(200, { 'Content-Type': 'application/json' })
+        res.end(
+          JSON.stringify({
+            access_token: 'AT-flow',
+            refresh_token: 'RT-flow',
+            expires_in: 3600,
+            scope: 'user:profile user:inference'
+          })
+        )
+      })
+    })
+    await new Promise<void>((r) => tokenServer!.listen(0, '127.0.0.1', r))
+    const tokenPort = (tokenServer.address() as { port: number }).port
+
+    const flow = await startClaudeOAuthFlow(() => {}, env, `http://127.0.0.1:${tokenPort}/token`)
+    const authUrl = new URL(flow.authUrl)
+    expect(validateClaudeOAuthUrl(flow.authUrl)).not.toBeNull()
+    const redirectUri = new URL(authUrl.searchParams.get('redirect_uri')!)
+    const state = authUrl.searchParams.get('state')!
+
+    // Simulate the browser redirect from claude.ai to our loopback server.
+    const cbRes = await fetch(
+      `http://127.0.0.1:${redirectUri.port}/callback?code=test-code-123&state=${encodeURIComponent(state)}`,
+      { redirect: 'manual' }
+    )
+    const tokens = await flow.complete
+
+    // Browser response arrives only after the exchange: a 302 to the success page.
+    expect(cbRes.status).toBe(302)
+    expect(cbRes.headers.get('location')).toBe(
+      'https://platform.claude.com/oauth/code/success?app=claude-code'
+    )
+    // Token exchange carried the callback's code + our state + loopback redirect.
+    expect(tokenBody).toMatchObject({
+      grant_type: 'authorization_code',
+      code: 'test-code-123',
+      state,
+      redirect_uri: `http://localhost:${redirectUri.port}/callback`
+    })
+    // Credentials were written in the SDK-native shape (granted scopes stored).
+    expect(tokens.accessToken).toBe('AT-flow')
+    const onDisk = JSON.parse(readFileSync(claudeCredentialsPath(env), 'utf-8'))
+    expect(onDisk.claudeAiOauth.accessToken).toBe('AT-flow')
+    expect(onDisk.claudeAiOauth.scopes).toEqual(['user:profile', 'user:inference'])
+  })
+
+  it('rejects a callback with a mismatched state and fails the flow', async () => {
+    const env = tempConfigEnv()
+    const flow = await startClaudeOAuthFlow(() => {}, env, 'http://127.0.0.1:1/never')
+    const redirectUri = new URL(new URL(flow.authUrl).searchParams.get('redirect_uri')!)
+    // Attach the rejection handler BEFORE triggering the callback, so the
+    // rejection is never momentarily unhandled.
+    const completion = expect(flow.complete).rejects.toThrow(/state mismatch/)
+    const cbRes = await fetch(`http://127.0.0.1:${redirectUri.port}/callback?code=x&state=WRONG`, {
+      redirect: 'manual'
+    })
+    expect(cbRes.status).toBe(400)
+    await completion
   })
 })

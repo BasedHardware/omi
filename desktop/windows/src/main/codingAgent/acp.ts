@@ -194,6 +194,13 @@ export interface AcpRuntimeAdapterOptions {
    * the Codex bridge). Adapter-specific by design — never widen the shared list.
    */
   extraEnvPassthrough?: readonly string[]
+  /**
+   * Explicit env values injected into THIS external adapter's subprocess (e.g.
+   * the Codex OpenAI key read from the encrypted store). Merged AFTER the
+   * allowlist/passthrough, so an app-managed value overrides one inherited from
+   * the parent env. Empty/undefined values are skipped. Never logged.
+   */
+  extraEnv?: Record<string, string | undefined>
   sessionMcpServersMode?: 'passthrough' | 'empty'
   supportsSessionSetModel?: boolean
   noProgressTimeoutMs?: number
@@ -242,6 +249,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
   private readonly command?: string
   private readonly envCommandName?: string
   private readonly extraEnvPassthrough: readonly string[]
+  private readonly extraEnv: Record<string, string | undefined>
   private readonly sessionMcpServersMode: 'passthrough' | 'empty'
   private readonly supportsSessionSetModel: boolean
   private readonly noProgressTimeoutMs: number
@@ -256,6 +264,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.command = options.command
     this.envCommandName = options.envCommandName
     this.extraEnvPassthrough = options.extraEnvPassthrough ?? []
+    this.extraEnv = options.extraEnv ?? {}
     this.sessionMcpServersMode = options.sessionMcpServersMode ?? 'passthrough'
     this.supportsSessionSetModel =
       options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching
@@ -296,6 +305,11 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
             ? sanitizeProxyUrl(process.env[key]!)
             : process.env[key]
         }
+      }
+      // App-managed values (e.g. the Codex OpenAI key) override anything the
+      // allowlist inherited from the parent env.
+      for (const [key, value] of Object.entries(this.extraEnv)) {
+        if (value !== undefined && value !== '') externalEnv[key] = value
       }
       this.log(`Starting ${this.adapterId} ACP subprocess: ${command}`)
       this.processIsExternal = true
@@ -419,8 +433,9 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
       if (this.processIsExternal && proc.pid) {
         // shell:true means proc.pid is cmd.exe — kill the whole tree or the
         // real adapter process is orphaned. taskkill is the Windows analog of
-        // the POSIX process-group SIGTERM below.
-        execFile('taskkill', ['/pid', String(proc.pid), '/t', '/f'], () => {
+        // the POSIX process-group SIGTERM below. windowsHide so the console-
+        // subsystem taskkill.exe never flashes a window on teardown.
+        execFile('taskkill', ['/pid', String(proc.pid), '/t', '/f'], { windowsHide: true }, () => {
           // Best-effort: if taskkill itself failed (already exited, access
           // denied), fall back to killing the direct child.
           proc.kill()

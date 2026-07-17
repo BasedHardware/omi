@@ -39,6 +39,16 @@ import {
 import { loadSkillInstructions } from './node-tools'
 import { toolNamesForAdapter, toolsForAdapter } from '../../agentKernel/omiToolManifest'
 
+// A handful of cases below assert behavior that only holds on win32 and cannot
+// pass on the ubuntu CI runner the suite runs on: `classifyFileWrite` resolves
+// via `path.resolve`, which on POSIX treats `C:\Windows\...` as a *relative*
+// path (prepending cwd) so the drive-anchored deny rules no longer match; and
+// the relay's named-pipe close semantics surface differently on a POSIX socket
+// (`write EPIPE` instead of a clean handshake rejection). These are gated per-
+// test so Linux still runs every other case in these suites; Windows runs them
+// all. See the CI notes in .github/workflows/desktop-windows-ci.yml.
+const notOnWindows = process.platform !== 'win32'
+
 // ── env isolation ──────────────────────────────────────────────────────────
 let savedOmiEnv: Record<string, string | undefined> = {}
 beforeEach(() => {
@@ -402,7 +412,7 @@ describe('classifyFileWrite (Windows)', () => {
     expect(classifyFileWrite('.\\build\\bundle.js')).toBeNull()
   })
 
-  it('blocks drive roots, C:\\Windows, and Program Files', () => {
+  it.skipIf(notOnWindows)('blocks drive roots, C:\\Windows, and Program Files', () => {
     expect(classifyFileWrite('C:\\bootmgr')).toBeTruthy()
     expect(classifyFileWrite('C:\\Windows\\System32\\drivers\\etc\\hosts')).toBeTruthy()
     expect(classifyFileWrite('C:/Windows/System32/x')).toBeTruthy()
@@ -427,7 +437,7 @@ describe('classifyFileWrite (Windows)', () => {
     expect(classifyFileWrite('C:\\Users\\me\\.ssh\\config')).toBeNull()
   })
 
-  it('blocks relative traversal that resolves into a system path', () => {
+  it.skipIf(notOnWindows)('blocks relative traversal that resolves into a system path', () => {
     expect(classifyFileWrite('C:\\proj\\..\\..\\Windows\\System32\\config')).toBeTruthy()
   })
 })
@@ -446,7 +456,7 @@ describe('inspectToolCall', () => {
     expect(inspectToolCall(bashEvent('ls -la'))).toBeNull()
   })
 
-  it('denies write/edit into system paths, passes read through', () => {
+  it.skipIf(notOnWindows)('denies write/edit into system paths, passes read through', () => {
     expect(inspectToolCall(writeEvent('C:\\Windows\\x'))).toBeTruthy()
     expect(
       inspectToolCall({
@@ -545,7 +555,7 @@ describe('denylist mutation-verify (rules are load-bearing)', () => {
     expect(matchesAny(withoutRule, cmd)).toBe(false)
   })
 
-  it('the C:\\Windows write rule is what blocks a System32 write', () => {
+  it.skipIf(notOnWindows)('the C:\\Windows write rule is what blocks a System32 write', () => {
     const path = 'C:\\Windows\\System32\\drivers\\etc\\hosts'
     expect(classifyFileWrite(path)).toBeTruthy()
     const resolved = resolve(path).replace(/\//g, '\\')
@@ -589,7 +599,7 @@ describe('macOS POSIX regex would have missed Windows-dangerous input', () => {
     expect(classifyBash('Remove-Item -Recurse -Force C:\\Windows')).toBeTruthy()
   })
 
-  it('macOS write-path rules MISS "C:\\Windows\\System32\\..." while the Windows rule catches it', () => {
+  it.skipIf(notOnWindows)('macOS write-path rules MISS "C:\\Windows\\System32\\..." while the Windows rule catches it', () => {
     const winPath = 'C:\\Windows\\System32\\drivers\\etc\\hosts'
     expect(macWritePathRules.some((r) => r.test(winPath))).toBe(false)
     expect(classifyFileWrite(winPath)).toBeTruthy()
@@ -787,7 +797,7 @@ describe('callSwiftTool relay wire protocol', () => {
     }
   })
 
-  it('rejects the connect promise if the host closes before hello_ok', async () => {
+  it.skipIf(notOnWindows)('rejects the connect promise if the host closes before hello_ok', async () => {
     const bridge = createMockBridge({ answerHello: false, onConnection: (s) => s.destroy() })
     await listen(bridge)
     try {
