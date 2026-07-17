@@ -129,6 +129,8 @@ class TasksStore: ObservableObject {
   @Published var hasMoreCompletedTasks = true
   @Published var hasMoreDeletedTasks = true
   @Published var error: String?
+  @Published private(set) var incompleteError: String?
+  @Published private(set) var completedError: String?
 
   /// Counter bumped at the top of `refreshTasksIfNeeded()`, before any of the
   /// early-exit guards. Lets `TasksStoreObserverTests` prove that posting
@@ -150,6 +152,9 @@ class TasksStore: ObservableObject {
     isLoadingIncomplete || isLoadingCompleted || isLoadingDeleted
   }
 
+  var hasLoadedIncompleteTasks: Bool { hasLoadedIncomplete }
+  var hasLoadedCompletedTasks: Bool { hasLoadedCompleted }
+
   func resetSessionState() {
     ownerOperationGeneration &+= 1
     startupMaintenanceTasks.forEach { $0.cancel() }
@@ -170,6 +175,8 @@ class TasksStore: ObservableObject {
     hasMoreCompletedTasks = true
     hasMoreDeletedTasks = true
     error = nil
+    incompleteError = nil
+    completedError = nil
     incompleteOffset = 0
     completedOffset = 0
     deletedOffset = 0
@@ -1156,8 +1163,7 @@ class TasksStore: ObservableObject {
         } else {
           flippedTotal += try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
             fetched,
-            authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot),
-            deriveDeletedFromCancelledStatus: true
+            authorization: Self.localMutationAuthorization(snapshot: lease.authorizationSnapshot)
           )
         }
       }
@@ -1262,6 +1268,7 @@ class TasksStore: ObservableObject {
 
     isLoadingIncomplete = true
     error = nil
+    incompleteError = nil
     incompleteOffset = 0
 
     // Step 1: Load from local cache first for instant display
@@ -1340,6 +1347,7 @@ class TasksStore: ObservableObject {
       if isCurrent(lease) {
         if incompleteTasks.isEmpty {
           self.error = error.localizedDescription
+          incompleteError = error.localizedDescription
         }
         logError("TasksStore: Failed to load incomplete tasks from API", error: error)
       }
@@ -1457,6 +1465,7 @@ class TasksStore: ObservableObject {
 
     isLoadingCompleted = true
     error = nil
+    completedError = nil
     completedOffset = 0
 
     // Step 1: Load from local cache first
@@ -1523,6 +1532,7 @@ class TasksStore: ObservableObject {
       guard isCurrent(lease) else { return }
       if completedTasks.isEmpty {
         self.error = error.localizedDescription
+        completedError = error.localizedDescription
       }
       logError("TasksStore: Failed to load completed tasks from API", error: error)
     }

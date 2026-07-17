@@ -331,7 +331,7 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       "locally-created unsynced rows must survive a confirmed-empty wipe")
   }
 
-  func testVisibilityReconcileDerivesDeletionFromCancelledStatusOnlyWhenOptedIn() async throws {
+  func testVisibilityReconcileDerivesDeletionFromCancelledStatusForEveryCaller() async throws {
     let fixture = try await RewindStorageTestIsolation.setUp(
       userIdPrefix: "cancelled-status-reconcile-test")
     addTeardownBlock {
@@ -357,16 +357,10 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
       createdAt: Date(timeIntervalSince1970: 0),
       taskStatus: "cancelled")
 
-    let withoutOptIn = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
+    let reconciled = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
       [cancelledWireItem],
       authorization: .unrestricted)
-    XCTAssertEqual(withoutOptIn, 0, "default callers keep the existing no-derivation semantics")
-
-    let withOptIn = try await ActionItemStorage.shared.reconcileDashboardVisibilityFields(
-      [cancelledWireItem],
-      authorization: .unrestricted,
-      deriveDeletedFromCancelledStatus: true)
-    XCTAssertEqual(withOptIn, 1)
+    XCTAssertEqual(reconciled, 1)
 
     let visible = try await ActionItemStorage.shared.getLocalActionItems(
       limit: 10,
