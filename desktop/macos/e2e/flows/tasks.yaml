@@ -5,6 +5,7 @@ description: Tasks page navigation and tasks snapshot via automation bridge
 app: non-prod
 covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift
+  - desktop/macos/Desktop/Sources/Startup/StartupWarmupPolicy.swift
   - desktop/macos/Desktop/Sources/MainWindow/Components/TaskChatPanel.swift
   - desktop/macos/Desktop/Sources/Stores/TasksStore.swift
   - desktop/macos/Desktop/Sources/Services/RecurringTaskScheduler.swift
