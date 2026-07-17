@@ -202,10 +202,50 @@ def test_normal_backend_deploys_fail_closed_on_fence_transitions_and_gate_stt_ca
     assert 'OMI_TRANSCRIPTION_SYNTHETIC_' not in manual
     assert 'Remove passed transcription candidate tag' in manual
     assert 'Remove failed transcription candidate tag' in manual
-    assert 'if: ${{ failure() && steps.deploy-backend.outcome == \'success\' }}' in manual
+    assert (
+        'if: ${{ failure() && steps.deploy-backend.outcome == \'success\''
+        ' && github.event.inputs.environment == \'development\' }}' in manual
+    )
     assert manual.index('Gate backend candidate on known audio') < manual.index(
         'Shift Cloud Run traffic to validated revisions'
     )
+
+
+def test_transcription_candidate_gate_is_development_only():
+    """The candidate probe must never gate a production deploy.
+
+    The probe reaches the candidate over a Cloud Run tag URL, which is a run.app
+    URL. Production disables run.app URLs and restricts ingress to internal and
+    load-balancer traffic, so a production tag resolves to no HTTPS endpoint and
+    every production deploy fails at the probe (2026-07-17, run 29574215693).
+    """
+    import yaml
+
+    root = Path(__file__).resolve().parents[3]
+    workflow = yaml.safe_load((root / '.github/workflows/gcp_backend.yml').read_text())
+    steps = workflow['jobs']['deploy']['steps']
+    by_name = {step.get('name'): step for step in steps}
+
+    gate_steps = (
+        'Resolve transcription candidate URL',
+        'Gate backend candidate on known audio',
+        'Remove passed transcription candidate tag',
+        'Remove failed transcription candidate tag',
+    )
+    for name in gate_steps:
+        assert name in by_name, f'{name} step is missing'
+        condition = by_name[name].get('if') or ''
+        assert (
+            "github.event.inputs.environment == 'development'" in condition
+        ), f'{name} must be development-only; a production run cannot resolve a tag URL'
+
+    # The tag itself is only requested for development; production never creates one.
+    deploy_flags = by_name['Deploy ${{ env.SERVICE }} to Cloud Run']['with']['flags']
+    assert "github.event.inputs.environment == 'development' && format('--tag={0}'" in deploy_flags
+
+    # Promotion must not depend on the skipped gate.
+    for name in ('Verify validated revisions are still current', 'Shift Cloud Run traffic to validated revisions'):
+        assert by_name[name].get('if') is None, f'{name} must still run when the gate is skipped'
 
 
 def test_static_processed_segment_marker_follows_partial_result_checkpoint():
