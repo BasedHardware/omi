@@ -168,9 +168,7 @@ async def _process_conversation_task(
                 )
                 if not marked_dead_letter:
                     return False
-                return await run_blocking(
-                    db_executor, lifecycle_service.fail_and_discard_processing, uid, conversation_id
-                )
+                return True
             await run_blocking(
                 db_executor,
                 finalization_jobs_db.mark_finalization_retryable,

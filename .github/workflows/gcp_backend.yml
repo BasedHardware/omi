@@ -280,6 +280,8 @@ jobs:
           test -n "$SYNC_TASKS_INVOKER_SA"
           {
             echo "account_deletion_handler_url=${SYNC_SERVICE_URL}/v1/users/account-deletion-wipes/run"
+            echo "listen_finalization_tasks_handler_url=${SYNC_SERVICE_URL}/v1/conversation-finalization-jobs/run"
+            echo "listen_finalization_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
             echo "sync_tasks_handler_url=${SYNC_SERVICE_URL}/v2/sync-jobs/run"
             echo "sync_tasks_invoker_sa=${SYNC_TASKS_INVOKER_SA}"
           } >> "$GITHUB_OUTPUT"
@@ -375,6 +377,8 @@ jobs:
         id: runtime-env
         env:
           ACCOUNT_DELETION_HANDLER_URL: ${{ steps.account-deletion-target.outputs.account_deletion_handler_url }}
+          LISTEN_FINALIZATION_TASKS_HANDLER_URL: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_handler_url }}
+          LISTEN_FINALIZATION_TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
           CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
           CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
           GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
@@ -471,6 +475,35 @@ jobs:
           provision_sync_ledger_ttl: 'true'
           provision_budget_alerts: ${{ github.event.inputs.environment == 'prod' && 'true' || 'false' }}
           alert_notification_channels: ${{ vars.SYNC_BACKFILL_ALERT_NOTIFICATION_CHANNELS }}
+
+      - name: Configure production conversation-finalization Cloud Tasks queue
+        if: ${{ vars.ENV == 'prod' }}
+        env:
+          TASKS_INVOKER_SA: ${{ steps.account-deletion-target.outputs.listen_finalization_tasks_invoker_sa }}
+        run: |
+          set -euo pipefail
+          test -n "$TASKS_INVOKER_SA"
+          gcloud run services add-iam-policy-binding "${{ env.SERVICE }}-sync" \
+            --region="${{ env.REGION }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --member="serviceAccount:${TASKS_INVOKER_SA}" \
+            --role=roles/run.invoker \
+            --quiet
+          if gcloud tasks queues describe conversation-finalization \
+            --location="${{ env.REGION }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" >/dev/null 2>&1; then
+            gcloud tasks queues update conversation-finalization \
+              --location="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --max-attempts=5 \
+              --max-concurrent-dispatches=4
+          else
+            gcloud tasks queues create conversation-finalization \
+              --location="${{ env.REGION }}" \
+              --project="${{ vars.GCP_PROJECT_ID }}" \
+              --max-attempts=5 \
+              --max-concurrent-dispatches=4
+          fi
 
       - name: Get GKE credentials
         if: ${{ github.event.inputs.deploy_targets == 'all' }}

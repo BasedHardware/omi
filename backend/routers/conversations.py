@@ -17,6 +17,7 @@ from models.conversation import (
     BulkAssignSegmentsRequest,
     CalendarEventLink,
     Conversation,
+    ConversationFinalizationStatusResponse,
     ConversationMutationResponse,
     CreateConversationResponse,
     DeleteActionItemRequest,
@@ -232,21 +233,34 @@ def finalize_conversation(
     if conversation.status != ConversationStatus.in_progress:
         return CreateConversationResponse(conversation=conversation, messages=[])
 
-    claim_updates = {}
+    extra_updates = {}
     if request and request.calendar_meeting_context:
         if not conversation.external_data:
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
-        claim_updates['external_data'] = conversation.external_data
+        extra_updates['external_data'] = conversation.external_data
 
-    if not lifecycle_service.admit_processing(
-        uid,
-        conversation.id,
-        extra_updates=claim_updates or None,
-    ):
+    try:
+        finalization = lifecycle_service.request_finalization(
+            uid,
+            conversation.id,
+            has_byok_keys=False,
+            force_process=True,
+            extra_updates=extra_updates or None,
+            require_cloud_tasks=True,
+        )
+    except lifecycle_service.FinalizationDispatchUnavailable as error:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable') from error
+
+    if finalization['route'] == 'noop':
         latest = _get_valid_conversation_by_id(uid, conversation_id)
-        latest = deserialize_conversation(latest)
-        return CreateConversationResponse(conversation=latest, messages=[])
+        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
+
+    # Requiring Cloud Tasks keeps REST finalization off the pusher-only route.
+    # The only accepted outcomes are an enqueued task or an outbox row retained
+    # for reconciler retry after an uncertain task-create acknowledgement.
+    if finalization['route'] not in {'cloud_tasks', 'queued'}:
+        raise HTTPException(status_code=503, detail='Conversation finalization is temporarily unavailable')
 
     conversation.status = ConversationStatus.processing
 
@@ -254,33 +268,26 @@ def finalize_conversation(
     if current_in_progress_id == conversation_id:
         redis_db.remove_in_progress_conversation_id(uid)
 
-    geolocation = redis_db.get_cached_user_geolocation(uid)
-    if geolocation:
-        geolocation = Geolocation(**geolocation)
-        conversation.geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
+    # The Cloud Tasks worker owns expensive processing, memory extraction, and
+    # integration fanout under the persisted job lease. Returning this snapshot
+    # is intentionally prompt; clients may poll the status projection below.
+    return CreateConversationResponse(conversation=conversation, messages=[])
 
-    persisted = False
 
-    def record_persistence(current: bool) -> None:
-        nonlocal persisted
-        persisted = current
-
-    # Same recovery as POST /v1/conversations: undo the just-claimed admission
-    # if processing raises, so a failure cannot strand the conversation.
-    with lifecycle_service.processing_admission_guard(uid, conversation_id):
-        conversation = process_conversation(
-            uid,
-            conversation.language,
-            conversation,
-            force_process=True,
-            persistence_observer=record_persistence,
-        )
-    if not persisted:
-        latest = _get_valid_conversation_by_id(uid, conversation_id)
-        return CreateConversationResponse(conversation=deserialize_conversation(latest), messages=[])
-    messages = asyncio.run(trigger_external_integrations(uid, conversation))
-
-    return CreateConversationResponse(conversation=conversation, messages=messages)
+@router.get(
+    '/v1/conversations/{conversation_id}/finalization',
+    response_model=ConversationFinalizationStatusResponse,
+    tags=['conversations'],
+)
+def get_conversation_finalization_status(
+    conversation_id: str,
+    uid: str = Depends(auth.get_current_user_uid),
+):
+    _get_valid_conversation_by_id(uid, conversation_id)
+    status = lifecycle_service.get_finalization_status(uid, conversation_id)
+    if status is None:
+        raise HTTPException(status_code=404, detail='Conversation finalization job not found')
+    return status
 
 
 @router.post('/v1/conversations/{conversation_id}/reprocess', response_model=Conversation, tags=['conversations'])
