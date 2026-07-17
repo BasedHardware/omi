@@ -17,12 +17,20 @@ import {
   clearSyncState
 } from '../integrations/syncState'
 import { filterNew } from '../integrations/syncStateLogic'
+import {
+  gmailSessionConnect,
+  gmailSessionStatus,
+  gmailSessionFetch,
+  gmailSessionDisconnect
+} from '../integrations/gmailSession'
 import type {
   GoogleStatus,
   GoogleSource,
   FetchNewResult,
   GmailItem,
-  CalendarItem
+  CalendarItem,
+  GmailSessionStatus,
+  GmailSessionFetchResult
 } from '../../shared/types'
 
 // All integrations IPC lives here (3e Sticky Notes + 3d Gmail/Calendar) so
@@ -83,6 +91,27 @@ export function registerIntegrationsHandlers(): void {
     async (_e, source: GoogleSource, ids: string[]): Promise<void> => {
       markProcessed(source, ids)
     }
+  )
+
+  // --- Gmail via an Omi-owned Electron session (Option B). The user signs into
+  // Google once inside our persistent-partition login window; we replay the same
+  // Gmail web endpoints macOS uses over that own-session cookie jar. No OAuth. ---
+  ipcMain.handle(
+    'integrations:gmailSession:connect',
+    async (): Promise<GmailSessionStatus> => gmailSessionConnect()
+  )
+  ipcMain.handle(
+    'integrations:gmailSession:status',
+    async (): Promise<GmailSessionStatus> => gmailSessionStatus()
+  )
+  ipcMain.handle(
+    'integrations:gmailSession:fetch',
+    async (_e, query?: string, maxResults?: number): Promise<GmailSessionFetchResult> =>
+      gmailSessionFetch(query, maxResults)
+  )
+  ipcMain.handle(
+    'integrations:gmailSession:disconnect',
+    async (): Promise<GmailSessionStatus> => gmailSessionDisconnect()
   )
 
   // --- X (Twitter) connector. The renderer relays { apiBase, token } per call; the
