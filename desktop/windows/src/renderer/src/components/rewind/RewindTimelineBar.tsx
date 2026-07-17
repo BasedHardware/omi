@@ -7,6 +7,7 @@ import {
   tsInBreak,
   axisTicks,
   activitySegments,
+  shouldRecenterTimeline,
   REWIND_ACTIVITY_GAP_MS,
   type TimelineMapping
 } from '../../../../shared/timelineGeometry'
@@ -102,20 +103,27 @@ export function RewindTimelineBar({
   const segments = mapping ? activitySegments(frameTimes, REWIND_ACTIVITY_GAP_MS) : []
   const breaks = mapping ? mapping.pieces.filter((p) => p.kind === 'break') : []
 
-  // Center the cursor whenever it actually CHANGES — the initial open position
-  // (the newest frame, so the bar lands on the recent edge), a seek, or live-follow.
-  // NOT on the per-second live poll: `mapping` is a fresh object every render, so
-  // without this guard the effect would fire each tick and yank the bar back to the
-  // cursor while the user is panning through history. Guarding on the cursor value
-  // (not a one-shot `didInit`) also survives the load race where the frames and the
-  // most-recent cursor arrive in separate renders.
+  // Follow the cursor when it actually CHANGES — the initial open (newest frame, so
+  // the bar lands on the recent edge), a click-seek, or a search jump. Two guards
+  // keep this from fighting the user's own pan:
+  //   1. Cursor-value guard: `mapping` is a fresh object every render, so without it
+  //      the effect would fire on every silent refresh and yank the bar back. Guarding
+  //      on the cursor value (not a one-shot `didInit`) also survives the load race
+  //      where frames and the most-recent cursor arrive in separate renders.
+  //   2. Tolerance guard: even on a real change, don't re-center while the playhead is
+  //      still within a quarter-viewport of where the user scrolled. Playback advances
+  //      cursorTs every 700ms; without a tolerance every tick would snap an overflowing
+  //      bar back to center (the reported "can't scroll it"). Mirrors the filmstrip.
   const lastCursorRef = useRef<number | null>(null)
   useEffect(() => {
     const outer = outerRef.current
     if (!outer || !mapping) return
-    if (lastCursorRef.current === cursorTs) return // not a seek → leave the user's pan alone
+    if (lastCursorRef.current === cursorTs) return // cursor unchanged → leave the user's pan alone
     lastCursorRef.current = cursorTs
-    outer.scrollLeft = Math.max(0, tsToX(cursorTs, mapping) - outer.clientWidth / 2)
+    const target = Math.max(0, tsToX(cursorTs, mapping) - outer.clientWidth / 2)
+    if (shouldRecenterTimeline(outer.scrollLeft, outer.clientWidth, target)) {
+      outer.scrollLeft = target
+    }
   }, [contentWidth, cursorTs, mapping])
 
   return (

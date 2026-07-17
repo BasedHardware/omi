@@ -261,6 +261,22 @@ export function frameIndexAtCursor(
   return covered ? nearestFrameIndex(sortedTs, cursorTs) : -1
 }
 
+/**
+ * Whether the activity bar should scroll to re-center the playhead on a genuine
+ * cursor change. Follow the playhead for the initial open, a click-seek, or a
+ * search jump — but leave the user's scroll alone while the playhead is still
+ * within a quarter-viewport of it, so the per-frame cursor advance during
+ * playback never yanks a bar the user just panned. Mirrors the filmstrip's
+ * "already roughly centered → don't fight the user" guard so both bars pan alike.
+ */
+export function shouldRecenterTimeline(
+  scrollLeft: number,
+  clientWidth: number,
+  targetScrollLeft: number
+): boolean {
+  return Math.abs(scrollLeft - targetScrollLeft) > clientWidth / 4
+}
+
 /** Index of the frame whose ts is closest to `ts`; -1 for empty input. */
 export function nearestFrameIndex(sortedTs: number[], ts: number): number {
   if (sortedTs.length === 0) return -1
