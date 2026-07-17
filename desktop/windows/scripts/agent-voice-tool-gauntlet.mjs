@@ -68,10 +68,11 @@ const ONLY = (process.env.OMI_GAUNTLET_ONLY || '').split(',').map((s) => s.trim(
 const RUN_ID = Date.now().toString(36)
 // A distinctive task phrase the mutation sequence tracks through create→…→delete.
 // "zebra" makes it unmistakable test data and trivial to find/verify/clean.
-const TASK_PHRASE = 'buy zebra milk'
-// Match on the distinctive "zebra" token alone — it survives the rename the update
-// step performs ("buy zebra oat milk"), so find/verify/cleanup all still catch it.
-const TASK_RE = /zebra/i
+// Mutation rows use distinctive nonsense tokens so create/update/delete (zebra) and a
+// separate create/complete (quokka) each act on their OWN task with unambiguous REST
+// proof (and "zebra" survives the update rename "buy zebra milk"→"buy zebra oat milk").
+// This combined regex identifies + cleans up everything the run creates.
+const MUTATION_RE = /zebra|quokka/i
 
 // ── The matrix ───────────────────────────────────────────────────────────────────
 // category: read | mutation | delegation | negative
@@ -88,15 +89,20 @@ const MATRIX = [
   { id: 'semantic_search', category: 'read', request: 'What was I reading about on my screen earlier today?', expect: 'semantic_search', alt: ['get_work_context', 'search_conversations'] },
   { id: 'get_work_context', category: 'read', request: 'What am I working on right now on my computer?', expect: 'get_work_context', alt: ['semantic_search', 'capture_screen'] },
 
-  // ── MUTATION SEQUENCE (self-cleaning: one task through its whole lifecycle) ──
-  { id: 'create_action_item', category: 'mutation', request: `Add ${TASK_PHRASE} to my action items.`, expect: 'create_action_item',
-    rest: (before, after) => after.some((i) => TASK_RE.test(i.description)) && !before.some((i) => TASK_RE.test(i.description)) },
-  { id: 'update_action_item', category: 'mutation', request: 'Change my zebra milk task to say buy zebra oat milk instead.', expect: 'update_action_item', alt: ['search_tasks', 'get_action_items'],
-    rest: (before, after) => after.some((i) => /oat/i.test(i.description) && TASK_RE.test(i.description)) },
-  { id: 'complete_task', category: 'mutation', request: 'Mark my zebra milk task as done.', expect: 'complete_task', alt: ['update_action_item', 'search_tasks'],
-    rest: (before, after, restById) => { const it = after.find((i) => TASK_RE.test(i.description)); return !!it && restById.get(it.id)?.completed === true } },
-  { id: 'delete_task', category: 'mutation', request: 'Delete my zebra milk task.', expect: 'delete_task', alt: ['search_tasks'],
-    rest: (before, after) => !after.some((i) => TASK_RE.test(i.description)) },
+  // ── MUTATION LIFECYCLE (each row REST-proven; two tasks so delete and complete each
+  //    act on a fresh task — avoids the model declining to delete an already-completed
+  //    one; fully self-cleaning). update_action_item is the param-bug tiebreaker: the
+  //    row PASSES only if the backend TEXT actually changes.
+  { id: 'create_action_item', category: 'mutation', request: 'Add buy zebra milk to my action items.', expect: 'create_action_item', re: /zebra/i,
+    rest: (b, a) => a.some((i) => /zebra/i.test(i.description)) && !b.some((i) => /zebra/i.test(i.description)) },
+  { id: 'update_action_item', category: 'mutation', request: 'Change my zebra milk task to say buy zebra oat milk instead.', expect: 'update_action_item', alt: ['search_tasks', 'get_action_items'], re: /zebra/i,
+    rest: (b, a) => a.some((i) => /oat/i.test(i.description) && /zebra/i.test(i.description)) },
+  { id: 'delete_task', category: 'mutation', request: 'Delete my zebra milk task completely.', expect: 'delete_task', alt: ['search_tasks'], re: /zebra/i,
+    rest: (b, a) => !a.some((i) => /zebra/i.test(i.description)) },
+  { id: 'create_action_item_b', category: 'mutation', request: 'Add feed the quokka to my action items.', expect: 'create_action_item', re: /quokka/i,
+    rest: (b, a) => a.some((i) => /quokka/i.test(i.description)) && !b.some((i) => /quokka/i.test(i.description)) },
+  { id: 'complete_task', category: 'mutation', request: 'Mark my quokka task as done.', expect: 'complete_task', alt: ['update_action_item', 'search_tasks'], re: /quokka/i,
+    rest: (b, a, byId) => { const it = a.find((i) => /quokka/i.test(i.description)); return !!it && byId.get(it.id)?.completed === true } },
 
   // ── DELEGATION ──
   { id: 'spawn_agent', category: 'delegation', request: 'Build me a simple tic tac toe web page.', expect: 'spawn_agent', alt: ['write', 'bash', 'edit'] },
@@ -286,8 +292,10 @@ async function main() {
       const MAX_ATTEMPTS = t.category === 'negative' ? 2 : 3
       let att = { tools: [], toolInputs: [], replyText: '', spokeMs: 0, sawTerminal: false, attempts: 0 }
       for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-        const turnStart = Date.now()
-        await page.evaluate((s) => { window.__turnStart = s }, turnStart)
+        // Snapshot the runIds already seen so a still-running BACKGROUND delegation
+        // (a build from a prior turn keeps emitting write/completed) can't bleed into
+        // this turn — we attribute ONLY runIds that are NEW this turn.
+        const priorRunIds = await page.evaluate(() => [...new Set(window.__ev.map((e) => e.runId).filter(Boolean))])
         log(`[${t.id}] (${t.category}) attempt ${attempt}: "${t.request}"`)
         await bar.evaluate(() => window.__omiPtt.beginHold())
         await new Promise((r) => setTimeout(r, 1400)) // capture-window spin-up margin
@@ -295,20 +303,27 @@ async function main() {
         playWav(wav) // blocks for the clip (~2-4s)
         await new Promise((r) => setTimeout(r, 600))
         await bar.evaluate(() => window.__omiPtt.endHold())
-        // Wait until a run for THIS turn reaches run_finished / final `completed`, or
-        // timeout. For delegation we don't wait for the whole (minutes-long) build — we
-        // break as soon as the coding agent emits its FIRST tool call (spawn_agent /
-        // write / bash / edit), which is the delegation signal we score on.
+        // Wait until a NEW run (this turn's) reaches run_finished / final `completed`,
+        // or — for delegation — emits its FIRST coding tool call (we don't wait for the
+        // whole minutes-long build), or timeout.
         const deadline = Date.now() + (t.category === 'delegation' ? 150000 : 90000)
         for (;;) {
-          const done = await page.evaluate(({ s, cat }) => window.__ev.some((e) => e._at >= s && (e.type === 'run_finished' || e.type === 'completed' || (cat === 'delegation' && e.type === 'tool_activity' && ['spawn_agent', 'write', 'bash', 'edit'].includes(e.name)))), { s: turnStart, cat: t.category })
+          const done = await page.evaluate(({ prior, cat }) => {
+            const priorS = new Set(prior)
+            return window.__ev.some((e) => e.runId && !priorS.has(e.runId) && (e.type === 'run_finished' || e.type === 'completed' || (cat === 'delegation' && e.type === 'tool_activity' && ['spawn_agent', 'write', 'bash', 'edit'].includes(e.name))))
+          }, { prior: priorRunIds, cat: t.category })
           if (done) break
           if (Date.now() > deadline) break
           await new Promise((r) => setTimeout(r, 600))
         }
         await new Promise((r) => setTimeout(r, 5000)) // drain trailing tool_activity + reply TTS
         await stopCapture(cap)
-        const evs = await page.evaluate((s) => window.__ev.filter((e) => e._at >= s), turnStart)
+        // Attribute ONLY events whose runId is NEW this turn (excludes background builds).
+        const evs = await page.evaluate((prior) => {
+          const priorS = new Set(prior)
+          const mine = new Set(window.__ev.map((e) => e.runId).filter((r) => r && !priorS.has(r)))
+          return window.__ev.filter((e) => e.runId && mine.has(e.runId))
+        }, priorRunIds)
         const toolEvents = evs.filter((e) => e.type === 'tool_activity')
         const tools = [...new Set(toolEvents.map((e) => e.name).filter(Boolean))]
         const replyText = (evs.filter((e) => e.type === 'completed').map((e) => e.text).filter(Boolean).pop())
@@ -345,10 +360,19 @@ async function main() {
             if (restOk) break
           }
         }
-        after.filter((i) => TASK_RE.test(i.description)).forEach((i) => createdItemIds.add(i.id))
+        const re = t.re || MUTATION_RE
+        after.filter((i) => MUTATION_RE.test(i.description)).forEach((i) => createdItemIds.add(i.id))
         const fired = tools.includes(t.expect) || (t.alt || []).some((a) => tools.includes(a))
+        // Explicit backend evidence: the actual item text + completed flag BEFORE/AFTER
+        // the spoken mutation — the empirical proof of whether the write took (e.g. it
+        // settles the update_action_item `id` vs `action_item_id` param-bug directly:
+        // if before==after text, the update silently failed on the backend).
+        const beforeItem = before.find((i) => re.test(i.description))
+        const afterItem = after.find((i) => re.test(i.description))
+        row.itemBefore = beforeItem ? `"${beforeItem.description}" completed=${beforeItem.completed}` : '(none)'
+        row.itemAfter = afterItem ? `"${afterItem.description}" completed=${afterItem.completed}` : '(none)'
         row.verdict = restOk === true ? 'PASS' : restOk === false ? (fired ? 'UNVERIFIED' : 'FAIL') : (fired ? 'PASS(tool-only)' : 'UNVERIFIED')
-        row.detail = `tools=[${tools}] restProof=${restOk === null ? 'no-rest-base' : restOk}`
+        row.detail = `tools=[${tools}] restProof=${restOk === null ? 'no-rest-base' : restOk} · backend before=${row.itemBefore} after=${row.itemAfter}`
         if (row.verdict === 'FAIL') exit = 1
         itemsBefore = after
       } else if (t.category === 'delegation') {
@@ -380,17 +404,25 @@ async function main() {
       await new Promise((r) => setTimeout(r, 1500))
     }
 
-    // ── Cleanup: delete every zebra-milk item we created; re-verify none remain. ──
+    // ── Cleanup: delete every test item we created; re-verify none remain. ──
     if (restBase) {
       const after = await restActionItems(restBase, idToken).catch(() => [])
-      for (const it of after.filter((i) => TASK_RE.test(i.description))) createdItemIds.add(it.id)
+      for (const it of after.filter((i) => MUTATION_RE.test(i.description))) createdItemIds.add(it.id)
       let del = 0
       for (const id of createdItemIds) { if (id && await restDelete(restBase, idToken, id)) del++ }
       const final = await restActionItems(restBase, idToken).catch(() => [])
-      const remaining = final.filter((i) => TASK_RE.test(i.description)).length
-      log(`cleanup: deleted ${del} created item(s); zebra-milk remaining=${remaining}`)
+      const remaining = final.filter((i) => MUTATION_RE.test(i.description)).length
+      log(`cleanup: deleted ${del} created item(s); test-items remaining=${remaining}`)
       results.push({ id: '__cleanup__', category: 'cleanup', verdict: remaining === 0 ? 'CLEAN' : 'DIRTY', detail: `deleted ${del}, remaining ${remaining}` })
       if (remaining !== 0) exit = 1
+    }
+    // The delegation build tells the coding agent to write a file; it lands in the app
+    // cwd (the worktree). Remove any tic-tac-toe artifact so it can't get committed.
+    for (const d of [root, path.join(root, '..', '..')]) {
+      for (const f of ['tic-tac-toe.html', 'tictactoe.html', 'tic_tac_toe.html', 'index.html']) {
+        const p = path.join(d, f)
+        try { if (fs.existsSync(p) && /tic.?tac.?toe/i.test(fs.readFileSync(p, 'utf8'))) { fs.rmSync(p, { force: true }); log(`cleanup: removed build artifact ${p}`) } } catch { /* */ }
+      }
     }
     if (spawnedAgents.size) {
       // Windows spawn_agent starts a LOCAL provider session (no backend VM), torn down
