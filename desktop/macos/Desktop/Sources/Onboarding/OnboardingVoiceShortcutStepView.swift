@@ -186,7 +186,7 @@ struct OnboardingVoiceShortcutStepView: View {
         .disabled(isRecordingCustomShortcut)
       }
 
-      Text("You can use one key or a combination like ⌘ J.")
+      Text("You can use only one key like ⌘.")
         .font(.system(size: 12))
         .foregroundColor(OmiColors.textTertiary)
 
