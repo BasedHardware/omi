@@ -1703,6 +1703,12 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Drive the lease deadline explicitly. A 6 ms wall-clock window can
+            # legitimately expire after one scheduler turn on a busy CI worker,
+            # even though the retry behavior under test is correct.
+            pipeline.time = types.SimpleNamespace(
+                monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.001, 0.002, 0.006])
+            )
             pipeline.renew_job_run_lock = MagicMock(side_effect=ConnectionError('redis unavailable'))
             stop_event = asyncio.Event()
             lease_lost_event = asyncio.Event()
@@ -3065,6 +3071,13 @@ class TestV2EndpointExecution:
                 pass
 
             module._run_full_pipeline_background_async = _noop_pipeline
+            scheduled_tasks = []
+
+            def _capture_background_task(coro, *, name):
+                scheduled_tasks.append(name)
+                coro.close()
+
+            module.start_background_task = _capture_background_task
 
             async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
@@ -3092,6 +3105,7 @@ class TestV2EndpointExecution:
             assert body['status'] == 'queued'
             assert body['poll_after_ms'] == 3000
             mock_sync_jobs.create_sync_job.assert_called_once()
+            assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
         finally:
             self._cleanup_modules(saved)
 
@@ -3304,13 +3318,15 @@ class TestTimeoutConfiguration:
 
     def test_llm_mini_has_timeout(self):
         source = self._read_clients_source()
-        llm_mini_line = [l for l in source.split('\n') if 'llm_mini' in l and 'ChatOpenAI' in l][0]
-        assert 'request_timeout=120' in llm_mini_line
-        assert 'max_retries=1' in llm_mini_line
+        start = source.index('def _create_legacy_llm_mini')
+        end = source.find('\n\ndef ', start + 1)
+        factory_body = source[start:end]
+        assert 'request_timeout=120' in factory_body
+        assert 'max_retries=1' in factory_body
 
     def test_anthropic_default_has_timeout(self):
         source = self._read_clients_source()
-        default_line = [l for l in source.split('\n') if '_default_anthropic_client' in l and 'AsyncAnthropic' in l][0]
+        default_line = [l for l in source.split('\n') if '= anthropic.AsyncAnthropic' in l][0]
         assert 'timeout=120' in default_line
         assert 'max_retries=1' in default_line
 

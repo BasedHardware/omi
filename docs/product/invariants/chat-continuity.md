@@ -121,6 +121,10 @@ rollback window; this is migration input, not a second store.
 - `desktop/macos/Desktop/Tests/AgentPillLifecycleTests.swift` and the named
   continuity gauntlet — terminal run, rendered pill, and producing
   `agentCompletion` converge for the same run identity
+- `desktop/macos/Desktop/Tests/ChatJournalWritePathTests.swift` — terminalization
+  supersedes only streaming coalesces (durable content writes stay journalable),
+  and journal replay preserves local-only row fields (`metadata`, `rating`,
+  `notificationScreenshot`) across a wholesale projection replace
 - Continuity gauntlet (manual / harness): typed → PTT → typed follow-up → spawn →
   status (`desktop/macos/scripts/agent-continuity-gauntlet.sh` when present)
 

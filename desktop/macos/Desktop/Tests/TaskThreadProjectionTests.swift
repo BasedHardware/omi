@@ -283,14 +283,12 @@ final class TaskThreadProjectionTests: XCTestCase {
   private var previousOwnerID: String?
 
   override func setUp() async throws {
-    try await super.setUp()
     previousOwnerID = RuntimeOwnerIdentity.currentOwnerId()
     await transitionOwner(to: "owner-a")
   }
 
   override func tearDown() async throws {
     await transitionOwner(to: previousOwnerID)
-    try await super.tearDown()
   }
 
   func testTwoTaskScopesKeepOneWorkstreamAndArtifactIdentity() {
@@ -574,29 +572,30 @@ final class TaskThreadProjectionTests: XCTestCase {
     let owner = TaskChatOwnerBox("owner-a")
     let gate = SuspendedTaskJournalPage()
     let surface = AgentSurfaceReference.workstream(workstreamId: "workstream-owner-bound")
-    let ownerATurn = try XCTUnwrap(KernelJournalTurn(
-      dictionary: [
-        "conversationId": "conversation-owner-a",
-        "turnId": "owner-a-private-turn",
-        "turnSeq": 1,
-        "conversationGeneration": 1,
-        "generationBaseTurnSeq": 0,
-        "producerId": "producer-owner-a",
-        "payloadHash": "sha256:owner-a",
-        "role": "user",
-        "surfaceKind": surface.surfaceKind,
-        "externalRefKind": surface.externalRefKind,
-        "externalRefId": surface.externalRefId,
-        "content": "Owner A private task chat",
-        "origin": "workstream",
-        "status": "completed",
-        "contentBlocks": [],
-        "resources": [],
-        "metadataJson": "{}",
-        "createdAtMs": 1,
-        "updatedAtMs": 1,
-      ]
-    ))
+    let ownerATurn = try XCTUnwrap(
+      KernelJournalTurn(
+        dictionary: [
+          "conversationId": "conversation-owner-a",
+          "turnId": "owner-a-private-turn",
+          "turnSeq": 1,
+          "conversationGeneration": 1,
+          "generationBaseTurnSeq": 0,
+          "producerId": "producer-owner-a",
+          "payloadHash": "sha256:owner-a",
+          "role": "user",
+          "surfaceKind": surface.surfaceKind,
+          "externalRefKind": surface.externalRefKind,
+          "externalRefId": surface.externalRefId,
+          "content": "Owner A private task chat",
+          "origin": "workstream",
+          "status": "completed",
+          "contentBlocks": [],
+          "resources": [],
+          "metadataJson": "{}",
+          "createdAtMs": 1,
+          "updatedAtMs": 1,
+        ]
+      ))
     let page = AgentRuntimeProcess.JournalOperationResult(
       operation: "list",
       conversationId: "conversation-owner-a",

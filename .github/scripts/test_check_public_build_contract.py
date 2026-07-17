@@ -151,7 +151,7 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         self.write(
             ".github/workflows/gcp_fake.yml",
             (self.root / ".github/workflows/gcp_fake.yml").read_text(encoding="utf-8")
-            + "  - uses: docker/build-push-action@v6\n",
+            + "  - uses: docker/build-push-action@v7\n",
         )
 
         self.assertIn("bypasses centralized public-build deployment", "\n".join(self.errors()))

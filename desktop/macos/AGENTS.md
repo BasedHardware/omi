@@ -123,6 +123,27 @@ enforces this via `scripts/check-sources-root-layout.py`.
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
 
+### Swift Formatting
+
+Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
+`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
+config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
+Generated sources under `Desktop/Sources/Generated/` are excluded from the
+formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
+Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
+
+### SwiftLint
+
+SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
+upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
+verified binary under `~/.cache/omi-swiftlint`; use
+`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
+Generated sources and test fixtures remain excluded and the committed baseline
+is down-only. SwiftLint baseline locations are absolute, so the wrapper
+materializes a temporary baseline rooted at the current checkout before linting;
+do not hand-edit those paths to match a specific machine.
+
 ### Synchronous state-machine callbacks
 
 - A reducer transition is atomic through model assignment, effect delivery, UI
@@ -222,7 +243,7 @@ See `.claude/settings.json` for connection details.
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
 - **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, and persistent launch configuration automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
-- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Use it while editing; run `./test.sh` for PR readiness.
+- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
 - **Swift suite throughput**: `scripts/swift-test-suites.sh` isolates suite processes but now defaults to four workers (matching CI). Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` only when diagnosing an order/concurrency-sensitive failure.
 - **Local Rust backend**: direct `./run.sh` development uses Cargo debug output (`target/debug`) by default and reuses a healthy backend that this worktree owns when Rust source/config/profile have not changed. A compile failure leaves that healthy process alive. Use `OMI_DESKTOP_BACKEND_RELEASE=1` only for an explicit optimized local check; release/CI builds remain unchanged.
 - **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.

@@ -57,10 +57,11 @@ package enum DesktopDevRuntimeManifestStore {
     let destination = path(in: profileRoot)
     let temporary = profileRoot.appendingPathComponent(".omi-dev-runtime-\(UUID().uuidString).tmp")
 
-    guard fileManager.createFile(
-      atPath: temporary.path,
-      contents: data,
-      attributes: [.posixPermissions: 0o600])
+    guard
+      fileManager.createFile(
+        atPath: temporary.path,
+        contents: data,
+        attributes: [.posixPermissions: 0o600])
     else {
       throw CocoaError(.fileWriteUnknown)
     }

@@ -887,19 +887,19 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
     serialized_readiness_job = json.dumps(readiness_job, sort_keys=True)
     if 'secrets.GCP_CREDENTIALS' in serialized_readiness_job:
         errors.append(ValidationError(scope, 'Firestore readiness must not receive backend deployment credentials'))
-    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v2']
+    auth_steps = [step for step in parsed_steps if step.get('uses') == 'google-github-actions/auth@v3']
     if len(auth_steps) != 1 or (_as_config_dict(auth_steps[0].get('with')) or {}).get('credentials_json') != (
         '${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}'
     ):
         errors.append(ValidationError(scope, 'Firestore readiness must use the dedicated read-only credentials'))
     expected_readiness_ref = 'main' if Path(workflow_file).name == 'gcp_backend.yml' else '${{ github.sha }}'
-    checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v4']
+    checkout_steps = [step for step in parsed_steps if step.get('uses') == 'actions/checkout@v7']
     if len(checkout_steps) != 1 or (_as_config_dict(checkout_steps[0].get('with')) or {}).get('ref') != (
         expected_readiness_ref
     ):
         errors.append(ValidationError(scope, 'Firestore readiness must check out only the approved source commit'))
     deploy_steps = [_as_config_dict(step) or {} for step in (_as_config_list(deploy_job.get('steps')) or [])]
-    deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v4']
+    deploy_checkout = [step for step in deploy_steps if step.get('uses') == 'actions/checkout@v7']
     expected_deploy_ref = (
         '${{ needs.firestore_readiness.outputs.candidate_sha }}'
         if Path(workflow_file).name == 'gcp_backend.yml'
@@ -959,7 +959,7 @@ def _validate_firestore_readiness_workflow_contract(workflow_file: str, workflow
         errors.append(ValidationError(scope, 'proposal validation must bind the failed gate path, target, and outcome'))
 
     upload_steps = [
-        (index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == 'actions/upload-artifact@v4'
+        (index, step) for index, step in enumerate(parsed_steps) if step.get('uses') == 'actions/upload-artifact@v7'
     ]
     expected_upload_if = (
         "${{ failure() && steps.firestore_readiness.outcome == 'failure' "

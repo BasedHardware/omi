@@ -21,6 +21,7 @@ from models.app import App
 from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
+from utils.llm.usage_tracker import Features, track_usage
 from utils.executors import run_blocking, llm_executor
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
@@ -166,11 +167,12 @@ async def execute_persona_chat_stream(
         callback_data['langsmith_run_id'] = langsmith_run_id
 
     try:
-        task = asyncio.create_task(
-            get_llm('chat_graph', streaming=True).agenerate(
-                messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
+        with track_usage(uid, Features.CHAT):
+            task = asyncio.create_task(
+                get_llm('chat_graph', streaming=True).agenerate(
+                    messages=[formatted_messages], callbacks=all_callbacks, **run_metadata
+                )
             )
-        )
 
         while True:
             try:

@@ -287,6 +287,8 @@ env:
         key: OPENROUTER_API_KEY
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
+  - name: GCP_LOCATION
+    value: "us-central1"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: HOSTED_TRANSLATION_API_URL

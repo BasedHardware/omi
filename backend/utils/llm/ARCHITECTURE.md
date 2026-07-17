@@ -1,48 +1,78 @@
-# LLM utilities
+# `backend/utils/llm`
 
-Shared model routing, provider adapters, gateway integration, and LLM-backed
-domain helpers used by backend routes and background processing.
+LLM-backed feature layer for the backend. Every module here turns a product
+feature (chat, memory extraction, notifications, personas, app generation, …)
+into one or more model calls, and routes those calls through a shared
+**gateway-first** transport with a legacy direct-provider fallback.
 
-## Package map
+The package is large because it collects *all* per-feature LLM prompts and
+response parsers in one place. New code should join the matching group below
+rather than adding another top-level concern.
 
-- `model_config.py` resolves feature names to quality-of-service profiles,
-  providers, models, and route options.
-- `clients.py` is the compatibility entry point for callers selecting an LLM by
-  feature. It applies BYOK context, usage/error callbacks, gateway routing, and
-  legacy fallback policy.
-- `providers.py` constructs and caches provider-specific LangChain clients.
-  Product feature behavior does not belong there.
-- `gateway_client.py`, `gateway_anthropic.py`, `gateway_byok.py`,
-  `gateway_serving.py`, `gateway_shadow.py`, and `gateway_observability.py` own
-  the Omi gateway transport, rollout, fallback, shadowing, and telemetry seams.
-- `byok_errors.py` and `usage_tracker.py` centralize provider error handling and
-  usage accounting.
-- `chat.py`, `conversation_processing.py`, `conversation_folder.py`, and
-  `followup.py` implement chat and conversation extraction workflows.
-- `memories.py`, `working_memory.py`, `working_observations.py`,
-  `durable_memory_patches.py`, `knowledge_graph.py`, `l2_memory_routes.py`,
-  `promotion_routes.py`, and `promotion_proposals.py` provide LLM-backed memory
-  transformations. Authoritative persistence remains outside this package.
-- The remaining feature modules own their named prompt and transformation
-  workflows, including apps, goals, notifications, persona, temporal context,
-  trends, and external integrations.
+## Transport & routing core
 
-## Boundaries
+The shared plumbing every feature call goes through.
 
-- HTTP authentication and response shaping belong in `backend/routers/`.
-- Persistent reads and writes belong in `backend/database/`; shared data
-  contracts belong in `backend/models/`.
-- New provider construction belongs in `providers.py`; new feature routing
-  belongs in `model_config.py` and should be consumed through `clients.py`.
-- Gateway behavior must stay behind the gateway modules so feature workflows do
-  not depend directly on transport or service-token details.
-- Blocking model calls from `async def` code must be offloaded through
-  `llm_executor`; synchronous helpers may be called from FastAPI `def` routes or
-  an existing executor lane.
+- `gateway_client.py` — resolves the LLM gateway base URL / service token and
+  low-level request helpers.
+- `gateway_serving.py` — gateway-first serving with fallback to a legacy
+  provider on hard transport failures.
+- `gateway_anthropic.py` — gateway-first Anthropic Messages client with a
+  direct-transport fallback.
+- `gateway_byok.py` — BYOK (bring-your-own-key) credential envelope helpers for
+  gateway routing.
+- `gateway_shadow.py` — dev/shadow comparison wrapping (sampled, prod-gated).
+- `gateway_observability.py` — records gateway vs. direct outcomes for
+  comparison and health.
+- `clients.py` — LLM client construction plus the shared error callback wiring.
+- `providers.py` / `model_config.py` — provider-specific chat-model
+  construction and model/profile selection per feature.
+- `byok_errors.py` — classifies and normalizes BYOK/provider LLM errors.
+- `usage_tracker.py` — feature-level token-usage accounting.
 
-## Data and credential safety
+## Chat & conversation
 
-BYOK credentials are request-scoped and must never be cached as raw values,
-persisted, included in durable task payloads, or logged. Prompts, model output,
-and provider error bodies may contain user data; follow the repository logging
-rules and sanitize them before logging.
+- `chat.py` — chat prompt assembly, context handling, response normalization.
+- `conversation_processing.py` — post-conversation structuring (speaker id
+  matching, discard detection, summarization).
+- `conversation_folder.py` — conversation → folder assignment.
+- `followup.py` — follow-up question generation.
+- `persona.py` — persona chat, memory condensation for personas.
+- `openglass.py` — vision (image description) model calls.
+
+## Memory & knowledge graph
+
+- `memories.py` — memory extraction (standard + high-recall).
+- `working_observations.py` — working-observation batch synthesis
+  (`working_memory.py` is a backward-compatible shim, WS-G11).
+- `knowledge_graph.py` — node/edge extraction from memories.
+- `promotion_proposals.py` / `promotion_routes.py` — durable-memory patch
+  proposals and their routing (`durable_memory_patches.py` and
+  `l2_memory_routes.py` are backward-compatible shims, WS-G11).
+
+## Proactive, notifications & insights
+
+- `notifications.py` — relevance retrieval and notification content.
+- `proactive_notification.py` — proactive notification drafting + validation.
+- `goals.py` — goal-tracking LLM utilities.
+- `trends.py` — trend extraction.
+- `temporal.py` — current-date grounding injected into prompts.
+
+## Apps, integrations & policy
+
+- `app_generator.py` / `app_generation_prompts.py` — AI app generation.
+- `external_integrations.py` — structured summaries for external integrations.
+- `fair_use_classifier.py` — LLM-based purpose detection for fair-use policy.
+
+## Conventions
+
+- Prefer routing new calls through the gateway core above; do not add a new
+  direct-provider path.
+- Backward-compatible shims (`working_memory.py`, `durable_memory_patches.py`,
+  `l2_memory_routes.py`) only re-export from their real modules — put
+  implementation in the target module, not the shim.
+- Keep prompts and provider selection separate from route and auth handling.
+- Construct provider clients lazily and sanitize provider responses before
+  logging them.
+- Add hermetic backend-unit coverage for routing and fallback changes; fallback
+  branches use the shared fallback telemetry helper.

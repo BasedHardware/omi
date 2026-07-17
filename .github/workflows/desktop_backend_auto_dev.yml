@@ -39,11 +39,11 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Google Auth
         id: auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -51,7 +51,7 @@ jobs:
         run: gcloud auth configure-docker
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Google Service Account
         run: echo "${{ secrets.GCP_SERVICE_ACCOUNT }}" | base64 -d > ./desktop/macos/Backend-Rust/google-credentials.json
@@ -91,7 +91,7 @@ jobs:
           PY
 
       - name: Build and Push Docker image
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./desktop/macos/Backend-Rust
           file: ./desktop/macos/Backend-Rust/Dockerfile
@@ -101,7 +101,7 @@ jobs:
           cache-to: type=registry,ref=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:buildcache,mode=max
 
       - name: Deploy desktop-backend to Cloud Run
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

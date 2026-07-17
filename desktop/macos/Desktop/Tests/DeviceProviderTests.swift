@@ -4,16 +4,20 @@ import XCTest
 
 @testable import Omi_Computer
 
+private final class Box<T>: @unchecked Sendable {
+  var value: T
+  init(_ value: T) { self.value = value }
+}
+
 @MainActor
 final class DeviceProviderTests: XCTestCase {
   private var defaultsToRemove: [UserDefaults] = []
 
-  override func tearDown() {
+  override func tearDown() async throws {
     for defaults in defaultsToRemove {
       removeDefaults(defaults)
     }
     defaultsToRemove = []
-    super.tearDown()
   }
 
   func testLoadsPersistedPairedDeviceFromInjectedDefaults() {
@@ -192,13 +196,13 @@ final class DeviceProviderTests: XCTestCase {
     let defaults = makeDefaults()
     defer { removeDefaults(defaults) }
     let notificationCenter = NotificationCenter()
-    var observedBytesToSync: Int?
+    let observedBytesToSync = Box<Int?>(nil)
     let observer = notificationCenter.addObserver(
       forName: .storageSyncAvailable,
       object: nil,
       queue: nil
     ) { notification in
-      observedBytesToSync = notification.userInfo?["bytesToSync"] as? Int
+      observedBytesToSync.value = notification.userInfo?["bytesToSync"] as? Int
     }
     defer { notificationCenter.removeObserver(observer) }
 
@@ -220,7 +224,7 @@ final class DeviceProviderTests: XCTestCase {
 
     await provider.connect(to: testDevice)
 
-    XCTAssertEqual(observedBytesToSync, 1_000_000)
+    XCTAssertEqual(observedBytesToSync.value, 1_000_000)
   }
 
   func testFirmwareUpdateInProgressStateCanBeToggled() {

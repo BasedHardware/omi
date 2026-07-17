@@ -11,7 +11,7 @@ private struct CapturedCandidateRequest {
 
 private final class CandidateURLCapture: URLProtocol, @unchecked Sendable {
   private static let lock = NSLock()
-  private static var request: CapturedCandidateRequest?
+  private nonisolated(unsafe) static var request: CapturedCandidateRequest?
 
   static func reset() {
     lock.lock()

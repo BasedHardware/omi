@@ -50,13 +50,13 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ github.event.inputs.branch }}
 
       - name: Google Auth
         id: auth
-        uses: 'google-github-actions/auth@v2'
+        uses: 'google-github-actions/auth@v3'
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -72,7 +72,7 @@ jobs:
 
       - name: Deploy to Cloud Run
         id: deploy
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}

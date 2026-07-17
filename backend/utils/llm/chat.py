@@ -290,14 +290,16 @@ def _get_answer_simple_message_prompt(uid: str, messages: List[Message], app: Op
 
 def answer_simple_message(uid: str, messages: List[Message], plugin: Optional[App] = None) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return _content_str(get_llm('chat_responses').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def answer_simple_message_stream(
     uid: str, messages: List[Message], plugin: Optional[App] = None, callbacks: List[Any] = []
 ) -> str:
     prompt = _get_answer_simple_message_prompt(uid, messages, plugin)
-    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 def _get_answer_omi_question_prompt(messages: List[Message], context: str) -> str:
@@ -900,7 +902,8 @@ def qa_rag(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return _content_str(get_llm('chat_responses').invoke(prompt))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses').invoke(prompt))
 
 
 def qa_rag_stream(
@@ -915,7 +918,8 @@ def qa_rag_stream(
 ) -> str:
     prompt = _get_qa_rag_prompt(uid, question, context, plugin, cited, messages, tz)
     # print('qa_rag prompt', prompt)
-    return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
+    with track_usage(uid, Features.CHAT):
+        return _content_str(get_llm('chat_responses', streaming=True).invoke(prompt, {'callbacks': callbacks}))
 
 
 # **************************************************
@@ -949,8 +953,9 @@ def retrieve_memory_context_params(
     '''.replace('    ', '').strip()
 
     try:
-        with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
-        response = cast(TopicsContext, with_parser.invoke(prompt))
+        with track_usage(uid, Features.CHAT):
+            with_parser = get_llm('chat_extraction').with_structured_output(TopicsContext)
+            response = cast(TopicsContext, with_parser.invoke(prompt))
         return [e.value if hasattr(e, 'value') else str(e) for e in response.topics]
     except Exception as e:
         logger.error(f'Error determining memory discard: {e}')
@@ -1270,10 +1275,11 @@ def retrieve_metadata_from_text(
 def _process_extracted_metadata(uid: str, prompt: str) -> dict[str, Any]:
     """Process the extracted metadata from any source"""
     try:
-        result = cast(
-            ExtractedInformation,
-            get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
-        )
+        with track_usage(uid, Features.CONVERSATION_PROCESSING):
+            result = cast(
+                ExtractedInformation,
+                get_llm('chat_extraction').with_structured_output(ExtractedInformation).invoke(prompt),
+            )
     except Exception as e:
         logger.error(f'Error extracting metadata: {e}')
         return {'people': [], 'topics': [], 'entities': [], 'dates': []}

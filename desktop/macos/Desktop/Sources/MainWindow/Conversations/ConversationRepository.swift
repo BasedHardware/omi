@@ -1,4 +1,5 @@
 import Foundation
+@preconcurrency import ObjectiveC
 
 /// Synchronous session fence for conversation cache transaction admission.
 ///
@@ -68,7 +69,7 @@ struct ConversationRepositorySnapshot: Equatable {
   let source: ConversationSnapshotSource
 }
 
-protocol ConversationRemoteDataSource {
+protocol ConversationRemoteDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
@@ -79,7 +80,7 @@ protocol ConversationRemoteDataSource {
   func delete(id: String) async throws
 }
 
-protocol ConversationLocalDataSource {
+protocol ConversationLocalDataSource: Sendable {
   func list(query: ConversationListQuery) async throws -> [ServerConversation]
   func count(query: ConversationListQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation?
@@ -260,7 +261,7 @@ final class ConversationRepository {
   private(set) var isLoading = false
   private(set) var error: String?
   var onSnapshot: ((ConversationRepositorySnapshot) -> Void)?
-  private var ownerChangeObserver: NSObjectProtocol?
+  private nonisolated(unsafe) var ownerChangeObserver: NSObjectProtocol?
 
   init(remote: ConversationRemoteDataSource, local: ConversationLocalDataSource) {
     self.remote = remote
@@ -529,8 +530,9 @@ final class ConversationRepository {
   private func rollbackPendingField(id: String, operation: MutationOperation) {
     let shouldRollback = clearPendingField(id: id, operation: operation)
     if shouldRollback,
-       let baseline = mutationBaselines[id],
-       let index = conversations.firstIndex(where: { $0.id == id }) {
+      let baseline = mutationBaselines[id],
+      let index = conversations.firstIndex(where: { $0.id == id })
+    {
       conversations[index] = operation.rollback(conversations[index], to: baseline)
       applyPending(id: id)
     }
@@ -555,8 +557,9 @@ final class ConversationRepository {
       return
     }
     if let incomingRevision = canonical.updatedAt,
-       let existingRevision = existing.updatedAt,
-       incomingRevision < existingRevision {
+      let existingRevision = existing.updatedAt,
+      incomingRevision < existingRevision
+    {
       return
     }
     mutationBaselines[id] = canonical
@@ -623,8 +626,9 @@ final class ConversationRepository {
     guard let index = conversations.firstIndex(where: { $0.id == conversation.id }) else { return }
     let existing = conversations[index]
     if let incoming = conversation.updatedAt,
-       let current = existing.updatedAt,
-       incoming < current {
+      let current = existing.updatedAt,
+      incoming < current
+    {
       return
     }
     conversations[index] = conversation

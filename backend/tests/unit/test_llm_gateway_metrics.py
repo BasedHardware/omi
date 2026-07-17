@@ -51,6 +51,10 @@ def test_stream_terminal_metric_exposes_bounded_surface_phase_and_byok_source(mo
         streaming=True,
         phase='midstream',
         ttfb_seconds=0.42,
+        budget_source='route_default',
+        output_budget='le_128',
+        completion_size='le_256',
+        finish_reason='length',
     )
 
     labels = requests.increments[0]
@@ -58,6 +62,10 @@ def test_stream_terminal_metric_exposes_bounded_surface_phase_and_byok_source(mo
     assert labels['streaming'] == 'true'
     assert labels['phase'] == 'midstream'
     assert labels['credential_source'] == 'service_forwarded_byok'
+    assert labels['budget_source'] == 'route_default'
+    assert labels['output_budget'] == 'le_128'
+    assert labels['completion_size'] == 'le_256'
+    assert labels['finish_reason'] == 'length'
     assert 'request_id' not in labels
     assert latency.observations[0][0] == labels
     assert ttfb.observations == [
@@ -114,7 +122,8 @@ def test_terminal_errors_are_warning_logs_with_only_bounded_failure_fields(monke
         'surface=openai_chat_completions streaming=false phase=before_output '
         'lane=omi:auto:conv-structure route=route.conv_structure.model_config.001 '
         'provider=none model=none credential_source=service_forwarded_byok outcome=error '
-        'error_class=credential_failure failure_class=byok_auth fallback_used=false ttfb_seconds=none'
+        'error_class=credential_failure failure_class=byok_auth fallback_used=false budget_source=none '
+        'output_budget=none completion_size=unknown finish_reason=unknown ttfb_seconds=none'
     ]
 
 

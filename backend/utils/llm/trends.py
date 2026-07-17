@@ -15,6 +15,7 @@ from models.trend import (
     TrendType,
 )
 from utils.llm.clients import get_llm
+from utils.llm.usage_tracker import Features, track_usage
 import logging
 
 logger = logging.getLogger(__name__)
@@ -68,8 +69,9 @@ def trends_extractor(uid: str, transcript_segments: List[TranscriptSegment], per
     {transcript}
     '''.replace('    ', '').strip()
     try:
-        with_parser = get_llm('trends').with_structured_output(ExpectedOutput)
-        response = cast(ExpectedOutput, with_parser.invoke(prompt))
+        with track_usage(uid, Features.TRENDS):
+            with_parser = get_llm('trends').with_structured_output(ExpectedOutput)
+            response = cast(ExpectedOutput, with_parser.invoke(prompt))
         filtered: list[Item] = []
         for item in response.items:
             if item.topic not in [

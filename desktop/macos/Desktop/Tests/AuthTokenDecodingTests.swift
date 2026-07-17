@@ -110,7 +110,8 @@ final class AuthTokenDecodingTests: XCTestCase {
 
   private func base64URL(_ json: [String: Any]) -> String {
     let data = try! JSONSerialization.data(withJSONObject: json, options: [.sortedKeys])
-    return data
+    return
+      data
       .base64EncodedString()
       .replacingOccurrences(of: "+", with: "-")
       .replacingOccurrences(of: "/", with: "_")

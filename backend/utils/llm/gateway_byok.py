@@ -5,10 +5,9 @@ from __future__ import annotations
 import hashlib
 from typing import Any, Dict, Optional
 
-from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from utils.llm.gateway_client import get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
 from utils.llm.usage_tracker import get_usage_callback
 
 _BYOK_GATEWAY_HEADER_PREFIX = 'X-Omi-Byok-'
@@ -45,6 +44,7 @@ def get_or_create_omi_gateway_llm_for_byok(
     api_key: str,
     streaming: bool = False,
     options: Optional[Dict[str, Any]] = None,
+    feature: str | None = None,
 ):
     """Return a gateway-backed LangChain client that forwards the user's BYOK key."""
 
@@ -70,6 +70,7 @@ def get_or_create_omi_gateway_llm_for_byok(
         key_fingerprint,
         options.get('request_timeout', 120),
         options.get('max_retries', 1),
+        feature,
     )
     cached = _byok_gateway_llm_cache.get(cache_key)
     if cached is not None:
@@ -85,6 +86,6 @@ def get_or_create_omi_gateway_llm_for_byok(
     if streaming:
         kwargs['streaming'] = True
         kwargs['stream_options'] = {'include_usage': True}
-    client = ChatOpenAI(model=lane_id, **kwargs)
+    client = GatewayContextChatOpenAI(model=lane_id, omi_gateway_feature=feature, **kwargs)
     _remember_byok_client(cache_key, client)
     return client

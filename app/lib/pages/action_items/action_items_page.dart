@@ -80,7 +80,7 @@ class _ActionItemsPageState extends State<ActionItemsPage> with AutomaticKeepAli
       PlatformManager.instance.analytics.actionItemsPageOpened();
       final provider = Provider.of<ActionItemsProvider>(context, listen: false);
       if (provider.actionItems.isEmpty) {
-        provider.fetchActionItems(showShimmer: true);
+        provider.ensureLoaded(showShimmer: true);
       }
       final taskIntegrationProvider = Provider.of<TaskIntegrationProvider>(context, listen: false);
       if (!taskIntegrationProvider.hasLoaded && !taskIntegrationProvider.isLoading) {
