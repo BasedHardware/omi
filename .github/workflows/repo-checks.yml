@@ -31,6 +31,15 @@ jobs:
         with:
           python-version-file: backend/.python-version
 
+      # The preflight can select uv-backed checks (e.g. backend-route-policy-baseline
+      # runs the OpenAPI runner) whenever a PR touches backend routes, so this job
+      # needs uv just like the sibling Hygiene job.
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/openapi-requirements.txt
+
       - name: Run current PR metadata preflight
         env:
           GITHUB_TOKEN: ${{ github.token }}
