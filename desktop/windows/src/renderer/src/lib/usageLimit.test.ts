@@ -1,4 +1,10 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
+
+// Mock the renderer BYOK cache so we can drive the "BYOK active" branch. Default
+// inactive, matching a free (non-BYOK) user; individual tests flip it on.
+const h = vi.hoisted(() => ({ isByokActiveCached: vi.fn(() => false) }))
+vi.mock('./byokKeys', () => ({ isByokActiveCached: h.isByokActiveCached }))
+
 import {
   onUsageLimit,
   showUsageLimit,
@@ -18,7 +24,10 @@ const quota = (p: Partial<ChatUsageQuota>): ChatUsageQuota => ({
   ...p
 })
 
-beforeEach(() => __resetUsageLimitSession())
+beforeEach(() => {
+  __resetUsageLimitSession()
+  h.isByokActiveCached.mockReturnValue(false)
+})
 
 describe('usage-limit pub/sub', () => {
   it('delivers the current reason to new and existing subscribers', () => {
@@ -92,6 +101,32 @@ describe('maybeTriggerTranscriptionQuotaPopup', () => {
     // A non-error status re-arms the latch...
     expect(maybeTriggerTranscriptionQuotaPopup('live')).toBe(false)
     // ...so a fresh exhaustion raises the popup a second time.
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
+  })
+
+  it('never paywalls a BYOK user — no popup on a quota error while BYOK is active', () => {
+    h.isByokActiveCached.mockReturnValue(true)
+    const seen: (UsageLimitReason | null)[] = []
+    onUsageLimit((r) => seen.push(r))
+    // A quota-exhausted error that WOULD raise the popup for a free user...
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(false)
+    expect(seen).toEqual([null]) // only the immediate value; never 'transcription'
+  })
+
+  it('still shows the popup for a non-BYOK (free) user on the same quota error', () => {
+    h.isByokActiveCached.mockReturnValue(false)
+    const seen: (UsageLimitReason | null)[] = []
+    onUsageLimit((r) => seen.push(r))
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
+    expect(seen.at(-1)).toBe('transcription')
+  })
+
+  it('does not consume the latch while BYOK is active — a later exhaustion after BYOK clears still shows', () => {
+    h.isByokActiveCached.mockReturnValue(true)
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(false)
+    // BYOK is cleared (keys removed / different account); the guard no longer
+    // suppresses and the still-armed latch lets the genuine exhaustion show.
+    h.isByokActiveCached.mockReturnValue(false)
     expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
   })
 })

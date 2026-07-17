@@ -54,6 +54,17 @@ export async function teardownUserData(): Promise<void> {
   } catch (e) {
     console.warn('[auth-teardown] mcpClearKey failed:', (e as Error).message)
   }
+  // 2c. Gmail session partition (Option B connector): Google auth cookies live in
+  //     an install-wide Electron partition (persist:omi-gmail), NOT a uid-scoped
+  //     store — so without this a second account on this machine would see the prior
+  //     user's Gmail connected and could fetch their mail. Clear it on sign-out /
+  //     account switch (same cross-account-leak class as the BYOK/MCP clears above).
+  //     Safe even when the feature is flag-off: disconnect just clears an empty jar.
+  try {
+    await window.omi?.gmailSessionDisconnect?.()
+  } catch (e) {
+    console.warn('[auth-teardown] gmailSessionDisconnect failed:', (e as Error).message)
+  }
   // 3. In-memory module caches so the current window reflects the wipe without a
   //    relaunch (the Conversations list, pending placeholders, the chat-grounding
   //    memory cache, and the Memories page's module-singleton cache).

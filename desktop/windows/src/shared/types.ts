@@ -914,6 +914,15 @@ export type OmiBridgeApi = {
   googleGmailFetchNew: () => Promise<FetchNewResult<GmailItem>>
   googleCalendarFetchNew: () => Promise<FetchNewResult<CalendarItem>>
   googleMarkProcessed: (source: GoogleSource, ids: string[]) => Promise<void>
+  // Gmail session connector (Option B): an Omi-owned login window + own-session
+  // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
+  // `gmailSessionConnect` opens the login window and resolves once signed in;
+  // fetch/status/disconnect operate on the persisted session partition.
+  gmailSessionConnect: (email?: string) => Promise<GmailSessionStatus>
+  gmailSessionStatus: () => Promise<GmailSessionStatus>
+  gmailSessionVerify: () => Promise<GmailSessionStatus>
+  gmailSessionFetch: (query?: string, maxResults?: number) => Promise<GmailSessionFetchResult>
+  gmailSessionDisconnect: () => Promise<GmailSessionStatus>
   // X (Twitter) connector — main runs the poll; the renderer relays the session.
   xStatus: (session: XConnectorSession) => Promise<XStatus>
   xConnect: (session: XConnectorSession) => Promise<XRunState>
@@ -1839,6 +1848,42 @@ export type CalendarItem = {
 export type FetchNewResult<T> = {
   ok: boolean
   items: T[]
+  error?: string
+}
+
+// --- Integrations: Gmail via an Omi-owned Electron session (Option B) ---
+// Windows can't harvest system-browser cookies the way macOS does (Chrome 127+
+// App-Bound Encryption), so the user signs into Google once inside an Omi-owned
+// PERSISTENT session partition, and we replay the SAME Gmail web endpoints macOS
+// uses (Atom feed + inbox bootstrap) against that own-session cookie jar. The email
+// shape mirrors macOS `GmailEmail` (see GmailReaderService.swift).
+
+/** One email from the Gmail session reader — mirrors macOS `GmailEmail`. */
+export type GmailSessionEmail = {
+  id: string
+  from: string
+  subject: string
+  snippet: string
+  /** ISO-8601 date string as emitted by the Gmail feed / bootstrap snapshot. */
+  date: string
+  isUnread: boolean
+}
+
+/** Connection status for the Gmail session connector, surfaced to Settings. */
+export type GmailSessionStatus = {
+  connected: boolean
+  /** ms epoch when the session last verified against Gmail; undefined if never. */
+  verifiedAt?: number
+  /** Short human-readable reason shown when not connected. */
+  message?: string
+}
+
+/** Result of a Gmail session fetch. `ok:false` carries a reason in `error`. */
+export type GmailSessionFetchResult = {
+  ok: boolean
+  emails: GmailSessionEmail[]
+  /** How the emails were sourced ('bootstrap' | 'atom'), for parity/diagnostics. */
+  source?: string
   error?: string
 }
 
