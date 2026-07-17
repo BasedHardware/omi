@@ -12,8 +12,19 @@ from collections.abc import Mapping
 from dataclasses import dataclass
 from enum import Enum
 
+from config.stt_provider_policy import (
+    DEEPGRAM_PROVIDER,
+    MODULATE_PROVIDER,
+    PARAKEET_PROVIDER,
+    STTServingSurface,
+    default_models_for_surface,
+    provider_for_model_token as policy_provider_for_model_token,
+    provider_is_enabled,
+)
+
 STT_PRERECORDED_MODEL_ENV = 'STT_PRERECORDED_MODEL'
-DEFAULT_STT_PRERECORDED_MODELS = ('dg-nova-3',)
+# Compatibility export for callers. Its value is owned by stt_provider_policy.
+DEFAULT_STT_PRERECORDED_MODELS = default_models_for_surface(STTServingSurface.PRERECORDED)
 
 
 class TranscriptionOutcome(str, Enum):
@@ -58,9 +69,6 @@ class ProviderEnvironmentContract:
 
 
 PROVIDER_ENVIRONMENT_CONTRACTS: Mapping[str, ProviderEnvironmentContract] = {
-    # Runtime may bypass the process key for an individual Deepgram BYOK request,
-    # but a deployment whose opaque preference can select Deepgram still needs the
-    # process credential for background/sync work with no user credential context.
     PrerecordedSTTService.DEEPGRAM: ProviderEnvironmentContract(
         required_env=('DEEPGRAM_API_KEY',),
         required_when_model_source_is_opaque=True,
@@ -79,7 +87,7 @@ PROVIDER_ENVIRONMENT_CONTRACTS: Mapping[str, ProviderEnvironmentContract] = {
 
 
 def parse_prerecorded_models(raw: str | None) -> tuple[str, ...]:
-    """Parse a model preference list, retaining the historical Deepgram default."""
+    """Parse the configured model preference, defaulting to non-Deepgram providers."""
     if raw is None:
         return DEFAULT_STT_PRERECORDED_MODELS
     models = tuple(model.strip() for model in raw.split(',') if model.strip())
@@ -93,26 +101,38 @@ def get_prerecorded_models(env: Mapping[str, str] | None = None) -> tuple[str, .
 
 
 def provider_for_model_token(model: str) -> str | None:
-    if model.startswith('dg-'):
-        return PrerecordedSTTService.DEEPGRAM
-    if model == 'modulate-velma-2':
+    provider = policy_provider_for_model_token(model)
+    if provider == MODULATE_PROVIDER:
         return PrerecordedSTTService.MODULATE
-    if model == 'parakeet':
+    if provider == PARAKEET_PROVIDER:
         return PrerecordedSTTService.PARAKEET
+    if provider == DEEPGRAM_PROVIDER:
+        return PrerecordedSTTService.DEEPGRAM
     return None
 
 
 def providers_for_model_config(raw: str) -> tuple[str, ...]:
-    """Return every provider a literal config can activate, including fallback."""
+    """Return every non-retired provider a literal config can activate, including fallback."""
     providers: list[str] = []
     for model in parse_prerecorded_models(raw):
         provider = provider_for_model_token(model)
-        if provider is not None and provider not in providers:
+        if (
+            provider is not None
+            and provider_is_enabled(provider, STTServingSurface.PRERECORDED)
+            and provider not in providers
+        ):
             providers.append(provider)
-    # Both routing entry points ultimately fall back to Deepgram for an unknown
-    # token or a language unsupported by earlier preferences.
-    if PrerecordedSTTService.DEEPGRAM not in providers:
-        providers.append(PrerecordedSTTService.DEEPGRAM)
+    # Retired/unknown tokens and unsupported languages fall through to the
+    # non-Deepgram defaults. Include both because language capability decides
+    # which one serves the request.
+    for model in DEFAULT_STT_PRERECORDED_MODELS:
+        provider = provider_for_model_token(model)
+        if (
+            provider is not None
+            and provider_is_enabled(provider, STTServingSurface.PRERECORDED)
+            and provider not in providers
+        ):
+            providers.append(provider)
     return tuple(providers)
 
 
@@ -128,6 +148,7 @@ def required_env_for_model_config(raw: str | None, *, source_is_opaque: bool = F
             provider
             for provider, contract in PROVIDER_ENVIRONMENT_CONTRACTS.items()
             if contract.required_when_model_source_is_opaque
+            and provider_is_enabled(provider, STTServingSurface.PRERECORDED)
         )
     else:
         providers = providers_for_model_config(raw or '')

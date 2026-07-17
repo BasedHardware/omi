@@ -85,34 +85,38 @@ class TestFactoryRouting:
             assert service == pr.PrerecordedSTTService.PARAKEET
             assert lang == 'fr'
 
-    def test_parakeet_fallback_to_deepgram_for_unsupported_language(self):
+    def test_parakeet_falls_back_to_modulate_for_unsupported_language(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             service, lang, model = pr.get_prerecorded_service('zh-CN')
-            assert service == pr.PrerecordedSTTService.DEEPGRAM
+            assert service == pr.PrerecordedSTTService.MODULATE
+            assert model == 'velma-2'
 
-    def test_parakeet_fallback_for_cjk(self):
+    def test_parakeet_fallback_never_selects_deepgram(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             for unsupported in ['ja', 'zh', 'ko', 'hi', 'vi']:
-                service, lang, model = pr.get_prerecorded_service(unsupported)
-                assert service == pr.PrerecordedSTTService.DEEPGRAM, f'{unsupported} should fall back to Deepgram'
+                try:
+                    service, _lang, _model = pr.get_prerecorded_service(unsupported)
+                except RuntimeError:
+                    continue
+                assert service != pr.PrerecordedSTTService.DEEPGRAM
 
     def test_get_prerecorded_provider_returns_parakeet(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('parakeet',)):
             provider = pr.get_prerecorded_provider()
             assert isinstance(provider, pr.ParakeetPrerecordedProvider)
 
-    def test_unknown_model_falls_back_to_deepgram(self):
+    def test_unknown_model_falls_back_to_parakeet(self):
         with patch.object(pr, 'get_prerecorded_models', return_value=('unknown-model',)):
             provider = pr.get_prerecorded_provider()
-            assert isinstance(provider, pr.DeepgramPrerecordedProvider)
-            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.DEEPGRAM
+            assert isinstance(provider, pr.ParakeetPrerecordedProvider)
+            assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
     def test_model_selection_reads_environment_at_call_time(self, monkeypatch):
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'parakeet')
         assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
         monkeypatch.setenv('STT_PRERECORDED_MODEL', 'dg-nova-3')
-        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.DEEPGRAM
+        assert pr.get_prerecorded_service('en')[0] == pr.PrerecordedSTTService.PARAKEET
 
     def test_deepgram_client_is_constructed_lazily_once(self, monkeypatch):
         client = MagicMock()
@@ -511,14 +515,15 @@ class TestStreamingFactoryRouting:
             assert service == STTService.parakeet
             assert model == 'parakeet'
 
-    def test_parakeet_streaming_fallback_for_cjk(self):
+    def test_parakeet_streaming_fallback_for_cjk_uses_modulate(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
 
         with patch('utils.stt.streaming.stt_service_models', ['parakeet', 'dg-nova-3']), patch.dict(
             os.environ, {'HOSTED_PARAKEET_API_URL': 'http://fake-parakeet:8080'}
         ):
             service, lang, model = get_stt_service_for_language('ja')
-            assert service == STTService.deepgram, 'Japanese should fall back to Deepgram'
+            assert service == STTService.modulate
+            assert model == 'velma-2'
 
     def test_parakeet_fallback_without_url(self):
         from utils.stt.streaming import STTService, get_stt_service_for_language
@@ -527,7 +532,7 @@ class TestStreamingFactoryRouting:
             env_backup = os.environ.pop('HOSTED_PARAKEET_API_URL', None)
             try:
                 service, lang, model = get_stt_service_for_language('en')
-                assert service == STTService.deepgram
+                assert service == STTService.modulate
             finally:
                 if env_backup:
                     os.environ['HOSTED_PARAKEET_API_URL'] = env_backup

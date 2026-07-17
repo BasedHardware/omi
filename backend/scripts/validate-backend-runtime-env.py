@@ -18,6 +18,7 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from config.stt_provider_policy import STTServingSurface, canonical_model_config  # noqa: E402
 from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
@@ -144,6 +145,7 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
@@ -380,6 +382,45 @@ def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: Config
             return True
     secret_entry = _as_config_dict(secrets_map.get(key))
     return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
+
+
+def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require deployable model values to match the code-owned serving policy."""
+    errors: list[ValidationError] = []
+    model_policy = {
+        'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
+        'STT_SERVICE_MODELS': canonical_model_config(STTServingSurface.STREAMING),
+    }
+    surfaces: list[tuple[str, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    for service, raw_service in cloud_run_services.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/cloud_run/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    for scope, env_map in surfaces:
+        for env_name, expected_value in model_policy.items():
+            if env_name not in env_map:
+                continue
+            actual_value = _manifest_literal_env_value(env_map, env_name)
+            if actual_value is None:
+                errors.append(
+                    ValidationError(scope, f'{env_name} must be a literal value owned by stt_provider_policy')
+                )
+            elif actual_value != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{env_name} must match stt_provider_policy: expected {expected_value!r}, got {actual_value!r}',
+                    )
+                )
+    return errors
 
 
 def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:

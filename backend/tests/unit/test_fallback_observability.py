@@ -123,17 +123,15 @@ def test_stt_selection_fallback_records_on_capability_mismatch(monkeypatch):
 
     service, lang, model = streaming_mod.get_stt_service_for_language('xx-unsupported')
 
-    assert service == streaming_mod.STTService.deepgram
-    assert lang == 'en'
-    assert model == 'nova-3'
+    assert (service, lang, model) == (None, None, None)
     assert counter.increments == [
         (
             {
                 'component': 'stt_selection',
                 'from_mode': 'requested_non_en',
-                'to_mode': 'deepgram_en',
+                'to_mode': 'unavailable',
                 'reason': 'capability_mismatch',
-                'outcome': 'degraded',
+                'outcome': 'exhausted',
             },
             1.0,
         )

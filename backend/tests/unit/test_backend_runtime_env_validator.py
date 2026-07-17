@@ -45,9 +45,8 @@ def with_memory_env(payload: str) -> str:
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED", "value": "false"},
         {"name": "OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE", "value": "1.0"},
         {"name": "POSTHOG_HOST", "value": "https://app.posthog.com"},
-        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,dg-nova-3"},
+        {"name": "STT_PRERECORDED_MODEL", "value": "parakeet,modulate-velma-2"},
         {"name": "HOSTED_PARAKEET_API_URL", "value": "http://parakeet.omiapi.com"},
-        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},
         {"name": "GOOGLE_CLIENT_ID", "value": "fake-public-client-id"},
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET", "key": "latest"}}},
@@ -86,7 +85,6 @@ def with_sync_ledger_fence_mode(payload: str) -> str:
 
 GOOGLE_OAUTH_SECRETS = '''\
         {"name": "GOOGLE_CLIENT_SECRET", "valueFrom": {"secretKeyRef": {"name": "GOOGLE_CLIENT_SECRET"}}},
-        {"name": "DEEPGRAM_API_KEY", "valueFrom": {"secretKeyRef": {"name": "DEEPGRAM_API_KEY", "key": "latest"}}},
         {"name": "MODULATE_API_KEY", "valueFrom": {"secretKeyRef": {"name": "MODULATE_API_KEY", "key": "latest"}}},'''
 
 
@@ -115,7 +113,6 @@ def validate_cloud_run_workflows_only(validator, *, env: str, manifest_path: Pat
 STANDARD_CLOUD_RUN_SECRETS = {
     'GOOGLE_CLIENT_ID': {'secret': 'GOOGLE_CLIENT_ID', 'version': 'latest'},
     'GOOGLE_CLIENT_SECRET': {'secret': 'GOOGLE_CLIENT_SECRET', 'version': 'latest'},
-    'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
     'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
 }
 
@@ -622,7 +619,7 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
 
     errors = validator._validate_prerecorded_stt_contract('dev', env_config)
 
-    assert len(errors) == 12
+    assert len(errors) == 9
     assert {error.scope for error in errors} == {
         'dev/cloud_run/backend',
         'dev/cloud_run/backend-sync',
@@ -630,13 +627,12 @@ def test_dev_cloud_run_prerecorded_stt_services_require_both_bindings():
     }
     assert {error.message for error in errors} == {
         'required Cloud Run service is missing STT_PRERECORDED_MODEL',
-        'required Cloud Run service is missing non-empty DEEPGRAM_API_KEY',
         'required Cloud Run service is missing non-empty MODULATE_API_KEY',
         'required Cloud Run service is missing non-empty HOSTED_PARAKEET_API_URL',
     }
 
 
-def test_literal_deepgram_model_does_not_require_parakeet_endpoint():
+def test_retired_deepgram_model_requires_non_deepgram_defaults():
     validator = load_validator()
     env_config = {
         'gke': {
@@ -650,10 +646,45 @@ def test_literal_deepgram_model_does_not_require_parakeet_endpoint():
         'cloud_run': {'services': {}},
     }
 
-    assert validator._validate_prerecorded_stt_contract('prod', env_config) == []
+    assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
+        ),
+    ]
 
 
-def test_literal_modulate_model_requires_its_declared_api_key_binding():
+def test_deployment_stt_models_must_match_the_central_serving_policy():
+    validator = load_validator()
+    env_config = {
+        'gke': {
+            'backend-listen': {
+                'env': {
+                    'STT_PRERECORDED_MODEL': {'value': 'dg-nova-3'},
+                    'STT_SERVICE_MODELS': {'value': 'modulate-velma-2'},
+                },
+            }
+        },
+        'cloud_run': {'services': {}},
+    }
+
+    assert validator._validate_stt_serving_model_policy('prod', env_config) == [
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            "STT_PRERECORDED_MODEL must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'dg-nova-3'",
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            "STT_SERVICE_MODELS must match stt_provider_policy: expected 'parakeet,modulate-velma-2', got 'modulate-velma-2'",
+        ),
+    ]
+
+
+def test_literal_modulate_model_requires_all_non_deepgram_fallback_bindings():
     validator = load_validator()
     env_config = {
         'gke': {
@@ -671,11 +702,15 @@ def test_literal_modulate_model_requires_its_declared_api_key_binding():
         validator.ValidationError(
             'prod/gke/backend-listen',
             'STT_PRERECORDED_MODEL requires non-empty MODULATE_API_KEY',
-        )
+        ),
+        validator.ValidationError(
+            'prod/gke/backend-listen',
+            'STT_PRERECORDED_MODEL requires non-empty HOSTED_PARAKEET_API_URL',
+        ),
     ]
 
 
-def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallback():
+def test_literal_model_configs_require_non_deepgram_fallback_bindings():
     validator = load_validator()
     cases = (
         ('parakeet', {'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.local'}}),
@@ -696,12 +731,9 @@ def test_literal_model_configs_require_deepgram_language_and_unknown_token_fallb
             'cloud_run': {'services': {}},
         }
 
-        assert validator._validate_prerecorded_stt_contract('prod', env_config) == [
-            validator.ValidationError(
-                'prod/gke/backend-listen',
-                'STT_PRERECORDED_MODEL requires non-empty DEEPGRAM_API_KEY',
-            )
-        ]
+        errors = validator._validate_prerecorded_stt_contract('prod', env_config)
+        assert all('DEEPGRAM_API_KEY' not in error.message for error in errors)
+        assert errors
 
 
 def test_full_validation_reports_missing_provider_binding_once():
@@ -722,7 +754,6 @@ def test_full_validation_reports_missing_provider_binding_once():
                             'secret': 'STT_PRERECORDED_MODEL',
                             'version': 'latest',
                         },
-                        'DEEPGRAM_API_KEY': {'secret': 'DEEPGRAM_API_KEY', 'version': 'latest'},
                         'MODULATE_API_KEY': {'secret': 'MODULATE_API_KEY', 'version': 'latest'},
                     },
                 }
@@ -991,22 +1022,11 @@ def test_cloud_run_workflow_validation_uses_custom_manifest_for_runtime_env_outp
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_ENABLED': {'value': 'false'},
                                     'OMI_LLM_GATEWAY_DEV_SHADOW_ALL_SAMPLE_RATE': {'value': '1.0'},
                                     'HOSTED_PARAKEET_API_URL': {'value': 'http://parakeet.omiapi.com'},
+                                    'STT_PRERECORDED_MODEL': {'value': 'parakeet,modulate-velma-2'},
                                     'CUSTOM_MANIFEST_ONLY_MARKER': {'value': 'present'},
                                 },
                                 'secrets': {
                                     **STANDARD_CLOUD_RUN_SECRETS,
-                                    'STT_PRERECORDED_MODEL': {
-                                        'secret': 'STT_PRERECORDED_MODEL',
-                                        'version': 'latest',
-                                    },
-                                    'DEEPGRAM_API_KEY': {
-                                        'secret': 'DEEPGRAM_API_KEY',
-                                        'version': 'latest',
-                                    },
-                                    'MODULATE_API_KEY': {
-                                        'secret': 'MODULATE_API_KEY',
-                                        'version': 'latest',
-                                    },
                                 },
                             }
                         },

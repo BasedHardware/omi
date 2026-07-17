@@ -13,6 +13,13 @@ import websockets
 from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEvents
 from deepgram.clients.live.v1 import LiveOptions
 
+from config.stt_provider_policy import (
+    MODULATE_PROVIDER,
+    PARAKEET_PROVIDER,
+    STTServingSurface,
+    default_models_for_surface,
+    provider_is_enabled,
+)
 from utils.async_tasks import create_named_task
 from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
@@ -253,10 +260,12 @@ parakeet_languages = {
     'uk',
 }
 
-stt_service_models = os.getenv('STT_SERVICE_MODELS', 'dg-nova-3').split(',')
+# Compatibility export for callers. Its value is owned by stt_provider_policy.
+DEFAULT_STT_SERVICE_MODELS = default_models_for_surface(STTServingSurface.STREAMING)
+stt_service_models = os.getenv('STT_SERVICE_MODELS', ','.join(DEFAULT_STT_SERVICE_MODELS)).split(',')
 
 
-def _normalize_language(language: str) -> str:
+def _normalize_language(language: str | None) -> str:
     if not language:
         return ''
     return language.split('-')[0].split('_')[0].lower()
@@ -270,34 +279,64 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
-def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True) -> Tuple[STTService, str, str]:
-    base_lang = _normalize_language(language)
-    for m in stt_service_models:
-        m = m.strip()
-        if m.startswith('dg-'):
-            dg_model = m.replace('dg-', '', 1)
-            if multi_lang_enabled and language in deepgram_nova3_multi_languages:
-                return STTService.deepgram, 'multi', dg_model
-            if language in deepgram_nova3_languages:
-                return STTService.deepgram, language, dg_model
-            continue
-        if m == 'modulate-velma-2':
-            if base_lang in modulate_languages:
-                return STTService.modulate, base_lang, 'velma-2'
-        if m == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
-            if base_lang in parakeet_languages:
-                return STTService.parakeet, base_lang or 'en', 'parakeet'
-            continue
+def get_stt_service_for_language(
+    language: Optional[str],
+    multi_lang_enabled: bool = True,
+    *,
+    surface: STTServingSurface = STTServingSurface.STREAMING,
+) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
+    """Select a serving STT provider allowed for the requested product surface.
 
-    # Fallback to deepgram nova-3 with English
+    A stale ``dg-*`` configuration is intentionally ignored. Provider wiring
+    and the central serving policy must both change before a retired provider
+    can return, so a ConfigMap rollback cannot reactivate it.
+    """
+    # Missing language metadata historically meant English. Preserve that
+    # behavior without opening a retired-provider fallback for unknown values.
+    base_lang = _normalize_language(language) or 'en'
+    del multi_lang_enabled  # Both replacement providers own their language handling.
+
+    def select(models: List[str] | Tuple[str, ...]) -> Optional[Tuple[STTService, str, str]]:
+        for model in models:
+            model = model.strip()
+            if (
+                model == 'parakeet'
+                and provider_is_enabled(PARAKEET_PROVIDER, surface)
+                and os.getenv('HOSTED_PARAKEET_API_URL')
+            ):
+                if base_lang in parakeet_languages:
+                    return STTService.parakeet, base_lang or 'en', 'parakeet'
+            if (
+                model == 'modulate-velma-2'
+                and provider_is_enabled(MODULATE_PROVIDER, surface)
+                and base_lang in modulate_languages
+            ):
+                return STTService.modulate, base_lang or 'en', 'velma-2'
+        return None
+
+    selected = select(stt_service_models)
+    if selected is not None:
+        return selected
+
+    selected = select(default_models_for_surface(surface))
+    if selected is not None:
+        record_fallback(
+            component='stt_selection',
+            from_mode=_stt_selection_from_mode(language or '', base_lang),
+            to_mode=selected[0].value,
+            reason='config_incomplete',
+            outcome='degraded',
+        )
+        return selected
+
     record_fallback(
         component='stt_selection',
-        from_mode=_stt_selection_from_mode(language, base_lang),
-        to_mode='deepgram_en',
+        from_mode=_stt_selection_from_mode(language or '', base_lang),
+        to_mode='unavailable',
         reason='capability_mismatch',
-        outcome='degraded',
+        outcome='exhausted',
     )
-    return STTService.deepgram, 'en', 'nova-3'
+    return None, None, None
 
 
 def should_preserve_filler_words(language: str) -> bool:
