@@ -118,12 +118,21 @@ export class GraphSimulation {
   private nodeMap = new Map<string, SimNode>()
   private newlyAdded: string[] = []
 
-  constructor(private centerNodeId?: string) {
-    // 2D layout: every node lives on the z=0 plane so the camera faces it head
-    // on. This is what makes labels reliably readable — in 3D, two nodes far
-    // apart in space can still project on top of each other; on a plane they
-    // cannot, and label-aware collision (below) keeps titles from touching.
-    this.sim = forceSimulation<SimNode>([], 2).stop()
+  // `dimensions` selects a 2D (default) or 3D layout. 2D pins every node to z=0 so
+  // the camera faces it head on — what makes labels reliably readable, since two
+  // nodes far apart in 3D can still project on top of each other. Onboarding + the
+  // inline Memories card pass 2 (fixed camera). Only the full-screen INTERACTIVE
+  // brain map passes 3, where OrbitControls lets the user rotate to disambiguate
+  // depth (mirroring macOS's SceneKit force-directed MemoryGraphPage).
+  constructor(
+    private centerNodeId?: string,
+    private dimensions: 2 | 3 = 2
+  ) {
+    this.sim = forceSimulation<SimNode>([], this.dimensions).stop()
+  }
+
+  private get is3D(): boolean {
+    return this.dimensions === 3
   }
 
   // The drawn radius of a node's sphere. The center ("you") node is a fixed,
@@ -193,6 +202,7 @@ export class GraphSimulation {
         node.seedX = node.seedY = node.seedZ = 0
         node.fx = 0
         node.fy = 0
+        if (this.is3D) node.fz = 0
       } else {
         // Keep the node + its (possibly long) label inside the frame.
         node.targetRadius = Math.min(node.targetRadius, this.maxRadiusFor(node))
@@ -275,6 +285,7 @@ export class GraphSimulation {
         if (fresh.has(n.id) || n.id === this.centerNodeId) continue
         n.fx = n.x
         n.fy = n.y
+        if (this.is3D) n.fz = n.z
       }
       // One synchronous batch instead of ~170 live animation frames: same total
       // force math, but as a single fast pass, so nothing is left to visibly
@@ -286,6 +297,7 @@ export class GraphSimulation {
         if (fresh.has(n.id) || n.id === this.centerNodeId) continue
         n.fx = undefined
         n.fy = undefined
+        if (this.is3D) n.fz = undefined
       }
       const snapshot: CachedLayout = new Map()
       for (const n of this.nodes) {
@@ -325,12 +337,18 @@ export class GraphSimulation {
     const edge = graph.edges.find((e) => e.sourceId === id || e.targetId === id)
     const neighborId = edge ? (edge.sourceId === id ? edge.targetId : edge.sourceId) : undefined
     const neighbor = neighborId ? this.nodeMap.get(neighborId) : undefined
-    // z stays 0 — the layout is 2D (see constructor). Only x/y are simulated.
+    // z stays 0 in 2D (only x/y are simulated); in 3D it gets the same jitter so
+    // the cloud spreads through depth instead of collapsing onto one plane.
     const jitter = (): number => (Math.random() - 0.5) * 60
+    const jz = (): number => (this.is3D ? jitter() : 0)
     if (neighbor) {
-      return { x: (neighbor.x ?? 0) + jitter(), y: (neighbor.y ?? 0) + jitter(), z: 0 }
+      return {
+        x: (neighbor.x ?? 0) + jitter(),
+        y: (neighbor.y ?? 0) + jitter(),
+        z: (neighbor.z ?? 0) + jz()
+      }
     }
-    return { x: jitter(), y: jitter(), z: 0 }
+    return { x: jitter(), y: jitter(), z: jz() }
   }
 
   // Hard-clamp every node's actual position so the node AND its label always
@@ -343,7 +361,9 @@ export class GraphSimulation {
       if (n.id === this.centerNodeId) continue
       const x = n.x ?? 0
       const y = n.y ?? 0
-      const r = Math.hypot(x, y)
+      const z = n.z ?? 0
+      // In 3D clamp to a sphere (include z); in 2D the plane radius as before.
+      const r = this.is3D ? Math.hypot(x, y, z) : Math.hypot(x, y)
       const maxR = Math.max(RING_RADIUS * RADIUS_MIN, frame - this.collideRadius(n))
       if (r > maxR && r > 0) {
         const k = maxR / r
@@ -351,6 +371,10 @@ export class GraphSimulation {
         n.y = y * k
         n.vx = 0
         n.vy = 0
+        if (this.is3D) {
+          n.z = z * k
+          n.vz = 0
+        }
       }
     }
   }
@@ -384,7 +408,9 @@ export class GraphSimulation {
   boundingRadius(): number {
     let max = 0
     for (const n of this.nodes) {
-      const d = Math.hypot(n.x ?? 0, n.y ?? 0) + this.collideRadius(n)
+      const d =
+        (this.is3D ? Math.hypot(n.x ?? 0, n.y ?? 0, n.z ?? 0) : Math.hypot(n.x ?? 0, n.y ?? 0)) +
+        this.collideRadius(n)
       if (d > max) max = d
     }
     return max
@@ -497,11 +523,12 @@ export class GraphSimulation {
 // sim.liveNode(), so there are zero per-frame React re-renders.
 export function useGraphSimulation(
   graph: KnowledgeGraph,
-  centerNodeId?: string
+  centerNodeId?: string,
+  dimensions: 2 | 3 = 2
 ): { nodes: NodePosition[]; sim: GraphSimulation; reduced: boolean } {
   const simRef = useRef<GraphSimulation>(undefined)
   // eslint-disable-next-line react-hooks/refs -- intentional latest-ref / lazy-init (reads newest value in once-registered listeners & imperative loops, avoids stale closures)
-  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId)
+  if (!simRef.current) simRef.current = new GraphSimulation(centerNodeId, dimensions)
   const reducedRef = useRef(
     typeof window !== 'undefined' &&
       window.matchMedia?.('(prefers-reduced-motion: reduce)').matches === true
