@@ -43,6 +43,7 @@ def fake_db(monkeypatch):
 
     monkeypatch.setattr(candidates_db, 'db', database)
     monkeypatch.setattr(candidates_db.firestore, 'transactional', transactional)
+    monkeypatch.setattr(candidates_db, 'is_canonical_memory_user', lambda uid: True)
     candidate_service.clear_workstream_candidate_resolver()
     candidate_service.task_links.clear_workstream_goal_resolver()
     candidate_service.task_links.register_goal_existence_resolver(lambda uid, goal_id: goal_id == 'goal-1')

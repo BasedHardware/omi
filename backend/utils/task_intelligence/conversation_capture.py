@@ -12,6 +12,7 @@ import database.action_items as action_items_db
 import database.task_intelligence_control as task_control_db
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope, TaskCreatePayload, TaskOwner
 from models.candidate import CandidateAction
+from models.task_intelligence import TaskWorkflowMode
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.backend_capture import BackendCaptureSignals, adapt_backend_capture
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
@@ -93,9 +94,12 @@ def process_before_legacy(uid: str, conversation_id: str, action_items: Sequence
     control = task_control_db.get_task_workflow_control(uid)
     if not capture_enabled(uid):
         return False
+    allow_writes = control.workflow_mode not in (TaskWorkflowMode.off, TaskWorkflowMode.shadow)
     for action_item, semantic_key, occurrence in _semantic_occurrences(action_items):
         decision = _capture_decision(action_item, conversation_id)
         if decision.candidate is None:
+            continue
+        if not allow_writes:
             continue
         candidate = candidate_service.create_candidate(
             uid,
@@ -109,7 +113,7 @@ def process_before_legacy(uid: str, conversation_id: str, action_items: Sequence
                 candidate.candidate_id,
                 account_generation=control.account_generation,
             )
-    return True
+    return False
 
 
 def reconcile_after_legacy(

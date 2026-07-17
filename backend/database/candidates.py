@@ -23,7 +23,7 @@ from models.candidate import (
     CandidateStatus,
     CandidateSubjectKind,
 )
-from models.task_intelligence import TaskWorkflowControl
+from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
 
 CANDIDATES_COLLECTION = 'candidates'
 ACTION_ITEMS_COLLECTION = 'action_items'
@@ -141,6 +141,8 @@ def _validate_write_control(snapshot: Any, *, uid: str, account_generation: int)
     control = TaskWorkflowControl()
     if snapshot.exists:
         control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
+    if control.workflow_mode in (TaskWorkflowMode.off, TaskWorkflowMode.shadow):
+        raise CandidateConflictError('task intelligence is not in an active workflow mode')
     if control.account_generation != account_generation:
         raise CandidateGenerationMismatchError('account generation mismatch')
 

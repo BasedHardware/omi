@@ -15,6 +15,16 @@ from models.action_item import EvidenceRef, TaskCreatePayload
 from models.structured_extraction import ActionItemsExtraction
 from utils.llm import conversation_processing
 
+import config.canonical_memory_cohort as canonical_memory_cohort
+import database.candidates as candidates_db_module
+
+
+@pytest.fixture(autouse=True)
+def _enable_canonical_for_test_user(monkeypatch):
+    """Allow test UIDs to pass the canonical-memory entitlement check."""
+    monkeypatch.setattr(canonical_memory_cohort, 'is_canonical_memory_user', lambda uid: True)
+    monkeypatch.setattr(candidates_db_module, 'is_canonical_memory_user', lambda uid: True)
+
 
 def _action(
     description,
@@ -350,7 +360,10 @@ def test_shadow_mode_uses_canonical_extraction_without_writing(monkeypatch):
     monkeypatch.setattr(
         conversation_capture,
         '_capture_decision',
-        lambda action_item, conversation_id: decisions.append((action_item.description, conversation_id)),
+        lambda action_item, conversation_id: (
+            decisions.append((action_item.description, conversation_id)),
+            SimpleNamespace(candidate=None),
+        )[1],
     )
 
     assert conversation_capture.capture_enabled('user-1') is True
@@ -456,7 +469,7 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
 
     monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
     monkeypatch.setattr(
-        conversation_capture.candidates_db,
+        candidates_db_module,
         'reconcile_migrated_candidate',
         reconcile,
     )
@@ -521,7 +534,7 @@ def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projecti
         return record
 
     monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
-    monkeypatch.setattr(conversation_capture.candidates_db, 'reconcile_migrated_candidate', reconcile)
+    monkeypatch.setattr(candidates_db_module, 'reconcile_migrated_candidate', reconcile)
     action = _action(
         'Send the revised budget',
         capture_kind='direct_request',
