@@ -5,8 +5,9 @@
 // that own-session cookie jar (mirrors macOS, which harvests the system browser's
 // cookies — an approach Windows can't take because of Chrome App-Bound Encryption).
 //
-// It ships OFF by default (a new, experimental credential path) and is opt-in via the
-// build flag, or via localStorage in dev — same shape as GOOGLE_ENABLED.
+// It now ships ON by default. Set VITE_ENABLE_GMAIL_SESSION=0 at build time to disable
+// it (the escape hatch); in dev you can also turn it off locally by setting localStorage
+// 'omi.gmailSession.enabled' = '0'.
 export const GMAIL_SESSION_ENABLED =
-  import.meta.env.VITE_ENABLE_GMAIL_SESSION === '1' ||
-  (import.meta.env.DEV && localStorage.getItem('omi.gmailSession.enabled') === '1')
+  import.meta.env.VITE_ENABLE_GMAIL_SESSION !== '0' &&
+  !(import.meta.env.DEV && localStorage.getItem('omi.gmailSession.enabled') === '0')

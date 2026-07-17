@@ -60,7 +60,11 @@ beforeEach(() => {
     aiProfileGetLatest: vi.fn().mockResolvedValue(null),
     aiProfileGenerateNow: vi.fn(),
     aiProfileEdit: vi.fn(),
-    aiProfileDelete: vi.fn()
+    aiProfileDelete: vi.fn(),
+    // SettingsSearchProvider mounts every settings tab (incl. IntegrationsTab) to
+    // index its text; with the Gmail-session flag now ON by default, that tab's
+    // mount effect reads the session status. Stub it so the effect resolves cleanly.
+    gmailSessionStatus: vi.fn().mockResolvedValue({ connected: false })
   }
 })
 
