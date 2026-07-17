@@ -242,6 +242,10 @@ export interface SendAgentMessageInput {
   requestId: string
   prompt: string
   promptBlocks?: PromptBlock[]
+  /** System prompt to bake into the adapter binding for this send. Threaded to
+   *  the run/binding so pi-mono spawns with `--system-prompt`. Keep it stable
+   *  across a session's turns — a changed hash restarts the pi subprocess. */
+  systemPrompt?: string
   mode?: RunMode
   adapterId?: string
   cwd?: string
