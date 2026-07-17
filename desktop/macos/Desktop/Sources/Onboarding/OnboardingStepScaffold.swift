@@ -120,16 +120,20 @@ struct OnboardingStepScaffold<Content: View>: View {
           // Directional flow: memories (left) export to your tools (right).
           // The chip is overlaid on the divider so it sits dead-center on the
           // dividing line. Muted to blend in; shape matches the chat send button.
-          Divider()
-            .background(OmiColors.backgroundTertiary)
-            .overlay(alignment: .top) {
-              Image(systemName: "arrow.right.circle.fill")
-                .scaledFont(size: 24)
-                .foregroundColor(OmiColors.textTertiary)
-                .padding(4)
-                .background(Circle().fill(OmiColors.backgroundPrimary))
-                .padding(.top, OmiSpacing.xxl)
-            }
+          // Fixed-width column so the chip isn't clipped by the neighboring pane;
+          // the line runs full height and the chip sits centered on it.
+          ZStack {
+            Rectangle()
+              .fill(OmiColors.backgroundTertiary)
+              .frame(width: 1)
+              .frame(maxHeight: .infinity)
+            Image(systemName: "arrow.right.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(OmiColors.textTertiary)
+              .padding(4)
+              .background(Circle().fill(OmiColors.backgroundPrimary))
+          }
+          .frame(width: 40)
 
           splitPane
             .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
