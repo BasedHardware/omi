@@ -669,6 +669,14 @@ public class ProactiveAssistantsPlugin: NSObject {
     // Get current window info (use real app name, not cached)
     let (realAppName, windowTitle, windowID) = await WindowMonitor.getActiveWindowInfoAsync()
 
+    // During login, lock, and screen-saver transitions macOS can report a
+    // system-owned foreground target that ScreenCaptureKit cannot capture.
+    // Waiting preserves the enabled capture intent so the next user window is
+    // recorded instead of falsely entering permission-recovery mode.
+    if ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: realAppName) {
+      return
+    }
+
     // Check if the current app is excluded from Rewind capture
     var isRewindExcluded = realAppName.map { RewindSettings.shared.isAppExcluded($0) } ?? false
 

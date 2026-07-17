@@ -218,6 +218,20 @@ struct DesktopHomeView: View {
                 Task { await SettingsSyncManager.shared.syncToServer() }
               }
 
+              // Named development bundles used to seed screen analysis off to
+              // avoid permission prompts. Screen capture no longer requests
+              // TCC during startup, so restore the default once: a granted
+              // named-bundle permission must actually begin storing frames.
+              let quietBundleCaptureMigrationKey = "screenAnalysisAutoStartFixed_v3"
+              if RewindCaptureState.shouldRepairQuietBundleCaptureDefault(
+                usesLazyDevPermissions: AppBuild.usesLazyDevPermissions,
+                migrationApplied: UserDefaults.standard.bool(forKey: quietBundleCaptureMigrationKey)
+              ) {
+                AssistantSettings.shared.screenAnalysisEnabled = true
+                UserDefaults.standard.set(true, forKey: quietBundleCaptureMigrationKey)
+                log("DesktopHomeView: Restored screen capture default for quiet named bundle")
+              }
+
               // Start proactive assistants monitoring if enabled in settings.
               // If API keys aren't loaded yet, this may fail — onChange below retries.
               if settings.screenAnalysisEnabled {
