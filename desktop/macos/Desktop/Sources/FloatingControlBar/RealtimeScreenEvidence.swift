@@ -345,7 +345,8 @@ enum RealtimeScreenGroundingPolicy {
     guard evidence?.captureFailure == .screenRecordingPermissionRequired else {
       return "I couldn't verify the current screen."
     }
-    return "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+    return
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
   }
 
   /// Mints the local presentation receipt only after the session reports that it accepted the

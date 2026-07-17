@@ -115,7 +115,8 @@ enum RealtimeHubTools {
             "permission": "screen_recording",
             "next_tool": "request_permission",
             "next_tool_arguments": ["type": "screen_recording"],
-            "message": "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet and ask whether they want to grant access. Call request_permission with type=screen_recording only after they explicitly request or affirm it.",
+            "message":
+              "Screen Recording permission is not granted. Tell the user Omi cannot see their current screen yet and ask whether they want to grant access. Call request_permission with type=screen_recording only after they explicitly request or affirm it.",
           ],
         ])
       }

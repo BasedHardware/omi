@@ -39,7 +39,8 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     XCTAssertFalse(denied.canVerifyCurrentScreen)
     XCTAssertEqual(
       RealtimeScreenGroundingPolicy.failureText(for: denied),
-      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request.")
+      "I need Screen Recording permission before I can view your screen. Say ‘grant it’ and I’ll open the permission request."
+    )
   }
 
   private func request(
