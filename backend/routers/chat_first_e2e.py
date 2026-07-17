@@ -1,5 +1,7 @@
 """Local/offline-only control plane for the named Chat-first E2E bundle."""
 
+from typing import NoReturn
+
 from fastapi import APIRouter, Depends, HTTPException, status
 
 from config.chat_first_e2e_fixture import is_chat_first_e2e_harness_runtime
@@ -14,7 +16,7 @@ from utils.task_intelligence import chat_first_e2e_fixture
 router = APIRouter(prefix='/v1/dev-harness/chat-first', include_in_schema=False)
 
 
-def _raise_harness_error(exc: RuntimeError) -> None:
+def _raise_harness_error(exc: RuntimeError) -> NoReturn:
     if isinstance(exc, chat_first_e2e_fixture.ChatFirstE2EFixtureUnavailable):
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found') from exc
     if isinstance(exc, chat_first_e2e_fixture.ChatFirstE2EFixtureIdentityError):

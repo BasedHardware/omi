@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 import database.task_intelligence_control as task_control_db
-from models.task_intelligence import TaskWorkflowControl
+from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl
 from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
 
 
@@ -20,7 +20,7 @@ def resolve_chat_first_eligibility(
     uid: str,
     *,
     load_control: Callable[[str], TaskWorkflowControl] = task_control_db.get_task_workflow_control,
-    resolve_rollout: Callable[..., object] = resolve_task_intelligence_for_user,
+    resolve_rollout: Callable[..., TaskIntelligenceRolloutDecision] = resolve_task_intelligence_for_user,
 ) -> ChatFirstEligibility:
     """Resolve the generation-bound cohort capability without fallback state.
 

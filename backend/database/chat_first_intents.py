@@ -2,7 +2,7 @@
 
 import hashlib
 from dataclasses import dataclass
-from datetime import date, datetime, timedelta, timezone
+from datetime import date, datetime, timedelta
 from typing import Any, Iterable
 
 from google.cloud import firestore
@@ -21,7 +21,7 @@ from models.chat_first import (
     ProactiveIntentSource,
     QuestionCardSpec,
 )
-from models.proactive_budget import account_materialization, budget_allows, normalized_budget_state, reserve_budget
+from models.proactive_budget import account_materialization, normalized_budget_state, reserve_budget
 from models.task_intelligence import TaskWorkflowControl
 
 INTENTS_COLLECTION = 'chat_first_proactive_intents'
@@ -92,6 +92,24 @@ def _budget_ref(uid: str, *, firestore_client: Any = None):
 def _stable_id(prefix: str, *parts: object) -> str:
     raw = '\x1f'.join(str(part) for part in parts).encode('utf-8')
     return f'{prefix}_{hashlib.sha256(raw).hexdigest()[:32]}'
+
+
+def proactive_intent_id(
+    uid: str,
+    *,
+    account_generation: int,
+    source_key: str,
+    continuity_key: str,
+) -> str:
+    """Return the canonical durable ID for one proactive intent identity."""
+
+    return _stable_id('cfi', uid, account_generation, source_key, continuity_key)
+
+
+def proactive_deferral_id(uid: str, *, account_generation: int, continuity_key: str) -> str:
+    """Return the canonical durable ID for one deferred question identity."""
+
+    return _stable_id('cfd', uid, account_generation, continuity_key)
 
 
 def _require_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
@@ -184,7 +202,12 @@ def admit_agent_judgment(
     """
 
     client = _db(firestore_client)
-    intent_id = _stable_id('cfi', uid, account_generation, 'agent_judgment', continuity_key)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key='agent_judgment',
+        continuity_key=continuity_key,
+    )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
     transaction = client.transaction()
@@ -235,7 +258,12 @@ def release_agent_judgment_admission(
     """
 
     client = _db(firestore_client)
-    intent_id = _stable_id('cfi', uid, account_generation, 'agent_judgment', continuity_key)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key='agent_judgment',
+        continuity_key=continuity_key,
+    )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     budget_ref = _budget_ref(uid, firestore_client=client)
     transaction = client.transaction()
@@ -273,7 +301,12 @@ def create_intent(
     """Idempotently persist an intent and atomically reserve agent-turn budget."""
 
     client = _db(firestore_client)
-    intent_id = _stable_id('cfi', uid, account_generation, source, continuity_key)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key=source,
+        continuity_key=continuity_key,
+    )
     intent = ProactiveIntent(
         intent_id=intent_id,
         continuity_key=continuity_key,
@@ -347,7 +380,12 @@ def get_or_create_cold_start_intent(
     if source not in {'cold_start_rich', 'cold_start_sparse'}:
         raise ValueError('cold-start intents require a cold-start source')
     client = _db(firestore_client)
-    intent_id = _stable_id('cfi', uid, account_generation, 'cold_start', continuity_key)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key='cold_start',
+        continuity_key=continuity_key,
+    )
     intent = ProactiveIntent(
         intent_id=intent_id,
         continuity_key=continuity_key,
@@ -427,7 +465,12 @@ def acknowledge_sparse_cold_start_sequence_terminal(
     if sequence_id != expected_sequence_id:
         raise ChatFirstIntentConflictError('cold-start terminal sequence does not match generation')
     client = _db(firestore_client)
-    intent_id = _stable_id('cfi', uid, account_generation, 'cold_start', sequence_id)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key='cold_start',
+        continuity_key=sequence_id,
+    )
     intent_ref = _intent_ref(uid, intent_id, firestore_client=client)
     transaction = client.transaction()
 
@@ -576,7 +619,11 @@ def record_deferral(
     """Accept the kernel's idempotent deferral outbox record."""
 
     client = _db(firestore_client)
-    deferral_id = _stable_id('cfd', uid, account_generation, continuity_key)
+    deferral_id = proactive_deferral_id(
+        uid,
+        account_generation=account_generation,
+        continuity_key=continuity_key,
+    )
     deferral = ProactiveDeferral(
         deferral_id=deferral_id,
         continuity_key=continuity_key,
@@ -660,7 +707,12 @@ def _release_deferral_transaction(
     now: datetime,
     firestore_client: Any,
 ) -> ProactiveIntent | None:
-    intent_id = _stable_id('cfi', uid, account_generation, 'deferral_reraise', deferred.continuity_key)
+    intent_id = proactive_intent_id(
+        uid,
+        account_generation=account_generation,
+        source_key='deferral_reraise',
+        continuity_key=deferred.continuity_key,
+    )
     intent = ProactiveIntent(
         intent_id=intent_id,
         continuity_key=deferred.continuity_key,
@@ -728,6 +780,8 @@ __all__ = [
     'fetch_ready_intents',
     'get_budget_state',
     'iter_ready_intent_ids',
+    'proactive_deferral_id',
+    'proactive_intent_id',
     'release_agent_judgment_admission',
     'record_deferral',
     'release_due_deferrals',
