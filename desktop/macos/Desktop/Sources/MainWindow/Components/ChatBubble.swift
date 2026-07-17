@@ -103,50 +103,50 @@ struct ChatBubble: View {
       )
 
       HStack(alignment: .top, spacing: OmiSpacing.md) {
-      if message.sender == .ai {
-        // App avatar
-        if let app = app {
-          AsyncImage(url: URL(string: app.image)) { phase in
-            switch phase {
-            case .success(let image):
-              image
+        if message.sender == .ai {
+          // App avatar
+          if let app = app {
+            AsyncImage(url: URL(string: app.image)) { phase in
+              switch phase {
+              case .success(let image):
+                image
+                  .resizable()
+                  .aspectRatio(contentMode: .fill)
+              default:
+                Circle()
+                  .fill(OmiColors.backgroundTertiary)
+              }
+            }
+            .frame(width: 32, height: 32)
+            .clipShape(Circle())
+          } else {
+            if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
+              let logoImage = NSImage(contentsOf: logoURL)
+            {
+              Image(nsImage: logoImage)
                 .resizable()
-                .aspectRatio(contentMode: .fill)
-            default:
-              Circle()
-                .fill(OmiColors.backgroundTertiary)
+                .scaledToFit()
+                .frame(width: 20, height: 20)
+                .frame(width: 32, height: 32)
+                .background(OmiColors.backgroundTertiary)
+                .clipShape(Circle())
             }
           }
-          .frame(width: 32, height: 32)
-          .clipShape(Circle())
-        } else {
-          if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
-            let logoImage = NSImage(contentsOf: logoURL)
-          {
-            Image(nsImage: logoImage)
-              .resizable()
-              .scaledToFit()
-              .frame(width: 20, height: 20)
-              .frame(width: 32, height: 32)
-              .background(OmiColors.backgroundTertiary)
-              .clipShape(Circle())
-          }
         }
-      }
 
-      VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
-        messageContentView(groupedBlocks)
-      }
+        VStack(alignment: message.sender == .user ? .trailing : .leading, spacing: OmiSpacing.xxs) {
+          messageContentView(groupedBlocks)
+        }
 
-      if message.sender == .user {
-        // User avatar
-        Image(systemName: "person.fill")
-          .scaledFont(size: OmiType.body)
-          .foregroundColor(OmiColors.textSecondary)
-          .frame(width: 32, height: 32)
-          .background(OmiColors.backgroundTertiary)
-          .clipShape(Circle())
-      }
+        if message.sender == .user {
+          // User avatar
+          Image(systemName: "person.fill")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textSecondary)
+            .frame(width: 32, height: 32)
+            .background(OmiColors.backgroundTertiary)
+            .clipShape(Circle())
+        }
       }
       .frame(maxWidth: .infinity, alignment: message.sender == .user ? .trailing : .leading)
       .contentShape(Rectangle())
@@ -1000,7 +1000,9 @@ enum ContentBlockGroup: Identifiable {
       case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }
-        groups.append(.questionCard(id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
+        groups.append(
+          .questionCard(
+            id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
       case .taskCard(let id, let taskID):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }

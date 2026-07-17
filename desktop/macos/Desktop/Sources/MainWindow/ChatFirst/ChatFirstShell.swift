@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Cohort-only main-window shell. It shares the existing data owners with the
 /// legacy shell but owns no second chat state, task state, or navigation index.
@@ -114,8 +114,8 @@ struct ChatFirstShell: View {
         chatProvider: viewModelContainer.chatProvider,
         automationRuntime: automationRuntime
       )
-        .accessibilityIdentifier("chat-first-route-conversations")
-        .onAppear { navigation.markRouteVisible(.conversations) }
+      .accessibilityIdentifier("chat-first-route-conversations")
+      .onAppear { navigation.markRouteVisible(.conversations) }
     case .tasks:
       ChatFirstTasksPage(
         navigation: navigation,

@@ -194,9 +194,11 @@ final class ChatFirstAutomationRuntime: ObservableObject {
       guard let self, let selectQuestionOption = self.selectQuestionOption else {
         throw DesktopAutomationActionError.invalidParams("chat_first_main_chat_page_not_visible")
       }
-      guard let selection = QuestionSelection(
-        rawValue: params["selection"] ?? QuestionSelection.first.rawValue
-      ) else {
+      guard
+        let selection = QuestionSelection(
+          rawValue: params["selection"] ?? QuestionSelection.first.rawValue
+        )
+      else {
         throw DesktopAutomationActionError.invalidParams("selection must be first or defer")
       }
       return ["question_selection_started": await selectQuestionOption(selection) ? "true" : "false"]
@@ -312,7 +314,7 @@ final class ChatFirstAutomationRuntime: ObservableObject {
   private func actionableQuestionCard() -> Bool {
     guard selectQuestionOption != nil, let tail = chatProvider.messages.last else { return false }
     return tail.contentBlocks.contains { block in
-      guard case let .questionCard(_, questionID, _, _, _, _, selectedOptionID) = block else { return false }
+      guard case .questionCard(_, let questionID, _, _, _, _, let selectedOptionID) = block else { return false }
       return chatProvider.isQuestionCardActionable(
         messageID: tail.id,
         questionID: questionID,
@@ -363,16 +365,16 @@ final class ChatFirstAutomationRuntime: ObservableObject {
   private func selectableQuestionOption(for selection: QuestionSelection) -> (questionID: String, optionID: String)? {
     guard let tail = chatProvider.messages.last else { return nil }
     for block in tail.contentBlocks {
-      guard case let .questionCard(_, questionID, _, _, _, options, selectedOptionID) = block,
-            chatProvider.isQuestionCardActionable(
-              messageID: tail.id,
-              questionID: questionID,
-              selectedOptionID: selectedOptionID
-            ),
-            let optionID = ChatFirstQuestionAutomationSelectionPolicy.optionID(
-              in: options,
-              selection: selection
-            )
+      guard case .questionCard(_, let questionID, _, _, _, let options, let selectedOptionID) = block,
+        chatProvider.isQuestionCardActionable(
+          messageID: tail.id,
+          questionID: questionID,
+          selectedOptionID: selectedOptionID
+        ),
+        let optionID = ChatFirstQuestionAutomationSelectionPolicy.optionID(
+          in: options,
+          selection: selection
+        )
       else { continue }
       return (questionID, optionID)
     }

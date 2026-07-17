@@ -13,13 +13,13 @@ extension DesktopAutomationBridge {
     while Date() < deadline {
       let snapshot = await liveAutomationSnapshot()
       if !snapshot.snapshotStale,
-         DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
-           shellVariant: snapshot.shellVariant,
-           selectedTab: snapshot.selectedTab,
-           visibleChatFirstRoute: snapshot.visibleChatFirstRoute,
-           expectedChatFirstRoute: expectedChatFirstRoute,
-           expectedLegacyTitle: expectedLegacyTitle
-         )
+        DesktopAutomationNavigationVisibilityPolicy.isTargetVisible(
+          shellVariant: snapshot.shellVariant,
+          selectedTab: snapshot.selectedTab,
+          visibleChatFirstRoute: snapshot.visibleChatFirstRoute,
+          expectedChatFirstRoute: expectedChatFirstRoute,
+          expectedLegacyTitle: expectedLegacyTitle
+        )
       {
         return snapshot
       }

@@ -84,8 +84,8 @@ struct ChatFirstDeferralDeliveryRequest: Sendable, Equatable {
       )
     }
     guard options.count == optionsPayload.count,
-          Set(options.map(\.optionID)).count == options.count,
-          options.filter(\.isDeferred).count <= 1
+      Set(options.map(\.optionID)).count == options.count,
+      options.filter(\.isDeferred).count <= 1
     else { return nil }
 
     self.ownerID = ownerID
@@ -154,7 +154,7 @@ extension AgentRuntimeProcess {
     if let authError = error as? AuthError, case .userChangedDuringRequest = authError {
       return "chat_first_deferral_owner_changed"
     }
-    if case let APIError.httpError(statusCode, _) = error {
+    if case APIError.httpError(let statusCode, _) = error {
       return [408, 425, 429].contains(statusCode) || (500...599).contains(statusCode)
         ? "chat_first_deferral_retryable"
         : "chat_first_deferral_4xx"

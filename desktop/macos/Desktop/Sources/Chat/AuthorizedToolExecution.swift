@@ -122,7 +122,8 @@ struct AuthorizedToolExecution: @unchecked Sendable {
       throw Rejection.staleManifest
     }
     let manifestDigest = try requiredString("manifestDigest")
-    let expectedManifestDigest = resolvedTool == .renderChatBlocks
+    let expectedManifestDigest =
+      resolvedTool == .renderChatBlocks
       ? GeneratedToolExecutors.chatFirstManifestDigest
       : GeneratedToolExecutors.manifestDigest
     guard manifestDigest == expectedManifestDigest else {

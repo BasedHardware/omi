@@ -1075,7 +1075,8 @@ actor TranscriptionStorage {
     let db = try await ensureInitialized()
 
     return try await db.read { database in
-      let sessions = try TranscriptionSessionRecord
+      let sessions =
+        try TranscriptionSessionRecord
         .filter(Column("backendSynced") == true)
         .filter(Column("deleted") == false)
         .filter(Column("discarded") == false)

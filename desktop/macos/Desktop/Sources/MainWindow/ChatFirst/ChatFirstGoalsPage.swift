@@ -1,6 +1,6 @@
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Cohort-only canonical Goals destination. The page owns no copied goal or
 /// task state: it renders the shared projection and delegates task mutation to
@@ -177,10 +177,12 @@ struct ChatFirstGoalsPage: View {
   }
 
   private func acknowledgeVisibleGoal(_ goalID: String) {
-    guard let focus = ChatFirstGoalDetailPolicy.focusToAcknowledge(
-      pendingFocus: navigation.pendingFocus,
-      visibleGoalID: goalID
-    ) else { return }
+    guard
+      let focus = ChatFirstGoalDetailPolicy.focusToAcknowledge(
+        pendingFocus: navigation.pendingFocus,
+        visibleGoalID: goalID
+      )
+    else { return }
     _ = navigation.acknowledgeFocus(focus)
   }
 
@@ -336,7 +338,9 @@ private struct ChatFirstGoalTaskRow: View {
       }
       .buttonStyle(.plain)
       .disabled(isResolving)
-      .accessibilityLabel(task.completed ? "Mark \(task.description_) incomplete" : "Mark \(task.description_) complete")
+      .accessibilityLabel(
+        task.completed ? "Mark \(task.description_) incomplete" : "Mark \(task.description_) complete"
+      )
       .accessibilityIdentifier("chat-first-goal-task-\(task.id)-toggle")
 
       Text(task.description_)

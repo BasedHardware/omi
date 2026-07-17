@@ -45,15 +45,17 @@ final class AuthorizedToolExecutionTests: XCTestCase {
             "manifestDigest": GeneratedToolExecutors.chatFirstManifestDigest,
             "surfaceKind": "main_chat",
           ]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
     XCTAssertThrowsError(
       try AuthorizedToolExecution.parse(
         payload(overrides: ["chatFirstControlGeneration": 7]),
-        currentOwnerID: "owner-1")) { error in
-          XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
-        }
+        currentOwnerID: "owner-1")
+    ) { error in
+      XCTAssertEqual(error as? AuthorizedToolExecution.Rejection, .invalidChatFirstCapability)
+    }
   }
 
   func testWrongOwnerAndManifestFailClosed() {

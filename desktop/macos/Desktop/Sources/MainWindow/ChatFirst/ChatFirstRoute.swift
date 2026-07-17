@@ -1,5 +1,5 @@
-import Foundation
 import Combine
+import Foundation
 
 /// Chat-first navigation deliberately does not reuse the legacy sidebar's raw
 /// integer values. The legacy adapter below is the only compatibility boundary
@@ -220,9 +220,10 @@ final class ChatFirstShellNavigation: ObservableObject {
     analytics: (@MainActor (ChatFirstAnalyticsEvent) -> Void)? = nil
   ) {
     self.defaults = defaults
-    self.analytics = analytics ?? { event in
-      AnalyticsManager.shared.chatFirst(event)
-    }
+    self.analytics =
+      analytics ?? { event in
+        AnalyticsManager.shared.chatFirst(event)
+      }
     if let data = defaults.data(forKey: Self.storageKey),
       let persisted = try? JSONDecoder().decode(ChatFirstPersistedNavigation.self, from: data)
     {

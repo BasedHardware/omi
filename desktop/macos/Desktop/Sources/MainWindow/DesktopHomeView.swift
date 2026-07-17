@@ -951,7 +951,8 @@ struct DesktopHomeView: View {
         expectedOwnerId: ownerID,
         authorizationSnapshot: authorization
       )
-      let current = RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      let current =
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
         && RuntimeOwnerIdentity.currentOwnerId() == ownerID
       chatFirstCapabilitySample.resolve(
         control: control,
@@ -959,7 +960,8 @@ struct DesktopHomeView: View {
         ownerIsStillCurrent: current
       )
     } catch {
-      let current = RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
+      let current =
+        RuntimeOwnerIdentity.isAuthorizationCurrent(authorization)
         && RuntimeOwnerIdentity.currentOwnerId() == ownerID
       chatFirstCapabilitySample.resolve(
         control: nil,
@@ -1035,116 +1037,116 @@ struct DesktopHomeView: View {
   /// the existing modifier order; they are only compile-time seams.
   private func mainContentWithOverlays<Content: View>(_ content: Content) -> some View {
     content
-    .overlay {
-      // Goal completion celebration overlay
-      GoalCelebrationView()
-    }
-    .overlay {
-      if showTryAskingPopup {
-        let suggestions = PostOnboardingPromptSuggestions.suggestions()
-        if !suggestions.isEmpty {
-          TryAskingPopupView(
-            suggestions: suggestions,
-            onAsk: { suggestion in
-              showTryAskingPopup = false
-              PostOnboardingPromptSuggestions.shouldShowPopup = false
-              FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
-            },
-            onDismiss: {
-              showTryAskingPopup = false
-              PostOnboardingPromptSuggestions.shouldShowPopup = false
-              PostOnboardingPromptSuggestions.isDismissed = true
-            }
-          )
+      .overlay {
+        // Goal completion celebration overlay
+        GoalCelebrationView()
+      }
+      .overlay {
+        if showTryAskingPopup {
+          let suggestions = PostOnboardingPromptSuggestions.suggestions()
+          if !suggestions.isEmpty {
+            TryAskingPopupView(
+              suggestions: suggestions,
+              onAsk: { suggestion in
+                showTryAskingPopup = false
+                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                FloatingControlBarManager.shared.openAIInputWithQuery(suggestion)
+              },
+              onDismiss: {
+                showTryAskingPopup = false
+                PostOnboardingPromptSuggestions.shouldShowPopup = false
+                PostOnboardingPromptSuggestions.isDismissed = true
+              }
+            )
+          }
         }
       }
-    }
   }
 
   private func mainContentWithNotifications<Content: View>(_ content: Content) -> some View {
     content
-    .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
-      showTryAskingPopup = true
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
-      selectedSettingsSection = .rewind
-      navigateToLegacyDestination(.settings)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
-      if let url = URL(string: "https://www.omi.me") {
-        NSWorkspace.shared.open(url)
+      .onReceive(NotificationCenter.default.publisher(for: .showTryAskingPopup)) { _ in
+        showTryAskingPopup = true
       }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
-      selectedSettingsSection = .advanced
-      navigateToLegacyDestination(.settings)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
-      selectedSettingsSection = .floatingBar
-      navigateToLegacyDestination(.settings)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
-      selectedSettingsSection = .advanced
-      navigateToLegacyDestination(.settings)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
-      log("DesktopHomeView: Received navigateToRewind notification")
-      navigateToLegacyDestination(.rewind)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
-      navigateToLegacyDestination(.rewind)
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
-        NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindSettings)) { _ in
+        selectedSettingsSection = .rewind
+        navigateToLegacyDestination(.settings)
       }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
-      if usesChatFirstShell {
-        chatFirstNavigation.selectPrimary(.chat)
-      } else {
-        // Legacy Home owns the historic Chat notification contract.
-        selectedIndex = SidebarNavItem.dashboard.rawValue
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToDeviceSettings)) { _ in
+        if let url = URL(string: "https://www.omi.me") {
+          NSWorkspace.shared.open(url)
+        }
       }
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
-      navigateToLegacyDestination(.tasks)
-    }
-    .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
-      if let rawValue = notification.userInfo?["rawValue"] as? Int,
-        let item = SidebarNavItem(rawValue: rawValue)
-      {
-        navigateToLegacyDestination(item)
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToTaskSettings)) { _ in
+        selectedSettingsSection = .advanced
+        navigateToLegacyDestination(.settings)
       }
-    }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToFloatingBarSettings)) { _ in
+        selectedSettingsSection = .floatingBar
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToAIChatSettings)) { _ in
+        selectedSettingsSection = .advanced
+        navigateToLegacyDestination(.settings)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewind)) { _ in
+        log("DesktopHomeView: Received navigateToRewind notification")
+        navigateToLegacyDestination(.rewind)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToRewindNotes)) { _ in
+        navigateToLegacyDestination(.rewind)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+          NotificationCenter.default.post(name: .expandRewindTranscript, object: nil)
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToChat)) { _ in
+        if usesChatFirstShell {
+          chatFirstNavigation.selectPrimary(.chat)
+        } else {
+          // Legacy Home owns the historic Chat notification contract.
+          selectedIndex = SidebarNavItem.dashboard.rawValue
+        }
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToTasks)) { _ in
+        navigateToLegacyDestination(.tasks)
+      }
+      .onReceive(NotificationCenter.default.publisher(for: .navigateToSidebarItem)) { notification in
+        if let rawValue = notification.userInfo?["rawValue"] as? Int,
+          let item = SidebarNavItem(rawValue: rawValue)
+        {
+          navigateToLegacyDestination(item)
+        }
+      }
   }
 
   private func mainContentWithLifecycle<Content: View>(_ content: Content) -> some View {
     content
-    .onChange(of: selectedIndex) { oldValue, newValue in
-      if newValue == SidebarNavItem.settings.rawValue
-        && oldValue != SidebarNavItem.settings.rawValue
-      {
-        previousIndexBeforeSettings = oldValue
+      .onChange(of: selectedIndex) { oldValue, newValue in
+        if newValue == SidebarNavItem.settings.rawValue
+          && oldValue != SidebarNavItem.settings.rawValue
+        {
+          previousIndexBeforeSettings = oldValue
+        }
+        updateStoreActivity(for: newValue)
       }
-      updateStoreActivity(for: newValue)
-    }
-    .onChange(of: chatFirstNavigation.route) { _, _ in
-      updateStoreActivityForCurrentShell()
-      reportAutomationState()
-    }
-    .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
-    .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
-    .onChange(of: useLegacyHomeDesign) { _, newValue in
-      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
-        isSidebarCollapsed = !newValue
+      .onChange(of: chatFirstNavigation.route) { _, _ in
+        updateStoreActivityForCurrentShell()
+        reportAutomationState()
       }
-    }
-    .onAppear {
-      if case .legacy = chatFirstCapabilitySample.variant {
-        isSidebarCollapsed = !useLegacyHomeDesign
+      .onChange(of: chatFirstNavigation.visibleRoute) { _, _ in reportAutomationState() }
+      .onChange(of: chatFirstNavigation.isSidebarCollapsed) { _, _ in reportAutomationState() }
+      .onChange(of: useLegacyHomeDesign) { _, newValue in
+        OmiMotion.withGated(.easeInOut(duration: 0.2)) {
+          isSidebarCollapsed = !newValue
+        }
       }
-      updateStoreActivityForCurrentShell()
-      restorePreChatWindowWidth()
-    }
+      .onAppear {
+        if case .legacy = chatFirstCapabilitySample.variant {
+          isSidebarCollapsed = !useLegacyHomeDesign
+        }
+        updateStoreActivityForCurrentShell()
+        restorePreChatWindowWidth()
+      }
   }
 
   /// Keep the legacy HStack out of the chat-first branch's SwiftUI generic

@@ -2804,10 +2804,12 @@ class TasksStore: ObservableObject {
     beforeLocalMutation: (() async -> Void)? = nil,
     operationOverrides: TaskUpdateOperationOverrides? = nil
   ) async -> TaskUpdateOutcome {
-    guard let lease = captureOwnerLease(
-      expectedOwnerID: expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot
-    ) else { return .ownerChanged }
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return .ownerChanged }
     if let beforeLocalMutation { await beforeLocalMutation() }
     guard isCurrent(lease) else { return .ownerChanged }
 
@@ -2904,10 +2906,12 @@ class TasksStore: ObservableObject {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil,
     rollbackStorage: (() async throws -> Void)? = nil
   ) async -> Bool {
-    guard let lease = captureOwnerLease(
-      expectedOwnerID: expectedOwnerID,
-      authorizationSnapshot: authorizationSnapshot
-    ) else { return false }
+    guard
+      let lease = captureOwnerLease(
+        expectedOwnerID: expectedOwnerID,
+        authorizationSnapshot: authorizationSnapshot
+      )
+    else { return false }
     do {
       if let rollbackStorage {
         try await rollbackStorage()

@@ -3,10 +3,10 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatFirstTasksPageTests: XCTestCase {
-  func testScheduleGroupingKeepsOverdueAndTodayWorkTogether() {
+  func testScheduleGroupingKeepsOverdueAndTodayWorkTogether() throws {
     var calendar = Calendar(identifier: .gregorian)
-    calendar.timeZone = TimeZone(secondsFromGMT: 0)!
-    let now = Date(timeIntervalSince1970: 1_719_115_200) // 2024-06-15 00:00 UTC
+    calendar.timeZone = try XCTUnwrap(TimeZone(secondsFromGMT: 0))
+    let now = Date(timeIntervalSince1970: 1_719_115_200)  // 2024-06-15 00:00 UTC
     let overdue = task(id: "overdue", dueAt: now.addingTimeInterval(-1))
     let today = task(id: "today", dueAt: now.addingTimeInterval(12 * 60 * 60))
     let tomorrow = task(id: "tomorrow", dueAt: now.addingTimeInterval(24 * 60 * 60))
@@ -35,7 +35,8 @@ final class ChatFirstTasksPageTests: XCTestCase {
 
     let groups = ChatFirstTaskPagePolicy.groupedByGoal([first, second, standalone])
     XCTAssertEqual(groups.count, 2)
-    XCTAssertEqual(Set(groups.first(where: { $0.goalID == "goal-a" })?.tasks.map(\.id) ?? []), Set(["first", "second"]))
+    XCTAssertEqual(
+      Set(groups.first(where: { $0.goalID == "goal-a" })?.tasks.map(\.id) ?? []), Set(["first", "second"]))
     XCTAssertEqual(ChatFirstTaskPagePolicy.badges(for: first), .init(goalID: "goal-a", captureID: "capture-a"))
     XCTAssertEqual(ChatFirstTaskPagePolicy.badges(for: standalone), .init(goalID: nil, captureID: nil))
     XCTAssertEqual(
