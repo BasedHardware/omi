@@ -19,7 +19,7 @@ struct OnboardingExportsStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "",
-      title: "Put your memories where you work.",
+      title: "Put Omi memory where you work.",
       description: "Connect the tools where you want Omi context to live.",
       rightPaneFooterText: summaryText,
       graphLeading: true,
