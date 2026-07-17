@@ -9,8 +9,8 @@
 // ConnectorBrandMark's OmiMark / macOS HomeOmiMarkIcon draw), rendered inline so
 // it tints white for the dark bar panel. A graded opacity around the ring gives a
 // bright "head" and faded "tail": without it, eight identical evenly-spaced dots
-// have 8-fold symmetry and rotation would read as a static shimmer rather than a
-// clear spin. The head/tail makes the direction and speed obvious.
+// have 8-fold symmetry and the fast (0.4s/rev) rotation would read as a static
+// shimmer rather than a clear spin. The head/tail makes the direction obvious.
 
 // Eight dots on a radius-6.6 ring inside a 24×24 box (exact omi-mark geometry),
 // index 0 at the top going clockwise. Opacity ramps 1.0 → 0.2 head-to-tail.

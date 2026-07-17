@@ -625,7 +625,7 @@
      reduced-motion path leaves loops/spinners running, so this is NOT stripped
      there. */
   .omi-thinking-spin {
-    animation: omiThinkingSpin 0.7s linear infinite;
+    animation: omiThinkingSpin 0.4s linear infinite;
     transform-origin: 50% 50%;
     will-change: transform;
   }
