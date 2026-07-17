@@ -48,6 +48,10 @@ def main() -> int:
     _require('METRICS_SECRET', gateway_env, errors, 'gateway')
     _require('GOOGLE_CLOUD_PROJECT', gateway_env, errors, 'gateway')
     _require('GCP_LOCATION', gateway_env, errors, 'gateway')
+    if gateway_env.get('LLM_GATEWAY_ACCOUNTING_ENABLED', {}).get('value') != 'true':
+        errors.append('gateway must enable LLM_GATEWAY_ACCOUNTING_ENABLED=true')
+    _require('LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS', gateway_env, errors, 'gateway')
+    _require('LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES', gateway_env, errors, 'gateway')
 
     readiness = gateway_values.get('readinessProbe')
     if not isinstance(readiness, dict):

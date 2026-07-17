@@ -47,6 +47,9 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
             'based-hardware-dev' if environment == 'dev' else 'based-hardware'
         )
         assert env['GCP_LOCATION']['value'] == 'us-central1'
+        assert env['LLM_GATEWAY_ACCOUNTING_ENABLED']['value'] == 'true'
+        assert env['LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS']['value'] == '1'
+        assert env['LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES']['value'] == '1000'
         assert 'OMI_LLM_GATEWAY_SERVICE_TOKEN' in _secret_keys(secrets)
         assert 'PERPLEXITY_API_KEY' not in env
         probe_command = gateway['readinessProbe']['exec']['command'][-1]
@@ -154,3 +157,6 @@ def test_gateway_env_validator_requires_vertex_runtime_configuration_not_gemini_
     assert 'gateway has no GOOGLE_CLOUD_PROJECT env' in result.stdout
     assert 'gateway has no GCP_LOCATION env' in result.stdout
     assert 'GEMINI_API_KEY' not in result.stdout
+    assert 'gateway must enable LLM_GATEWAY_ACCOUNTING_ENABLED=true' in result.stdout
+    assert 'gateway has no LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS env' in result.stdout
+    assert 'gateway has no LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES env' in result.stdout

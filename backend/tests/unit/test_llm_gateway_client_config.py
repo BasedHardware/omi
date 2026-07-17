@@ -7,14 +7,14 @@ import uuid
 
 from langchain_core.callbacks.manager import CallbackManagerForLLMRun
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, HumanMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
 from utils.llm import clients, gateway_shadow
 from utils.llm import providers
-from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, get_llm_gateway_base_url
+from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
     LLM_GATEWAY_ALLOW_DIRECT_EXCEPTION_ENV_VAR,
     LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE_ENV_VAR,
@@ -25,6 +25,7 @@ from utils.llm.gateway_client import (
     should_route_features_through_gateway,
 )
 from utils.llm.clients import get_llm_gateway_chat_structured
+from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 import httpx
 
 
@@ -73,30 +74,41 @@ def test_llm_gateway_base_url_uses_repo_local_env_config(monkeypatch):
 
 
 def test_gateway_langchain_client_uses_internal_gateway_base_url_and_auth(monkeypatch):
-    captured = {}
-
-    class FakeChatOpenAI:
-        def __init__(self, **kwargs):
-            captured.update(kwargs)
-
     monkeypatch.setenv('OMI_LLM_GATEWAY_URL', 'http://gateway.internal:8080/')
     monkeypatch.setenv('OMI_LLM_GATEWAY_SERVICE_TOKEN', 'service-token')
-    monkeypatch.setattr(providers, 'ChatOpenAI', FakeChatOpenAI)
     original_cache = dict(providers._llm_cache)
     providers._llm_cache.clear()
 
     try:
         result = get_llm_gateway_chat_structured()
 
-        assert isinstance(result, FakeChatOpenAI)
-        assert captured['model'] == 'omi:auto:chat-structured'
-        assert captured['base_url'] == 'http://gateway.internal:8080/v1'
-        assert captured['request_timeout'] == 35.0
-        assert captured['default_headers']['X-Omi-Service-Caller'] == 'backend'
-        assert captured['default_headers']['Authorization'] == 'Bearer service-token'
+        assert isinstance(result, GatewayContextChatOpenAI)
+        assert result.model_name == 'omi:auto:chat-structured'
+        assert str(result.openai_api_base) == 'http://gateway.internal:8080/v1'
+        assert result.request_timeout == 35.0
+        assert result.default_headers['X-Omi-Service-Caller'] == 'backend'
+        assert result.default_headers['Authorization'] == 'Bearer service-token'
     finally:
         providers._llm_cache.clear()
         providers._llm_cache.update(original_cache)
+
+
+def test_gateway_langchain_client_injects_request_scoped_usage_attribution() -> None:
+    model = GatewayContextChatOpenAI(
+        model='omi:auto:chat-structured',
+        api_key='gateway-test',
+        base_url='http://gateway.internal:8080/v1',
+        omi_gateway_feature='fallback_feature',
+    )
+    token = set_usage_context('user-123', 'conversation_processing')
+    try:
+        payload = model._get_request_payload([HumanMessage(content='hello')])
+    finally:
+        reset_usage_context(token)
+
+    assert payload['extra_headers']['X-Omi-User-Uid'] == 'user-123'
+    assert payload['extra_headers']['X-Omi-LLM-Feature'] == 'conversation_processing'
+    assert payload['metadata']['omi_feature'] == 'conversation_processing'
 
 
 def test_get_llm_dev_shadow_wraps_legacy_and_submits_gateway(monkeypatch):
@@ -171,9 +183,10 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     gateway = FakeChatModel(name='gateway', calls=[])
     legacy = FakeChatModel(name='legacy', calls=[])
 
-    def fake_gateway(lane_id, streaming=False, options=None):
+    def fake_gateway(lane_id, streaming=False, options=None, *, feature=None):
         captured['lane_id'] = lane_id
         captured['streaming'] = streaming
+        captured['feature'] = feature
         return gateway
 
     monkeypatch.setenv(LLM_GATEWAY_FEATURE_MODE_ENV_VAR, 'gateway')
@@ -185,7 +198,7 @@ def test_get_llm_feature_gateway_mode_uses_generated_auto_lane(monkeypatch):
     result = clients.get_llm('conv_discard', streaming=True).invoke('hello')
 
     assert result.content == 'gateway response'
-    assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True}
+    assert captured == {'lane_id': feature_auto_lane_id('conv_discard'), 'streaming': True, 'feature': 'conv_discard'}
     assert len(gateway.calls) == 1
     assert legacy.calls == []
 

@@ -224,6 +224,8 @@ def test_memory_maintenance_job_workflow_passes_vpc_vars_and_checkout_sha():
     assert 'git rev-parse --short=7 HEAD' in text
     assert 'short_sha=${GITHUB_SHA::7}' not in text
     assert 'render_backend_runtime_env.py --env ${{ vars.ENV }} --job memory-maintenance-job' in text
+    assert 'Measure runner disk cleanup' in text
+    assert 'Duration: $((SECONDS - started_at))s' in text
 
 
 def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
@@ -232,3 +234,6 @@ def test_auto_dev_memory_maintenance_workflow_selects_only_its_job():
     assert 'render_backend_runtime_env.py --env dev --job memory-maintenance-job' in workflow.read_text(
         encoding='utf-8'
     )
+    text = workflow.read_text(encoding='utf-8')
+    assert 'Measure runner disk cleanup' in text
+    assert 'Duration: $((SECONDS - started_at))s' in text

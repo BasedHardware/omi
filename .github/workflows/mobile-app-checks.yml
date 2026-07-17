@@ -22,7 +22,7 @@ jobs:
       has_flutter_generated: ${{ steps.changes.outputs.has_flutter_generated }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -37,9 +37,9 @@ jobs:
     if: needs.changes.outputs.has_flutter_generated == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -88,7 +88,7 @@ jobs:
     if: needs.changes.outputs.has_app_dart == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -129,7 +129,7 @@ jobs:
     timeout-minutes: 30
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Setup Flutter
         uses: subosito/flutter-action@v2
@@ -203,7 +203,7 @@ jobs:
 
       - name: Upload Flutter test diagnostics
         if: ${{ failure() && steps.flutter_tests.outcome == 'failure' }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: flutter-test-diagnostics
           path: |
@@ -218,9 +218,9 @@ jobs:
     if: needs.changes.outputs.has_app_compile_smoke == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
-          fetch-depth: 0
+          fetch-depth: 1
 
       - name: Free runner disk space
         # ubuntu-latest ships with ~14GB free; the Gradle build runs out of
@@ -264,7 +264,7 @@ jobs:
         run: dart run build_runner build --delete-conflicting-outputs
 
       - name: Setup Gradle for Flutter compile smoke
-        uses: gradle/actions/setup-gradle@v4
+        uses: gradle/actions/setup-gradle@v6
 
       - name: Build Flutter Android dev debug APK
         working-directory: app

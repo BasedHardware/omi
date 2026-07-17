@@ -13,6 +13,16 @@ import google.auth
 from google.auth.transport.requests import Request as GoogleAuthRequest
 import httpx
 
+from llm_gateway.gateway.accounting import (
+    ProviderResponseMetadata,
+    ProviderUsage,
+    anthropic_usage_from_response,
+    cache_requested_for_anthropic_request,
+    cache_write_ttl_for_anthropic_request,
+    cache_requested_for_openai_request,
+    openai_usage_from_response,
+    vertex_usage_from_response,
+)
 from llm_gateway.gateway.credentials import CredentialContext
 from llm_gateway.gateway.schemas import CredentialMode, FailureClass, ProviderRef
 from llm_gateway.gateway.sse import SSEEventDecoder
@@ -42,7 +52,7 @@ class ChatCompletionProvider(Protocol):
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]: ...
+    ) -> 'ProviderResponse': ...
 
 
 @dataclass
@@ -52,6 +62,23 @@ class ProviderFailure(Exception):
 
     def __str__(self) -> str:
         return self.safe_message
+
+
+@dataclass(frozen=True)
+class ProviderResponse(Mapping[str, Any]):
+    """OpenAI-compatible response plus provider-native accounting metadata."""
+
+    response: Mapping[str, Any]
+    accounting: ProviderResponseMetadata = ProviderResponseMetadata()
+
+    def __getitem__(self, key: str) -> Any:
+        return self.response[key]
+
+    def __iter__(self):
+        return iter(self.response)
+
+    def __len__(self) -> int:
+        return len(self.response)
 
 
 class OpenAICompatibleChatCompletionProvider:
@@ -76,7 +103,7 @@ class OpenAICompatibleChatCompletionProvider:
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]:
+    ) -> ProviderResponse:
         api_key = _resolve_provider_api_key(
             credentials=credentials,
             provider_ref=provider_ref,
@@ -112,7 +139,10 @@ class OpenAICompatibleChatCompletionProvider:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
         _validate_chat_completion_response_shape(parsed)
-        return parsed
+        return ProviderResponse(
+            response=parsed,
+            accounting=openai_usage_from_response(parsed, cache_requested=cache_requested_for_openai_request(request)),
+        )
 
     async def stream_chat_completion(
         self,
@@ -227,7 +257,7 @@ class VertexGeminiProvider:
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]:
+    ) -> ProviderResponse:
         self._reject_byok(credentials)
         endpoint = self._endpoint(provider_ref.model, method='generateContent')
         payload = _vertex_request(request)
@@ -253,9 +283,14 @@ class VertexGeminiProvider:
         except httpx.HTTPError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
-        normalized = _vertex_to_openai_response(parsed, requested_model=provider_ref.model)
+        accounting = vertex_usage_from_response(parsed)
+        normalized = _vertex_to_openai_response(
+            parsed,
+            requested_model=provider_ref.model,
+            usage=accounting.usage,
+        )
         _validate_chat_completion_response_shape(normalized)
-        return normalized
+        return ProviderResponse(response=normalized, accounting=accounting)
 
     async def stream_chat_completion(
         self,
@@ -288,7 +323,11 @@ class VertexGeminiProvider:
                         if not event_data or event_data == '[DONE]':
                             continue
                         parsed = _parse_limited_json_response(event_data.encode('utf-8'))
-                        translated, _ = _vertex_to_openai_stream_chunk(parsed, requested_model=provider_ref.model)
+                        translated, _ = _vertex_to_openai_stream_chunk(
+                            parsed,
+                            requested_model=provider_ref.model,
+                            usage=vertex_usage_from_response(parsed).usage,
+                        )
                         if translated is not None:
                             yield translated
                 yield _openai_sse_done()
@@ -440,14 +479,19 @@ def _thinking_budget(request: Mapping[str, Any]) -> int | None:
     return thinking_budget
 
 
-def _vertex_to_openai_response(response: Mapping[str, Any], *, requested_model: str) -> dict[str, Any]:
+def _vertex_to_openai_response(
+    response: Mapping[str, Any],
+    *,
+    requested_model: str,
+    usage: ProviderUsage | None = None,
+) -> dict[str, Any]:
     candidates = response.get('candidates')
     candidate = (
         candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
     )
     content = _vertex_candidate_text(candidate)
     finish_reason = _vertex_finish_reason(candidate.get('finishReason') if candidate is not None else 'SAFETY')
-    return {
+    normalized: dict[str, Any] = {
         'id': str(response.get('responseId') or 'vertex_gateway'),
         'object': 'chat.completion',
         'created': int(time.time()),
@@ -460,37 +504,47 @@ def _vertex_to_openai_response(response: Mapping[str, Any], *, requested_model: 
             }
         ],
     }
+    if usage is not None:
+        normalized['usage'] = _openai_usage_payload(usage)
+    return normalized
 
 
 def _vertex_to_openai_stream_chunk(
     response: Mapping[str, Any],
     *,
     requested_model: str,
+    usage: ProviderUsage | None = None,
 ) -> tuple[bytes | None, bool]:
     candidates = response.get('candidates')
     candidate = (
         candidates[0] if isinstance(candidates, list) and candidates and isinstance(candidates[0], Mapping) else None
     )
-    if candidate is None:
+    if candidate is None and usage is None:
         return None, False
     text = _vertex_candidate_text(candidate)
-    raw_finish_reason = candidate.get('finishReason')
+    raw_finish_reason = candidate.get('finishReason') if candidate is not None else None
     finish_reason = _vertex_finish_reason(raw_finish_reason) if raw_finish_reason else None
-    if not text and finish_reason is None:
+    if not text and finish_reason is None and usage is None:
         return None, False
-    body = {
+    body: dict[str, Any] = {
         'id': str(response.get('responseId') or 'vertex_gateway'),
         'object': 'chat.completion.chunk',
         'created': int(time.time()),
         'model': requested_model,
-        'choices': [
-            {
-                'index': 0,
-                'delta': {'content': text} if text else {},
-                'finish_reason': finish_reason,
-            }
-        ],
+        'choices': (
+            [
+                {
+                    'index': 0,
+                    'delta': {'content': text} if text else {},
+                    'finish_reason': finish_reason,
+                }
+            ]
+            if candidate is not None
+            else []
+        ),
     }
+    if usage is not None:
+        body['usage'] = _openai_usage_payload(usage)
     return _openai_sse(body), finish_reason is not None
 
 
@@ -549,7 +603,7 @@ class AnthropicMessagesProvider:
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]:
+    ) -> ProviderResponse:
         if credentials.mode == CredentialMode.BYOK:
             raise ProviderFailure(FailureClass.BYOK_UNSUPPORTED_PROVIDER)
 
@@ -584,7 +638,17 @@ class AnthropicMessagesProvider:
         except ValueError as exc:
             raise ProviderFailure(FailureClass.PROVIDER_5XX_OMI_PAID) from exc
 
-        return _anthropic_to_openai_response(parsed, requested_model=str(request.get('model') or provider_ref.model))
+        accounting = anthropic_usage_from_response(
+            parsed,
+            cache_requested=cache_requested_for_anthropic_request(anthropic_request),
+            cache_write_ttl=cache_write_ttl_for_anthropic_request(anthropic_request),
+        )
+        normalized = _anthropic_to_openai_response(
+            parsed,
+            requested_model=str(request.get('model') or provider_ref.model),
+            usage=accounting.usage,
+        )
+        return ProviderResponse(response=normalized, accounting=accounting)
 
     async def aclose(self) -> None:
         if self._owns_http_client:
@@ -621,7 +685,12 @@ def _anthropic_request(request: Mapping[str, Any], provider_ref: ProviderRef) ->
     return payload
 
 
-def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_model: str) -> dict[str, Any]:
+def _anthropic_to_openai_response(
+    response: Mapping[str, Any],
+    *,
+    requested_model: str,
+    usage: ProviderUsage | None = None,
+) -> dict[str, Any]:
     content_blocks = response.get('content')
     text_parts: list[str] = []
     tool_calls: list[dict[str, Any]] = []
@@ -647,7 +716,7 @@ def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_mode
     message: dict[str, Any] = {'role': 'assistant', 'content': ''.join(text_parts)}
     if tool_calls:
         message['tool_calls'] = tool_calls
-    return {
+    normalized: dict[str, Any] = {
         'id': str(response.get('id') or 'anthropic_gateway'),
         'object': 'chat.completion',
         'created': 1782522000,
@@ -659,6 +728,19 @@ def _anthropic_to_openai_response(response: Mapping[str, Any], *, requested_mode
                 'finish_reason': 'tool_calls' if tool_calls else _openai_finish_reason(response.get('stop_reason')),
             }
         ],
+    }
+    if usage is not None:
+        normalized['usage'] = _openai_usage_payload(usage)
+    return normalized
+
+
+def _openai_usage_payload(usage: ProviderUsage) -> dict[str, Any]:
+    return {
+        'prompt_tokens': usage.prompt_tokens,
+        'completion_tokens': usage.output_tokens + usage.reasoning_tokens,
+        'total_tokens': usage.total_tokens,
+        'prompt_tokens_details': {'cached_tokens': usage.cached_input_tokens},
+        'completion_tokens_details': {'reasoning_tokens': usage.reasoning_tokens},
     }
 
 
@@ -716,7 +798,7 @@ class FakeChatCompletionProvider:
         provider_ref: ProviderRef,
         credentials: CredentialContext,
         timeout_ms: int,
-    ) -> Mapping[str, Any]:
+    ) -> ProviderResponse:
         self.calls.append(
             FakeProviderCall(
                 provider=provider_ref.provider,
@@ -727,12 +809,14 @@ class FakeChatCompletionProvider:
             )
         )
         if not self._outcomes:
-            return _default_fake_response(provider_ref)
+            response = _default_fake_response(provider_ref)
+            return ProviderResponse(response=response, accounting=openai_usage_from_response(response))
 
         outcome = self._outcomes.popleft()
         if isinstance(outcome, ProviderFailure):
             raise outcome
-        return outcome
+        response = dict(outcome)
+        return ProviderResponse(response=response, accounting=openai_usage_from_response(response))
 
 
 @dataclass(frozen=True)

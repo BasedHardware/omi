@@ -1,3 +1,0 @@
-{
-  "change": "Added SwiftLint safety rules (force unwrap, force try, force cast, IUO, weak delegate) via a pinned build-tool plugin with a committed violation baseline"
-}

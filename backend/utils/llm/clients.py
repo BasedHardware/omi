@@ -508,6 +508,7 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             provider=_effective_byok_provider(model, provider),
             api_key=byok_key,
             streaming=streaming,
+            feature=feature,
         )
         result = wrap_gateway_with_legacy_fallback(
             feature=feature,
@@ -523,7 +524,7 @@ def get_llm(feature: str, streaming: bool = False, cache_key: Optional[str] = No
             else get_default_client(model, provider, streaming, get_route_options(feature, model, provider))
         )
     elif gateway_feature_mode:
-        gateway_model = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming)
+        gateway_model = get_or_create_omi_gateway_llm(feature_auto_lane_id(feature), streaming, feature=feature)
         if provider in {'anthropic', 'perplexity'}:
             # No OpenAI-compatible LangChain legacy client for these providers.
             result = gateway_model
@@ -572,6 +573,7 @@ def get_llm_gateway_chat_structured(
                 request_timeout if request_timeout is not None else BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS
             )
         },
+        feature='chat_extraction',
     )
     if cache_key:
         return result.bind(prompt_cache_key=cache_key)

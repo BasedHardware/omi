@@ -18,6 +18,7 @@ from utils.llm.gateway_client import (
     feature_auto_lane_id,
     get_llm_gateway_base_url,
     get_llm_gateway_service_token,
+    llm_gateway_headers,
     should_route_features_through_gateway,
 )
 from utils.llm.gateway_observability import record_gateway_request_result
@@ -31,6 +32,12 @@ _GATEWAY_CLIENT_CACHE: TTLCache[str, anthropic.AsyncAnthropic] = TTLCache(
     ttl=_GATEWAY_CLIENT_CACHE_TTL_SECONDS,
 )
 _REQUEST_ID_HEADER = 'X-Omi-Request-ID'
+
+
+def _gateway_request_headers(existing: object) -> dict[str, str]:
+    headers = dict(existing) if isinstance(existing, Mapping) else {}
+    headers.update(llm_gateway_headers(feature=_CHAT_AGENT_FEATURE))
+    return headers
 
 
 def get_gateway_first_anthropic_client(
@@ -118,6 +125,7 @@ class _GatewayFirstAnthropicMessages:
     def stream(self, **kwargs: Any) -> '_GatewayAnthropicStreamWithFallback':
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
+        gateway_kwargs['extra_headers'] = _gateway_request_headers(gateway_kwargs.get('extra_headers'))
         legacy_kwargs = dict(kwargs)
         legacy_kwargs['model'] = self._agent_model
         return _GatewayAnthropicStreamWithFallback(
@@ -131,6 +139,7 @@ class _GatewayFirstAnthropicMessages:
     async def create(self, **kwargs: Any) -> Any:
         gateway_kwargs = dict(kwargs)
         gateway_kwargs['model'] = CHAT_AGENT_AUTO_LANE_ID
+        gateway_kwargs['extra_headers'] = _gateway_request_headers(gateway_kwargs.get('extra_headers'))
         request_id = _set_request_id(gateway_kwargs)
         try:
             result = await self._gateway_messages.create(**gateway_kwargs)

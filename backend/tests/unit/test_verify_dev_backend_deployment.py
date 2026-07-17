@@ -272,20 +272,78 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
     ]
 
 
-def test_legacy_binding_migration_rejects_non_dev_projects_without_gcloud_calls() -> None:
+def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls() -> None:
     preflight = _load_preflight()
     calls: list[list[str]] = []
 
-    with pytest.raises(ValueError, match='development-only'):
+    with pytest.raises(ValueError, match="prod expects project 'based-hardware'"):
         preflight.migrate_legacy_public_bindings(
             services=('backend',),
             env='prod',
-            project='based-hardware',
+            project='based-hardware-dev',
             region='us-central1',
             runner=lambda command, **_kwargs: calls.append(command),
         )
 
     assert calls == []
+
+
+def test_legacy_binding_migration_strips_prod_legacy_bindings() -> None:
+    preflight = _load_preflight()
+    legacy_service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'GOOGLE_CLIENT_ID',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID', 'key': 'latest'}},
+                                },
+                                {
+                                    'name': 'GOOGLE_CLIENT_SECRET',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_SECRET', 'key': 'latest'}},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout=json.dumps(legacy_service))
+
+    migrated = preflight.migrate_legacy_public_bindings(
+        services=('backend',),
+        env='prod',
+        project='based-hardware',
+        region='us-central1',
+        runner=runner,
+    )
+
+    assert migrated == ['backend']
+    update = commands[-1]
+    assert update[:5] == ['gcloud', 'run', 'services', 'update', 'backend']
+    assert '--project=based-hardware' in update
+    assert '--no-traffic' in update
+    # Only the manifest-declared public setting is stripped; the real secret stays bound.
+    assert '--remove-secrets=GOOGLE_CLIENT_ID' in update
+
+
+def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
+    assert text.count('--migrate-legacy-public-binding') == 4
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert f'--migrate-legacy-public-binding {service}' in text
+    assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
 
 
 def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:
@@ -321,12 +379,33 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
         assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
         assert '--proposal-ttl-seconds 3600' in text
-        assert 'actions/upload-artifact@v4' in text
+        assert 'actions/upload-artifact@v7' in text
         assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
         assert 'if-no-files-found: error' in text
         assert 'retention-days: 1' in text
         assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
         assert 'needs: firestore_readiness' in text
+
+
+def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_are_missing() -> None:
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+    )
+
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+
+        assert 'Require read-only Firestore credentials' in readiness
+        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
+        assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
+        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
+            'Checkout approved Firestore'
+        )
+        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
+            'Google Auth for read-only Firestore inventory'
+        )
 
 
 def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
@@ -436,3 +515,48 @@ def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_templ
 
     assert 'gke/deployment: desired replicas are not all available' not in errors
     assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
+    """The rollout wait must outlast a healthy roll, not just one pod's startup.
+
+    backend-listen rolls `maxSurge + maxUnavailable` pods at a time and its
+    startupProbe alone permits `failureThreshold * periodSeconds` per pod, so a
+    wait sized for a single pod fails a healthy deploy (2026-07-17, run
+    29576112586: 28 replicas, `timed out waiting for the condition`, rollout
+    converged on its own minutes later). A stalled rollout is caught by the
+    deployment's progressDeadlineSeconds, not by this bound.
+    """
+    import re
+
+    import yaml
+
+    root = BACKEND_DIR.parent
+    values = yaml.safe_load(
+        (root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(encoding='utf-8')
+    )
+    startup = values['startupProbe']
+    per_pod_startup_seconds = startup['failureThreshold'] * startup['periodSeconds']
+    min_replicas = values['autoscaling']['minReplicas']
+    rolling = values['strategy']['rollingUpdate']
+    pods_in_flight = rolling['maxSurge'] + rolling['maxUnavailable']
+
+    # Even at the HPA floor the roll needs this many sequential waves.
+    waves = -(-min_replicas // pods_in_flight)
+    required_seconds = waves * per_pod_startup_seconds
+
+    workflows = (
+        '.github/workflows/gcp_backend.yml',
+        '.github/workflows/gcp_backend_listen_helm.yml',
+        '.github/workflows/gcp_backend_auto_dev.yml',
+    )
+    pattern = re.compile(r'rollout status deploy/\$\{\{ vars\.ENV \}\}-omi-backend-listen --timeout=(\d+)s')
+    for relative in workflows:
+        text = (root / relative).read_text(encoding='utf-8')
+        found = pattern.findall(text)
+        assert found, f'{relative} must wait on the backend-listen rollout'
+        for value in found:
+            assert int(value) >= required_seconds, (
+                f'{relative} waits {value}s on backend-listen, but a roll at the HPA floor needs '
+                f'>= {required_seconds}s ({waves} waves x {per_pod_startup_seconds}s startup budget)'
+            )
