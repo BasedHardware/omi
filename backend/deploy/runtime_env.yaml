@@ -8,7 +8,7 @@ environments:
       namespace: dev-omi-backend
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
-      static_address_name: dev-omi-self-hosted-llm-ip-address
+      static_address_name: dev-llm-gateway-ilb-ip-address
     gke:
       backend-listen:
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml

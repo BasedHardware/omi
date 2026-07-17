@@ -104,6 +104,17 @@ def test_prod_gateway_wiring_is_off_until_verified_promotion():
     }
 
 
+def test_gateway_runtime_static_address_matches_helm_ingress_declaration():
+    manifest = _load_yaml('deploy/runtime_env.yaml')
+
+    for environment in ('dev', 'prod'):
+        gateway = _load_yaml(f'charts/llm-gateway/{environment}_omi_llm_gateway_values.yaml')
+        assert (
+            manifest['environments'][environment]['llm_gateway']['static_address_name']
+            == gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name']
+        )
+
+
 def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     helper = (BACKEND_ROOT / 'scripts/deploy-llm-gateway.sh').read_text(encoding='utf-8')
     workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_llm_gateway.yml').read_text(encoding='utf-8')
