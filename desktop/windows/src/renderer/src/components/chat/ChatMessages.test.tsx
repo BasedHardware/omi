@@ -55,6 +55,38 @@ describe('ChatMessages copy button', () => {
   })
 })
 
+describe('ChatMessages [overlay] — pending spinner', () => {
+  it('shows the standalone spinning Omi mark (not a bubble) while the reply is pending', () => {
+    const { container } = render(
+      <ChatMessages messages={[user('hi'), assistant('')]} sending={true} variant="overlay" />
+    )
+    const spinner = screen.getByRole('status', { name: 'Omi is thinking' })
+    expect(spinner.querySelector('svg.omi-thinking-spin')).not.toBeNull()
+    // The loader is NOT itself a message bubble: only the user turn is a bubble,
+    // the pending assistant turn is the standalone spinner.
+    expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(1)
+  })
+
+  it('swaps the spinner for a bubble once the reply has content', () => {
+    const { container } = render(
+      <ChatMessages
+        messages={[user('hi'), assistant('here is your answer')]}
+        sending={true}
+        variant="overlay"
+      />
+    )
+    expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
+    // Both turns are now bubbles (the assistant bubble carries bubble-in for the
+    // pop-in); the loader is gone.
+    expect(container.querySelectorAll('[class*="group/msg"]').length).toBe(2)
+  })
+
+  it('does not use the bar spinner in the main window (keeps its own indicator)', () => {
+    render(<ChatMessages messages={[user('hi'), assistant('')]} sending={true} variant="main" />)
+    expect(screen.queryByRole('status', { name: 'Omi is thinking' })).toBeNull()
+  })
+})
+
 const image = {
   id: 'f-img',
   name: 'photo.png',

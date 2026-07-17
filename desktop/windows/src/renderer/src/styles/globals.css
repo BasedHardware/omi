@@ -616,6 +616,26 @@
     }
   }
 
+  /* Bar chat "waiting for the reply" loader — the Omi dot-ring mark spun fast, so
+     a pending assistant turn reads as a live brand spinner (standalone, no bubble)
+     instead of a bubble of dots. The graded dot opacity (set inline on the SVG)
+     gives the ring a bright head + faded tail so the rotation is unmistakable
+     despite the mark's 8-fold symmetry. The in-app reduce-motion kill-switch below
+     stops it after one turn (a static mark); per charter 03 the OS-level
+     reduced-motion path leaves loops/spinners running, so this is NOT stripped
+     there. */
+  .omi-thinking-spin {
+    animation: omiThinkingSpin 0.7s linear infinite;
+    transform-origin: 50% 50%;
+    will-change: transform;
+  }
+
+  @keyframes omiThinkingSpin {
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
   /* In-app "Reduce motion" toggle (Settings). This is the user's explicit
      "make everything instant" preference and near-zeroes ALL durations — a
      full kill-switch. It is deliberately DISTINCT from the OS-level
