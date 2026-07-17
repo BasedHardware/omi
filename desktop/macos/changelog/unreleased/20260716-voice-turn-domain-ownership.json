@@ -1,3 +1,0 @@
-{
-  "change": "Hardened push-to-talk and realtime voice reliability by enforcing one compiler-checked voice-turn lifecycle domain."
-}

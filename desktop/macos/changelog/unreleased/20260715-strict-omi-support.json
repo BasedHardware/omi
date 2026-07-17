@@ -1,3 +1,0 @@
-{
-  "change": "Made OmiSupport and its direct tests strict — complete strict concurrency and warnings-as-errors with zero diagnostics"
-}
