@@ -117,8 +117,18 @@ struct OnboardingStepScaffold<Content: View>: View {
           )
           .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-          Divider()
-            .background(OmiColors.backgroundTertiary)
+          // Directional flow: memories (left) export to your tools (right).
+          // Chip matches the chat "Ask Omi" send button.
+          ZStack {
+            Divider()
+              .background(OmiColors.backgroundTertiary)
+            Image(systemName: "arrow.right.circle.fill")
+              .scaledFont(size: 24)
+              .foregroundColor(OmiColors.accent)
+              .padding(4)
+              .background(Circle().fill(OmiColors.backgroundPrimary))
+          }
+          .fixedSize(horizontal: true, vertical: false)
 
           splitPane
             .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
