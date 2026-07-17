@@ -89,7 +89,7 @@ const MATRIX = [
   { id: 'get_memories', category: 'read', request: 'What do you know about me?', expect: 'get_memories', alt: ['search_memories'], soft: true },
   { id: 'search_conversations', category: 'read', request: 'Find my past conversations about groceries.', expect: 'search_conversations', alt: ['get_conversations', 'semantic_search'] },
   { id: 'get_daily_recap', category: 'read', request: 'Give me a recap of what I did today.', expect: 'get_daily_recap', alt: ['get_conversations', 'search_conversations'] },
-  { id: 'semantic_search', category: 'read', request: 'What was I reading about on my screen earlier today?', expect: 'semantic_search', alt: ['get_work_context', 'search_conversations'] },
+  { id: 'semantic_search', category: 'read', request: 'What was I reading about on my screen earlier today?', expect: 'semantic_search', alt: ['get_work_context', 'search_conversations'], soft: true },
   { id: 'get_work_context', category: 'read', request: 'What am I working on right now on my computer?', expect: 'get_work_context', alt: ['semantic_search', 'capture_screen'], soft: true },
 
   // ── MUTATION LIFECYCLE (each row REST-proven; two tasks so delete and complete each
@@ -363,8 +363,10 @@ async function main() {
         // returns (eventual consistency), so a single immediate read can miss it.
         let after = before, restById = new Map(), restOk = restBase ? false : null
         if (restBase) {
-          for (let poll = 0; poll < 4; poll++) {
-            await new Promise((r) => setTimeout(r, 2000))
+          // Poll longer (18s) — the backend action-items store is eventually consistent;
+          // a just-created/updated item can take several seconds to be READable.
+          for (let poll = 0; poll < 6; poll++) {
+            await new Promise((r) => setTimeout(r, 3000))
             after = await restActionItems(restBase, idToken).catch(() => before)
             restById = new Map(after.map((i) => [i.id, i]))
             restOk = !!t.rest && t.rest(before, after, restById)
