@@ -1023,6 +1023,9 @@ export type OmiBridgeApi = {
   getMicPermissionState: () => Promise<MicPermissionState>
   perfFirstPaint: () => void
   perfMark: (name: string) => void
+  /** Flip the native WCO caption cluster to the Home stage tone (onHome=true) or
+   *  the app base (false), so the buttons stay seamless across routes. Main window. */
+  setTitleBarSurface: (onHome: boolean) => void
   /** True when the main window was created with the Win11 Mica background
    *  material (22H2+). The renderer sets data-mica on the root so the canvas
    *  goes translucent; flat solid fallback everywhere else. */

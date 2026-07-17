@@ -12,7 +12,7 @@ import { join } from 'path'
 import { appendFileSync } from 'fs'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import { supportsMica } from './windowsVersion'
-import { APP_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
+import { APP_BG_HEX, HOME_BG_HEX, WCO_SYMBOL_HEX } from '../shared/chrome'
 import iconPath from '../../resources/icon.png?asset'
 import { listCaptureSources } from './ipc/capture'
 import { isAllowedExternalScheme } from './externalUrl'
@@ -461,6 +461,15 @@ function createWindow(): BrowserWindow {
       // directly behind the buttons is the page background — #0f0f0f, restored
       // as the Mica tint base in useMicaChrome, or the flat non-Mica canvas).
       //
+      // #0f0f0f is the base for every route EXCEPT Home, whose Hub paints a darker
+      // stage (--home-paper #050505); the strip matches that on Home (see TitleBar),
+      // so a static #0f0f0f cluster would read as a lighter box there. The renderer
+      // flips the overlay per route via chrome:titleBarSurface (HOME_BG_HEX on Home,
+      // APP_BG_HEX elsewhere). The CREATION color is seeded with the Home tone, not
+      // the base: the app deterministically cold-starts on Home (HashRouter '/' →
+      // /home), so seeding Home avoids a first-frame lighter-box flash before the
+      // renderer's flip lands; the flip switches it to the base when you leave Home.
+      //
       // #0f0f0f is deliberate, not a leftover. The caption seam looked wrong ONLY
       // because the Mica tint was dead code (the page rendered fully transparent,
       // so the strip was raw 100%-bleed Mica — much lighter than the opaque
@@ -470,15 +479,15 @@ function createWindow(): BrowserWindow {
       // FLATTENS the overlay alpha (rgba(15,15,15,0.82) rendered as opaque
       // ~#0e0e0e, no desktop bleed) so a translucent overlay is impossible, and
       // solids #1a1a1a / #252525 both rendered as a VISIBLY LIGHTER box around
-      // the buttons — #0f0f0f was the only seamless tone. (Trade-off: the strip
-      // is translucent and the overlay is opaque, so on a very light wallpaper
-      // the 18% bleed lifts the strip slightly above #0f0f0f — a subtle, not a
-      // box-shaped, mismatch. See PR notes.)
-      // Static is fine: the app has no theme/backdrop switching (no nativeTheme/
-      // themeSource usage), so the overlay never needs a runtime setTitleBarOverlay.
-      // Both values derive from shared/chrome (single source of truth with the
-      // renderer's Mica tint + the CSS --bg-primary / --text-tertiary tokens).
-      color: APP_BG_HEX,
+      // the buttons — the overlay renders at ~its set solid tone, so it stays
+      // seamless only when it equals the strip beneath it (why it is route-aware).
+      // (Trade-off: the strip is translucent and the overlay is opaque, so on a
+      // very light wallpaper the 18% bleed lifts the strip slightly above the
+      // overlay tone — a subtle, not a box-shaped, mismatch. See PR notes.)
+      // All tones derive from shared/chrome (single source of truth with the
+      // renderer's Mica tint + the CSS --bg-primary / --home-paper / --text-tertiary
+      // tokens).
+      color: HOME_BG_HEX,
       symbolColor: WCO_SYMBOL_HEX,
       height: 36
     },
@@ -716,6 +725,21 @@ app.whenReady().then(async () => {
   // Generic renderer-side startup mark (e.g. 'renderer:eval' once the bundle has
   // finished evaluating), recorded on the main clock to bisect startup phases.
   ipcMain.on('perf:mark', (_e, name: string) => perfMark(String(name)))
+  // Route-aware caption-overlay tone. Home paints a DARKER stage (--home-paper)
+  // than the app base (--bg-primary), and the native WCO caption cluster can't be
+  // transparent, so a static overlay color sits as a lighter box over Home's
+  // near-black strip. The renderer flips this when entering/leaving Home so the
+  // buttons blend on Home while every other route keeps the app-base tone. `onHome`
+  // is the renderer's only input; height/symbol stay fixed at the creation values.
+  ipcMain.on('chrome:titleBarSurface', (_e, onHome: boolean) =>
+    withMainWindow((win) =>
+      win.setTitleBarOverlay({
+        color: onHome ? HOME_BG_HEX : APP_BG_HEX,
+        symbolColor: WCO_SYMBOL_HEX,
+        height: 36
+      })
+    )
+  )
   // Dev-only bench IPC (bench:echo round-trip). Tree-shaken from packaged main.
   if (import.meta.env.DEV) devBench.registerBenchIpc()
   ipcMain.handle('db:remapConversationId', async (_e, fromId: string, toId: string) =>
