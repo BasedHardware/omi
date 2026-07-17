@@ -113,8 +113,8 @@ describe('assistantSettings IPC', () => {
 
     it('sanitizes a junk frequency to 0 (Off), never louder', () => {
       for (const junk of [7, 1.5, '3', -1, NaN]) {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const view = invoke('assistants:setSettings', {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           notificationFrequency: junk as any
         }) as AssistantSettingsView
         expect(view.notificationFrequency).toBe(0)
