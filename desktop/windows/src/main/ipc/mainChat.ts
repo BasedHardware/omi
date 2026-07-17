@@ -12,6 +12,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
+import { buildDesktopChatSystemPrompt } from '../agentKernel/desktopChatPrompt'
 import { formatTranscriptTail } from '../agentKernel/turnContext'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
@@ -27,15 +28,48 @@ const MAIN_CHAT_TAIL_LIMIT = 8
 /** Kernel run-lifecycle event types that mean the turn is over. */
 const TERMINAL_RUN_EVENT_TYPES = new Set(['run.succeeded', 'run.failed', 'run.cancelled'])
 
+/** The Omi desktop-chat system prompt, baked into every main-chat turn so the
+ *  model gets Omi's persona and — the point — the <initiative> guidance that
+ *  hands long/coding/research work to spawn_agent (macOS-parity auto-routing)
+ *  instead of answering in text. Computed ONCE so it is byte-identical across a
+ *  session's turns: the kernel binding is then reused rather than restarting the
+ *  pi subprocess on every message (isBindingCompatible keys on its hash). The
+ *  machine timezone is stable per process; no volatile datetime is interpolated.
+ *  Name is omitted (not available synchronously here) and reads as "the user". */
+const DESKTOP_CHAT_SYSTEM_PROMPT = buildDesktopChatSystemPrompt({
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+})
+
 /** What `runMainChatTurn` needs from the host. Defaulted to the process-wide
  *  kernel and the main-side authoritative owner; injected in tests. */
 export interface MainChatTurnDeps {
   kernel: AgentRuntimeKernel
   ownerId: string
+  /** Builds the per-turn <user_context> personalization block (memories / active
+   *  tasks / AI profile / name), or '' when there is nothing to add. Optional and
+   *  injected so tests stay hermetic; when omitted the turn carries no
+   *  personalization. The production default (defaultDeps) lazy-loads the impure
+   *  reader so mainChat's STATIC import graph never pulls in better-sqlite3 —
+   *  mainChat.test.ts must stay loadable under plain-node Vitest. Reads are fast
+   *  sync SQLite; the async signature only covers the one-time dynamic import. */
+  personalization?: () => Promise<string>
 }
 
 function defaultDeps(): MainChatTurnDeps {
-  return { kernel: getAgentRuntimeKernel(), ownerId: controlPlaneOwnerId() }
+  return {
+    kernel: getAgentRuntimeKernel(),
+    ownerId: controlPlaneOwnerId(),
+    personalization: async () => {
+      try {
+        const { readTurnPersonalization } = await import('./mainChatPersonalization')
+        return readTurnPersonalization()
+      } catch {
+        // A failed reader (or DB not ready) must never sink a chat turn — the
+        // turn just goes out without the personalization block.
+        return ''
+      }
+    }
+  }
 }
 
 function broadcast(event: MainChatEvent): void {
@@ -216,7 +250,20 @@ export async function runMainChatTurn(
     // re-seeds the reassigned chat's own history.
     const tail = kernel.getMainChatTurnTail(ownerId, MAIN_CHAT_TAIL_LIMIT, chatId)
     const history = formatTranscriptTail(tail.turns)
-    const effectivePrompt = history ? `${history}\n\n${args.prompt}` : args.prompt
+
+    // Per-turn personalization (Mac's <user_context>): the user's memories, active
+    // tasks, and AI profile, prepended to the prompt like the history tail rather
+    // than baked into the (byte-stable) system prompt — see the note over
+    // buildDesktopChatPersonalization for why this rides here. Fails open to '' so
+    // it never blocks a turn. Ordered context → history → current message, matching
+    // Mac's top-down structure (facts first, then prior turns, then the new ask).
+    const personalization = deps.personalization ? await deps.personalization() : ''
+    const contextBlocks = [personalization, history].filter(
+      (block): block is string => typeof block === 'string' && block.length > 0
+    )
+    const effectivePrompt = contextBlocks.length
+      ? `${contextBlocks.join('\n\n')}\n\n${args.prompt}`
+      : args.prompt
 
     // Record the clean user turn on the kernel transcript (empty assistant text →
     // only the user turn is appended; the run appends the assistant turn at
@@ -254,6 +301,7 @@ export async function runMainChatTurn(
       clientId,
       requestId,
       prompt: effectivePrompt,
+      systemPrompt: DESKTOP_CHAT_SYSTEM_PROMPT,
       adapterId: MAIN_CHAT_ADAPTER_ID
     })
 
