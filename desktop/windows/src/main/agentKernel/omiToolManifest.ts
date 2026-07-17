@@ -453,12 +453,12 @@ const swiftToolSurfacePatches: Record<string, OmiToolSurfacePatch> = {
         "Update an existing task: mark it done, edit its text, or reschedule it. You MUST first call get_action_items to get the matching task's id, then pass that id here. Fast synchronous write.",
       schemaOverride: schema(
         {
-          id: { type: 'string', description: 'The task id from get_action_items.' },
+          action_item_id: { type: 'string', description: 'The task id from get_action_items.' },
           completed: { type: 'boolean', description: 'Set true to mark the task done.' },
           description: { type: 'string', description: 'New task text, if changing it.' },
           due_at: { type: 'string', description: 'New ISO-8601 due date/time, if rescheduling.' }
         },
-        ['id']
+        ['action_item_id']
       )
     }
   },
