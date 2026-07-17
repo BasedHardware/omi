@@ -127,8 +127,10 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
 
       - name: Run macOS-scoped manifest checks
+        env:
+          CHANGED_FILES: ${{ needs.changes.outputs.changed_files }}
         run: |
-          printf '%s\n' "${{ needs.changes.outputs.changed_files }}" > /tmp/desktop-changed-files.txt
+          printf '%s\n' "$CHANGED_FILES" > /tmp/desktop-changed-files.txt
           python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --changed-files /tmp/desktop-changed-files.txt --skip-pr-body-checks
 
       # Debug build+test only on the PR critical path. Release compile is a
