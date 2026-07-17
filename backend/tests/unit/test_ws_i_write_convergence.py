@@ -559,8 +559,8 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
         limit=10,
         offset=0,
         cursor=None,
-        device_scope="all",
-        client_device_id=None,
+        device_scope="explicit",
+        client_device_id="device-1",
         uid="uid-canonical",
         memory_runtime=runtime,
         x_app_platform=None,
@@ -574,7 +574,7 @@ def test_v3_get_routes_canonical_user_to_memory_service(monkeypatch):
         "uid-canonical",
         limit=5000,
         offset=0,
-        device_scope_request=DeviceScopeRequest(device_scope="all", client_device_id=None),
+        device_scope_request=DeviceScopeRequest(device_scope="explicit", client_device_id="device-1"),
         include_pending_processing=True,
     )
     legacy_get.assert_not_called()

@@ -217,7 +217,7 @@ def test_production_default_dependency_is_disabled_and_preserves_legacy_get_beha
         {"uid": "secret-uid-123", "limit": 5000, "offset": 0},
         {"uid": "secret-uid-123", "limit": 17, "offset": 3},
     ]
-    assert module.get_v3_get_runtime().enabled is False
+    assert module.get_v3_get_runtime(uid="secret-uid-123").enabled is False
     assert counters.mutation_calls == []
 
 

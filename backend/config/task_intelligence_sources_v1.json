@@ -36,6 +36,7 @@
         "desktop/macos/Desktop/Sources/MainWindow/Dashboard/WhatMattersNowSection.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/DashboardPage.swift",
         "desktop/macos/Desktop/Sources/MainWindow/Pages/TasksPage.swift",
+        "desktop/macos/Desktop/Sources/MainWindow/ChatFirst/ChatFirstTasksPage.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift",
         "desktop/macos/Desktop/Sources/Onboarding/OnboardingView.swift"

@@ -6,6 +6,7 @@ import database.candidates as candidates_db
 from models.candidate import CandidateCreate, CandidateRecord, CandidateStatus
 from models.task_intelligence import TaskWorkflowControl
 import routers.staged_tasks as staged_router
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.staged_migration import migrate_staged_tasks, proposal_from_legacy_staged
 
@@ -135,6 +136,7 @@ def test_legacy_proposal_has_envelope_authority_and_no_score_semantics():
 
 
 def test_read_mode_staged_create_projects_candidate_without_staged_write(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'user-1')
     control = TaskWorkflowControl(workflow_mode='read', account_generation=5)
     monkeypatch.setattr(staged_router.task_control_db, 'get_task_workflow_control', lambda uid: control)
     monkeypatch.setattr(
@@ -163,6 +165,7 @@ def test_read_mode_staged_create_projects_candidate_without_staged_write(monkeyp
 
 
 def test_read_compatibility_only_projects_and_clears_legacy_task_creates(monkeypatch):
+    set_canonical_cohort(monkeypatch, 'user-1')
     now = datetime(2026, 7, 9, tzinfo=timezone.utc)
 
     def record(candidate_id, payload):

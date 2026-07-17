@@ -186,8 +186,8 @@ class TestModeAwareSidecarReconciliation:
     @staticmethod
     def _write_control(monkeypatch):
         monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
+            r,
+            '_effective_control',
             lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=7),
         )
 
@@ -429,8 +429,8 @@ class TestModeAwareSidecarReconciliation:
 
     def test_read_mode_legacy_migrations_are_noops(self, monkeypatch):
         monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
+            r,
+            '_effective_control',
             lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
         )
         monkeypatch.setattr(
@@ -449,8 +449,8 @@ class TestModeAwareSidecarReconciliation:
 
     def test_read_mode_by_id_routes_ignore_non_staged_candidates(self, monkeypatch):
         monkeypatch.setattr(
-            r.task_control_db,
-            'get_task_workflow_control',
+            r,
+            '_effective_control',
             lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=7),
         )
         proposal = CandidateCreate.model_validate(
