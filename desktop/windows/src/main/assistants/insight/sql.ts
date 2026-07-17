@@ -335,19 +335,26 @@ function matchParen(toks: SqlToken[], openIdx: number): number {
   return -1
 }
 
-/** True iff a leading `WITH RECURSIVE` defines a CTE that references its own name in
- *  its body but has no `LIMIT` inside that body to bound generation. SQLite only
- *  permits a CTE to reference itself under `RECURSIVE`, so a non-recursive WITH can
- *  never infinite-loop; a recursive CTE whose body carries its own LIMIT terminates.
- *  An unbounded one (e.g. `WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL SELECT x+1
- *  FROM r) SELECT max(x) FROM r`) runs forever — and because the aggregate over it
- *  must fully evaluate the recursion, the outer-LIMIT wrap can't stop it. Rejected. */
-function hasUnboundedRecursiveCte(toks: SqlToken[]): boolean {
-  let i = 0
-  if (!(toks[i]?.t === 'word' && toks[i].v === 'with')) return false
-  i++
-  if (toks[i]?.t === 'word' && toks[i].v === 'recursive') i++
-  else return false
+/** True iff a `limit` keyword appears at the TOP LEVEL of a recursive CTE `body`
+ *  (paren depth 0) — the only position where a LIMIT bounds the recursion. A `LIMIT`
+ *  smuggled inside a nested subquery (`… WHERE x < (SELECT 1 LIMIT 1)`) does NOT
+ *  terminate the recursion, so it must not count as a bound (that was a bypass: the
+ *  old any-depth scan let an unbounded recursion masquerade as bounded). */
+function bodyHasBoundingLimit(body: SqlToken[]): boolean {
+  let depth = 0
+  for (const t of body) {
+    if (t.t === 'punct' && t.v === '(') depth++
+    else if (t.t === 'punct' && t.v === ')') depth--
+    else if (depth === 0 && t.t === 'word' && t.v === 'limit') return true
+  }
+  return false
+}
+
+/** Given the index of the first CTE name right after `WITH RECURSIVE`, return true
+ *  iff any CTE in that comma-separated list references its own name in its body but
+ *  has no top-level `LIMIT` to bound generation. */
+function recursiveCteListIsUnbounded(toks: SqlToken[], start: number): boolean {
+  let i = start
   for (;;) {
     const nameTok = toks[i]
     if (!nameTok || (nameTok.t !== 'word' && nameTok.t !== 'ident')) return false
@@ -365,8 +372,7 @@ function hasUnboundedRecursiveCte(toks: SqlToken[]): boolean {
     if (bodyClose < 0) return false
     const body = toks.slice(i + 1, bodyClose)
     const selfRef = body.some((t) => (t.t === 'word' || t.t === 'ident') && t.v === name)
-    const bodyHasLimit = body.some((t) => t.t === 'word' && t.v === 'limit')
-    if (selfRef && !bodyHasLimit) return true
+    if (selfRef && !bodyHasBoundingLimit(body)) return true
     i = bodyClose + 1
     if (toks[i]?.t === 'punct' && toks[i].v === ',') {
       i++
@@ -374,6 +380,29 @@ function hasUnboundedRecursiveCte(toks: SqlToken[]): boolean {
     }
     return false
   }
+}
+
+/** True iff the query contains an unbounded recursive CTE: a `WITH RECURSIVE` whose
+ *  CTE references its own name with no top-level `LIMIT` in its body. SQLite only
+ *  permits a CTE to reference itself under `RECURSIVE`, so a non-recursive WITH can
+ *  never infinite-loop; a recursive CTE whose body carries a top-level LIMIT
+ *  terminates. An unbounded one (e.g. `WITH RECURSIVE r(x) AS (SELECT 1 UNION ALL
+ *  SELECT x+1 FROM r) SELECT max(x) FROM r`) runs forever — and because an aggregate
+ *  over it must fully evaluate the recursion, the outer-LIMIT wrap can't stop it.
+ *  Scanned at EVERY `WITH RECURSIVE` site, not just a leading one, so a recursive CTE
+ *  nested inside a subquery (`SELECT * FROM (WITH RECURSIVE …) x`) is caught too. */
+function hasUnboundedRecursiveCte(toks: SqlToken[]): boolean {
+  for (let i = 0; i + 1 < toks.length; i++) {
+    if (
+      toks[i].t === 'word' &&
+      toks[i].v === 'with' &&
+      toks[i + 1].t === 'word' &&
+      toks[i + 1].v === 'recursive'
+    ) {
+      if (recursiveCteListIsUnbounded(toks, i + 2)) return true
+    }
+  }
+  return false
 }
 
 /** Keywords that end a JOIN's search for an ON/USING predicate. Hitting any of these
@@ -399,10 +428,13 @@ const JOIN_BOUNDARY_KW = new Set([
   'natural'
 ])
 
-/** Walk one FROM clause (its keyword at `fromIdx`) and report whether it lists two
- *  real tables separated by a top-level comma (`FROM a, b`) — an implicit cartesian
- *  join. A subquery after the comma (`FROM t, (SELECT …)`) is NOT flagged: it is the
- *  common 1-row scalar-cross idiom and its cardinality is unknowable here. */
+/** Walk one FROM clause (its keyword at `fromIdx`) and report whether it lists a
+ *  second top-level FROM item after a comma — a table (`FROM a, b`) OR a subquery
+ *  (`FROM a, (SELECT …)`) — an implicit cartesian join. The subquery form is flagged
+ *  too: its cardinality is unknowable here, so a many-row subquery crossed with an
+ *  aggregate / ORDER BY the outer LIMIT can't bound would freeze the sync DB call.
+ *  (The 1-row scalar-cross idiom is the collateral cost; the model can hoist the
+ *  scalar into the SELECT list or a CTE instead.) */
 function fromHasCommaJoin(toks: SqlToken[], fromIdx: number): boolean {
   let j = fromIdx + 1
   for (;;) {
@@ -430,17 +462,85 @@ function fromHasCommaJoin(toks: SqlToken[], fromIdx: number): boolean {
     const comma = toks[j]
     if (comma && comma.t === 'punct' && comma.v === ',') {
       const after = toks[j + 1]
-      if (after && (after.t === 'word' || after.t === 'ident')) return true
-      j++ // subquery after comma → keep walking, don't flag
-      continue
+      // A second top-level FROM item after the comma — a table (`FROM a, b`) OR a
+      // subquery (`FROM a, (SELECT …)`) — is an implicit cartesian. Both are flagged.
+      if (
+        after &&
+        (after.t === 'word' || after.t === 'ident' || (after.t === 'punct' && after.v === '('))
+      ) {
+        return true
+      }
+      return false
     }
     return false
   }
 }
 
-/** True iff the JOIN keyword at `joinIdx` has no ON/USING predicate before the next
- *  clause boundary — a cartesian product. Depth-tracked so predicates/keywords
- *  inside a joined subquery don't confuse the scan. */
+/** Words that can appear in a join predicate WITHOUT being a column reference:
+ *  logical/comparison operator keywords and the literal keywords. An ON predicate
+ *  that contains none of these AND no other identifier references no column, so it is
+ *  a constant (tautological) predicate — a cartesian in disguise. */
+const NON_COLUMN_PREDICATE_WORDS = new Set([
+  'and',
+  'or',
+  'not',
+  'is',
+  'in',
+  'between',
+  'like',
+  'glob',
+  'match',
+  'regexp',
+  'exists',
+  'escape',
+  'collate',
+  'distinct',
+  'case',
+  'when',
+  'then',
+  'else',
+  'end',
+  'cast',
+  'as',
+  'null',
+  'true',
+  'false',
+  'current_date',
+  'current_time',
+  'current_timestamp'
+])
+
+/** True iff the `ON` predicate beginning at `onIdx` references no column — i.e. it is
+ *  built only from constants/operators (`ON 1=1`, `ON true`, `ON 'x'='x'`). Such a
+ *  predicate imposes no correlation between the joined relations, so the JOIN is a
+ *  cartesian product. A predicate that names any column (`ON a.id = b.frame_id`, even
+ *  one nested in a subquery) is a real one and passes. The scan stops at the depth-0
+ *  clause boundary that ends the ON predicate. */
+function onPredicateIsConstant(toks: SqlToken[], onIdx: number): boolean {
+  let depth = 0
+  for (let k = onIdx + 1; k < toks.length; k++) {
+    const t = toks[k]
+    if (t.t === 'punct') {
+      if (t.v === '(') depth++
+      else if (t.v === ')') {
+        if (depth === 0) break
+        depth--
+      }
+      continue
+    }
+    if (depth === 0 && t.t === 'word' && JOIN_BOUNDARY_KW.has(t.v)) break
+    if ((t.t === 'word' || t.t === 'ident') && !NON_COLUMN_PREDICATE_WORDS.has(t.v)) {
+      return false // references something column-like → a real join predicate
+    }
+  }
+  return true
+}
+
+/** True iff the JOIN keyword at `joinIdx` has no *real* ON/USING predicate before the
+ *  next clause boundary — a cartesian product. A `USING` always names a column, so it
+ *  is always real; an `ON` whose predicate is a constant tautology (`ON 1=1`) is NOT
+ *  a real correlation and is treated as a missing predicate. Depth-tracked so
+ *  predicates/keywords inside a joined subquery don't confuse the scan. */
 function joinLacksPredicate(toks: SqlToken[], joinIdx: number): boolean {
   let depth = 0
   for (let k = joinIdx + 1; k < toks.length; k++) {
@@ -455,7 +555,8 @@ function joinLacksPredicate(toks: SqlToken[], joinIdx: number): boolean {
     }
     if (depth !== 0) continue
     if (t.t === 'word') {
-      if (t.v === 'on' || t.v === 'using') return false
+      if (t.v === 'using') return false // USING always names a column
+      if (t.v === 'on') return onPredicateIsConstant(toks, k) // ON 1=1 is a cartesian in disguise
       if (JOIN_BOUNDARY_KW.has(t.v)) return true
     }
   }
