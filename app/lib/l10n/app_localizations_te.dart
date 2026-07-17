@@ -9646,4 +9646,8 @@ class AppLocalizationsTe extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'కనెక్షన్ లేదు — స్థానికంగా రికార్డ్ చేయబడుతోంది. మీరు మళ్లీ ఆన్‌లైన్‌కి వచ్చినప్పుడు దీన్ని ట్రాన్స్‌క్రైబ్ చేయబడుతుంది.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'మీ డేటా డిఫాల్ట్‌గా బలమైన ఎన్‌క్రిప్షన్‌తో సురక్షితం చేయబడుతుంది, మరియు అది ఎలా నిల్వ చేయబడుతుందో మరియు ఉపయోగించబడుతుందో మీరు నియంత్రిస్తారు.';
 }

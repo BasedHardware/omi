@@ -9599,4 +9599,8 @@ class AppLocalizationsCs extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána.';
 }

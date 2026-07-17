@@ -9625,4 +9625,8 @@ class AppLocalizationsPl extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Twoje dane są domyślnie zabezpieczone silnym szyfrowaniem, a Ty decydujesz o tym, jak są przechowywane i wykorzystywane.';
 }

@@ -9619,4 +9619,8 @@ class AppLocalizationsUk extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Немає з\'єднання — запис ведеться локально. Розшифрування виконається, коли ви знову будете онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ваші дані за замовчуванням захищені надійним шифруванням, і ви контролюєте, як вони зберігаються та використовуються.';
 }

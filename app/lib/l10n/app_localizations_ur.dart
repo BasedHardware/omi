@@ -9612,4 +9612,8 @@ class AppLocalizationsUr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'کوئی کنکشن نہیں — مقامی طور پر ریکارڈنگ ہو رہی ہے۔ جب آپ دوبارہ آن لائن ہوں گے تو اسے نقل کر دیا جائے گا۔';
+
+  @override
+  String get dataEncryptedBanner =>
+      'آپ کا ڈیٹا بطورِ ڈیفالٹ مضبوط خفیہ کاری سے محفوظ ہے، اور یہ کیسے محفوظ اور استعمال کیا جاتا ہے اس پر آپ کا کنٹرول رہتا ہے۔';
 }

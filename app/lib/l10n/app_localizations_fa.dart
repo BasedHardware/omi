@@ -9600,4 +9600,8 @@ class AppLocalizationsFa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند.';
 }

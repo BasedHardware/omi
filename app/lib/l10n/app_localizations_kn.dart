@@ -9629,4 +9629,8 @@ class AppLocalizationsKn extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'ಸಂಪರ್ಕವಿಲ್ಲ — ಸ್ಥಳೀಯವಾಗಿ ರೆಕಾರ್ಡ್ ಮಾಡಲಾಗುತ್ತಿದೆ. ನೀವು ಮತ್ತೆ ಆನ್‌ಲೈನ್‌ಗೆ ಬಂದಾಗ ಇದನ್ನು ಟ್ರಾನ್ಸ್‌ಕ್ರೈಬ್ ಮಾಡಲಾಗುತ್ತದೆ.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'ನಿಮ್ಮ ಡೇಟಾ ಪೂರ್ವನಿಯೋಜಿತವಾಗಿ ಬಲವಾದ ಎನ್‌ಕ್ರಿಪ್ಶನ್‌ನಿಂದ ಸುರಕ್ಷಿತವಾಗಿದೆ, ಮತ್ತು ಅದನ್ನು ಹೇಗೆ ಸಂಗ್ರಹಿಸಲಾಗುತ್ತದೆ ಮತ್ತು ಬಳಸಲಾಗುತ್ತದೆ ಎಂಬುದನ್ನು ನೀವು ನಿಯಂತ್ರಿಸುತ್ತೀರಿ.';
 }

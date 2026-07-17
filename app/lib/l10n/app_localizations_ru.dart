@@ -9634,4 +9634,8 @@ class AppLocalizationsRu extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Нет подключения — запись ведётся локально. Расшифровка выполнится, когда вы снова будете в сети.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ваши данные по умолчанию защищены надёжным шифрованием, и вы контролируете, как они хранятся и используются.';
 }

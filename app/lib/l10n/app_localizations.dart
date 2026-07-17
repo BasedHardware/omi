@@ -17888,6 +17888,12 @@ abstract class AppLocalizations {
   /// In en, this message translates to:
   /// **'No connection — recording locally. It will be transcribed when you\'re back online.'**
   String get phoneMicOfflineFallbackMessage;
+
+  /// Data privacy page banner summarizing encryption and user control
+  ///
+  /// In en, this message translates to:
+  /// **'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.'**
+  String get dataEncryptedBanner;
 }
 
 class _AppLocalizationsDelegate extends LocalizationsDelegate<AppLocalizations> {

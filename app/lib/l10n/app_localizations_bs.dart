@@ -9625,4 +9625,8 @@ class AppLocalizationsBs extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nema veze — snima se lokalno. Bit će transkribirano kada ponovo budete na mreži.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaši podaci su prema zadanim postavkama zaštićeni jakom enkripcijom, a vi kontrolišete kako se pohranjuju i koriste.';
 }
