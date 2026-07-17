@@ -433,7 +433,7 @@ def _process_chat_tools_manifest(external_integration: dict, app_dict: dict) -> 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
         # Resolve relative endpoints to absolute URLs
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
@@ -1120,7 +1120,7 @@ def refresh_app_manifest(app_id: str, uid: str = Depends(auth.get_current_user_u
 
     fetched_tools = manifest_result.get('tools')
     if fetched_tools:
-        base_url = external_integration.get('app_home_url', '').rstrip('/')
+        base_url = (external_integration.get('app_home_url') or '').rstrip('/')
         if base_url:
             for tool in fetched_tools:
                 endpoint = tool.get('endpoint', '')
