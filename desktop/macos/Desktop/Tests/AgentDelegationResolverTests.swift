@@ -5,7 +5,7 @@ import XCTest
 final class AgentDelegationBoundaryTests: XCTestCase {
   func testKernelControlPlaneIsOnlyProductionProviderSpawnBoundary() throws {
     // omi-test-quality: source-inspection -- static contract: no Swift semantic router may interpret user wording into a provider spawn.
-    let realtime = try sourceFile("FloatingControlBar/RealtimeHubController.swift")
+    let realtime = try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
     let floating = try sourceFile("FloatingControlBar/FloatingControlBarWindow.swift")
     let pills = try sourceFile("FloatingControlBar/AgentPill.swift")
     let coordinator = try sourceFile("Chat/DesktopCoordinatorService.swift")

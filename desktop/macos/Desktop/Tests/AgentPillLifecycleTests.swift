@@ -1100,13 +1100,13 @@ import XCTest
     // an explicit owner so the next PTT is classified correctly and non-barge-in
     // starts do not blindly stop the player.
     XCTAssertFalse(source.contains("private var realtimePlaybackActive = false"))
-    XCTAssertTrue(source.contains("private var reducerNativePlaybackActive: Bool"))
+    XCTAssertTrue(source.contains("var reducerNativePlaybackActive: Bool"))
     XCTAssertTrue(source.contains("let voicePlaybackActive = FloatingBarVoicePlaybackService.shared.isSpeaking"))
     XCTAssertTrue(
       source.contains("let bargeIn = providerResponseInFlight || reducerNativePlaybackActive || voicePlaybackActive"))
     XCTAssertTrue(source.contains("if bargeIn {\n      pcmPlayer?.stop()"))
     XCTAssertTrue(source.contains("audioReceivedThisTurn = true\n    realtimePlaybackEpoch = pcmPlayer.playbackEpoch"))
-    XCTAssertTrue(source.contains("private var realtimePlaybackEpoch = 0"))
+    XCTAssertTrue(source.contains("var realtimePlaybackEpoch = 0"))
     XCTAssertTrue(source.contains("player.onPlaybackScheduled = { [weak self] playbackEpoch in"))
     XCTAssertTrue(source.contains("self.realtimePlaybackEpoch = playbackEpoch"))
     XCTAssertTrue(source.contains("player.onPlaybackIdle = { [weak self] playbackEpoch in"))
@@ -1127,12 +1127,12 @@ import XCTest
     // replacement session instead of dropping captured speech.
     XCTAssertTrue(sessionSource.contains("enum RealtimeHubBargeInStrategy"))
     XCTAssertTrue(sessionSource.contains("provider == .gemini ? .freshSession : .inSessionCancel"))
-    XCTAssertTrue(hubSource.contains("private var sessionAuth: HubAuth?"))
+    XCTAssertTrue(hubSource.contains("var sessionAuth: HubAuth?"))
     let inputAdmissionSource = try realtimeHubInputAdmissionSource()
     XCTAssertTrue(inputAdmissionSource.contains("struct RealtimeReplacementAudioBuffer"))
-    XCTAssertTrue(hubSource.contains("private var replacementAudioBuffer: RealtimeReplacementAudioBuffer?"))
+    XCTAssertTrue(hubSource.contains("var replacementAudioBuffer: RealtimeReplacementAudioBuffer?"))
     XCTAssertTrue(hubSource.contains("func commitTurn() -> RealtimeHubCommitResult"))
-    XCTAssertTrue(hubSource.contains("private func restartSessionForBargeIn("))
+    XCTAssertTrue(hubSource.contains("func restartSessionForBargeIn("))
     XCTAssertTrue(hubSource.contains("interruptedTurnTask: Task<InterruptedTurnPayload?, Never>?"))
     XCTAssertTrue(
       hubSource.contains("case .ephemeral:\n            self.remintReplacementSessionForBargeIn(provider: provider)"))
@@ -1146,11 +1146,9 @@ import XCTest
     XCTAssertTrue(hubSource.contains("return .deferredForReplacement"))
     XCTAssertTrue(hubSource.contains("return .rejectedNoSession"))
     XCTAssertTrue(hubSource.contains("failBargeInReplacement(provider: provider, reason: error.localizedDescription)"))
-    XCTAssertTrue(hubSource.contains("directGeminiScreenInput(for: turnID)"))
-    XCTAssertTrue(hubSource.contains("direct_input_scheduled"))
-    XCTAssertTrue(hubSource.contains("session.sendVideoFrame(attachment.jpeg, mime: \"image/jpeg\")"))
-    XCTAssertTrue(sessionSource.contains("var supportsDirectPTTScreenInput: Bool { provider == .gemini }"))
-    XCTAssertTrue(sessionSource.contains("func sendPTTScreenContextMetadata"))
+    XCTAssertFalse(hubSource.contains("attachGeminiScreenFrameAfterActivityStartIfNeeded"))
+    XCTAssertFalse(hubSource.contains("attached early in-turn screen frame after activityStart"))
+    XCTAssertFalse(hubSource.contains("attachGeminiScreenFrameBeforeCommitIfNeeded"))
     XCTAssertFalse(hubSource.contains("speculativeScreenshot"))
     XCTAssertTrue(hubSource.contains("case .screenshot:"))
     XCTAssertFalse(hubSource.contains("ScreenCaptureManager.captureScreenJPEG"))
@@ -1192,9 +1190,9 @@ import XCTest
     XCTAssertTrue(hubSource.contains("interrupting: providerResponseInFlight"))
     XCTAssertFalse(hubSource.contains("attachGeminiScreenFrameAfterActivityStartIfNeeded"))
     XCTAssertTrue(hubSource.contains("session?.cancelActiveResponse()"))
-    XCTAssertTrue(hubSource.contains("private func isCurrentSession(_ source: RealtimeHubSession) -> Bool"))
+    XCTAssertTrue(hubSource.contains("func isCurrentSession(_ source: RealtimeHubSession) -> Bool"))
     XCTAssertTrue(hubSource.contains("guard isCurrentSession(source) else { return }"))
-    XCTAssertTrue(hubSource.contains("private func sendToolResultIfCurrent("))
+    XCTAssertTrue(hubSource.contains("func sendToolResultIfCurrent("))
     XCTAssertFalse(hubSource.contains("self.session?.sendToolResult(callId: callId"))
     XCTAssertTrue(sessionSource.contains("delegate.hubDidReceiveAudio(pcm, identity: identity, source: self)"))
     XCTAssertTrue(sessionSource.contains("guard isCurrentOpenAIResponseEvent(e) else"))
@@ -1265,7 +1263,7 @@ import XCTest
       hubSource.contains("let shouldRedactProviderMessage: Bool"),
       "Credential close logs must redact raw provider auth/quota payloads")
     XCTAssertTrue(
-      hubSource.contains("private func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
+      hubSource.contains("func shouldFailoverToAlternate(for failureClass: CredentialFailureClass?) -> Bool"),
       "Provider switching must be centralized and limited to stable credential/quota failures")
     XCTAssertFalse(
       hubSource.contains("if aliveFor < 10, failoverToAlternateProvider() { return }\n    // Re-warm"),
@@ -1840,11 +1838,7 @@ import XCTest
   }
 
   private func realtimeHubControllerSource() throws -> String {
-    let sourceURL = URL(fileURLWithPath: #filePath)
-      .deletingLastPathComponent()
-      .deletingLastPathComponent()
-      .appendingPathComponent("Sources/FloatingControlBar/RealtimeHubController.swift")
-    return try String(contentsOf: sourceURL, encoding: .utf8)
+    try RealtimeHubControllerSourceTestSupport.moduleSource(testFilePath: #filePath)
   }
 
   private func realtimeHubInputAdmissionSource() throws -> String {
