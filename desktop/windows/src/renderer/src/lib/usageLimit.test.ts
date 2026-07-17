@@ -4,6 +4,7 @@ import {
   showUsageLimit,
   dismissUsageLimit,
   maybeTriggerChatQuotaPopup,
+  maybeTriggerTranscriptionQuotaPopup,
   __resetUsageLimitSession,
   type UsageLimitReason
 } from './usageLimit'
@@ -53,5 +54,44 @@ describe('maybeTriggerChatQuotaPopup', () => {
   it('stays silent when the quota probe fails', async () => {
     const fetchQuota = vi.fn().mockRejectedValue(new Error('network'))
     expect(await maybeTriggerChatQuotaPopup(fetchQuota)).toBe(false)
+  })
+})
+
+describe('maybeTriggerTranscriptionQuotaPopup', () => {
+  // The message the capture window surfaces on a 1008 free-quota close.
+  const QUOTA_ERR =
+    'free Omi transcription quota is used up (1008) — add an Omi subscription or sign in with an entitled account to keep transcribing'
+
+  it('raises the transcription popup once when a quota-exhausted error status arrives', () => {
+    const seen: (UsageLimitReason | null)[] = []
+    onUsageLimit((r) => seen.push(r))
+
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
+    expect(seen.at(-1)).toBe('transcription')
+
+    // Repeated error callbacks for the same exhaustion must not re-raise it.
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(false)
+    expect(seen.filter((r) => r === 'transcription')).toHaveLength(1)
+  })
+
+  it('does not raise the popup for a normal (non-quota) error', () => {
+    const seen: (UsageLimitReason | null)[] = []
+    onUsageLimit((r) => seen.push(r))
+    expect(maybeTriggerTranscriptionQuotaPopup('error', 'microphone unavailable')).toBe(false)
+    expect(maybeTriggerTranscriptionQuotaPopup('error', undefined)).toBe(false)
+    expect(seen).toEqual([null]) // only the immediate current value; never 'transcription'
+  })
+
+  it('does not raise the popup for a healthy status', () => {
+    expect(maybeTriggerTranscriptionQuotaPopup('live')).toBe(false)
+    expect(maybeTriggerTranscriptionQuotaPopup('connecting')).toBe(false)
+  })
+
+  it('re-arms after recovery so a later exhaustion shows again', () => {
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
+    // A non-error status re-arms the latch...
+    expect(maybeTriggerTranscriptionQuotaPopup('live')).toBe(false)
+    // ...so a fresh exhaustion raises the popup a second time.
+    expect(maybeTriggerTranscriptionQuotaPopup('error', QUOTA_ERR)).toBe(true)
   })
 })
