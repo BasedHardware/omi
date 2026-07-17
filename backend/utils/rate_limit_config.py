@@ -121,6 +121,12 @@ RATE_POLICIES: dict[str, tuple[int, int]] = {
     # TTS — ElevenLabs proxy. Coarse outer ring; fine-grained burst + daily
     # char caps are enforced in database.redis_db.check_tts_rate_limit.
     "tts:synthesize": (300, 3600),
+    # Auth / identity. /v1/auth/me resolves the caller's Firebase Auth profile via
+    # a Firebase Admin get_user lookup (an external, quota-metered call), unlike the
+    # Firestore-backed self-reads that run unbounded. A generous per-UID cap bounds
+    # abuse of that external call without throttling normal app-launch / token-refresh
+    # polling of a rarely-changing self identity.
+    "auth:me": (300, 3600),
 }
 
 

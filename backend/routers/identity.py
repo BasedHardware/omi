@@ -29,7 +29,7 @@ class IdentityResponse(BaseModel):
 
 
 @router.get('/v1/auth/me', response_model=IdentityResponse, tags=['auth'])
-def get_my_identity(uid: str = Depends(auth.get_current_user_uid)):
+def get_my_identity(uid: str = Depends(auth.with_rate_limit(auth.get_current_user_uid, "auth:me"))):
     """Return the authenticated caller's Firebase Auth identity profile.
 
     A plain def endpoint: get_user_from_uid is a blocking Firebase call and FastAPI runs
@@ -37,6 +37,11 @@ def get_my_identity(uid: str = Depends(auth.get_current_user_uid)):
     or unknown). response_model pins the returned fields to a minimal identity set (uid, email,
     email_verified, display_name, photo_url) so phone number, account-state flags, or any other
     Firebase profile field cannot leak.
+
+    Rate limited per UID ("auth:me"): the underlying get_user_from_uid is a Firebase Admin
+    lookup against an external, quota-metered service, so an unbounded self-read here would let a
+    single caller burn that external budget. The cap is generous enough not to throttle normal
+    app-launch / token-refresh polling.
     """
     user = get_user_from_uid(uid)
     if not user:

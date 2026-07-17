@@ -1091,10 +1091,10 @@ routes:
         scopes: []
       byok: not_applicable
       rate_limit:
-        policy_name: none
-        key_subject: none
-        enforcement: none
-        placement: none
+        policy_name: auth:me
+        key_subject: uid
+        enforcement: fail_open
+        placement: dependency
       timeout_class: default_method
       surface: first_party_app
       visibility: first_party
