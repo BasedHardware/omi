@@ -1,0 +1,9 @@
+{
+  "schema_version": 1,
+  "id": "FC-workflow-executable-assumption",
+  "violated_contract": "A deployment workflow must not directly execute a repository script unless its executable mode is a checked-in and verified part of the workflow contract.",
+  "canonical_prevention": "Invoke repository scripts through an explicit interpreter at workflow boundaries, then cover every caller with a deployment-contract test so Git mode assumptions cannot block a rollout before promotion.",
+  "evidence_prs": [9943],
+  "scope_hints": [".github/workflows/**", "backend/scripts/**", "backend/tests/unit/test_*deploy_contract.py"],
+  "status": "open"
+}
