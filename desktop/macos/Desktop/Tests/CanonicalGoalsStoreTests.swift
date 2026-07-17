@@ -4,7 +4,7 @@ import XCTest
 
 @MainActor
 final class CanonicalGoalsStoreTests: XCTestCase {
-  func testLoadProjectsFocusedGoalAheadOfOtherActiveGoals() async {
+  func testLoadProjectsFocusedGoalAheadOfOtherActiveGoals() async throws {
     let api = FakeCanonicalGoalsClient()
     api.goals = [
       goal(id: "background", status: .background, rank: nil),
@@ -13,7 +13,7 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     let owner = TestOwner("owner-a")
     let store = CanonicalGoalsStore(client: api, ownerIDProvider: { owner.value })
 
-    store.activate(capability: capability(generation: 7))
+    store.activate(capability: try capability(generation: 7))
     await store.load()
 
     XCTAssertEqual(store.primaryFocusedGoal?.goalId, "focused")
@@ -22,7 +22,7 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     XCTAssertEqual(api.goalRequestOwnerIDs, ["owner-a"])
   }
 
-  func testSetFocusUsesSampledGenerationPrimaryReplacementAndReconciles() async {
+  func testSetFocusUsesSampledGenerationPrimaryReplacementAndReconciles() async throws {
     let api = FakeCanonicalGoalsClient()
     api.goals = [
       goal(id: "focused", status: .focused, rank: 0),
@@ -35,7 +35,7 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     let owner = TestOwner("owner-a")
     let store = CanonicalGoalsStore(client: api, ownerIDProvider: { owner.value })
 
-    store.activate(capability: capability(generation: 12))
+    store.activate(capability: try capability(generation: 12))
     await store.load()
     let updated = await store.setAsFocus(goalID: "background")
 
@@ -49,13 +49,13 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     XCTAssertEqual(store.primaryFocusedGoal?.goalId, "background")
   }
 
-  func testUnavailableProjectionClearsCanonicalDataAndDoesNotRetainPriorOwnerState() async {
+  func testUnavailableProjectionClearsCanonicalDataAndDoesNotRetainPriorOwnerState() async throws {
     let api = FakeCanonicalGoalsClient()
     api.goals = [goal(id: "owner-a", status: .focused, rank: 0)]
     let owner = TestOwner("owner-a")
     let store = CanonicalGoalsStore(client: api, ownerIDProvider: { owner.value })
 
-    store.activate(capability: capability(generation: 7))
+    store.activate(capability: try capability(generation: 7))
     await store.load()
     XCTAssertEqual(store.goals.map(\.goalId), ["owner-a"])
 
@@ -66,13 +66,13 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     XCTAssertEqual(store.availability, .unavailable("Goals are unavailable right now. Try again."))
   }
 
-  func testUnavailableProjectionClearsDataWhenCanonicalFetchFails() async {
+  func testUnavailableProjectionClearsDataWhenCanonicalFetchFails() async throws {
     let api = FakeCanonicalGoalsClient()
     api.goals = [goal(id: "focused", status: .focused, rank: 0)]
     let owner = TestOwner("owner-a")
     let store = CanonicalGoalsStore(client: api, ownerIDProvider: { owner.value })
 
-    store.activate(capability: capability(generation: 7))
+    store.activate(capability: try capability(generation: 7))
     await store.load()
     XCTAssertEqual(store.goals.map(\.goalId), ["focused"])
 
@@ -117,12 +117,14 @@ final class CanonicalGoalsStoreTests: XCTestCase {
     )
   }
 
-  private func capability(generation: Int) -> ChatFirstCapabilityProjection {
-    ChatFirstCapabilityProjection(control: OmiAPI.TaskWorkflowControl(
-      accountGeneration: generation,
-      chatFirstUi: true,
-      workflowMode: .read
-    ))!
+  private func capability(generation: Int) throws -> ChatFirstCapabilityProjection {
+    try XCTUnwrap(
+      ChatFirstCapabilityProjection(
+        control: OmiAPI.TaskWorkflowControl(
+          accountGeneration: generation,
+          chatFirstUi: true,
+          workflowMode: .read
+        )))
   }
 
   private func goal(id: String, status: OmiAPI.GoalStatus, rank: Int?) -> OmiAPI.GoalResponse {
@@ -166,7 +168,7 @@ private final class TestOwner {
   }
 }
 
-private final class FakeCanonicalGoalsClient: CanonicalGoalsClient {
+private final class FakeCanonicalGoalsClient: CanonicalGoalsClient, @unchecked Sendable {
   enum FakeError: Error {
     case missing
   }
@@ -217,13 +219,14 @@ private final class FakeCanonicalGoalsClient: CanonicalGoalsClient {
     expectedOwnerId: String?,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
   ) async throws -> OmiAPI.GoalResponse {
-    focusRequests.append(FocusRequest(
-      goalID: goalID,
-      replacementGoalID: replacementGoalID,
-      accountGeneration: accountGeneration,
-      idempotencyKey: idempotencyKey,
-      expectedOwnerID: expectedOwnerId
-    ))
+    focusRequests.append(
+      FocusRequest(
+        goalID: goalID,
+        replacementGoalID: replacementGoalID,
+        accountGeneration: accountGeneration,
+        idempotencyKey: idempotencyKey,
+        expectedOwnerID: expectedOwnerId
+      ))
     guard let goal = goals.first(where: { $0.goalId == goalID }) else { throw FakeError.missing }
     hasFocused = true
     return goal

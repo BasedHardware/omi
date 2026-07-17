@@ -103,8 +103,13 @@ enum ChatContentBlockCodec {
         guard let goalId = dict["goalId"] as? String, let summary = dict["summary"] as? String else { continue }
         blocks.append(.goalLink(id: id, goalId: goalId, summary: summary))
       case "captureLink":
-        guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else { continue }
-        blocks.append(.captureLink(id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int, summary: summary))
+        guard let conversationId = dict["conversationId"] as? String, let summary = dict["summary"] as? String else {
+          continue
+        }
+        blocks.append(
+          .captureLink(
+            id: id, conversationId: conversationId, momentTimestampMs: dict["momentTimestampMs"] as? Int,
+            summary: summary))
       case "agentSpawn":
         guard let sessionId = dict["sessionId"] as? String,
           !sessionId.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty,
@@ -220,7 +225,8 @@ enum ChatContentBlockCodec {
         "summary": summary,
         "fullText": fullText,
       ]
-    case .questionCard(let id, let questionId, let text, let subjectKind, let subjectId, let options, let selectedOptionId):
+    case .questionCard(
+      let id, let questionId, let text, let subjectKind, let subjectId, let options, let selectedOptionId):
       var dictionary: [String: Any] = [
         "type": "questionCard", "id": id, "questionId": questionId, "text": text,
         "subject": ["kind": subjectKind, "id": subjectId], "options": options,

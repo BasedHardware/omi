@@ -41,12 +41,14 @@ final class ChatFirstRichBlockTests: XCTestCase {
         text: "Which goal should we focus on?",
         subjectKind: "goal",
         subjectId: "goal-1",
-        options: [[
-          "optionId": "focus-goal-1",
-          "label": "Keep this goal",
-          "preparedAnswer": "Keep goal 1 as my focus",
-          "defer": false,
-        ]]
+        options: [
+          [
+            "optionId": "focus-goal-1",
+            "label": "Keep this goal",
+            "preparedAnswer": "Keep goal 1 as my focus",
+            "defer": false,
+          ]
+        ]
       ),
       .taskCard(id: "task-card", taskId: "task-1"),
       .goalLink(id: "goal-link", goalId: "goal-1", summary: "Finish the launch plan"),
@@ -62,7 +64,9 @@ final class ChatFirstRichBlockTests: XCTestCase {
     let restored = try XCTUnwrap(ChatContentBlockCodec.decode(encoded))
     XCTAssertEqual(restored.count, blocks.count)
 
-    guard case .questionCard(_, let questionID, let text, let subjectKind, let subjectID, let options, let selectedOptionID) = restored[0]
+    guard
+      case .questionCard(
+        _, let questionID, let text, let subjectKind, let subjectID, let options, let selectedOptionID) = restored[0]
     else { return XCTFail("question card should survive persisted replay") }
     XCTAssertEqual(questionID, "question-1")
     XCTAssertEqual(text, "Which goal should we focus on?")
@@ -97,11 +101,13 @@ final class ChatFirstRichBlockTests: XCTestCase {
       text: "Which goal should we focus on?",
       subjectKind: "goal",
       subjectId: "goal-1",
-      options: [[
-        "optionId": "focus-goal-1",
-        "label": "Keep this goal",
-        "preparedAnswer": "Keep goal 1 as my focus",
-      ]],
+      options: [
+        [
+          "optionId": "focus-goal-1",
+          "label": "Keep this goal",
+          "preparedAnswer": "Keep goal 1 as my focus",
+        ]
+      ],
       selectedOptionId: "focus-goal-1"
     )
 
@@ -156,10 +162,26 @@ final class ChatFirstRichBlockTests: XCTestCase {
       richBlockRenderingEnabled: true
     )
     XCTAssertEqual(enabled.count, 4)
-    XCTAssertTrue(enabled.contains { if case .questionCard = $0 { return true }; return false })
-    XCTAssertTrue(enabled.contains { if case .taskCard = $0 { return true }; return false })
-    XCTAssertTrue(enabled.contains { if case .goalLink = $0 { return true }; return false })
-    XCTAssertTrue(enabled.contains { if case .captureLink = $0 { return true }; return false })
+    XCTAssertTrue(
+      enabled.contains {
+        if case .questionCard = $0 { return true }
+        return false
+      })
+    XCTAssertTrue(
+      enabled.contains {
+        if case .taskCard = $0 { return true }
+        return false
+      })
+    XCTAssertTrue(
+      enabled.contains {
+        if case .goalLink = $0 { return true }
+        return false
+      })
+    XCTAssertTrue(
+      enabled.contains {
+        if case .captureLink = $0 { return true }
+        return false
+      })
   }
 
   func testTaskAcknowledgementRequiresReconciledCompletedRecord() {

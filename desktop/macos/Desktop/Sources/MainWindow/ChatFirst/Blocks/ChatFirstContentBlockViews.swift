@@ -1,5 +1,5 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Question card
 
@@ -229,10 +229,11 @@ struct TaskCardView: View {
 
       // `TasksStore` owns local-first mutation and rollback. Acknowledgement
       // is derived only from its reconciled record, never from the tap.
-      guard ChatFirstTaskCardReconciliation.shouldShowCompletionAcknowledgement(
-        intendedCompletion: intendedCompletion,
-        reconciledTask: reconciledTask
-      )
+      guard
+        ChatFirstTaskCardReconciliation.shouldShowCompletionAcknowledgement(
+          intendedCompletion: intendedCompletion,
+          reconciledTask: reconciledTask
+        )
       else { return }
       OmiMotion.withGated(.spring(response: 0.26, dampingFraction: 0.72)) {
         showCompletionAcknowledgement = true

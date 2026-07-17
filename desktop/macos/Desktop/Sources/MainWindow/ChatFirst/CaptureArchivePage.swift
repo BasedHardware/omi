@@ -1,6 +1,6 @@
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Cohort-only device-capture archive. This is intentionally a read-only
 /// archive surface: no chat history, composer, search, edit, or delete paths
@@ -95,8 +95,12 @@ struct CaptureArchivePage: View {
             }
           }
           if repository.isLoadingMore {
-            HStack { Spacer(); ProgressView(); Spacer() }
-              .accessibilityLabel("Loading more Omi-device captures")
+            HStack {
+              Spacer()
+              ProgressView()
+              Spacer()
+            }
+            .accessibilityLabel("Loading more Omi-device captures")
           }
         }
         .listStyle(.plain)
@@ -355,11 +359,13 @@ struct CaptureArchivePage: View {
     let resolution = await playback.prepare(for: detail)
     if let momentTimestamp {
       let didCompleteSeek = await playback.seekToMoment(wallOffset: momentTimestamp)
-      guard CaptureFocusAcknowledgementPolicy.canAcknowledge(
-        requestedMoment: momentTimestamp,
-        resolution: resolution,
-        didCompleteSeek: didCompleteSeek
-      ) else { return }
+      guard
+        CaptureFocusAcknowledgementPolicy.canAcknowledge(
+          requestedMoment: momentTimestamp,
+          resolution: resolution,
+          didCompleteSeek: didCompleteSeek
+        )
+      else { return }
     }
     _ = navigation.acknowledgeFocus(.capture(id: id, momentTs: momentTimestamp))
   }
@@ -412,29 +418,29 @@ private struct CaptureArchiveRow: View {
   }
 }
 
-private extension ServerConversation {
-  var archiveDisplayDate: Date { startedAt ?? createdAt }
+extension ServerConversation {
+  fileprivate var archiveDisplayDate: Date { startedAt ?? createdAt }
 
-  var listMetadata: String {
+  fileprivate var listMetadata: String {
     "\(archiveDisplayDate.formatted(.relative(presentation: .named))) · \(formattedDuration)"
   }
 
-  var detailMetadata: String {
+  fileprivate var detailMetadata: String {
     let date = archiveDisplayDate.formatted(date: .abbreviated, time: .shortened)
     return "\(date) · \(formattedDuration)"
   }
 
-  var participantLabels: [String] {
+  fileprivate var participantLabels: [String] {
     Array(Set(transcriptSegments.compactMap(\.speaker))).sorted()
   }
 
-  var accessibilitySummary: String {
+  fileprivate var accessibilitySummary: String {
     "\(title), \(listMetadata), Omi-device capture"
   }
 }
 
-private extension TranscriptSegment {
-  var shortTimestamp: String {
+extension TranscriptSegment {
+  fileprivate var shortTimestamp: String {
     let totalSeconds = Int(start)
     return String(format: "%02d:%02d", totalSeconds / 60, totalSeconds % 60)
   }

@@ -70,11 +70,11 @@ final class ChatFirstPromptMaterializationCoordinatorTests: XCTestCase {
       XCTAssertNil(driver.materializationContext())
       XCTAssertFalse(
         ChatFirstPromptMaterializationPolicy.shouldStart(
-        hasChatFirstMainChatContext: false,
-        transcriptFirstPageLoaded: true,
-        isRunning: false,
-        lastAttemptAt: nil,
-        now: now
+          hasChatFirstMainChatContext: false,
+          transcriptFirstPageLoaded: true,
+          isRunning: false,
+          lastAttemptAt: nil,
+          now: now
         )
       )
     }

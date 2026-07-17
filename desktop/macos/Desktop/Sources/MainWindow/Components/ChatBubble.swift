@@ -1008,7 +1008,9 @@ enum ContentBlockGroup: Identifiable {
       case .questionCard(let id, let questionID, let text, _, _, let options, let selectedOptionID):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }
-        groups.append(.questionCard(id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
+        groups.append(
+          .questionCard(
+            id: id, questionID: questionID, text: text, options: options, selectedOptionID: selectedOptionID))
       case .taskCard(let id, let taskID):
         flushToolCalls()
         guard richBlockRenderingEnabled else { continue }

@@ -72,13 +72,14 @@ final class ChatFirstPromptMaterializationCoordinator: ObservableObject {
 
   @discardableResult
   private func requestMaterialization(windowForeground: Bool) -> Bool {
-    guard ChatFirstPromptMaterializationPolicy.shouldStart(
-      hasChatFirstMainChatContext: driver?.materializationContext() != nil,
-      transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
-      isRunning: requestTask != nil,
-      lastAttemptAt: lastAttemptAt,
-      now: now()
-    ), let driver
+    guard
+      ChatFirstPromptMaterializationPolicy.shouldStart(
+        hasChatFirstMainChatContext: driver?.materializationContext() != nil,
+        transcriptFirstPageLoaded: didLoadTranscriptFirstPage,
+        isRunning: requestTask != nil,
+        lastAttemptAt: lastAttemptAt,
+        now: now()
+      ), let driver
     else { return false }
 
     lastAttemptAt = now()

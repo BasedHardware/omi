@@ -31,6 +31,19 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(sample.variant.projection?.controlGeneration, 7)
   }
 
+  func testLegacyWorkflowMetadataCannotSuppressDerivedChatFirstCapability() throws {
+    let control = OmiAPI.TaskWorkflowControl(
+      accountGeneration: 9,
+      chatFirstUi: true,
+      workflowMode: .off
+    )
+
+    let projection = try XCTUnwrap(ChatFirstCapabilityProjection(control: control))
+
+    XCTAssertTrue(projection.chatFirstUi)
+    XCTAssertEqual(projection.controlGeneration, 9)
+  }
+
   func testMissingStaleAndOwnerChangedSamplesFailClosed() {
     var missing = ChatFirstShellCapabilitySample()
     missing.resolve(control: nil, requestedOwnerID: "owner-a", ownerIsStillCurrent: true)
@@ -46,9 +59,9 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(ownerChanged.variant.stableName, "legacy")
   }
 
-  func testNavigationPersistsOnlyRouteAndCollapseAndRetainsFocusUntilAcknowledged() {
+  func testNavigationPersistsOnlyRouteAndCollapseAndRetainsFocusUntilAcknowledged() throws {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
@@ -78,9 +91,9 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertFalse(restored.isFocusedEntityAcknowledged)
   }
 
-  func testRouteIsNotVisibleUntilTheMountedDestinationAcknowledgesIt() {
+  func testRouteIsNotVisibleUntilTheMountedDestinationAcknowledgesIt() throws {
     let suiteName = "ChatFirstShellTests.visible-route.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
@@ -100,9 +113,9 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertNil(navigation.visibleRoute)
   }
 
-  func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() {
+  func testDirectAndLegacyNavigationClearFocusAndMapToTypedRoutes() throws {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)
@@ -122,9 +135,9 @@ final class ChatFirstShellTests: XCTestCase {
     XCTAssertEqual(navigation.route, .chat)
   }
 
-  func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() {
+  func testNavigationUsesTypedOriginsWithoutEntityIdentifiersInAnalytics() throws {
     let suiteName = "ChatFirstShellTests.analytics.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
     var events: [ChatFirstAnalyticsEvent] = []
     let navigation = ChatFirstShellNavigation(defaults: defaults) { event in
@@ -148,9 +161,9 @@ final class ChatFirstShellTests: XCTestCase {
     )
   }
 
-  func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() {
+  func testRelatedGoalFocusCanLandInTasksAndAcknowledgesAfterTasksVisibility() throws {
     let suiteName = "ChatFirstShellTests.\(UUID().uuidString)"
-    let defaults = UserDefaults(suiteName: suiteName)!
+    let defaults = try XCTUnwrap(UserDefaults(suiteName: suiteName))
     defer { defaults.removePersistentDomain(forName: suiteName) }
 
     let navigation = ChatFirstShellNavigation(defaults: defaults)

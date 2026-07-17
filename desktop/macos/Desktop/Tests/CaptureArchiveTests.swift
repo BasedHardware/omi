@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
@@ -88,11 +89,13 @@ final class CaptureArchiveTests: XCTestCase {
       sources: [.omi]
     )
 
-    XCTAssertEqual(listFilters, [
-      "include_discarded=false",
-      "statuses=completed,processing",
-      "sources=omi",
-    ])
+    XCTAssertEqual(
+      listFilters,
+      [
+        "include_discarded=false",
+        "statuses=completed,processing",
+        "sources=omi",
+      ])
     XCTAssertTrue(countEndpoint.contains("sources=omi"))
     XCTAssertTrue(countEndpoint.contains("include_discarded=false"))
   }
@@ -107,7 +110,7 @@ final class CaptureArchiveTests: XCTestCase {
         duration: 40,
         capturedDuration: 45,
         spans: [
-          CaptureAudioURLSpan(fileID: "part-a", wallOffset: 12, artifactOffset: 3, length: 10),
+          CaptureAudioURLSpan(fileID: "part-a", wallOffset: 12, artifactOffset: 3, length: 10)
         ]
       ),
       pollAfterMs: nil
@@ -144,7 +147,7 @@ final class CaptureArchiveTests: XCTestCase {
         CaptureAudioURLFile(
           id: "part-a", status: "cached", signedURL: URL(string: "https://example.test/part-a.mp3"),
           contentType: "audio/mpeg", duration: 12
-        ),
+        )
       ],
       conversationAudio: nil,
       pollAfterMs: nil
@@ -154,11 +157,12 @@ final class CaptureArchiveTests: XCTestCase {
     }
   }
 
-  func testPlaybackCanRefreshAPendingCaptureWithoutChangingItsIdentity() async {
+  func testPlaybackCanRefreshAPendingCaptureWithoutChangingItsIdentity() async throws {
     let pending = CapturePlaybackResolution.pending(pollAfterMs: 1_000)
-    let ready = CapturePlaybackResolution.fileFallback(CapturePlaybackFile(
-      id: "part-a", signedURL: try! XCTUnwrap(URL(string: "https://example.test/part-a.mp3")), duration: 12
-    ))
+    let ready = CapturePlaybackResolution.fileFallback(
+      CapturePlaybackFile(
+        id: "part-a", signedURL: try XCTUnwrap(URL(string: "https://example.test/part-a.mp3")), duration: 12
+      ))
     let provider = CapturePlaybackProviderFake(resolutions: [pending, ready])
     let controller = CapturePlaybackController(provider: provider)
     let capture = archiveCapture(id: "omi-1")
@@ -174,26 +178,32 @@ final class CaptureArchiveTests: XCTestCase {
     let artifact = CapturePlaybackArtifact(
       signedURL: URL(string: "https://example.test/capture.mp3")!, duration: 20, spans: []
     )
-    XCTAssertFalse(CaptureFocusAcknowledgementPolicy.canAcknowledge(
-      requestedMoment: 3, resolution: .pending(pollAfterMs: 1000)
-    ))
-    XCTAssertFalse(CaptureFocusAcknowledgementPolicy.canAcknowledge(
-      requestedMoment: 3, resolution: .fileFallback(CapturePlaybackFile(
-        id: "part", signedURL: URL(string: "https://example.test/part.mp3")!, duration: 3
-      )), didCompleteSeek: true
-    ))
-    XCTAssertFalse(CaptureFocusAcknowledgementPolicy.canAcknowledge(
-      requestedMoment: 3, resolution: .readyAggregate(artifact), didCompleteSeek: false
-    ))
-    XCTAssertTrue(CaptureFocusAcknowledgementPolicy.canAcknowledge(
-      requestedMoment: 3, resolution: .readyAggregate(artifact), didCompleteSeek: true
-    ))
+    XCTAssertFalse(
+      CaptureFocusAcknowledgementPolicy.canAcknowledge(
+        requestedMoment: 3, resolution: .pending(pollAfterMs: 1000)
+      ))
+    XCTAssertFalse(
+      CaptureFocusAcknowledgementPolicy.canAcknowledge(
+        requestedMoment: 3,
+        resolution: .fileFallback(
+          CapturePlaybackFile(
+            id: "part", signedURL: URL(string: "https://example.test/part.mp3")!, duration: 3
+          )), didCompleteSeek: true
+      ))
+    XCTAssertFalse(
+      CaptureFocusAcknowledgementPolicy.canAcknowledge(
+        requestedMoment: 3, resolution: .readyAggregate(artifact), didCompleteSeek: false
+      ))
+    XCTAssertTrue(
+      CaptureFocusAcknowledgementPolicy.canAcknowledge(
+        requestedMoment: 3, resolution: .readyAggregate(artifact), didCompleteSeek: true
+      ))
   }
 
 }
 
 final class CaptureArchiveCacheTests: XCTestCase {
-  private var userID: String!
+  private var userID = ""
   private var userDirectory: URL?
 
   override func setUp() async throws {
@@ -262,7 +272,8 @@ private func archiveCapture(
     updatedAt: createdAt,
     startedAt: createdAt,
     finishedAt: createdAt.addingTimeInterval(60),
-    structured: Structured(title: "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
+    structured: Structured(
+      title: "Capture \(id)", overview: "Summary", emoji: "", category: "other", actionItems: [], events: []),
     transcriptSegments: [],
     transcriptSegmentsIncluded: false,
     geolocation: nil,
@@ -314,7 +325,7 @@ private final class CaptureArchiveRemoteFake: CaptureArchiveRemoteDataSource {
   }
 }
 
-private final class CaptureArchiveLocalFake: CaptureArchiveLocalDataSource {
+private final class CaptureArchiveLocalFake: CaptureArchiveLocalDataSource, @unchecked Sendable {
   var rows: [ServerConversation]
   var countValue: Int
 
@@ -329,7 +340,7 @@ private final class CaptureArchiveLocalFake: CaptureArchiveLocalDataSource {
   func store(_ conversation: ServerConversation) async throws {}
 }
 
-private final class CapturePlaybackProviderFake: CapturePlaybackProviding {
+private final class CapturePlaybackProviderFake: CapturePlaybackProviding, @unchecked Sendable {
   private var resolutions: [CapturePlaybackResolution]
   private(set) var resolveCount = 0
 
@@ -343,6 +354,6 @@ private final class CapturePlaybackProviderFake: CapturePlaybackProviding {
   }
 }
 
-private extension Array {
-  var single: Element? { count == 1 ? first : nil }
+extension Array {
+  fileprivate var single: Element? { count == 1 ? first : nil }
 }
