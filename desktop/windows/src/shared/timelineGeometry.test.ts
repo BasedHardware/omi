@@ -9,6 +9,7 @@ import {
   activitySegments,
   gapSegments,
   frameIndexAtCursor,
+  shouldRecenterTimeline,
   REWIND_BREAK_THRESHOLD_MS
 } from './timelineGeometry'
 
@@ -315,5 +316,31 @@ describe('nearestFrameIndex', () => {
     expect(nearestFrameIndex([0, 100, 200], 130)).toBe(1)
     expect(nearestFrameIndex([0, 100, 200], 160)).toBe(2)
     expect(nearestFrameIndex([], 50)).toBe(-1)
+  })
+})
+
+describe('shouldRecenterTimeline', () => {
+  const CW = 800 // viewport width → tolerance is CW/4 = 200px
+
+  it('re-centers on the initial open (scrolled to 0, playhead far to the right)', () => {
+    expect(shouldRecenterTimeline(0, CW, 1200)).toBe(true)
+  })
+
+  it('re-centers on a large seek/jump away from the current scroll', () => {
+    expect(shouldRecenterTimeline(2000, CW, 100)).toBe(true)
+  })
+
+  it('leaves a pan alone while the playhead stays within a quarter-viewport', () => {
+    // The per-frame advance while PLAYING nudges the target a few px each tick — it
+    // must not yank a bar the user just panned. 0/150/200 px off all stay put.
+    expect(shouldRecenterTimeline(1000, CW, 1000)).toBe(false)
+    expect(shouldRecenterTimeline(1000, CW, 1150)).toBe(false)
+    expect(shouldRecenterTimeline(1000, CW, 850)).toBe(false)
+    expect(shouldRecenterTimeline(1000, CW, 1200)).toBe(false) // exactly CW/4 → still tolerated
+  })
+
+  it('re-centers once the playhead drifts just past a quarter-viewport', () => {
+    expect(shouldRecenterTimeline(1000, CW, 1201)).toBe(true)
+    expect(shouldRecenterTimeline(1000, CW, 799)).toBe(true)
   })
 })
