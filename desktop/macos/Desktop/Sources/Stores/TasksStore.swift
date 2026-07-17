@@ -157,7 +157,9 @@ class TasksStore: ObservableObject {
 
   func resetSessionState() {
     ownerOperationGeneration &+= 1
-    startupMaintenanceTasks.forEach { $0.cancel() }
+    for task in startupMaintenanceTasks {
+      task.cancel()
+    }
     startupMaintenanceTasks.removeAll()
     activeMigrationLease = nil
     activeRetryLease = nil

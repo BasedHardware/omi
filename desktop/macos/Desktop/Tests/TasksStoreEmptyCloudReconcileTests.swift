@@ -443,19 +443,20 @@ final class TasksStoreEmptyCloudReconcileTests: XCTestCase {
         await MainActor.run {
           NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
         }
+      },
+      { defaults in
+        if let authOwnerID {
+          defaults.set(authOwnerID, forKey: .authUserId)
+        } else {
+          defaults.removeObject(forKey: .authUserId)
+        }
+        if let automationOverrideID {
+          defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
+        } else {
+          defaults.removeObject(forKey: .automationOwnerOverride)
+        }
       }
-    ) { defaults in
-      if let authOwnerID {
-        defaults.set(authOwnerID, forKey: .authUserId)
-      } else {
-        defaults.removeObject(forKey: .authUserId)
-      }
-      if let automationOverrideID {
-        defaults.set(automationOverrideID, forKey: .automationOwnerOverride)
-      } else {
-        defaults.removeObject(forKey: .automationOwnerOverride)
-      }
-    }
+    )
   }
 
   private func normalizedOwner(_ value: String?) -> String? {

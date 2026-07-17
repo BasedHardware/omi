@@ -81,7 +81,7 @@ enum DashboardTaskReconciliationPlanner {
     var itemsById = dashboardWindowServerItems.reduce(into: [String: TaskActionItem]()) { result, item in
       result[item.id] = item
     }
-    exactServerItemsById.values.forEach { item in
+    for item in exactServerItemsById.values {
       itemsById[item.id] = item
     }
 
