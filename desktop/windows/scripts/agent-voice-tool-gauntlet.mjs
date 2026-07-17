@@ -153,7 +153,7 @@ async function stopReplyCapture(cap) {
     const fin = () => { if (!done) { done = true; resolve() } }
     child.on('close', fin)
     try { child.stdin.write('q') } catch { /* fall through */ }
-    setTimeout(() => { try { child.kill('SIGKILL') } catch {} ; fin() }, 4000)
+    setTimeout(() => { try { child.kill('SIGKILL') } catch { /* already exiting */ } ; fin() }, 4000)
   })
 }
 
@@ -298,7 +298,7 @@ async function main() {
 
     // Snapshot action items for cleanup diff.
     let itemsBefore = []
-    for (const b of restBases) { try { itemsBefore = await restActionItems(b, idToken); break } catch {} }
+    for (const b of restBases) { try { itemsBefore = await restActionItems(b, idToken); break } catch { /* try next base */ } }
 
     // ── Drive each spoken request ──
     for (const t of TESTS) {
@@ -340,7 +340,7 @@ async function main() {
 
       const snap = await page.evaluate(() => ({ toolCalls: window.__toolCalls, recorded: window.__recorded, tev: window.__tev.filter((e) => e.type === 'tool_activity') }))
       let replyPcmBuf = null
-      try { replyPcmBuf = fs.readFileSync(replyPcm) } catch {}
+      try { replyPcmBuf = fs.readFileSync(replyPcm) } catch { /* no reply captured */ }
       const voicedMs = voicedMsOfPcm(replyPcmBuf)
 
       const toolNames = [...new Set(snap.toolCalls.map((c) => c.name).filter(Boolean))]
@@ -354,7 +354,7 @@ async function main() {
       let auditTools = []
       try {
         auditTools = [...new Set(fs.readFileSync(auditLog, 'utf8').split(/\r?\n/).filter(Boolean).map((l) => { try { return JSON.parse(l) } catch { return null } }).filter((o) => o && o.phase === 'after').map((o) => o.tool))]
-      } catch {}
+      } catch { /* no audit log */ }
 
       const toolVerdict = firedExpected.length ? 'FIRED' : firedAccepted.length ? 'FIRED(alt)' : toolNames.length ? `DIFFERENT[${toolNames}]` : 'NO-TOOL'
       const transcribed = transcript.length > 0 || toolNames.length > 0 // a tool call implies STT produced text
@@ -393,9 +393,9 @@ async function main() {
     log(`ERROR: ${e?.stack || e}`)
     exitCode = 1
   } finally {
-    try { if (app) await app.close() } catch {}
+    try { if (app) await app.close() } catch { /* already closing */ }
     restoreAudioDefaults()
-    try { fs.rmSync(ud, { recursive: true, force: true }) } catch {}
+    try { fs.rmSync(ud, { recursive: true, force: true }) } catch { /* best-effort cleanup */ }
     // ── Report ──
     log('')
     log('════════════ VOICE TOOL GAUNTLET MATRIX ════════════')
@@ -415,8 +415,8 @@ async function main() {
     if (gaps.length) log(`  GAPS: ${gaps.map((g) => `${g.id}[tool=${g.toolVerdict},spoke=${g.spoke},rec=${g.recorded}]`).join(', ')}`)
     else log('  NO GAPS — every spoken request fired a tool + recorded.')
     log('════════════════════════════════════════════════════')
-    try { fs.writeFileSync(path.join(root, 'voice-tool-gauntlet-report.json'), JSON.stringify({ runId: RUN_ID, uid, results, mainLog: mainLines.slice(-60) }, null, 2)) } catch {}
-    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch {}
+    try { fs.writeFileSync(path.join(root, 'voice-tool-gauntlet-report.json'), JSON.stringify({ runId: RUN_ID, uid, results, mainLog: mainLines.slice(-60) }, null, 2)) } catch { /* best-effort report write */ }
+    try { fs.rmSync(tmp, { recursive: true, force: true }) } catch { /* best-effort cleanup */ }
     process.exit(results.some((r) => !r.id.startsWith('—')) ? exitCode : 2)
   }
 }

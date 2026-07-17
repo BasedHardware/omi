@@ -567,7 +567,7 @@ function searchForFile(fileName, dirs) {
 
 /** Drive one real-audio PTT turn; retries up to MAX_TURN_ATTEMPTS on an
  *  STT/hold timeout (machine contention can drop a turn). */
-async function runTurn({ app, page, barPage, t, tmp, dshowName, auditLog }) {
+async function runTurn({ page, barPage, t, tmp, dshowName, auditLog }) {
   const wav = path.join(tmp, `${t.id}-req.wav`)
   sapiSpeakToWav(`Omi test fixture. ${t.request}`, wav)
 
