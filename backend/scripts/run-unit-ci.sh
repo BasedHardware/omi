@@ -49,7 +49,11 @@ selected_count="$(wc -l < "$selected_tests" | tr -d ' ')"
 reason="$(cat "$selection_reason")"
 
 PYTHON="$PYTHON_BIN" bash test-preflight.sh
-PYTHON="$PYTHON_BIN" bash scripts/typecheck.sh
+if [ "$mode" = "--all" ] || "$SCRIPT_DIR/needs-typecheck.sh" "$2"; then
+  PYTHON="$PYTHON_BIN" bash scripts/typecheck.sh
+else
+  echo "Skipping backend type check: changed paths do not affect the typed boundary."
+fi
 
 if [ "$selected_count" -eq 0 ]; then
   echo "No backend unit tests selected: $reason"

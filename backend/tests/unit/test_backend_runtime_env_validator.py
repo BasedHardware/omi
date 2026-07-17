@@ -381,7 +381,7 @@ def test_firestore_readiness_contract_requires_validation_before_artifact_upload
     workflow_path = ROOT.parent / '.github/workflows' / workflow_name
     workflow = validator._load_yaml(workflow_path)
     steps = workflow['jobs']['firestore_readiness']['steps']
-    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v4')
+    upload_index = next(index for index, step in enumerate(steps) if step.get('uses') == 'actions/upload-artifact@v7')
     upload = steps.pop(upload_index)
     validation_index = next(
         index for index, step in enumerate(steps) if step.get('id') == 'validate_firestore_proposal'
@@ -401,7 +401,7 @@ def test_firestore_readiness_contract_rejects_backend_deployment_credentials(wor
     auth = next(
         step
         for step in workflow['jobs']['firestore_readiness']['steps']
-        if step.get('uses') == 'google-github-actions/auth@v2'
+        if step.get('uses') == 'google-github-actions/auth@v3'
     )
     auth['with']['credentials_json'] = '${{ secrets.GCP_CREDENTIALS }}'
 

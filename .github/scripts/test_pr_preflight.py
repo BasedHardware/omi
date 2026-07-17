@@ -234,6 +234,67 @@ class SelectionTests(unittest.TestCase):
             self.assertEqual(result.returncode, 0, result.stdout)
             self.assertIn(str(body.resolve()), result.stdout)
 
+    def test_repo_checks_routes_metadata_events_to_the_narrow_preflight(self) -> None:
+        """Metadata-only PR updates must not restart the full hygiene suite."""
+        workflow = (REPO_ROOT / ".github/workflows/repo-checks.yml").read_text(encoding="utf-8")
+        metadata_job = workflow.split("  metadata-preflight:\n", 1)[1].split("\n  changes:\n", 1)[0]
+        changes_job = workflow.split("  changes:\n", 1)[1].split("\n  hygiene:\n", 1)[0]
+        hygiene_job = workflow.split("  hygiene:\n", 1)[1].split("\n  formatting:\n", 1)[0]
+
+        for event in ("edited", "labeled", "unlabeled"):
+            self.assertIn(event, metadata_job)
+            self.assertIn(event, changes_job)
+            self.assertIn(event, hygiene_job)
+        self.assertIn("scripts/pr-preflight", metadata_job)
+        self.assertIn("github.event.pull_request.base.sha", metadata_job)
+        self.assertIn("github.event_name != 'pull_request'", changes_job)
+        self.assertIn("github.event_name != 'pull_request'", hygiene_job)
+
+    def test_issue_sync_action_is_pinned(self) -> None:
+        workflow = (REPO_ROOT / ".github/workflows/main.yml").read_text(encoding="utf-8")
+
+        self.assertIn("paritytech/github-issue-sync@34a24348bf2f2a73924e322f43d6132e0c276b5f", workflow)
+        self.assertNotIn("paritytech/github-issue-sync@master", workflow)
+
+    def test_standard_actions_no_longer_use_node_20_majors(self) -> None:
+        deprecated_references = (
+            "actions/checkout@v3",
+            "actions/checkout@v4",
+            "actions/setup-python@v5",
+            "actions/setup-node@v3",
+            "actions/setup-node@v4",
+            "actions/cache@v4",
+            "actions/cache/restore@v4",
+            "actions/cache/save@v4",
+            "actions/upload-artifact@v4",
+            "actions/download-artifact@v4",
+            "actions/github-script@v6",
+            "actions/github-script@v7",
+            "actions/create-github-app-token@v1",
+            "actions/configure-pages@v3",
+            "actions/deploy-pages@v4",
+            "actions/upload-pages-artifact@v3",
+            "actions/setup-dotnet@v4",
+            "google-github-actions/auth@v2",
+            "google-github-actions/setup-gcloud@v2",
+            "google-github-actions/get-gke-credentials@v2",
+            "google-github-actions/deploy-cloudrun@v2",
+            "docker/build-push-action@v6",
+            "docker/setup-buildx-action@v3",
+            "azure/setup-helm@v3",
+            "gradle/actions/setup-gradle@v4",
+            "pnpm/action-setup@v4",
+            "opentofu/setup-opentofu@v1",
+            "peter-evans/create-pull-request@v5",
+            "astral-sh/setup-uv@37802adc94f370d6bfd71619e3f0bf239e1f3b78",
+        )
+        workflow_files = (*REPO_ROOT.glob(".github/workflows/*.yml"), *REPO_ROOT.glob(".github/actions/*/action.yml"))
+
+        for path in workflow_files:
+            text = path.read_text(encoding="utf-8")
+            for reference in deprecated_references:
+                self.assertNotIn(reference, text, f"{path}: update {reference} to a non-Node-20 action")
+
 
 class SingleFlightTests(unittest.TestCase):
     def run_runner(

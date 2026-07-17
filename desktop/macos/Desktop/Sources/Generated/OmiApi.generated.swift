@@ -7039,7 +7039,7 @@ public enum OmiAPI {
 
   public static func getConversationActionItemsCountV1ConversationsConversationIdActionItemsCountGet(client: OmiApiClient, conversationId: String, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil) async throws -> OmiAnyCodable {
     let _path = "/v1/conversations/\(conversationId)/action-items/count"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }

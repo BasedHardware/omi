@@ -321,12 +321,33 @@ def test_static_backend_deploys_only_check_the_serving_firestore_schema() -> Non
         assert '--proposal-output "$FIRESTORE_PROPOSAL_PATH"' in text
         assert '--source-commit "$FIRESTORE_SOURCE_COMMIT"' in text
         assert '--proposal-ttl-seconds 3600' in text
-        assert 'actions/upload-artifact@v4' in text
+        assert 'actions/upload-artifact@v7' in text
         assert 'steps.validate_firestore_proposal.outcome == \'success\'' in text
         assert 'if-no-files-found: error' in text
         assert 'retention-days: 1' in text
         assert 'credentials_json: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in text
         assert 'needs: firestore_readiness' in text
+
+
+def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_are_missing() -> None:
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+    )
+
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+
+        assert 'Require read-only Firestore credentials' in readiness
+        assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
+        assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
+        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
+            'Checkout approved Firestore'
+        )
+        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
+            'Google Auth for read-only Firestore inventory'
+        )
 
 
 def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
