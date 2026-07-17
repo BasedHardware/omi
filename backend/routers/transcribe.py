@@ -469,9 +469,16 @@ async def _stream_handler(
     # language-based selection below overwrites stt_service.
     requested_stt_service = stt_service
 
-    # Determine the best STT service
+    # Free plans default to self-hosted Parakeet unless the user picked an engine
+    # (custom STT or an explicit Parakeet request). Read the plan only when Parakeet
+    # could actually apply; language support + fallback live in get_stt_service_for_language.
+    prefer_parakeet = False
+    if not use_custom_stt and requested_stt_service != 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        subscription = await run_blocking(db_executor, user_db.get_user_valid_subscription, uid)
+        prefer_parakeet = subscription is None or subscription.plan == PlanType.basic
+
     stt_service, stt_language, stt_model = get_stt_service_for_language(
-        language, multi_lang_enabled=not single_language_mode
+        language, multi_lang_enabled=not single_language_mode, prefer_parakeet=prefer_parakeet
     )
     if not stt_service or not stt_language:
         await websocket.close(code=1008, reason=f"The language is not supported, {language}")
