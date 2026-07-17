@@ -19,8 +19,13 @@ import {
   type ClaudeOAuthFlowHandle
 } from '../codingAgent/claudeOAuth'
 import { messageFrom } from '../codingAgent/failures'
+import { detectAgents } from '../codingAgent/agentDetect'
+import { codexApiKeyStatus, saveCodexApiKey } from '../codingAgent/codexAuth'
 import type { ProductionAdapterId } from '../codingAgent/interface'
 import type {
+  AgentDetectionMap,
+  CodexKeyResult,
+  CodexKeyStatus,
   CodingAgentAuthStatus,
   CodingAgentEvent,
   CodingAgentInfo,
@@ -72,12 +77,26 @@ export function registerCodingAgentHandlers(): void {
 
   ipcMain.handle('codingAgent:authStatus', (): CodingAgentAuthStatus => claudeAuthStatus())
 
-  ipcMain.handle('codingAgent:startAuth', (): Promise<CodingAgentStartAuthResult> => startClaudeAuth())
+  ipcMain.handle(
+    'codingAgent:startAuth',
+    (): Promise<CodingAgentStartAuthResult> => startClaudeAuth()
+  )
 
   ipcMain.handle('codingAgent:signOut', (): CodingAgentAuthStatus => {
     removeClaudeCredentials()
     return claudeAuthStatus()
   })
+
+  // PATH auto-detection for the external agent CLIs (Codex / Hermes / OpenClaw).
+  ipcMain.handle('codingAgent:detect', (): Promise<AgentDetectionMap> => detectAgents())
+
+  // Codex OpenAI API-key lane (encrypted store, boolean-only status to renderer).
+  ipcMain.handle('codingAgent:codexKeyStatus', (): CodexKeyStatus => codexApiKeyStatus())
+  ipcMain.handle(
+    'codingAgent:setCodexKey',
+    (_e, key: string): Promise<CodexKeyResult> =>
+      saveCodexApiKey(typeof key === 'string' ? key : '')
+  )
 }
 
 // One in-flight Claude sign-in at a time. A duplicate request (e.g. the user
