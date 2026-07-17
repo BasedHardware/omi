@@ -47,9 +47,12 @@ function Pill(props: {
       aria-pressed={on}
       aria-label={label}
       className={cn(
-        'focus-ring flex h-[34px] items-center gap-2 rounded-full border',
-        // Leading 12 / trailing 8 — asymmetric, matching Mac.
-        'pl-3 pr-2 text-[12px] font-medium transition-colors duration-150',
+        'focus-ring flex h-[34px] items-center gap-1.5 rounded-full border',
+        // Leading 12 / icon↔label gap 6 / trailing 10 — a deliberate Windows-specific
+        // tweak: Windows font/icon rendering makes the nominal Mac gap read larger, so
+        // the icon↔label gap is tightened and the trailing pad widened to rebalance
+        // (the leading edge is held at 12 so only the internal balance shifts).
+        'pl-3 pr-2.5 text-[12px] font-medium transition-colors duration-150',
         PILL_CLASS[on ? 'active' : 'inactive']
       )}
     >
