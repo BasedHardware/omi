@@ -488,7 +488,13 @@ jobs:
             --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
             --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
             --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=300s; then
+          # Bounds a healthy-but-slow rollout, not a stuck one: backend-listen runs
+          # 12-60 HPA replicas rolled 3 at a time (maxSurge=2, maxUnavailable=1) and
+          # its startupProbe alone permits 300s per pod, so a full roll routinely
+          # exceeds 300s and node scale-up adds more. A genuinely stalled rollout
+          # still fails fast on the deployment's 600s progressDeadlineSeconds, which
+          # kubectl reports as ProgressDeadlineExceeded regardless of this value.
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
             exit 1
           fi

@@ -515,3 +515,48 @@ def test_evaluate_fails_closed_when_available_replicas_are_not_the_updated_templ
 
     assert 'gke/deployment: desired replicas are not all available' not in errors
     assert 'gke/deployment: desired replicas are not all updated' in errors
+
+
+def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
+    """The rollout wait must outlast a healthy roll, not just one pod's startup.
+
+    backend-listen rolls `maxSurge + maxUnavailable` pods at a time and its
+    startupProbe alone permits `failureThreshold * periodSeconds` per pod, so a
+    wait sized for a single pod fails a healthy deploy (2026-07-17, run
+    29576112586: 28 replicas, `timed out waiting for the condition`, rollout
+    converged on its own minutes later). A stalled rollout is caught by the
+    deployment's progressDeadlineSeconds, not by this bound.
+    """
+    import re
+
+    import yaml
+
+    root = BACKEND_DIR.parent
+    values = yaml.safe_load(
+        (root / 'backend/charts/backend-listen/prod_omi_backend_listen_values.yaml').read_text(encoding='utf-8')
+    )
+    startup = values['startupProbe']
+    per_pod_startup_seconds = startup['failureThreshold'] * startup['periodSeconds']
+    min_replicas = values['autoscaling']['minReplicas']
+    rolling = values['strategy']['rollingUpdate']
+    pods_in_flight = rolling['maxSurge'] + rolling['maxUnavailable']
+
+    # Even at the HPA floor the roll needs this many sequential waves.
+    waves = -(-min_replicas // pods_in_flight)
+    required_seconds = waves * per_pod_startup_seconds
+
+    workflows = (
+        '.github/workflows/gcp_backend.yml',
+        '.github/workflows/gcp_backend_listen_helm.yml',
+        '.github/workflows/gcp_backend_auto_dev.yml',
+    )
+    pattern = re.compile(r'rollout status deploy/\$\{\{ vars\.ENV \}\}-omi-backend-listen --timeout=(\d+)s')
+    for relative in workflows:
+        text = (root / relative).read_text(encoding='utf-8')
+        found = pattern.findall(text)
+        assert found, f'{relative} must wait on the backend-listen rollout'
+        for value in found:
+            assert int(value) >= required_seconds, (
+                f'{relative} waits {value}s on backend-listen, but a roll at the HPA floor needs '
+                f'>= {required_seconds}s ({waves} waves x {per_pod_startup_seconds}s startup budget)'
+            )
