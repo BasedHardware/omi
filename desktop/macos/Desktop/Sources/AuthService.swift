@@ -11,6 +11,11 @@ import Sentry
 extension Notification.Name {
   /// Posted by AuthService.signOut() so views can reset @AppStorage-backed properties directly.
   static let userDidSignOut = Notification.Name("com.omi.desktop.userDidSignOut")
+  /// Posted whenever the signed-in user's name becomes known (Apple first-auth
+  /// capture, or a later backend/Firebase fetch). `givenName`/`familyName` are
+  /// plain UserDefaults, so onboarding can't observe them directly — it listens
+  /// for this and re-reads `AuthService.shared.givenName`.
+  static let authNameDidUpdate = Notification.Name("com.omi.desktop.authNameDidUpdate")
 }
 
 final class OAuthLoopbackCallbackServer: @unchecked Sendable {
@@ -580,6 +585,14 @@ class AuthService {
   }
 
   // MARK: - User Name Properties
+
+  /// Notify observers (onboarding) that the user's name is now known. Posted on
+  /// the main queue since it drives UI. Observers re-read `givenName` themselves.
+  func postNameDidUpdate() {
+    DispatchQueue.main.async {
+      NotificationCenter.default.post(name: .authNameDidUpdate, object: nil)
+    }
+  }
 
   /// Get the user's given name (first name)
   var givenName: String {
@@ -1166,13 +1179,16 @@ class AuthService {
     NSLog("OMI AUTH: Got Apple identity token")
 
     // Save user name if provided (Apple only sends name on first sign-in)
+    var capturedFreshAppleName = false
     if let fullName = appleCredential.fullName {
       let given = fullName.givenName ?? ""
       let family = fullName.familyName ?? ""
       if !given.isEmpty {
         givenName = given
         familyName = family
+        capturedFreshAppleName = true
         NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
+        postNameDidUpdate()
       }
     }
     if let email = appleCredential.email {
@@ -1244,6 +1260,11 @@ class AuthService {
 
     if givenName.isEmpty {
       loadNameFromBackendIfNeeded()
+    } else if capturedFreshAppleName {
+      // Session is live now; persist the first-auth Apple name to Firebase +
+      // backend so it survives reinstalls (Apple won't resend it).
+      let capturedName = displayName
+      Task { [weak self] in await self?.updateGivenName(capturedName) }
     }
 
     AnalyticsManager.shared.identify()
@@ -2246,6 +2267,7 @@ class AuthService {
           self.givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
           self.familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
           NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", self.givenName, self.familyName)
+          self.postNameDidUpdate()
           return
         }
       } catch {
