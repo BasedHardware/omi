@@ -15349,7 +15349,9 @@
           "basic",
           "unlimited",
           "architect",
-          "operator"
+          "operator",
+          "plus",
+          "unlimited_v2"
         ],
         "title": "PlanType",
         "type": "string"
@@ -17914,7 +17916,13 @@
           },
           "plan": {
             "$ref": "#/components/schemas/PlanType",
-            "default": "basic"
+            "default": "basic",
+            "enum": [
+              "basic",
+              "unlimited",
+              "architect",
+              "operator"
+            ]
           },
           "status": {
             "$ref": "#/components/schemas/SubscriptionStatus",

@@ -1,7 +1,7 @@
 from enum import Enum
 from typing import Optional, List
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field, field_validator
 
 
 class WebhookType(str, Enum):
@@ -60,7 +60,10 @@ class ChatUsageQuota(BaseModel):
 
 
 class Subscription(BaseModel):
-    plan: PlanType = PlanType.basic
+    plan: PlanType = Field(
+        default=PlanType.basic,
+        json_schema_extra={"enum": ["basic", "unlimited", "architect", "operator"]},
+    )
     status: SubscriptionStatus = SubscriptionStatus.active
     current_period_end: Optional[int] = None
     # Period start is used by the Neo desktop-grandfather check. Populated by the
@@ -144,3 +147,10 @@ class UserSubscriptionResponse(BaseModel):
     # — value is `subscription.current_period_end`. Null otherwise. The desktop client
     # uses this to render a "Neo desktop access ends on <date>" notice.
     desktop_grandfather_until: Optional[int] = None
+
+    @field_validator("subscription", mode="before")
+    @classmethod
+    def _reject_unshipped_mobile_plan_values(cls, value: Subscription) -> Subscription:
+        if value.plan in {PlanType.plus, PlanType.unlimited_v2}:
+            raise ValueError("mobile plan IDs require a versioned app-client subscription contract")
+        return value
