@@ -466,6 +466,28 @@ def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None
     assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
+def test_static_release_vector_verify_binds_the_workflow_short_sha() -> None:
+    # git rev-parse --short=7 HEAD can extend past seven characters; the verifier
+    # must receive the exact short SHA the workflow used to tag the image and
+    # revision suffix, so it does not reject a correctly deployed release whose
+    # 7-character prefix is ambiguous. Every release-vector verify call in the
+    # backend deploy workflows must pass --short-sha bound to image-tag output.
+    workflows = (
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml',
+        BACKEND_DIR.parent / '.github/workflows/gcp_backend_auto_dev.yml',
+    )
+    for workflow in workflows:
+        text = workflow.read_text(encoding='utf-8')
+        assert 'verify_backend_release_vector.py' in text, f'{workflow.name} must invoke the release-vector verifier'
+        # Count verify invocations and the --short-sha wiring; require a 1:1 match.
+        invocations = text.count('verify_backend_release_vector.py \\\n')
+        wired = text.count('--short-sha "${{ steps.image-tag.outputs.short_sha }}"')
+        assert invocations == wired, (
+            f'{workflow.name}: {invocations} release-vector verify call(s) but '
+            f'{wired} --short-sha wiring(s); each verify must bind the workflow short SHA'
+        )
+
+
 def test_expectation_binds_commit_to_deploy_run_revision_and_image() -> None:
     expectation = _expectation()
 
@@ -488,6 +510,52 @@ def test_expectation_derives_a_prod_vector_with_the_matching_environment() -> No
     assert expectation.revisions['backend'] == 'backend-abcdef1-54321-2'
     assert expectation.listener_deployment == 'prod-omi-backend-listen'
     assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_expectation_uses_the_workflow_short_sha_when_ambiguous() -> None:
+    # git rev-parse --short=7 HEAD can return 8+ characters when the 7-character
+    # prefix is ambiguous; the workflow tags the image with that longer suffix.
+    # The verifier must bind to the workflow's exact short SHA rather than a
+    # naive 7-character truncation of the commit SHA.
+    expectation = verifier.build_expectation(
+        commit_sha='abcdef1234567890',
+        short_sha='abcdef12',
+        deploy_run_id='12345',
+        deploy_run_attempt='1',
+        project='based-hardware-dev',
+        region='us-central1',
+        environment='dev',
+    )
+
+    assert expectation.image == 'gcr.io/based-hardware-dev/backend:abcdef12'
+    assert expectation.revisions['backend'] == 'backend-abcdef12-12345-1'
+    assert verifier.evaluate(expectation, _documents(expectation)) == []
+
+
+def test_expectation_rejects_a_short_sha_that_is_not_a_prefix() -> None:
+    with pytest.raises(ValueError, match='short SHA must be a prefix of the commit SHA'):
+        verifier.build_expectation(
+            commit_sha='abcdef1234567890',
+            short_sha='deadbeef',
+            deploy_run_id='12345',
+            deploy_run_attempt='1',
+            project='based-hardware-dev',
+            region='us-central1',
+            environment='dev',
+        )
+
+
+def test_expectation_rejects_a_malformed_short_sha() -> None:
+    with pytest.raises(ValueError, match='short SHA must be a hexadecimal value'):
+        verifier.build_expectation(
+            commit_sha='abcdef1234567890',
+            short_sha='abcdefg',
+            deploy_run_id='12345',
+            deploy_run_attempt='1',
+            project='based-hardware-dev',
+            region='us-central1',
+            environment='dev',
+        )
 
 
 def test_read_only_commands_are_limited_to_queries() -> None:

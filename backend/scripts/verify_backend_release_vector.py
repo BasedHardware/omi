@@ -38,8 +38,20 @@ def build_expectation(
     project: str,
     region: str,
     environment: str,
+    short_sha: str | None = None,
 ) -> DeploymentExpectation:
-    """Derive an immutable desired release vector from deploy-run metadata."""
+    """Derive an immutable desired release vector from deploy-run metadata.
+
+    ``short_sha`` is the exact abbreviated SHA the deploy workflow used to tag
+    the image and build the revision suffix (``git rev-parse --short=7 HEAD``).
+    Git documents ``--short=N`` as a prefix of *at least* N characters: when the
+    N-character prefix is ambiguous Git extends it, so the deployed revision can
+    carry 8+ characters while a naive ``commit_sha[:7]`` truncation would expect
+    exactly seven and reject a correctly deployed release. Passing the
+    workflow's computed short SHA keeps the verifier aligned with what was
+    actually deployed; when omitted it falls back to the seven-character prefix
+    for local/manual invocations.
+    """
     normalized_sha = commit_sha.strip().lower()
     if len(normalized_sha) < 7 or any(char not in '0123456789abcdef' for char in normalized_sha):
         raise ValueError('commit SHA must be a hexadecimal value with at least seven characters')
@@ -47,8 +59,16 @@ def build_expectation(
         raise ValueError('deploy run ID and attempt must be decimal integers')
     if environment not in {'dev', 'prod'}:
         raise ValueError("environment must be 'dev' or 'prod'")
-    short_sha = normalized_sha[:7]
-    suffix = f'{short_sha}-{deploy_run_id}-{deploy_run_attempt}'
+    if short_sha is not None:
+        normalized_short = short_sha.strip().lower()
+        if len(normalized_short) < 7 or any(char not in '0123456789abcdef' for char in normalized_short):
+            raise ValueError('short SHA must be a hexadecimal value with at least seven characters')
+        if not normalized_sha.startswith(normalized_short):
+            raise ValueError('short SHA must be a prefix of the commit SHA')
+        resolved_short_sha = normalized_short
+    else:
+        resolved_short_sha = normalized_sha[:7]
+    suffix = f'{resolved_short_sha}-{deploy_run_id}-{deploy_run_attempt}'
     return DeploymentExpectation(
         commit_sha=normalized_sha,
         deploy_run_id=deploy_run_id,
@@ -57,7 +77,7 @@ def build_expectation(
         region=region,
         environment=environment,
         namespace=f'{environment}-omi-backend',
-        image=f'gcr.io/{project}/backend:{short_sha}',
+        image=f'gcr.io/{project}/backend:{resolved_short_sha}',
         revisions={service: f'{service}-{suffix}' for service in CLOUD_RUN_SERVICES},
         listener_deployment=f'{environment}-omi-backend-listen',
         listener_service=f'{environment}-omi-backend-listen',
@@ -346,6 +366,14 @@ def _container_env(containers: Sequence[Any]) -> dict[str, str]:
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--commit-sha', required=True)
+    parser.add_argument(
+        '--short-sha',
+        help=(
+            'exact abbreviated SHA the deploy workflow used to tag the image and '
+            'revision suffix; must be a prefix of --commit-sha. Matches the workflow '
+            'git rev-parse --short=7 HEAD, which Git may extend past seven characters.'
+        ),
+    )
     parser.add_argument('--deploy-run-id', required=True)
     parser.add_argument('--deploy-run-attempt', required=True)
     parser.add_argument('--project', required=True)
@@ -361,6 +389,7 @@ def main() -> int:
     try:
         expectation = build_expectation(
             commit_sha=args.commit_sha,
+            short_sha=args.short_sha,
             deploy_run_id=args.deploy_run_id,
             deploy_run_attempt=args.deploy_run_attempt,
             project=args.project,

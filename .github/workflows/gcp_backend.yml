@@ -656,6 +656,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
             --project "${{ vars.GCP_PROJECT_ID }}" \
