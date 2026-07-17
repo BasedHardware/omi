@@ -83,14 +83,14 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 job = self.jobs[job_id]
                 self.assertIn("needs: changes", job)
                 self.assertIn(f"needs.changes.outputs.{output}", job)
-                self.assertIn("fetch-depth: 1", job)
                 self.assertNotIn("Check changed files", job)
 
+        # The debug job needs full history (fetch-depth: 0) for manifest checks
+        # that call git diff/merge-base; the release compile can stay shallow.
         debug_job = self.jobs["desktop-swift"]
-        self.assertIn("Fetch manifest check base", debug_job)
-        self.assertIn("git fetch --no-tags --depth=1 origin", debug_job)
-        self.assertIn("--changed-files", debug_job)
-        self.assertIn("needs.changes.outputs.changed_files", debug_job)
+        self.assertIn("fetch-depth: 0", debug_job)
+        release_job = self.jobs["desktop-swift-release-compile"]
+        self.assertIn("fetch-depth: 1", release_job)
 
     def test_canonical_runner_fails_closed_on_the_pinned_toolchain(self):
         runner = _runner_text()
