@@ -1,0 +1,20 @@
+{{- if and .Values.rbac.create .Values.rules.external -}}
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  {{- if .Values.customAnnotations }}
+  annotations:
+  {{- toYaml .Values.customAnnotations | nindent 4 }}
+  {{- end }}
+  labels:
+    {{- include "k8s-prometheus-adapter.labels" . | indent 4 }}
+  name: {{ template "k8s-prometheus-adapter.name" . }}-external-metrics
+rules:
+- apiGroups:
+  - "external.metrics.k8s.io"
+  resources: {{ toYaml .Values.rbac.externalMetrics.resources | nindent 2 }}
+  verbs:
+  - list
+  - get
+  - watch
+{{- end -}}

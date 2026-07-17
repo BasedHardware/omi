@@ -1,0 +1,707 @@
+{{- /*
+Generated from 'prometheus' group from https://raw.githubusercontent.com/prometheus-operator/kube-prometheus/65922b9fd8c3869c06686b44f5f3aa9f96560666/manifests/prometheus-prometheusRule.yaml
+Do not change in-place! In order to change this file first read following link:
+https://github.com/prometheus-community/helm-charts/tree/main/charts/kube-prometheus-stack/hack
+*/ -}}
+{{- $kubeTargetVersion := default .Capabilities.KubeVersion.GitVersion .Values.kubeTargetVersionOverride }}
+{{- if and (semverCompare ">=1.14.0-0" $kubeTargetVersion) (semverCompare "<9.9.9-9" $kubeTargetVersion) .Values.defaultRules.create .Values.defaultRules.rules.prometheus }}
+{{- $prometheusJob := printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "prometheus" }}
+{{- $namespace := printf "%s" (include "kube-prometheus-stack.namespace" .) }}
+apiVersion: monitoring.coreos.com/v1
+kind: PrometheusRule
+metadata:
+  name: {{ printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "prometheus" | trunc 63 | trimSuffix "-" }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+{{- if .Values.defaultRules.labels }}
+{{ toYaml .Values.defaultRules.labels | indent 4 }}
+{{- end }}
+{{- if .Values.defaultRules.annotations }}
+  annotations:
+{{ toYaml .Values.defaultRules.annotations | indent 4 }}
+{{- end }}
+spec:
+  groups:
+  - name: prometheus
+    rules:
+{{- if not (.Values.defaultRules.disabled.PrometheusBadConfig | default false) }}
+    - alert: PrometheusBadConfig
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has failed to reload its configuration.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusbadconfig
+        summary: Failed Prometheus configuration reload.
+      expr: |-
+        # Without max_over_time, failed scrapes could create false negatives, see
+        # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+        max_over_time(prometheus_config_last_reload_successful{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) == 0
+      for: {{ dig "PrometheusBadConfig" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusBadConfig" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusSDRefreshFailure | default false) }}
+    - alert: PrometheusSDRefreshFailure
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has failed to refresh SD with mechanism {{`{{`}}$labels.mechanism{{`}}`}}.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheussdrefreshfailure
+        summary: Failed Prometheus SD refresh.
+      expr: increase(prometheus_sd_refresh_failures_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[10m]) > 0
+      for: {{ dig "PrometheusSDRefreshFailure" "for" "20m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusSDRefreshFailure" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusNotificationQueueRunningFull | default false) }}
+    - alert: PrometheusNotificationQueueRunningFull
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Alert notification queue of Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} is running full.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusnotificationqueuerunningfull
+        summary: Prometheus alert notification queue predicted to run full in less than 30m.
+      expr: |-
+        # Without min_over_time, failed scrapes could create false negatives, see
+        # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+        (
+          predict_linear(prometheus_notifications_queue_length{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m], 60 * 30)
+        >
+          min_over_time(prometheus_notifications_queue_capacity{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        )
+      for: {{ dig "PrometheusNotificationQueueRunningFull" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusNotificationQueueRunningFull" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusErrorSendingAlertsToSomeAlertmanagers | default false) }}
+    - alert: PrometheusErrorSendingAlertsToSomeAlertmanagers
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: '{{`{{`}} printf "%.1f" $value {{`}}`}}% errors while sending alerts from Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} to Alertmanager {{`{{`}}$labels.alertmanager{{`}}`}}.'
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheuserrorsendingalertstosomealertmanagers
+        summary: Prometheus has encountered more than 1% errors sending alerts to a specific Alertmanager.
+      expr: |-
+        (
+          rate(prometheus_notifications_errors_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        /
+          rate(prometheus_notifications_sent_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        )
+        * 100
+        > 1
+      for: {{ dig "PrometheusErrorSendingAlertsToSomeAlertmanagers" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusErrorSendingAlertsToSomeAlertmanagers" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusNotConnectedToAlertmanagers | default false) }}
+    - alert: PrometheusNotConnectedToAlertmanagers
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} is not connected to any Alertmanagers.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusnotconnectedtoalertmanagers
+        summary: Prometheus is not connected to any Alertmanagers.
+      expr: |-
+        # Without max_over_time, failed scrapes could create false negatives, see
+        # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+        max_over_time(prometheus_notifications_alertmanagers_discovered{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) < 1
+      for: {{ dig "PrometheusNotConnectedToAlertmanagers" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusNotConnectedToAlertmanagers" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusTSDBReloadsFailing | default false) }}
+    - alert: PrometheusTSDBReloadsFailing
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has detected {{`{{`}}$value | humanize{{`}}`}} reload failures over the last 3h.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheustsdbreloadsfailing
+        summary: Prometheus has issues reloading blocks from disk.
+      expr: increase(prometheus_tsdb_reloads_failures_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[3h]) > 0
+      for: {{ dig "PrometheusTSDBReloadsFailing" "for" "4h" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusTSDBReloadsFailing" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusTSDBCompactionsFailing | default false) }}
+    - alert: PrometheusTSDBCompactionsFailing
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has detected {{`{{`}}$value | humanize{{`}}`}} compaction failures over the last 3h.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheustsdbcompactionsfailing
+        summary: Prometheus has issues compacting blocks.
+      expr: increase(prometheus_tsdb_compactions_failed_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[3h]) > 0
+      for: {{ dig "PrometheusTSDBCompactionsFailing" "for" "4h" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusTSDBCompactionsFailing" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusNotIngestingSamples | default false) }}
+    - alert: PrometheusNotIngestingSamples
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} is not ingesting samples.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusnotingestingsamples
+        summary: Prometheus is not ingesting samples.
+      expr: |-
+        (
+          sum without(type) (rate(prometheus_tsdb_head_samples_appended_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])) <= 0
+        and
+          (
+            sum without(scrape_job) (prometheus_target_metadata_cache_entries{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}) > 0
+          or
+            sum without(rule_group) (prometheus_rule_group_rules{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}) > 0
+          )
+        )
+      for: {{ dig "PrometheusNotIngestingSamples" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusNotIngestingSamples" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusDuplicateTimestamps | default false) }}
+    - alert: PrometheusDuplicateTimestamps
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} is dropping {{`{{`}} printf "%.4g" $value  {{`}}`}} samples/s with different values but duplicated timestamp.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusduplicatetimestamps
+        summary: Prometheus is dropping samples with duplicate timestamps.
+      expr: rate(prometheus_target_scrapes_sample_duplicate_timestamp_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusDuplicateTimestamps" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusDuplicateTimestamps" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusOutOfOrderTimestamps | default false) }}
+    - alert: PrometheusOutOfOrderTimestamps
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} is dropping {{`{{`}} printf "%.4g" $value  {{`}}`}} samples/s with timestamps arriving out of order.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusoutofordertimestamps
+        summary: Prometheus drops samples with out-of-order timestamps.
+      expr: rate(prometheus_target_scrapes_sample_out_of_order_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusOutOfOrderTimestamps" "for" "10m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusOutOfOrderTimestamps" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusRemoteStorageFailures | default false) }}
+    - alert: PrometheusRemoteStorageFailures
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} failed to send {{`{{`}} printf "%.1f" $value {{`}}`}}% of the samples to {{`{{`}} $labels.remote_name{{`}}`}}:{{`{{`}} $labels.url {{`}}`}}
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusremotestoragefailures
+        summary: Prometheus fails to send samples to remote storage.
+      expr: |-
+        (
+          (rate(prometheus_remote_storage_failed_samples_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]))
+        /
+          (
+            (rate(prometheus_remote_storage_failed_samples_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) or rate(prometheus_remote_storage_samples_failed_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]))
+          +
+            (rate(prometheus_remote_storage_succeeded_samples_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) or rate(prometheus_remote_storage_samples_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]))
+          )
+        )
+        * 100
+        > 1
+      for: {{ dig "PrometheusRemoteStorageFailures" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusRemoteStorageFailures" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusRemoteWriteBehind | default false) }}
+    - alert: PrometheusRemoteWriteBehind
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} remote write is {{`{{`}} printf "%.1f" $value {{`}}`}}s behind for {{`{{`}} $labels.remote_name{{`}}`}}:{{`{{`}} $labels.url {{`}}`}}.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusremotewritebehind
+        summary: Prometheus remote write is behind.
+      expr: |-
+        # Without max_over_time, failed scrapes could create false negatives, see
+        # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+        (
+          max_over_time(prometheus_remote_storage_highest_timestamp_in_seconds{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        - ignoring(remote_name, url) group_right
+          max_over_time(prometheus_remote_storage_queue_highest_sent_timestamp_seconds{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        )
+        > 120
+      for: {{ dig "PrometheusRemoteWriteBehind" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusRemoteWriteBehind" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusRemoteWriteDesiredShards | default false) }}
+    - alert: PrometheusRemoteWriteDesiredShards
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} remote write desired shards calculation wants to run {{`{{`}} $value {{`}}`}} shards for queue {{`{{`}} $labels.remote_name{{`}}`}}:{{`{{`}} $labels.url {{`}}`}}, which is more than the max of {{`{{`}} printf `prometheus_remote_storage_shards_max{instance="%s",job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}` $labels.instance | query | first | value {{`}}`}}.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusremotewritedesiredshards
+        summary: Prometheus remote write desired shards calculation wants to run more than configured max shards.
+      expr: |-
+        # Without max_over_time, failed scrapes could create false negatives, see
+        # https://www.robustperception.io/alerting-on-gauges-in-prometheus-2-0 for details.
+        (
+          max_over_time(prometheus_remote_storage_shards_desired{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        >
+          max_over_time(prometheus_remote_storage_shards_max{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m])
+        )
+      for: {{ dig "PrometheusRemoteWriteDesiredShards" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusRemoteWriteDesiredShards" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusRuleFailures | default false) }}
+    - alert: PrometheusRuleFailures
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has failed to evaluate {{`{{`}} printf "%.0f" $value {{`}}`}} rules in the last 5m.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusrulefailures
+        summary: Prometheus is failing rule evaluations.
+      expr: increase(prometheus_rule_evaluation_failures_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusRuleFailures" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusRuleFailures" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusMissingRuleEvaluations | default false) }}
+    - alert: PrometheusMissingRuleEvaluations
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has missed {{`{{`}} printf "%.0f" $value {{`}}`}} rule group evaluations in the last 5m.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusmissingruleevaluations
+        summary: Prometheus is missing rule evaluations due to slow rule group evaluation.
+      expr: increase(prometheus_rule_group_iterations_missed_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusMissingRuleEvaluations" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusMissingRuleEvaluations" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusTargetLimitHit | default false) }}
+    - alert: PrometheusTargetLimitHit
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has dropped {{`{{`}} printf "%.0f" $value {{`}}`}} targets because the number of targets exceeded the configured target_limit.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheustargetlimithit
+        summary: Prometheus has dropped targets because some scrape configs have exceeded the targets limit.
+      expr: increase(prometheus_target_scrape_pool_exceeded_target_limit_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusTargetLimitHit" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusTargetLimitHit" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusLabelLimitHit | default false) }}
+    - alert: PrometheusLabelLimitHit
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has dropped {{`{{`}} printf "%.0f" $value {{`}}`}} targets because some samples exceeded the configured label_limit, label_name_length_limit or label_value_length_limit.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheuslabellimithit
+        summary: Prometheus has dropped targets because some scrape configs have exceeded the labels limit.
+      expr: increase(prometheus_target_scrape_pool_exceeded_label_limits_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusLabelLimitHit" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusLabelLimitHit" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusScrapeBodySizeLimitHit | default false) }}
+    - alert: PrometheusScrapeBodySizeLimitHit
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has failed {{`{{`}} printf "%.0f" $value {{`}}`}} scrapes in the last 5m because some targets exceeded the configured body_size_limit.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusscrapebodysizelimithit
+        summary: Prometheus has dropped some targets that exceeded body size limit.
+      expr: increase(prometheus_target_scrapes_exceeded_body_size_limit_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusScrapeBodySizeLimitHit" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusScrapeBodySizeLimitHit" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusScrapeSampleLimitHit | default false) }}
+    - alert: PrometheusScrapeSampleLimitHit
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} has failed {{`{{`}} printf "%.0f" $value {{`}}`}} scrapes in the last 5m because some targets exceeded the configured sample_limit.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheusscrapesamplelimithit
+        summary: Prometheus has failed scrapes that have exceeded the configured sample limit.
+      expr: increase(prometheus_target_scrapes_exceeded_sample_limit_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0
+      for: {{ dig "PrometheusScrapeSampleLimitHit" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusScrapeSampleLimitHit" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusTargetSyncFailure | default false) }}
+    - alert: PrometheusTargetSyncFailure
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: '{{`{{`}} printf "%.0f" $value {{`}}`}} targets in Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} have failed to sync because invalid configuration was supplied.'
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheustargetsyncfailure
+        summary: Prometheus has failed to sync targets.
+      expr: increase(prometheus_target_sync_failed_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[30m]) > 0
+      for: {{ dig "PrometheusTargetSyncFailure" "for" "5m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusTargetSyncFailure" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusHighQueryLoad | default false) }}
+    - alert: PrometheusHighQueryLoad
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} query API has less than 20% available capacity in its query engine for the last 15 minutes.
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheushighqueryload
+        summary: Prometheus is reaching its maximum capacity serving concurrent requests.
+      expr: avg_over_time(prometheus_engine_queries{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) / max_over_time(prometheus_engine_queries_concurrent_max{job="{{ $prometheusJob }}",namespace="{{ $namespace }}"}[5m]) > 0.8
+      for: {{ dig "PrometheusHighQueryLoad" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusHighQueryLoad" "severity" "warning" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- if not (.Values.defaultRules.disabled.PrometheusErrorSendingAlertsToAnyAlertmanager | default false) }}
+    - alert: PrometheusErrorSendingAlertsToAnyAlertmanager
+      annotations:
+{{- if .Values.defaultRules.additionalRuleAnnotations }}
+{{ toYaml .Values.defaultRules.additionalRuleAnnotations | indent 8 }}
+{{- end }}
+{{- if .Values.defaultRules.additionalRuleGroupAnnotations.prometheus }}
+{{ toYaml .Values.defaultRules.additionalRuleGroupAnnotations.prometheus | indent 8 }}
+{{- end }}
+        description: '{{`{{`}} printf "%.1f" $value {{`}}`}}% minimum errors while sending alerts from Prometheus {{`{{`}}$labels.namespace{{`}}`}}/{{`{{`}}$labels.pod{{`}}`}} to any Alertmanager.'
+        runbook_url: {{ .Values.defaultRules.runbookUrl }}/prometheus/prometheuserrorsendingalertstoanyalertmanager
+        summary: Prometheus encounters more than 3% errors sending alerts to any Alertmanager.
+      expr: |-
+        min without (alertmanager) (
+          rate(prometheus_notifications_errors_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}",alertmanager!~``}[5m])
+        /
+          rate(prometheus_notifications_sent_total{job="{{ $prometheusJob }}",namespace="{{ $namespace }}",alertmanager!~``}[5m])
+        )
+        * 100
+        > 3
+      for: {{ dig "PrometheusErrorSendingAlertsToAnyAlertmanager" "for" "15m" .Values.customRules }}
+      {{- with .Values.defaultRules.keepFiringFor }}
+      keep_firing_for: "{{ . }}"
+      {{- end }}
+      labels:
+        severity: {{ dig "PrometheusErrorSendingAlertsToAnyAlertmanager" "severity" "critical" .Values.customRules }}
+      {{- if or .Values.defaultRules.additionalRuleLabels .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+        {{- with .Values.defaultRules.additionalRuleLabels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+        {{- with .Values.defaultRules.additionalRuleGroupLabels.prometheus }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      {{- end }}
+{{- end }}
+{{- end }}

@@ -1,7 +1,8 @@
 """Regression coverage for the single source of truth governing STT serving."""
 
 from config.stt_provider_policy import (
-    DEEPGRAM_PROVIDER,
+    DEEPGRAM_CLOUD_PROVIDER,
+    DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
     STTServingSurface,
@@ -11,8 +12,14 @@ from config.stt_provider_policy import (
 )
 
 
-def test_deepgram_is_disabled_for_every_serving_surface():
-    assert all(not provider_is_enabled(DEEPGRAM_PROVIDER, surface) for surface in STTServingSurface)
+def test_hosted_deepgram_is_disabled_for_every_serving_surface():
+    assert all(not provider_is_enabled(DEEPGRAM_CLOUD_PROVIDER, surface) for surface in STTServingSurface)
+
+
+def test_self_hosted_deepgram_is_explicitly_limited_to_streaming():
+    assert provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.STREAMING)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PRERECORDED)
+    assert not provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, STTServingSurface.PTT)
 
 
 def test_policy_owns_the_safe_model_order_for_every_serving_surface():
@@ -23,5 +30,5 @@ def test_policy_owns_the_safe_model_order_for_every_serving_surface():
         assert provider_is_enabled(MODULATE_PROVIDER, surface)
 
 
-def test_retired_model_tokens_stay_classified_by_the_policy():
-    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_PROVIDER
+def test_deepgram_model_tokens_are_classified_as_self_hosted_only():
+    assert provider_for_model_token('dg-nova-3') == DEEPGRAM_SELF_HOSTED_PROVIDER

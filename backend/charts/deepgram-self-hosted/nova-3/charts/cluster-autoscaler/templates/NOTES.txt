@@ -1,0 +1,18 @@
+{{- if or ( or .Values.autoDiscovery.clusterName .Values.autoDiscovery.namespace .Values.autoDiscovery.labels ) .Values.autoscalingGroups }}
+
+To verify that cluster-autoscaler has started, run:
+
+  kubectl --namespace={{ .Release.Namespace }} get pods -l "app.kubernetes.io/name={{ template "cluster-autoscaler.name" . }},app.kubernetes.io/instance={{ .Release.Name }}"
+
+{{- else -}}
+
+##############################################################################
+####   ERROR: You must specify values for either                          ####
+####   autoDiscovery or autoscalingGroups[]                   ####
+##############################################################################
+
+The deployment and pod will not be created and the installation is not functional
+See README:
+  open https://github.com/kubernetes/autoscaler/tree/master/charts/cluster-autoscaler
+
+{{- end -}}

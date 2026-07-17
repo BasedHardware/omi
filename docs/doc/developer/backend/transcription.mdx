@@ -156,10 +156,12 @@ All audio is internally converted to 16-bit linear PCM before being sent to STT 
 The canonical provider/surface matrix and default model order live in
 `backend/config/stt_provider_policy.py`. The deployment validator requires
 `STT_SERVICE_MODELS` and `STT_PRERECORDED_MODEL` to match that code-owned
-policy; an environment edit cannot re-enable a disabled provider. The first
-configured model that supports the requested language wins. Serving defaults are
-`parakeet,modulate-velma-2`; retired or unknown model tokens are ignored. If
-neither supported provider can serve a language, the request fails closed.
+policy; an environment edit cannot re-enable hosted Deepgram. The normal serving
+defaults are `parakeet,modulate-velma-2`. Self-hosted Deepgram is a distinct,
+streaming-only provider that requires `DEEPGRAM_SELF_HOSTED_ENABLED=true` and a
+non-cloud `DEEPGRAM_SELF_HOSTED_URL`; it is never a fallback to
+`api.deepgram.com`. If no supported provider can serve a language, the request
+fails closed.
 
 ```mermaid
 flowchart TD
@@ -283,8 +285,10 @@ Retire those public endpoints only after they show no `/v4/listen` traffic.
 
 Serving revisions use `HOSTED_PARAKEET_API_URL` for Parakeet and
 `MODULATE_API_KEY` for Modulate. Both are required because the selected
-provider depends on language capability. `DEEPGRAM_*` settings are not part of
-the serving environment.
+provider depends on language capability. The retained self-hosted Deepgram
+deployment uses `DEEPGRAM_API_KEY`, `DEEPGRAM_SELF_HOSTED_ENABLED`, and
+`DEEPGRAM_SELF_HOSTED_URL` only in its explicitly configured GKE workload;
+hosted Deepgram is disabled.
 
 ## External Custom STT Service
 

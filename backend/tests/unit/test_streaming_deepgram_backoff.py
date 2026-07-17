@@ -13,7 +13,6 @@ import pytest
 
 from deepgram import LiveTranscriptionEvents
 from utils.stt.streaming import connect_to_deepgram_with_backoff, process_audio_dg
-from utils.stt.streaming import deepgram_options, deepgram_cloud_options
 from utils.stt.streaming import get_stt_service_for_language, STTService, should_preserve_filler_words
 
 
@@ -324,12 +323,13 @@ async def test_returns_none_after_all_none_retries_exhausted():
     assert len(sleep_calls) == 2  # slept between retries
 
 
-def test_deepgram_options_no_keepalive():
-    """SDK keepalive option must not be present — it spawns a dangerous background thread (#5870)."""
-    for name, opts in [('deepgram_options', deepgram_options), ('deepgram_cloud_options', deepgram_cloud_options)]:
-        # DeepgramClientOptions stores options dict — keepalive key must be absent
-        if hasattr(opts, 'options') and isinstance(opts.options, dict):
-            assert 'keepalive' not in opts.options, f'{name} must not contain "keepalive" key'
+def test_self_hosted_deepgram_options_never_enable_keepalive():
+    """The retained self-hosted socket must not create a keepalive thread (#5870)."""
+    from utils.stt.streaming import _self_hosted_deepgram_options
+
+    opts = _self_hosted_deepgram_options('https://dg.example.test')
+    assert 'keepalive' not in opts.options
+    assert opts.url == 'https://dg.example.test'
 
 
 @pytest.mark.asyncio

@@ -1,0 +1,314 @@
+affinity: {}
+
+topologySpreadConstraints: []
+
+image:
+  repository: registry.k8s.io/prometheus-adapter/prometheus-adapter
+  # if not set appVersion field from Chart.yaml is used
+  tag: ""
+  pullPolicy: IfNotPresent
+  pullSecrets: []
+    # - foo
+
+logLevel: 4
+
+metricsRelistInterval: 1m
+
+listenPort: 6443
+
+nodeSelector: {}
+
+priorityClassName: ""
+
+## Override the release namespace (for multi-namespace deployments in combined charts)
+namespaceOverride: ""
+
+## Additional annotations to add to all resources
+customAnnotations: {}
+  # role: custom-metrics
+
+## Additional labels to add to all resources
+customLabels: {}
+  # monitoring: prometheus-adapter
+
+# Url to access prometheus
+prometheus:
+  # Value is templated
+  url: http://prometheus.default.svc
+  port: 9090
+  path: ""
+
+replicas: 1
+
+# k8s 1.21 needs fsGroup to be set for non root deployments
+# ref: https://github.com/kubernetes/kubernetes/issues/70679
+podSecurityContext:
+  fsGroup: 10001
+
+# SecurityContext of the container
+# ref. https://kubernetes.io/docs/tasks/configure-pod-container/security-context
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop: ["ALL"]
+  readOnlyRootFilesystem: true
+  runAsNonRoot: true
+  runAsUser: 10001
+  seccompProfile:
+    type: RuntimeDefault
+
+rbac:
+  # Specifies whether RBAC resources should be created
+  create: true
+  # Specifies if a Cluster Role should be used for the Auth Reader
+  useAuthReaderClusterRole: false
+  externalMetrics:
+    resources: ["*"]
+  customMetrics:
+    resources: ["*"]
+
+psp:
+  # Specifies whether PSP resources should be created
+  create: false
+  # Annotations added to the pod security policy
+  annotations: {}
+  ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#apparmor
+  ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#seccomp
+  ## Ref: https://kubernetes.io/docs/concepts/policy/pod-security-policy/#sysctl
+
+# If false then the user will opt out of automounting API credentials.
+automountServiceAccountToken: true
+
+serviceAccount:
+  # Specifies whether a service account should be created
+  create: true
+  # The name of the service account to use.
+  # If not set and create is true, a name is generated using the fullname template
+  name:
+  # ServiceAccount annotations.
+  # Use case: AWS EKS IAM roles for service accounts
+  # ref: https://docs.aws.amazon.com/eks/latest/userguide/specify-service-account-role.html
+  annotations: {}
+  # If false then the user will opt out of automounting API credentials.
+  automountServiceAccountToken: true
+
+# Custom DNS configuration to be added to prometheus-adapter pods
+dnsConfig: {}
+  # nameservers:
+  #   - 1.2.3.4
+  # searches:
+  #   - ns1.svc.cluster-domain.example
+  #   - my.dns.search.suffix
+  # options:
+  #   - name: ndots
+  #     value: "2"
+  #   - name: edns0
+
+resources: {}
+  # requests:
+  #   cpu: 100m
+  #   memory: 128Mi
+  # limits:
+  #   cpu: 100m
+  #   memory: 128Mi
+
+# Configure liveness probe
+# https://kubernetes.io/docs/reference/kubernetes-api/workload-resources/pod-v1/#Probe
+livenessProbe:
+  httpGet:
+    path: /healthz
+    port: https
+    scheme: HTTPS
+  initialDelaySeconds: 30
+  timeoutSeconds: 5
+
+# Configure readiness probe
+readinessProbe:
+  httpGet:
+    path: /healthz
+    port: https
+    scheme: HTTPS
+  initialDelaySeconds: 30
+  timeoutSeconds: 5
+
+# Configure startup probe
+# Use if prometheus-adapter takes a long time to finish startup e.g. polling a lot of API versions in cluster
+startupProbe: {}
+
+rules:
+  default: true
+
+  custom: []
+    # - seriesQuery: '{__name__=~"^some_metric_count$"}'
+    #   resources:
+    #     template: <<.Resource>>
+    #   name:
+    #     matches: ""
+    #     as: "my_custom_metric"
+    #   metricsQuery: sum(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+
+  # Mounts a configMap with pre-generated rules for use. Overrides the
+  # default, custom, external and resource entries
+  existing:
+
+  external: []
+    # - seriesQuery: '{__name__=~"^some_metric_count$"}'
+    #   resources:
+    #     template: <<.Resource>>
+    #   name:
+    #     matches: ""
+    #     as: "my_external_metric"
+    #   metricsQuery: sum(<<.Series>>{<<.LabelMatchers>>}) by (<<.GroupBy>>)
+
+  # resource:
+  #   cpu:
+  #     containerQuery: |
+  #       sum by (<<.GroupBy>>) (
+  #         rate(container_cpu_usage_seconds_total{container!="",<<.LabelMatchers>>}[3m])
+  #       )
+  #     nodeQuery: |
+  #       sum  by (<<.GroupBy>>) (
+  #         rate(node_cpu_seconds_total{mode!="idle",mode!="iowait",mode!="steal",<<.LabelMatchers>>}[3m])
+  #       )
+  #     resources:
+  #       overrides:
+  #         node:
+  #           resource: node
+  #         namespace:
+  #           resource: namespace
+  #         pod:
+  #           resource: pod
+  #     containerLabel: container
+  #   memory:
+  #     containerQuery: |
+  #       sum by (<<.GroupBy>>) (
+  #         avg_over_time(container_memory_working_set_bytes{container!="",<<.LabelMatchers>>}[3m])
+  #       )
+  #     nodeQuery: |
+  #       sum by (<<.GroupBy>>) (
+  #         avg_over_time(node_memory_MemTotal_bytes{<<.LabelMatchers>>}[3m])
+  #         -
+  #         avg_over_time(node_memory_MemAvailable_bytes{<<.LabelMatchers>>}[3m])
+  #       )
+  #     resources:
+  #       overrides:
+  #         node:
+  #           resource: node
+  #         namespace:
+  #           resource: namespace
+  #         pod:
+  #           resource: pod
+  #     containerLabel: container
+  #   window: 3m
+
+service:
+  annotations: {}
+  port: 443
+  type: ClusterIP
+  # clusterIP: 1.2.3.4
+  ipDualStack:
+    enabled: false
+    ipFamilies: ["IPv6", "IPv4"]
+    ipFamilyPolicy: "PreferDualStack"
+tls:
+  enable: false
+  ca: |-
+    # Public CA file that signed the APIService
+  key: |-
+    # Private key of the APIService
+  certificate: |-
+    # Public key of the APIService
+
+# Set environment variables from secrets, configmaps or by setting them as name/value
+env: []
+  # - name: TMP_DIR
+  #   value: /tmp
+  # - name: PASSWORD
+  #   valueFrom:
+  #     secretKeyRef:
+  #       name: mysecret
+  #       key: password
+  #       optional: false
+
+# Any extra arguments
+extraArguments: []
+  # - --tls-private-key-file=/etc/tls/tls.key
+  # - --tls-cert-file=/etc/tls/tls.crt
+
+# Additional containers to add to the pod
+extraContainers: []
+
+# Any extra volumes
+extraVolumes: []
+  # - name: example-name
+  #   hostPath:
+  #     path: /path/on/host
+  #     type: DirectoryOrCreate
+  # - name: ssl-certs
+  #   hostPath:
+  #     path: /etc/ssl/certs/ca-bundle.crt
+  #     type: File
+
+# Any extra volume mounts
+extraVolumeMounts: []
+  #   - name: example-name
+  #     mountPath: /path/in/container
+  #   - name: ssl-certs
+  #     mountPath: /etc/ssl/certs/ca-certificates.crt
+  #     readOnly: true
+
+tolerations: []
+
+# Labels added to the pod
+podLabels: {}
+
+# Annotations added to the pod
+podAnnotations: {}
+
+# Annotations added to the deployment
+deploymentAnnotations: {}
+
+hostNetwork:
+  # Specifies if prometheus-adapter should be started in hostNetwork mode.
+  #
+  # You would require this enabled if you use alternate overlay networking for pods and
+  # API server unable to communicate with metrics-server. As an example, this is required
+  # if you use Weave network on EKS. See also dnsPolicy
+  enabled: false
+
+# When hostNetwork is enabled, you probably want to set this to ClusterFirstWithHostNet
+# dnsPolicy: ClusterFirstWithHostNet
+
+# Deployment strategy type
+strategy:
+  type: RollingUpdate
+  rollingUpdate:
+    maxUnavailable: 25%
+    maxSurge: 25%
+
+podDisruptionBudget:
+  # Specifies if PodDisruptionBudget should be enabled
+  # When enabled, minAvailable or maxUnavailable should also be defined.
+  enabled: false
+  minAvailable:
+  maxUnavailable: 1
+
+certManager:
+  enabled: false
+  caCertDuration: 43800h0m0s
+  certDuration: 8760h0m0s
+  # -- Set the revisionHistoryLimit on the Certificates. See
+  # https://cert-manager.io/docs/reference/api-docs/#cert-manager.io/v1.CertificateSpec
+  # Defaults to nil.
+  caCertRevisionHistoryLimit:
+  certRevisionHistoryLimit:
+
+## Extra manifests to deploy as an array
+extraManifests: []
+  # - apiVersion: v1
+  #   kind: ConfigMap
+  #   metadata:
+  #   labels:
+  #     name: prometheus-extra
+  #   data:
+  #     extra-data: "value"

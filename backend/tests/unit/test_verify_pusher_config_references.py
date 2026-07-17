@@ -186,6 +186,17 @@ def test_rendered_dev_pusher_direct_bindings_match_source_contract(preflight: Si
     assert preflight.validate_dev_pusher_binding_contract(deployment) == []
 
 
+def test_prod_pusher_retains_the_explicit_self_hosted_deepgram_contract(preflight: SimpleNamespace):
+    deployment = preflight.rendered_pusher_deployment("prod")
+    bindings = preflight.direct_pusher_bindings(deployment)
+    literals = preflight.literal_pusher_values(deployment)
+
+    assert bindings["DEEPGRAM_API_KEY"] == ("secret", "prod-omi-backend-secrets", "DEEPGRAM_API_KEY")
+    assert literals["DEEPGRAM_SELF_HOSTED_ENABLED"] == "true"
+    assert literals["DEEPGRAM_SELF_HOSTED_URL"] == "https://dg.omi.me"
+    assert literals["STT_SERVICE_MODELS"] == "parakeet,modulate-velma-2"
+
+
 def test_dev_pusher_literal_policy_rejects_stale_deepgram_model(preflight: SimpleNamespace):
     deployment = copy.deepcopy(preflight.rendered_pusher_deployment("dev"))
     env = deployment["spec"]["template"]["spec"]["containers"][0]["env"]

@@ -1,0 +1,376 @@
+{{- if or ( or .Values.autoDiscovery.clusterName .Values.autoDiscovery.namespace .Values.autoDiscovery.labels ) .Values.autoscalingGroups }}
+{{/* one of the above is required */}}
+apiVersion: {{ template "deployment.apiVersion" . }}
+kind: Deployment
+metadata:
+  annotations:
+{{ toYaml .Values.deployment.annotations | indent 4 }}
+  labels:
+{{ include "cluster-autoscaler.labels" . | indent 4 }}
+  name: {{ template "cluster-autoscaler.fullname" . }}
+  namespace: {{ .Release.Namespace }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+{{ include "cluster-autoscaler.instance-name" . | indent 6 }}
+    {{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 6 }}
+    {{- end }}
+{{- if .Values.updateStrategy }}
+  strategy:
+    {{ toYaml .Values.updateStrategy | nindent 4 | trim }}
+{{- end }}
+  template:
+    metadata:
+    {{- if .Values.podAnnotations }}
+      annotations:
+{{ toYaml .Values.podAnnotations | indent 8 }}
+    {{- end }}
+      labels:
+{{ include "cluster-autoscaler.instance-name" . | indent 8 }}
+      {{- if .Values.additionalLabels }}
+{{ toYaml .Values.additionalLabels | indent 8 }}
+      {{- end }}
+      {{- if .Values.podLabels }}
+{{ toYaml .Values.podLabels | indent 8 }}
+      {{- end }}
+    spec:
+      {{- if .Values.priorityClassName }}
+      priorityClassName: "{{ .Values.priorityClassName }}"
+      {{- end }}
+      {{- with .Values.dnsConfig }}
+      dnsConfig:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- if .Values.dnsPolicy }}
+      dnsPolicy: "{{ .Values.dnsPolicy }}"
+      {{- end }}
+      {{- if .Values.hostNetwork }}
+      hostNetwork: {{ .Values.hostNetwork }}
+      {{- end }}
+      {{- with .Values.initContainers }}
+      initContainers:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      containers:
+        - name: {{ template "cluster-autoscaler.name" . }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: "{{ .Values.image.pullPolicy }}"
+          command:
+            - ./cluster-autoscaler
+            - --cloud-provider={{ .Values.cloudProvider }}
+          {{- if and (eq .Values.cloudProvider "clusterapi") (eq .Values.clusterAPIMode "kubeconfig-incluster") }}
+            - --namespace={{ .Values.clusterAPIConfigMapsNamespace | default "kube-system" }}
+          {{- else }}
+            - --namespace={{ .Release.Namespace }}
+          {{- end }}
+          {{- if .Values.autoscalingGroups }}
+            {{- range .Values.autoscalingGroups }}
+            {{- if eq $.Values.cloudProvider "hetzner" }}
+            - --nodes={{ .minSize }}:{{ .maxSize }}:{{ .instanceType }}:{{ .region }}:{{ .name }}
+            {{- else }}
+            - --nodes={{ .minSize }}:{{ .maxSize }}:{{ .name }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
+          {{- if eq .Values.cloudProvider "rancher" }}
+            {{- if .Values.cloudConfigPath }}
+            - --cloud-config={{ .Values.cloudConfigPath }}
+            {{- end }}
+          {{- end }}
+          {{- if eq .Values.cloudProvider "aws" }}
+            {{- if .Values.autoDiscovery.clusterName }}
+            - --node-group-auto-discovery=asg:tag={{ tpl (join "," .Values.autoDiscovery.tags) . }}
+            {{- end }}
+            {{- if .Values.cloudConfigPath }}
+            - --cloud-config={{ .Values.cloudConfigPath }}
+            {{- end }}
+          {{- else if eq .Values.cloudProvider "gce" }}
+          {{- if .Values.autoscalingGroupsnamePrefix }}
+            {{- range .Values.autoscalingGroupsnamePrefix }}
+            - --node-group-auto-discovery=mig:namePrefix={{ tpl .name $ }},min={{ .minSize }},max={{ .maxSize }}
+            {{- end }}
+          {{- end }}
+          {{- if eq .Values.cloudProvider "oci" }}
+            {{- if .Values.cloudConfigPath }}
+            - --nodes={{ .minSize }}:{{ .maxSize }}:{{ .name }}
+            - --balance-similar-node-groups
+            {{- end }}
+          {{- end }}
+          {{- else if eq .Values.cloudProvider "magnum" }}
+            {{- if .Values.autoDiscovery.clusterName }}
+            - --cluster-name={{ tpl (.Values.autoDiscovery.clusterName) . }}
+            - --node-group-auto-discovery=magnum:role={{ tpl (join "," .Values.autoDiscovery.roles) . }}
+            {{- else }}
+            - --cluster-name={{ tpl (.Values.magnumClusterName) . }}
+            {{- end }}
+          {{- else if eq .Values.cloudProvider "clusterapi" }}
+            {{- if or .Values.autoDiscovery.clusterName .Values.autoDiscovery.labels .Values.autoDiscovery.namespace }}
+            - --node-group-auto-discovery=clusterapi:{{ template "cluster-autoscaler.capiAutodiscoveryConfig" . }}
+            {{- end }}
+            {{- if eq .Values.clusterAPIMode "incluster-kubeconfig"}}
+            - --cloud-config={{ .Values.clusterAPICloudConfigPath }}
+            {{- else if eq .Values.clusterAPIMode "kubeconfig-incluster"}}
+            - --kubeconfig={{ .Values.clusterAPIWorkloadKubeconfigPath }}
+            - --clusterapi-cloud-config-authoritative
+            {{- else if eq .Values.clusterAPIMode "kubeconfig-kubeconfig"}}
+            - --kubeconfig={{ .Values.clusterAPIWorkloadKubeconfigPath }}
+            - --cloud-config={{ .Values.clusterAPICloudConfigPath }}
+            {{- else if eq .Values.clusterAPIMode "single-kubeconfig"}}
+            - --kubeconfig={{ .Values.clusterAPIWorkloadKubeconfigPath }}
+            {{- end }}
+          {{- else if eq .Values.cloudProvider "azure" }}
+            {{- if .Values.autoDiscovery.clusterName }}
+            - --node-group-auto-discovery=label:cluster-autoscaler-enabled=true,cluster-autoscaler-name={{ tpl (.Values.autoDiscovery.clusterName) . }}
+            {{- end }}
+          {{- end }}
+          {{- if eq .Values.cloudProvider "magnum" }}
+            - --cloud-config={{ .Values.cloudConfigPath }}
+          {{- end }}
+          {{- range $key, $value := .Values.extraArgs }}
+            {{- if not (kindIs "invalid" $value) }}
+            - --{{ $key | mustRegexFind "^[^_]+" }}={{ $value }}
+            {{- else }}
+            - --{{ $key | mustRegexFind "^[^_]+" }}
+            {{- end }}
+          {{- end }}
+          {{- range .Values.customArgs }}
+            - {{ . }}
+          {{- end }}
+          env:
+            - name: POD_NAMESPACE
+              valueFrom:
+                fieldRef:
+                  fieldPath: metadata.namespace
+            - name: SERVICE_ACCOUNT
+              valueFrom:
+                fieldRef:
+                  fieldPath: spec.serviceAccountName
+          {{- if and (eq .Values.cloudProvider "aws") (ne (tpl .Values.awsRegion $) "") }}
+            - name: AWS_REGION
+              value: "{{ tpl .Values.awsRegion $ }}"
+            {{- if .Values.awsAccessKeyID }}
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  key: AwsAccessKeyId
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            {{- end }}
+            {{- if .Values.awsSecretAccessKey }}
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: AwsSecretAccessKey
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            {{- end }}
+          {{- else if eq .Values.cloudProvider "azure" }}
+            - name: ARM_SUBSCRIPTION_ID
+              valueFrom:
+                secretKeyRef:
+                  key: SubscriptionID
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: ARM_RESOURCE_GROUP
+              valueFrom:
+                secretKeyRef:
+                  key: ResourceGroup
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: ARM_VM_TYPE
+              valueFrom:
+                secretKeyRef:
+                  key: VMType
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: AZURE_ENABLE_FORCE_DELETE
+              value: "{{ .Values.azureEnableForceDelete }}"
+            {{- if .Values.azureUseWorkloadIdentityExtension }}
+            - name: ARM_USE_WORKLOAD_IDENTITY_EXTENSION
+              value: "true"
+            {{- else if .Values.azureUseManagedIdentityExtension }}
+            - name: ARM_USE_MANAGED_IDENTITY_EXTENSION
+              value: "true"
+            - name: ARM_USER_ASSIGNED_IDENTITY_ID
+              valueFrom:
+                secretKeyRef:
+                  key: UserAssignedIdentityID
+                  name: {{ template "cluster-autoscaler.fullname" . }}
+            {{- else }}
+            - name: ARM_TENANT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: TenantID
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: ARM_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  key: ClientID
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: ARM_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: ClientSecret
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            {{- end }}
+          {{- else if eq .Values.cloudProvider "exoscale" }}
+            - name: EXOSCALE_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: api-key
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: EXOSCALE_API_SECRET
+              valueFrom:
+                secretKeyRef:
+                  key: api-secret
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: EXOSCALE_ZONE
+              valueFrom:
+                secretKeyRef:
+                  key: api-zone
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+          {{- else if eq .Values.cloudProvider "kwok" }}
+            - name: KWOK_PROVIDER_CONFIGMAP
+              value: "{{.Values.kwokConfigMapName | default "kwok-provider-config"}}"
+          {{- else if eq .Values.cloudProvider "civo" }}
+            - name: CIVO_API_URL
+              valueFrom:
+                secretKeyRef:
+                  key: api-url
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: CIVO_API_KEY
+              valueFrom:
+                secretKeyRef:
+                  key: api-key
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: CIVO_CLUSTER_ID
+              valueFrom:
+                secretKeyRef:
+                  key: cluster-id
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+            - name: CIVO_REGION
+              valueFrom:
+                secretKeyRef:
+                  key: region
+                  name: {{ default (include "cluster-autoscaler.fullname" .) .Values.secretKeyRefNameOverride }}
+          {{- end }}
+          {{- range $key, $value := .Values.extraEnv }}
+            - name: {{ $key }}
+              value: "{{ $value }}"
+          {{- end }}
+          {{- range $key, $value := .Values.extraEnvConfigMaps }}
+            - name: {{ $key }}
+              valueFrom:
+                configMapKeyRef:
+                  name: {{ default (include "cluster-autoscaler.fullname" $) $value.name }}
+                  key: {{ required "Must specify key!" $value.key }}
+          {{- end }}
+          {{- range $key, $value := .Values.extraEnvSecrets }}
+            - name: {{ $key }}
+              valueFrom:
+                secretKeyRef:
+                  name: {{ default (include "cluster-autoscaler.fullname" $) $value.name }}
+                  key: {{ required "Must specify key!" $value.key }}
+          {{- end }}
+          {{- if or .Values.envFromSecret .Values.envFromConfigMap }}
+          envFrom:
+          {{- if .Values.envFromSecret }}
+            - secretRef:
+                name: {{ .Values.envFromSecret }}
+          {{- end }}
+          {{- if .Values.envFromConfigMap }}
+            - configMapRef:
+                name: {{ .Values.envFromConfigMap }}
+          {{- end }}
+          {{- end }}
+          livenessProbe:
+            httpGet:
+              path: /health-check
+              port: 8085
+          ports:
+            - containerPort: 8085
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
+          {{- if .Values.containerSecurityContext }}
+          securityContext:
+            {{ toYaml .Values.containerSecurityContext | nindent 12 | trim }}
+          {{- end }}
+          {{- if or (eq .Values.cloudProvider "magnum") .Values.extraVolumeSecrets .Values.extraVolumeMounts .Values.clusterAPIKubeconfigSecret }}
+          volumeMounts:
+          {{- if eq .Values.cloudProvider "magnum" }}
+            - name: cloudconfig
+              mountPath: {{ .Values.cloudConfigPath }}
+              readOnly: true
+          {{- end }}
+          {{- if and (eq .Values.cloudProvider "magnum") (.Values.magnumCABundlePath) }}
+            - name: ca-bundle
+              mountPath: {{ .Values.magnumCABundlePath }}
+              readOnly: true
+          {{- end }}
+          {{- range $key, $value := .Values.extraVolumeSecrets }}
+            - name: {{ $key }}
+              mountPath: {{ required "Must specify mountPath!" $value.mountPath }}
+              readOnly: true
+          {{- end }}
+          {{- if .Values.clusterAPIKubeconfigSecret }}
+            - name: cluster-api-kubeconfig
+              mountPath: {{ .Values.clusterAPIWorkloadKubeconfigPath | trimSuffix "/value" }}
+          {{- end }}
+          {{- if .Values.extraVolumeMounts }}
+            {{- toYaml .Values.extraVolumeMounts | nindent 12 }}
+          {{- end }}
+          {{- end }}
+    {{- if .Values.affinity }}
+      affinity:
+{{ toYaml .Values.affinity | indent 8 }}
+    {{- end }}
+    {{- if .Values.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.nodeSelector | indent 8 }}
+    {{- end }}
+      serviceAccountName: {{ template "cluster-autoscaler.serviceAccountName" . }}
+      tolerations:
+{{ toYaml .Values.tolerations | indent 8 }}
+    {{- if .Values.topologySpreadConstraints }}
+      topologySpreadConstraints:
+{{ toYaml .Values.topologySpreadConstraints | indent 8 }}
+    {{- end }}
+      {{- if .Values.securityContext }}
+      securityContext:
+        {{ toYaml .Values.securityContext | nindent 8 | trim }}
+      {{- end }}
+      {{- if or (eq .Values.cloudProvider "magnum") .Values.extraVolumeSecrets .Values.extraVolumes .Values.clusterAPIKubeconfigSecret }}
+      volumes:
+      {{- if eq .Values.cloudProvider "magnum" }}
+        - name: cloudconfig
+          hostPath:
+            path: {{ .Values.cloudConfigPath }}
+      {{- end }}
+      {{- if and (eq .Values.cloudProvider "magnum") (.Values.magnumCABundlePath) }}
+        - name: ca-bundle
+          hostPath:
+            path: {{ .Values.magnumCABundlePath }}
+      {{- end }}
+      {{- range $key, $value := .Values.extraVolumeSecrets }}
+        - name: {{ $key }}
+          secret:
+            secretName: {{ default (include "cluster-autoscaler.fullname" $) $value.name }}
+            {{- if $value.items }}
+            items:
+            {{- toYaml $value.items | nindent 14 }}
+            {{- end }}
+      {{- end }}
+      {{- if .Values.extraVolumes }}
+        {{- toYaml .Values.extraVolumes | nindent 8 }}
+      {{- end }}
+      {{- if .Values.clusterAPIKubeconfigSecret }}
+        - name: cluster-api-kubeconfig
+          secret:
+            secretName: {{ .Values.clusterAPIKubeconfigSecret }}
+      {{- end }}
+      {{- end }}
+      {{- if .Values.image.pullSecrets }}
+      imagePullSecrets:
+      {{- range .Values.image.pullSecrets }}
+        - name: {{ . }}
+      {{- end }}
+    {{- end }}
+{{- end }}

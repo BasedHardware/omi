@@ -19,16 +19,19 @@ class STTServingSurface(str, Enum):
     PTT = 'ptt'
 
 
-DEEPGRAM_PROVIDER: Final = 'deepgram'
+DEEPGRAM_CLOUD_PROVIDER: Final = 'deepgram_cloud'
+DEEPGRAM_SELF_HOSTED_PROVIDER: Final = 'deepgram_self_hosted'
 MODULATE_PROVIDER: Final = 'modulate'
 PARAKEET_PROVIDER: Final = 'parakeet'
 
-# This is the single source of truth for provider enablement. Deepgram is
-# intentionally absent from every serving surface. Future availability changes
-# start here: enable all audited surfaces for a global switch, or only the
-# intended surfaces for granular rollout, after provider wiring is ready.
+# This is the single source of truth for provider enablement. Cloud Deepgram is
+# intentionally absent from every serving surface. Self-hosted Deepgram is a
+# distinct product and remains available only to the streaming runtime that has
+# its explicit self-hosted endpoint configured. Future availability changes
+# start here, after provider wiring and regression coverage are ready.
 PROVIDER_SERVING_SURFACES: Final[Mapping[str, frozenset[STTServingSurface]]] = {
-    DEEPGRAM_PROVIDER: frozenset(),
+    DEEPGRAM_CLOUD_PROVIDER: frozenset(),
+    DEEPGRAM_SELF_HOSTED_PROVIDER: frozenset({STTServingSurface.STREAMING}),
     MODULATE_PROVIDER: frozenset(
         {
             STTServingSurface.STREAMING,
@@ -56,14 +59,19 @@ DEFAULT_MODELS_BY_SURFACE: Final[Mapping[STTServingSurface, tuple[str, ...]]] = 
 
 
 def provider_for_model_token(model: str) -> str | None:
-    """Return the provider owning a known model token, including retired tokens."""
+    """Return the provider owning a known model token.
+
+    Deepgram model tokens identify the retained self-hosted deployment. Their
+    selection still requires the runtime's explicit self-hosted endpoint; they
+    never imply permission to contact the hosted Deepgram API.
+    """
     normalized = model.strip().lower()
     if normalized == 'parakeet':
         return PARAKEET_PROVIDER
     if normalized == 'modulate-velma-2':
         return MODULATE_PROVIDER
     if normalized in {'deepgram', 'nova-2', 'nova-3', 'dg-nova-2', 'dg-nova-3'}:
-        return DEEPGRAM_PROVIDER
+        return DEEPGRAM_SELF_HOSTED_PROVIDER
     return None
 
 

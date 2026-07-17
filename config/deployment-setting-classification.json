@@ -8,6 +8,7 @@
       "DD_API_KEY",
       "DECK_APP_SECRET",
       "DESKTOP_PREVIEW_PUBLISH_KEY",
+      "DEEPGRAM_API_KEY",
       "DOCKER_PAT",
       "ENCRYPTION_SECRET",
       "FAL_KEY",

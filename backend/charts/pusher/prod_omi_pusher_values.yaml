@@ -137,6 +137,14 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: ADMIN_KEY
+  # This is the self-hosted Deepgram credential used only with dg.omi.me.
+  # Hosted Deepgram is disabled by the serving policy and is not injected into
+  # backend-listen or Cloud Run workloads.
+  - name: DEEPGRAM_API_KEY
+    valueFrom:
+      secretKeyRef:
+        name: prod-omi-backend-secrets
+        key: DEEPGRAM_API_KEY
   - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
@@ -232,6 +240,10 @@ env:
       secretKeyRef:
         name: prod-omi-backend-secrets
         key: TYPESENSE_API_KEY
+  - name: DEEPGRAM_SELF_HOSTED_ENABLED
+    value: "true"
+  - name: DEEPGRAM_SELF_HOSTED_URL
+    value: "https://dg.omi.me"
   - name: HOSTED_PARAKEET_API_URL
     value: "http://parakeet.omi.me"
   - name: STT_PRERECORDED_MODEL

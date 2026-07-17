@@ -1,0 +1,15 @@
+kind: RoleBinding
+apiVersion: rbac.authorization.k8s.io/v1
+metadata:
+  name: gpu-operator
+  labels:
+    {{- include "gpu-operator.labels" . | nindent 4 }}
+    app.kubernetes.io/component: "gpu-operator"
+subjects:
+- kind: ServiceAccount
+  name: gpu-operator
+  namespace: {{ $.Release.Namespace }}
+roleRef:
+  kind: Role
+  name: gpu-operator
+  apiGroup: rbac.authorization.k8s.io

@@ -1,0 +1,48 @@
+{{- if and .Values.coreDns.enabled .Values.coreDns.serviceMonitor.enabled .Values.kubernetesServiceMonitors.enabled }}
+apiVersion: monitoring.coreos.com/v1
+kind: ServiceMonitor
+metadata:
+  name: {{ template "kube-prometheus-stack.fullname" . }}-coredns
+  {{- if .Values.prometheus.prometheusSpec.ignoreNamespaceSelectors }}
+  namespace: kube-system
+  {{- else }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+  {{- end }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-coredns
+  {{- with .Values.coreDns.serviceMonitor.additionalLabels }}
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+spec:
+  jobLabel: {{ .Values.coreDns.serviceMonitor.jobLabel }}
+  {{- include "servicemonitor.scrapeLimits" .Values.coreDns.serviceMonitor | nindent 2 }}
+  selector:
+    {{- if .Values.coreDns.serviceMonitor.selector }}
+    {{ tpl (toYaml .Values.coreDns.serviceMonitor.selector | nindent 4) . }}
+    {{- else }}
+    matchLabels:
+      app: {{ template "kube-prometheus-stack.name" . }}-coredns
+      release: {{ $.Release.Name | quote }}
+    {{- end }}
+  namespaceSelector:
+    matchNames:
+      - "kube-system"
+  endpoints:
+  - port: {{ .Values.coreDns.serviceMonitor.port }}
+    {{- if .Values.coreDns.serviceMonitor.interval}}
+    interval: {{ .Values.coreDns.serviceMonitor.interval }}
+    {{- end }}
+    {{- if .Values.coreDns.serviceMonitor.proxyUrl }}
+    proxyUrl: {{ .Values.coreDns.serviceMonitor.proxyUrl}}
+    {{- end }}
+    bearerTokenFile: /var/run/secrets/kubernetes.io/serviceaccount/token
+{{- if .Values.coreDns.serviceMonitor.metricRelabelings }}
+    metricRelabelings:
+{{ tpl (toYaml .Values.coreDns.serviceMonitor.metricRelabelings | indent 4) . }}
+{{- end }}
+{{- if .Values.coreDns.serviceMonitor.relabelings }}
+    relabelings:
+{{ tpl (toYaml .Values.coreDns.serviceMonitor.relabelings | indent 4) . }}
+{{- end }}
+{{- end }}

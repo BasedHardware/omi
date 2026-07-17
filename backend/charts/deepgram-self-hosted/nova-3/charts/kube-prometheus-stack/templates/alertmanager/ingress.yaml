@@ -1,0 +1,78 @@
+{{- if and .Values.alertmanager.enabled .Values.alertmanager.ingress.enabled }}
+{{- $pathType := .Values.alertmanager.ingress.pathType | default "ImplementationSpecific" }}
+{{- $serviceName := printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "alertmanager" }}
+{{- $backendServiceName := .Values.alertmanager.ingress.serviceName | default (printf "%s-%s" (include "kube-prometheus-stack.fullname" .) "alertmanager") }}
+{{- $servicePort := .Values.alertmanager.ingress.servicePort | default .Values.alertmanager.service.port -}}
+{{- $routePrefix := list .Values.alertmanager.alertmanagerSpec.routePrefix }}
+{{- $paths := .Values.alertmanager.ingress.paths | default $routePrefix -}}
+{{- $apiIsStable := eq (include "kube-prometheus-stack.ingress.isStable" .) "true" -}}
+{{- $ingressSupportsPathType := eq (include "kube-prometheus-stack.ingress.supportsPathType" .) "true" -}}
+apiVersion: {{ include "kube-prometheus-stack.ingress.apiVersion" . }}
+kind: Ingress
+metadata:
+  name: {{ $serviceName }}
+  namespace: {{ template "kube-prometheus-stack.namespace" . }}
+{{- if .Values.alertmanager.ingress.annotations }}
+  annotations:
+    {{- tpl (toYaml .Values.alertmanager.ingress.annotations) . | nindent 4 }}
+{{- end }}
+  labels:
+    app: {{ template "kube-prometheus-stack.name" . }}-alertmanager
+{{- if .Values.alertmanager.ingress.labels }}
+{{ toYaml .Values.alertmanager.ingress.labels | indent 4 }}
+{{- end }}
+{{ include "kube-prometheus-stack.labels" . | indent 4 }}
+spec:
+  {{- if $apiIsStable }}
+  {{- if .Values.alertmanager.ingress.ingressClassName }}
+  ingressClassName: {{ .Values.alertmanager.ingress.ingressClassName }}
+  {{- end }}
+  {{- end }}
+  rules:
+  {{- if .Values.alertmanager.ingress.hosts }}
+  {{- range $host := .Values.alertmanager.ingress.hosts }}
+    - host: {{ tpl $host $ | quote }}
+      http:
+        paths:
+  {{- range $p := $paths }}
+          - path: {{ tpl $p $ }}
+            {{- if and $pathType $ingressSupportsPathType }}
+            pathType: {{ $pathType }}
+            {{- end }}
+            backend:
+              {{- if $apiIsStable }}
+              service:
+                name: {{ $backendServiceName }}
+                port:
+                  number: {{ $servicePort }}
+              {{- else }}
+              serviceName: {{ $backendServiceName }}
+              servicePort: {{ $servicePort }}
+    {{- end }}
+    {{- end -}}
+  {{- end -}}
+  {{- else }}
+    - http:
+        paths:
+  {{- range $p := $paths }}
+          - path: {{ tpl $p $ }}
+            {{- if and $pathType $ingressSupportsPathType }}
+            pathType: {{ $pathType }}
+            {{- end }}
+            backend:
+              {{- if $apiIsStable }}
+              service:
+                name: {{ $backendServiceName }}
+                port:
+                  number: {{ $servicePort }}
+              {{- else }}
+              serviceName: {{ $backendServiceName }}
+              servicePort: {{ $servicePort }}
+  {{- end }}
+  {{- end -}}
+  {{- end -}}
+  {{- if .Values.alertmanager.ingress.tls }}
+  tls:
+{{ tpl (toYaml .Values.alertmanager.ingress.tls | indent 4) . }}
+  {{- end -}}
+{{- end -}}

@@ -1,0 +1,602 @@
+# Default values for gpu-operator.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+platform:
+  openshift: false
+
+nfd:
+  enabled: true
+  nodefeaturerules: false
+
+psa:
+  enabled: false
+
+cdi:
+  enabled: false
+  default: false
+
+sandboxWorkloads:
+  enabled: false
+  defaultWorkload: "container"
+
+hostPaths:
+  # rootFS represents the path to the root filesystem of the host.
+  # This is used by components that need to interact with the host filesystem
+  # and as such this must be a chroot-able filesystem.
+  # Examples include the MIG Manager and Toolkit Container which may need to
+  # stop, start, or restart systemd services
+  rootFS: "/"
+
+  # driverInstallDir represents the root at which driver files including libraries,
+  # config files, and executables can be found.
+  driverInstallDir: "/run/nvidia/driver"
+
+daemonsets:
+  labels: {}
+  annotations: {}
+  priorityClassName: system-node-critical
+  tolerations:
+  - key: nvidia.com/gpu
+    operator: Exists
+    effect: NoSchedule
+  # configuration for controlling update strategy("OnDelete" or "RollingUpdate") of GPU Operands
+  # note that driver Daemonset is always set with OnDelete to avoid unintended disruptions
+  updateStrategy: "RollingUpdate"
+  # configuration for controlling rolling update of GPU Operands
+  rollingUpdate:
+    # maximum number of nodes to simultaneously apply pod updates on.
+    # can be specified either as number or percentage of nodes. Default 1.
+    maxUnavailable: "1"
+
+validator:
+  repository: nvcr.io/nvidia/cloud-native
+  image: gpu-operator-validator
+  # If version is not specified, then default is to use chart.AppVersion
+  #version: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+  resources: {}
+  plugin:
+    env:
+      - name: WITH_WORKLOAD
+        value: "false"
+
+operator:
+  repository: nvcr.io/nvidia
+  image: gpu-operator
+  # If version is not specified, then default is to use chart.AppVersion
+  #version: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  priorityClassName: system-node-critical
+  defaultRuntime: docker
+  runtimeClass: nvidia
+  use_ocp_driver_toolkit: false
+  # cleanup CRD on chart un-install
+  cleanupCRD: false
+  # upgrade CRD on chart upgrade, requires --disable-openapi-validation flag
+  # to be passed during helm upgrade.
+  upgradeCRD: true
+  initContainer:
+    image: cuda
+    repository: nvcr.io/nvidia
+    version: 12.6.3-base-ubi9
+    imagePullPolicy: IfNotPresent
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Equal"
+    value: ""
+    effect: "NoSchedule"
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Equal"
+    value: ""
+    effect: "NoSchedule"
+  annotations:
+    openshift.io/scc: restricted-readonly
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: "node-role.kubernetes.io/master"
+                operator: In
+                values: [""]
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: "node-role.kubernetes.io/control-plane"
+                operator: In
+                values: [""]
+  logging:
+    # Zap time encoding (one of 'epoch', 'millis', 'nano', 'iso8601', 'rfc3339' or 'rfc3339nano')
+    timeEncoding: epoch
+    # Zap Level to configure the verbosity of logging. Can be one of 'debug', 'info', 'error', or any integer value > 0 which corresponds to custom debug levels of increasing verbosity
+    level: info
+    # Development Mode defaults(encoder=consoleEncoder,logLevel=Debug,stackTraceLevel=Warn)
+    # Production Mode defaults(encoder=jsonEncoder,logLevel=Info,stackTraceLevel=Error)
+    develMode: false
+  resources:
+    limits:
+      cpu: 500m
+      memory: 350Mi
+    requests:
+      cpu: 200m
+      memory: 100Mi
+
+mig:
+  strategy: single
+
+driver:
+  enabled: true
+  nvidiaDriverCRD:
+    enabled: false
+    deployDefaultCR: true
+    driverType: gpu
+    nodeSelector: {}
+  useOpenKernelModules: false
+  # use pre-compiled packages for NVIDIA driver installation.
+  # only supported for as a tech-preview feature on ubuntu22.04 kernels.
+  usePrecompiled: false
+  repository: nvcr.io/nvidia
+  image: driver
+  version: "550.144.03"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  startupProbe:
+    initialDelaySeconds: 60
+    periodSeconds: 10
+    # nvidia-smi can take longer than 30s in some cases
+    # ensure enough timeout is set
+    timeoutSeconds: 60
+    failureThreshold: 120
+  rdma:
+    enabled: false
+    useHostMofed: false
+  upgradePolicy:
+    # global switch for automatic upgrade feature
+    # if set to false all other options are ignored
+    autoUpgrade: true
+    # how many nodes can be upgraded in parallel
+    # 0 means no limit, all nodes will be upgraded in parallel
+    maxParallelUpgrades: 1
+    # maximum number of nodes with the driver installed, that can be unavailable during
+    # the upgrade. Value can be an absolute number (ex: 5) or
+    # a percentage of total nodes at the start of upgrade (ex:
+    # 10%). Absolute number is calculated from percentage by rounding
+    # up. By default, a fixed value of 25% is used.'
+    maxUnavailable: 25%
+    # options for waiting on pod(job) completions
+    waitForCompletion:
+      timeoutSeconds: 0
+      podSelector: ""
+    # options for gpu pod deletion
+    gpuPodDeletion:
+      force: false
+      timeoutSeconds: 300
+      deleteEmptyDir: false
+    # options for node drain (`kubectl drain`) before the driver reload
+    # this is required only if default GPU pod deletions done by the operator
+    # are not sufficient to re-install the driver
+    drain:
+      enable: false
+      force: false
+      podSelector: ""
+      # It's recommended to set a timeout to avoid infinite drain in case non-fatal error keeps happening on retries
+      timeoutSeconds: 300
+      deleteEmptyDir: false
+  manager:
+    image: k8s-driver-manager
+    repository: nvcr.io/nvidia/cloud-native
+    # When choosing a different version of k8s-driver-manager, DO NOT downgrade to a version lower than v0.6.4
+    # to ensure k8s-driver-manager stays compatible with gpu-operator starting from v24.3.0
+    version: v0.7.0
+    imagePullPolicy: IfNotPresent
+    env:
+      - name: ENABLE_GPU_POD_EVICTION
+        value: "true"
+      - name: ENABLE_AUTO_DRAIN
+        value: "false"
+      - name: DRAIN_USE_FORCE
+        value: "false"
+      - name: DRAIN_POD_SELECTOR_LABEL
+        value: ""
+      - name: DRAIN_TIMEOUT_SECONDS
+        value: "0s"
+      - name: DRAIN_DELETE_EMPTYDIR_DATA
+        value: "false"
+  env: []
+  resources: {}
+  # Private mirror repository configuration
+  repoConfig:
+    configMapName: ""
+  # custom ssl key/certificate configuration
+  certConfig:
+    name: ""
+  # vGPU licensing configuration
+  licensingConfig:
+    configMapName: ""
+    nlsEnabled: true
+  # vGPU topology daemon configuration
+  virtualTopology:
+    config: ""
+  # kernel module configuration for NVIDIA driver
+  kernelModuleConfig:
+    name: ""
+
+toolkit:
+  enabled: true
+  repository: nvcr.io/nvidia/k8s
+  image: container-toolkit
+  version: v1.17.4-ubuntu20.04
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  installDir: "/usr/local/nvidia"
+
+devicePlugin:
+  enabled: true
+  repository: nvcr.io/nvidia
+  image: k8s-device-plugin
+  version: v0.17.0
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  args: []
+  env:
+    - name: PASS_DEVICE_SPECS
+      value: "true"
+    - name: FAIL_ON_INIT_ERROR
+      value: "true"
+    - name: DEVICE_LIST_STRATEGY
+      value: envvar
+    - name: DEVICE_ID_STRATEGY
+      value: uuid
+    - name: NVIDIA_VISIBLE_DEVICES
+      value: all
+    - name: NVIDIA_DRIVER_CAPABILITIES
+      value: all
+  resources: {}
+  # Plugin configuration
+  # Use "name" to either point to an existing ConfigMap or to create a new one with a list of configurations(i.e with create=true).
+  # Use "data" to build an integrated ConfigMap from a set of configurations as
+  # part of this helm chart. An example of setting "data" might be:
+  # config:
+  #   name: device-plugin-config
+  #   create: true
+  #   data:
+  #     default: |-
+  #       version: v1
+  #       flags:
+  #         migStrategy: none
+  #     mig-single: |-
+  #       version: v1
+  #       flags:
+  #         migStrategy: single
+  #     mig-mixed: |-
+  #       version: v1
+  #       flags:
+  #         migStrategy: mixed
+  config:
+    # Create a ConfigMap (default: false)
+    create: false
+    # ConfigMap name (either existing or to create a new one with create=true above)
+    name: ""
+    # Default config name within the ConfigMap
+    default: ""
+    # Data section for the ConfigMap to create (i.e only applies when create=true)
+    data: {}
+  # MPS related configuration for the plugin
+  mps:
+    # MPS root path on the host
+    root: "/run/nvidia/mps"
+
+# standalone dcgm hostengine
+dcgm:
+  # disabled by default to use embedded nv-hostengine by exporter
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: dcgm
+  version: 3.3.9-1-ubuntu22.04
+  imagePullPolicy: IfNotPresent
+  args: []
+  env: []
+  resources: {}
+
+dcgmExporter:
+  enabled: true
+  repository: nvcr.io/nvidia/k8s
+  image: dcgm-exporter
+  version: 3.3.9-3.6.1-ubuntu22.04
+  imagePullPolicy: IfNotPresent
+  env:
+    - name: DCGM_EXPORTER_LISTEN
+      value: ":9400"
+    - name: DCGM_EXPORTER_KUBERNETES
+      value: "true"
+    - name: DCGM_EXPORTER_COLLECTORS
+      value: "/etc/dcgm-exporter/dcp-metrics-included.csv"
+  resources: {}
+  serviceMonitor:
+    enabled: false
+    interval: 15s
+    honorLabels: false
+    additionalLabels: {}
+    relabelings: []
+    # - source_labels:
+    #     - __meta_kubernetes_pod_node_name
+    #   regex: (.*)
+    #   target_label: instance
+    #   replacement: $1
+    #   action: replace
+  # DCGM Exporter configuration
+  # This block is used to configure DCGM Exporter to emit a customized list of metrics.
+  # Use "name" to either point to an existing ConfigMap or to create a new one with a
+  # list of configurations (i.e with create=true).
+  # When pointing to an existing ConfigMap, the ConfigMap must exist in the same namespace as the release.
+  # The metrics are expected to be listed under a key called `dcgm-metrics.csv`.
+  # Use "data" to build an integrated ConfigMap from a set of custom metrics as
+  # part of the chart. An example of some custom metrics are shown below. Note that
+  # the contents of "data" must be in CSV format and be valid DCGM Exporter metric configurations.
+  # config:
+    # name: custom-dcgm-exporter-metrics
+    # create: true
+    # data: |-
+      # Format
+      # If line starts with a '#' it is considered a comment
+      # DCGM FIELD, Prometheus metric type, help message
+
+      # Clocks
+      # DCGM_FI_DEV_SM_CLOCK,  gauge, SM clock frequency (in MHz).
+      # DCGM_FI_DEV_MEM_CLOCK, gauge, Memory clock frequency (in MHz).
+gfd:
+  enabled: true
+  repository: nvcr.io/nvidia
+  image: k8s-device-plugin
+  version: v0.17.0
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env:
+    - name: GFD_SLEEP_INTERVAL
+      value: 60s
+    - name: GFD_FAIL_ON_INIT_ERROR
+      value: "true"
+  resources: {}
+
+migManager:
+  enabled: true
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-mig-manager
+  version: v0.10.0-ubuntu20.04
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env:
+    - name: WITH_REBOOT
+      value: "false"
+  resources: {}
+  # MIG configuration
+  # Use "name" to either point to an existing ConfigMap or to create a new one with a list of configurations(i.e with create=true).
+  # Use "data" to build an integrated ConfigMap from a set of configurations as
+  # part of this helm chart. An example of setting "data" might be:
+  # config:
+  #   name: custom-mig-parted-configs
+  #   create: true
+  #   data: |-
+  #     config.yaml: |-
+  #       version: v1
+  #       mig-configs:
+  #         all-disabled:
+  #           - devices: all
+  #             mig-enabled: false
+  #         custom-mig:
+  #           - devices: [0]
+  #             mig-enabled: false
+  #           - devices: [1]
+  #              mig-enabled: true
+  #              mig-devices:
+  #                "1g.10gb": 7
+  #           - devices: [2]
+  #             mig-enabled: true
+  #             mig-devices:
+  #               "2g.20gb": 2
+  #               "3g.40gb": 1
+  #           - devices: [3]
+  #             mig-enabled: true
+  #             mig-devices:
+  #               "3g.40gb": 1
+  #               "4g.40gb": 1
+  config:
+    default: "all-disabled"
+    # Create a ConfigMap (default: false)
+    create: false
+    # ConfigMap name (either existing or to create a new one with create=true above)
+    name: ""
+    # Data section for the ConfigMap to create (i.e only applies when create=true)
+    data: {}
+  gpuClientsConfig:
+    name: ""
+
+nodeStatusExporter:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: gpu-operator-validator
+  # If version is not specified, then default is to use chart.AppVersion
+  #version: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  resources: {}
+
+gds:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: nvidia-fs
+  version: "2.20.5"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+
+gdrcopy:
+  enabled: false
+  repository: nvcr.io/nvidia/cloud-native
+  image: gdrdrv
+  version: "v2.4.1-2"
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  args: []
+
+vgpuManager:
+  enabled: false
+  repository: ""
+  image: vgpu-manager
+  version: ""
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  driverManager:
+    image: k8s-driver-manager
+    repository: nvcr.io/nvidia/cloud-native
+    # When choosing a different version of k8s-driver-manager, DO NOT downgrade to a version lower than v0.6.4
+    # to ensure k8s-driver-manager stays compatible with gpu-operator starting from v24.3.0
+    version: v0.7.0
+    imagePullPolicy: IfNotPresent
+    env:
+      - name: ENABLE_GPU_POD_EVICTION
+        value: "false"
+      - name: ENABLE_AUTO_DRAIN
+        value: "false"
+
+vgpuDeviceManager:
+  enabled: true
+  repository: nvcr.io/nvidia/cloud-native
+  image: vgpu-device-manager
+  version: v0.2.8
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  config:
+    name: ""
+    default: "default"
+
+vfioManager:
+  enabled: true
+  repository: nvcr.io/nvidia
+  image: cuda
+  version: 12.6.3-base-ubi9
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+  driverManager:
+    image: k8s-driver-manager
+    repository: nvcr.io/nvidia/cloud-native
+    # When choosing a different version of k8s-driver-manager, DO NOT downgrade to a version lower than v0.6.4
+    # to ensure k8s-driver-manager stays compatible with gpu-operator starting from v24.3.0
+    version: v0.7.0
+    imagePullPolicy: IfNotPresent
+    env:
+      - name: ENABLE_GPU_POD_EVICTION
+        value: "false"
+      - name: ENABLE_AUTO_DRAIN
+        value: "false"
+
+kataManager:
+  enabled: false
+  config:
+    artifactsDir: "/opt/nvidia-gpu-operator/artifacts/runtimeclasses"
+    runtimeClasses:
+      - name: kata-nvidia-gpu
+        nodeSelector: {}
+        artifacts:
+          url: nvcr.io/nvidia/cloud-native/kata-gpu-artifacts:ubuntu22.04-535.54.03
+          pullSecret: ""
+      - name: kata-nvidia-gpu-snp
+        nodeSelector:
+          "nvidia.com/cc.capable": "true"
+        artifacts:
+          url: nvcr.io/nvidia/cloud-native/kata-gpu-artifacts:ubuntu22.04-535.86.10-snp
+          pullSecret: ""
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-kata-manager
+  version: v0.2.2
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env: []
+  resources: {}
+
+sandboxDevicePlugin:
+  enabled: true
+  repository: nvcr.io/nvidia
+  image: kubevirt-gpu-device-plugin
+  version: v1.2.10
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  args: []
+  env: []
+  resources: {}
+
+ccManager:
+  enabled: false
+  defaultMode: "off"
+  repository: nvcr.io/nvidia/cloud-native
+  image: k8s-cc-manager
+  version: v0.1.1
+  imagePullPolicy: IfNotPresent
+  imagePullSecrets: []
+  env:
+    - name: CC_CAPABLE_DEVICE_IDS
+      value: "0x2339,0x2331,0x2330,0x2324,0x2322,0x233d"
+  resources: {}
+
+node-feature-discovery:
+  enableNodeFeatureApi: true
+  priorityClassName: system-node-critical
+  gc:
+    enable: true
+    replicaCount: 1
+    serviceAccount:
+      name: node-feature-discovery
+      create: false
+  worker:
+    serviceAccount:
+      name: node-feature-discovery
+      # disable creation to avoid duplicate serviceaccount creation by master spec below
+      create: false
+    tolerations:
+    - key: "node-role.kubernetes.io/master"
+      operator: "Equal"
+      value: ""
+      effect: "NoSchedule"
+    - key: "node-role.kubernetes.io/control-plane"
+      operator: "Equal"
+      value: ""
+      effect: "NoSchedule"
+    - key: nvidia.com/gpu
+      operator: Exists
+      effect: NoSchedule
+    config:
+      sources:
+        pci:
+          deviceClassWhitelist:
+          - "02"
+          - "0200"
+          - "0207"
+          - "0300"
+          - "0302"
+          deviceLabelFields:
+          - vendor
+  master:
+    serviceAccount:
+      name: node-feature-discovery
+      create: true
+    config:
+      extraLabelNs: ["nvidia.com"]
+      # noPublish: false
+      # resourceLabels: ["nvidia.com/feature-1","nvidia.com/feature-2"]
+      # enableTaints: false
+      # labelWhiteList: "nvidia.com/gpu"

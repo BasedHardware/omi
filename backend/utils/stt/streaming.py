@@ -14,6 +14,7 @@ from deepgram import DeepgramClient, DeepgramClientOptions, LiveTranscriptionEve
 from deepgram.clients.live.v1 import LiveOptions
 
 from config.stt_provider_policy import (
+    DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
     STTServingSurface,
@@ -21,7 +22,6 @@ from config.stt_provider_policy import (
     provider_is_enabled,
 )
 from utils.async_tasks import create_named_task
-from utils.byok import get_byok_key
 from utils.executors import sync_executor, run_blocking
 from utils.http_client import get_stt_client, get_stt_semaphore
 from utils.stt.safe_socket import SafeDeepgramSocket  # noqa: F401 — re-exported for backward compat
@@ -36,9 +36,6 @@ from utils.other.backoff import calculate_backoff_with_jitter
 import logging
 
 logger = logging.getLogger(__name__)
-
-
-headers = {"Authorization": f"Token {os.getenv('DEEPGRAM_API_KEY')}", "Content-Type": "audio/*"}
 
 
 class STTService(str, Enum):
@@ -287,18 +284,28 @@ def get_stt_service_for_language(
 ) -> Tuple[Optional[STTService], Optional[str], Optional[str]]:
     """Select a serving STT provider allowed for the requested product surface.
 
-    A stale ``dg-*`` configuration is intentionally ignored. Provider wiring
-    and the central serving policy must both change before a retired provider
-    can return, so a ConfigMap rollback cannot reactivate it.
+    A ``dg-*`` configuration is eligible only for the retained self-hosted
+    deployment. It never selects Deepgram's hosted API, and a missing
+    self-hosted endpoint falls through to the policy-owned alternatives.
     """
     # Missing language metadata historically meant English. Preserve that
     # behavior without opening a retired-provider fallback for unknown values.
     base_lang = _normalize_language(language) or 'en'
-    del multi_lang_enabled  # Both replacement providers own their language handling.
 
     def select(models: List[str] | Tuple[str, ...]) -> Optional[Tuple[STTService, str, str]]:
         for model in models:
             model = model.strip()
+            if (
+                model.startswith('dg-')
+                and provider_is_enabled(DEEPGRAM_SELF_HOSTED_PROVIDER, surface)
+                and is_dg_self_hosted
+            ):
+                dg_model = model.replace('dg-', '', 1)
+                if multi_lang_enabled and language in deepgram_nova3_multi_languages:
+                    return STTService.deepgram, 'multi', dg_model
+                if language in deepgram_nova3_languages:
+                    return STTService.deepgram, language, dg_model
+                continue
             if (
                 model == 'parakeet'
                 and provider_is_enabled(PARAKEET_PROVIDER, surface)
@@ -348,26 +355,34 @@ def should_preserve_filler_words(language: str) -> bool:
     return not language.startswith('en')
 
 
-# Initialize Deepgram client based on environment configuration
+# Initialize a Deepgram client only for the retained self-hosted deployment.
+# Never construct the SDK's default client here: its default endpoint is the
+# retired hosted Deepgram API.
 is_dg_self_hosted = os.getenv('DEEPGRAM_SELF_HOSTED_ENABLED', '').lower() == 'true'
-deepgram_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+deepgram: Optional[DeepgramClient] = None
 
-deepgram_cloud_options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
-deepgram_cloud_options.url = "https://api.deepgram.com"
+
+def _self_hosted_deepgram_options(endpoint: str) -> DeepgramClientOptions:
+    """Build options for a verified self-hosted endpoint, never the SDK default."""
+    options = DeepgramClientOptions(options={"termination_exception_connect": "true"})
+    options.url = endpoint
+    return options
+
+
+def _require_self_hosted_deepgram_endpoint(endpoint: str) -> str:
+    """Reject the retired hosted endpoint before constructing an SDK client."""
+    if not endpoint:
+        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
+    if urllib.parse.urlparse(endpoint).hostname == 'api.deepgram.com':
+        raise ValueError('DEEPGRAM_SELF_HOSTED_URL must not point to api.deepgram.com')
+    return endpoint
+
 
 if is_dg_self_hosted:
-    dg_self_hosted_url = os.getenv('DEEPGRAM_SELF_HOSTED_URL')
-    if not dg_self_hosted_url:
-        raise ValueError("DEEPGRAM_SELF_HOSTED_URL must be set when DEEPGRAM_SELF_HOSTED_ENABLED is true")
-    # Override only the URL while keeping all other options
-    deepgram_options.url = dg_self_hosted_url
-    deepgram_cloud_options.url = dg_self_hosted_url
+    dg_self_hosted_url = _require_self_hosted_deepgram_endpoint(os.getenv('DEEPGRAM_SELF_HOSTED_URL') or '')
+    deepgram_options = _self_hosted_deepgram_options(dg_self_hosted_url)
     logger.info(f"Using Deepgram self-hosted at: {dg_self_hosted_url}")
-
-deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_options)
-
-# unused fn
-deepgram_beta = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_cloud_options)
+    deepgram = DeepgramClient(os.getenv('DEEPGRAM_API_KEY') or '', deepgram_options)
 
 
 async def process_audio_dg(
@@ -504,17 +519,9 @@ def _dg_keywords_set(options: LiveOptions, keywords: List[str]):
 
 
 def _deepgram_client_for_request() -> DeepgramClient:
-    """Return a Deepgram client keyed to the current request's BYOK Deepgram key.
-
-    BYOK users pay Deepgram directly — we don't want to rack up minutes on the
-    Omi Deepgram account for them. Self-hosted Deepgram ignores BYOK since
-    there's no per-user billing concept there.
-    """
-    if is_dg_self_hosted:
-        return deepgram
-    byok = get_byok_key('deepgram')
-    if byok:
-        return DeepgramClient(byok, deepgram_cloud_options)
+    """Return the explicitly configured self-hosted Deepgram client only."""
+    if not is_dg_self_hosted or deepgram is None:
+        raise RuntimeError('Hosted Deepgram is disabled; self-hosted Deepgram is not configured')
     return deepgram
 
 

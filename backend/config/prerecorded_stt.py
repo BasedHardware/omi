@@ -13,7 +13,7 @@ from dataclasses import dataclass
 from enum import Enum
 
 from config.stt_provider_policy import (
-    DEEPGRAM_PROVIDER,
+    DEEPGRAM_SELF_HOSTED_PROVIDER,
     MODULATE_PROVIDER,
     PARAKEET_PROVIDER,
     STTServingSurface,
@@ -106,7 +106,7 @@ def provider_for_model_token(model: str) -> str | None:
         return PrerecordedSTTService.MODULATE
     if provider == PARAKEET_PROVIDER:
         return PrerecordedSTTService.PARAKEET
-    if provider == DEEPGRAM_PROVIDER:
+    if provider == DEEPGRAM_SELF_HOSTED_PROVIDER:
         return PrerecordedSTTService.DEEPGRAM
     return None
 

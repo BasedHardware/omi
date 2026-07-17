@@ -1,0 +1,14 @@
+{{- if .Values.dcgmExporter.config }}
+{{- if and (.Values.dcgmExporter.config.create) (not (empty .Values.dcgmExporter.config.data)) }}
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: {{ .Values.dcgmExporter.config.name }}
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- include "gpu-operator.labels" . | nindent 4 }}
+data:
+  dcgm-metrics.csv: |
+{{- .Values.dcgmExporter.config.data | nindent 4 }}
+{{- end }}
+{{- end }}

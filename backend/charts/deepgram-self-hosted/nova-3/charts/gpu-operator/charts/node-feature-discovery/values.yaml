@@ -1,0 +1,593 @@
+image:
+  repository: registry.k8s.io/nfd/node-feature-discovery
+  # This should be set to 'IfNotPresent' for released version
+  pullPolicy: IfNotPresent
+  # tag, if defined will use the given image tag, else Chart.AppVersion will be used
+  # tag
+imagePullSecrets: []
+
+nameOverride: ""
+fullnameOverride: ""
+namespaceOverride: ""
+
+enableNodeFeatureApi: true
+
+featureGates:
+  NodeFeatureAPI: true
+  NodeFeatureGroupAPI: false
+
+priorityClassName: ""
+
+master:
+  enable: true
+  extraEnvs: []
+  hostNetwork: false
+  config: ### <NFD-MASTER-CONF-START-DO-NOT-REMOVE>
+    # noPublish: false
+    # autoDefaultNs: true
+    # extraLabelNs: ["added.ns.io","added.kubernets.io"]
+    # denyLabelNs: ["denied.ns.io","denied.kubernetes.io"]
+    # resourceLabels: ["vendor-1.com/feature-1","vendor-2.io/feature-2"]
+    # enableTaints: false
+    # labelWhiteList: "foo"
+    # resyncPeriod: "2h"
+    # klog:
+    #    addDirHeader: false
+    #    alsologtostderr: false
+    #    logBacktraceAt:
+    #    logtostderr: true
+    #    skipHeaders: false
+    #    stderrthreshold: 2
+    #    v: 0
+    #    vmodule:
+    ##   NOTE: the following options are not dynamically run-time configurable
+    ##         and require a nfd-master restart to take effect after being changed
+    #    logDir:
+    #    logFile:
+    #    logFileMaxSize: 1800
+    #    skipLogHeaders: false
+    # leaderElection:
+    #   leaseDuration: 15s
+    #   # this value has to be lower than leaseDuration and greater than retryPeriod*1.2
+    #   renewDeadline: 10s
+    #   # this value has to be greater than 0
+    #   retryPeriod: 2s
+    # nfdApiParallelism: 10
+  ### <NFD-MASTER-CONF-END-DO-NOT-REMOVE>
+  # The TCP port that nfd-master listens for incoming requests. Default: 8080
+  # Deprecated this parameter is related to the deprecated gRPC API and will
+  # be removed with it in a future release
+  port: 8080
+  metricsPort: 8081
+  healthPort: 8082
+  instance:
+  featureApi:
+  resyncPeriod:
+  denyLabelNs: []
+  extraLabelNs: []
+  resourceLabels: []
+  enableTaints: false
+  crdController: null
+  featureRulesController: null
+  nfdApiParallelism: null
+  deploymentAnnotations: {}
+  replicaCount: 1
+
+  podSecurityContext: {}
+    # fsGroup: 2000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ "ALL" ]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    # runAsUser: 1000
+
+  serviceAccount:
+    # Specifies whether a service account should be created
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name:
+  
+  # specify how many old ReplicaSets for the Deployment to retain.
+  revisionHistoryLimit: 
+
+  rbac:
+    create: true
+
+  service:
+    type: ClusterIP
+    port: 8080
+
+  resources:
+    limits:
+      memory: 4Gi
+    requests:
+      cpu: 100m
+      # You may want to use the same value for `requests.memory` and `limits.memory`. The “requests” value affects scheduling to accommodate pods on nodes.
+      # If there is a large difference between “requests” and “limits” and nodes experience memory pressure, the kernel may invoke
+      # the OOM Killer, even if the memory does not exceed the “limits” threshold. This can cause unexpected pod evictions. Memory
+      # cannot be compressed and once allocated to a pod, it can only be reclaimed by killing the pod.
+      # Natan Yellin 22/09/2022 https://home.robusta.dev/blog/kubernetes-memory-limit
+      memory: 128Mi
+
+  nodeSelector: {}
+
+  tolerations:
+  - key: "node-role.kubernetes.io/master"
+    operator: "Equal"
+    value: ""
+    effect: "NoSchedule"
+  - key: "node-role.kubernetes.io/control-plane"
+    operator: "Equal"
+    value: ""
+    effect: "NoSchedule"
+
+  annotations: {}
+
+  affinity:
+    nodeAffinity:
+      preferredDuringSchedulingIgnoredDuringExecution:
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: "node-role.kubernetes.io/master"
+                operator: In
+                values: [""]
+        - weight: 1
+          preference:
+            matchExpressions:
+              - key: "node-role.kubernetes.io/control-plane"
+                operator: In
+                values: [""]
+                
+  livenessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 10
+    # failureThreshold: 3
+    # periodSeconds: 10
+  readinessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 5
+    failureThreshold: 10
+    # periodSeconds: 10
+
+worker:
+  enable: true
+  extraEnvs: []
+  hostNetwork: false
+  config: ### <NFD-WORKER-CONF-START-DO-NOT-REMOVE>
+    #core:
+    #  labelWhiteList:
+    #  noPublish: false
+    #  sleepInterval: 60s
+    #  featureSources: [all]
+    #  labelSources: [all]
+    #  klog:
+    #    addDirHeader: false
+    #    alsologtostderr: false
+    #    logBacktraceAt:
+    #    logtostderr: true
+    #    skipHeaders: false
+    #    stderrthreshold: 2
+    #    v: 0
+    #    vmodule:
+    ##   NOTE: the following options are not dynamically run-time configurable
+    ##         and require a nfd-worker restart to take effect after being changed
+    #    logDir:
+    #    logFile:
+    #    logFileMaxSize: 1800
+    #    skipLogHeaders: false
+    #sources:
+    #  cpu:
+    #    cpuid:
+    ##     NOTE: whitelist has priority over blacklist
+    #      attributeBlacklist:
+    #        - "AVX10"
+    #        - "BMI1"
+    #        - "BMI2"
+    #        - "CLMUL"
+    #        - "CMOV"
+    #        - "CX16"
+    #        - "ERMS"
+    #        - "F16C"
+    #        - "HTT"
+    #        - "LZCNT"
+    #        - "MMX"
+    #        - "MMXEXT"
+    #        - "NX"
+    #        - "POPCNT"
+    #        - "RDRAND"
+    #        - "RDSEED"
+    #        - "RDTSCP"
+    #        - "SGX"
+    #        - "SSE"
+    #        - "SSE2"
+    #        - "SSE3"
+    #        - "SSE4"
+    #        - "SSE42"
+    #        - "SSSE3"
+    #        - "TDX_GUEST"
+    #      attributeWhitelist:
+    #  kernel:
+    #    kconfigFile: "/path/to/kconfig"
+    #    configOpts:
+    #      - "NO_HZ"
+    #      - "X86"
+    #      - "DMI"
+    #  pci:
+    #    deviceClassWhitelist:
+    #      - "0200"
+    #      - "03"
+    #      - "12"
+    #    deviceLabelFields:
+    #      - "class"
+    #      - "vendor"
+    #      - "device"
+    #      - "subsystem_vendor"
+    #      - "subsystem_device"
+    #  usb:
+    #    deviceClassWhitelist:
+    #      - "0e"
+    #      - "ef"
+    #      - "fe"
+    #      - "ff"
+    #    deviceLabelFields:
+    #      - "class"
+    #      - "vendor"
+    #      - "device"
+    #  local:
+    #    hooksEnabled: false
+    #  custom:
+    #    # The following feature demonstrates the capabilities of the matchFeatures
+    #    - name: "my custom rule"
+    #      labels:
+    #        "vendor.io/my-ng-feature": "true"
+    #      # matchFeatures implements a logical AND over all matcher terms in the
+    #      # list (i.e. all of the terms, or per-feature matchers, must match)
+    #      matchFeatures:
+    #        - feature: cpu.cpuid
+    #          matchExpressions:
+    #            AVX512F: {op: Exists}
+    #        - feature: cpu.cstate
+    #          matchExpressions:
+    #            enabled: {op: IsTrue}
+    #        - feature: cpu.pstate
+    #          matchExpressions:
+    #            no_turbo: {op: IsFalse}
+    #            scaling_governor: {op: In, value: ["performance"]}
+    #        - feature: cpu.rdt
+    #          matchExpressions:
+    #            RDTL3CA: {op: Exists}
+    #        - feature: cpu.sst
+    #          matchExpressions:
+    #            bf.enabled: {op: IsTrue}
+    #        - feature: cpu.topology
+    #          matchExpressions:
+    #            hardware_multithreading: {op: IsFalse}
+    #
+    #        - feature: kernel.config
+    #          matchExpressions:
+    #            X86: {op: Exists}
+    #            LSM: {op: InRegexp, value: ["apparmor"]}
+    #        - feature: kernel.loadedmodule
+    #          matchExpressions:
+    #            e1000e: {op: Exists}
+    #        - feature: kernel.selinux
+    #          matchExpressions:
+    #            enabled: {op: IsFalse}
+    #        - feature: kernel.version
+    #          matchExpressions:
+    #            major: {op: In, value: ["5"]}
+    #            minor: {op: Gt, value: ["10"]}
+    #
+    #        - feature: storage.block
+    #          matchExpressions:
+    #            rotational: {op: In, value: ["0"]}
+    #            dax: {op: In, value: ["0"]}
+    #
+    #        - feature: network.device
+    #          matchExpressions:
+    #            operstate: {op: In, value: ["up"]}
+    #            speed: {op: Gt, value: ["100"]}
+    #
+    #        - feature: memory.numa
+    #          matchExpressions:
+    #            node_count: {op: Gt, value: ["2"]}
+    #        - feature: memory.nv
+    #          matchExpressions:
+    #            devtype: {op: In, value: ["nd_dax"]}
+    #            mode: {op: In, value: ["memory"]}
+    #
+    #        - feature: system.osrelease
+    #          matchExpressions:
+    #            ID: {op: In, value: ["fedora", "centos"]}
+    #        - feature: system.name
+    #          matchExpressions:
+    #            nodename: {op: InRegexp, value: ["^worker-X"]}
+    #
+    #        - feature: local.label
+    #          matchExpressions:
+    #            custom-feature-knob: {op: Gt, value: ["100"]}
+    #
+    #    # The following feature demonstrates the capabilities of the matchAny
+    #    - name: "my matchAny rule"
+    #      labels:
+    #        "vendor.io/my-ng-feature-2": "my-value"
+    #      # matchAny implements a logical IF over all elements (sub-matchers) in
+    #      # the list (i.e. at least one feature matcher must match)
+    #      matchAny:
+    #        - matchFeatures:
+    #            - feature: kernel.loadedmodule
+    #              matchExpressions:
+    #                driver-module-X: {op: Exists}
+    #            - feature: pci.device
+    #              matchExpressions:
+    #                vendor: {op: In, value: ["8086"]}
+    #                class: {op: In, value: ["0200"]}
+    #        - matchFeatures:
+    #            - feature: kernel.loadedmodule
+    #              matchExpressions:
+    #                driver-module-Y: {op: Exists}
+    #            - feature: usb.device
+    #              matchExpressions:
+    #                vendor: {op: In, value: ["8086"]}
+    #                class: {op: In, value: ["02"]}
+    #
+    #    - name: "avx wildcard rule"
+    #      labels:
+    #        "my-avx-feature": "true"
+    #      matchFeatures:
+    #        - feature: cpu.cpuid
+    #          matchName: {op: InRegexp, value: ["^AVX512"]}
+    #
+    #    # The following features demonstreate label templating capabilities
+    #    - name: "my template rule"
+    #      labelsTemplate: |
+    #        {{ range .system.osrelease }}vendor.io/my-system-feature.{{ .Name }}={{ .Value }}
+    #        {{ end }}
+    #      matchFeatures:
+    #        - feature: system.osrelease
+    #          matchExpressions:
+    #            ID: {op: InRegexp, value: ["^open.*"]}
+    #            VERSION_ID.major: {op: In, value: ["13", "15"]}
+    #
+    #    - name: "my template rule 2"
+    #      labelsTemplate: |
+    #        {{ range .pci.device }}vendor.io/my-pci-device.{{ .class }}-{{ .device }}=with-cpuid
+    #        {{ end }}
+    #      matchFeatures:
+    #        - feature: pci.device
+    #          matchExpressions:
+    #            class: {op: InRegexp, value: ["^06"]}
+    #            vendor: ["8086"]
+    #        - feature: cpu.cpuid
+    #          matchExpressions:
+    #            AVX: {op: Exists}
+    #
+    #    # The following examples demonstrate vars field and back-referencing
+    #    # previous labels and vars
+    #    - name: "my dummy kernel rule"
+    #      labels:
+    #        "vendor.io/my.kernel.feature": "true"
+    #      matchFeatures:
+    #        - feature: kernel.version
+    #          matchExpressions:
+    #            major: {op: Gt, value: ["2"]}
+    #
+    #    - name: "my dummy rule with no labels"
+    #      vars:
+    #        "my.dummy.var": "1"
+    #      matchFeatures:
+    #        - feature: cpu.cpuid
+    #          matchExpressions: {}
+    #
+    #    - name: "my rule using backrefs"
+    #      labels:
+    #        "vendor.io/my.backref.feature": "true"
+    #      matchFeatures:
+    #        - feature: rule.matched
+    #          matchExpressions:
+    #            vendor.io/my.kernel.feature: {op: IsTrue}
+    #            my.dummy.var: {op: Gt, value: ["0"]}
+    #
+    #    - name: "kconfig template rule"
+    #      labelsTemplate: |
+    #        {{ range .kernel.config }}kconfig-{{ .Name }}={{ .Value }}
+    #        {{ end }}
+    #      matchFeatures:
+    #        - feature: kernel.config
+    #          matchName: {op: In, value: ["SWAP", "X86", "ARM"]}
+### <NFD-WORKER-CONF-END-DO-NOT-REMOVE>
+
+  metricsPort: 8081
+  healthPort: 8082
+  daemonsetAnnotations: {}
+  podSecurityContext: {}
+    # fsGroup: 2000
+
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ "ALL" ]
+    readOnlyRootFilesystem: true
+    runAsNonRoot: true
+    # runAsUser: 1000
+
+  livenessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 10
+    # failureThreshold: 3
+    # periodSeconds: 10
+  readinessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 5
+    failureThreshold: 10
+    # periodSeconds: 10
+
+  serviceAccount:
+    # Specifies whether a service account should be created.
+    # We create this by default to make it easier for downstream users to apply PodSecurityPolicies.
+    create: true
+    # Annotations to add to the service account
+    annotations: {}
+    # The name of the service account to use.
+    # If not set and create is true, a name is generated using the fullname template
+    name:
+
+  # specify how many old ControllerRevisions for the DaemonSet to retain.
+  revisionHistoryLimit:
+
+  rbac:
+    create: true
+
+  # Allow users to mount the hostPath /usr/src, useful for RHCOS on s390x
+  # Does not work on systems without /usr/src AND a read-only /usr, such as Talos
+  mountUsrSrc: false
+
+  resources:
+    limits:
+      memory: 512Mi
+    requests:
+      cpu: 5m
+      memory: 64Mi
+
+  nodeSelector: {}
+
+  tolerations: []
+
+  annotations: {}
+
+  affinity: {}
+
+  priorityClassName: ""
+
+topologyUpdater:
+  config: ### <NFD-TOPOLOGY-UPDATER-CONF-START-DO-NOT-REMOVE>
+    ## key = node name, value = list of resources to be excluded.
+    ## use * to exclude from all nodes.
+    ## an example for how the exclude list should looks like
+    #excludeList:
+    #  node1: [cpu]
+    #  node2: [memory, example/deviceA]
+    #  *: [hugepages-2Mi]
+### <NFD-TOPOLOGY-UPDATER-CONF-END-DO-NOT-REMOVE>
+
+  enable: false
+  createCRDs: false
+  extraEnvs: []
+  hostNetwork: false
+
+  serviceAccount:
+    create: true
+    annotations: {}
+    name:
+
+  # specify how many old ControllerRevisions for the DaemonSet to retain.
+  revisionHistoryLimit:
+
+  rbac:
+    create: true
+
+  metricsPort: 8081
+  healthPort: 8082
+  kubeletConfigPath:
+  kubeletPodResourcesSockPath:
+  updateInterval: 60s
+  watchNamespace: "*"
+  kubeletStateDir: /var/lib/kubelet
+
+  podSecurityContext: {}
+  securityContext:
+    allowPrivilegeEscalation: false
+    capabilities:
+      drop: [ "ALL" ]
+    readOnlyRootFilesystem: true
+    runAsUser: 0
+  
+  livenessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 10
+    # failureThreshold: 3
+    # periodSeconds: 10
+  readinessProbe:
+    grpc:
+      port: 8082
+    initialDelaySeconds: 5
+    failureThreshold: 10
+    # periodSeconds: 10
+
+  resources:
+    limits:
+      memory: 60Mi
+    requests:
+      cpu: 50m
+      memory: 40Mi
+
+  nodeSelector: {}
+  tolerations: []
+  annotations: {}
+  daemonsetAnnotations: {}
+  affinity: {}
+  podSetFingerprint: true
+
+gc:
+  enable: true
+  extraEnvs: []
+  hostNetwork: false
+  replicaCount: 1
+
+  serviceAccount:
+    create: true
+    annotations: {}
+    name:
+  rbac:
+    create: true
+
+  interval: 1h
+
+  podSecurityContext: {}
+
+  resources:
+    limits:
+      memory: 1Gi
+    requests:
+      cpu: 10m
+      memory: 128Mi
+
+  metricsPort: 8081
+
+  nodeSelector: {}
+  tolerations: []
+  annotations: {}
+  deploymentAnnotations: {}
+  affinity: {}
+
+  # specify how many old ReplicaSets for the Deployment to retain.
+  revisionHistoryLimit: 
+
+# Optionally use encryption for worker <--> master comms
+# TODO: verify hostname is not yet supported
+#
+# If you do not enable certManager (and have it installed) you will
+# need to manually, or otherwise, provision the TLS certs as secrets
+tls:
+  enable: false
+  certManager: false
+  certManagerCertificate:
+    issuerKind:
+    issuerName:
+
+prometheus:
+  enable: false
+  scrapeInterval: 10s
+  labels: {}
