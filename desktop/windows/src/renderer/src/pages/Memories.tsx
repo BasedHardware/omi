@@ -20,6 +20,7 @@ import { MemoryCard } from '../components/memories/MemoryCard'
 import { MemoryFilterBar } from '../components/memories/MemoryFilterBar'
 import { MemoryDetailSheet } from '../components/memories/MemoryDetailSheet'
 import { UndoDeleteToast } from '../components/memories/UndoDeleteToast'
+import { auth } from '../lib/firebase'
 
 // Cap how many cards render at once so a multi-thousand list stays responsive;
 // filtering/selection still operate on the full (filtered) set, not just what's
@@ -57,6 +58,20 @@ export function Memories(): React.JSX.Element {
     const t = setTimeout(() => setGraphReady(true), 4000)
     return () => clearTimeout(t)
   }, [graphReady, hasGraph])
+
+  // Revalidate when the window regains focus, so memories the backend distilled
+  // from new conversations during the session show up on return without an app
+  // relaunch (mirrors QuickGoalsWidget / HomeGoalsChips focus-refetch). refresh()
+  // swaps the list in place with no spinner, so this isn't a jarring reload; the
+  // loading guard skips a redundant fetch while the initial load is still in
+  // flight, and auth.currentUser skips it during a sign-out transition.
+  useEffect(() => {
+    const onFocus = (): void => {
+      if (auth.currentUser && !loading) void refresh()
+    }
+    window.addEventListener('focus', onFocus)
+    return () => window.removeEventListener('focus', onFocus)
+  }, [loading, refresh])
 
   // Compose (add memory).
   const [composing, setComposing] = useState(false)

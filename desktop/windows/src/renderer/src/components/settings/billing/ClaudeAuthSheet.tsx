@@ -2,12 +2,15 @@ import { useEffect, useState } from 'react'
 import { Modal } from '../../ui/Modal'
 import { onClaudeSignIn, dismissClaudeSignIn, OMI_PRICING_URL } from '../../../lib/claudeSignIn'
 
-// "Upgrade to Omi Pro" sheet — Windows port of macOS ClaudeAuthSheet. Shown by
-// beginClaudeSignIn() alongside the parallel Claude OAuth browser launch. This
-// is an unconditional upsell (no entitlement check, matching macOS); completing
-// the parallel sign-in auto-closes it and grants Claude with no purchase.
-// Copy/intent match macOS verbatim; the primary CTA opens omi.me/pricing.
-// Neutral white primary, no purple (INV-UI-1). Mounted once at the app root.
+// "Upgrade to Omi Pro" sheet — Windows port of macOS ClaudeAuthSheet. Shown
+// ONLY by the mid-turn `auth_required` event (Claude Code's token rejected
+// during a chat turn) via beginClaudeSignIn(), which also launches the parallel
+// Claude OAuth — matching macOS's `.sheet(isPresented: $chatProvider
+// .isClaudeAuthRequired)`. It is NOT tied to the Settings → Agents sign-in
+// button (that does plain OAuth, no upsell). Completing the parallel sign-in
+// auto-closes it and grants Claude with no purchase. Copy/intent match macOS
+// verbatim; the primary CTA opens omi.me/pricing. Neutral white primary, no
+// purple (INV-UI-1). Mounted once at the app root.
 export function ClaudeAuthSheet(): React.JSX.Element {
   const [open, setOpen] = useState(false)
 

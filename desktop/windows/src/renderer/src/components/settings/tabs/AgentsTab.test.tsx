@@ -3,7 +3,7 @@ import { describe, it, expect, vi, afterEach, beforeEach } from 'vitest'
 import { render, cleanup, fireEvent, screen, waitFor } from '@testing-library/react'
 import { AgentsTab } from './AgentsTab'
 import { SettingsSearchProvider } from '../SettingsSearchProvider'
-import { __resetClaudeSignIn } from '../../../lib/claudeSignIn'
+import { __resetClaudeSignIn, onClaudeSignIn } from '../../../lib/claudeSignIn'
 
 // SettingRow reads the settings-search context; provide it so the tab mounts.
 const renderTab = (): void => {
@@ -96,14 +96,23 @@ describe('AgentsTab', () => {
     await waitFor(() => expect(screen.getByText(/answered the handshake/)).toBeTruthy())
   })
 
-  it('shows a Sign in button when Claude Code is signed out, and starts the flow on click', async () => {
+  it('shows a Sign in button when Claude Code is signed out, and starts OAuth directly (no upsell sheet) on click', async () => {
     codingAgentAuthStatus.mockResolvedValue({ connected: false, expiresAt: null })
+    // The sign-in button must NOT open the "Upgrade to Omi Pro" sheet — connecting
+    // the coding agent is plain OAuth, so a Pro user is never paywalled. Watch the
+    // shared sheet channel: it must stay closed while sign-in runs.
+    let sheetOpened = false
+    const unsub = onClaudeSignIn((s) => {
+      if (s.open) sheetOpened = true
+    })
     renderTab()
     const signIn = await screen.findByText('Sign in to Claude')
     // No handshake Test is offered while signed out (externals show Connect, not Test).
     expect(screen.queryByText('Test')).toBeNull()
     fireEvent.click(signIn)
     await waitFor(() => expect(codingAgentStartAuth).toHaveBeenCalled())
+    expect(sheetOpened).toBe(false)
+    unsub()
   })
 
   it('signs out when Disconnect is clicked', async () => {

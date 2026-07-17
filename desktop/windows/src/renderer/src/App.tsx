@@ -149,9 +149,10 @@ function AppShellInner(): React.JSX.Element {
       <UsageLimitTriggerHost />
       <UsageLimitPopup />
       {/* "Upgrade to Omi Pro" upsell shown alongside the parallel Claude Code
-          OAuth launch (Settings → Agents sign-in, or an in-chat auth_required).
-          Unconditional upsell, matching macOS; completing sign-in auto-closes
-          it and grants Claude with no purchase. */}
+          OAuth launch — ONLY on an in-chat auth_required event (Claude Code's
+          token rejected mid-turn), matching macOS's isClaudeAuthRequired sheet.
+          The Settings → Agents sign-in button does plain OAuth, no upsell.
+          Completing sign-in auto-closes it and grants Claude with no purchase. */}
       <ClaudeAuthSheet />
     </div>
   )

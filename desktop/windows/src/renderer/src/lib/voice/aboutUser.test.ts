@@ -50,7 +50,7 @@ describe('renderAboutUserCard — exact template', () => {
         '- Ships fast.',
         '- Has a dog.',
         'Right now: 2 overdue, 3 due today.',
-        '(This is a quick snapshot, not the exact current list.)',
+        '(This is a quick snapshot — for the exact or current list, call get_action_items.)',
         '</about_user>'
       ].join('\n')
     )
@@ -63,19 +63,19 @@ describe('renderAboutUserCard — exact template', () => {
         'What Omi knows about them:',
         '- Nothing saved yet.',
         'Right now: nothing overdue or due today.',
-        '(This is a quick snapshot, not the exact current list.)',
+        '(This is a quick snapshot — for the exact or current list, call get_action_items.)',
         '</about_user>'
       ].join('\n')
     )
   })
 
-  // Phase-A deviation from macOS, deliberately asserted: the hedge stays, but it
-  // must not name get_tasks / get_action_items (no tools exist on Windows yet).
-  it('hedges without naming a nonexistent tool', () => {
+  // Windows deviation from macOS, deliberately asserted: the pointer names
+  // get_action_items (the advertised tasks-read tool) but NOT get_tasks, which the
+  // Windows voice surface does not advertise.
+  it('points at the advertised tasks tool without naming get_tasks', () => {
     const card = renderAboutUserCard({ name: 'Ada', facts: [], overdue: 0, dueToday: 0 })
-    expect(card).toContain('(This is a quick snapshot, not the exact current list.)')
+    expect(card).toContain('call get_action_items')
     expect(card).not.toContain('get_tasks')
-    expect(card).not.toContain('get_action_items')
   })
 })
 

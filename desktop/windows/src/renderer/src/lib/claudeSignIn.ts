@@ -1,12 +1,23 @@
-// Global Claude Code sign-in / upsell channel — Windows port of macOS's
-// ChatProvider.handleClaudeAuthRequired + ClaudeAuthSheet semantics.
+// Global "Upgrade to Omi Pro" sheet channel — Windows port of macOS's
+// ChatProvider.isClaudeAuthRequired + ClaudeAuthSheet semantics.
 //
-// Mac-faithful behavior (no entitlement/plan check — the gate is an
-// UNCONDITIONAL upsell, bypassable by completing sign-in):
-//  - beginClaudeSignIn() shows the "Upgrade to Omi Pro" sheet AND launches the
-//    real Claude OAuth in the browser IN PARALLEL (main's codingAgentStartAuth
-//    builds + validates the claude.com/cai/oauth/authorize URL, opens it, and awaits
-//    the loopback callback).
+// CORRECT TRIGGER (Mac parity): the sheet is shown ONLY by an `auth_required`
+// event the coding-agent bridge emits MID-TURN — i.e. Claude Code's token was
+// rejected while a chat turn was running (taskRunner emits it; useChat handles
+// it → beginClaudeSignIn). Mac presents its ClaudeAuthSheet the same way, via
+// `.sheet(isPresented: $chatProvider.isClaudeAuthRequired)` on ChatPage.
+//
+// NOT a trigger: the Settings → Agents "Sign in to Claude" button. That button
+// is a plain coding-agent OAuth — it calls window.omi.codingAgentStartAuth()
+// directly with NO upsell, so a user (Omi Pro or not) is never paywalled just
+// for connecting the coding agent. (An earlier Windows build wrongly routed the
+// sign-in button through this sheet and mislabeled it "Mac-faithful"; it was
+// not — Mac never ties the sheet to that button.)
+//
+// beginClaudeSignIn() (the mid-turn entry point) shows the sheet AND launches
+// the real Claude OAuth in the browser IN PARALLEL (main's codingAgentStartAuth
+// builds + validates the claude.com/cai/oauth/authorize URL, opens it, and awaits
+// the loopback callback):
 //  - If the user completes the parallel OAuth before dismissing, the flow
 //    resolves connected → the sheet auto-closes and Claude is granted, no
 //    purchase (Mac's auth_success bypass — kept deliberately).
@@ -52,9 +63,11 @@ export function dismissClaudeSignIn(): void {
 }
 
 /**
- * Show the upsell sheet and launch the parallel Claude OAuth. `onResult` (used
- * by Settings → Agents to reflect the new status / surface an error) fires once
- * the flow resolves, unless the user already dismissed the sheet.
+ * Mid-turn `auth_required` entry point: show the upsell sheet and launch the
+ * parallel Claude OAuth. Call this ONLY from the coding-agent auth_required
+ * handler (useChat) — NOT the Settings sign-in button, which does plain OAuth.
+ * `onResult` fires once the flow resolves, unless the user already dismissed
+ * the sheet.
  */
 export function beginClaudeSignIn(onResult?: (result: CodingAgentStartAuthResult) => void): void {
   dismissed = false

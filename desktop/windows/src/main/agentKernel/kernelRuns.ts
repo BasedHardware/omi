@@ -47,6 +47,7 @@ export class KernelRuns extends KernelCore {
       requestId: input.requestId,
       prompt: input.prompt,
       promptBlocks: input.promptBlocks,
+      systemPrompt: input.systemPrompt,
       mode: input.mode,
       adapterId: input.adapterId ?? session.defaultAdapterId,
       cwd: input.cwd ?? session.defaultCwd ?? undefined,

@@ -509,9 +509,11 @@ export function useChat(): UseChat {
       } else if (event.type === 'tool_activity') {
         activity = event.status === 'started' ? event.name : null
       } else if (event.type === 'auth_required') {
-        // Claude Code isn't signed in — show the upsell sheet + launch the
-        // parallel OAuth (macOS parity). The task's own error result already
-        // explains the block in the thread.
+        // Claude Code's token was rejected mid-turn — this is the ONE correct
+        // trigger for the upsell sheet (macOS's isClaudeAuthRequired). Show it +
+        // launch the parallel OAuth. (The Settings sign-in button does NOT come
+        // through here — it does plain OAuth.) The task's own error result
+        // already explains the block in the thread.
         beginClaudeSignIn()
       }
       render()
