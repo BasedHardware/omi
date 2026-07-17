@@ -22,7 +22,7 @@ from models.chat import ChatSession, Message, PageContext
 from utils.llm.chat import retrieve_is_file_question
 from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
-from utils.executors import run_blocking, llm_executor
+from utils.executors import db_executor, llm_executor, run_blocking
 from utils.other.chat_file import FileChatTool
 from utils.retrieval.agentic import (
     AGENT_STREAM_FAILURE_MESSAGE,
@@ -123,12 +123,6 @@ async def _execute_file_chat_stream(
     last_message = messages[-1] if messages else None
     question = last_message.text if last_message else ""
 
-    try:
-        fc_tool = FileChatTool(uid, chat_session.id)
-    except Exception as e:
-        logger.error(f"Failed to create FileChatTool: {e}")
-        raise
-
     # Determine which files to use
     if last_message and last_message.files_id and len(last_message.files_id) > 0:
         file_ids = last_message.files_id
@@ -140,8 +134,11 @@ async def _execute_file_chat_stream(
     callback = AsyncStreamingCallback()
 
     try:
-        # Run the producer as a concurrent task so chunks stream in real-time
+        # The constructor reads Firestore synchronously, so it belongs inside
+        # the supervised producer as well. That starts the first-event deadline
+        # before any blocking file-chat setup can hold the event loop.
         async def _produce() -> str:
+            fc_tool = await run_blocking(db_executor, FileChatTool, uid, chat_session.id)
             return await fc_tool.process_chat_with_file_stream(question, file_ids, callback=cast(Any, callback))
 
         task = asyncio.create_task(_produce())
@@ -163,11 +160,11 @@ async def _execute_file_chat_stream(
             callback_data['ask_for_nps'] = True
 
         yield None
-    except Exception as e:
-        logger.error(f"Error in file chat: {e}")
+    except Exception as error:
+        logger.error('file chat stream failed error_type=%s', type(error).__name__)
         if callback_data is not None:
-            callback_data['error'] = str(e)
-        yield None
+            callback_data['error'] = 'stream_failure'
+        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
 
 
 # ---------------------------------------------------------------------------
@@ -257,11 +254,11 @@ async def execute_persona_chat_stream(
         yield None
         return
 
-    except Exception as e:
-        logger.error(f"Error in execute_persona_chat_stream: {e}")
+    except Exception as error:
+        logger.error('persona chat stream failed error_type=%s', type(error).__name__)
         if callback_data is not None:
-            callback_data['error'] = str(e)
-        yield None
+            callback_data['error'] = 'stream_failure'
+        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
         return
 
 

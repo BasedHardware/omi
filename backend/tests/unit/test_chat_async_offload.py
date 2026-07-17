@@ -38,6 +38,7 @@ os.environ.setdefault('TYPESENSE_PROTOCOL', 'http')
 # per-test call within the fast-unit duration guard.
 import utils.retrieval.graph as graph  # noqa: E402
 import utils.retrieval.agentic as agentic  # noqa: E402
+import utils.other.chat_file as chat_file  # noqa: E402
 
 
 async def _collect_agentic_chunks(producer):
@@ -79,6 +80,118 @@ async def test_has_file_context_offloads_llm_call_off_loop():
     assert result is True
     assert 'thread' in ran_on, "retrieve_is_file_question was not called"
     assert ran_on['thread'] is not loop_thread, "retrieve_is_file_question must run off the event-loop thread"
+
+
+def _file_chat_tool_for_stream_test():
+    """Create a FileChatTool without its production Firestore constructor for a hermetic stream test."""
+    tool = object.__new__(chat_file.FileChatTool)
+    tool.uid = 'uid1'
+    tool.chat_session_id = 'session1'
+    tool.thread_id = None
+    tool.assistant_id = None
+    return tool
+
+
+async def test_file_assistants_stream_runs_setup_and_sync_callbacks_off_loop():
+    """The real non-vision file stream keeps the loop responsive and bridges worker callbacks."""
+    loop = asyncio.get_running_loop()
+    loop_thread = threading.current_thread()
+    ask_started = asyncio.Event()
+    worker_finished = asyncio.Event()
+    release_worker = threading.Event()
+    worker_threads = {}
+    tool = _file_chat_tool_for_stream_test()
+    callback = agentic.AsyncStreamingCallback()
+
+    def fake_ensure(self):
+        worker_threads['ensure'] = threading.current_thread()
+        self.thread_id = 'thread1'
+        self.assistant_id = 'assistant1'
+
+    def blocking_ask(self, _uid, _question, _file_ids, _thread_id, _assistant_id, stream_callback):
+        worker_threads['ask'] = threading.current_thread()
+        loop.call_soon_threadsafe(ask_started.set)
+        try:
+            assert release_worker.wait(timeout=0.5), 'test did not release the blocking Assistants stream'
+            stream_callback.put_data_nowait('file answer')
+            return 'file answer'
+        finally:
+            stream_callback.end_nowait()
+            loop.call_soon_threadsafe(worker_finished.set)
+
+    with patch.object(chat_file, '_assert_direct_file_chat_allowed', lambda: None), patch.object(
+        chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []
+    ), patch.object(chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure), patch.object(
+        chat_file.FileChatTool, 'ask_stream', blocking_ask
+    ):
+        task = asyncio.create_task(tool.process_chat_with_file_stream('summarize', ['file1'], callback))
+        await asyncio.wait_for(ask_started.wait(), timeout=0.5)
+
+        health_check_ran = asyncio.Event()
+        loop.call_soon(health_check_ran.set)
+        await asyncio.wait_for(health_check_ran.wait(), timeout=0.1)
+        assert not task.done(), 'the worker-side stream should still be pending while the loop serves other work'
+
+        release_worker.set()
+        assert await task == 'file answer'
+        await asyncio.wait_for(worker_finished.wait(), timeout=0.5)
+
+    assert worker_threads['ensure'] is not loop_thread
+    assert worker_threads['ask'] is not loop_thread
+    assert await callback.queue.get() == 'data: file answer'
+    assert await callback.queue.get() is None
+
+
+async def test_file_stream_deadline_fires_while_sync_assistants_stream_is_off_loop():
+    """A blocked Assistants iterator yields the terminal SSE error instead of freezing its deadline."""
+    loop = asyncio.get_running_loop()
+    ask_started = asyncio.Event()
+    worker_finished = asyncio.Event()
+    release_worker = threading.Event()
+    tool = _file_chat_tool_for_stream_test()
+
+    def fake_ensure(self):
+        self.thread_id = 'thread1'
+        self.assistant_id = 'assistant1'
+
+    def blocking_ask(self, _uid, _question, _file_ids, _thread_id, _assistant_id, stream_callback):
+        loop.call_soon_threadsafe(ask_started.set)
+        try:
+            assert release_worker.wait(timeout=0.5), 'test did not release the blocking Assistants stream'
+            return ''
+        finally:
+            stream_callback.end_nowait()
+            loop.call_soon_threadsafe(worker_finished.set)
+
+    message = SimpleNamespace(files_id=['file1'], text='summarize')
+    session = SimpleNamespace(id='session1', file_ids=['file1'])
+    callback_data = {}
+
+    async def collect_file_stream():
+        return [
+            chunk
+            async for chunk in graph._execute_file_chat_stream('uid1', [message], session, callback_data=callback_data)
+        ]
+
+    with patch.object(graph, 'FileChatTool', lambda *_args: tool), patch.object(
+        chat_file, '_assert_direct_file_chat_allowed', lambda: None
+    ), patch.object(chat_file.chat_db, 'get_chat_files_desc', lambda *_args, **_kwargs: []), patch.object(
+        chat_file.FileChatTool, '_ensure_thread_and_assistant', fake_ensure
+    ), patch.object(
+        chat_file.FileChatTool, 'ask_stream', blocking_ask
+    ), patch.object(
+        graph, 'AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS', 0.01
+    ), patch.object(
+        agentic, 'AGENT_STREAM_CANCEL_GRACE_SECONDS', 0.05
+    ):
+        stream_task = asyncio.create_task(collect_file_stream())
+        await asyncio.wait_for(ask_started.wait(), timeout=0.5)
+        chunks = await asyncio.wait_for(stream_task, timeout=0.5)
+        release_worker.set()
+        await asyncio.wait_for(worker_finished.wait(), timeout=0.5)
+
+    assert chunks == [f'error: {agentic.AGENT_STREAM_TIMEOUT_MESSAGE}']
+    assert callback_data['error'] == 'stream_failure'
 
 
 async def test_agentic_setup_reads_run_off_loop():

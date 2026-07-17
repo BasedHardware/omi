@@ -191,6 +191,21 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     def __init__(self):
         self.queue = asyncio.Queue()
+        # Sync providers can invoke the nowait methods from an executor worker.
+        # asyncio.Queue is bound to this request loop, so its mutation must always
+        # be marshalled back to that loop instead of happening from the worker.
+        self._loop = asyncio.get_running_loop()
+
+    def _put_nowait_threadsafe(self, value: str | None) -> None:
+        """Queue a synchronous callback value on the loop that owns the response."""
+        if self._loop.is_closed():
+            return
+        try:
+            self._loop.call_soon_threadsafe(self.queue.put_nowait, value)
+        except RuntimeError:
+            # The request loop can close after a bounded stream is cancelled while
+            # a non-cooperative sync provider is still unwinding in its worker.
+            return
 
     async def put_data(self, text):
         await self.queue.put(f"data: {text}")
@@ -203,18 +218,18 @@ class AsyncStreamingCallback(BaseCallbackHandler):
 
     def put_thought_nowait(self, text, app_id: Optional[str] = None):
         if app_id:
-            self.queue.put_nowait(f"think: {text}|app_id:{app_id}")
+            self._put_nowait_threadsafe(f"think: {text}|app_id:{app_id}")
         else:
-            self.queue.put_nowait(f"think: {text}")
+            self._put_nowait_threadsafe(f"think: {text}")
 
     def put_data_nowait(self, text):
-        self.queue.put_nowait(f"data: {text}")
+        self._put_nowait_threadsafe(f"data: {text}")
 
     async def end(self):
         await self.queue.put(None)
 
     def end_nowait(self):
-        self.queue.put_nowait(None)
+        self._put_nowait_threadsafe(None)
 
     async def on_llm_new_token(self, token: str, **_kwargs) -> None:
         """Bridge LangChain streaming callbacks for persona chat."""
