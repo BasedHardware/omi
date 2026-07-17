@@ -121,7 +121,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled):
+    def select_stt(language, *, multi_lang_enabled, prefer_parakeet=False):
         selected_multi_language_options.append((language, multi_lang_enabled))
         return 'test-stt', 'es', 'test-model'
 
