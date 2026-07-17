@@ -90,11 +90,15 @@ const capabilities: AdapterCapabilities = {
 }
 
 interface FakeAdapter extends RuntimeAdapter {
-  readonly calls: { executeAttempt: AdapterAttemptContext[]; cancelAttempt: CancelAttemptContext[] }
+  readonly calls: {
+    executeAttempt: AdapterAttemptContext[]
+    cancelAttempt: CancelAttemptContext[]
+    openBinding: OpenBindingInput[]
+  }
 }
 
 function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
-  const calls: FakeAdapter['calls'] = { executeAttempt: [], cancelAttempt: [] }
+  const calls: FakeAdapter['calls'] = { executeAttempt: [], cancelAttempt: [], openBinding: [] }
   return {
     adapterId: ADAPTER_ID,
     capabilities,
@@ -106,6 +110,7 @@ function fakeAdapter(options: FakeAdapterOptions = {}): FakeAdapter {
       /* no-op fake */
     },
     async openBinding(input: OpenBindingInput): Promise<AdapterBindingHandle> {
+      calls.openBinding.push(input)
       nativeSessionCounter += 1
       return {
         sessionId: input.sessionId,
@@ -370,6 +375,54 @@ describe('runMainChatTurn', () => {
 
     const terminal = events.at(-1) as Extract<MainChatEvent, { type: 'run_finished' }>
     expect(terminal.status).toBe('succeeded')
+  })
+
+  it('bakes the desktop-chat system prompt (initiative → spawn_agent) into the binding', async () => {
+    // The macOS-parity fix: the model must receive the <initiative> instruction so
+    // it hands long/coding work to spawn_agent instead of replying in text. Prove
+    // the system prompt threads end to end — runMainChatTurn → sendAgentMessage →
+    // executeRun → openBinding — by capturing what the adapter binding is opened
+    // with. (piMono bakes this into the pi subprocess via --system-prompt.)
+    const adapter = fakeAdapter({ reply: () => 'ok' })
+    const kernel = newKernel(adapter)
+
+    await runMainChatTurn({ requestId: 'req-sp', prompt: 'hi', cleanUserText: 'hi' }, () => {}, {
+      kernel,
+      ownerId: OWNER
+    })
+
+    expect(adapter.calls.openBinding).toHaveLength(1)
+    const systemPrompt = adapter.calls.openBinding[0].systemPrompt ?? ''
+    expect(systemPrompt).toContain('<initiative>')
+    expect(systemPrompt).toContain('spawn_agent')
+    expect(systemPrompt).toContain(
+      'Work needing more than ~30 seconds of tool calls or research: start a background agent with spawn_agent'
+    )
+    // Persona is present too — this is the Omi desktop chat prompt, not pi's default.
+    expect(systemPrompt).toContain('You are Omi')
+  })
+
+  it('reuses the binding across turns with the SAME system prompt (no per-turn restart)', async () => {
+    // A stable prompt must not restart the pi subprocess every message. With an
+    // identical system-prompt hash, the second turn resumes the binding rather than
+    // opening a new one.
+    const adapter = fakeAdapter({ reply: () => 'ok' })
+    const kernel = newKernel(adapter)
+
+    await runMainChatTurn(
+      { requestId: 'req-1', prompt: 'first', cleanUserText: 'first', chatId: 'chat-z' },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
+    await runMainChatTurn(
+      { requestId: 'req-2', prompt: 'second', cleanUserText: 'second', chatId: 'chat-z' },
+      () => {},
+      { kernel, ownerId: OWNER }
+    )
+
+    // Opened exactly once — turn 2 resumed the same binding (same prompt hash).
+    expect(adapter.calls.openBinding).toHaveLength(1)
+    expect(adapter.calls.executeAttempt).toHaveLength(2)
   })
 
   it('records one clean user turn + one assistant turn (no double-append, verbatim forward)', async () => {

@@ -12,6 +12,7 @@ import { ipcMain, BrowserWindow } from 'electron'
 import { getAppSettings } from '../appSettings'
 import { getAgentRuntimeKernel, controlPlaneOwnerId } from '../agentKernel/controlPlane'
 import { DEFAULT_LOCAL_OWNER_ID } from '../agentKernel/controlTools'
+import { buildDesktopChatSystemPrompt } from '../agentKernel/desktopChatPrompt'
 import { formatTranscriptTail } from '../agentKernel/turnContext'
 import type { AgentRuntimeKernel } from '../agentKernel/kernel'
 import type { AgentEvent } from '../agentKernel/types'
@@ -26,6 +27,18 @@ const MAIN_CHAT_TAIL_LIMIT = 8
 
 /** Kernel run-lifecycle event types that mean the turn is over. */
 const TERMINAL_RUN_EVENT_TYPES = new Set(['run.succeeded', 'run.failed', 'run.cancelled'])
+
+/** The Omi desktop-chat system prompt, baked into every main-chat turn so the
+ *  model gets Omi's persona and — the point — the <initiative> guidance that
+ *  hands long/coding/research work to spawn_agent (macOS-parity auto-routing)
+ *  instead of answering in text. Computed ONCE so it is byte-identical across a
+ *  session's turns: the kernel binding is then reused rather than restarting the
+ *  pi subprocess on every message (isBindingCompatible keys on its hash). The
+ *  machine timezone is stable per process; no volatile datetime is interpolated.
+ *  Name is omitted (not available synchronously here) and reads as "the user". */
+const DESKTOP_CHAT_SYSTEM_PROMPT = buildDesktopChatSystemPrompt({
+  timezone: Intl.DateTimeFormat().resolvedOptions().timeZone
+})
 
 /** What `runMainChatTurn` needs from the host. Defaulted to the process-wide
  *  kernel and the main-side authoritative owner; injected in tests. */
@@ -254,6 +267,7 @@ export async function runMainChatTurn(
       clientId,
       requestId,
       prompt: effectivePrompt,
+      systemPrompt: DESKTOP_CHAT_SYSTEM_PROMPT,
       adapterId: MAIN_CHAT_ADAPTER_ID
     })
 
