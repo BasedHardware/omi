@@ -1,3 +1,4 @@
+import AppKit
 import OSLog
 import OmiSupport
 import OmiTheme
@@ -76,42 +77,142 @@ enum MemoryAtlasCluster: String, CaseIterable, Identifiable {
 }
 
 /// The time axis behind the atlas. Built from entity `createdAt` timestamps so
-/// the user can scrub — or watch — their memory come into being. It degrades
-/// gracefully: when the graph carries no meaningful spread of timestamps (for
-/// example a freshly rebuilt graph where every node shares one build date) the
-/// factory returns `nil` and the surface simply hides the timeline.
+/// the user can scrub — or watch — their memory come into being. Playback is
+/// density-aware: a tight imported/backfilled cluster is expanded into a short,
+/// deterministic sequence instead of appearing as one unreadable burst. Dates
+/// shown to the user always remain the original dates from memory data.
 struct MemoryAtlasTimeline: Equatable {
+  struct Entry: Equatable {
+    let nodeID: String
+    let createdAt: Date
+    let playbackFraction: Double
+  }
+
   let start: Date
   let end: Date
-  /// Entity-birth counts across evenly spaced buckets, for the histogram.
+  /// Entity-birth counts across the density-expanded playback axis, for the
+  /// histogram. This describes animation pacing, not rewritten history.
   let buckets: [Int]
+  let entries: [Entry]
+  let playbackFractionByNodeID: [String: Double]
 
+  var hasChronologicalRange: Bool { end > start }
   var span: TimeInterval { max(end.timeIntervalSince(start), 1) }
 
   func date(atFraction fraction: Double) -> Date {
-    start.addingTimeInterval(span * min(max(fraction, 0), 1))
+    let clamped = min(max(fraction, 0), 1)
+    guard let first = entries.first else {
+      return start.addingTimeInterval(span * clamped)
+    }
+    guard clamped > first.playbackFraction else { return first.createdAt }
+    // This deliberately steps to the last real creation date rather than
+    // interpolating an invented timestamp between two memories.
+    return entries[max(firstPlaybackIndex(after: clamped) - 1, 0)].createdAt
   }
 
   func fraction(for date: Date) -> Double {
-    min(max(date.timeIntervalSince(start) / span, 0), 1)
+    guard let first = entries.first, let last = entries.last else { return 1 }
+    guard date > first.createdAt else { return first.playbackFraction }
+    guard date < last.createdAt else { return last.playbackFraction }
+    return entries[max(firstDateIndex(after: date) - 1, 0)].playbackFraction
   }
 
-  /// A short window (relative to the whole span) during which a freshly born
-  /// entity still reads as "new" — drives the spawn-pop bloom as the playhead
-  /// sweeps past it.
+  func isVisible(nodeID: String, at fraction: Double) -> Bool {
+    (playbackFractionByNodeID[nodeID] ?? 1) <= min(max(fraction, 0), 1)
+  }
+
+  func visibleNodeCount(at fraction: Double) -> Int {
+    let clamped = min(max(fraction, 0), 1)
+    return firstPlaybackIndex(after: clamped)
+  }
+
+  func spawnProgress(nodeID: String, at fraction: Double) -> Double {
+    guard let bornAt = playbackFractionByNodeID[nodeID] else { return 0 }
+    let age = fraction - bornAt
+    let window = max(0.012, min(0.05, 5 / Double(max(entries.count, 1))))
+    guard age >= 0, age < window else { return 0 }
+    return 1 - age / window
+  }
+
+  /// Retained for the legacy Date-based preview path. Live replay uses
+  /// `spawnProgress(nodeID:at:)` so dense imports bloom one-at-a-time.
   var spawnWindow: TimeInterval { span / 26 }
 
+  private func firstPlaybackIndex(after fraction: Double) -> Int {
+    var lower = 0
+    var upper = entries.count
+    while lower < upper {
+      let middle = lower + (upper - lower) / 2
+      if entries[middle].playbackFraction > fraction {
+        upper = middle
+      } else {
+        lower = middle + 1
+      }
+    }
+    return lower
+  }
+
+  private func firstDateIndex(after date: Date) -> Int {
+    var lower = 0
+    var upper = entries.count
+    while lower < upper {
+      let middle = lower + (upper - lower) / 2
+      if entries[middle].createdAt > date {
+        upper = middle
+      } else {
+        lower = middle + 1
+      }
+    }
+    return lower
+  }
+
   static func make(from nodes: [KnowledgeGraphNode], bucketCount: Int = 40) -> MemoryAtlasTimeline? {
-    let dates = nodes.map(\.createdAt)
-    guard let start = dates.min(), let end = dates.max(), end > start else { return nil }
-    let span = end.timeIntervalSince(start)
+    let orderedNodes = nodes.sorted {
+      if $0.createdAt == $1.createdAt { return $0.id < $1.id }
+      return $0.createdAt < $1.createdAt
+    }
+    guard orderedNodes.count > 1, let start = orderedNodes.first?.createdAt, let end = orderedNodes.last?.createdAt
+    else {
+      return nil
+    }
+
+    let hasChronologicalRange = end > start
+    let chronologicalSpan = max(end.timeIntervalSince(start), 1)
+    // Chronology remains the majority signal for naturally distributed
+    // memories, while rank gives dense imports enough playback room to be
+    // comprehensible. Both inputs are monotonic, so this cannot reorder data
+    // or fabricate a date.
+    let chronologicalWeight = hasChronologicalRange ? 0.32 : 0
+    let densityWeight = 1 - chronologicalWeight
+    let denominator = Double(max(orderedNodes.count - 1, 1))
+    let entries = orderedNodes.enumerated().map { index, node in
+      let chronologicalFraction =
+        hasChronologicalRange
+        ? node.createdAt.timeIntervalSince(start) / chronologicalSpan
+        : 0
+      let densityFraction = Double(index) / denominator
+      return Entry(
+        nodeID: node.id,
+        createdAt: node.createdAt,
+        playbackFraction: chronologicalWeight * chronologicalFraction + densityWeight * densityFraction
+      )
+    }
+
     var buckets = Array(repeating: 0, count: max(bucketCount, 1))
-    for date in dates {
-      let fraction = date.timeIntervalSince(start) / span
-      let index = min(buckets.count - 1, max(0, Int(fraction * Double(buckets.count))))
+    for entry in entries {
+      let index = min(
+        buckets.count - 1,
+        max(0, Int(entry.playbackFraction * Double(buckets.count)))
+      )
       buckets[index] += 1
     }
-    return MemoryAtlasTimeline(start: start, end: end, buckets: buckets)
+    return MemoryAtlasTimeline(
+      start: start,
+      end: end,
+      buckets: buckets,
+      entries: entries,
+      playbackFractionByNodeID: Dictionary(lastWriteWins: entries.map { ($0.nodeID, $0.playbackFraction) })
+    )
   }
 }
 
@@ -342,7 +443,9 @@ enum MemoryAtlasRenderPlanner {
     selectedNodeID: String?,
     matchingNodeIDs: Set<String>?,
     matchingEdges: [MemoryAtlasEdgePlacement]? = nil,
-    asOf: Date? = nil
+    asOf: Date? = nil,
+    timeline: MemoryAtlasTimeline? = nil,
+    timeCursor: Double? = nil
   ) -> MemoryAtlasRenderPlan {
     let fullyLabelledZoom = MemoryAtlasZoomPolicy.fullyLabelledZoom(
       nodeCount: snapshot.nodes.count
@@ -418,7 +521,11 @@ enum MemoryAtlasRenderPlanner {
     // always present — "you" are the constant the rest of the memory accretes
     // around.
     let timeFilteredNodes: [MemoryAtlasNodePlacement]
-    if let asOf {
+    if let timeline, let timeCursor, timeCursor < 0.9995 {
+      timeFilteredNodes = snapshot.nodes.filter { placement in
+        placement.id == snapshot.anchorNodeID || timeline.isVisible(nodeID: placement.id, at: timeCursor)
+      }
+    } else if let asOf {
       timeFilteredNodes = snapshot.nodes.filter { placement in
         placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf
       }
@@ -457,9 +564,16 @@ enum MemoryAtlasRenderPlanner {
     let selectedEdgeLimit = selectedNodeID == nil ? edgeLimit : min(edgeLimit, 80)
     let visibleEdges = Array(
       edgeCandidates.lazy
-        .filter {
-          (asOf == nil || $0.edge.createdAt <= asOf!)
-            && visibleNodeIDs.contains($0.edge.sourceId) && visibleNodeIDs.contains($0.edge.targetId)
+        .filter { edge in
+          let isWithinTimeline =
+            timeline.flatMap { timeline in
+              timeCursor.map { cursor in
+                cursor >= 0.9995 || timeline.fraction(for: edge.edge.createdAt) <= cursor
+              }
+            } ?? true
+          return isWithinTimeline
+            && (asOf == nil || edge.edge.createdAt <= asOf!)
+            && visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
         }
         .prefix(selectedEdgeLimit)
     )
@@ -1016,7 +1130,7 @@ struct CanonicalMemoryAtlasPage: View {
           .foregroundColor(OmiColors.textTertiary)
       }
       .padding(.horizontal, 18)
-      .frame(height: 56)
+      .frame(height: 44)
       .background(OmiColors.backgroundSecondary)
 
       Divider().overlay(OmiColors.border.opacity(0.25))
@@ -1196,6 +1310,10 @@ private struct CanonicalMemoryAtlasSurface: View {
   let compact: Bool
   let onViewEvidence: ([String]) -> Void
   private let snapshot: MemoryAtlasSnapshot
+  private let renderPlanCache: MemoryAtlasRenderPlanCache
+  /// The cursor at which each relationship can first be painted. Precomputing
+  /// this avoids walking every edge again on every 30 Hz replay frame.
+  private let connectionBirthFractions: [Double]
   /// Deterministic offscreen renders (ViewExporter QA) pin the time cursor and
   /// suppress auto-play so the timeline captures a stable frame.
   private let previewTimeCursor: Double?
@@ -1215,6 +1333,7 @@ private struct CanonicalMemoryAtlasSurface: View {
   @State private var isTimePlaying = false
   @State private var didAutoplay = false
   @State private var playbackTask: Task<Void, Never>? = nil
+  @FocusState private var searchIsFocused: Bool
   /// Persisted: once the user pauses or scrubs the timeline, the atlas stops
   /// auto-playing its growth animation on open. Playing all the way through is
   /// the delightful default; interrupting it is an explicit opt-out.
@@ -1233,10 +1352,24 @@ private struct CanonicalMemoryAtlasSurface: View {
     self.previewTimeCursor = previewTimeCursor
     _timeCursor = State(initialValue: previewTimeCursor ?? 1)
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
-    snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+    let atlasSnapshot = MemoryAtlasLayoutEngine.makeSnapshot(
       graph: graph,
       userName: givenName.isEmpty ? nil : givenName
     )
+    snapshot = atlasSnapshot
+    renderPlanCache = MemoryAtlasRenderPlanCache(snapshot: atlasSnapshot)
+    if let timeline = atlasSnapshot.timeline {
+      connectionBirthFractions = atlasSnapshot.edges.map { placement in
+        let endpointBirth =
+          [placement.edge.sourceId, placement.edge.targetId].map { nodeID in
+            nodeID == atlasSnapshot.anchorNodeID ? 0 : (timeline.playbackFractionByNodeID[nodeID] ?? 1)
+          }.max() ?? 1
+        return max(timeline.fraction(for: placement.edge.createdAt), endpointBirth)
+      }
+      .sorted()
+    } else {
+      connectionBirthFractions = []
+    }
   }
 
   private var selectedNode: MemoryAtlasNodePlacement? {
@@ -1264,15 +1397,28 @@ private struct CanonicalMemoryAtlasSurface: View {
   }
 
   private var visibleEntityCount: Int {
-    guard let asOf = asOfDate else { return snapshot.nodes.count }
-    return snapshot.nodes.reduce(0) { count, placement in
-      count + ((placement.id == snapshot.anchorNodeID || placement.node.createdAt <= asOf) ? 1 : 0)
-    }
+    guard let timeline, timeCursor < 0.9995 else { return snapshot.nodes.count }
+    let anchorIsOutsideCursor = snapshot.anchorNodeID.map { !timeline.isVisible(nodeID: $0, at: timeCursor) } ?? false
+    return timeline.visibleNodeCount(at: timeCursor) + (anchorIsOutsideCursor ? 1 : 0)
   }
 
   private var visibleConnectionCount: Int {
-    guard let asOf = asOfDate else { return snapshot.edges.count }
-    return snapshot.edges.reduce(0) { $0 + ($1.edge.createdAt <= asOf ? 1 : 0) }
+    guard timeline != nil, timeCursor < 0.9995 else { return snapshot.edges.count }
+    return firstConnectionBirthIndex(after: timeCursor)
+  }
+
+  private func firstConnectionBirthIndex(after fraction: Double) -> Int {
+    var lower = 0
+    var upper = connectionBirthFractions.count
+    while lower < upper {
+      let middle = lower + (upper - lower) / 2
+      if connectionBirthFractions[middle] > fraction {
+        upper = middle
+      } else {
+        lower = middle + 1
+      }
+    }
+    return lower
   }
 
   private var recentConnectionLabel: String {
@@ -1284,8 +1430,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       atlasToolbar
 
       GeometryReader { proxy in
-        let plan = MemoryAtlasRenderPlanner.makePlan(
-          snapshot: snapshot,
+        let plan = renderPlanCache.makePlan(
           viewportSize: proxy.size,
           zoom: zoom,
           pan: pan,
@@ -1293,13 +1438,27 @@ private struct CanonicalMemoryAtlasSurface: View {
           selectedNodeID: selectedNodeID,
           matchingNodeIDs: matchingNodeIDs,
           matchingEdges: matchingEdges,
-          asOf: asOfDate
+          asOf: asOfDate,
+          timeline: timeline,
+          timeCursor: timeCursor,
+          isCameraMoving: isCameraMoving
         )
 
         ZStack {
           OmiColors.backgroundPrimary
 
           atlasCanvas(size: proxy.size, plan: plan)
+            // Camera gestures belong to the painted atlas only. Keeping them
+            // off the enclosing ZStack prevents a click on zoom, playback, or
+            // the selection strip from also selecting a node behind the control.
+            .contentShape(Rectangle())
+            .gesture(panGesture)
+            .simultaneousGesture(magnificationGesture(in: proxy.size))
+            .simultaneousGesture(
+              SpatialTapGesture().onEnded { value in
+                selectNearestNode(to: value.location, in: proxy.size)
+              }
+            )
 
           if zoom < 1.9 && !isCameraMoving {
             clusterTitles(size: proxy.size)
@@ -1317,29 +1476,35 @@ private struct CanonicalMemoryAtlasSurface: View {
           }
 
           zoomControls
-            .padding(compact ? 10 : 16)
+            .padding(compact ? 8 : 12)
+            .padding(.bottom, selectedNode == nil ? 0 : (compact ? 50 : 56))
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
-        }
-        .contentShape(Rectangle())
-        .gesture(panGesture)
-        .simultaneousGesture(magnificationGesture(in: proxy.size))
-        .simultaneousGesture(
-          SpatialTapGesture().onEnded { value in
-            selectNearestNode(to: value.location, in: proxy.size)
+
+          if let selectedNode {
+            selectionStrip(for: selectedNode)
+              .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottom)
           }
-        )
+
+          if !compact {
+            MemoryAtlasInputMonitor(
+              onScroll: { delta, location in
+                scrollZoom(by: delta, anchoredAt: location, in: proxy.size)
+              },
+              onEscape: clearTransientState,
+              onFocusSearch: { searchIsFocused = true }
+            )
+            .accessibilityHidden(true)
+          }
+        }
         .onAppear { viewportSize = proxy.size }
         .onChange(of: proxy.size) { _, newSize in viewportSize = newSize }
         .clipped()
       }
 
       VStack(spacing: 0) {
-        if let selectedNode {
-          selectionStrip(for: selectedNode)
-        }
         if !compact, timeline != nil {
           timelineBar
-        } else if !compact, selectedNode == nil {
+        } else if !compact {
           // No meaningful timestamp spread — keep the legacy legend so the
           // level indicator and type key stay available.
           atlasLegend
@@ -1389,6 +1554,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       if let fraction = notification.userInfo?["fraction"] as? Double {
         stopPlayback(userInitiated: true)
         timeCursor = min(max(fraction, 0), 1)
+        clearSelectionIfHiddenAtCurrentTime()
       }
       if let play = notification.userInfo?["play"] as? Bool {
         if play {
@@ -1412,12 +1578,15 @@ private struct CanonicalMemoryAtlasSurface: View {
 
         TextField("Search your entities", text: $searchText)
           .textFieldStyle(.plain)
+          .focused($searchIsFocused)
           .scaledFont(size: 12)
           .foregroundColor(OmiColors.textPrimary)
           .onSubmit { selectFirstSearchResult() }
           .onChange(of: searchText) { _, newValue in
             updateSearchMatches(newValue)
           }
+          .accessibilityLabel("Search entities")
+          .accessibilityIdentifier("memory_atlas_search")
 
         if !searchText.isEmpty {
           Button {
@@ -1428,11 +1597,13 @@ private struct CanonicalMemoryAtlasSurface: View {
               .foregroundColor(OmiColors.textTertiary)
           }
           .buttonStyle(.plain)
+          .help("Clear search (Esc)")
+          .accessibilityLabel("Clear search")
         }
       }
       .padding(.horizontal, 12)
-      .frame(width: compact ? 260 : 340, height: 34)
-      .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 13, stroke: OmiColors.border.opacity(0.3))
+      .frame(width: compact ? 250 : 320, height: 30)
+      .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 11, stroke: OmiColors.border.opacity(0.3))
 
       Spacer()
 
@@ -1448,8 +1619,9 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
     }
     .padding(.horizontal, compact ? 12 : 18)
-    .frame(height: compact ? 48 : 56)
+    .frame(height: compact ? 40 : 44)
     .background(OmiColors.backgroundPrimary)
+    .accessibilityHint("Press Command-F to search. Press Return to select the first visible result.")
   }
 
   private func atlasCanvas(size: CGSize, plan: MemoryAtlasRenderPlan) -> some View {
@@ -1492,11 +1664,24 @@ private struct CanonicalMemoryAtlasSurface: View {
     size: CGSize,
     plan: MemoryAtlasRenderPlan
   ) {
+    let paintBounds = canvasPaintBounds(for: size)
     for cluster in snapshot.activeClusters {
       var path = Path()
       for placement in plan.visibleEdges where placement.cluster == cluster {
-        path.move(to: point(for: placement.source, in: size))
-        path.addLine(to: point(for: placement.target, in: size))
+        let source = point(for: placement.source, in: size)
+        let target = point(for: placement.target, in: size)
+        let segmentBounds = CGRect(
+          x: min(source.x, target.x) - 1,
+          y: min(source.y, target.y) - 1,
+          width: max(abs(source.x - target.x), 2),
+          height: max(abs(source.y - target.y), 2)
+        )
+        // The rendered segment lies inside its bounding box, so a disjoint
+        // box cannot cross the viewport. This is paint-only culling: the plan
+        // and its stable entity cohort remain unchanged.
+        guard segmentBounds.intersects(paintBounds) else { continue }
+        path.move(to: source)
+        path.addLine(to: target)
       }
       guard !path.isEmpty else { continue }
       context.stroke(
@@ -1515,8 +1700,8 @@ private struct CanonicalMemoryAtlasSurface: View {
     // While the time cursor is engaged, an entity that was just "born" blooms
     // briefly as the playhead sweeps past its creation date, then settles into
     // the constellation — the atlas visibly grows rather than snapping in.
-    let asOf = asOfDate
-    let spawnWindow = asOf != nil ? (snapshot.timeline?.spawnWindow ?? 0) : 0
+    let replayCursor = timeCursor < 0.9995 ? timeCursor : nil
+    let paintBounds = canvasPaintBounds(for: size)
 
     for cluster in snapshot.activeClusters {
       var primaryPath = Path()
@@ -1528,10 +1713,23 @@ private struct CanonicalMemoryAtlasSurface: View {
         var radius = nodeRadius(for: placement)
         let center = point(for: placement.normalizedPosition, in: size)
 
+        // Canvas otherwise builds paths for every deep-zoom entity, including
+        // those far outside the clipped viewport. Culling here keeps maximum
+        // zoom scalable without changing which nodes exist or can appear as
+        // the user pans back to them.
+        guard
+          paintBounds.intersects(
+            CGRect(
+              x: center.x - radius,
+              y: center.y - radius,
+              width: radius * 2,
+              height: radius * 2
+            ))
+        else { continue }
+
         var pop = 0.0
-        if let asOf, spawnWindow > 0 {
-          let age = asOf.timeIntervalSince(placement.node.createdAt)
-          if age >= 0, age < spawnWindow { pop = 1 - age / spawnWindow }
+        if let replayCursor, let timeline {
+          pop = timeline.spawnProgress(nodeID: placement.id, at: replayCursor)
         }
         if pop > 0 {
           radius *= CGFloat(1 + 0.9 * pop)
@@ -1806,9 +2004,23 @@ private struct CanonicalMemoryAtlasSurface: View {
         .buttonStyle(.plain)
         .accessibilityIdentifier("memory_atlas_view_evidence")
       }
+
+      Button {
+        selectedNodeID = nil
+      } label: {
+        Image(systemName: "xmark")
+          .scaledFont(size: 10, weight: .semibold)
+          .foregroundColor(OmiColors.textTertiary)
+          .frame(width: 24, height: 24)
+          .contentShape(Rectangle())
+      }
+      .buttonStyle(.plain)
+      .help("Clear selection (Esc)")
+      .accessibilityLabel("Clear selection")
+      .accessibilityIdentifier("memory_atlas_clear_selection")
     }
     .padding(.horizontal, compact ? 12 : 18)
-    .frame(height: compact ? 58 : 72)
+    .frame(height: compact ? 50 : 56)
     .background(OmiColors.backgroundSecondary)
     .overlay(alignment: .top) {
       Divider().overlay(OmiColors.border.opacity(0.24))
@@ -1833,31 +2045,32 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
     }
     .padding(.horizontal, 18)
-    .frame(height: 44)
+    .frame(height: 36)
     .background(OmiColors.backgroundSecondary)
   }
 
   // MARK: - Time axis
 
   private var timelineBar: some View {
-    VStack(spacing: 9) {
-      HStack(spacing: 12) {
-        Button(action: togglePlayback) {
-          ZStack {
-            Circle().fill(OmiColors.textPrimary).frame(width: 30, height: 30)
-            Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
-              .scaledFont(size: 11, weight: .bold)
-              .foregroundColor(OmiColors.backgroundPrimary)
-              .offset(x: isTimePlaying ? 0 : 1)
-          }
+    HStack(spacing: 12) {
+      Button(action: togglePlayback) {
+        ZStack {
+          Circle().fill(OmiColors.textPrimary).frame(width: 28, height: 28)
+          Image(systemName: isTimePlaying ? "pause.fill" : "play.fill")
+            .scaledFont(size: 10, weight: .bold)
+            .foregroundColor(OmiColors.backgroundPrimary)
+            .offset(x: isTimePlaying ? 0 : 1)
         }
-        .buttonStyle(.plain)
-        .help(isTimePlaying ? "Pause" : "Play your memory forward")
-        .accessibilityIdentifier("memory_atlas_timeline_play")
+      }
+      .buttonStyle(.plain)
+      .help(isTimePlaying ? "Pause" : "Play your memory forward")
+      .accessibilityLabel(isTimePlaying ? "Pause memory timeline" : "Play memory timeline")
+      .accessibilityIdentifier("memory_atlas_timeline_play")
 
-        VStack(alignment: .leading, spacing: 1) {
+      VStack(spacing: 3) {
+        HStack(spacing: 10) {
           Text(asOfLabel)
-            .scaledFont(size: 12, weight: .semibold)
+            .scaledFont(size: 11, weight: .semibold)
             .foregroundColor(OmiColors.textPrimary)
           Text("\(visibleEntityCount) entities · \(visibleConnectionCount) connections")
             .scaledFont(size: 10)
@@ -1876,27 +2089,27 @@ private struct CanonicalMemoryAtlasSurface: View {
             Text("Now")
               .scaledFont(size: 10, weight: .semibold)
               .foregroundColor(OmiColors.textSecondary)
-              .padding(.horizontal, 10)
-              .frame(height: 24)
-              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 8)
+              .padding(.horizontal, 8)
+              .frame(height: 20)
+              .omiControlSurface(fill: OmiColors.backgroundRaised, radius: 7)
           }
           .buttonStyle(.plain)
           .accessibilityIdentifier("memory_atlas_timeline_now")
         }
-      }
 
-      timelineTrack
+        timelineTrack
 
-      HStack {
-        Text(shortDate(timeline?.start))
-        Spacer()
-        Text("Now")
+        HStack {
+          Text(shortDate(timeline?.start))
+          Spacer()
+          Text(timeline?.hasChronologicalRange == true ? "Now" : "Imported")
+        }
+        .scaledFont(size: 8)
+        .foregroundColor(OmiColors.textQuaternary)
       }
-      .scaledFont(size: 9)
-      .foregroundColor(OmiColors.textQuaternary)
     }
     .padding(.horizontal, 18)
-    .padding(.vertical, 12)
+    .padding(.vertical, 7)
     .background(OmiColors.backgroundSecondary)
     .overlay(alignment: .top) {
       Divider().overlay(OmiColors.border.opacity(0.24))
@@ -1915,8 +2128,23 @@ private struct CanonicalMemoryAtlasSurface: View {
           .onChanged { value in scrub(to: value.location.x / max(geo.size.width, 1)) }
       )
     }
-    .frame(height: 40)
+    .frame(height: 26)
     .accessibilityIdentifier("memory_atlas_timeline_track")
+    .accessibilityElement()
+    .accessibilityLabel("Memory timeline")
+    .accessibilityValue(asOfLabel)
+    .accessibilityHint("Adjust to replay the atlas over time")
+    .accessibilityAdjustableAction { direction in
+      let step = 0.05
+      switch direction {
+      case .increment:
+        scrub(to: min(timeCursor + step, 1))
+      case .decrement:
+        scrub(to: max(timeCursor - step, 0))
+      @unknown default:
+        break
+      }
+    }
   }
 
   private func drawTimeline(context: inout GraphicsContext, size: CGSize) {
@@ -1966,7 +2194,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     let formatter = DateFormatter()
     formatter.dateStyle = .medium
     formatter.timeStyle = .none
-    return "As of \(formatter.string(from: asOf))"
+    if timeline?.hasChronologicalRange == false {
+      return "Import replay · \(formatter.string(from: asOf))"
+    }
+    return "Replay · \(formatter.string(from: asOf))"
   }
 
   private func shortDate(_ date: Date?) -> String {
@@ -1996,6 +2227,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     playbackTask?.cancel()
     if resetToStart || timeCursor >= 0.9995 {
       timeCursor = 0
+      clearSelectionIfHiddenAtCurrentTime()
     }
     isTimePlaying = true
     // Suppress the interactive overlay + floating titles for a clean, smooth
@@ -2044,6 +2276,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       autoplayEnabled = false
     }
     timeCursor = min(max(fraction, 0), 1)
+    clearSelectionIfHiddenAtCurrentTime()
   }
 
   private func jumpToNow() {
@@ -2059,6 +2292,7 @@ private struct CanonicalMemoryAtlasSurface: View {
         Image(systemName: "minus").frame(width: 28, height: 28)
       }
       .accessibilityIdentifier("memory_atlas_zoom_out")
+      .accessibilityLabel("Zoom out")
       Button {
         resetViewport()
       } label: {
@@ -2068,6 +2302,8 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
       .help("Return to overview")
       .accessibilityIdentifier("memory_atlas_reset_viewport")
+      .accessibilityLabel("Reset atlas viewport")
+      .accessibilityValue("\(Int(zoom * 100)) percent")
       Button {
         zoomIn()
       } label: {
@@ -2076,6 +2312,7 @@ private struct CanonicalMemoryAtlasSurface: View {
       .disabled(zoom >= maximumZoom)
       .help(compact ? "Open the atlas for deeper exploration" : "Zoom in (accelerates for large atlases)")
       .accessibilityIdentifier("memory_atlas_zoom_in")
+      .accessibilityLabel("Zoom in")
     }
     .scaledFont(size: 10)
     .foregroundColor(OmiColors.textSecondary)
@@ -2126,6 +2363,24 @@ private struct CanonicalMemoryAtlasSurface: View {
       }
   }
 
+  private func scrollZoom(by delta: CGFloat, anchoredAt pointer: CGPoint, in size: CGSize) {
+    guard delta != 0, size.width > 0, size.height > 0 else { return }
+    let nextZoom = min(
+      max(zoom * CGFloat(exp(Double(delta))), MemoryAtlasZoomPolicy.minimumZoom),
+      maximumZoom
+    )
+    guard nextZoom != zoom else { return }
+
+    let ratio = nextZoom / zoom
+    pan = CGSize(
+      width: (1 - ratio) * (pointer.x - size.width / 2) + ratio * pan.width,
+      height: (1 - ratio) * (pointer.y - size.height / 2) + ratio * pan.height
+    )
+    zoom = nextZoom
+    settledZoom = nextZoom
+    settledPan = pan
+  }
+
   private var maximumZoom: CGFloat {
     MemoryAtlasZoomPolicy.maximumZoom(nodeCount: snapshot.nodes.count, compact: compact)
   }
@@ -2158,6 +2413,10 @@ private struct CanonicalMemoryAtlasSurface: View {
     )
   }
 
+  private func canvasPaintBounds(for size: CGSize) -> CGRect {
+    CGRect(x: -28, y: -28, width: size.width + 56, height: size.height + 56)
+  }
+
   private func nodeDiameter(_ placement: MemoryAtlasNodePlacement, selected: Bool) -> CGFloat {
     if isInspectMode {
       if selected { return 64 }
@@ -2175,6 +2434,22 @@ private struct CanonicalMemoryAtlasSurface: View {
     guard !searchText.isEmpty else { return true }
     return node.label.localizedCaseInsensitiveContains(searchText)
       || node.aliases.contains { $0.localizedCaseInsensitiveContains(searchText) }
+  }
+
+  /// The replay filters membership by its density-aware axis. Hit testing and
+  /// keyboard search use the same predicate so a future entity cannot be
+  /// selected while it is still absent from the canvas.
+  private func nodeIsVisibleAtCurrentTime(_ placement: MemoryAtlasNodePlacement) -> Bool {
+    guard let timeline, timeCursor < 0.9995 else { return true }
+    return placement.id == snapshot.anchorNodeID || timeline.isVisible(nodeID: placement.id, at: timeCursor)
+  }
+
+  private func clearSelectionIfHiddenAtCurrentTime() {
+    guard let selectedNodeID, let placement = snapshot.nodeByID[selectedNodeID], !nodeIsVisibleAtCurrentTime(placement)
+    else {
+      return
+    }
+    self.selectedNodeID = nil
   }
 
   private func updateSearchMatches(_ query: String) {
@@ -2196,13 +2471,16 @@ private struct CanonicalMemoryAtlasSurface: View {
 
   private func selectFirstSearchResult() {
     guard let matchingNodeIDs, !matchingNodeIDs.isEmpty else { return }
-    selectedNodeID = snapshot.nodes.first { matchingNodeIDs.contains($0.id) }?.id
+    selectedNodeID =
+      snapshot.nodes.first {
+        matchingNodeIDs.contains($0.id) && nodeIsVisibleAtCurrentTime($0)
+      }?.id
   }
 
   private func selectNearestNode(to location: CGPoint, in size: CGSize) {
     let hitRadius = max(12, 18 / zoom)
     var nearest: (placement: MemoryAtlasNodePlacement, distance: CGFloat)?
-    for placement in snapshot.nodes {
+    for placement in snapshot.nodes where nodeIsVisibleAtCurrentTime(placement) {
       let rendered = point(for: placement.normalizedPosition, in: size)
       let distance = hypot(rendered.x - location.x, rendered.y - location.y)
       if distance <= hitRadius && (nearest == nil || distance < nearest!.distance) {
@@ -2263,6 +2541,140 @@ private struct CanonicalMemoryAtlasSurface: View {
       settledZoom = 1
       pan = .zero
       settledPan = .zero
+    }
+  }
+
+  private func clearTransientState() {
+    searchIsFocused = false
+    searchText = ""
+    matchingNodeIDs = nil
+    matchingEdges = nil
+    selectedNodeID = nil
+  }
+}
+
+/// SwiftUI has no view-local scroll-wheel gesture on the macOS 14 deployment
+/// floor. This passive bridge observes the Atlas viewport without entering the
+/// hit-test chain, so normal dragging, tapping, and control interaction remain
+/// owned by SwiftUI.
+private struct MemoryAtlasInputMonitor: NSViewRepresentable {
+  let onScroll: (CGFloat, CGPoint) -> Void
+  let onEscape: () -> Void
+  let onFocusSearch: () -> Void
+
+  func makeCoordinator() -> Coordinator {
+    Coordinator(onScroll: onScroll, onEscape: onEscape, onFocusSearch: onFocusSearch)
+  }
+
+  func makeNSView(context: Context) -> PassiveEventView {
+    let view = PassiveEventView()
+    let coordinator = context.coordinator
+    view.geometryDidChange = { [weak coordinator] windowNumber, frameInWindow in
+      coordinator?.windowNumber = windowNumber
+      coordinator?.frameInWindow = frameInWindow
+    }
+    context.coordinator.installMonitor()
+    return view
+  }
+
+  func updateNSView(_ nsView: PassiveEventView, context: Context) {
+    context.coordinator.onScroll = onScroll
+    context.coordinator.onEscape = onEscape
+    context.coordinator.onFocusSearch = onFocusSearch
+  }
+
+  static func dismantleNSView(_ nsView: PassiveEventView, coordinator: Coordinator) {
+    nsView.geometryDidChange = nil
+    coordinator.removeMonitor()
+  }
+
+  final class PassiveEventView: NSView {
+    var geometryDidChange: ((Int?, CGRect) -> Void)?
+
+    override var isFlipped: Bool { true }
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func viewDidMoveToWindow() {
+      super.viewDidMoveToWindow()
+      publishGeometry()
+    }
+
+    override func layout() {
+      super.layout()
+      publishGeometry()
+    }
+
+    private func publishGeometry() {
+      guard let window else {
+        geometryDidChange?(nil, .zero)
+        return
+      }
+      geometryDidChange?(window.windowNumber, convert(bounds, to: nil))
+    }
+  }
+
+  final class Coordinator {
+    var onScroll: (CGFloat, CGPoint) -> Void
+    var onEscape: () -> Void
+    var onFocusSearch: () -> Void
+    fileprivate var windowNumber: Int?
+    fileprivate var frameInWindow: CGRect = .zero
+    private var eventMonitor: Any?
+
+    init(
+      onScroll: @escaping (CGFloat, CGPoint) -> Void,
+      onEscape: @escaping () -> Void,
+      onFocusSearch: @escaping () -> Void
+    ) {
+      self.onScroll = onScroll
+      self.onEscape = onEscape
+      self.onFocusSearch = onFocusSearch
+    }
+
+    func installMonitor() {
+      eventMonitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .keyDown]) {
+        [weak self] event in
+        guard let self, event.windowNumber == self.windowNumber else {
+          return event
+        }
+
+        if event.type == .keyDown, event.keyCode == 53 {
+          self.onEscape()
+          return nil
+        }
+
+        if event.type == .keyDown,
+          event.modifierFlags.contains(.command),
+          event.charactersIgnoringModifiers?.lowercased() == "f"
+        {
+          self.onFocusSearch()
+          return nil
+        }
+
+        guard event.type == .scrollWheel else { return event }
+        let frameInWindow = self.frameInWindow
+        guard frameInWindow.contains(event.locationInWindow) else { return event }
+        guard abs(event.scrollingDeltaY) > abs(event.scrollingDeltaX) else { return event }
+
+        let sensitivity: CGFloat = event.hasPreciseScrollingDeltas ? 0.012 : 0.12
+        let scaledDelta = min(max(event.scrollingDeltaY * sensitivity, -0.18), 0.18)
+        let location = CGPoint(
+          x: event.locationInWindow.x - frameInWindow.minX,
+          y: frameInWindow.maxY - event.locationInWindow.y
+        )
+        self.onScroll(scaledDelta, location)
+        return nil
+      }
+    }
+
+    func removeMonitor() {
+      guard let eventMonitor else { return }
+      NSEvent.removeMonitor(eventMonitor)
+      self.eventMonitor = nil
+    }
+
+    deinit {
+      removeMonitor()
     }
   }
 }

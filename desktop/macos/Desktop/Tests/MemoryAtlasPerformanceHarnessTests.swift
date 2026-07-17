@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 /// Deterministic production-scale input for Memory Atlas performance loops.
@@ -29,9 +30,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
       first.activeClusters,
       [.person, .organization, .place, .thing, .concept]
     )
-    XCTAssertTrue(first.activeClusters.map(first.center(for:)).allSatisfy { center in
-      abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
-    })
+    XCTAssertTrue(
+      first.activeClusters.map(first.center(for:)).allSatisfy { center in
+        abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
+      })
   }
 
   func testRenderPlannerKeepsOverviewWorkWithinBudgets() {
@@ -179,9 +181,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
 
     XCTAssertEqual(plan.detailLevel, .focus)
     XCTAssertTrue(plan.visibleNodes.contains { $0.id == selected.id })
-    XCTAssertTrue(plan.relatedNodeIDs.allSatisfy { relatedID in
-      plan.visibleNodes.contains { $0.id == relatedID }
-    })
+    XCTAssertTrue(
+      plan.relatedNodeIDs.allSatisfy { relatedID in
+        plan.visibleNodes.contains { $0.id == relatedID }
+      })
     XCTAssertEqual(plan.visibleNodes.count, snapshot.nodes.count)
   }
 
@@ -206,9 +209,10 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
 
     XCTAssertLessThanOrEqual(plan.visibleEdges.count, 80)
     XCTAssertLessThanOrEqual(plan.labelNodeIDs.count, 36)
-    XCTAssertTrue(plan.visibleEdges.allSatisfy { edge in
-      edge.edge.sourceId == "owner" || edge.edge.targetId == "owner"
-    })
+    XCTAssertTrue(
+      plan.visibleEdges.allSatisfy { edge in
+        edge.edge.sourceId == "owner" || edge.edge.targetId == "owner"
+      })
     XCTAssertTrue(plan.relatedNodeIDs.contains("owner"))
   }
 
@@ -233,14 +237,72 @@ final class MemoryAtlasPerformanceHarnessTests: XCTestCase {
         matchingNodeIDs: nil
       )
 
-      let nodeLimit = zoom < 1.35 ? 1_200 : (zoom < 1.9 ? 1_600 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 2_400 : 3_200))
-      let baseEdgeLimit = zoom < 1.35 ? 36 : (zoom < 1.9 ? 96 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 160 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 260 : 360)))
+      let nodeLimit =
+        zoom < 1.35 ? 1_200 : (zoom < 1.9 ? 1_600 : (zoom < MemoryAtlasZoomPolicy.focusModeZoom ? 2_400 : 3_200))
+      let baseEdgeLimit =
+        zoom < 1.35
+        ? 36
+        : (zoom < 1.9
+          ? 96
+          : (zoom < MemoryAtlasZoomPolicy.focusModeZoom
+            ? 160 : (zoom < MemoryAtlasZoomPolicy.inspectModeZoom ? 260 : 360)))
       let edgeLimit = frame.isMultiple(of: 3) ? min(baseEdgeLimit, 80) : baseEdgeLimit
       XCTAssertLessThanOrEqual(plan.visibleNodes.count, nodeLimit)
       XCTAssertLessThanOrEqual(plan.visibleEdges.count, edgeLimit)
-      let labelLimit = zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 96 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
+      let labelLimit =
+        zoom >= MemoryAtlasZoomPolicy.inspectModeZoom ? 96 : (zoom >= MemoryAtlasZoomPolicy.focusModeZoom ? 72 : 36)
       XCTAssertLessThanOrEqual(plan.interactiveNodes.count, labelLimit)
     }
+  }
+
+  func testGesturePlanCacheAvoidsRepeatedProductionScalePlanning() {
+    let snapshot = makeProductionScaleSnapshot()
+    let cache = MemoryAtlasRenderPlanCache(snapshot: snapshot)
+    let viewport = CGSize(width: 1_200, height: 800)
+    var expectedNodeIDs: [String] = []
+    var expectedEdgeIDs: [String] = []
+
+    // Every frame stays in the detail band. Pan and exact zoom change the
+    // projection, but not the planner's stable node/edge cohort, so a live
+    // gesture should pay for that graph-wide selection once rather than 180
+    // times. The view still recomputes a fresh plan after the gesture ends.
+    for frame in 0..<180 {
+      let progress = CGFloat(frame) / 179
+      let plan = cache.makePlan(
+        viewportSize: viewport,
+        zoom: 2.2 + progress * 0.8,
+        pan: CGSize(width: progress * 480, height: -progress * 260),
+        compact: false,
+        selectedNodeID: nil,
+        matchingNodeIDs: nil,
+        matchingEdges: nil,
+        asOf: nil,
+        isCameraMoving: true
+      )
+      if frame == 0 {
+        expectedNodeIDs = plan.visibleNodes.map(\.id)
+        expectedEdgeIDs = plan.visibleEdges.map(\.id)
+      } else {
+        XCTAssertEqual(plan.visibleNodes.map(\.id), expectedNodeIDs)
+        XCTAssertEqual(plan.visibleEdges.map(\.id), expectedEdgeIDs)
+      }
+    }
+
+    XCTAssertEqual(cache.plannerInvocationCount, 1)
+    XCTAssertEqual(cache.transientReuseCount, 179)
+
+    _ = cache.makePlan(
+      viewportSize: viewport,
+      zoom: 3,
+      pan: CGSize(width: 480, height: -260),
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil,
+      matchingEdges: nil,
+      asOf: nil,
+      isCameraMoving: false
+    )
+    XCTAssertEqual(cache.plannerInvocationCount, 2)
   }
 
   func testZoomOnlyAddsStableEntityCohorts() {

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 final class MemoryAtlasLayoutTests: XCTestCase {
@@ -37,9 +38,10 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(centers[3].y, 0.702_254, accuracy: 0.000_001)
     XCTAssertEqual(centers[4].x, 0.357_342, accuracy: 0.000_001)
     XCTAssertEqual(centers[4].y, 0.422_746, accuracy: 0.000_001)
-    XCTAssertTrue(centers.allSatisfy { center in
-      abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
-    })
+    XCTAssertTrue(
+      centers.allSatisfy { center in
+        abs(hypot((center.x - 0.5) / 0.15, (center.y - 0.5) / 0.25) - 1) < 0.000_001
+      })
   }
 
   func testEmptyTypesRedistributeAroundTheStar() {
@@ -54,10 +56,11 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: sampleGraph(), userName: "David")
 
     XCTAssertEqual(snapshot.edges.count, 3)
-    XCTAssertTrue(snapshot.edges.allSatisfy { edge in
-      snapshot.nodes.contains { $0.normalizedPosition == edge.source }
-        && snapshot.nodes.contains { $0.normalizedPosition == edge.target }
-    })
+    XCTAssertTrue(
+      snapshot.edges.allSatisfy { edge in
+        snapshot.nodes.contains { $0.normalizedPosition == edge.source }
+          && snapshot.nodes.contains { $0.normalizedPosition == edge.target }
+      })
   }
 
   func testLayoutCoalescesDuplicateServerIdentifiersWithoutTrapping() {
@@ -149,7 +152,8 @@ final class MemoryAtlasLayoutTests: XCTestCase {
       nodes: [
         KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
         KnowledgeGraphNode(id: "omi", label: "Omi", nodeType: .thing, createdAt: base.addingTimeInterval(86_400)),
-        KnowledgeGraphNode(id: "openai", label: "OpenAI", nodeType: .organization, createdAt: base.addingTimeInterval(2 * 86_400)),
+        KnowledgeGraphNode(
+          id: "openai", label: "OpenAI", nodeType: .organization, createdAt: base.addingTimeInterval(2 * 86_400)),
       ],
       edges: []
     )
@@ -162,7 +166,7 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     XCTAssertEqual(timeline?.buckets.reduce(0, +), snapshot.nodes.count)
   }
 
-  func testTimelineIsNilWhenTimestampsHaveNoSpread() {
+  func testTimelineSpreadsAZeroRangeImportWithoutInventingDates() throws {
     let stamp = Date(timeIntervalSince1970: 1_700_000_000)
     let graph = KnowledgeGraphResponse(
       nodes: [
@@ -173,16 +177,157 @@ final class MemoryAtlasLayoutTests: XCTestCase {
     )
 
     let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let timeline = try XCTUnwrap(snapshot.timeline)
+
+    XCTAssertFalse(timeline.hasChronologicalRange)
+    XCTAssertEqual(timeline.buckets.reduce(0, +), snapshot.nodes.count)
+    XCTAssertEqual(timeline.date(atFraction: 0.25), stamp)
+    XCTAssertEqual(timeline.date(atFraction: 0.75), stamp)
+    XCTAssertEqual(timeline.entries.map(\.playbackFraction), [0, 1])
+  }
+
+  func testDensityAwareTimelineExpandsImportedClusterButKeepsDateOrder() throws {
+    let base = Date(timeIntervalSince1970: 1_700_000_000)
+    let imported = (0..<24).map { index in
+      KnowledgeGraphNode(
+        id: String(format: "import-%02d", index),
+        label: String(format: "Imported %02d", index),
+        nodeType: .concept,
+        createdAt: base.addingTimeInterval(86_400)
+      )
+    }
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
+        KnowledgeGraphNode(
+          id: "later", label: "Later", nodeType: .organization,
+          createdAt: base.addingTimeInterval(30 * 86_400)
+        ),
+      ] + imported,
+      edges: []
+    )
+
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let timeline = try XCTUnwrap(snapshot.timeline)
+    let importedEntries = timeline.entries.filter { $0.nodeID.hasPrefix("import-") }
+    let firstImportedEntry = try XCTUnwrap(importedEntries.first)
+    let lastImportedEntry = try XCTUnwrap(importedEntries.last)
+
+    XCTAssertEqual(importedEntries.map(\.createdAt), Array(repeating: base.addingTimeInterval(86_400), count: 24))
+    XCTAssertGreaterThan(
+      lastImportedEntry.playbackFraction - firstImportedEntry.playbackFraction,
+      0.5,
+      "a dense import should have room to grow during replay"
+    )
+    XCTAssertEqual(timeline.buckets.reduce(0, +), snapshot.nodes.count)
+    XCTAssertLessThan(
+      timeline.buckets.max() ?? Int.max, 8, "the histogram should not collapse the import into one burst")
+
+    let plan = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 900, height: 640),
+      zoom: 1,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil,
+      timeline: timeline,
+      timeCursor: 0.45
+    )
+    XCTAssertGreaterThan(plan.visibleNodes.count, 2)
+    XCTAssertLessThan(plan.visibleNodes.count, snapshot.nodes.count)
+  }
+
+  func testTimelineIsNilForOneEntity() {
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(
+      graph: KnowledgeGraphResponse(
+        nodes: [KnowledgeGraphNode(id: "david", label: "David", nodeType: .person)],
+        edges: []
+      ),
+      userName: "David"
+    )
+
     XCTAssertNil(snapshot.timeline)
+  }
+
+  func testDensityReplayNeverShowsAnEdgeBeforeBothEndpointsAreBorn() throws {
+    let base = Date(timeIntervalSince1970: 1_700_000_000)
+    let graph = KnowledgeGraphResponse(
+      nodes: [
+        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base),
+        KnowledgeGraphNode(
+          id: "future", label: "Future project", nodeType: .concept,
+          createdAt: base.addingTimeInterval(86_400)
+        ),
+      ],
+      edges: [
+        KnowledgeGraphEdge(
+          id: "future-edge", sourceId: "david", targetId: "future", label: "works_on", createdAt: base
+        )
+      ]
+    )
+    let snapshot = MemoryAtlasLayoutEngine.makeSnapshot(graph: graph, userName: "David")
+    let timeline = try XCTUnwrap(snapshot.timeline)
+
+    let earlyPlan = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 800, height: 600),
+      zoom: 1,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil,
+      timeline: timeline,
+      timeCursor: 0
+    )
+    XCTAssertEqual(Set(earlyPlan.visibleNodes.map(\.id)), ["david"])
+    XCTAssertTrue(earlyPlan.visibleEdges.isEmpty)
+
+    let completePlan = MemoryAtlasRenderPlanner.makePlan(
+      snapshot: snapshot,
+      viewportSize: CGSize(width: 800, height: 600),
+      zoom: 1,
+      pan: .zero,
+      compact: false,
+      selectedNodeID: nil,
+      matchingNodeIDs: nil,
+      timeline: timeline,
+      timeCursor: 1
+    )
+    XCTAssertEqual(Set(completePlan.visibleEdges.map(\.id)), ["future-edge"])
+  }
+
+  func testDensityReplayUsesStableIDOrderForEqualTimestamps() throws {
+    let stamp = Date(timeIntervalSince1970: 1_700_000_000)
+    let entities = [
+      KnowledgeGraphNode(id: "zebra", label: "Zebra", nodeType: .thing, createdAt: stamp),
+      KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: stamp),
+      KnowledgeGraphNode(id: "alpha", label: "Alpha", nodeType: .concept, createdAt: stamp),
+    ]
+    let first = try XCTUnwrap(
+      MemoryAtlasLayoutEngine.makeSnapshot(
+        graph: KnowledgeGraphResponse(nodes: entities, edges: []), userName: "David"
+      ).timeline
+    )
+    let second = try XCTUnwrap(
+      MemoryAtlasLayoutEngine.makeSnapshot(
+        graph: KnowledgeGraphResponse(nodes: Array(entities.reversed()), edges: []), userName: "David"
+      ).timeline
+    )
+
+    XCTAssertEqual(first.entries.map(\.nodeID), ["alpha", "david", "zebra"])
+    XCTAssertEqual(first.entries, second.entries)
   }
 
   func testAsOfCursorHidesEntitiesBornAfterTheCursorButKeepsAnchor() {
     let base = Date(timeIntervalSince1970: 1_700_000_000)
     let graph = KnowledgeGraphResponse(
       nodes: [
-        KnowledgeGraphNode(id: "david", label: "David", nodeType: .person, createdAt: base.addingTimeInterval(3 * 86_400)),
+        KnowledgeGraphNode(
+          id: "david", label: "David", nodeType: .person, createdAt: base.addingTimeInterval(3 * 86_400)),
         KnowledgeGraphNode(id: "early", label: "Early", nodeType: .concept, createdAt: base),
-        KnowledgeGraphNode(id: "late", label: "Late", nodeType: .concept, createdAt: base.addingTimeInterval(2 * 86_400)),
+        KnowledgeGraphNode(
+          id: "late", label: "Late", nodeType: .concept, createdAt: base.addingTimeInterval(2 * 86_400)),
       ],
       edges: []
     )
