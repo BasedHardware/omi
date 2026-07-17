@@ -1,0 +1,3 @@
+{
+  "change": "Fixed chat responses losing their model/token/cost footer stats and dropping discovery cards and refreshed file states once a turn finished"
+}
