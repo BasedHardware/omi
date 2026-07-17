@@ -87,6 +87,8 @@ class DesktopSwiftCIContractTests(unittest.TestCase):
                 self.assertNotIn("Check changed files", job)
 
         debug_job = self.jobs["desktop-swift"]
+        self.assertIn("Fetch manifest check base", debug_job)
+        self.assertIn("git fetch --no-tags --depth=1 origin", debug_job)
         self.assertIn("--changed-files", debug_job)
         self.assertIn("needs.changes.outputs.changed_files", debug_job)
 
