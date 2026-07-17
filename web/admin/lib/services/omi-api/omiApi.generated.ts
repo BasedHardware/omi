@@ -887,7 +887,7 @@ export interface ChartDataset {
 
 export interface ChatFirstSubject {
   id: string;
-  kind: "task" | "goal" | "capture";
+  kind: "task" | "goal" | "capture" | "cold_start";
 }
 
 export interface ChatMessageCountResponse {
@@ -956,6 +956,17 @@ export interface ClickUpSpacesResponse {
 
 export interface ClickUpTeamsResponse {
   teams?: Array<Record<string, unknown>>;
+}
+
+export interface ColdStartSequence {
+  sequence_id: string;
+  step: number;
+}
+
+export interface ColdStartSequenceTerminalReceipt {
+  receipt_id: string;
+  sequence_id: string;
+  terminal_state: "completed" | "abandoned";
 }
 
 export type ContextMatchSignal = "app" | "person" | "document" | "meeting" | "free_time" | "dependency" | "agent";
@@ -2045,7 +2056,9 @@ export interface LlmUsageResponse {
 }
 
 export interface MaterializePromptsRequest {
+  cold_start_sequence_terminal_receipts?: Array<ColdStartSequenceTerminalReceipt>;
   control_generation: number;
+  initial_page_loaded?: boolean;
   owner_fence: string;
   receipts?: Array<ProactiveMaterializationReceipt>;
   source_surface: "main_chat";
@@ -2585,13 +2598,15 @@ export interface PrivateCloudSyncResponse {
 export interface ProactiveIntent {
   account_generation: number;
   blocks: Array<QuestionCardSpec | TaskCardSpec | GoalLinkSpec | CaptureLinkSpec>;
+  cold_start_sequence_terminal_receipt_id?: string | null;
+  cold_start_sequence_terminal_state?: "completed" | "abandoned" | null;
   continuity_key: string;
   created_at: string;
   delivered_at?: string | null;
-  delivery_state?: "ready" | "delivered";
+  delivery_state?: "ready" | "pending_kernel_receipt" | "delivered";
   intent_id: string;
   materialization_receipt_id?: string | null;
-  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment";
+  source: "daily_opener" | "capture_arrival" | "deferral_reraise" | "agent_judgment" | "cold_start_rich" | "cold_start_sparse";
   subject?: ChatFirstSubject | null;
 }
 
@@ -2636,6 +2651,7 @@ export interface PublicFairUseCaseStatusResponse {
 }
 
 export interface QuestionCardSpec {
+  cold_start_sequence?: ColdStartSequence | null;
   options: Array<QuestionOption>;
   question_id: string;
   subject: ChatFirstSubject;
@@ -3897,6 +3913,8 @@ export interface OmiApiSchemas {
   "ClickUpListsResponse": ClickUpListsResponse;
   "ClickUpSpacesResponse": ClickUpSpacesResponse;
   "ClickUpTeamsResponse": ClickUpTeamsResponse;
+  "ColdStartSequence": ColdStartSequence;
+  "ColdStartSequenceTerminalReceipt": ColdStartSequenceTerminalReceipt;
   "ContextMatchSignal": ContextMatchSignal;
   "ContinuationCheckpoint": ContinuationCheckpoint;
   "ContinuationCheckpointUpsert": ContinuationCheckpointUpsert;
@@ -15657,4 +15675,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 381 client methods generated.
+// Total: 382 client methods generated.
