@@ -1,3 +1,4 @@
+progressDeadlineSeconds: 1800
 # Default values for backend-listen.
 # This is a YAML-formatted file.
 # Declare variables to be passed into your templates.
@@ -122,7 +123,7 @@ env:
   - name: OMI_ENV_STAGE
     value: "prod"
   - name: OMI_LLM_GATEWAY_FEATURE_MODE
-    value: "gateway"
+    value: "off"
   - name: OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE
     value: "true"
   - name: OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION

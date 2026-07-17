@@ -430,6 +430,16 @@ struct FloatingControlBarView: View {
     .contextMenu { barContextMenu }
     .onHover(perform: handleBarHover)
     .onChange(of: shouldShowNotchHoverMenu) { _, visible in
+      if state.isVoicePresentationActive {
+        // A PTT transition replaces the idle hover surface with a separately sized panel. Do not
+        // let an in-flight hover spring keep changing the black surface after voice takes over.
+        var transaction = Transaction()
+        transaction.animation = nil
+        withTransaction(transaction) {
+          notchSwitcherProgress = 0
+        }
+        return
+      }
       // Fixed window, animated content: in notch mode the NSPanel frame
       // never moves for hover expand/collapse — this value carries the
       // ENTIRE visible morph (black surface height/width, row reveal,
@@ -441,6 +451,19 @@ struct FloatingControlBarView: View {
         : FloatingControlBarWindow.notchHoverMenuCollapseAnimation
       OmiMotion.withGated(morphAnim) {
         notchSwitcherProgress = visible ? 1 : 0
+      }
+    }
+    .onChange(of: state.isVoicePresentationActive) { _, active in
+      guard active else { return }
+      // These view-local values otherwise remain true until pointer exit and can paint stale
+      // hover chrome over the voice presentation.
+      var transaction = Transaction()
+      transaction.animation = nil
+      withTransaction(transaction) {
+        isHovering = false
+        notchLogoHovering = false
+        notchSettingsHovering = false
+        notchSwitcherProgress = 0
       }
     }
     .onChange(of: state.showingAIConversation) { _, isShowing in
@@ -470,11 +493,11 @@ struct FloatingControlBarView: View {
   /// (chat, voice, notification, PTT hint) still resize the panel and keep
   /// the geometry-driven surface.
   private func floatingSurfaceSize(geometry: GeometryProxy) -> CGSize {
-    let notchHoverLifecycle =
-      state.usesNotchIsland
-      && !state.showingAIConversation
-      && state.currentNotification == nil
-      && state.pttHintText.isEmpty
+    let notchHoverLifecycle = NotchHoverSurfacePolicy.usesAnimatedHoverSurface(
+      usesNotchIsland: state.usesNotchIsland,
+      showingAIConversation: state.showingAIConversation,
+      isVoicePresentationActive: state.isVoicePresentationActive,
+      isShowingNotification: state.isShowingNotification)
     if notchHoverLifecycle {
       let openWidth = max(notchChromeWidth, FloatingControlBarWindow.notchExpandedWidth)
       return CGSize(
@@ -647,7 +670,7 @@ struct FloatingControlBarView: View {
       }
       .buttonStyle(.plain)
 
-      if !showingNotchThinking && notchSettingsHovering {
+      if !state.isVoicePresentationActive && notchSettingsHovering {
         notchSettingsButton
           .zIndex(1)
           .transition(.scale.combined(with: .opacity))
@@ -944,6 +967,10 @@ struct FloatingControlBarView: View {
   }
 
   private func setNotchLogoHovering(_ hovering: Bool) {
+    guard !state.isVoicePresentationActive || !hovering else {
+      notchLogoHovering = false
+      return
+    }
     OmiMotion.withGated(.spring(response: 0.18, dampingFraction: 0.74)) {
       notchLogoHovering = hovering
     }
@@ -1048,9 +1075,10 @@ struct FloatingControlBarView: View {
   private func handleBarHover(_ hovering: Bool) {
     if state.usesNotchIsland {
       (window as? FloatingControlBarWindow)?.updateNotchPointerFromGlobalMouse()
+      let showsHoverChrome = hovering && !state.isVoicePresentationActive
       OmiMotion.withGated(.easeOut(duration: FloatingControlBarWindow.notchHoverMenuExpandDuration)) {
-        isHovering = state.isNotchHoverMenuVisible
-        notchSettingsHovering = hovering
+        isHovering = showsHoverChrome && state.isNotchHoverMenuVisible
+        notchSettingsHovering = showsHoverChrome
       }
       if !hovering || !state.isNotchHoverMenuVisible {
         notchLogoHovering = false
@@ -2335,10 +2363,6 @@ private struct AgentMainChatView: View {
     guard !trimmed.isEmpty || !staged.isEmpty else { return }
     followUpText = ""
     attachments = []
-    // This composer belongs to a leaf agent. It can only continue its own
-    // canonical session; nested/sibling creation stays on the top-level
-    // resolver path so questions about existing agents never become side
-    // effects.
     manager.continueAgent(from: pill, text: trimmed, attachments: staged)
   }
 

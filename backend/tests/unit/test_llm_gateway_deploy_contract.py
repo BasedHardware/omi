@@ -58,14 +58,14 @@ def test_llm_gateway_anthropic_secret_and_authenticated_readiness_probe_contract
         assert 'X-Omi-Service-Caller: backend' in probe_command
 
 
-def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
+def test_prod_gateway_wiring_is_off_until_verified_promotion():
     manifest = _load_yaml('deploy/runtime_env.yaml')
     prod = manifest['environments']['prod']
     gke_env = prod['gke']['backend-listen']['env']
     assert (
         gke_env['OMI_LLM_GATEWAY_URL']['value'] == 'http://prod-omi-llm-gateway.prod-omi-backend.svc.cluster.local:8080'
     )
-    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+    assert gke_env['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
     assert gke_env['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
     assert gke_env['USE_VERTEX_AI']['value'] == 'true'
@@ -74,8 +74,12 @@ def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
 
     for service in ('backend', 'backend-sync', 'backend-integration'):
         service_config = prod['cloud_run']['services'][service]
-        assert service_config['env']['OMI_LLM_GATEWAY_URL']['value'] == 'http://172.16.160.108'
-        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'gateway'
+        assert service_config['env']['OMI_LLM_GATEWAY_URL'] == {
+            'env_var': 'OMI_LLM_GATEWAY_URL',
+            'default': 'http://127.0.0.1:9',
+            'category': 'service_discovery',
+        }
+        assert service_config['env']['OMI_LLM_GATEWAY_FEATURE_MODE']['value'] == 'off'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE']['value'] == 'true'
         assert service_config['env']['OMI_LLM_GATEWAY_ALLOW_DIRECT_MODEL_EXCEPTION']['value'] == 'true'
         assert service_config['env']['USE_VERTEX_AI']['value'] == 'true'
@@ -92,6 +96,12 @@ def test_prod_gateway_is_reachable_by_both_gke_and_cloud_run_callers():
     assert gateway['ingress']['annotations']['kubernetes.io/ingress.regional-static-ip-name'] == (
         'prod-omi-self-hosted-llm-ip-address'
     )
+    assert prod['llm_gateway'] == {
+        'namespace': 'prod-omi-backend',
+        'release_name': 'prod-omi-llm-gateway',
+        'ingress_name': 'prod-omi-llm-gateway',
+        'static_address_name': 'prod-omi-self-hosted-llm-ip-address',
+    }
 
 
 def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
@@ -104,6 +114,27 @@ def test_gateway_deploy_workflow_and_helper_allow_explicit_prod_launches():
     assert 'LLM_GATEWAY_GSA is required for Vertex Workload Identity' in helper
     assert 'serviceAccount.annotations.iam\\\\.gke\\\\.io/gcp-service-account=${LLM_GATEWAY_GSA}' in helper
     assert 'LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}' in workflow
+    assert 'Verify LLM Gateway serving data plane' in workflow
+    assert 'Probe LLM Gateway from the Cloud Run VPC' in workflow
+    assert 'verify-llm-gateway-serving.py' in workflow
+    assert 'probe-llm-gateway-from-cloud-run.sh' in workflow
+
+
+def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_promotion():
+    workflow = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend.yml').read_text(encoding='utf-8')
+    auto_dev = (BACKEND_ROOT.parent / '.github/workflows/gcp_backend_auto_dev.yml').read_text(encoding='utf-8')
+
+    assert 'Determine whether this deploy requests gateway-first serving' in workflow
+    assert 'Verify LLM gateway control plane before promotion' in workflow
+    assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in workflow
+    assert "steps.gateway-intent.outputs.enabled == 'true'" in workflow
+    assert (
+        '--listener-values="backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml"' in workflow
+    )
+    assert "steps.gateway-serving.outputs.gateway_url || 'http://127.0.0.1:9'" in workflow
+    assert 'Verify LLM gateway control plane before promotion' in auto_dev
+    assert 'Probe LLM gateway from the Cloud Run VPC before promotion' in auto_dev
+    assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
 
 
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():

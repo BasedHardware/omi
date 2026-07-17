@@ -9525,4 +9525,8 @@ class AppLocalizationsHe extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => 'אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים.';
 }

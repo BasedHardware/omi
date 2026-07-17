@@ -9626,4 +9626,8 @@ class AppLocalizationsNl extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Je gegevens zijn standaard beveiligd met sterke versleuteling, en jij bepaalt hoe ze worden opgeslagen en gebruikt.';
 }

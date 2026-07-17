@@ -435,16 +435,6 @@ final class AgentPillsManager: ObservableObject {
     }
   }
 
-  struct ProviderDirective: Equatable {
-    /// Deterministic explicit-provider syntax only. This is an untrusted
-    /// proposal: `spawn_agent` still calls the kernel's route-and-apply
-    /// contract before it creates any session/run.
-    let provider: DirectedProvider
-    let rewrittenQuery: String
-    let title: String
-    let ack: String
-  }
-
   struct Snapshot: Encodable {
     let id: String
     let title: String
@@ -453,100 +443,6 @@ final class AgentPillsManager: ObservableObject {
     let query: String
     let createdAt: String
     let completedAt: String?
-  }
-
-  nonisolated static func providerDirective(from text: String) -> ProviderDirective? {
-    providerDirective(from: text, contextualPreviousRequest: nil)
-  }
-
-  nonisolated static func providerDirective(
-    from text: String,
-    contextualPreviousRequest: String?
-  ) -> ProviderDirective? {
-    let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !trimmed.isEmpty else { return nil }
-
-    let providerPattern = "(open\\s*claw|openclaw|hermes)"
-    let patterns = [
-      #"(?i)^\s*(?:please\s+)?(?:(?:i\s+)?meant\s+)?(?:ask|tell|ping|message|run|use|try)\s+\#(providerPattern)\b(?:\s+(.*))?$"#,
-      #"(?i)^\s*(?:please\s+)?\#(providerPattern)\s*[:,\-]\s*(.*)$"#,
-    ]
-
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-      let range = NSRange(trimmed.startIndex..., in: trimmed)
-      guard let match = regex.firstMatch(in: trimmed, range: range), match.numberOfRanges >= 2 else { continue }
-      guard let providerRange = Range(match.range(at: 1), in: trimmed) else { continue }
-      let providerToken = trimmed[providerRange]
-        .lowercased()
-        .replacingOccurrences(of: " ", with: "")
-      let provider: DirectedProvider
-      switch providerToken {
-      case "openclaw": provider = .openclaw
-      case "hermes": provider = .hermes
-      default: continue
-      }
-
-      let restIndex = match.numberOfRanges > 2 ? 2 : NSNotFound
-      let rest: String
-      if restIndex != NSNotFound,
-        let restRange = Range(match.range(at: restIndex), in: trimmed)
-      {
-        rest = String(trimmed[restRange]).trimmingCharacters(in: .whitespacesAndNewlines)
-      } else {
-        rest = ""
-      }
-      let contextualObjective =
-        contextualPreviousRequest
-        .flatMap { providerObjective(from: $0) }?
-        .trimmingCharacters(in: .whitespacesAndNewlines)
-      let objective: String
-      if rest.isEmpty, isProviderCorrection(trimmed), contextualObjective?.isEmpty == false {
-        objective = contextualObjective!
-      } else {
-        objective = rest.isEmpty ? "Say how it's going." : rest
-      }
-      return ProviderDirective(
-        provider: provider,
-        rewrittenQuery: objective,
-        title: provider.displayName,
-        ack: "Asking \(provider.displayName)."
-      )
-    }
-
-    return nil
-  }
-
-  nonisolated static func providerObjective(from text: String) -> String {
-    let original = text.trimmingCharacters(in: .whitespacesAndNewlines)
-    guard !original.isEmpty else { return original }
-    let patterns = [
-      #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(?:to|about)\s+(.+)$"#,
-      #"(?i)^\s*(?:please\s+)?(?:ask|tell|ping|message|run|use|try)\s+\S+\s+(.+)$"#,
-    ]
-    for pattern in patterns {
-      guard let regex = try? NSRegularExpression(pattern: pattern) else { continue }
-      let range = NSRange(original.startIndex..., in: original)
-      guard let match = regex.firstMatch(in: original, range: range),
-        match.numberOfRanges > 1,
-        let objectiveRange = Range(match.range(at: 1), in: original)
-      else {
-        continue
-      }
-      let objective = original[objectiveRange].trimmingCharacters(in: .whitespacesAndNewlines)
-      if !objective.isEmpty {
-        return objective
-      }
-    }
-    return original
-  }
-
-  private nonisolated static func isProviderCorrection(_ text: String) -> Bool {
-    let lower = text.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
-    return lower.hasPrefix("i meant")
-      || lower.hasPrefix("meant")
-      || lower.hasSuffix("instead")
-      || lower.contains(" instead of ")
   }
 
   /// Spawn a visible pill projection backed by a canonical background-agent

@@ -9623,4 +9623,8 @@ class AppLocalizationsMs extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Tiada sambungan — merakam secara setempat. Ia akan ditranskripsikan apabila anda dalam talian semula.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Data anda dilindungi secara lalai dengan penyulitan yang kuat, dan anda mengawal cara ia disimpan dan digunakan.';
 }

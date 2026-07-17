@@ -1,0 +1,3 @@
+{
+  "change": "Restores automatic Rewind capture in named development bundles after Screen Recording is granted, including smooth recovery from lock-screen transitions."
+}

@@ -9593,4 +9593,8 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'No connection — recording locally. It will be transcribed when you\'re back online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.';
 }

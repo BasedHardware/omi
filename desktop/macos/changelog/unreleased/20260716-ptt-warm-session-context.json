@@ -1,0 +1,3 @@
+{
+  "change": "Fixed the first push-to-talk turns after launch or a completed Gemini response being delayed by redundant realtime-session reconnects"
+}

@@ -117,6 +117,31 @@ enum FloatingConversationCloseIntent: Equatable {
   }
 }
 
+/// Hover is an idle-only notch presentation. Voice owns the same top-anchored
+/// surface while recording, thinking, waiting, or speaking, so the two must
+/// never animate their geometry or affordances at the same time.
+enum NotchHoverSurfacePolicy {
+  static func allowsMenu(
+    showingAIConversation: Bool,
+    isVoicePresentationActive: Bool,
+    isShowingNotification: Bool
+  ) -> Bool {
+    !showingAIConversation && !isVoicePresentationActive && !isShowingNotification
+  }
+
+  static func usesAnimatedHoverSurface(
+    usesNotchIsland: Bool,
+    showingAIConversation: Bool,
+    isVoicePresentationActive: Bool,
+    isShowingNotification: Bool
+  ) -> Bool {
+    usesNotchIsland
+      && !showingAIConversation
+      && !isVoicePresentationActive
+      && !isShowingNotification
+  }
+}
+
 /// Hidden provenance carried with a floating-bar notification so follow-up
 /// questions can explain where the notification came from without guessing.
 struct FloatingBarNotificationContext: Equatable {
@@ -244,6 +269,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
       barState.applyVoiceProjection(projection)
       let shouldExpandForVoice = barState.isVoiceListening
 
+      // Clear idle hover before the PTT resize so its animated surface cannot
+      // compete with the reducer-owned voice presentation.
+      barState.dismissNotchHoverForVoicePresentation()
+
       if shouldExpandForVoice != wasExpandedForVoice,
         !barState.showingAIConversation,
         UserDefaults.standard.bool(forKey: .hasCompletedOnboarding)
@@ -289,10 +318,11 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var isAgentSwitcherExpanded: Bool { agentSwitcherPinned || agentSwitcherHovering }
   @Published private(set) var notchHoverMenuOpen: Bool = false
   var canShowNotchHoverMenu: Bool {
-    !showingAIConversation
-      && !isVoiceListening
-      && !isShowingNotification
-      && currentNotification == nil
+    NotchHoverSurfacePolicy.allowsMenu(
+      showingAIConversation: showingAIConversation,
+      isVoicePresentationActive: isVoicePresentationActive,
+      isShowingNotification: isShowingNotification
+    )
   }
   var isNotchHoverMenuVisible: Bool {
     canShowNotchHoverMenu && notchHoverMenuOpen
@@ -305,6 +335,13 @@ class FloatingControlBarState: NSObject, ObservableObject {
     if !open {
       agentSwitcherPinned = false
     }
+  }
+
+  /// Voice presentation owns the notch from recording through response playback.
+  /// Retaining hover state across that handoff leaves a stale morph underneath it.
+  func dismissNotchHoverForVoicePresentation() {
+    guard isVoicePresentationActive, notchHoverMenuOpen else { return }
+    setNotchHoverMenuOpen(false)
   }
 
   /// Convenience for call sites that previously used a stored question id.
@@ -336,6 +373,10 @@ class FloatingControlBarState: NSObject, ObservableObject {
   var isThinking: Bool { voiceProjection.isThinking }
   var isVoiceResponseGlowActive: Bool {
     isVoiceResponseActive || isVoiceResponseWaiting
+  }
+  /// Any reducer-owned voice phase that reserves the notch surface.
+  var isVoicePresentationActive: Bool {
+    isVoiceListening || isThinking || isVoiceResponseGlowActive || !pttHintText.isEmpty
   }
   /// True only when the notch-mode setting is enabled and the current display
   /// exposes a real camera housing safe area. External displays keep old pill UI.

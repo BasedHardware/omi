@@ -9596,4 +9596,8 @@ class AppLocalizationsVi extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dữ liệu của bạn được bảo mật mặc định bằng mã hóa mạnh, và bạn kiểm soát cách nó được lưu trữ và sử dụng.';
 }

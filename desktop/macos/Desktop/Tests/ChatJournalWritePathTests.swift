@@ -59,6 +59,63 @@ final class ChatJournalWritePathTests: XCTestCase {
     await fulfillment(of: [ran], timeout: 2.0)
   }
 
+  func testPostTerminalArtifactDeliveryProjectsReadyResourceCard() async throws {
+    let provider = ChatProvider()
+    let surface = provider.mainChatSurfaceReference()
+    let coordinator = ChatJournalWriteCoordinator()
+    let messageID = "assistant-post-terminal-artifact"
+    let artifactURL = FileManager.default.temporaryDirectory
+      .appendingPathComponent("post-terminal-artifact-\(UUID().uuidString).html")
+    try "<h1>Artifact card</h1>".write(to: artifactURL, atomically: true, encoding: .utf8)
+    defer { try? FileManager.default.removeItem(at: artifactURL) }
+
+    let resource = ChatResource.localGeneratedFile(
+      id: "artifact:post-terminal",
+      title: "post-terminal-artifact.html",
+      subtitle: "text/html",
+      mimeType: "text/html",
+      uri: artifactURL.absoluteString
+    )
+    let resourcePayload = KernelJournalTurnWrite.jsonArray(
+      try XCTUnwrap(ChatResource.encodeResourcesForPersistence([resource])))
+    let terminalTurn = try makeTurn(
+      surface: surface,
+      turnId: messageID,
+      turnSeq: 1,
+      content: "Artifact ready",
+      status: .completed,
+      resources: resourcePayload
+    )
+
+    provider.projectJournalTurn(
+      try makeTurn(
+        surface: surface,
+        turnId: messageID,
+        turnSeq: 1,
+        content: "Building the artifact",
+        status: .streaming
+      ))
+    let didBegin = await coordinator.beginTerminalization(messageID: messageID)
+    XCTAssertTrue(didBegin)
+
+    let projected = expectation(description: "post-terminal artifact is projected")
+    let accepted = coordinator.schedule(
+      messageID: messageID,
+      supersededByTerminalization: false
+    ) {
+      provider.projectJournalTurn(terminalTurn)
+      projected.fulfill()
+    }
+
+    XCTAssertTrue(accepted, "A post-terminal artifact delivery must not be dropped")
+    await fulfillment(of: [projected], timeout: 2.0)
+
+    let message = try XCTUnwrap(provider.messages.first { $0.id == messageID })
+    XCTAssertEqual(message.journalStatus, .completed)
+    XCTAssertEqual(message.displayResources, [resource])
+    XCTAssertEqual(message.displayResources.first?.state, .ready)
+  }
+
   func testDurableAndStreamingWritesAreBothAcceptedBeforeTerminalization() {
     let coordinator = ChatJournalWriteCoordinator()
     let messageID = "assistant-turn-3"
@@ -138,7 +195,8 @@ final class ChatJournalWritePathTests: XCTestCase {
     turnSeq: Int,
     role: String = "assistant",
     content: String,
-    status: KernelJournalTurnStatus = .completed
+    status: KernelJournalTurnStatus = .completed,
+    resources: [Any] = []
   ) throws -> KernelJournalTurn {
     try XCTUnwrap(
       KernelJournalTurn(dictionary: [
@@ -157,7 +215,7 @@ final class ChatJournalWritePathTests: XCTestCase {
         "origin": "test",
         "status": status.rawValue,
         "contentBlocks": [],
-        "resources": [],
+        "resources": resources,
         "metadataJson": "{}",
         "createdAtMs": 1_700_000_000_000 + turnSeq,
         "updatedAtMs": 1_700_000_000_000 + turnSeq,

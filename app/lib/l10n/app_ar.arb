@@ -3116,5 +3116,6 @@
     "deviceStorageUsedOfTotal": "{used} من {total} مستخدمة",
     "deviceStorageFree": "{free} متاحة",
     "deviceStorageNearlyFull": "الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.",
-    "phoneMicOfflineFallbackMessage": "لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت."
+    "phoneMicOfflineFallbackMessage": "لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.",
+    "dataEncryptedBanner": "بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها."
 }

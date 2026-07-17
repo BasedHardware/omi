@@ -326,9 +326,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
       _SearchableItem(title: context.l10n.voiceResponseMode, icon: profileIcon, onTap: goToProfile),
       if (Platform.isAndroid)
         _SearchableItem(title: context.l10n.backgroundModeTitle, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.paymentMethods, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.conversationDisplay, icon: profileIcon, onTap: goToProfile),
-      _SearchableItem(title: context.l10n.dataPrivacy, icon: profileIcon, onTap: goToProfile),
+      _SearchableItem(title: context.l10n.paymentMethods, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.conversationDisplay, icon: devIcon, onTap: goToDeveloper),
+      _SearchableItem(title: context.l10n.dataPrivacy, icon: devIcon, onTap: goToDeveloper),
       _SearchableItem(title: context.l10n.deleteAccountTitle, icon: profileIcon, onTap: goToProfile),
       // --- Notifications ---
       _SearchableItem(title: context.l10n.notifications, icon: notifIcon, onTap: goToNotifications),
@@ -402,15 +402,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
         onTap: () {
           PlatformManager.instance.analytics.whatsNewOpened();
           ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
-        },
-      ),
-      // --- Mac app ---
-      _SearchableItem(
-        title: context.l10n.getOmiForMac,
-        icon: FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-        onTap: () async {
-          final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-          await launchUrl(url, mode: LaunchMode.externalApplication);
         },
       ),
       // --- Referral ---
@@ -602,14 +593,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                     routeToPage(context, const PermissionsPage());
                   },
                 ),
-                const Divider(height: 1, color: Color(0xFF3C3C43)),
-                _buildSettingsItem(
-                  title: context.l10n.memories,
-                  icon: FaIcon(FontAwesomeIcons.brain, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () {
-                    routeToPage(context, const MemoriesPage());
-                  },
-                ),
               ],
             ),
             const SizedBox(height: 32),
@@ -659,21 +642,6 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   onTap: () {
                     PlatformManager.instance.analytics.whatsNewOpened();
                     ChangelogSheet.showWithLoading(context, () => getAppChangelogs(limit: 5));
-                  },
-                ),
-              ],
-            ),
-            const SizedBox(height: 32),
-
-            // Share & Get Section
-            _buildSectionContainer(
-              children: [
-                _buildSettingsItem(
-                  title: context.l10n.getOmiForMac,
-                  icon: FaIcon(FontAwesomeIcons.desktop, color: Color(0xFF8E8E93), size: 20),
-                  onTap: () async {
-                    final Uri url = Uri.parse('https://apps.apple.com/us/app/omi-ai-scale-yourself/id6502156163');
-                    await launchUrl(url, mode: LaunchMode.externalApplication);
                   },
                 ),
                 const Divider(height: 1, color: Color(0xFF3C3C43)),

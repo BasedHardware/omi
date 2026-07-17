@@ -9667,4 +9667,8 @@ class AppLocalizationsEl extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Καμία σύνδεση — γίνεται τοπική εγγραφή. Θα απομαγνητοφωνηθεί μόλις συνδεθείτε ξανά.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Τα δεδομένα σας προστατεύονται από προεπιλογή με ισχυρή κρυπτογράφηση και εσείς ελέγχετε πώς αποθηκεύονται και χρησιμοποιούνται.';
 }

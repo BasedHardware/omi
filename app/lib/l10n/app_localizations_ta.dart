@@ -9668,4 +9668,8 @@ class AppLocalizationsTa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'இணைப்பு இல்லை — உள்ளூரில் பதிவு செய்யப்படுகிறது. நீங்கள் மீண்டும் ஆன்லைனுக்கு வரும்போது படியெடுக்கப்படும்.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'உங்கள் தரவு இயல்பாகவே வலுவான குறியாக்கத்துடன் பாதுகாக்கப்படுகிறது, மேலும் அது எவ்வாறு சேமிக்கப்படுகிறது மற்றும் பயன்படுத்தப்படுகிறது என்பதை நீங்கள் கட்டுப்படுத்துகிறீர்கள்.';
 }

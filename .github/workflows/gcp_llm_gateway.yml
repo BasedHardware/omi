@@ -102,6 +102,27 @@ jobs:
         run: |
           IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh
 
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe LLM Gateway from the Cloud Run VPC
+        run: |
+          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --gateway-url="${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network="${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet="${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress=private-ranges-only \
+            --name-suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
       - name: Smoke LLM Gateway
         run: |
           NAMESPACE="${{ vars.ENV }}-omi-backend"

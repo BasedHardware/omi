@@ -9440,4 +9440,7 @@ class AppLocalizationsJa extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => '接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。';
+
+  @override
+  String get dataEncryptedBanner => 'あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。';
 }

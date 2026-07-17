@@ -9654,4 +9654,8 @@ class AppLocalizationsCa extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Sense connexió: s\'està gravant localment. Es transcriurà quan tornis a tenir connexió.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s\'emmagatzemen i s\'utilitzen.';
 }

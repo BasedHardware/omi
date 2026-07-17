@@ -9615,4 +9615,8 @@ class AppLocalizationsLt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami.';
 }

@@ -560,3 +560,18 @@ def test_backend_listen_rollout_wait_can_cover_a_real_rollout():
                 f'{relative} waits {value}s on backend-listen, but a roll at the HPA floor needs '
                 f'>= {required_seconds}s ({waves} waves x {per_pod_startup_seconds}s startup budget)'
             )
+
+    # The k8s deadline is the actual failure point (kubectl returns
+    # ProgressDeadlineExceeded the moment it trips, regardless of the CLI
+    # --timeout). It defaults to 600s and must be raised to cover a real roll,
+    # or a healthy-but-slow rollout fails at the deployment level even though the
+    # CLI would wait (2026-07-17, runs 29591891153 / 29611750428).
+    progress_deadline = values.get('progressDeadlineSeconds')
+    assert progress_deadline is not None, (
+        'backend-listen chart must set progressDeadlineSeconds; the k8s default (600s) '
+        f'is below the {required_seconds}s a real roll needs'
+    )
+    assert progress_deadline >= required_seconds, (
+        f'progressDeadlineSeconds={progress_deadline}s is below the {required_seconds}s a roll at '
+        f'the HPA floor needs ({waves} waves x {per_pod_startup_seconds}s startup budget)'
+    )

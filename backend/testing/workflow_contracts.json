@@ -438,11 +438,19 @@
       "risk": "high",
       "sources": [
         "backend/routers/transcribe.py",
+        "backend/routers/listen/**",
+        "backend/routers/pusher.py",
         "backend/utils/listen_pusher_session.py",
         "backend/utils/pusher.py",
         "backend/utils/stt/live_failure.py",
         "backend/utils/transcribe_decisions.py",
-        "backend/pusher/main.py"
+        "backend/pusher/main.py",
+        "backend/utils/conversations/finalizer.py",
+        "backend/utils/conversations/lifecycle.py",
+        "backend/testing/listen_pusher_stack/**",
+        ".github/workflows/backend-hermetic-e2e.yml",
+        "package.json",
+        "package-lock.json"
       ],
       "tests": [
         "tests/unit/test_listen_pipeline.py",
@@ -452,13 +460,15 @@
         "tests/unit/test_transcribe_decisions.py",
         "tests/unit/utils/test_listen_pusher_session.py",
         "tests/unit/test_transcribe_teardown_flush.py",
+        "tests/unit/test_listen_pusher_stack_ci_wiring.py",
         "testing/e2e/test_listen_stt.py"
       ],
       "checks": [],
       "invariants": [
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
-        "pusher heartbeat prevents idle connection drops"
+        "pusher heartbeat prevents idle connection drops",
+        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in blocking PR CI"
       ]
     },
     {
@@ -498,6 +508,8 @@
         "backend/scripts/sync_ledger_fence_cutover.py",
         "backend/scripts/verify_dev_backend_deployment.py",
         "backend/scripts/verify_sync_ledger_fence_transition.py",
+        "backend/scripts/verify-llm-gateway-serving.py",
+        "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
         "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/repair_cloud_run_traffic.py",
         "backend/scripts/firebase_release_probe_token.py",
@@ -513,6 +525,8 @@
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_deploy_status_report.py",
         "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_verify_llm_gateway_serving.py",
+        "tests/unit/test_llm_gateway_deploy_contract.py",
         "tests/unit/test_sync_two_lane.py",
         "tests/unit/test_firebase_release_probe_token.py",
         "tests/unit/test_transcription_capability_probe.py",
@@ -524,7 +538,8 @@
         "traffic shifts only after candidate revisions are Ready=True",
         "spec.traffic mismatches are repaired or block deploy with an explicit command",
         "normal deploys cannot change the serving sync ledger fence mode",
-        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route"
+        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route",
+        "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
       ]
     },
     {

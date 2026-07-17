@@ -3184,5 +3184,6 @@
     "deviceStorageUsedOfTotal": "wykorzystano {used} z {total}",
     "deviceStorageFree": "{free} wolne",
     "deviceStorageNearlyFull": "Urządzenie jest prawie pełne — zsynchronizuj, aby zwolnić miejsce.",
-    "phoneMicOfflineFallbackMessage": "Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią."
+    "phoneMicOfflineFallbackMessage": "Brak połączenia – nagrywanie lokalne. Transkrypcja nastąpi po ponownym połączeniu z siecią.",
+    "dataEncryptedBanner": "Twoje dane są domyślnie zabezpieczone silnym szyfrowaniem, a Ty decydujesz o tym, jak są przechowywane i wykorzystywane."
 }

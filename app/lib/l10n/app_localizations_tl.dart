@@ -9688,4 +9688,8 @@ class AppLocalizationsTl extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.';
 }
