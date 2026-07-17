@@ -102,15 +102,18 @@ describe('external agents easy-connect', () => {
       'at least one Connect button'
     )
 
-    // Codex exposes an in-app OpenAI API-key lane.
-    await page
-      .getByText('OpenAI API key', { exact: true })
-      .waitFor({ state: 'visible', timeout: 8000 })
+    await page.screenshot({ path: path.join(shotsDir, 'agents-easy-connect.png'), fullPage: true })
+
+    // Codex exposes an in-app OpenAI API-key lane — it sits lower in the settings
+    // pane's own scroll region, so scroll it into view and capture it too.
+    const keyLabel = page.getByText('OpenAI API key', { exact: true })
+    await keyLabel.waitFor({ state: 'visible', timeout: 8000 })
+    await keyLabel.scrollIntoViewIfNeeded()
+    await new Promise((r) => setTimeout(r, 300))
     assert.ok(
       (await page.getByPlaceholder('sk-…').count()) >= 1,
       'Codex OpenAI API-key input is present'
     )
-
-    await page.screenshot({ path: path.join(shotsDir, 'agents-easy-connect.png'), fullPage: true })
+    await page.screenshot({ path: path.join(shotsDir, 'agents-easy-connect-codex.png') })
   })
 })
