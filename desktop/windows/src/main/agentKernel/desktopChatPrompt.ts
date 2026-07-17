@@ -110,3 +110,115 @@ export function buildDesktopChatSystemPrompt(options: DesktopChatPromptOptions =
   const tzClause = tz ? ` (${tz})` : ''
   return DESKTOP_CHAT_TEMPLATE.replaceAll('{user_name}', name).replaceAll('{tz}', tzClause)
 }
+
+// ---------------------------------------------------------------------------
+// Per-turn personalization (Mac's <user_context> block).
+//
+// Mac front-loads the user's facts/goals/tasks/AI-profile into the SYSTEM prompt
+// (`buildDesktopChat` → memories_section/goal_section/tasks_section/
+// ai_profile_section). On Windows this data is VOLATILE within a session — the
+// memory/task assistants extract continuously, and the AI profile regenerates —
+// so baking it into the system prompt would change the prompt hash turn-to-turn
+// and force a pi-subprocess restart every message (isBindingCompatible keys on
+// that hash; see the stability contract above). That is a real regression.
+//
+// So we keep the system prompt as the STABLE persona and deliver the same
+// personalization as PER-TURN context, prepended to the user prompt alongside
+// the <conversation_history> tail (mainChat.ts). This mirrors both the existing
+// tail-injection pattern AND Mac's own floating-bar design, which splits the
+// static persona from a live tail carrying exactly this volatile context
+// (ChatProvider.buildFloatingBarSystemPrompt, cacheSplitSentinel). The model
+// receives the same facts Mac gives it; only the transport differs.
+//
+// Wording is a faithful port of Mac's formatters (ChatProvider.swift):
+//  - <user_facts>       ← formatMemoriesSection   ("Facts about <name>:", "- [memory] …")
+//  - <user_tasks>       ← formatTasksSection      ("Current tasks:", "- <desc> [priority: …] …")
+//  - <ai_user_profile>  ← formatAIProfileSection  (raw profile text)
+// Goals (Mac's formatGoalSection) are intentionally omitted: on Windows goals are
+// backend-only and read over async HTTP (assistants/goals/context.ts), and a
+// per-turn network fetch on every typed reply would add latency and a failure
+// surface to the hot path. Documented as a known gap, not an oversight.
+
+/** One active task rendered into the <user_tasks> block. Shape is the subset of
+ *  ActionItemRecord this section reads. */
+export interface DesktopChatPersonalizationTask {
+  description: string
+  priority?: string | null
+  /** Due date as epoch milliseconds, or null/undefined when none. */
+  dueAt?: number | null
+  category?: string | null
+}
+
+/** Already-read personalization inputs for the <user_context> block. All optional
+ *  — each absent/empty source simply drops its section, and an entirely empty
+ *  input yields '' (no wrapper). The caller (mainChatPersonalization.ts) does the
+ *  impure reads and fails each source open. */
+export interface DesktopChatPersonalization {
+  /** The signed-in user's given name; falls back to "the user" in the header. */
+  userName?: string
+  /** Memory contents, newest-first; capped to Mac's 30. */
+  memories?: string[]
+  /** Active (incomplete) tasks; capped to Mac's 20. */
+  tasks?: DesktopChatPersonalizationTask[]
+  /** The latest AI-generated user-profile text. */
+  aiProfileText?: string
+}
+
+/** Mac caps: formatMemoriesSection prefix(30), tasks loaded with limit 20. */
+const MEMORIES_CAP = 30
+const TASKS_CAP = 20
+
+/** Render a due date deterministically as "YYYY-MM-DD HH:mm" in UTC. Pure/stable
+ *  for tests; UTC (not the machine's zone) so the same input always renders the
+ *  same string. The prompt already tells the model to show times in the user's
+ *  timezone, so an absolute reference here is fine context. */
+function formatDueAt(dueAt: number): string {
+  return new Date(dueAt).toISOString().slice(0, 16).replace('T', ' ')
+}
+
+/**
+ * Build the per-turn `<user_context>` personalization block, or '' when there is
+ * nothing to say. Pure and deterministic — identical inputs yield an identical
+ * string — so it is fully unit-testable with no DB or network.
+ */
+export function buildDesktopChatPersonalization(p: DesktopChatPersonalization = {}): string {
+  const name = p.userName?.trim() || 'the user'
+  const sections: string[] = []
+
+  const memories = (p.memories ?? [])
+    .map((m) => m.trim())
+    .filter((m) => m.length > 0)
+    .slice(0, MEMORIES_CAP)
+  if (memories.length > 0) {
+    sections.push(
+      [
+        '<user_facts>',
+        `Facts about ${name}:`,
+        ...memories.map((m) => `- [memory] ${m}`),
+        '</user_facts>'
+      ].join('\n')
+    )
+  }
+
+  const tasks = (p.tasks ?? []).filter((t) => t.description.trim().length > 0).slice(0, TASKS_CAP)
+  if (tasks.length > 0) {
+    const lines = tasks.map((t) => {
+      let line = `- ${t.description.trim()}`
+      if (t.priority && t.priority.trim()) line += ` [priority: ${t.priority.trim()}]`
+      if (typeof t.dueAt === 'number' && Number.isFinite(t.dueAt)) {
+        line += ` [due: ${formatDueAt(t.dueAt)}]`
+      }
+      if (t.category && t.category.trim()) line += ` [category: ${t.category.trim()}]`
+      return line
+    })
+    sections.push(['<user_tasks>', 'Current tasks:', ...lines, '</user_tasks>'].join('\n'))
+  }
+
+  const profile = p.aiProfileText?.trim()
+  if (profile) {
+    sections.push(`<ai_user_profile>\n${profile}\n</ai_user_profile>`)
+  }
+
+  if (sections.length === 0) return ''
+  return `<user_context>\n${sections.join('\n\n')}\n</user_context>`
+}

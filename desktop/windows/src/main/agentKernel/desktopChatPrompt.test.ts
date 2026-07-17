@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { buildDesktopChatSystemPrompt } from './desktopChatPrompt'
+import { buildDesktopChatSystemPrompt, buildDesktopChatPersonalization } from './desktopChatPrompt'
 
 describe('buildDesktopChatSystemPrompt', () => {
   it('carries the <initiative> block that routes long/coding work to spawn_agent', () => {
@@ -36,6 +36,19 @@ describe('buildDesktopChatSystemPrompt', () => {
     expect(prompt).toContain('Write like a smart friend texting')
   })
 
+  it('carries the full ported persona: response_style, mentor, and critical-accuracy rules', () => {
+    // The brief's parity gap — every typed reply must get the concise 2-8-line
+    // register, the "mentor, not a yes-man" pushback, AND the anti-fabrication
+    // guardrails, exactly as Mac front-loads them (ChatPrompts.desktopChat).
+    const prompt = buildDesktopChatSystemPrompt()
+    expect(prompt).toContain('<response_style>')
+    expect(prompt).toContain('Default 2-8 lines')
+    expect(prompt).toContain('<mentor_behavior>')
+    expect(prompt).toContain("You're a mentor, not a yes-man")
+    expect(prompt).toContain('<critical_accuracy_rules>')
+    expect(prompt).toContain('never from plausible invention')
+  })
+
   it('interpolates a name when provided, else reads as "the user"', () => {
     expect(buildDesktopChatSystemPrompt({ userName: 'Ada' })).toContain(
       'an AI assistant & mentor for Ada'
@@ -61,5 +74,87 @@ describe('buildDesktopChatSystemPrompt', () => {
     const a = buildDesktopChatSystemPrompt({ timezone: 'UTC' })
     const b = buildDesktopChatSystemPrompt({ timezone: 'UTC' })
     expect(a).toBe(b)
+  })
+
+  it('carries NO volatile personalization (that rides the per-turn prompt, not here)', () => {
+    // Personalization lives in the per-turn <user_context> block so the system
+    // prompt stays byte-stable. Prove none of it leaked into the system prompt.
+    const prompt = buildDesktopChatSystemPrompt({ userName: 'Ada' })
+    expect(prompt).not.toContain('<user_context>')
+    expect(prompt).not.toContain('<user_facts>')
+    expect(prompt).not.toContain('<user_tasks>')
+    expect(prompt).not.toContain('<ai_user_profile>')
+  })
+})
+
+describe('buildDesktopChatPersonalization', () => {
+  it('renders memories, tasks, and AI profile into one <user_context> block', () => {
+    const block = buildDesktopChatPersonalization({
+      userName: 'Ada',
+      memories: ['prefers dark mode', 'lives in Berlin'],
+      tasks: [
+        { description: 'ship the installer', priority: 'high', category: 'work' },
+        { description: 'call the bank' }
+      ],
+      aiProfileText: 'Ada is a systems engineer shipping a desktop app.'
+    })
+    expect(block).toContain('<user_context>')
+    expect(block).toContain('</user_context>')
+    // Faithful to Mac's formatMemoriesSection wording.
+    expect(block).toContain('<user_facts>')
+    expect(block).toContain('Facts about Ada:')
+    expect(block).toContain('- [memory] prefers dark mode')
+    expect(block).toContain('- [memory] lives in Berlin')
+    // Faithful to Mac's formatTasksSection wording.
+    expect(block).toContain('<user_tasks>')
+    expect(block).toContain('Current tasks:')
+    expect(block).toContain('- ship the installer [priority: high] [category: work]')
+    expect(block).toContain('- call the bank')
+    // Faithful to Mac's formatAIProfileSection.
+    expect(block).toContain('<ai_user_profile>')
+    expect(block).toContain('Ada is a systems engineer shipping a desktop app.')
+  })
+
+  it('renders a due date deterministically (UTC) when a task has one', () => {
+    const block = buildDesktopChatPersonalization({
+      tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
+    })
+    expect(block).toContain('- submit report [due: 2026-07-20 15:30]')
+  })
+
+  it('falls back to "the user" in the facts header when no name is given', () => {
+    const block = buildDesktopChatPersonalization({ memories: ['likes tea'] })
+    expect(block).toContain('Facts about the user:')
+  })
+
+  it('drops empty sections and returns "" when there is nothing to say', () => {
+    // Whole-empty input → no wrapper at all (never inject an empty shell).
+    expect(buildDesktopChatPersonalization()).toBe('')
+    expect(buildDesktopChatPersonalization({ userName: 'Ada', memories: [], tasks: [] })).toBe('')
+    // Only one source present → only that section, still wrapped.
+    const onlyProfile = buildDesktopChatPersonalization({ aiProfileText: 'engineer' })
+    expect(onlyProfile).toContain('<ai_user_profile>')
+    expect(onlyProfile).not.toContain('<user_facts>')
+    expect(onlyProfile).not.toContain('<user_tasks>')
+  })
+
+  it('caps memories at 30 and tasks at 20 (Mac parity)', () => {
+    const block = buildDesktopChatPersonalization({
+      memories: Array.from({ length: 50 }, (_, i) => `memory ${i}`),
+      tasks: Array.from({ length: 40 }, (_, i) => ({ description: `task ${i}` }))
+    })
+    expect((block.match(/\[memory\]/g) ?? []).length).toBe(30)
+    expect((block.match(/^- task /gm) ?? []).length).toBe(20)
+  })
+
+  it('ignores blank memories and blank-description tasks', () => {
+    const block = buildDesktopChatPersonalization({
+      memories: ['  ', 'real memory', ''],
+      tasks: [{ description: '   ' }, { description: 'real task' }]
+    })
+    expect(block).toContain('- [memory] real memory')
+    expect(block).toContain('- real task')
+    // The blank entries did not produce empty bullets.
+    expect(block).not.toContain('- [memory] \n')
   })
 })

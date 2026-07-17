@@ -402,6 +402,77 @@ describe('runMainChatTurn', () => {
     expect(systemPrompt).toContain('You are Omi')
   })
 
+  it('prepends the per-turn personalization block to the dispatched prompt', async () => {
+    // Mac's <user_context> (memories/tasks/AI profile/name) reaches the model as
+    // per-turn context — prepended to the prompt like the history tail — so the
+    // system prompt can stay byte-stable. Prove the injected block lands ahead of
+    // the user message, and the clean transcript still stores only the raw text.
+    let dispatchedPrompt = ''
+    const adapter = fakeAdapter({
+      reply: () => 'ok',
+      stream: (prompt) => {
+        dispatchedPrompt = prompt
+        return []
+      }
+    })
+    const kernel = newKernel(adapter)
+    const store = openStores[openStores.length - 1]
+    const block =
+      '<user_context>\n<user_facts>\nFacts about Ada:\n- [memory] likes tea\n</user_facts>\n</user_context>'
+
+    await runMainChatTurn(
+      {
+        requestId: 'req-p',
+        prompt: 'what do you know about me',
+        cleanUserText: 'what do you know about me'
+      },
+      () => {},
+      { kernel, ownerId: OWNER, personalization: async () => block }
+    )
+
+    // Personalization first, then the user message (turn 1 → no history between).
+    expect(dispatchedPrompt).toBe(`${block}\n\nwhat do you know about me`)
+    // The transcript still records the CLEAN user text, never the contexted prompt.
+    const turns = store.allRows('SELECT role, content FROM conversation_turns ORDER BY rowid ASC')
+    expect(turns[0]).toMatchObject({ role: 'user', content: 'what do you know about me' })
+  })
+
+  it('orders personalization → history → current message across turns', async () => {
+    const dispatched: string[] = []
+    const adapter = fakeAdapter({
+      reply: (prompt) => `reply-to:${prompt.slice(-20)}`,
+      stream: (prompt) => {
+        dispatched.push(prompt)
+        return []
+      }
+    })
+    const kernel = newKernel(adapter)
+    const block =
+      '<user_context>\n<user_facts>\nFacts about Ada:\n- [memory] likes tea\n</user_facts>\n</user_context>'
+    const deps = { kernel, ownerId: OWNER, personalization: async () => block }
+
+    // Turn 1 on chat-p: empty history → personalization then the message.
+    await runMainChatTurn(
+      { requestId: 'req-1', prompt: 'first question', cleanUserText: 'q1', chatId: 'chat-p' },
+      () => {},
+      deps
+    )
+    expect(dispatched[0]).toBe(`${block}\n\nfirst question`)
+
+    // Turn 2 on the SAME chat: personalization, THEN the history tail, THEN the ask.
+    await runMainChatTurn(
+      { requestId: 'req-2', prompt: 'second question', cleanUserText: 'q2', chatId: 'chat-p' },
+      () => {},
+      deps
+    )
+    const second = dispatched[1]
+    expect(second.startsWith(block)).toBe(true)
+    expect(second).toContain('<conversation_history>')
+    expect(second.endsWith('second question')).toBe(true)
+    // The personalization block precedes the history block.
+    expect(second.indexOf('<user_context>')).toBeLessThan(second.indexOf('<conversation_history>'))
+  })
+
   it('reuses the binding across turns with the SAME system prompt (no per-turn restart)', async () => {
     // A stable prompt must not restart the pi subprocess every message. With an
     // identical system-prompt hash, the second turn resumes the binding rather than
