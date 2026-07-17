@@ -963,6 +963,30 @@ def get_plan_features(plan: PlanType, simplified: bool = False) -> List[str]:
             "Desktop capture with Free-tier allowance",
         ]
 
+    if plan == PlanType.plus:
+        if simplified:
+            return [
+                f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
+                f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
+        return [
+            f"{PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,} minutes of transcription per month",
+            f"{PLUS_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited memories and insights",
+        ]
+
+    if plan == PlanType.unlimited_v2:
+        if simplified:
+            return [
+                "Unlimited transcription",
+                f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            ]
+        return [
+            "Unlimited transcription",
+            f"{UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH} chat questions per month",
+            "Unlimited memories and insights",
+        ]
+
     # Basic plan
     return [
         (
