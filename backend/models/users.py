@@ -18,7 +18,7 @@ class PlanType(str, Enum):
     architect = 'architect'  # display "Architect" (desktop)
     operator = 'operator'  # display "Operator" (desktop)
     plus = 'plus'  # display "Plus" (mobile)
-    max = 'max'  # display "Max" (mobile)
+    unlimited_v2 = 'unlimited_v2'  # display "Unlimited" (mobile); distinct from legacy `unlimited` (Neo)
 
     @classmethod
     def _missing_(cls, value: object):

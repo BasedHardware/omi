@@ -24,10 +24,10 @@ def _get_user(uid: str) -> Any:
     return firebase_auth.get_user(uid)  # type: ignore[reportUnknownMemberType]  # firebase_admin auth untyped
 
 
-PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.max}
+PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.unlimited_v2}
 
 # Mobile consumer tiers: sold on ios/android + web, hidden from desktop.
-MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.max}
+MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.unlimited_v2}
 
 # Plans that unlock the full desktop (macOS) experience. This is deliberately
 # narrower than basic desktop usability: every plan, including Neo, has at
@@ -427,14 +427,14 @@ def get_paid_plan_definitions() -> List[Dict[str, Any]]:
             "legacy": False,
         },
         {
-            "plan_type": PlanType.max,
-            "plan_id": "max",
-            "title": "Max",
+            "plan_type": PlanType.unlimited_v2,
+            "plan_id": "unlimited_v2",
+            "title": "Unlimited",
             "subtitle": "Unlimited transcription",
             "description": "Unlimited transcription — record all day.",
             "eyebrow": "Most popular",
-            "monthly_price_id": os.getenv('STRIPE_MAX_MONTHLY_PRICE_ID'),
-            "annual_price_id": os.getenv('STRIPE_MAX_ANNUAL_PRICE_ID'),
+            "monthly_price_id": os.getenv('STRIPE_UNLIMITED_V2_MONTHLY_PRICE_ID'),
+            "annual_price_id": os.getenv('STRIPE_UNLIMITED_V2_ANNUAL_PRICE_ID'),
             "annual_description": "Save with annual billing.",
             "legacy": False,
         },
@@ -468,7 +468,7 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     """Plans hidden from the purchase catalog per platform.
 
-    Mobile sells Plus + Max; desktop sells Operator + Architect; Neo is
+    Mobile sells Plus + Unlimited; desktop sells Operator + Architect; Neo is
     deprecated on both. Web is unfiltered. A subscriber on a hidden plan still
     sees it via `filter_plans_for_user`'s current-plan / ever-purchased escapes.
     """
@@ -476,7 +476,7 @@ def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
     if p in _MOBILE_PLATFORM_TOKENS:
         return {PlanType.unlimited, PlanType.operator, PlanType.architect}
     if p in DESKTOP_PLATFORMS:
-        return {PlanType.unlimited, PlanType.plus, PlanType.max}
+        return {PlanType.unlimited, PlanType.plus, PlanType.unlimited_v2}
     return set()
 
 
@@ -711,7 +711,7 @@ ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER
 PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', '1500'))
 PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
-MAX_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('MAX_CHAT_QUESTIONS_PER_MONTH', '1000'))
+UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH', '1000'))
 
 # Features available during the 3-day desktop trial (matches paid-plan behavior).
 TRIAL_FEATURES = [
@@ -729,7 +729,7 @@ PLAN_DISPLAY_NAMES = {
     PlanType.architect: 'Architect',
     PlanType.operator: 'Operator',
     PlanType.plus: 'Plus',
-    PlanType.max: 'Max',
+    PlanType.unlimited_v2: 'Unlimited',
 }
 
 
@@ -906,12 +906,12 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             insights_gained=None,
             chat_questions_per_month=PLUS_CHAT_QUESTIONS_PER_MONTH,
         )
-    if plan == PlanType.max:
+    if plan == PlanType.unlimited_v2:
         return PlanLimits(
             transcription_seconds=None,
             words_transcribed=None,
             insights_gained=None,
-            chat_questions_per_month=MAX_CHAT_QUESTIONS_PER_MONTH,
+            chat_questions_per_month=UNLIMITED_V2_CHAT_QUESTIONS_PER_MONTH,
         )
     return get_basic_plan_limits()
 
