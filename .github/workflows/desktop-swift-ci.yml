@@ -94,6 +94,9 @@ jobs:
         with:
           fetch-depth: 1
 
+      - name: Fetch manifest check base
+        run: git fetch --no-tags --depth=1 origin "${{ needs.changes.outputs.diff_base }}"
+
       - name: Select and assert pinned Xcode 16.4
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
 
