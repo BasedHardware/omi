@@ -1,3 +1,0 @@
-{
-  "change": "Improved desktop chat and voice reliability by splitting oversized internals into smaller owned components."
-}

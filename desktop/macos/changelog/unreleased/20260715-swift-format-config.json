@@ -1,3 +1,0 @@
-{
-  "change": "Added a pinned swift-format configuration (2-space indent, 120-column) with generated-source exclusion and formatter scope management"
-}

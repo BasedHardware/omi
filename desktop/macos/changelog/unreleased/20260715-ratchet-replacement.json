@@ -1,3 +1,0 @@
-{
-  "change": "Replaced per-bug-class asyncAfter and UserDefaults ratchet scripts with equivalent SwiftLint custom rules backed by the down-only baseline guard"
-}
