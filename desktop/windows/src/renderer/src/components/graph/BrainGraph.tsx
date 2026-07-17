@@ -65,7 +65,8 @@ function GraphNodeMesh({
   centerNodeId,
   reduced,
   posMap,
-  frameLoop
+  frameLoop,
+  labelFade
 }: {
   sim: GraphSimulation
   node: NodePosition
@@ -75,11 +76,18 @@ function GraphNodeMesh({
   // its eased on-screen position so the edges can connect to it.
   posMap: Map<string, THREE.Vector3>
   frameLoop: 'always' | 'demand'
+  // 3D only: fade a label by how far its node sits BEHIND the cloud center
+  // relative to the camera, so back-of-cloud titles recede instead of stacking
+  // on the front ones. Off (labels full-opacity) on the flat 2D surfaces.
+  labelFade: boolean
 }): React.JSX.Element {
   const groupRef = useRef<THREE.Group>(null)
   const coreMat = useRef<THREE.MeshStandardMaterial>(null)
   const glowMat = useRef<THREE.MeshBasicMaterial>(null)
   const glowMesh = useRef<THREE.Mesh>(null)
+  // troika Text instance (drei <Text> forwards its ref here); has fillOpacity + sync().
+  const textRef = useRef<{ fillOpacity: number; sync: () => void } | null>(null)
+  const lastFade = useRef(1)
   const target = useRef(new THREE.Vector3(node.x, node.y, node.z))
   const isFixed = node.id === centerNodeId
   const color = nodeColor(node.nodeType, isFixed)
@@ -87,6 +95,9 @@ function GraphNodeMesh({
   // The center ("you") label gets a bit bigger than the proportional size.
   const labelSize = labelFontSize(node.sizeScale) * (isFixed ? 1.35 : 1)
   const phase = useMemo(() => hashPhase(node.id), [node.id])
+  // Depth scale for the fade: the same analytic radius the camera frames to, so
+  // a node a full cloud-radius behind center fades to the floor opacity.
+  const fadeSpan = useMemo(() => fullGraphRadius(), [])
   const invalidate = useThree((state) => state.invalidate)
 
   // Read the live simulation position each frame (no React state in the loop)
@@ -130,6 +141,24 @@ function GraphNodeMesh({
     if (coreMat.current) coreMat.current.emissiveIntensity = (0.85 + 0.45 * pulse) * flare
     if (glowMat.current) glowMat.current.opacity = (0.12 + 0.14 * pulse) * flare
     if (glowMesh.current) glowMesh.current.scale.setScalar(1 + 0.18 * pulse)
+
+    // Depth fade (3D only): dim a label by how far its node sits BEHIND the cloud
+    // center as seen from the camera (origin is the pinned "you" node / cloud
+    // center). Quantized to 1/8 so troika only re-syncs a handful of times across
+    // an orbit, not every frame. This is what keeps the front titles crisp while
+    // the far side recedes — the readability win over a raw 3D cloud.
+    if (labelFade && textRef.current) {
+      const cam = state.camera
+      const behind = Math.max(0, cam.position.distanceTo(g.position) - cam.position.length())
+      const f = Math.max(0.15, 1 - behind / fadeSpan)
+      const q = Math.round(f * 8) / 8
+      if (q !== lastFade.current) {
+        lastFade.current = q
+        textRef.current.fillOpacity = q
+        textRef.current.sync()
+        if (frameLoop === 'demand') invalidate()
+      }
+    }
     if (frameLoop === 'demand' && shouldContinue) invalidate()
   })
 
@@ -173,6 +202,7 @@ function GraphNodeMesh({
       </mesh>
       <Billboard position={[0, radius + labelSize * 0.9, 0]}>
         <Text
+          ref={textRef as never}
           // Font varies only ±20% with node size (matches collision/framing);
           // the center label is bumped a bit larger.
           fontSize={labelSize}
@@ -311,7 +341,11 @@ function GraphScene({
   shuffleKey,
   frameLoop = 'always'
 }: BrainGraphProps): React.JSX.Element {
-  const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId)
+  // The interactive full-screen brain map runs the layout in 3D (OrbitControls lets
+  // the user rotate to read depth, mirroring macOS's SceneKit MemoryGraphPage); the
+  // fixed-camera surfaces (onboarding, inline Memories card) stay 2D so their labels
+  // never overlap with no way to rotate them apart.
+  const { sim, nodes, reduced } = useGraphSimulation(graph, centerNodeId, interactive ? 3 : 2)
   const invalidate = useThree((state) => state.invalidate)
 
   // Eased on-screen position of each node, written by the meshes and read by the
@@ -353,6 +387,11 @@ function GraphScene({
     <>
       <ambientLight intensity={0.8} />
       <directionalLight position={[200, 300, 400]} intensity={0.6} />
+      {/* Depth fog in 3D so far spheres/edges recede — a depth cue for the mesh
+          layer. Billboard labels use troika's own shader and ignore scene fog, so
+          the far-label declutter is handled separately by the per-node distance
+          fade in GraphNodeMesh. */}
+      {interactive && <fog attach="fog" args={[0x0a0a0f, 500, 1400]} />}
       <GraphEdges sim={sim} edges={graph.edges} posMap={posMap} />
       {/* eslint-disable-next-line react-hooks/refs -- posMap is a lazy-init ref read here to glue edges/nodes to eased positions; intentional */}
       {nodes.map((n) => (
@@ -364,11 +403,49 @@ function GraphScene({
           reduced={reduced}
           posMap={posMap}
           frameLoop={frameLoop}
+          labelFade={interactive === true}
         />
       ))}
-      {interactive ? <OrbitControls enablePan enableZoom enableRotate /> : <CameraRig />}
+      {interactive ? (
+        <>
+          <OrbitControls makeDefault enablePan enableZoom enableRotate />
+          <FitCamera radius={nodes.length > 0 ? sim.boundingRadius() : 0} />
+        </>
+      ) : (
+        <CameraRig />
+      )}
     </>
   )
+}
+
+// Interactive 3D only: one-shot framing of the whole cloud. Pulls the camera back
+// so the 3D bounding SPHERE fits (the flat CameraRig frames a 2D radius and never
+// runs here), then hands control to OrbitControls, which orbits around the origin
+// where the pinned "you" node sits. Re-fits if the cloud's radius grows (new
+// nodes) but never fights the user mid-orbit — it only sets the initial distance.
+function FitCamera({ radius }: { radius: number }): null {
+  const camera = useThree((s) => s.camera)
+  const controls = useThree((s) => s.controls) as {
+    target: THREE.Vector3
+    update: () => void
+  } | null
+  const framedFor = useRef(0)
+  useEffect(() => {
+    if (radius <= 0 || !controls) return
+    // Only (re)frame when the radius meaningfully grows, so an incremental add
+    // widens the view but a settled graph is never nudged.
+    if (radius <= framedFor.current * 1.05) return
+    framedFor.current = radius
+    const cam = camera as THREE.PerspectiveCamera
+    const vfov = (cam.fov * Math.PI) / 180
+    const dist = (radius / Math.tan(vfov / 2)) * FRAME_MARGIN
+    // Position + target only (method calls) — the Canvas camera's far (20000) already
+    // clears any fit distance, so no projection-param writes are needed here.
+    cam.position.set(0, 0, dist)
+    controls.target.set(0, 0, 0)
+    controls.update()
+  }, [radius, controls, camera])
+  return null
 }
 
 // Shared 3D knowledge-graph renderer. Used by onboarding (live local graph) and
