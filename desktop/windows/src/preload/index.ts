@@ -493,6 +493,10 @@ const omi: OmiBridgeApi = {
   getMicPermissionState: () => ipcRenderer.invoke('permissions:micState'),
   perfFirstPaint: () => ipcRenderer.send('perf:firstPaint'),
   perfMark: (name: string) => ipcRenderer.send('perf:mark', name),
+  // Main-window WCO caption tone. Home paints a darker stage than the app base, so
+  // the shell flips the native caption cluster to the home tone on Home (and back
+  // elsewhere) to keep it seamless. Main-window only; a no-op on other windows.
+  setTitleBarSurface: (onHome: boolean) => ipcRenderer.send('chrome:titleBarSurface', onHome),
   // Main-window chrome: whether the window was created with a Windows 11 Mica
   // background material (renderer goes translucent so the material shows).
   // Passed via additionalArguments at window construction.
