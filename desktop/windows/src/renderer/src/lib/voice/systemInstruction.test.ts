@@ -78,17 +78,43 @@ describe('buildVoiceSystemInstruction', () => {
     expect(text).toContain('Current local datetime:')
   })
 
-  it('never references tools that do not exist in Phase A', () => {
+  it('advertises the Windows-scoped data tools and the spawn_agent delegation directive', () => {
     const text = buildVoiceSystemInstruction({ aboutUser: card, userLanguages: ['en'] })
+    // Every tool named must be one buildVoiceHubToolCatalog actually advertises on
+    // the Windows voice surface (src/main/ipc/voiceTool.ts).
     for (const tool of [
       'spawn_agent',
-      'get_tasks',
       'get_action_items',
+      'create_action_item',
+      'update_action_item',
+      'complete_task',
+      'delete_task',
+      'search_tasks',
       'get_memories',
       'search_memories',
-      'ask_higher_model'
+      'get_conversations',
+      'search_conversations',
+      'get_daily_recap',
+      'semantic_search',
+      'get_work_context',
+      'capture_screen',
+      'list_agent_sessions'
     ]) {
-      expect(text).not.toContain(tool)
+      expect(text).toContain(tool)
+    }
+    // The delegation directive: the model must EMIT spawn_agent, not merely promise it.
+    expect(text).toContain('delegate with spawn_agent')
+    expect(text).toContain('EMIT the spawn_agent')
+    // Tools macOS voice-exposes but Windows does NOT advertise must never be named —
+    // pointing the model at an uncallable tool makes it promise work it cannot do.
+    for (const absent of [
+      'get_tasks',
+      'ask_higher_model',
+      'create_calendar_event',
+      'screenshot',
+      'point_click'
+    ]) {
+      expect(text).not.toContain(absent)
     }
   })
 
