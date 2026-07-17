@@ -188,11 +188,13 @@ setattr(_apps_stub, 'get_available_app_by_id_with_reviews', MagicMock())
 setattr(_apps_stub, 'get_is_user_paid_app', MagicMock(return_value=False))
 _register_module('utils.apps', _apps_stub)
 
-from fastapi import FastAPI  # noqa: E402
+from fastapi import FastAPI, HTTPException  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
 from models.conversation import Conversation  # noqa: E402
 from models.conversation_enums import ConversationStatus  # noqa: E402
 from models.structured import Structured  # noqa: E402
+
+import pytest  # noqa: E402
 
 _remove_module_for_fresh_import('routers.conversations')
 _remove_module_for_fresh_import('routers')
@@ -319,6 +321,7 @@ def test_finalize_conversation_persists_durable_work_and_returns_without_process
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
@@ -365,6 +368,7 @@ def test_finalize_conversation_passes_calendar_context_into_atomic_durable_admis
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
@@ -397,6 +401,7 @@ def test_finalize_conversation_does_not_clear_different_redis_pointer():
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
@@ -421,6 +426,7 @@ def test_finalize_conversation_noop_returns_latest_without_side_effects():
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', side_effect=[target, latest]),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
@@ -439,6 +445,30 @@ def test_finalize_conversation_noop_returns_latest_without_side_effects():
     process.assert_not_called()
     integrations.assert_not_called()
     assert response.conversation.status == ConversationStatus.processing
+
+
+def test_finalize_conversation_rejects_byok_request_before_mutation():
+    """A BYOK request must not be admitted to the durable worker (which cannot
+    inherit request-scoped keys), so it fails fast instead of silently using
+    platform credentials."""
+    target = _conversation()
+
+    with (
+        patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
+        patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=True) as has_byok,
+        patch.object(conv.lifecycle_service, 'request_finalization') as request_finalization,
+        patch.object(conv.redis_db, 'remove_in_progress_conversation_id') as remove_pointer,
+        patch.object(conv, 'process_conversation') as process,
+    ):
+        with pytest.raises(HTTPException) as exc_info:
+            conv.finalize_conversation('conv-1', uid='test-uid')
+
+    assert exc_info.value.status_code == 409
+    has_byok.assert_called_once()
+    request_finalization.assert_not_called()
+    remove_pointer.assert_not_called()
+    process.assert_not_called()
 
 
 def test_legacy_finalize_claim_loser_returns_latest_without_processing_or_integrations():
@@ -472,6 +502,7 @@ def test_finalize_conversation_returns_queued_outbox_after_uncertain_task_acknow
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',
@@ -496,6 +527,7 @@ def test_finalize_conversation_returns_503_without_mutating_when_durable_dispatc
     with (
         patch.object(conv.conversations_db, 'get_conversation', return_value={'id': 'conv-1'}),
         patch.object(conv, 'deserialize_conversation', return_value=target),
+        patch.object(conv.byok, 'has_byok_keys', return_value=False),
         patch.object(
             conv.lifecycle_service,
             'request_finalization',

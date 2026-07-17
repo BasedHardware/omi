@@ -48,6 +48,7 @@ from utils.conversations import lifecycle as lifecycle_service
 from utils.executors import db_executor, postprocess_executor, run_blocking, submit_with_context
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem
+from utils import byok
 from utils.memory.surface_routing import pin_memory_system
 from utils.conversations.search import ConversationSearchUnavailableError, search_conversations
 from utils.llm.conversation_processing import generate_summary_with_prompt
@@ -239,6 +240,18 @@ def finalize_conversation(
             conversation.external_data = {}
         conversation.external_data['calendar_meeting_context'] = request.calendar_meeting_context.model_dump()
         extra_updates['external_data'] = conversation.external_data
+
+    # The durable Cloud Tasks worker cannot inherit this request's BYOK
+    # context: the task payload is the opaque {job_id, dispatch_generation}
+    # schema, so the worker runs without the X-BYOK-* keys the middleware
+    # validated for this request. Admitting a BYOK request here would silently
+    # process the conversation with platform credentials. Reject before any
+    # mutation so BYOK clients fail fast instead of being processed as Omi keys.
+    if byok.has_byok_keys():
+        raise HTTPException(
+            status_code=409,
+            detail='BYOK finalization is not supported on this route; use the live listen session',
+        )
 
     try:
         finalization = lifecycle_service.request_finalization(
