@@ -920,6 +920,7 @@ export type OmiBridgeApi = {
   // fetch/status/disconnect operate on the persisted session partition.
   gmailSessionConnect: () => Promise<GmailSessionStatus>
   gmailSessionStatus: () => Promise<GmailSessionStatus>
+  gmailSessionVerify: () => Promise<GmailSessionStatus>
   gmailSessionFetch: (query?: string, maxResults?: number) => Promise<GmailSessionFetchResult>
   gmailSessionDisconnect: () => Promise<GmailSessionStatus>
   // X (Twitter) connector — main runs the poll; the renderer relays the session.

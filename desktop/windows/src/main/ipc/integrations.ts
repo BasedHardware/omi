@@ -20,6 +20,7 @@ import { filterNew } from '../integrations/syncStateLogic'
 import {
   gmailSessionConnect,
   gmailSessionStatus,
+  gmailSessionVerify,
   gmailSessionFetch,
   gmailSessionDisconnect
 } from '../integrations/gmailSession'
@@ -103,6 +104,12 @@ export function registerIntegrationsHandlers(): void {
   ipcMain.handle(
     'integrations:gmailSession:status',
     async (): Promise<GmailSessionStatus> => gmailSessionStatus()
+  )
+  // A network probe (vs. the cheap cookie-presence status): the renderer calls this
+  // after a failed fetch so a stale-but-present session flips the row to reconnect.
+  ipcMain.handle(
+    'integrations:gmailSession:verify',
+    async (): Promise<GmailSessionStatus> => gmailSessionVerify()
   )
   ipcMain.handle(
     'integrations:gmailSession:fetch',

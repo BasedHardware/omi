@@ -112,8 +112,9 @@ export function IntegrationsTab(): React.JSX.Element {
         })
       } else {
         toast('Could not read Gmail', { tone: 'warn', body: res.error })
-        // A stale/expired session flips the row back to a "Connect" prompt.
-        setGmailStatus(await window.omi.gmailSessionStatus())
+        // Network-probe the session (not the cheap cookie check): a stale-but-present
+        // session verifies as disconnected, flipping the row back to a Connect prompt.
+        setGmailStatus(await window.omi.gmailSessionVerify())
       }
     } catch (e) {
       toast('Could not read Gmail', { tone: 'error', body: (e as Error).message })

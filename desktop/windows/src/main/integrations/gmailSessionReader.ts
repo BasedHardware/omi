@@ -109,7 +109,10 @@ async function fetchAtomSingle(
     if (!parsed.error) {
       return { ok: true, emails: parsed.emails, source: 'atom' }
     }
-    // 200 but not an Atom feed => Google served a login/interstitial HTML => stale session.
+    // 200 but not an Atom feed => Google served login/interstitial HTML => stale session.
+    // INTENTIONAL deviation from macOS (whose classifier only keys off HTTP 401/403 and
+    // would surface this as a generic error): treating a 200 non-feed as session_expired
+    // gives the user the correct "reconnect" action. Do not "fix" this back to a 401 check.
     return fail('session_expired', parsed.error)
   }
   if (feed.status === 401 || feed.status === 403) return fail('session_expired')
@@ -124,6 +127,9 @@ function mergeByLatest(emails: GmailSessionEmail[], maxResults: number): GmailSe
     const existing = merged.get(email.id)
     if (!existing || existing.date < email.date) merged.set(email.id, email)
   }
+  // Sort newest-first. INTENTIONAL deviation from macOS (which sorts parsed Date objects):
+  // all feed/bootstrap dates are ISO-8601 UTC strings, so lexicographic compare is
+  // chronologically equivalent and avoids Date parsing. Do not "fix" to Date math.
   return [...merged.values()].sort((a, b) => b.date.localeCompare(a.date)).slice(0, maxResults)
 }
 

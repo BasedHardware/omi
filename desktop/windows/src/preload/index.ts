@@ -194,6 +194,7 @@ const omi: OmiBridgeApi = {
   // cookie replay. connect opens the login window and resolves once signed in. ---
   gmailSessionConnect: () => ipcRenderer.invoke('integrations:gmailSession:connect'),
   gmailSessionStatus: () => ipcRenderer.invoke('integrations:gmailSession:status'),
+  gmailSessionVerify: () => ipcRenderer.invoke('integrations:gmailSession:verify'),
   gmailSessionFetch: (query?: string, maxResults?: number) =>
     ipcRenderer.invoke('integrations:gmailSession:fetch', query, maxResults),
   gmailSessionDisconnect: () => ipcRenderer.invoke('integrations:gmailSession:disconnect'),
