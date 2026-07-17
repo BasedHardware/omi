@@ -75,6 +75,23 @@ if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Star
   exit 1
 fi
 
+# A requested Rewind reseed must take the full install path. Fast-only is an
+# inspection path and therefore rejects the combination before any side effect.
+rewind_seed_fast_only_output="$TMP_ROOT/rewind-seed-fast-only.log"
+if HOME="$TMP_ROOT/home" OMI_APP_NAME="omi-rewind-seed-fast-only-$$" OMI_FORCE_REWIND_SEED=1 \
+  "$MACOS_DIR/run.sh" --yolo --fast-only >"$rewind_seed_fast_only_output" 2>&1; then
+  echo "--fast-only unexpectedly accepted a forced Rewind seed" >&2
+  exit 1
+else
+  rewind_seed_fast_only_status=$?
+fi
+test "$rewind_seed_fast_only_status" = "2"
+grep -q -- '--fast-only cannot be combined' "$rewind_seed_fast_only_output"
+if grep -qE 'Killing existing instances|Cleaning up conflicting app bundles|Starting Cloudflare|Starting Rust backend|Preparing agent runtime' "$rewind_seed_fast_only_output"; then
+  echo "forced Rewind seed performed launch side effects before rejecting --fast-only" >&2
+  exit 1
+fi
+
 # A detached launcher cannot own a tunnel: cleanup would terminate it as the
 # script exits, leaving the relaunched app with a dead endpoint. Reject this
 # configuration before probing or starting anything.

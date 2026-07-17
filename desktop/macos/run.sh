@@ -9,6 +9,11 @@ export LC_NUMERIC=C
 # ─── Arguments ─────────────────────────────────────────────────────────
 YOLO_MODE=0
 FORCE_FULL_BUNDLE="${OMI_FORCE_FULL_BUNDLE:-0}"
+# Reseeding replaces an existing named profile after preserving it. It must run
+# through the install/seed path; a fast executable patch intentionally skips it.
+if [ "${OMI_FORCE_REWIND_SEED:-0}" = "1" ]; then
+    FORCE_FULL_BUNDLE=1
+fi
 FAST_ONLY=0
 NO_WAIT="${NO_WAIT:-0}"
 SHOW_HELP=0
@@ -55,6 +60,8 @@ Options (via environment variables):
   OMI_APP_NAME="Omi Dev"   App name (default: "Omi Dev")
   OMI_SKIP_AUTH_SEED=1     Do not copy auth/onboarding from Omi Dev into named bundles
   OMI_SKIP_SETTINGS_SEED=1  Do not copy shortcuts/settings from Omi Dev into named bundles
+  OMI_SKIP_REWIND_SEED=1    Do not copy the local Rewind history into a new named bundle
+  OMI_FORCE_REWIND_SEED=1   Replace an existing named-bundle Rewind history with a fresh Omi Dev snapshot
   OMI_DEV_EAGER_PERMISSIONS=1  Preserve eager mic/screen/file startup behavior in named bundles
   OMI_PYTHON_API_URL="..."  Python backend URL (explicit override; named bundles default to dev)
   OMI_SIGN_IDENTITY="..."  Code signing identity (auto-detected if not set)
@@ -1220,6 +1227,13 @@ if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_SETTINGS_SEED:-0}" != "1" ]; t
         auth_debug "AFTER settings seed: devLazyPermissionsEnabled=$(defaults read "$BUNDLE_ID" devLazyPermissionsEnabled 2>&1 || true)"
     else
         echo "Warning: could not seed shortcuts/settings from Omi Dev. Continuing with bundle defaults."
+    fi
+fi
+
+if [ "$IS_NAMED_BUNDLE" = true ] && [ "${OMI_SKIP_REWIND_SEED:-0}" != "1" ]; then
+    step "Seeding Rewind history from Omi Dev..."
+    if ! ./scripts/omi-rewind-seed.sh "$BUNDLE_ID"; then
+        echo "Warning: could not seed Rewind history into $BUNDLE_ID. Launching with its existing local profile."
     fi
 fi
 
