@@ -202,3 +202,4 @@ tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_no_non_canonic
 tests/unit/test_inv_mem_1_guard.py::TestInvMemSourceRatchet::test_default_read_paths_do_not_include_archive_without_explicit_mode
 tests/unit/test_task_intelligence_contract_freeze.py
 tests/unit/test_lock_bypass_fixes.py
+tests/unit/test_byok_security.py::TestCacheRouting::test_cached_openai_chat_no_raw_key_in_cache
