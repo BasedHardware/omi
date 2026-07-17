@@ -322,16 +322,12 @@ def main() -> int:
         manifest_errors = validate_manifest(manifest, root)
         if manifest_errors:
             raise ValueError("; ".join(manifest_errors))
-        if args.changed_files:
-            # When a pre-computed changed-files list is supplied (e.g. from a
-            # shallow-checkout macOS job that received it from the ubuntu
-            # changes job), skip the merge-base call — the shallow clone may
-            # not have enough connected history for it to succeed.
-            files = [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line]
-            resolved_base = args.base
-        else:
-            resolved_base = merge_base(root, args.base, args.head)
-            files = changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
+        resolved_base = merge_base(root, args.base, args.head)
+        files = (
+            [line for line in args.changed_files.read_text(encoding="utf-8").splitlines() if line]
+            if args.changed_files
+            else changed_files(root, args.base, args.head, include_worktree=args.lane == "local")
+        )
     except (OSError, ValueError, subprocess.CalledProcessError) as exc:
         print(f"FAIL: could not resolve manifest checks: {exc}", file=sys.stderr)
         return 2
