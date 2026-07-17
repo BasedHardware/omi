@@ -8,7 +8,7 @@ environments:
       namespace: dev-omi-backend
       release_name: dev-omi-llm-gateway
       ingress_name: dev-omi-llm-gateway
-      static_address_name: dev-omi-self-hosted-llm-ip-address
+      static_address_name: dev-llm-gateway-ilb-ip-address
     gke:
       backend-listen:
         values_file: backend/charts/backend-listen/dev_omi_backend_listen_values.yaml
@@ -306,6 +306,11 @@ environments:
             HOSTED_PARAKEET_API_URL:
               value: http://parakeet.omiapi.com
               category: service_discovery
+            # Direct dev Cloud Run /v4/listen traffic remains public while the
+            # retired Cloud Run Pusher route drains. It must use the GKE Pusher.
+            HOSTED_PUSHER_API_URL:
+              value: http://pusher.omiapi.com
+              category: service_discovery
             OMI_LLM_GATEWAY_URL:
               env_var: OMI_LLM_GATEWAY_URL
               # The workflow replaces this with the ingress-derived address
@@ -479,6 +484,8 @@ environments:
               value: 'true'
               category: rollout
               provisional: true
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -574,6 +581,8 @@ environments:
             MEMORY_TYPESENSE_COLLECTION:
               value: canonical_memory_atoms
               category: memory_rollout
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON
@@ -608,6 +617,8 @@ environments:
             PINECONE_INDEX_NAME:
               value: memories-backend-dev
               category: integrations
+          forbidden_env:
+            - HOSTED_PUSHER_API_URL
           secrets:
             SERVICE_ACCOUNT_JSON:
               secret: SERVICE_ACCOUNT_JSON

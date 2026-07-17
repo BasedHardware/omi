@@ -218,15 +218,15 @@ final class StartupWarmupPolicyTests: XCTestCase {
     XCTAssertTrue(state.reserveDatabaseWarmup(dbAvailable: true))
   }
 
-  func testTasksPageFirstUseLoadsWhenStoreHasNoRenderedTasks() {
+  func testTasksPageFirstUseLoadsWhenActiveViewHasNotHydrated() {
     XCTAssertTrue(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: false, isLoading: false)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: false, isActiveViewLoading: false)
     )
     XCTAssertFalse(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: true, isLoading: false)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: true, isActiveViewLoading: false)
     )
     XCTAssertFalse(
-      TasksPageFirstUseLoadPolicy.shouldLoadTasks(hasRenderedTasks: false, isLoading: true)
+      TasksPageFirstUseLoadPolicy.shouldLoadTasks(isActiveViewLoaded: false, isActiveViewLoading: true)
     )
   }
 
