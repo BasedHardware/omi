@@ -227,17 +227,19 @@ int main(void)
 
     err = mount_sd_card();
     if (err) {
-        LOG_ERR("Failed to mount SD card (err %d)", err);
-        return err;
-    }
-    k_msleep(500);
+        // Offline storage is optional; a failed SD mount (bad/missing/incompatible card
+        // or wiring fault) must not abort boot and block BLE/transport entirely.
+        LOG_ERR("Failed to mount SD card (err %d), continuing without offline storage", err);
+    } else {
+        k_msleep(500);
 
-    LOG_PRINTK("\n");
-    LOG_INF("Initializing storage...\n");
+        LOG_PRINTK("\n");
+        LOG_INF("Initializing storage...\n");
 
-    err = storage_init();
-    if (err) {
-        LOG_ERR("Failed to initialize storage (err %d)", err);
+        err = storage_init();
+        if (err) {
+            LOG_ERR("Failed to initialize storage (err %d)", err);
+        }
     }
 #endif
 
