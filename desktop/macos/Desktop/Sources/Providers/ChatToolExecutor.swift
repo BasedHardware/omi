@@ -1682,6 +1682,10 @@ class ChatToolExecutor {
           pane: "Privacy_ScreenCapture",
           expectedOwnerID: expectedOwnerID,
           authorizationSnapshot: authorizationSnapshot)
+        // Same drag-to-grant mechanic as Full Disk Access. macOS pre-registers
+        // the row here, but the card still walks the user to the right toggle —
+        // and re-adds the app if the row was removed via tccutil or a reset.
+        Task { await PermissionDragGuidance.presentDragToGrantHelper() }
         try? await Task.sleep(nanoseconds: 2_000_000_000)
         guard
           isPermissionAuthorizationCurrent(
