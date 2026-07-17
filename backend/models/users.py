@@ -17,8 +17,8 @@ class PlanType(str, Enum):
     unlimited = 'unlimited'  # LEGACY — display "Neo"; hidden from new users
     architect = 'architect'  # display "Architect" (desktop)
     operator = 'operator'  # display "Operator" (desktop)
-    plus = 'plus'  # display "Plus" — mobile, 1500 min/mo
-    max = 'max'  # display "Max" — mobile, unlimited transcription
+    plus = 'plus'  # display "Plus" (mobile)
+    max = 'max'  # display "Max" (mobile)
 
     @classmethod
     def _missing_(cls, value: object):

@@ -1295,10 +1295,8 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
-    # Backward-compat: clients whose plan enum predates `plus`/`max` deserialize
-    # them as Free (mobile) or fail to decode (desktop). Serialize a known paid
-    # label so buyers read as paid. Limits/features/grandfather above were all
-    # computed from the true plan; only the serialized label changes.
+    # Grandfather is read from the true plan before the label is remapped for
+    # clients whose enum predates `plus`/`max` (see wire_plan_for_client).
     desktop_grandfather_until = neo_grandfather_until(subscription)
     subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
 

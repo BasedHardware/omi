@@ -26,8 +26,7 @@ def _get_user(uid: str) -> Any:
 
 PAID_PLAN_TYPES = {PlanType.unlimited, PlanType.architect, PlanType.operator, PlanType.plus, PlanType.max}
 
-# Mobile-only consumer tiers (transcription-metered). Sold on ios/android + web,
-# hidden from the desktop catalog. Plus caps transcription; Max is unlimited.
+# Mobile consumer tiers: sold on ios/android + web, hidden from desktop.
 MOBILE_PLAN_TYPES = {PlanType.plus, PlanType.max}
 
 # Plans that unlock the full desktop (macOS) experience. This is deliberately
@@ -467,19 +466,11 @@ _MOBILE_PLATFORM_TOKENS = {'ios', 'android'}
 
 
 def _platform_hidden_plans(platform: Optional[str]) -> Set[PlanType]:
-    """Plans that are hidden from the purchase catalog for the given platform.
+    """Plans hidden from the purchase catalog per platform.
 
-    Mobile (ios/android) sells the consumer tiers Plus + Max, so the
-    desktop-oriented Operator + Architect and the deprecated Neo are hidden.
-
-    Desktop (macOS / Windows) sells Operator + Architect, so the mobile
-    Plus + Max and the deprecated Neo are hidden.
-
-    A subscriber already on a hidden plan still sees it (to manage/cancel) via
-    `filter_plans_for_user`'s current-plan escape; lapsed Neo subscribers on
-    mobile keep Neo visible via the ever-purchased escape.
-
-    Web and any other client are left alone — their catalog is unchanged.
+    Mobile sells Plus + Max; desktop sells Operator + Architect; Neo is
+    deprecated on both. Web is unfiltered. A subscriber on a hidden plan still
+    sees it via `filter_plans_for_user`'s current-plan / ever-purchased escapes.
     """
     p = (platform or '').lower()
     if p in _MOBILE_PLATFORM_TOKENS:
@@ -596,19 +587,14 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
     return False
 
 
-# Minimum client build whose local plan enum includes `plus`/`max`. Until an
-# app build ships with those enum values, every current client must receive a
-# known plan label instead, or it silently deserializes `plus`/`max` as Free
-# (mobile) or fails to decode (desktop). Defaults are set far ahead of any
-# shipped build so *all* current clients get the remap today; lower them to the
-# real build number once a plus/max-aware client ships. Client fails *closed*:
-# a missing/unparseable version does not understand plus/max.
+# Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
+# any shipped build so every current client is remapped today (see
+# wire_plan_for_client); lower once a plus/max-aware client ships.
 PLUS_MAX_MIN_MOBILE_VERSION = os.getenv('PLUS_MAX_MIN_MOBILE_VERSION', '99.0.0')
 PLUS_MAX_MIN_DESKTOP_VERSION = os.getenv('PLUS_MAX_MIN_DESKTOP_VERSION', '99.0.0')
 
 
 def client_understands_plus_max(platform: Optional[str], app_version: Optional[str]) -> bool:
-    """True iff this client's local plan enum includes `plus`/`max`."""
     if not platform or not app_version:
         return False
     platform_lower = platform.lower()
@@ -625,13 +611,10 @@ def client_understands_plus_max(platform: Optional[str], app_version: Optional[s
 
 
 def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: Optional[str]) -> PlanType:
-    """Plan label to serialize for a client that may not understand `plus`/`max`.
+    """Serialize `plus`/`max` as `unlimited` for clients whose enum predates them.
 
-    Remaps the mobile tiers to `unlimited` (a paid enum every current client
-    understands) so buyers read as paid instead of Free. Only the serialized
-    label is remapped — real entitlement/limits are computed from the true plan
-    before this is called. This is the `plus`/`max` analogue of the existing
-    `operator`→`unlimited` backward-compat remap.
+    Only the label is remapped — real entitlement/limits are computed from the
+    true plan before this is called. Mirrors the `operator`→`unlimited` remap.
     """
     if plan in MOBILE_PLAN_TYPES and not client_understands_plus_max(platform, app_version):
         return PlanType.unlimited
@@ -725,9 +708,6 @@ NEO_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('NEO_CHAT_QUESTIONS_PER_MONTH', '20
 OPERATOR_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('OPERATOR_CHAT_QUESTIONS_PER_MONTH', '500'))
 ARCHITECT_CHAT_COST_USD_PER_MONTH = float(os.getenv('ARCHITECT_CHAT_COST_USD_PER_MONTH', '400.0'))
 
-# Mobile Plus / Max tiers. Plus caps transcription at PLUS_TIER minutes; Max is
-# unlimited transcription (fair-use throttle is a fast-follow, not enforced here).
-# Chat caps are env-overridable so ops can tune without a deploy.
 PLUS_TIER_MINUTES_LIMIT_PER_MONTH = int(os.getenv('PLUS_TIER_MINUTES_LIMIT_PER_MONTH', '1500'))
 PLUS_TIER_MONTHLY_SECONDS_LIMIT = PLUS_TIER_MINUTES_LIMIT_PER_MONTH * 60
 PLUS_CHAT_QUESTIONS_PER_MONTH = int(os.getenv('PLUS_CHAT_QUESTIONS_PER_MONTH', '200'))
@@ -920,7 +900,6 @@ def get_plan_limits(plan: PlanType) -> PlanLimits:
             chat_cost_usd_per_month=ARCHITECT_CHAT_COST_USD_PER_MONTH,
         )
     if plan == PlanType.plus:
-        # Transcription-capped consumer tier. Enforced by has_transcription_credits.
         return PlanLimits(
             transcription_seconds=PLUS_TIER_MONTHLY_SECONDS_LIMIT,
             words_transcribed=None,
