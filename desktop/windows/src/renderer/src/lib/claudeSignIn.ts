@@ -5,7 +5,7 @@
 // UNCONDITIONAL upsell, bypassable by completing sign-in):
 //  - beginClaudeSignIn() shows the "Upgrade to Omi Pro" sheet AND launches the
 //    real Claude OAuth in the browser IN PARALLEL (main's codingAgentStartAuth
-//    builds + validates the claude.ai/oauth/authorize URL, opens it, and awaits
+//    builds + validates the claude.com/cai/oauth/authorize URL, opens it, and awaits
 //    the loopback callback).
 //  - If the user completes the parallel OAuth before dismissing, the flow
 //    resolves connected → the sheet auto-closes and Claude is granted, no
