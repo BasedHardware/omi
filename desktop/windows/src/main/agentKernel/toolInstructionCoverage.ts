@@ -50,6 +50,10 @@ export interface SurfaceCoverageInput {
   /** `guard:allow` — tools intentionally NOT named in this surface's prose, keyed
    *  to a required human reason. Permanently exempt from the coverage rule. */
   allow?: Readonly<Record<string, string>>
+  /** The universe of real tool names (the full manifest) used for the REVERSE
+   *  check: an instruction that names a real tool NOT advertised to this surface
+   *  makes the model promise work it cannot do. Omit to skip the reverse check. */
+  knownToolNames?: readonly string[]
 }
 
 export type SurfaceCoverageStatus =
@@ -68,6 +72,10 @@ export interface SurfaceCoverageResult {
   mentioned: string[]
   /** Advertised tools that are unnamed AND not on the allow list. */
   missing: string[]
+  /** REVERSE: real tool names the instruction references that are NOT advertised
+   *  to this surface (and not allow-listed) — the model is told about a tool it
+   *  cannot call. Empty when no instruction text or no `knownToolNames`. */
+  referencedNotAdvertised: string[]
   /** Advertised tools skipped via `guard:allow`, with reasons echoed in `message`. */
   allowlisted: string[]
   pendingOwner?: string
@@ -126,6 +134,7 @@ export function analyzeSurfaceCoverage(input: SurfaceCoverageInput): SurfaceCove
       advertisedCount: advertised.length,
       mentioned: [],
       missing: considered,
+      referencedNotAdvertised: [],
       allowlisted,
       pendingOwner: input.pendingOwner,
       fails: FAILING_STATUSES.has(status),
@@ -143,26 +152,38 @@ export function analyzeSurfaceCoverage(input: SurfaceCoverageInput): SurfaceCove
   const mentioned = considered.filter((tool) => toolIsMentioned(text, tool, input.aliasesByTool))
   const missing = considered.filter((tool) => !toolIsMentioned(text, tool, input.aliasesByTool))
 
+  // REVERSE: real tool names the prose references but the surface does not
+  // advertise. Scan only KNOWN tool names (never arbitrary snake_case prose), so
+  // it cannot false-positive on words like `about_user` or `screen_recording`.
+  const advertisedSet = new Set(advertised)
+  const referencedNotAdvertised = [...new Set(input.knownToolNames ?? [])].filter(
+    (name) => !advertisedSet.has(name) && !(name in allow) && instructionMentions(text, name)
+  )
+
+  const clean = missing.length === 0 && referencedNotAdvertised.length === 0
+  const problems: string[] = []
+  if (missing.length > 0) problems.push(`unnamed advertised: ${missing.join(', ')}`)
+  if (referencedNotAdvertised.length > 0) {
+    problems.push(`referenced-but-not-advertised: ${referencedNotAdvertised.join(', ')}`)
+  }
+
   let status: SurfaceCoverageStatus
   let message: string
   if (input.enforcement === 'enforced') {
-    status = missing.length === 0 ? 'ok' : 'violation'
-    message =
-      missing.length === 0
-        ? `All ${considered.length} advertised tool(s) are named in the instruction.`
-        : `${missing.length} advertised tool(s) are NOT named in the instruction: ${missing.join(', ')}.`
-  } else if (missing.length === 0) {
-    // Pending but nothing is missing — the sibling branch's work has landed; the
-    // 'pending' marker is now stale and must be flipped to 'enforced'.
+    status = clean ? 'ok' : 'violation'
+    message = clean
+      ? `All ${considered.length} advertised tool(s) named; no phantom references.`
+      : `Instruction coverage problems — ${problems.join('; ')}.`
+  } else if (clean) {
+    // Pending but nothing is missing or phantom — the sibling branch's work has
+    // landed; the 'pending' marker is now stale and must be flipped to 'enforced'.
     status = 'pending-stale'
     message =
       `PENDING surface "${input.surface}" is now fully covered — set its enforcement to ` +
       `'enforced' and drop the pending owner${input.pendingOwner ? ` (${input.pendingOwner})` : ''}.`
   } else {
     status = 'pending'
-    message =
-      `PENDING (owner: ${input.pendingOwner ?? 'unassigned'}): ${missing.length} advertised ` +
-      `tool(s) not yet named in the instruction: ${missing.join(', ')}.`
+    message = `PENDING (owner: ${input.pendingOwner ?? 'unassigned'}): ${problems.join('; ')}.`
   }
 
   return {
@@ -172,6 +193,7 @@ export function analyzeSurfaceCoverage(input: SurfaceCoverageInput): SurfaceCove
     advertisedCount: advertised.length,
     mentioned,
     missing,
+    referencedNotAdvertised,
     allowlisted,
     pendingOwner: input.pendingOwner,
     fails: FAILING_STATUSES.has(status),
@@ -211,7 +233,10 @@ export function formatCoverageReport(report: CoverageReport): string {
     lines.push(
       `  [${marker}] ${result.surface} (${result.enforcement}): ` +
         `${result.mentioned.length}/${result.advertisedCount} named` +
-        (result.allowlisted.length ? `, ${result.allowlisted.length} allow` : '')
+        (result.allowlisted.length ? `, ${result.allowlisted.length} allow` : '') +
+        (result.referencedNotAdvertised.length
+          ? `, ${result.referencedNotAdvertised.length} phantom`
+          : '')
     )
     lines.push(`        ${result.message}`)
   }

@@ -44,6 +44,12 @@ function aliasesByTool(): Record<string, string[]> {
   return map
 }
 
+// The full tool-name universe for the REVERSE check (prose naming a real tool the
+// surface does not advertise). Derived from the manifest so it never drifts.
+function knownToolNames(): string[] {
+  return omiToolManifest.map((entry) => entry.name)
+}
+
 // ── Surface: realtime_voice ────────────────────────────────────────────────────
 // Advertised set = exactly what the production catalog builder hands the warm
 // voice session. Coordinator role is the superset (the voice thread resolves
@@ -63,6 +69,7 @@ function voiceSurfaceInput(): SurfaceCoverageInput {
     advertisedTools,
     aliasesByTool: aliasesByTool(),
     instruction: { present: true, text: instruction },
+    knownToolNames: knownToolNames(),
     // FLIP to 'enforced' when feat/win-voice-instruction-tools lands the tool
     // sections in buildVoiceSystemInstruction.
     enforcement: 'pending',
@@ -89,6 +96,7 @@ function desktopChatSurfaceInput(): SurfaceCoverageInput {
     surface: 'desktopChat',
     advertisedTools: desktopChatAdvertisedTools(),
     aliasesByTool: aliasesByTool(),
+    knownToolNames: knownToolNames(),
     instruction: { present: false },
     // FLIP to 'enforced' (and pass the rendered prose above) when
     // feat/win-chat-initiative-routing lands the desktop-chat persona/prompt.
@@ -160,6 +168,35 @@ describe('analyzeSurfaceCoverage — rule encoding', () => {
     })
     expect(r.status).toBe('ok')
     expect(r.mentioned).toEqual(['semantic_search'])
+  })
+
+  it('REVERSE: enforced + prose names a real tool the surface does NOT advertise → violation', () => {
+    const r = analyzeSurfaceCoverage({
+      ...base,
+      advertisedTools: ['spawn_agent'],
+      knownToolNames: ['spawn_agent', 'get_tasks'],
+      instruction: { present: true, text: 'Use spawn_agent, and get_tasks for the list.' },
+      enforcement: 'enforced'
+    })
+    expect(r.status).toBe('violation')
+    expect(r.referencedNotAdvertised).toEqual(['get_tasks'])
+    expect(r.missing).toEqual([])
+  })
+
+  it('REVERSE: only KNOWN tool names are scanned (prose tokens are not phantoms)', () => {
+    const r = analyzeSurfaceCoverage({
+      ...base,
+      advertisedTools: ['spawn_agent'],
+      knownToolNames: ['spawn_agent', 'get_tasks'],
+      // about_user / screen_recording are prose tokens, not tools — must be ignored.
+      instruction: {
+        present: true,
+        text: 'Read about_user; check screen_recording; use spawn_agent.'
+      },
+      enforcement: 'enforced'
+    })
+    expect(r.status).toBe('ok')
+    expect(r.referencedNotAdvertised).toEqual([])
   })
 
   it('pending + gaps → reported, does not fail', () => {
