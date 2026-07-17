@@ -603,8 +603,7 @@ actor ActionItemStorage {
   @discardableResult
   func reconcileDashboardVisibilityFields(
     _ items: [TaskActionItem],
-    authorization: LocalMutationAuthorization,
-    deriveDeletedFromCancelledStatus: Bool = false
+    authorization: LocalMutationAuthorization
   ) async throws -> Int {
     try authorization.require()
     guard !items.isEmpty else { return 0 }
@@ -623,13 +622,11 @@ actor ActionItemStorage {
           else { continue }
 
           // The list/detail wire model carries no `deleted` field; the
-          // backend projects soft-deletion as status cancelled/superseded.
-          // Callers doing authoritative per-document reconciliation opt in
-          // to that derivation.
-          let statusImpliesDeleted =
-            deriveDeletedFromCancelledStatus
-            && (item.taskStatus == "cancelled" || item.taskStatus == "superseded")
-          let incomingDeleted = item.deleted ?? statusImpliesDeleted
+          // backend projects soft retirement as status cancelled/superseded.
+          // `TaskActionItem.isRetired` is the one lifecycle projection for
+          // every caller, so a dashboard detail refresh cannot resurrect a
+          // task that the canonical list has already retired.
+          let incomingDeleted = item.isRetired
           var changed = false
 
           if record.completed != item.completed {
