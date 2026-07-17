@@ -99,7 +99,7 @@ export function registerIntegrationsHandlers(): void {
   // Gmail web endpoints macOS uses over that own-session cookie jar. No OAuth. ---
   ipcMain.handle(
     'integrations:gmailSession:connect',
-    async (): Promise<GmailSessionStatus> => gmailSessionConnect()
+    async (_e, email?: string): Promise<GmailSessionStatus> => gmailSessionConnect(email)
   )
   ipcMain.handle(
     'integrations:gmailSession:status',

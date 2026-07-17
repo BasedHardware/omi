@@ -17,7 +17,7 @@ import {
   type GmailHttpResponse,
   type GmailReaderDeps
 } from './gmailSessionReader'
-import { hasGoogleAuthCookies } from './gmailSessionParse'
+import { hasGoogleAuthCookies, buildGmailLoginUrl } from './gmailSessionParse'
 import { installContextMenu } from '../contextMenu'
 import type { GmailSessionStatus, GmailSessionFetchResult } from '../../shared/types'
 
@@ -31,11 +31,8 @@ const PARTITION = 'persist:omi-gmail'
 const CHROME_UA =
   'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36'
 
-// Start at accounts.google.com (per the connector's design) and continue to Gmail once
-// signed in; when the partition already holds a session this redirects straight through.
-const LOGIN_URL =
-  'https://accounts.google.com/ServiceLogin?continue=' +
-  encodeURIComponent('https://mail.google.com/mail/')
+// The sign-in URL is built per-call by buildGmailLoginUrl (adds login_hint when the
+// signed-in Omi email is known) — see gmailSessionParse.ts.
 
 const LOGIN_TIMEOUT_MS = 5 * 60_000
 const HTTP_TIMEOUT_MS = 30_000
@@ -101,8 +98,11 @@ const readerDeps: GmailReaderDeps = { httpGet, getAuthCookieNames }
  * Open the Google login window on the persistent partition and resolve once the
  * session is authenticated (auth cookies present) or the window is closed/times out.
  * Verifying against Gmail happens separately via the reader.
+ *
+ * `email` is the signed-in Omi user's Google address (from the renderer); when present
+ * it is passed to Google as `login_hint` so the window lands on "Continue as <account>".
  */
-export function gmailSessionConnect(): Promise<GmailSessionStatus> {
+export function gmailSessionConnect(email?: string): Promise<GmailSessionStatus> {
   const ses = getGmailSession()
   return new Promise((resolve) => {
     let settled = false
@@ -170,7 +170,7 @@ export function gmailSessionConnect(): Promise<GmailSessionStatus> {
     cleanups.push(() => clearTimeout(timer))
 
     win.once('ready-to-show', () => win.show())
-    void win.loadURL(LOGIN_URL, { userAgent: CHROME_UA })
+    void win.loadURL(buildGmailLoginUrl(email), { userAgent: CHROME_UA })
   })
 }
 

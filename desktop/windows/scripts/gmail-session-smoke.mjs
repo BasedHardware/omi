@@ -24,6 +24,8 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..')
 const mainEntry = path.join(root, 'out', 'main', 'index.js')
 const shotsDir = path.join(root, '.playwright-mcp', 'gmail-session')
 const LOGIN_MODE = process.argv.includes('--login')
+// A clearly-fake email to prove the login_hint arg reaches Google's URL (renderer->main).
+const SMOKE_LOGIN_HINT = 'omi.smoke.hint@example.com'
 
 if (!existsSync(mainEntry)) {
   console.error(`[gmail-smoke] ${mainEntry} missing — run: npx electron-vite build`)
@@ -108,9 +110,10 @@ async function main() {
 
     // Fire the connect flow (opens the login window). Do NOT await — it resolves only
     // on login / window-close / timeout. Stash the promise so --login can read it.
-    await page.evaluate(() => {
-      window.__gmailConnect = window.omi.gmailSessionConnect()
-    })
+    // Pass a (fake) email so we can also prove the login_hint arg flows renderer->main.
+    await page.evaluate((email) => {
+      window.__gmailConnect = window.omi.gmailSessionConnect(email)
+    }, SMOKE_LOGIN_HINT)
 
     // Poll for the login window to reach accounts.google.com.
     let info = null
@@ -129,6 +132,13 @@ async function main() {
     } else {
       console.log('[gmail-smoke] login window URL  :', info.url)
       console.log('[gmail-smoke] login window title:', info.title)
+      // login_hint is verified authoritatively by the buildGmailLoginUrl unit test.
+      // Google consumes it during the redirect to /v3/signin/identifier, so its absence
+      // from this post-redirect URL is expected — this is informational only.
+      const hintSeen = info.url.includes('login_hint=')
+      console.log(
+        `[gmail-smoke] login_hint in observed (post-redirect) URL: ${hintSeen ? 'yes' : 'no (consumed by Google — expected; unit test covers the built URL)'}`
+      )
       const reachedGoogle = /(^https:\/\/accounts\.google\.com)|(\.google\.com)/.test(info.url)
       const blocked =
         /couldn't sign you in|this browser or app may not be secure|disallowed_useragent/i.test(

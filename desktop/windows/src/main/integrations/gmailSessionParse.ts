@@ -93,6 +93,20 @@ export function buildAtomFeedUrl(query: string, feedPath?: string | null): strin
 }
 
 /**
+ * Build the Google sign-in URL the login window opens. Starts at accounts.google.com
+ * and continues to Gmail once signed in. When the signed-in Omi user's Google email is
+ * known, add `login_hint` so Google lands on "Continue as <account>" instead of making
+ * the user type it; a missing/blank email just opens the normal sign-in (no crash).
+ */
+export function buildGmailLoginUrl(email?: string | null): string {
+  const base =
+    'https://accounts.google.com/ServiceLogin?continue=' +
+    encodeURIComponent('https://mail.google.com/mail/')
+  const hint = email?.trim()
+  return hint ? `${base}&login_hint=${encodeURIComponent(hint)}` : base
+}
+
+/**
  * Parse a Gmail Atom feed into normalized emails.
  * Faithful port of `parse_atom` (GmailReaderService.swift). Atom entries are always
  * marked unread (matching Mac). The id derivation intentionally mirrors Mac's quirk:

@@ -6,6 +6,7 @@ import { toastImportTally } from '../../../lib/importToast'
 import { useMemories } from '../../../hooks/useMemories'
 import { useGoogleConnection } from '../../../hooks/useGoogleConnection'
 import { GMAIL_SESSION_ENABLED } from '../../../lib/gmailSessionFeatureFlag'
+import { auth } from '../../../lib/firebase'
 import { SettingRow } from '../SettingRow'
 import type { GmailSessionStatus } from '../../../../../shared/types'
 
@@ -90,7 +91,9 @@ export function IntegrationsTab(): React.JSX.Element {
     if (gmailBusy) return
     setGmailBusy(true)
     try {
-      const next = await window.omi.gmailSessionConnect()
+      // Pre-select the account: pass the signed-in Omi user's Google email so Google
+      // lands on "Continue as <account>" instead of an empty identifier field.
+      const next = await window.omi.gmailSessionConnect(auth.currentUser?.email ?? undefined)
       setGmailStatus(next)
       if (next.connected) toast('Gmail connected', { tone: 'success' })
       else if (next.message) toast('Gmail not connected', { tone: 'warn', body: next.message })

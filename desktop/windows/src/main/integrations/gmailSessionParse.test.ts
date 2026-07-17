@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import {
   buildAtomFeedUrl,
+  buildGmailLoginUrl,
   parseAtomFeed,
   parseBootstrapPage,
   hasGoogleAuthCookies,
@@ -28,6 +29,33 @@ describe('buildAtomFeedUrl', () => {
     expect(buildAtomFeedUrl('', 'atom/starred')).toBe(
       'https://mail.google.com/mail/feed/atom/starred'
     )
+  })
+})
+
+describe('buildGmailLoginUrl', () => {
+  const CONTINUE = 'continue=' + encodeURIComponent('https://mail.google.com/mail/')
+
+  it('opens the plain sign-in (no login_hint) when no email is given', () => {
+    const url = buildGmailLoginUrl()
+    expect(url).toBe(`https://accounts.google.com/ServiceLogin?${CONTINUE}`)
+    expect(url).not.toContain('login_hint')
+  })
+
+  it('adds an encoded login_hint when an email is given', () => {
+    const url = buildGmailLoginUrl('user@gmail.com')
+    expect(url).toBe(
+      `https://accounts.google.com/ServiceLogin?${CONTINUE}&login_hint=user%40gmail.com`
+    )
+  })
+
+  it('percent-encodes a plus-addressed email', () => {
+    expect(buildGmailLoginUrl('a+b@gmail.com')).toContain('login_hint=a%2Bb%40gmail.com')
+  })
+
+  it('omits login_hint for an empty or whitespace email', () => {
+    expect(buildGmailLoginUrl('')).not.toContain('login_hint')
+    expect(buildGmailLoginUrl('   ')).not.toContain('login_hint')
+    expect(buildGmailLoginUrl(null)).not.toContain('login_hint')
   })
 })
 

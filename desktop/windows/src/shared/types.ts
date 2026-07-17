@@ -918,7 +918,7 @@ export type OmiBridgeApi = {
   // cookie replay against Gmail's web endpoints — no restricted-scope OAuth.
   // `gmailSessionConnect` opens the login window and resolves once signed in;
   // fetch/status/disconnect operate on the persisted session partition.
-  gmailSessionConnect: () => Promise<GmailSessionStatus>
+  gmailSessionConnect: (email?: string) => Promise<GmailSessionStatus>
   gmailSessionStatus: () => Promise<GmailSessionStatus>
   gmailSessionVerify: () => Promise<GmailSessionStatus>
   gmailSessionFetch: (query?: string, maxResults?: number) => Promise<GmailSessionFetchResult>
