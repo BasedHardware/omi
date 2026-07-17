@@ -1172,6 +1172,14 @@ export type OmiBridgeApi = {
   /** Sign out of Claude Code (drop only its stored credentials). */
   codingAgentSignOut: () => Promise<CodingAgentAuthStatus>
   onCodingAgentEvent: (cb: (event: CodingAgentEvent) => void) => () => void
+  /** PATH auto-detect for the external agent CLIs — powers the "Installed ✓ /
+   *  Not installed" status in Settings → Agents so the user isn't guessing. */
+  codingAgentDetect: () => Promise<AgentDetectionMap>
+  /** Whether a Codex OpenAI API key is stored (boolean only — never the key). */
+  codingAgentCodexKeyStatus: () => Promise<CodexKeyStatus>
+  /** Validate + store (or clear, when blank) the Codex OpenAI API key. A 401 is
+   *  reported and not stored; an unreachable network stores with a soft warning. */
+  codingAgentSetCodexKey: (key: string) => Promise<CodexKeyResult>
   // --- Main chat (kernel-routed pi-mono) ---
   /** Which engine the main typed-chat should use: 'legacy_sse' (the existing
    *  /v2/messages path) or 'pi_mono' (the kernel-routed managed-cloud door).
@@ -1386,6 +1394,30 @@ export type CodingAgentResult = {
   text: string
   costUsd?: number
   error?: string
+}
+
+/** Whether an external agent's CLI is on PATH (Settings → Agents status). */
+export type AgentCliDetection = {
+  installed: boolean
+  /** Absolute path to the resolved binary, when found. */
+  path?: string
+  /** Version parsed from `<bin> --version`, when it answered. */
+  version?: string
+}
+
+/** Per-agent detection for the three external CLIs (Claude Code is built in). */
+export type AgentDetectionMap = Record<Exclude<CodingAgentId, 'acp'>, AgentCliDetection>
+
+/** Whether a Codex OpenAI API key is stored (never carries the key itself). */
+export type CodexKeyStatus = { hasKey: boolean }
+
+/** Outcome of saving/validating the Codex OpenAI API key. `warning` is set when
+ *  the key was stored but OpenAI could not be reached to verify it. */
+export type CodexKeyResult = {
+  ok: boolean
+  hasKey: boolean
+  error?: string
+  warning?: string
 }
 
 // --- Main chat (kernel-routed, pi-mono managed-cloud) ---

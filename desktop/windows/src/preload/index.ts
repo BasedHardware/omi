@@ -349,6 +349,9 @@ const omi: OmiBridgeApi = {
     ipcRenderer.on('codingAgent:event', listener)
     return () => ipcRenderer.removeListener('codingAgent:event', listener)
   },
+  codingAgentDetect: () => ipcRenderer.invoke('codingAgent:detect'),
+  codingAgentCodexKeyStatus: () => ipcRenderer.invoke('codingAgent:codexKeyStatus'),
+  codingAgentSetCodexKey: (key: string) => ipcRenderer.invoke('codingAgent:setCodexKey', key),
   chatGetEngine: () => ipcRenderer.invoke('chat:getEngine'),
   mainChatSend: (args: MainChatSendArgs) => ipcRenderer.invoke('mainChat:send', args),
   mainChatCancel: (runId: string) => ipcRenderer.invoke('mainChat:cancel', runId),
