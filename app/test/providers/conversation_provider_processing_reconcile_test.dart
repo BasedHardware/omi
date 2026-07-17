@@ -75,8 +75,8 @@ void main() {
 }
 
 ServerConversation _conversation(String id, {required ConversationStatus status}) => ServerConversation(
-  id: id,
-  createdAt: DateTime.utc(2026),
-  structured: Structured('Title', 'Overview'),
-  status: status,
-);
+      id: id,
+      createdAt: DateTime.utc(2026),
+      structured: Structured('Title', 'Overview'),
+      status: status,
+    );
