@@ -743,6 +743,13 @@ def _validate_cloud_run(
             )
         )
         errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                actual=actual_env,
+            )
+        )
+        errors.extend(
             _validate_cloud_run_secret_entries(
                 scope=f'cloud_run/{service}',
                 expected=service_config.get('secrets', {}),
@@ -806,6 +813,13 @@ def _validate_cloud_run_workflows(
                 strict_provisional=strict_provisional,
             )
         )
+        errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run_workflow/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                actual=actual_env,
+            )
+        )
         actual_secrets = _workflow_secret_entries_by_name(service_state.get('secrets', {}))
         errors.extend(
             _validate_cloud_run_secret_entries(
@@ -835,6 +849,13 @@ def _validate_cloud_run_workflows(
                 expected=job_config.get('env', {}),
                 actual=actual_env,
                 strict_provisional=strict_provisional,
+            )
+        )
+        errors.extend(
+            _validate_forbidden_env_entries(
+                scope=f'cloud_run_workflow/{job}',
+                forbidden=job_config.get('forbidden_env'),
+                actual=actual_env,
             )
         )
         actual_secrets = _workflow_secret_entries_by_name(job_state.get('secrets', {}))
@@ -1137,6 +1158,23 @@ def _validate_env_entries(
             if actual_secret != expected_secret:
                 errors.append(ValidationError(scope, f'env {name} secret mismatch: expected {expected_secret!r}'))
     return errors
+
+
+def _validate_forbidden_env_entries(
+    *,
+    scope: str,
+    forbidden: object,
+    actual: EnvEntryMap,
+) -> list[ValidationError]:
+    if forbidden is None:
+        return []
+    forbidden_names = _as_config_list(forbidden)
+    if forbidden_names is None or any(not isinstance(name, str) or not name for name in forbidden_names):
+        return [ValidationError(scope, 'forbidden_env must be a list of non-empty env names')]
+    return [
+        ValidationError(scope, f'forbidden env {name} is present')
+        for name in sorted(set(forbidden_names).intersection(actual))
+    ]
 
 
 def _validate_cloud_run_secret_entries(

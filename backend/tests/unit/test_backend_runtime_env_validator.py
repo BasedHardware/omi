@@ -65,6 +65,16 @@ def with_memory_env(payload: str) -> str:
     )
 
 
+def with_backend_pusher_env(payload: str) -> str:
+    return re.sub(
+        r'("backend":\s*\{.*?"env":\s*\[\s*\{"name": "GOOGLE_CLOUD_PROJECT", "value": "based-hardware"\},)',
+        r'\1\n        {"name": "HOSTED_PUSHER_API_URL", "value": "http://pusher.omiapi.com"},',
+        payload,
+        count=1,
+        flags=re.DOTALL,
+    )
+
+
 def with_sync_ledger_fence_mode(payload: str) -> str:
     """Keep offline Cloud Run state fixtures aligned with the protected rollout default."""
     return payload.replace(
@@ -81,7 +91,7 @@ GOOGLE_OAUTH_SECRETS = '''\
 
 
 def with_cloud_run_oauth_secrets(payload: str) -> str:
-    payload = with_memory_env(with_sync_ledger_fence_mode(payload))
+    payload = with_backend_pusher_env(with_memory_env(with_sync_ledger_fence_mode(payload)))
     return re.sub(
         r'^(\s*\{"name": "OMI_LLM_GATEWAY_SERVICE_TOKEN".*\}\s*\})\s*,?\s*$',
         r'\1,\n' + GOOGLE_OAUTH_SECRETS.rstrip(','),
@@ -419,6 +429,41 @@ def test_repo_prod_rendered_cloud_run_state_matches_manifest():
     errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
 
     assert errors == []
+
+
+def test_dev_cloud_run_pusher_contract_rejects_legacy_and_non_listener_bindings():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    env_config = validator._get_env_config(manifest, 'dev')
+    rendered_state = validator._build_rendered_cloud_run_state(env_config)
+
+    backend_env = rendered_state['services']['backend']['env']
+    next(entry for entry in backend_env if entry['name'] == 'HOSTED_PUSHER_API_URL')[
+        'value'
+    ] = 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal'
+    rendered_state['services']['backend-sync']['env'].append(
+        {
+            'name': 'HOSTED_PUSHER_API_URL',
+            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+        }
+    )
+    rendered_state['services']['backend-sync-backfill']['env'].append(
+        {
+            'name': 'HOSTED_PUSHER_API_URL',
+            'value': 'http://internal-alb.pusher-ep-dev.il7.us-central1.lb.based-hardware-dev.internal',
+        }
+    )
+
+    errors = validator._validate_cloud_run(env_config, rendered_state, strict_provisional=False)
+
+    assert errors == [
+        validator.ValidationError(
+            'cloud_run/backend',
+            "env HOSTED_PUSHER_API_URL value mismatch: expected 'http://pusher.omiapi.com'",
+        ),
+        validator.ValidationError('cloud_run/backend-sync', 'forbidden env HOSTED_PUSHER_API_URL is present'),
+        validator.ValidationError('cloud_run/backend-sync-backfill', 'forbidden env HOSTED_PUSHER_API_URL is present'),
+    ]
 
 
 def test_parakeet_cloud_run_surface_requires_hosted_endpoint():

@@ -269,6 +269,11 @@ legacy Cloud Run `pusher` service is not a deploy, candidate, or health-report
 surface; do not publish an image merely to make that retired surface appear
 ready.
 
+During the direct-URL retirement window, the public dev Cloud Run `backend`
+and legacy `backend-listen` services must use `http://pusher.omiapi.com`.
+Other dev Cloud Run services and jobs must not define `HOSTED_PUSHER_API_URL`.
+Retire those public endpoints only after they show no `/v4/listen` traffic.
+
 ## Deepgram Configuration
 
 When using Deepgram, the following options are configured:
