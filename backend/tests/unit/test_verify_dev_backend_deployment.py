@@ -272,20 +272,78 @@ def test_legacy_binding_migration_rejects_multi_container_services_without_mutat
     ]
 
 
-def test_legacy_binding_migration_rejects_non_dev_projects_without_gcloud_calls() -> None:
+def test_legacy_binding_migration_rejects_mismatched_projects_without_gcloud_calls() -> None:
     preflight = _load_preflight()
     calls: list[list[str]] = []
 
-    with pytest.raises(ValueError, match='development-only'):
+    with pytest.raises(ValueError, match="prod expects project 'based-hardware'"):
         preflight.migrate_legacy_public_bindings(
             services=('backend',),
             env='prod',
-            project='based-hardware',
+            project='based-hardware-dev',
             region='us-central1',
             runner=lambda command, **_kwargs: calls.append(command),
         )
 
     assert calls == []
+
+
+def test_legacy_binding_migration_strips_prod_legacy_bindings() -> None:
+    preflight = _load_preflight()
+    legacy_service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {
+                                    'name': 'GOOGLE_CLIENT_ID',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_ID', 'key': 'latest'}},
+                                },
+                                {
+                                    'name': 'GOOGLE_CLIENT_SECRET',
+                                    'valueFrom': {'secretKeyRef': {'name': 'GOOGLE_CLIENT_SECRET', 'key': 'latest'}},
+                                },
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+    commands: list[list[str]] = []
+
+    def runner(command: list[str], **_kwargs):
+        commands.append(command)
+        return SimpleNamespace(stdout=json.dumps(legacy_service))
+
+    migrated = preflight.migrate_legacy_public_bindings(
+        services=('backend',),
+        env='prod',
+        project='based-hardware',
+        region='us-central1',
+        runner=runner,
+    )
+
+    assert migrated == ['backend']
+    update = commands[-1]
+    assert update[:5] == ['gcloud', 'run', 'services', 'update', 'backend']
+    assert '--project=based-hardware' in update
+    assert '--no-traffic' in update
+    # Only the manifest-declared public setting is stripped; the real secret stays bound.
+    assert '--remove-secrets=GOOGLE_CLIENT_ID' in update
+
+
+def test_prod_deploy_invokes_legacy_binding_migration_before_deploy() -> None:
+    workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
+    text = workflow.read_text(encoding='utf-8')
+
+    assert 'backend/scripts/preflight-cloud-run-deploy.py' in text
+    assert text.count('--migrate-legacy-public-binding') == 4
+    for service in ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration'):
+        assert f'--migrate-legacy-public-binding {service}' in text
+    assert text.index('migrate-legacy-public-binding') < text.index('Deploy ${{ env.SERVICE }} to Cloud Run')
 
 
 def test_dev_deploy_invokes_legacy_binding_migration_only_for_dev_services() -> None:

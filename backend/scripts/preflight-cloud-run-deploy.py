@@ -148,7 +148,9 @@ def migrate_legacy_public_bindings(
     manifest_path: Path = DEFAULT_MANIFEST,
     runner: Any = subprocess.run,
 ) -> list[str]:
-    _require_development_scope(env=env, project=project, check_name='Legacy public-binding migration')
+    _require_manifest_scope(
+        env=env, project=project, manifest_path=manifest_path, check_name='Legacy public-binding migration'
+    )
     service_configs = _cloud_run_service_configs(env=env, manifest_path=manifest_path)
 
     migrated: list[str] = []
@@ -252,6 +254,25 @@ def check_runtime_bindings(
 def _require_development_scope(*, env: str, project: str, check_name: str) -> None:
     if env != 'dev' or project != DEVELOPMENT_PROJECT:
         raise ValueError(f'{check_name} is development-only')
+
+
+def _require_manifest_scope(*, env: str, project: str, manifest_path: Path, check_name: str) -> None:
+    """Bind an operation to the project the manifest declares for `env`.
+
+    Migration is value-preserving but rewrites live service bindings, so the
+    caller must not be able to aim one environment's contract at another's
+    project.
+    """
+    manifest = render_backend_runtime_env._load_yaml(manifest_path)
+    environments = render_backend_runtime_env._as_config_dict(manifest.get('environments'))
+    if environments is None:
+        raise ValueError(f'Missing environments in {manifest_path}')
+    environment_config = render_backend_runtime_env._as_config_dict(environments.get(env))
+    if environment_config is None:
+        raise ValueError(f'{check_name} has no {env} environment in {manifest_path}')
+    expected_project = environment_config.get('gcp_project')
+    if project != expected_project:
+        raise ValueError(f'{check_name} for {env} expects project {expected_project!r}, got {project!r}')
 
 
 def _cloud_run_service_configs(*, env: str, manifest_path: Path) -> dict[str, Any]:
