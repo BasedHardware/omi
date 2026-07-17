@@ -42,7 +42,11 @@ beforeEach(() => {
 
 afterEach(() => __resetClaudeSignIn())
 
-describe('beginClaudeSignIn', () => {
+// beginClaudeSignIn is the MID-TURN auth_required entry point (Mac's
+// isClaudeAuthRequired sheet) — it opens the upsell sheet + launches the parallel
+// OAuth. It is NOT the Settings sign-in button (that path does plain OAuth with
+// no sheet — see AgentsTab.test).
+describe('beginClaudeSignIn (mid-turn auth_required)', () => {
   it('opens the sheet AND launches the OAuth in parallel', () => {
     codingAgentStartAuth.mockReturnValue(deferred<CodingAgentStartAuthResult>().promise)
     beginClaudeSignIn()
