@@ -242,10 +242,12 @@ export class VoiceHubTurnDriver {
 
     const superseding = this.turnID !== null
 
-    // Barge-in: record the turn being superseded (its partial reply) into chat
-    // BEFORE it's torn down and its accumulators are reset — macOS
-    // recordInterruptedTurn. Exactly-once via turnRecorded; a no-op if the reply
-    // never started (empty assistant text).
+    // Barge-in: record the turn being superseded (its partial user text + partial
+    // reply) into chat BEFORE it's torn down and its accumulators are reset — macOS
+    // recordInterruptedTurn. Exactly-once via turnRecorded; a no-op only if BOTH
+    // sides are still empty (an interrupt before the user's transcript arrived and
+    // before any reply). A user-only partial IS preserved, so an early barge-in no
+    // longer silently drops the interrupted message.
     if (superseding) this.recordTurnIfUnrecorded(true)
 
     // `begin` mints the id and sends `start` (which terminates any prior turn as
@@ -456,6 +458,19 @@ export class VoiceHubTurnDriver {
             sessionID: this.sessionID,
             responseID: null
           })
+          // Mac parity (RealtimeHubController.hubDidFinishTurn): record the completed
+          // turn into the ONE chat engine the moment the provider finishes GENERATING,
+          // NOT after the spoken reply finishes PLAYING. Windows had recorded only on
+          // the terminal `success` edge, which waits for `playbackDrained` — so on a
+          // long reply the user's own message surfaced 5–30s late. The dispatch above
+          // may itself already have reached terminal success (playback drained before
+          // turn-done) and recorded via dispatch()'s terminal path; because
+          // recordTurnIfUnrecorded is idempotent (`turnRecorded`), this call is then a
+          // no-op — preserving INV-CHAT-1 exactly-once. In the common still-playing
+          // case this is the early record. Assistant text is fully accumulated by now:
+          // both providers emit their final assistant marker immediately BEFORE
+          // turn-done (geminiHubSession turnComplete / openaiHubSession response.done).
+          this.recordTurnIfUnrecorded(false)
         }
       },
       onInputTranscript: (text, isFinal) => {
@@ -574,13 +589,18 @@ export class VoiceHubTurnDriver {
   }
 
   /** Append this turn's user transcript + assistant reply to the ONE chat engine,
-   *  exactly once (macOS turnRecorded). No-op if already recorded or if either text
-   *  is empty (e.g. a cascade turn, or a barge-in before the reply started). */
+   *  exactly once (macOS turnRecorded). No-op if already recorded or if BOTH texts
+   *  are empty (e.g. a cascade turn, or a barge-in before either side produced text). */
   private recordTurnIfUnrecorded(interrupted: boolean): void {
     if (this.turnRecorded) return
     const user = this.turnTranscript.trim()
     const assistant = this.assistantText.trim()
-    if (!user || !assistant) return
+    // Record whenever AT LEAST one side has text (macOS records unconditionally at
+    // hubDidFinishTurn). A one-sided turn is real: a near-silent/short hold the
+    // provider returned no input transcription for, or a spoken reply with no text —
+    // dropping it read to users as "my message never sent." Only a BOTH-empty turn is
+    // skipped (matches the kernel handler's own guard in main/ipc/voiceHub.ts).
+    if (!user && !assistant) return
     this.turnRecorded = true
     const turnId = this.turnID as unknown as string | null
     // The warm hub SAW this turn live — mark its id so the continuity seed refresh

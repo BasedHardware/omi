@@ -406,6 +406,69 @@ describe('chat recording', () => {
     // cascade records via send, threading the per-press turnId as the shared key.
     expect(h.spies.onFinalText).toHaveBeenCalledWith('take a note', expect.any(String))
   })
+
+  it('records at provider turn-done, BEFORE the spoken reply finishes playing (Mac parity)', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    ev.onInputTranscript?.('what time is it', true, null)
+    ev.onAssistantText?.("it's noon", false, null)
+    h.driver.end()
+    ev.onSpeakingStart?.() // playback begins (lease held) — the reply is still speaking
+    ev.onTurnDone?.(null) // provider finished GENERATING (playback NOT yet drained)
+
+    // Recorded NOW — not held until playbackDrained. This is the whole fix: on a long
+    // reply the message pair must land while the audio is still playing.
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith(
+      'what time is it',
+      "it's noon",
+      false,
+      expect.any(String)
+    )
+
+    // The later playback-drain terminal must NOT double-record (INV-CHAT-1 exactly-once
+    // via the turnRecorded dedup).
+    ev.onSpeakingEnd?.() // playbackDrained -> terminal(success)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+  })
+
+  it('records a turn with an empty assistant reply (one side present) exactly once', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    ev.onInputTranscript?.('did it work', true, null)
+    // No assistant text this turn (the provider produced audio/no reply text).
+    finishTurn(h)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('did it work', '', false, expect.any(String))
+  })
+
+  it('records a turn with an empty user transcript (quiet hold) exactly once', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    const ev = h.hub.events()
+    // No input transcription (near-silent hold) — only a spoken reply.
+    ev.onAssistantText?.('here you go', false, null)
+    finishTurn(h)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledTimes(1)
+    expect(h.spies.onRecordTurn).toHaveBeenCalledWith('', 'here you go', false, expect.any(String))
+  })
+
+  it('does not record a both-empty turn', async () => {
+    const h = makeDriver({ pttHubEnabled: true })
+    h.hub.setAvailability(true)
+    h.driver.begin({ backfillMs: 0 })
+    await flush()
+    finishTurn(h) // no transcript, no reply
+    expect(h.spies.onRecordTurn).not.toHaveBeenCalled()
+  })
 })
 
 // ---- system-audio duck (A5 §5) --------------------------------------------
