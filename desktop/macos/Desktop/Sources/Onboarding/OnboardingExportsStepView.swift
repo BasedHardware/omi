@@ -22,6 +22,7 @@ struct OnboardingExportsStepView: View {
       title: "Put your memories where you work.",
       description: "Connect the tools where you want Omi context to live.",
       rightPaneFooterText: summaryText,
+      graphLeading: true,
       showsSkip: true,
       onSkip: onSkip,
       onForceComplete: onForceComplete

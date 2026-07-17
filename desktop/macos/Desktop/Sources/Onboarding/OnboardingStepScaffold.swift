@@ -64,6 +64,10 @@ struct OnboardingStepScaffold<Content: View>: View {
   let layoutMode: OnboardingLayoutMode
   let rightPaneMode: OnboardingRightPaneMode
   let rightPaneFooterText: String?
+  /// When true (split layout only), the graph/second-brain pane renders on the
+  /// leading side and the step content on the trailing side — the mirror of the
+  /// default. Used by the exports step.
+  let graphLeading: Bool
   let showsSkip: Bool
   let onSkip: (() -> Void)?
   let onForceComplete: (() -> Void)?
@@ -79,6 +83,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     layoutMode: OnboardingLayoutMode = .split,
     rightPaneMode: OnboardingRightPaneMode = .graph,
     rightPaneFooterText: String? = nil,
+    graphLeading: Bool = false,
     showsSkip: Bool = false,
     onSkip: (() -> Void)? = nil,
     onForceComplete: (() -> Void)? = nil,
@@ -93,6 +98,7 @@ struct OnboardingStepScaffold<Content: View>: View {
     self.layoutMode = layoutMode
     self.rightPaneMode = rightPaneMode
     self.rightPaneFooterText = rightPaneFooterText
+    self.graphLeading = graphLeading
     self.showsSkip = showsSkip
     self.onSkip = onSkip
     self.onForceComplete = onForceComplete
@@ -103,18 +109,33 @@ struct OnboardingStepScaffold<Content: View>: View {
     switch layoutMode {
     case .split:
       HStack(spacing: 0) {
-        splitPane
-          .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+        if graphLeading {
+          OnboardingSecondBrainPane(
+            graphViewModel: graphViewModel,
+            mode: rightPaneMode,
+            footerText: rightPaneFooterText
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
 
-        Divider()
-          .background(OmiColors.backgroundTertiary)
+          Divider()
+            .background(OmiColors.backgroundTertiary)
 
-        OnboardingSecondBrainPane(
-          graphViewModel: graphViewModel,
-          mode: rightPaneMode,
-          footerText: rightPaneFooterText
-        )
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+          splitPane
+            .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+        } else {
+          splitPane
+            .frame(minWidth: 470, idealWidth: 520, maxWidth: 560)
+
+          Divider()
+            .background(OmiColors.backgroundTertiary)
+
+          OnboardingSecondBrainPane(
+            graphViewModel: graphViewModel,
+            mode: rightPaneMode,
+            footerText: rightPaneFooterText
+          )
+          .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
       }
       .frame(maxWidth: .infinity, maxHeight: .infinity)
       .background(OmiColors.backgroundPrimary)
