@@ -90,6 +90,10 @@ function readAiProfileText(): string | undefined {
 export function readTurnPersonalization(): string {
   return buildDesktopChatPersonalization({
     userName: readUserName(),
+    // Same machine IANA zone mainChat feeds the system prompt — so task due dates
+    // render in the user's local wall-clock, matching the times the prompt tells
+    // the model to display.
+    timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
     memories: readMemories(),
     tasks: readTasks(),
     aiProfileText: readAiProfileText()

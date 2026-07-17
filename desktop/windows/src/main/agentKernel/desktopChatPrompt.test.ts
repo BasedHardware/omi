@@ -115,11 +115,40 @@ describe('buildDesktopChatPersonalization', () => {
     expect(block).toContain('Ada is a systems engineer shipping a desktop app.')
   })
 
-  it('renders a due date deterministically (UTC) when a task has one', () => {
+  it('renders a due date in the USER timezone (local wall-clock, no misleading UTC)', () => {
+    // 15:30 UTC on 2026-07-20. New York is EDT (UTC-4) → 11:30 local; the model
+    // must see the local wall-clock, not the raw UTC time, or a non-UTC user gets
+    // a due time off by their offset. Deterministic: fixed epoch + fixed tz.
+    const ny = buildDesktopChatPersonalization({
+      timezone: 'America/New_York',
+      tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
+    })
+    expect(ny).toContain('- submit report [due: 2026-07-20 11:30]')
+    // A fractional-offset zone (Kolkata, UTC+5:30) → 21:00 local, proving it is a
+    // real tz conversion and not a fixed slice.
+    const kolkata = buildDesktopChatPersonalization({
+      timezone: 'Asia/Kolkata',
+      tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
+    })
+    expect(kolkata).toContain('- submit report [due: 2026-07-20 21:00]')
+  })
+
+  it('marks the due date as UTC when no timezone is known (never unlabeled)', () => {
+    // No tz → deterministic UTC with an explicit marker so the model can convert
+    // instead of reading it as-if-local. Also proves the pure builder never falls
+    // back to the non-deterministic runtime-local zone.
     const block = buildDesktopChatPersonalization({
       tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
     })
-    expect(block).toContain('- submit report [due: 2026-07-20 15:30]')
+    expect(block).toContain('- submit report [due: 2026-07-20 15:30 UTC]')
+  })
+
+  it('falls back to marked UTC when the timezone id is invalid', () => {
+    const block = buildDesktopChatPersonalization({
+      timezone: 'Not/AZone',
+      tasks: [{ description: 'submit report', dueAt: Date.UTC(2026, 6, 20, 15, 30) }]
+    })
+    expect(block).toContain('- submit report [due: 2026-07-20 15:30 UTC]')
   })
 
   it('falls back to "the user" in the facts header when no name is given', () => {

@@ -156,6 +156,10 @@ export interface DesktopChatPersonalizationTask {
 export interface DesktopChatPersonalization {
   /** The signed-in user's given name; falls back to "the user" in the header. */
   userName?: string
+  /** IANA timezone id (e.g. "America/New_York") for rendering task due dates in
+   *  the user's local wall-clock — same tz the system prompt is told to display
+   *  times in. Omitted → due dates render as UTC with an explicit marker. */
+  timezone?: string
   /** Memory contents, newest-first; capped to Mac's 30. */
   memories?: string[]
   /** Active (incomplete) tasks; capped to Mac's 20. */
@@ -168,12 +172,34 @@ export interface DesktopChatPersonalization {
 const MEMORIES_CAP = 30
 const TASKS_CAP = 20
 
-/** Render a due date deterministically as "YYYY-MM-DD HH:mm" in UTC. Pure/stable
- *  for tests; UTC (not the machine's zone) so the same input always renders the
- *  same string. The prompt already tells the model to show times in the user's
- *  timezone, so an absolute reference here is fine context. */
-function formatDueAt(dueAt: number): string {
-  return new Date(dueAt).toISOString().slice(0, 16).replace('T', ' ')
+/** Render a due date as "YYYY-MM-DD HH:mm" in the USER'S timezone (Mac renders
+ *  task.dueAt with a local-zone DateFormatter). The prompt tells the model to
+ *  show times in the user's tz, so feeding it the local wall-clock keeps them
+ *  consistent — an unlabeled UTC time would be read as-if-local and be off by the
+ *  user's offset. Deterministic for a fixed (epoch, tz). When no tz is known (or
+ *  it is invalid), fall back to UTC WITH an explicit marker so the model never
+ *  mistakes it for local time, and the pure builder stays test-deterministic
+ *  (never the runtime-local zone). */
+function formatDueAt(dueAt: number, timezone?: string): string {
+  if (timezone) {
+    try {
+      const parts = new Intl.DateTimeFormat('en-US', {
+        timeZone: timezone,
+        year: 'numeric',
+        month: '2-digit',
+        day: '2-digit',
+        hour: '2-digit',
+        minute: '2-digit',
+        hourCycle: 'h23'
+      }).formatToParts(new Date(dueAt))
+      const at = (type: Intl.DateTimeFormatPartTypes): string =>
+        parts.find((p) => p.type === type)?.value ?? ''
+      return `${at('year')}-${at('month')}-${at('day')} ${at('hour')}:${at('minute')}`
+    } catch {
+      // Invalid timezone id → fall through to the marked-UTC path below.
+    }
+  }
+  return `${new Date(dueAt).toISOString().slice(0, 16).replace('T', ' ')} UTC`
 }
 
 /**
@@ -206,7 +232,7 @@ export function buildDesktopChatPersonalization(p: DesktopChatPersonalization = 
       let line = `- ${t.description.trim()}`
       if (t.priority && t.priority.trim()) line += ` [priority: ${t.priority.trim()}]`
       if (typeof t.dueAt === 'number' && Number.isFinite(t.dueAt)) {
-        line += ` [due: ${formatDueAt(t.dueAt)}]`
+        line += ` [due: ${formatDueAt(t.dueAt, p.timezone)}]`
       }
       if (t.category && t.category.trim()) line += ` [category: ${t.category.trim()}]`
       return line
