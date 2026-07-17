@@ -4,11 +4,11 @@ import Foundation
 
 /// Narrow, page-owned playback boundary for the capture archive. A ready
 /// aggregate artifact is the only state that promises exact moment seeking.
-protocol CapturePlaybackProviding {
+protocol CapturePlaybackProviding: Sendable {
   func resolvePlayback(for capture: ServerConversation) async -> CapturePlaybackResolution
 }
 
-enum CapturePlaybackResolution: Equatable {
+enum CapturePlaybackResolution: Equatable, Sendable {
   case readyAggregate(CapturePlaybackArtifact)
   case fileFallback(CapturePlaybackFile)
   case pending(pollAfterMs: Int?)
@@ -28,13 +28,13 @@ enum CapturePlaybackResolution: Equatable {
   }
 }
 
-struct CapturePlaybackFile: Equatable {
+struct CapturePlaybackFile: Equatable, Sendable {
   let id: String
   let signedURL: URL
   let duration: TimeInterval
 }
 
-struct CapturePlaybackArtifact: Equatable {
+struct CapturePlaybackArtifact: Equatable, Sendable {
   let signedURL: URL
   let duration: TimeInterval
   let spans: [CaptureAudioURLSpan]
@@ -43,10 +43,12 @@ struct CapturePlaybackArtifact: Equatable {
   /// artifact's media offset. It returns nil across a gap or missing span;
   /// callers must not seek a per-file fallback and claim accuracy.
   func artifactOffset(forWallOffset wallOffset: TimeInterval) -> TimeInterval? {
-    guard let span = spans.first(where: {
-      let end = $0.wallOffset + $0.length
-      return wallOffset >= $0.wallOffset && wallOffset < end
-    }) else {
+    guard
+      let span = spans.first(where: {
+        let end = $0.wallOffset + $0.length
+        return wallOffset >= $0.wallOffset && wallOffset < end
+      })
+    else {
       return nil
     }
     return span.artifactOffset + (wallOffset - span.wallOffset)

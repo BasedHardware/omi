@@ -1,6 +1,6 @@
 import Combine
-import CryptoKit
 import CoreGraphics
+import CryptoKit
 @preconcurrency import GRDB
 import OmiSupport
 import SwiftUI
@@ -3898,17 +3898,122 @@ class ChatProvider: ObservableObject {
       intents.count <= 8,
       intents.allSatisfy({ $0.accountGeneration == session.capability.controlGeneration })
     else { return nil }
+    let encodedIntents = try JSONEncoder().encode(intents)
+    guard let intentsJSON = String(data: encodedIntents, encoding: .utf8) else {
+      throw APIError.invalidResponse
+    }
     let result = try await resolvedAgentClient().materializeChatFirstIntents(
       surface: session.surface,
       ownerID: session.ownerID,
       sessionID: session.agentSession.sessionId,
       controlGeneration: session.capability.controlGeneration,
-      intents: intents
+      intentsJSON: intentsJSON
     )
     if result.accepted {
       await kernelTurnProjection.refresh(surface: session.surface)
     }
     return result
+  }
+
+  /// Local/offline E2E probe for the ordinary authorized block-rendering path.
+  /// It reserves canonical journal rows before invoking the fixture, so a
+  /// successful probe proves the real executor and projection paths.
+  func runChatFirstFixtureTaskCardProbe() async -> [String: String] {
+    let stage = ProcessInfo.processInfo.environment["OMI_ENV_STAGE"]
+    let isLocalOrOfflineStage = stage == "local" || stage == "offline"
+    guard AppBuild.allowsLocalAutomation,
+      isLocalOrOfflineStage,
+      !isSending,
+      let session = try? await chatFirstMaterializationSession()
+    else {
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
+
+    await kernelTurnProjection.refresh(surface: session.surface)
+    let fixtureTaskID = "chat-first-e2e-task-v1"
+    let beforeCount = messages.reduce(into: 0) { count, message in
+      count += message.contentBlocks.reduce(into: 0) { blockCount, block in
+        if case .taskCard(_, let taskID) = block, taskID == fixtureTaskID {
+          blockCount += 1
+        }
+      }
+    }
+    let continuityKey = "chat-first-e2e-executor-\(UUID().uuidString.lowercased())"
+    let ids = Self.messageIds(forAttemptId: continuityKey)
+    let userMessage = ChatMessage(
+      id: ids.user,
+      clientTurnId: continuityKey,
+      text: "Render the Chat-first fixture task card.",
+      sender: .user,
+      turnOwner: .mainChat
+    )
+    let assistantMessage = ChatMessage(
+      id: ids.assistant,
+      clientTurnId: continuityKey,
+      text: "",
+      sender: .ai,
+      isStreaming: true,
+      turnOwner: .mainChat,
+      hidesEmptyStreamingPlaceholder: true
+    )
+    guard
+      await recordStreamingJournalExchange(
+        surface: session.surface,
+        ownerID: session.ownerID,
+        continuityKey: continuityKey,
+        userMessage: userMessage,
+        assistantMessage: assistantMessage,
+        origin: journalOrigin(for: session.surface),
+        appId: overrideAppId ?? selectedAppId,
+        sessionId: isInDefaultChat ? nil : currentSessionId,
+        messageSource: journalOrigin(for: session.surface)
+      )
+    else {
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
+
+    do {
+      let receipt = try await resolvedAgentClient().invokeChatFirstFixtureTaskCard(
+        ownerID: session.ownerID,
+        sessionID: session.agentSession.sessionId,
+        producingTurnID: ids.assistant,
+        controlGeneration: session.capability.controlGeneration
+      )
+      await kernelTurnProjection.refresh(surface: session.surface)
+      let afterCount = messages.reduce(into: 0) { count, message in
+        count += message.contentBlocks.reduce(into: 0) { blockCount, block in
+          if case .taskCard(_, let taskID) = block, taskID == fixtureTaskID {
+            blockCount += 1
+          }
+        }
+      }
+      let rendered = receipt.journalBlockRendered && afterCount == beforeCount + 1
+      return [
+        "executor_invoked": receipt.executorInvoked ? "true" : "false",
+        "validated": receipt.validated ? "true" : "false",
+        "journal_block_rendered": rendered ? "true" : "false",
+      ]
+    } catch {
+      _ = await finishJournalUpdate(
+        messageId: ids.assistant,
+        status: .failed,
+        surface: session.surface,
+        ownerID: session.ownerID
+      )
+      return [
+        "executor_invoked": "false",
+        "validated": "false",
+        "journal_block_rendered": "false",
+      ]
+    }
   }
 
   private struct ChatFirstMaterializationSession {
@@ -4051,7 +4156,6 @@ class ChatProvider: ObservableObject {
         telemetryAttempt.finish(stopReason: turnLifecycle.stopReason ?? stopReason(for: sendGen))
         clearChatTelemetryState(for: sendGen)
         releaseSendLock(sendGeneration: sendGen)
-
 
         return nil
       }

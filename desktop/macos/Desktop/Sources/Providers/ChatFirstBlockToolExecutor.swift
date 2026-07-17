@@ -49,11 +49,16 @@ enum ChatFirstBlockToolExecutor {
         expectedOwnerId: expectedOwnerID,
         authorizationSnapshot: authorizationSnapshot
       )
-      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+      else {
         return ChatToolExecutor.authorizedOwnerChangedResult()
       }
       guard let journalBlocks = ChatFirstBlockWire.journalBlocks(from: receipt) else {
         return #"{"ok":false,"error":{"code":"chat_first_blocks_rejected"}}"#
+      }
+      let journalBlocksData = try JSONSerialization.data(withJSONObject: journalBlocks)
+      guard let journalBlocksJSON = String(data: journalBlocksData, encoding: .utf8) else {
+        return #"{"ok":false,"error":{"code":"chat_first_blocks_unavailable"}}"#
       }
       _ = try await AgentRuntimeProcess.shared.appendChatFirstBlocks(
         clientId: "chat-first-render",
@@ -64,12 +69,13 @@ enum ChatFirstBlockToolExecutor {
         attemptID: attemptID,
         capabilityRef: capabilityRef,
         controlGeneration: controlGeneration,
-        blocks: journalBlocks,
+        blocksJSON: journalBlocksJSON,
         authorizationSnapshot: authorizationSnapshot
       )
       return #"{"ok":true,"rendered":#(journalBlocks.count)}"#
     } catch {
-      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot) else {
+      guard ChatToolExecutor.isExpectedOwnerCurrent(expectedOwnerID, authorizationSnapshot: authorizationSnapshot)
+      else {
         return ChatToolExecutor.authorizedOwnerChangedResult()
       }
       logError("Chat-first block rendering failed", error: error)

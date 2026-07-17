@@ -6715,7 +6715,7 @@ public enum OmiAPI {
 
   public static func recordChatDeferralV1ChatDeferralsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/chat/deferrals"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }
@@ -6741,7 +6741,7 @@ public enum OmiAPI {
 
   public static func materializePromptsV1ChatMaterializePromptsPost(client: OmiApiClient, authorization: String? = nil, xAppPlatform: String? = nil, xDeviceIdHash: String? = nil, xAppVersion: String? = nil, body: OmiAnyCodable) async throws -> OmiAnyCodable {
     let _path = "/v1/chat/materialize-prompts"
-    guard var components = URLComponents(string: client.baseURL + _path) else {
+    guard let components = URLComponents(string: client.baseURL + _path) else {
       throw OmiApiError.invalidURL
     }
     guard let url = components.url else { throw OmiApiError.invalidURL }

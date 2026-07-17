@@ -52,8 +52,10 @@ struct ChatFirstMaterializationContext: Equatable, Sendable {
   let controlGeneration: Int
 }
 
-struct ChatFirstPromptIntent: Decodable {
-  enum Source: String, Decodable, Sendable {
+/// Intent blocks are immutable decoded JSON. They are immediately encoded at
+/// the runtime boundary rather than shared as mutable Foundation collections.
+struct ChatFirstPromptIntent: Codable, @unchecked Sendable {
+  enum Source: String, Codable, Sendable {
     case dailyOpener = "daily_opener"
     case captureArrival = "capture_arrival"
     case deferralReraise = "deferral_reraise"
@@ -84,7 +86,7 @@ struct ChatFirstPromptIntent: Decodable {
   }
 }
 
-struct ChatFirstMaterializePromptsResponse: Decodable {
+struct ChatFirstMaterializePromptsResponse: Decodable, @unchecked Sendable {
   let intents: [ChatFirstPromptIntent]
 }
 

@@ -56,7 +56,7 @@ extension AgentBridge {
     ownerID: String,
     sessionID: String,
     controlGeneration: Int,
-    intents: [ChatFirstPromptIntent],
+    intentsJSON: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
     let authorization = try resolveAuthorization(
@@ -69,7 +69,7 @@ extension AgentBridge {
       ownerID: ownerID,
       sessionID: sessionID,
       controlGeneration: controlGeneration,
-      intents: intents,
+      intentsJSON: intentsJSON,
       authorizationSnapshot: authorization
     )
   }

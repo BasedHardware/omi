@@ -27,19 +27,19 @@ private enum CaptureArchiveRepositoryError: Error {
   case receivedNonArchiveCapture
 }
 
-private extension ServerConversation {
-  var isOmiCaptureArchiveRecord: Bool {
+extension ServerConversation {
+  fileprivate var isOmiCaptureArchiveRecord: Bool {
     source == .omi && !discarded && (status == .completed || status == .processing)
   }
 }
 
-protocol CaptureArchiveRemoteDataSource {
+protocol CaptureArchiveRemoteDataSource: Sendable {
   func list(query: CaptureArchiveQuery) async throws -> [ServerConversation]
   func count(query: CaptureArchiveQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation
 }
 
-protocol CaptureArchiveLocalDataSource {
+protocol CaptureArchiveLocalDataSource: Sendable {
   func list(query: CaptureArchiveQuery) async throws -> [ServerConversation]
   func count(query: CaptureArchiveQuery) async throws -> Int
   func detail(id: String) async throws -> ServerConversation?

@@ -264,14 +264,14 @@ enum AgentClient {
       ownerID: String,
       sessionID: String,
       controlGeneration: Int,
-      intents: [ChatFirstPromptIntent]
+      intentsJSON: String
     ) async throws -> AgentRuntimeProcess.ChatFirstIntentsMaterialization {
       try await bridge.materializeChatFirstIntents(
         surface: surface,
         ownerID: ownerID,
         sessionID: sessionID,
         controlGeneration: controlGeneration,
-        intents: intents
+        intentsJSON: intentsJSON
       )
     }
 

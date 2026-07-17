@@ -4,7 +4,7 @@ import Foundation
 /// The narrow canonical-goal contract shared by the cohort-only Chat renderers
 /// and Goals destination. It intentionally has no relationship to the
 /// Dashboard recommendation/outbox state.
-protocol CanonicalGoalsClient: AnyObject {
+protocol CanonicalGoalsClient: AnyObject, Sendable {
   func getCanonicalGoals(
     includeEnded: Bool,
     expectedOwnerId: String?,

@@ -1,6 +1,6 @@
 import Foundation
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// The two deliberate scheduling groups in the cohort Tasks page. This folds
 /// the legacy page's Tomorrow, Later, and no-deadline buckets into a single
@@ -230,7 +230,7 @@ struct ChatFirstTasksPage: View {
       .foregroundStyle(OmiColors.textSecondary)
       .accessibilityIdentifier("chat-first-tasks-discuss")
 
-      if let error = tasksStore.error, !visibleTasks.isEmpty {
+      if tasksStore.error != nil, !visibleTasks.isEmpty {
         HStack(spacing: OmiSpacing.sm) {
           Image(systemName: "exclamationmark.triangle")
             .accessibilityHidden(true)
@@ -257,7 +257,7 @@ struct ChatFirstTasksPage: View {
       }
       .onAppear { scrollPendingFocusIntoView(proxy) }
       .onChange(of: navigation.pendingFocus) { _, _ in scrollPendingFocusIntoView(proxy) }
-      .onChange(of: visibleTasks.map(\.id)) { _ in scrollPendingFocusIntoView(proxy) }
+      .onChange(of: visibleTasks.map(\.id)) { _, _ in scrollPendingFocusIntoView(proxy) }
     }
   }
 
@@ -383,10 +383,11 @@ struct ChatFirstTasksPage: View {
   }
 
   private func acknowledgeVisibleTaskIfNeeded(_ taskID: String) {
-    guard let focus = ChatFirstTaskPagePolicy.focusToAcknowledge(
-      pendingFocus: navigation.pendingFocus,
-      visibleTaskID: taskID
-    ), navigation.acknowledgeFocus(focus)
+    guard
+      let focus = ChatFirstTaskPagePolicy.focusToAcknowledge(
+        pendingFocus: navigation.pendingFocus,
+        visibleTaskID: taskID
+      ), navigation.acknowledgeFocus(focus)
     else { return }
 
     highlightedTaskID = taskID
@@ -398,10 +399,12 @@ struct ChatFirstTasksPage: View {
   }
 
   private func acknowledgeVisibleGoalIfNeeded(_ goalID: String) {
-    guard let focus = ChatFirstTaskPagePolicy.goalFocusToAcknowledge(
-      pendingFocus: navigation.pendingFocus,
-      visibleGoalID: goalID
-    ) else { return }
+    guard
+      let focus = ChatFirstTaskPagePolicy.goalFocusToAcknowledge(
+        pendingFocus: navigation.pendingFocus,
+        visibleGoalID: goalID
+      )
+    else { return }
     _ = navigation.acknowledgeFocus(focus)
   }
 
