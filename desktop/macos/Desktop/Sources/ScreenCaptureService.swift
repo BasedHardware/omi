@@ -521,6 +521,12 @@ final class ScreenCaptureService: Sendable {
       return resolved
     }
 
+    // The capture caller needs to see system-owned no-window targets so it can
+    // pause instead of capturing the previous app from the cache.
+    if let resolved, ScreenCaptureTargetPolicy.shouldWaitForUserWindow(appName: resolved.appName) {
+      return resolved
+    }
+
     // Preserve capture through a brief helper/system/secure-window transition.
     if let cached = getCachedActiveWindowSnapshot() {
       let shouldLog = axStateLock.withLock { () -> Bool in

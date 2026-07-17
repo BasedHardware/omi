@@ -49,6 +49,27 @@ final class ScreenCaptureResolverCacheTests: XCTestCase {
     XCTAssertEqual(ScreenCaptureService._peekActiveWindowCacheForTests(), seededSnapshot)
   }
 
+  func testSystemNoWindowResolutionSkipsFreshCaptureableCache() async {
+    for systemApp in ["loginwindow", "ScreenSaverEngine"] {
+      ScreenCaptureService._resetActiveWindowCacheForTests()
+      ScreenCaptureService._seedActiveWindowCacheForTests(
+        appName: "Safari",
+        windowTitle: "GitHub",
+        windowID: CGWindowID(42),
+        resolvedAt: Date()
+      )
+      ScreenCaptureService._resolverOverrideForTests = {
+        (appName: systemApp, windowTitle: nil, windowID: nil)
+      }
+
+      let result = await ScreenCaptureService.getActiveWindowInfoAsync()
+
+      XCTAssertEqual(result.appName, systemApp)
+      XCTAssertNil(result.windowID)
+      XCTAssertEqual(ScreenCaptureService._peekActiveWindowCacheForTests()?.windowID, CGWindowID(42))
+    }
+  }
+
   func testNoWindowResolutionWithoutCacheDoesNotCreatePoisonedSnapshot() async {
     ScreenCaptureService._resolverOverrideForTests = {
       (appName: "Secure Surface", windowTitle: nil, windowID: nil)
