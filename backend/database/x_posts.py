@@ -130,7 +130,7 @@ def get_x_posts(uid: str, limit: int = 100, kind: Optional[str] = None) -> List[
             raw: object = d.to_dict()
             if isinstance(raw, dict):
                 docs.append(cast(Dict[str, Any], raw))
-        docs.sort(key=lambda x: x.get('created_at') or '', reverse=True)
+        docs.sort(key=lambda x: str(x.get('created_at') or ''), reverse=True)
         return docs[:limit]
     query = coll.order_by('created_at', direction=firestore.Query.DESCENDING).limit(limit)
     out: List[Dict[str, Any]] = []
