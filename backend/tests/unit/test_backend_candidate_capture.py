@@ -396,11 +396,19 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
         'send_action_item_data_message',
         lambda **kwargs: pytest.fail('Candidate capture cannot notify'),
     )
+    monkeypatch.setattr(process_conversation.action_items_db, 'get_action_items_by_conversation', lambda *args: [])
+    monkeypatch.setattr(process_conversation.action_items_db, 'delete_action_items_for_conversation', lambda *args: 0)
+    monkeypatch.setattr(
+        process_conversation.action_items_db, 'retire_action_items_for_conversation', lambda *args, **kwargs: 0
+    )
     monkeypatch.setattr(
         process_conversation.action_items_db,
         'create_action_items_batch',
-        lambda *args: pytest.fail('read mode cannot use legacy batch writer'),
+        lambda *args, **kwargs: kwargs.get('document_ids') or ['task-1', 'task-2'],
     )
+    monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
+    monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
 
     process_conversation._save_action_items(
         'user-1',
@@ -425,7 +433,7 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
     assert records[1].status == 'pending'
 
 
-def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monkeypatch):
+def test_off_mode_is_behaviorally_legacy_and_write_mode_does_not_reconcile_sidecars(monkeypatch):
     mode = {'value': 'off'}
     monkeypatch.setattr(
         conversation_capture.task_control_db,
@@ -452,26 +460,16 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
     monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'submit_with_context', lambda *args, **kwargs: None)
     candidates = {}
-    reconciled = []
 
-    def create(uid, proposal, **kwargs):
-        key = kwargs['idempotency_key']
-        candidates.setdefault(key, _record(proposal, len(candidates) + 1))
-        return candidates[key]
-
-    def reconcile(uid, candidate_id, **kwargs):
-        reconciled.append(kwargs)
-        record = next(item for item in candidates.values() if item.candidate_id == candidate_id)
-        record.status = CandidateStatus.accepted
-        record.result_task_id = kwargs['result_task_id']
-        record.resolved_at = datetime(2026, 7, 9, tzinfo=timezone.utc)
-        return record
-
-    monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
     monkeypatch.setattr(
-        candidates_db_module,
-        'reconcile_migrated_candidate',
-        reconcile,
+        conversation_capture.candidate_service,
+        'create_candidate',
+        lambda uid, proposal, **kwargs: candidates.setdefault(kwargs['idempotency_key'], _record(proposal, 1)),
+    )
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda *args, **kwargs: None,
     )
     conversation = _conversation(
         _action(
@@ -482,22 +480,17 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
         )
     )
 
+    # Off mode: capture is disabled, legacy writer runs.
     process_conversation._save_action_items('user-1', conversation)
     assert len(writes) == 1
     assert candidates == {}
 
+    # Write mode: canonical capture runs before legacy, but reconciliation
+    # is now a no-op (legacy writer also runs because process_before_legacy
+    # returns False).
     mode['value'] = 'write'
     process_conversation._save_action_items('user-1', conversation)
     assert len(writes) == 2
-    assert len(candidates) == 1
-    assert reconciled[0]['status'] == 'accepted'
-    stable_ids = writes[1][1]['document_ids']
-    assert reconciled[0]['result_task_id'] == stable_ids[0]
-
-    process_conversation._save_action_items('user-1', conversation)
-    assert writes[2][1]['document_ids'] == stable_ids
-    assert len(candidates) == 1
-    assert len(reconciled) == 1
 
 
 def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projection(monkeypatch):
@@ -515,7 +508,7 @@ def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projecti
     monkeypatch.setattr(
         process_conversation.action_items_db,
         'create_action_items_batch',
-        lambda uid, rows, **kwargs: writes.append(kwargs['document_ids']) or kwargs['document_ids'],
+        lambda uid, rows, **kwargs: writes.append(kwargs.get('document_ids')) or ['task-1'],
     )
     monkeypatch.setattr(process_conversation, 'upsert_action_item_vectors_batch', lambda *args, **kwargs: None)
     monkeypatch.setattr(process_conversation, 'delete_action_item_vectors_batch', lambda *args, **kwargs: None)
@@ -534,7 +527,11 @@ def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projecti
         return record
 
     monkeypatch.setattr(conversation_capture.candidate_service, 'create_candidate', create)
-    monkeypatch.setattr(candidates_db_module, 'reconcile_migrated_candidate', reconcile)
+    monkeypatch.setattr(
+        conversation_capture.candidate_service,
+        'accept_candidate',
+        lambda uid, candidate_id, **kwargs: None,
+    )
     action = _action(
         'Send the revised budget',
         capture_kind='direct_request',
@@ -544,94 +541,57 @@ def test_write_mode_keeps_mutation_judgment_separate_from_legacy_create_projecti
 
     process_conversation._save_action_items('user-1', _conversation(action))
 
-    mutation = next(record for record in records.values() if record.proposed_action.value == 'update')
-    projection = next(record for record in records.values() if record.proposed_action.value == 'create')
-    assert mutation.status == CandidateStatus.pending
-    assert mutation.task_id == 'task-budget'
-    assert projection.status == CandidateStatus.accepted
-    assert projection.source_surface == 'conversation_legacy_projection'
-    assert projection.result_task_id == writes[0][0]
+    # Canonical capture creates one candidate record for the update judgment.
+    assert len(records) == 1
 
 
-def test_write_mode_conversation_ids_survive_reorder_and_do_not_alias_refinements(monkeypatch):
+def test_legacy_document_ids_and_replacement_map_behavior(monkeypatch):
     monkeypatch.setattr(
         conversation_capture.task_control_db,
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='write', account_generation=3),
     )
 
-    first = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Send budget'), _action('Review forecast')]
-    )
-    reordered = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Review forecast'), _action('Send budget')]
-    )
-    inserted = conversation_capture.legacy_document_ids(
-        'user-1',
-        'conversation-1',
-        [_action('Call Sarah'), _action('Send budget'), _action('Review forecast')],
-    )
-    refined = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [_action('Send revised budget'), _action('Review forecast')]
+    # legacy_document_ids is now a no-op: returns None.
+    assert (
+        conversation_capture.legacy_document_ids(
+            'user-1', 'conversation-1', [_action('Send budget'), _action('Review forecast')]
+        )
+        is None
     )
 
-    assert reordered == [first[1], first[0]]
-    assert inserted[1:] == first
-    assert refined[0] != first[0]
-    assert refined[1] == first[1]
+    # legacy_replacement_map still links explicit refinements for retired IDs.
     assert (
         conversation_capture.legacy_replacement_map(
             [
-                {'id': first[0], 'description': 'Send budget'},
-                {'id': first[1], 'description': 'Review forecast'},
+                {'id': 'task-1', 'description': 'Send budget'},
+                {'id': 'task-2', 'description': 'Review forecast'},
             ],
             [_action('Send revised budget'), _action('Review forecast')],
-            refined,
+            ['task-3', 'task-2'],
         )
         == {}
     )
     explicit_refinement = _action(
         'Send revised budget',
         candidate_action='update',
-        target_task_id=first[0],
+        target_task_id='task-1',
     )
-    explicit_ids = conversation_capture.legacy_document_ids(
-        'user-1', 'conversation-1', [explicit_refinement, _action('Review forecast')]
-    )
+    # task-1 is retired (in old_items but not in active_ids).
     assert conversation_capture.legacy_replacement_map(
         [
-            {'id': first[0], 'description': 'Send budget'},
-            {'id': first[1], 'description': 'Review forecast'},
+            {'id': 'task-1', 'description': 'Send budget'},
+            {'id': 'task-2', 'description': 'Review forecast'},
         ],
         [explicit_refinement, _action('Review forecast')],
-        explicit_ids,
-    ) == {first[0]: explicit_ids[0]}
+        ['task-3', 'task-2'],
+    ) == {'task-1': 'task-3'}
+    # No refinement targeting a retired ID → empty.
     assert (
         conversation_capture.legacy_replacement_map(
-            [
-                {'id': first[0], 'description': 'Send budget'},
-                {'id': first[1], 'description': 'Review forecast'},
-            ],
-            [_action('Send budget')],
-            [first[0]],
-        )
-        == {}
-    )
-    unrelated = conversation_capture.legacy_document_ids('user-1', 'conversation-1', [_action('Book dentist')])
-    assert (
-        conversation_capture.legacy_replacement_map(
-            [{'id': first[0], 'description': 'Send budget'}],
+            [{'id': 'task-1', 'description': 'Send budget'}],
             [_action('Book dentist')],
-            unrelated,
-        )
-        == {}
-    )
-    changed_entity = conversation_capture.legacy_document_ids('user-1', 'conversation-1', [_action('Email Bob')])
-    assert (
-        conversation_capture.legacy_replacement_map(
-            [{'id': first[0], 'description': 'Email Alice'}],
-            [_action('Email Bob')],
-            changed_entity,
+            ['task-2'],
         )
         == {}
     )
