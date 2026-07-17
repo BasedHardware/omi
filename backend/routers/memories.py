@@ -119,12 +119,11 @@ class V3GetRuntime:
 def get_v3_get_runtime(uid: str = Depends(auth.get_current_user_uid)):
     """Return the production/default runtime bundle for GET `/v3/memories`.
 
-    Default production behavior is still disabled. Server-owned configuration can
-    only enter memory when all of these are true: `MEMORY_MODE` is not off,
-    `MEMORY_ENABLED_USERS` contains the authenticated uid, the persisted
-    control state is read-mode, and global/read-convergence gates allow the
-    composed service to proceed. Client headers, query params, request bodies,
-    and persisted user docs alone cannot activate memory.
+    The code-owned canonical-memory selector chooses the cohort. Enrolled
+    accounts then require a valid, generation-matched projection/control state;
+    any unavailable or stale state fails closed instead of returning legacy
+    memory. Client headers, query params, request bodies, and persisted user
+    docs alone cannot activate canonical memory.
     """
 
     return build_v3_production_runtime(uid=uid, db_client=getattr(db_client_module, 'db', None))
@@ -648,26 +647,31 @@ def get_memories(
         _validate_device_scope_request(scope_request.device_scope, scope_request.client_device_id)
         _set_device_scope_capability_header(response, supported=True)
         _set_canonical_lifecycle_exposure_header(response, exposed=True)
-        # Clamp pagination parameters so the canonical branch (which bypasses
-        # _legacy_get_memories clamping) never receives values that would
-        # slice the visible list incorrectly — e.g. limit=-1 returning nearly
-        # the entire list or negative offsets producing inconsistent pages.
+        # Clamp pagination parameters before handing an eligible account to a
+        # canonical reader.
         clamped_offset = max(0, offset)
-        clamped_limit = max(1, min(limit, 5000))
-        # Preserve the historical first-page load for the mobile MemoriesProvider,
-        # which calls getMemoriesResult() with its default limit and has no
-        # load-more path. Legacy users get this expansion via _legacy_get_memories;
-        # canonical users must get the same first-page behavior so accounts with
-        # more than 100 memories do not silently see only the newest 100.
-        if clamped_offset == 0:
-            clamped_limit = 5000
-        return MemoryService(db_client=db_client).read(
-            uid,
-            limit=clamped_limit,
-            offset=clamped_offset,
-            device_scope_request=scope_request,
-            include_pending_processing=True,
-        )
+        # `/v3/memories` is the generation-bound V3 projection contract. The
+        # canonical selector must not bypass that contract through the general
+        # memory-service reader: an unavailable or stale projection is a 503,
+        # never a legacy/general-memory fallback. Device-scoped reads remain on
+        # the canonical service path because V3's compatibility projection has
+        # no device-scope representation.
+        if scope_request.device_scope != 'all':
+            # Preserve the historical first-page expansion for this separate
+            # canonical service path.
+            clamped_limit = max(1, min(limit, 5000))
+            if clamped_offset == 0:
+                clamped_limit = 5000
+            return MemoryService(db_client=db_client).read(
+                uid,
+                limit=clamped_limit,
+                offset=clamped_offset,
+                device_scope_request=scope_request,
+                include_pending_processing=True,
+            )
+        # V3's compositional contract limits a page to 500 items.
+        limit = max(1, min(limit, 500))
+        offset = clamped_offset
 
     if memory_runtime.source_decision != 'memory_read':
         return _legacy_memories_response(_legacy_get_memories(uid, limit, offset))

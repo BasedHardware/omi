@@ -32,8 +32,8 @@ WATERMARK = "NOT_ACTIVATION_EVIDENCE"
 DEFAULT_LOCAL_USER_ID = "local_default_user"
 ALICE_USER_ID = "alice"
 BOB_USER_ID = "bob"
-CHAT_FIRST_E2E_ENABLED_USER_ID = "omi-chat-first-e2e-enabled"
-CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID = "omi-chat-first-e2e-out-of-cohort"
+CHAT_FIRST_E2E_ENABLED_USER_ID = "omi-local-emulator-chat-first-enabled-v1"
+CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID = "omi-local-emulator-chat-first-disabled-v1"
 # Short-term seeds must stay visible across long local-dev sessions.
 SHORT_TERM_EXPIRES_AT = "2027-12-31T23:59:59Z"
 SYNTHETIC_SOURCE_VERSION = "memory-local-synthetic-source-1"
@@ -1312,6 +1312,63 @@ def _apply_firestore_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> 
             os.environ["FIRESTORE_EMULATOR_HOST"] = old_host
 
 
+_AUTH_EMULATOR_APP_NAME = 'omi-local-dev-harness-auth-emulator'
+
+
+def _apply_auth_admin_sdk(cfg: config.HarnessConfig, op: SeedOperation) -> bool:
+    """Seed fixed Auth-emulator UIDs through the Firebase Admin API.
+
+    The client sign-up endpoint chooses a random ``localId``.  The Admin API
+    accepts the operation target as ``uid``, which lets the enabled Chat-first
+    harness account be a member of the same static product whitelist used in
+    every other environment.
+    """
+
+    try:
+        import firebase_admin
+        from firebase_admin import auth as firebase_auth
+    except ImportError:
+        return False
+
+    old_host = os.environ.get('FIREBASE_AUTH_EMULATOR_HOST')
+    os.environ['FIREBASE_AUTH_EMULATOR_HOST'] = cfg.auth_host
+    try:
+        try:
+            app = firebase_admin.get_app(_AUTH_EMULATOR_APP_NAME)
+        except ValueError:
+            app = firebase_admin.initialize_app(
+                options={'projectId': cfg.project_id},
+                name=_AUTH_EMULATOR_APP_NAME,
+            )
+        if op.action == 'upsert':
+            payload = dict(op.payload if isinstance(op.payload, Mapping) else {})
+            try:
+                firebase_auth.get_user(op.target, app=app)
+            except firebase_auth.UserNotFoundError:
+                firebase_auth.create_user(
+                    uid=op.target,
+                    email=str(payload['email']),
+                    password=str(payload['password']),
+                    display_name=str(payload.get('displayName', '')),
+                    email_verified=bool(payload.get('emailVerified', False)),
+                    disabled=bool(payload.get('disabled', False)),
+                    app=app,
+                )
+        elif op.action == 'delete':
+            try:
+                firebase_auth.delete_user(op.target, app=app)
+            except firebase_auth.UserNotFoundError:
+                pass
+        else:
+            raise RuntimeError(f'Unsupported Auth scenario action: {op.action}')
+        return True
+    finally:
+        if old_host is None:
+            os.environ.pop('FIREBASE_AUTH_EMULATOR_HOST', None)
+        else:
+            os.environ['FIREBASE_AUTH_EMULATOR_HOST'] = old_host
+
+
 def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
     if op.kind == "file":
         target = cfg.layout.state_root / "files" / op.target
@@ -1348,6 +1405,10 @@ def _apply_operation(cfg: config.HarnessConfig, op: SeedOperation) -> None:
                 raise RuntimeError(f"Firestore emulator delete failed for {op.target}: HTTP {status} {body[:200]}")
         return
     if op.kind == "auth":
+        if _apply_auth_admin_sdk(cfg, op):
+            return
+        if op.target in {CHAT_FIRST_E2E_ENABLED_USER_ID, CHAT_FIRST_E2E_OUT_OF_COHORT_USER_ID}:
+            raise RuntimeError('Chat-first E2E fixtures require Firebase Admin Auth to preserve their fixed UIDs')
         # Firebase Auth emulator supports account creation via identitytoolkit and
         # deletion via emulator admin endpoints. If an existing user causes a 400
         # on upsert, the seed remains idempotent for local QA purposes.

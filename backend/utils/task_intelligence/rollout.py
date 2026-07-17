@@ -1,15 +1,12 @@
-"""Pure task-intelligence rollout decisions.
+"""Pure task-intelligence entitlement decisions.
 
-Workflow migration mode and canonical-memory cohort eligibility are deliberately
-separate axes. The pure composer accepts both for hermetic tests; the production
-resolver obtains cohort membership from the canonical memory owner.
+Canonical-memory membership is the only eligibility input. Workflow controls
+remain persisted generation fences and diagnostics, not rollout gates.
 """
 
 # LIFECYCLE: permanent
 
-from config.what_matters_now_smoke_fixture import is_development_smoke_fixture
-from config.chat_first_e2e_fixture import is_chat_first_e2e_enabled_fixture
-from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowMode
+from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowControl, TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
 
@@ -26,35 +23,19 @@ def resolve_task_intelligence_rollout(
     if account_generation < 0:
         raise ValueError('account_generation must be nonnegative')
 
-    if mode == TaskWorkflowMode.off:
-        return TaskIntelligenceRolloutDecision(
-            uid=uid,
-            workflow_mode=mode,
-            memory_cohort_eligible=memory_cohort_eligible,
-            account_generation=account_generation,
-            legacy_reads_authoritative=True,
-            legacy_writes_enabled=True,
-            intelligence_evaluation_enabled=False,
-            canonical_sidecar_writes_enabled=False,
-            canonical_reads_authoritative=False,
-            compatibility_projection_required=False,
-            intelligence_product_enabled=False,
-        )
-
-    canonical_writes = mode in {TaskWorkflowMode.write, TaskWorkflowMode.read}
-    canonical_reads = mode == TaskWorkflowMode.read
+    canonical_entitled = memory_cohort_eligible
     return TaskIntelligenceRolloutDecision(
         uid=uid,
         workflow_mode=mode,
         memory_cohort_eligible=memory_cohort_eligible,
         account_generation=account_generation,
-        legacy_reads_authoritative=not canonical_reads,
-        legacy_writes_enabled=not canonical_reads,
-        intelligence_evaluation_enabled=memory_cohort_eligible,
-        canonical_sidecar_writes_enabled=canonical_writes,
-        canonical_reads_authoritative=canonical_reads,
-        compatibility_projection_required=canonical_reads,
-        intelligence_product_enabled=canonical_reads and memory_cohort_eligible,
+        legacy_reads_authoritative=not canonical_entitled,
+        legacy_writes_enabled=not canonical_entitled,
+        intelligence_evaluation_enabled=canonical_entitled,
+        canonical_sidecar_writes_enabled=canonical_entitled,
+        canonical_reads_authoritative=canonical_entitled,
+        compatibility_projection_required=canonical_entitled,
+        intelligence_product_enabled=canonical_entitled,
     )
 
 
@@ -67,11 +48,7 @@ def resolve_task_intelligence_for_user(
 ) -> TaskIntelligenceRolloutDecision:
     """Compose workflow mode with the authoritative canonical-memory selector."""
 
-    memory_cohort_eligible = (
-        is_development_smoke_fixture(uid)
-        or is_chat_first_e2e_enabled_fixture(uid)
-        or (resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL)
-    )
+    memory_cohort_eligible = resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
     return resolve_task_intelligence_rollout(
         uid=uid,
         workflow_mode=workflow_mode,
@@ -80,14 +57,38 @@ def resolve_task_intelligence_for_user(
     )
 
 
-def resolve_chat_first_ui(rollout: TaskIntelligenceRolloutDecision, ui_flag_enabled: bool) -> bool:
+def resolve_chat_first_ui(rollout: TaskIntelligenceRolloutDecision) -> bool:
     """Return the server-owned Chat-first capability for one resolved user.
 
-    The explicit UI flag is necessary but never sufficient: only the canonical
-    read-mode task-intelligence product cohort may receive the new shell.
+    The canonical-memory entitlement is already composed into the rollout. The
+    persisted UI flag and workflow mode are intentionally ignored: neither may
+    suppress an enrolled account.
     """
 
-    return bool(rollout.intelligence_product_enabled and ui_flag_enabled)
+    return rollout.intelligence_product_enabled
 
 
-__all__ = ['resolve_chat_first_ui', 'resolve_task_intelligence_for_user', 'resolve_task_intelligence_rollout']
+def effective_task_workflow_control(
+    control: TaskWorkflowControl,
+    rollout: TaskIntelligenceRolloutDecision,
+) -> TaskWorkflowControl:
+    """Project persisted control metadata onto the sole entitlement decision.
+
+    ``account_generation`` remains the persisted concurrency fence. The
+    workflow value in an API projection is effective state only: code-enrolled
+    users are read-capable and every other user remains legacy/off.
+    """
+
+    return control.model_copy(
+        update={
+            'workflow_mode': TaskWorkflowMode.read if rollout.intelligence_product_enabled else TaskWorkflowMode.off,
+        }
+    )
+
+
+__all__ = [
+    'effective_task_workflow_control',
+    'resolve_chat_first_ui',
+    'resolve_task_intelligence_for_user',
+    'resolve_task_intelligence_rollout',
+]

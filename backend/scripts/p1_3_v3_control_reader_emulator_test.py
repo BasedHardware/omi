@@ -17,7 +17,7 @@ from typing import Any
 
 from google.cloud import firestore
 
-from config.memory_rollout import MemoryRolloutMode, MemoryRolloutConfig
+from config.memory_rollout import MemoryRolloutMode
 from database.memory_collections import MemoryCollections
 from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
@@ -28,7 +28,9 @@ from utils.memory.v3.control_reader_contract import (
 from utils.memory.v3.control_state_adapter import read_v3_control
 
 PROJECT_ID = os.environ.get("GCLOUD_PROJECT") or os.environ.get("FIREBASE_PROJECT") or "demo-memory"
-UID = "memory-v3-control-reader-emulator-user"
+# This is the code-owned canonical entitlement; the emulator remains isolated
+# by FIRESTORE_EMULATOR_HOST and never contacts the real account.
+UID = "vi7SA9ckQCe4ccobWNxlbdcNdC23"
 CONTROL_PATH = MemoryCollections(uid=UID).memory_control_state
 GLOBAL_READ_GATE_PATH = "memory_control/global_read_gate"
 WRITE_CONVERGENCE_GATE_PATH = "memory_control/write_convergence_gate"
@@ -101,11 +103,7 @@ def _write_fixture(db: firestore.Client, case: ProofCase) -> None:
 
 def _assert_case(db: firestore.Client, case: ProofCase) -> None:
     _write_fixture(db, case)
-    result = read_v3_control(
-        uid=UID,
-        db_client=db,
-        rollout_config=MemoryRolloutConfig(enabled_users={UID}, mode=MemoryRolloutMode.read),
-    )
+    result = read_v3_control(uid=UID, db_client=db)
     decision = decide_v3_control_route(case.request, result)
     assert result.source_path == CONTROL_PATH, case.case_id
     assert decision.route_family == case.route_family, (case.case_id, decision)

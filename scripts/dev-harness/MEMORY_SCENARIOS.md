@@ -39,7 +39,7 @@ the fixture using its logical principal, then launch the named bundle:
 PROVIDER_MODE=offline make dev-up
 make seed-memory-scenario SCENARIO=happy_path
 make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=enabled
-make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-chat-first-e2e-enabled
+make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
 ```
 
 The same local-only command snapshots or advances an existing fixture while

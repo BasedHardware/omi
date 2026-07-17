@@ -1,23 +1,19 @@
 version: 2
 name: chat-first-capability-isolation
 tier: manual
-description: "Manual local/offline capability-off assertion. Run it once for each isolated fixture case in the three-launch matrix below."
+description: "Manual local/offline capability-off assertion. Run it once for each isolated fixture case in the two-launch matrix below."
 app: non-prod
 # A harness invocation owns one automation port, hence one named app. It cannot
 # switch apps mid-run; prepare, launch, and run this *single-case* assertion
 # separately for every row below (each command pair has a distinct named bundle
 # and port):
 #
-#   make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=ui_flag_off
-#   OMI_AUTOMATION_PORT=47851 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-flag-off DESKTOP_USER=omi-chat-first-e2e-enabled
-#   python3 desktop/macos/scripts/omi-harness run desktop/macos/e2e/flows/chat-first-capability-isolation.yaml --lane bridge --port 47851 --bundle-id com.omi.omi-chat-first-e2e-flag-off
-#
 #   make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=out_of_cohort
-#   OMI_AUTOMATION_PORT=47852 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-out-of-cohort DESKTOP_USER=omi-chat-first-e2e-out-of-cohort
+#   OMI_AUTOMATION_PORT=47852 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-out-of-cohort DESKTOP_USER=omi-local-emulator-chat-first-disabled-v1
 #   python3 desktop/macos/scripts/omi-harness run desktop/macos/e2e/flows/chat-first-capability-isolation.yaml --lane bridge --port 47852 --bundle-id com.omi.omi-chat-first-e2e-out-of-cohort
 #
 #   make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=unreachable_control
-#   OMI_AUTOMATION_PORT=47853 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-unreachable-control DESKTOP_USER=omi-chat-first-e2e-enabled
+#   OMI_AUTOMATION_PORT=47853 make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e-unreachable-control DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
 #   python3 desktop/macos/scripts/omi-harness run desktop/macos/e2e/flows/chat-first-capability-isolation.yaml --lane bridge --port 47853 --bundle-id com.omi.omi-chat-first-e2e-unreachable-control
 #
 # The fixture is server-owned and authenticates to Firebase Auth emulator

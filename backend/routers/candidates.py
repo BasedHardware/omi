@@ -26,7 +26,11 @@ from utils.other import endpoints as auth
 from utils.task_intelligence import candidate_service
 from utils.task_intelligence.capture_policy import MINIMUM_CAPTURE_CONFIDENCE
 from utils.task_intelligence.recommendations import candidate_recommendation_dedupe_key
-from utils.task_intelligence.rollout import resolve_chat_first_ui, resolve_task_intelligence_for_user
+from utils.task_intelligence.rollout import (
+    effective_task_workflow_control,
+    resolve_chat_first_ui,
+    resolve_task_intelligence_for_user,
+)
 from utils.task_intelligence import chat_first_e2e_fixture
 from utils.task_intelligence.task_links import TaskLinkValidationError
 from utils.task_intelligence.staged_migration import migrate_staged_tasks
@@ -42,10 +46,15 @@ SUGGESTED_CANDIDATE_FRESHNESS = candidates_db.PENDING_CANDIDATE_REUSE_WINDOW
 
 def _require_candidate_write_control(uid: str, account_generation: int) -> None:
     control = task_control_db.get_task_workflow_control(uid)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
     if control.account_generation != account_generation:
         raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Account generation mismatch')
-    if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail='Candidate writes are not enabled')
 
 
 def _raise_store_error(exc: candidates_db.CandidateStoreError) -> None:
@@ -184,8 +193,8 @@ def list_candidates(
     surface: Optional[Literal['suggested']] = Query(default=None),
     uid: str = Depends(auth.get_current_user_uid),
 ):
+    rollout = _require_suggested_rollout(uid)
     if surface == 'suggested':
-        rollout = _require_suggested_rollout(uid)
         records = candidates_db.list_candidates(
             uid,
             status=None,
@@ -211,11 +220,10 @@ def list_candidates(
             ),
             has_more=False,
         )
-    control = task_control_db.get_task_workflow_control(uid)
     records = candidates_db.list_candidates(
         uid,
         status=candidate_status,
-        account_generation=control.account_generation,
+        account_generation=rollout.account_generation,
         limit=limit + 1,
         offset=offset,
     )
@@ -228,7 +236,19 @@ def migrate_staged_candidates(
     uid: str = Depends(auth.get_current_user_uid),
 ):
     control = task_control_db.get_task_workflow_control(uid)
-    return migrate_staged_tasks(uid, control, after_id=request.after_id, limit=request.limit)
+    rollout = resolve_task_intelligence_for_user(
+        uid=uid,
+        workflow_mode=control.workflow_mode,
+        account_generation=control.account_generation,
+    )
+    if not rollout.intelligence_product_enabled:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Not found')
+    return migrate_staged_tasks(
+        uid,
+        effective_task_workflow_control(control, rollout),
+        after_id=request.after_id,
+        limit=request.limit,
+    )
 
 
 @router.get('/v1/candidates/control', response_model=TaskWorkflowControl, tags=['candidates'])
@@ -251,13 +271,22 @@ def get_candidate_workflow_control(uid: str = Depends(auth.get_current_user_uid)
             workflow_mode=control.workflow_mode,
             account_generation=control.account_generation,
         )
-        chat_first_ui = resolve_chat_first_ui(rollout, control.chat_first_ui_enabled)
+        chat_first_ui = resolve_chat_first_ui(rollout)
     except Exception:
         # Cohort resolution is intentionally fail-closed: a backend outage or
         # stale selector keeps this user in the existing shell.
-        chat_first_ui = False
+        return control.model_copy(
+            update={
+                'workflow_mode': TaskWorkflowMode.off,
+                'chat_first_ui': False,
+            }
+        )
 
-    return control.model_copy(update={'chat_first_ui': chat_first_ui})
+    # Desktop samples both fields as one generation-bound projection. Preserve
+    # the raw generation, but never let a stale workflow record select the
+    # legacy shell for an enrolled account.
+    effective_control = effective_task_workflow_control(control, rollout)
+    return effective_control.model_copy(update={'chat_first_ui': chat_first_ui})
 
 
 @router.post('/v1/candidates/integrations/drain', tags=['candidates'])
@@ -278,9 +307,9 @@ def drain_candidate_integrations(
 
 @router.get('/v1/candidates/{candidate_id}', response_model=CandidateRecord, tags=['candidates'])
 def get_candidate(candidate_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    rollout = _require_suggested_rollout(uid)
     candidate = candidates_db.get_candidate(uid, candidate_id)
-    control = task_control_db.get_task_workflow_control(uid)
-    if candidate is None or candidate.account_generation != control.account_generation:
+    if candidate is None or candidate.account_generation != rollout.account_generation:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail='Candidate not found')
     return candidate
 

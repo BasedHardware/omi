@@ -203,16 +203,11 @@ def read_control_with_gcloud_user_token(
 def build_activation_plan(
     uid: str,
     current: TaskWorkflowControl,
-    *,
-    chat_first_ui_enabled: bool | None = None,
 ) -> ActivationPlan:
     require_dogfood_uid(uid)
     target = TaskWorkflowControl(
         workflow_mode=TaskWorkflowMode.read,
         account_generation=current.account_generation,
-        chat_first_ui_enabled=(
-            current.chat_first_ui_enabled if chat_first_ui_enabled is None else chat_first_ui_enabled
-        ),
     )
     return ActivationPlan(
         uid=uid,
@@ -228,7 +223,6 @@ def apply_activation(
     *,
     uid: str,
     expected_account_generation: int,
-    chat_first_ui_enabled: bool,
     rpc_timeout_seconds: float = DEFAULT_FIRESTORE_RPC_TIMEOUT_SECONDS,
 ) -> bool:
     """Write the `read` control only if the observed generation remains current.
@@ -257,7 +251,6 @@ def apply_activation(
         target = TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.read,
             account_generation=current.account_generation,
-            chat_first_ui_enabled=chat_first_ui_enabled,
         )
         if current == target:
             return False
@@ -271,7 +264,6 @@ def _firestore_control_fields(control: TaskWorkflowControl) -> dict[str, dict[st
     return {
         'workflow_mode': {'stringValue': control.workflow_mode.value},
         'account_generation': {'integerValue': str(control.account_generation)},
-        'chat_first_ui_enabled': {'booleanValue': control.chat_first_ui_enabled},
     }
 
 
@@ -280,7 +272,6 @@ def apply_activation_with_gcloud_user_token(
     firestore_project: str,
     uid: str,
     expected_account_generation: int,
-    chat_first_ui_enabled: bool,
     current: FirestoreControlSnapshot,
     rpc_timeout_seconds: float,
     http_open=None,
@@ -295,7 +286,6 @@ def apply_activation_with_gcloud_user_token(
     target = TaskWorkflowControl(
         workflow_mode=TaskWorkflowMode.read,
         account_generation=current.control.account_generation,
-        chat_first_ui_enabled=chat_first_ui_enabled,
     )
     if current.control == target:
         return False
@@ -309,7 +299,7 @@ def apply_activation_with_gcloud_user_token(
     query = urlencode(
         {
             **precondition,
-            'updateMask.fieldPaths': ['workflow_mode', 'account_generation', 'chat_first_ui_enabled'],
+            'updateMask.fieldPaths': ['workflow_mode', 'account_generation'],
         },
         doseq=True,
     )
@@ -355,24 +345,15 @@ def build_report(
             'It writes only users/{uid}/task_intelligence_control/state when --apply is supplied.',
             'It does not change the canonical-memory cohort, runtime environment, or any other user.',
             'The transaction preserves account_generation and rejects a stale expected generation.',
-            'The Chat-first UI flag is an explicit per-user input and must be confirmed exactly on apply.',
+            'Chat-first derives only from the code-owned canonical-memory cohort; this tool has no UI flag.',
             'The gcloud-user source obtains a short-lived token without including it in output or reports.',
         ],
     }
 
 
-def parse_bool(value: str) -> bool:
-    normalized = value.strip().lower()
-    if normalized == 'true':
-        return True
-    if normalized == 'false':
-        return False
-    raise argparse.ArgumentTypeError('must be true or false')
-
-
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description='Dry-run/apply Smart Tasks read mode and Chat-first UI for the approved dogfood UID.'
+        description='Dry-run/apply Smart Tasks read-mode metadata for the approved dogfood UID.'
     )
     parser.add_argument('--uid', default=TASK_INTELLIGENCE_DOGFOOD_UID)
     parser.add_argument('--firestore-project', help='Required for --inspect-existing or --apply.')
@@ -396,16 +377,6 @@ def parse_args() -> argparse.Namespace:
         '--confirm-workflow-mode',
         help='Required with --apply; must exactly equal read.',
     )
-    parser.add_argument(
-        '--chat-first-ui-enabled',
-        type=parse_bool,
-        help='Requested per-user Chat-first UI flag; required with --apply and accepted as true or false.',
-    )
-    parser.add_argument(
-        '--confirm-chat-first-ui-enabled',
-        type=parse_bool,
-        help='Required with --apply; must exactly match --chat-first-ui-enabled.',
-    )
     return parser.parse_args()
 
 
@@ -423,12 +394,6 @@ def main() -> int:
             raise SystemExit('--confirm-workflow-mode must exactly equal read when --apply is used')
         if args.expected_account_generation is None:
             raise SystemExit('--expected-account-generation is required when --apply is used')
-        if args.chat_first_ui_enabled is None:
-            raise SystemExit('--chat-first-ui-enabled is required when --apply is used')
-        if args.confirm_chat_first_ui_enabled != args.chat_first_ui_enabled:
-            raise SystemExit(
-                '--confirm-chat-first-ui-enabled must exactly match --chat-first-ui-enabled when --apply is used'
-            )
     if (args.inspect_existing or args.apply) and not args.firestore_project:
         raise SystemExit('--firestore-project is required for inspection or apply')
 
@@ -452,7 +417,7 @@ def main() -> int:
             f'expected {args.expected_account_generation}, found {current.account_generation}'
         )
 
-    plan = build_activation_plan(args.uid, current, chat_first_ui_enabled=args.chat_first_ui_enabled)
+    plan = build_activation_plan(args.uid, current)
     applied = None
     verified_control = None
     if args.apply:
@@ -463,7 +428,6 @@ def main() -> int:
                 firestore_project=args.firestore_project,
                 uid=args.uid,
                 expected_account_generation=args.expected_account_generation,
-                chat_first_ui_enabled=args.chat_first_ui_enabled,
                 current=current_snapshot,
                 rpc_timeout_seconds=args.rpc_timeout_seconds,
             )
@@ -477,7 +441,6 @@ def main() -> int:
                 db_client,
                 uid=args.uid,
                 expected_account_generation=args.expected_account_generation,
-                chat_first_ui_enabled=args.chat_first_ui_enabled,
                 rpc_timeout_seconds=args.rpc_timeout_seconds,
             )
             verified_control = read_control(
@@ -488,7 +451,6 @@ def main() -> int:
         if verified_control != TaskWorkflowControl(
             workflow_mode=TaskWorkflowMode.read,
             account_generation=current.account_generation,
-            chat_first_ui_enabled=args.chat_first_ui_enabled,
         ):
             raise RuntimeError('post-apply control verification did not match the requested control')
     print(

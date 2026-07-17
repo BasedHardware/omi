@@ -1,17 +1,19 @@
 """Firebase Auth emulator identities and runtime guard for Chat-first E2E.
 
-The Firebase Auth emulator assigns the authenticated ``localId``.  It does not
-reliably honour a caller-provided ``localId`` during seed, so fixture access
-resolves two logical synthetic principals through the dev-harness manifest
-instead of relying on a production-like auth bypass or hard-coded UID.
+The local harness seeds fixed Firebase Auth emulator UIDs through the Admin
+API.  The enabled UID is deliberately listed in the canonical-memory cohort,
+so fixture capability uses the normal product entitlement rather than a test
+bypass.
 """
 
 import json
 import os
 from pathlib import Path
 
-CHAT_FIRST_E2E_ENABLED_PRINCIPAL = 'omi-chat-first-e2e-enabled'
-CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL = 'omi-chat-first-e2e-out-of-cohort'
+from config.canonical_memory_cohort import LOCAL_CHAT_FIRST_E2E_ENABLED_UID
+
+CHAT_FIRST_E2E_ENABLED_PRINCIPAL = LOCAL_CHAT_FIRST_E2E_ENABLED_UID
+CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL = 'omi-local-emulator-chat-first-disabled-v1'
 _LOCAL_E2E_STAGES = frozenset({'local', 'offline'})
 _AUTH_UID_MANIFEST_NAME = 'canonical-auth-uids.json'
 
@@ -61,14 +63,6 @@ def fixture_uid_for_principal(principal: str, *, state_root: str | None = None) 
     return _fixture_auth_uids(state_root=state_root).get(principal)
 
 
-def is_chat_first_e2e_enabled_fixture(uid: str, *, stage: str | None = None) -> bool:
-    """Return whether one local-only fixture identity is in the test cohort."""
-
-    return is_chat_first_e2e_harness_runtime(stage=stage) and uid == fixture_uid_for_principal(
-        CHAT_FIRST_E2E_ENABLED_PRINCIPAL
-    )
-
-
 def is_chat_first_e2e_fixture_uid(uid: str, *, stage: str | None = None) -> bool:
     """Return whether ``uid`` is one of the two isolated E2E accounts."""
 
@@ -79,7 +73,6 @@ __all__ = [
     'CHAT_FIRST_E2E_ENABLED_PRINCIPAL',
     'CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL',
     'fixture_uid_for_principal',
-    'is_chat_first_e2e_enabled_fixture',
     'is_chat_first_e2e_fixture_uid',
     'is_chat_first_e2e_harness_runtime',
 ]

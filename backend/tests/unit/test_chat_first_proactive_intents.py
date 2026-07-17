@@ -7,6 +7,7 @@ from unittest.mock import patch
 import pytest
 
 import database.chat_first_intents as intents_db
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.chat_first import (
     CaptureLinkSpec,
     ChatFirstSubject,
@@ -97,6 +98,7 @@ class _Firestore:
 
 @pytest.fixture
 def firestore(monkeypatch):
+    set_canonical_cohort(monkeypatch, UID)
     monkeypatch.setattr(
         intents_db.firestore, 'transactional', lambda function: lambda transaction: function(transaction)
     )
@@ -498,19 +500,36 @@ def test_deferral_releases_once_verbatim_when_due_or_subject_changes(firestore):
     assert subject_change[0].blocks == [task_question]
 
 
-def test_off_or_stale_control_rejects_intent_before_feature_records_are_read(firestore):
+def test_workflow_mode_cannot_suppress_intent_but_stale_generation_still_rejects(firestore):
     firestore.rows[('users', UID, 'task_intelligence_control', 'state')] = TaskWorkflowControl(
-        workflow_mode=TaskWorkflowMode.read,
+        workflow_mode=TaskWorkflowMode.off,
         account_generation=GENERATION,
-        chat_first_ui_enabled=False,
     ).persisted_payload()
     question = _question()
+
+    intent, created = intents_db.create_intent(
+        UID,
+        source='agent_judgment',
+        continuity_key='workflow-mode-is-metadata',
+        subject=question.subject,
+        blocks=[question],
+        account_generation=GENERATION,
+        now=NOW,
+        firestore_client=firestore,
+    )
+
+    assert created is True
+    assert intent.account_generation == GENERATION
+    firestore.rows[('users', UID, 'task_intelligence_control', 'state')] = TaskWorkflowControl(
+        workflow_mode=TaskWorkflowMode.off,
+        account_generation=GENERATION + 1,
+    ).persisted_payload()
 
     with pytest.raises(intents_db.ChatFirstIntentGenerationMismatch):
         intents_db.create_intent(
             UID,
             source='agent_judgment',
-            continuity_key='off',
+            continuity_key='stale-generation',
             subject=question.subject,
             blocks=[question],
             account_generation=GENERATION,
@@ -518,7 +537,7 @@ def test_off_or_stale_control_rejects_intent_before_feature_records_are_read(fir
             firestore_client=firestore,
         )
 
-    assert not any(INTENTS_COLLECTION in path or DEFERRALS_COLLECTION in path for path in firestore.rows)
+    assert sum(INTENTS_COLLECTION in path for path in firestore.rows) == 1
 
 
 def test_malformed_control_or_proactive_state_fails_closed_without_a_fail_open_drop(firestore):
