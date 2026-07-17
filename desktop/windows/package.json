@@ -42,6 +42,7 @@
     "test:e2e:agent": "node scripts/run-agent-e2e.mjs src/main/codingAgent/acp.e2e.test.ts",
     "test:e2e:conv-sync": "node scripts/run-live-e2e.mjs src/renderer/src/lib/sync/convSync.e2e.test.ts",
     "test:e2e:voice-smoke": "node scripts/run-voice-smoke.mjs",
+    "gauntlet:voice": "node scripts/agent-voice-tool-gauntlet.mjs",
     "voice:loop-check": "node scripts/run-voice-loop-check.mjs",
     "test:e2e:lifecycle": "node scripts/run-lifecycle-e2e.mjs",
     "test:e2e:rewind-semantic": "node scripts/run-rewind-semantic-e2e.mjs",
