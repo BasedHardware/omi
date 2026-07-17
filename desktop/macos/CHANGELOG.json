@@ -1,5 +1,7 @@
 {
-  "unreleased": [],
+  "unreleased": [
+    "Improved desktop recording finalization checks so stopped recordings are verified against duplicate conversations and missing transcripts"
+  ],
   "releases": [
     {
       "version": "0.12.76",

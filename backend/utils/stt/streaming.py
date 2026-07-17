@@ -270,12 +270,8 @@ def _stt_selection_from_mode(_language: str, base_lang: str) -> str:
     return 'none'
 
 
-def get_stt_service_for_language(
-    language: str, multi_lang_enabled: bool = True, prefer_parakeet: bool = False
-) -> Tuple[STTService, str, str]:
+def get_stt_service_for_language(language: str, multi_lang_enabled: bool = True) -> Tuple[STTService, str, str]:
     base_lang = _normalize_language(language)
-    if prefer_parakeet and os.getenv('HOSTED_PARAKEET_API_URL') and base_lang in parakeet_languages:
-        return STTService.parakeet, base_lang or 'en', 'parakeet'
     for m in stt_service_models:
         m = m.strip()
         if m.startswith('dg-'):

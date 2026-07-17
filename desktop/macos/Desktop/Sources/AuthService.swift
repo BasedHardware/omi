@@ -1179,13 +1179,16 @@ class AuthService {
     NSLog("OMI AUTH: Got Apple identity token")
 
     // Save user name if provided (Apple only sends name on first sign-in)
+    var capturedFreshAppleName = false
     if let fullName = appleCredential.fullName {
       let given = fullName.givenName ?? ""
       let family = fullName.familyName ?? ""
       if !given.isEmpty {
         givenName = given
         familyName = family
+        capturedFreshAppleName = true
         NSLog("OMI AUTH: Saved name from Apple: %@ %@", given, family)
+        postNameDidUpdate()
       }
     }
     if let email = appleCredential.email {
@@ -1257,6 +1260,11 @@ class AuthService {
 
     if givenName.isEmpty {
       loadNameFromBackendIfNeeded()
+    } else if capturedFreshAppleName {
+      // Session is live now; persist the first-auth Apple name to Firebase +
+      // backend so it survives reinstalls (Apple won't resend it).
+      let capturedName = displayName
+      Task { [weak self] in await self?.updateGivenName(capturedName) }
     }
 
     AnalyticsManager.shared.identify()
@@ -2259,6 +2267,7 @@ class AuthService {
           self.givenName = nameParts.first.map(String.init) ?? name.trimmingCharacters(in: .whitespaces)
           self.familyName = nameParts.count > 1 ? String(nameParts[1]) : ""
           NSLog("OMI AUTH: Loaded name from backend profile - given: %@, family: %@", self.givenName, self.familyName)
+          self.postNameDidUpdate()
           return
         }
       } catch {

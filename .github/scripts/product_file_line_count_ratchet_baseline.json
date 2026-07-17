@@ -11,11 +11,11 @@
     "backend/utils/apps.py": 1641,
     "backend/utils/memory/legacy_backfill.py": 1816,
     "backend/utils/memory_ingestion/pipeline.py": 1711,
-    "backend/utils/other/storage.py": 1578,
+    "backend/utils/other/storage.py": 1584,
     "backend/utils/retrieval/tools/calendar_tools.py": 1513,
     "backend/utils/sync/pipeline.py": 2296,
     "desktop/macos/Backend-Rust/src/routes/proxy.rs": 2741,
-    "desktop/macos/Desktop/Sources/AuthService.swift": 3294,
+    "desktop/macos/Desktop/Sources/AuthService.swift": 3303,
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": 2109,
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": 4242,
     "desktop/macos/Desktop/Sources/CloudConnectorFormAutomation.swift": 1678,
@@ -46,7 +46,8 @@
     "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2155
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/AuthService.swift": "Apple sign-in name capture signals observers and persists the first-auth name Apple sends only once, on top of the pinned swift-format layout.",
+    "backend/utils/other/storage.py": "delete_app_logo now requires an exact app-logo bucket prefix (startswith) so a foreign URL embedding the prefix later cannot delete an unrelated object on this deletion path (David review on #9873).",
+    "desktop/macos/Desktop/Sources/AuthService.swift": "Apple first-auth name capture signals observers (authNameDidUpdate) and persists the name to Firebase so it survives reinstalls.",
     "desktop/macos/Desktop/Sources/Chat/AgentBridge.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/Chat/AgentRuntimeProcess.swift": "Strict concurrency annotations (Ticket 14) add Sendable conformances and isolation qualifiers without changing runtime behavior.",
     "desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift": "Reach-error card gains a debug bridge action so the actionable failure surface is verifiable in-process, on top of strict-concurrency annotations.",
