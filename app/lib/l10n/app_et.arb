@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} / {total} kasutatud",
     "deviceStorageFree": "{free} vaba",
     "deviceStorageNearlyFull": "Seade on peaaegu täis — sünkroonige ruumi vabastamiseks.",
-    "phoneMicOfflineFallbackMessage": "Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus."
+    "phoneMicOfflineFallbackMessage": "Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.",
+    "dataEncryptedBanner": "Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse."
 }

@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "panaudota {used} iš {total}",
     "deviceStorageFree": "{free} laisva",
     "deviceStorageNearlyFull": "Įrenginys beveik pilnas — sinchronizuokite, kad atlaisvintumėte vietos.",
-    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę."
+    "phoneMicOfflineFallbackMessage": "Nėra ryšio – įrašoma vietoje. Bus transkribuota, kai vėl būsite prisijungę.",
+    "dataEncryptedBanner": "Jūsų duomenys pagal numatytuosius nustatymus apsaugoti stipriu šifravimu, o jūs valdote, kaip jie saugomi ir naudojami."
 }

@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "izmantoti {used} no {total}",
     "deviceStorageFree": "{free} brīvi",
     "deviceStorageNearlyFull": "Ierīce ir gandrīz pilna — sinhronizējiet, lai atbrīvotu vietu.",
-    "phoneMicOfflineFallbackMessage": "Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē."
+    "phoneMicOfflineFallbackMessage": "Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.",
+    "dataEncryptedBanner": "Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti."
 }

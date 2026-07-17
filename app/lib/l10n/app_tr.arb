@@ -3184,5 +3184,6 @@
     "deviceStorageUsedOfTotal": "{total} alanın {used} kısmı kullanıldı",
     "deviceStorageFree": "{free} boş",
     "deviceStorageNearlyFull": "Cihaz neredeyse dolu — yer açmak için eşitleyin.",
-    "phoneMicOfflineFallbackMessage": "Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek."
+    "phoneMicOfflineFallbackMessage": "Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.",
+    "dataEncryptedBanner": "Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz."
 }

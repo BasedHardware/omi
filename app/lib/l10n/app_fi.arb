@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} / {total} käytössä",
     "deviceStorageFree": "{free} vapaana",
     "deviceStorageNearlyFull": "Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.",
-    "phoneMicOfflineFallbackMessage": "Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa."
+    "phoneMicOfflineFallbackMessage": "Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.",
+    "dataEncryptedBanner": "Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään."
 }

@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} sa {total} ang nagamit",
     "deviceStorageFree": "{free} ang libre",
     "deviceStorageNearlyFull": "Halos puno na ang device — mag-sync para magbakante ng espasyo.",
-    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit."
+    "phoneMicOfflineFallbackMessage": "Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.",
+    "dataEncryptedBanner": "Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit."
 }

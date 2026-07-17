@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} din {total} utilizat",
     "deviceStorageFree": "{free} liber",
     "deviceStorageNearlyFull": "Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.",
-    "phoneMicOfflineFallbackMessage": "Fără conexiune — se înregistrează local. Va fi transcris când revii online."
+    "phoneMicOfflineFallbackMessage": "Fără conexiune — se înregistrează local. Va fi transcris când revii online.",
+    "dataEncryptedBanner": "Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate."
 }

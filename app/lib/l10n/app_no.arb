@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} av {total} brukt",
     "deviceStorageFree": "{free} ledig",
     "deviceStorageNearlyFull": "Enheten er nesten full — synkroniser for å frigjøre plass.",
-    "phoneMicOfflineFallbackMessage": "Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen."
+    "phoneMicOfflineFallbackMessage": "Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen.",
+    "dataEncryptedBanner": "Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes."
 }

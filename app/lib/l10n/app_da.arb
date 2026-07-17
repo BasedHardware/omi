@@ -3158,5 +3158,6 @@
     "deviceStorageUsedOfTotal": "{used} af {total} brugt",
     "deviceStorageFree": "{free} ledig",
     "deviceStorageNearlyFull": "Enheden er næsten fuld — synkronisér for at frigøre plads.",
-    "phoneMicOfflineFallbackMessage": "Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen."
+    "phoneMicOfflineFallbackMessage": "Ingen forbindelse – der optages lokalt. Det bliver transskriberet, når du er online igen.",
+    "dataEncryptedBanner": "Dine data er som standard sikret med stærk kryptering, og du bestemmer, hvordan de opbevares og bruges."
 }

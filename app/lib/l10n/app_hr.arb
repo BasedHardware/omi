@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} od {total} iskorišteno",
     "deviceStorageFree": "{free} slobodno",
     "deviceStorageNearlyFull": "Uređaj je gotovo pun — sinkronizirajte kako biste oslobodili prostor.",
-    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži."
+    "phoneMicOfflineFallbackMessage": "Nema veze — snima se lokalno. Bit će transkribirano kad ponovno budeš na mreži.",
+    "dataEncryptedBanner": "Vaši su podaci prema zadanim postavkama zaštićeni snažnom enkripcijom, a vi kontrolirate kako se pohranjuju i koriste."
 }

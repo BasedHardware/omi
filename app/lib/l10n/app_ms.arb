@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} daripada {total} digunakan",
     "deviceStorageFree": "{free} bebas",
     "deviceStorageNearlyFull": "Peranti hampir penuh — segerakkan untuk mengosongkan ruang.",
-    "phoneMicOfflineFallbackMessage": "Tiada sambungan — merakam secara setempat. Ia akan ditranskripsikan apabila anda dalam talian semula."
+    "phoneMicOfflineFallbackMessage": "Tiada sambungan — merakam secara setempat. Ia akan ditranskripsikan apabila anda dalam talian semula.",
+    "dataEncryptedBanner": "Data anda dilindungi secara lalai dengan penyulitan yang kuat, dan anda mengawal cara ia disimpan dan digunakan."
 }
