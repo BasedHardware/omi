@@ -121,8 +121,8 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     )
     selected_multi_language_options = []
 
-    def select_stt(language, *, multi_lang_enabled):
-        selected_multi_language_options.append((language, multi_lang_enabled))
+    def select_stt(language, *, multi_lang_enabled, prefer_parakeet=False):
+        selected_multi_language_options.append((language, multi_lang_enabled, prefer_parakeet))
         return 'test-stt', 'es', 'test-model'
 
     monkeypatch.setattr(runtime_module, 'load_listen_connect_base', lambda *_args, **_kwargs: _async_result(base))
@@ -133,7 +133,7 @@ async def test_bootstrap_forces_single_language_before_selecting_stt_for_onboard
     monkeypatch.setattr(runtime_module, 'OnboardingHandler', lambda *_args: SimpleNamespace())
 
     assert await runtime._bootstrap() is True
-    assert selected_multi_language_options == [('es', False)]
+    assert selected_multi_language_options == [('es', False, False)]
 
 
 def test_runtime_emits_speaker_suggestion_event():
