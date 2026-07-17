@@ -308,7 +308,7 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   Widget _buildDailyRecapsPreview(BuildContext context) {
-    const cardHeight = 130.0;
+    const cardHeight = 170.0;
     if (_loadingSummaries) {
       return Padding(
         padding: const EdgeInsets.only(top: 12),
@@ -354,7 +354,10 @@ class HomeContentPageState extends State<HomeContentPage> with AutomaticKeepAliv
   }
 
   static const double _cardWidth = 260.0;
-  static const double _mapHeight = 60.0;
+  // At 60px with retinaMode: true the tile layer rendered blank on the home
+  // recap card (reported on prod). 100px is enough for flutter_map to fetch
+  // and paint tiles reliably while keeping the card compact.
+  static const double _mapHeight = 100.0;
 
   Widget _buildSummaryCard(BuildContext context, DailySummary summary, double cardHeight) {
     final hasMap = summary.locations.isNotEmpty;
