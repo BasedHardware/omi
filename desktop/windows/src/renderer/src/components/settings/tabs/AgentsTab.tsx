@@ -13,7 +13,7 @@ import { Bot, Terminal } from 'lucide-react'
 import { SettingRow } from '../SettingRow'
 import { getPreferences, setPreferences } from '../../../lib/preferences'
 import { useCodingAgents } from '../../../hooks/useCodingAgents'
-import { beginClaudeSignIn } from '../../../lib/claudeSignIn'
+import { CLAUDE_SIGN_IN_FAILED } from '../../../lib/claudeSignIn'
 import type {
   AgentDetectionMap,
   CodingAgentAuthStatus,
@@ -123,11 +123,23 @@ export function AgentsTab(): React.JSX.Element {
   const signInToClaude = (): void => {
     setClaudeAuth((a) => ({ ...a, busy: true, error: undefined }))
     setTests((t) => ({ ...t, acp: { running: false } }))
-    // Routes through the shared upsell sheet + parallel OAuth (macOS parity);
-    // onResult reflects the post-sign-in status or surfaces a failure here.
-    beginClaudeSignIn((r) =>
-      setClaudeAuth({ status: r.status, busy: false, error: r.ok ? undefined : r.error })
-    )
+    // Connecting the coding agent is a plain OAuth (Mac parity) — launch the
+    // Claude Code browser sign-in directly, with NO upsell sheet. The
+    // "Upgrade to Omi Pro" ClaudeAuthSheet is reserved for the mid-turn
+    // auth_required event (see claudeSignIn.ts), so a Pro user connecting here
+    // is never paywalled. Reflect the resulting status / surface a failure.
+    void window.omi
+      .codingAgentStartAuth()
+      .then((r) =>
+        setClaudeAuth({ status: r.status, busy: false, error: r.ok ? undefined : r.error })
+      )
+      .catch(() =>
+        setClaudeAuth({
+          status: { connected: false, expiresAt: null },
+          busy: false,
+          error: CLAUDE_SIGN_IN_FAILED
+        })
+      )
   }
 
   const signOutOfClaude = (): void => {

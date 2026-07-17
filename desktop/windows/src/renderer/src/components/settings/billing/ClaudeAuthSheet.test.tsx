@@ -22,8 +22,11 @@ afterEach(() => {
   __resetClaudeSignIn()
 })
 
+// The sheet is driven by beginClaudeSignIn — the mid-turn auth_required trigger
+// (Mac's isClaudeAuthRequired), NOT the Settings sign-in button. These cases
+// exercise that mid-turn path.
 describe('ClaudeAuthSheet', () => {
-  it('is hidden until a sign-in begins, then shows the Omi Pro upsell copy', async () => {
+  it('is hidden until a mid-turn auth_required begins, then shows the Omi Pro upsell copy', async () => {
     render(<ClaudeAuthSheet />)
     expect(screen.queryByText('Upgrade to Omi Pro')).toBeNull()
 
