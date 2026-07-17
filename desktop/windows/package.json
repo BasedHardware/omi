@@ -60,7 +60,8 @@
     "soak": "node scripts/run-soak.mjs",
     "soak:verify": "node scripts/soak-verify.mjs",
     "test:e2e:meeting": "node scripts/run-meeting-e2e.mjs",
-    "test:e2e:meeting-live": "node scripts/run-meeting-live.mjs"
+    "test:e2e:meeting-live": "node scripts/run-meeting-live.mjs",
+    "smoke:gmail-session": "node scripts/gmail-session-smoke.mjs"
   },
   "dependencies": {
     "@agentclientprotocol/claude-agent-acp": "^0.58.1",
