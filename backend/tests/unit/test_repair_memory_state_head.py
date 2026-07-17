@@ -4,6 +4,8 @@ import importlib.util
 import sys
 from pathlib import Path
 
+import pytest
+
 from tests.unit.fixtures.strict_firestore_transaction import StrictFirestore
 from utils.memory.v3.account_generation_source import read_memory_v3_trusted_account_generation
 
@@ -18,6 +20,11 @@ def load_script():
     sys.modules[spec.name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(scope="module")
+def script():
+    return load_script()
 
 
 def _control(uid: str = "u1"):
@@ -45,9 +52,7 @@ class _StrictDocumentClient:
         return self.database.transaction()
 
 
-def test_repair_plan_rejects_control_without_trusted_fields():
-    script = load_script()
-
+def test_repair_plan_rejects_control_without_trusted_fields(script):
     plan = script.build_state_head_repair_plan(
         uid="u1", head={"current_head_commit_id": "legacy"}, control={"uid": "u1", "account_generation": 7}
     )
@@ -56,8 +61,7 @@ def test_repair_plan_rejects_control_without_trusted_fields():
     assert plan.trusted_fields is None
 
 
-def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head():
-    script = load_script()
+def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head(script):
     db = StrictFirestore(
         {
             ("users", "u1", "memory_state", "head"): {
@@ -88,8 +92,7 @@ def test_repair_transaction_preserves_legacy_fields_and_restores_v3_trusted_head
     assert trusted.account_generation == 7
 
 
-def test_repair_transaction_creates_missing_state_head_from_trusted_apply_control():
-    script = load_script()
+def test_repair_transaction_creates_missing_state_head_from_trusted_apply_control(script):
     db = StrictFirestore({("users", "u1", "memory_state", "apply_control"): _control()})
 
     client = _StrictDocumentClient(db)
@@ -100,8 +103,7 @@ def test_repair_transaction_creates_missing_state_head_from_trusted_apply_contro
     assert db.rows[("users", "u1", "memory_state", "head")]["head_commit_id"] == "canonical-head-7"
 
 
-def test_repair_transaction_is_noop_for_an_already_trusted_head():
-    script = load_script()
+def test_repair_transaction_is_noop_for_an_already_trusted_head(script):
     trusted_head = {
         **_control(),
         "schema_version": 1,
@@ -122,8 +124,7 @@ def test_repair_transaction_is_noop_for_an_already_trusted_head():
     assert db.rows[("users", "u1", "memory_state", "head")] == trusted_head
 
 
-def test_repair_transaction_reads_before_writing_under_strict_firestore_rules():
-    script = load_script()
+def test_repair_transaction_reads_before_writing_under_strict_firestore_rules(script):
     db = StrictFirestore(
         {
             ("users", "u1", "memory_state", "head"): {"current_head_commit_id": "legacy"},
