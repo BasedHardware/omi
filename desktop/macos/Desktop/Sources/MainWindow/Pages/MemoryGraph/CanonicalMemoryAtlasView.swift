@@ -571,8 +571,9 @@ enum MemoryAtlasRenderPlanner {
                 cursor >= 0.9995 || timeline.fraction(for: edge.edge.createdAt) <= cursor
               }
             } ?? true
+          let isBeforeAsOf = asOf.map { edge.edge.createdAt <= $0 } ?? true
           return isWithinTimeline
-            && (asOf == nil || edge.edge.createdAt <= asOf!)
+            && isBeforeAsOf
             && visibleNodeIDs.contains(edge.edge.sourceId) && visibleNodeIDs.contains(edge.edge.targetId)
         }
         .prefix(selectedEdgeLimit)
@@ -2483,7 +2484,7 @@ private struct CanonicalMemoryAtlasSurface: View {
     for placement in snapshot.nodes where nodeIsVisibleAtCurrentTime(placement) {
       let rendered = point(for: placement.normalizedPosition, in: size)
       let distance = hypot(rendered.x - location.x, rendered.y - location.y)
-      if distance <= hitRadius && (nearest == nil || distance < nearest!.distance) {
+      if distance <= hitRadius && (nearest.map { distance < $0.distance } ?? true) {
         nearest = (placement, distance)
       }
     }

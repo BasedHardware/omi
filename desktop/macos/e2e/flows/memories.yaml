@@ -10,6 +10,7 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/ForceDirectedSimulation.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryGraphPage.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/CanonicalMemoryAtlasView.swift
+  - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryGraph/MemoryAtlasRenderPlanCache.swift
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/MemoryExportDestinationSheet.swift
 preconditions:
@@ -50,6 +51,40 @@ steps:
       result.detail.result_count: { min: 1 }
 
   - id: S5
+    name: Open Atlas exploration page
+    bridge.action:
+      name: open_memory_atlas
+    expect:
+      result.detail.opened: "true"
+      result.detail.target: "page"
+
+  - id: S6
+    name: Scrub Atlas replay
+    bridge.action:
+      name: memory_atlas_set_time
+      params:
+        target: "page"
+        fraction: "0.45"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+      result.detail.fraction: "0.45"
+
+  - id: S7
+    name: Zoom and pan Atlas
+    bridge.action:
+      name: memory_atlas_set_viewport
+      params:
+        target: "page"
+        zoom: "2.2"
+        pan_x: "140"
+        pan_y: "-80"
+    expect:
+      result.detail.posted: "true"
+      result.detail.target: "page"
+      result.detail.zoom: "2.2"
+
+  - id: S8
     name: Logs clean
     log.expect:
       absent:

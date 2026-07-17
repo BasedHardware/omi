@@ -7,8 +7,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testCloseClearsRunningFlag() async throws {
     let testUserId = "rewind-db-lifecycle-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -30,8 +33,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testPoolGenerationAdvancesAcrossReopen() async throws {
     let testUserId = "rewind-db-pool-generation-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -70,8 +76,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testAgentSyncDatabaseFailureReportingClosesPoolForRecovery() async throws {
     let testUserId = "rewind-agent-sync-recovery-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -109,8 +118,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testInitializeReopensDatabaseClosedAfterIndexerInitialization() async throws {
     let testUserId = "rewind-indexer-reinitialize-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -142,8 +154,11 @@ final class RewindDatabaseLifecycleTests: XCTestCase {
 
   func testProcessFrameReopensDatabaseClosedAfterIndexerInitialization() async throws {
     let testUserId = "rewind-indexer-process-frame-reinitialize-\(UUID().uuidString)"
-    let userDir = FileManager.default
-      .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+    let applicationSupportDirectory = try XCTUnwrap(
+      FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+    )
+    let userDir =
+      applicationSupportDirectory
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
