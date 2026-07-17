@@ -23,10 +23,12 @@
 
 import { describe, expect, it } from 'vitest'
 import {
+  analyzeAdvertisedToolCopy,
   analyzeSurfaceCoverage,
   analyzeToolInstructionCoverage,
   formatCoverageReport,
   instructionMentions,
+  type AdvertisedToolCopy,
   type CoverageReport,
   type SurfaceCoverageInput
 } from './toolInstructionCoverage'
@@ -48,6 +50,29 @@ function aliasesByTool(): Record<string, string[]> {
 // surface does not advertise). Derived from the manifest so it never drifts.
 function knownToolNames(): string[] {
   return omiToolManifest.map((entry) => entry.name)
+}
+
+// ── Advertised-tool COPY (description + parameter descriptions) ─────────────────
+// The catalog declaration is itself model-facing: the model reads each tool's
+// description and its parameter descriptions. Derived straight from the production
+// voice catalog so the scanned copy is exactly what the model sees.
+function paramDescriptions(parameters: unknown): string[] {
+  const props = (parameters as { properties?: Record<string, unknown> } | null)?.properties
+  if (!props || typeof props !== 'object') return []
+  const out: string[] = []
+  for (const value of Object.values(props)) {
+    const description = (value as { description?: unknown } | null)?.description
+    if (typeof description === 'string') out.push(description)
+  }
+  return out
+}
+
+function voiceAdvertisedCopy(): AdvertisedToolCopy[] {
+  return buildVoiceHubToolCatalog('coordinator').map((tool) => ({
+    name: tool.name,
+    description: tool.description,
+    parameterDescriptions: paramDescriptions(tool.parameters)
+  }))
 }
 
 // ── Surface: realtime_voice ────────────────────────────────────────────────────
@@ -248,6 +273,86 @@ describe('analyzeSurfaceCoverage — rule encoding', () => {
   })
 })
 
+describe('analyzeAdvertisedToolCopy — advertised-tool copy reverse check', () => {
+  const known = ['get_action_items', 'get_tasks', 'search_tasks', 'update_action_item']
+
+  it('flags an advertised tool whose copy names an unadvertised known tool (the shipped bug)', () => {
+    const r = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: [
+        {
+          name: 'update_action_item',
+          description: "You MUST first call get_tasks to get the matching task's id.",
+          parameterDescriptions: ['The task id from get_tasks.']
+        },
+        { name: 'get_action_items', description: 'Read the tasks.', parameterDescriptions: [] }
+      ],
+      knownToolNames: known
+    })
+    expect(r.fails).toBe(true)
+    expect(r.offenders).toEqual([{ tool: 'update_action_item', references: ['get_tasks'] }])
+  })
+
+  it('a self-reference or a reference to ANOTHER advertised tool is fine', () => {
+    const r = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: [
+        {
+          name: 'update_action_item',
+          description: 'First call get_action_items; this is update_action_item.',
+          parameterDescriptions: ['The task id from get_action_items.']
+        },
+        { name: 'get_action_items', description: 'Read the tasks.', parameterDescriptions: [] }
+      ],
+      knownToolNames: known
+    })
+    expect(r.fails).toBe(false)
+    expect(r.offenders).toEqual([])
+  })
+
+  it('only KNOWN tool names are scanned (arbitrary prose is not a phantom)', () => {
+    const r = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: [
+        {
+          name: 'get_action_items',
+          description: 'Read about_user and screen_recording context.',
+          parameterDescriptions: []
+        }
+      ],
+      knownToolNames: known
+    })
+    expect(r.fails).toBe(false)
+  })
+
+  it('guard:allow exempts an intentional unadvertised reference', () => {
+    const r = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: [
+        { name: 'update_action_item', description: 'Prefer get_tasks.', parameterDescriptions: [] }
+      ],
+      knownToolNames: known,
+      allow: { get_tasks: 'intentional documented cross-surface pointer' }
+    })
+    expect(r.fails).toBe(false)
+  })
+
+  it('matches on token boundaries (get_tasks does not match get_tasks_extended)', () => {
+    const r = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: [
+        {
+          name: 'get_action_items',
+          description: 'Call get_tasks_extended.',
+          parameterDescriptions: []
+        }
+      ],
+      knownToolNames: ['get_tasks', 'get_action_items']
+    })
+    expect(r.fails).toBe(false)
+  })
+})
+
 describe('instructionMentions — token boundary', () => {
   it('matches a standalone tool name', () => {
     expect(instructionMentions('call get_tasks now', 'get_tasks')).toBe(true)
@@ -286,5 +391,35 @@ describe('tool ↔ instruction coverage — real surfaces', () => {
     })
     expect(enforcedVoice.status).toBe('violation')
     expect(enforcedVoice.missing.length).toBeGreaterThan(0)
+  })
+
+  it('no voice-advertised tool names an unadvertised tool in its own copy (enforced)', () => {
+    // The advertised-tool-COPY reverse check over the real voice catalog — the surface
+    // the get_tasks-in-a-description bug shipped on. Enforced (hard-asserted): unlike
+    // the instruction-prose surfaces, every tool's copy exists on THIS branch, so a
+    // regression is catchable now. On a red run the message names the offender(s).
+    //
+    // guard:allow — two benign known-name collisions, each documented. get_tasks is
+    // deliberately NOT allowed, so reintroducing a get_tasks reference in an advertised
+    // tool's copy (the bug this guard exists for) still fails here.
+    const result = analyzeAdvertisedToolCopy({
+      surface: 'realtime_voice',
+      advertised: voiceAdvertisedCopy(),
+      knownToolNames: knownToolNames(),
+      allow: {
+        // 'screenshot' is the only single-word tool name; it collides with the plain
+        // English word ("raw screenshot pixels", "asking them to screenshot"). The
+        // screenshot tool is macOS-only and is never voice-advertised on Windows.
+        screenshot:
+          "English word in capture_screen / get_work_context copy, not the Mac-only 'screenshot' tool",
+        // create_desktop_dispatch's free-form `operation` param uses get_screenshot as
+        // an ILLUSTRATIVE example value ("e.g. get_screenshot"), not a call directive.
+        get_screenshot:
+          "example operation value in create_desktop_dispatch's `operation` param, not a call directive"
+      }
+    })
+    console.log(result.message)
+    expect(result.offenders).toEqual([])
+    expect(result.fails).toBe(false)
   })
 })
