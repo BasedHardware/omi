@@ -6,6 +6,7 @@ app: com.omi.computer-macos
 covers:
   - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage+CaptureHealth.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindCaptureState.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
@@ -28,7 +29,7 @@ steps:
 
   - id: S2
     name: Verify permission state
-    do: "Check the Rewind page for permission status. If Screen Recording permission is not granted, a 'Grant Permission' or 'Grant' button should be visible. Note the current Rewind status (On/Off)."
+    do: "Check the Rewind page for permission status. If Screen Recording permission is not granted, a 'Grant Permission' or 'Grant' button should be visible. Note the current Rewind status (On/Off), and if monitoring is on but the current window cannot be captured, verify the visible Capture paused or Recovering state explains that Rewind is not recording."
     expect:
       interactive_count: { min: 3 }
 
