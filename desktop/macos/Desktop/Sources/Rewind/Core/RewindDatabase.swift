@@ -97,11 +97,24 @@ actor RewindDatabase {
 
   /// A sanitized SQLite corruption/I/O classifier. Avoid logging DB paths or row data.
   private func isRecoverableDatabaseError(_ error: Error) -> Bool {
-    guard let dbError = error as? DatabaseError else { return false }
-    if isBusyDatabaseError(error) { return false }
-    let code = dbError.resultCode
-    let extendedCode = dbError.extendedResultCode.rawValue
-    return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    if let dbError = error as? DatabaseError {
+      if isBusyDatabaseError(error) { return false }
+      let code = dbError.resultCode
+      let extendedCode = dbError.extendedResultCode.rawValue
+      return code == .SQLITE_IOERR || code == .SQLITE_CORRUPT || extendedCode == 6922
+    }
+
+    // GRDB can bridge a SQLite failure through NSError before a storage actor
+    // reports it. Keep this restricted to canonical SQLite primary codes/text
+    // so unrelated application or network failures cannot rotate local storage.
+    let nsError = error as NSError
+    if nsError.code == 10 || nsError.code == 11 || nsError.code == 6922 {
+      return true
+    }
+    let description = error.localizedDescription.lowercased()
+    return description.contains("sqlite error 10")
+      || description.contains("sqlite error 11")
+      || description.contains("sqlite error 6922")
   }
 
   private func isBusyDatabaseError(_ error: Error) -> Bool {

@@ -142,6 +142,12 @@ enum ViewExporter {
         },
         CGSize(width: 900, height: 700)
       ),
+
+      (
+        "16-memory-atlas",
+        { MemoryAtlasExportPreview.surface() },
+        CGSize(width: 1200, height: 820)
+      ),
     ]
 
     guard index >= 0 && index < views.count else { return nil }
@@ -149,7 +155,7 @@ enum ViewExporter {
     return (entry.0, entry.1(), entry.2)
   }
 
-  static var standaloneViewCount: Int { 14 }
+  static var standaloneViewCount: Int { 15 }
 
   private static let onboardingExportSteps: [(String, Int)] = [
     ("01-name", 0),
@@ -292,7 +298,15 @@ enum ViewExporter {
       ),
       (
         "full-memories", 3,
-        { AnyView(MemoriesPage(viewModel: previewMemoriesViewModel(), graphViewModel: MemoryGraphViewModel())) }
+        {
+          AnyView(
+            MemoriesPage(
+              viewModel: previewMemoriesViewModel(),
+              graphViewModel: MemoryGraphViewModel(),
+              onOpenAtlas: {}
+            )
+          )
+        }
       ),
       (
         "full-tasks", 4,

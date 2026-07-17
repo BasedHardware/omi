@@ -5,6 +5,29 @@ import SwiftUI
 
 // MARK: - Memory Graph Page
 
+/// One explicit compatibility boundary: canonical-memory users get the atlas,
+/// while the established graph remains available until a user is migrated.
+enum MemoryGraphPresentationMode: Equatable {
+  case canonicalAtlas
+  case legacyBrainMap
+
+  /// Local QA can exercise the canonical-only surface without changing the
+  /// server-owned rollout state. Production bundles always remain gate-driven.
+  static var localQAOverrideEnabled: Bool {
+    AppBuild.isNonProduction
+      && ProcessInfo.processInfo.environment["OMI_FORCE_CANONICAL_MEMORY_ATLAS"] == "1"
+  }
+
+  static func resolve(
+    canonicalLifecycleExposed: Bool,
+    forceCanonicalAtlasForLocalQA: Bool = false
+  ) -> Self {
+    canonicalLifecycleExposed || forceCanonicalAtlasForLocalQA
+      ? .canonicalAtlas
+      : .legacyBrainMap
+  }
+}
+
 struct MemoryGraphPage: View {
   @ObservedObject var viewModel: MemoryGraphViewModel
   @Environment(\.dismiss) private var dismiss
@@ -197,6 +220,7 @@ class MemoryGraphViewModel: ObservableObject {
   @Published var isRebuilding = false
   @Published var isEmpty = true
   @Published var selectedNodeId: String?
+  @Published private(set) var graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
 
   let scene = SCNScene()
   let cameraNode = SCNNode()
@@ -211,6 +235,7 @@ class MemoryGraphViewModel: ObservableObject {
   // the fetched graph is unchanged.
   private var lastLoadedAt = Date.distantPast
   private var isPreparing = false
+  private var hasLoadedCanonicalAtlas = false
   private var hasRunEmptyBootstrap = false
   private var loadedGraphSignature: Int?
   private var sessionGeneration = 0
@@ -288,6 +313,56 @@ class MemoryGraphViewModel: ObservableObject {
     }
   }
 
+  /// Load graph data for the canonical atlas without invoking the legacy
+  /// empty-graph rebuild path or paying the SceneKit simulation cost.
+  func prepareCanonicalAtlas() async {
+    guard !isPreparing else { return }
+    let generation = sessionGeneration
+    isPreparing = true
+    defer {
+      if generation == sessionGeneration {
+        isPreparing = false
+      }
+    }
+
+    if hasLoadedCanonicalAtlas,
+      !graphResponse.nodes.isEmpty,
+      !PollingConfig.shouldAllowActivationRefresh(lastRefresh: lastLoadedAt)
+    {
+      return
+    }
+
+    let showSpinner = graphResponse.nodes.isEmpty
+    if showSpinner { isLoading = true }
+    defer {
+      if showSpinner && generation == sessionGeneration {
+        isLoading = false
+      }
+    }
+
+    do {
+      // Canonical users should see the authoritative server graph. The local
+      // onboarding cache is useful offline, but may contain a much smaller or
+      // older projection than the incrementally maintained canonical graph.
+      let response: KnowledgeGraphResponse
+      do {
+        response = try await APIClient.shared.getKnowledgeGraph()
+      } catch {
+        response = await KnowledgeGraphStorage.shared.loadGraph()
+        guard !response.nodes.isEmpty else { throw error }
+        log("Memory atlas: server graph unavailable, using local projection")
+      }
+      guard generation == sessionGeneration else { return }
+      graphResponse = response
+      isEmpty = response.nodes.isEmpty
+      hasLoadedCanonicalAtlas = true
+      lastLoadedAt = Date()
+      log("Memory atlas: \(response.nodes.count) nodes, \(response.edges.count) edges")
+    } catch {
+      log("Failed to load memory atlas: \(error.localizedDescription)")
+    }
+  }
+
   func loadGraph() async {
     await loadGraph(generation: sessionGeneration)
   }
@@ -308,6 +383,7 @@ class MemoryGraphViewModel: ObservableObject {
       guard generation == sessionGeneration else { return }
 
       log("Knowledge graph: \(response.nodes.count) nodes, \(response.edges.count) edges")
+      graphResponse = response
       isEmpty = response.nodes.isEmpty
       lastLoadedAt = Date()
 
@@ -573,10 +649,12 @@ class MemoryGraphViewModel: ObservableObject {
     isRebuilding = false
     isEmpty = true
     selectedNodeId = nil
+    graphResponse = KnowledgeGraphResponse(nodes: [], edges: [])
     isAnimating = false
     lastLoadedAt = .distantPast
     isPreparing = false
     hasRunEmptyBootstrap = false
+    hasLoadedCanonicalAtlas = false
     loadedGraphSignature = nil
     cameraNode.position = SCNVector3(0, 0, 2000)
   }
