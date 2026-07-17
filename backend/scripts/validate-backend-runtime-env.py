@@ -212,7 +212,41 @@ def _build_rendered_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
                 }
             )
         services[str(service_name)] = {'env': env_entries, 'flags': dict(network_flags)}
-    return {'services': services}
+    jobs: ConfigDict = {}
+    job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
+    for job_name, raw_job_config in job_configs.items():
+        job_config = _as_config_dict(raw_job_config) or {}
+        env_entries = []
+        for env_name, raw_entry in (job_config.get('env') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None:
+                continue
+            if 'value' in entry:
+                env_entries.append({'name': str(env_name), 'value': str(entry['value'])})
+            elif 'env_var' in entry:
+                env_entries.append(
+                    {
+                        'name': str(env_name),
+                        'value': str(entry.get('default', f'__rendered_{env_name}__')),
+                    }
+                )
+        for secret_name, raw_entry in (job_config.get('secrets') or {}).items():
+            entry = _as_config_dict(raw_entry)
+            if entry is None or 'secret' not in entry:
+                continue
+            env_entries.append(
+                {
+                    'name': str(secret_name),
+                    'valueFrom': {
+                        'secretKeyRef': {
+                            'name': str(entry['secret']),
+                            'key': str(entry.get('version', 'latest')),
+                        }
+                    },
+                }
+            )
+        jobs[str(job_name)] = {'env': env_entries, 'flags': dict(job_config.get('flags') or {})}
+    return {'services': services, 'jobs': jobs}
 
 
 def _rendered_network_flags(env_config: ConfigDict) -> StringMap:
@@ -764,6 +798,38 @@ def _validate_cloud_run(
                 strict_provisional=strict_provisional,
             )
         )
+    state_jobs = _as_config_dict(cloud_run_state.get('jobs'))
+    if state_jobs is not None:
+        job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
+        for job, raw_job_config in job_configs.items():
+            job_config = _as_config_dict(raw_job_config) or {}
+            job_state = _as_config_dict(state_jobs.get(job))
+            if job_state is None:
+                errors.append(ValidationError(f'cloud_run/{job}', 'missing job state'))
+                continue
+            actual_env = _env_entries_by_name(job_state.get('env', []))
+            errors.extend(
+                _validate_env_entries(
+                    scope=f'cloud_run/{job}',
+                    expected=job_config.get('env', {}),
+                    actual=actual_env,
+                    strict_provisional=strict_provisional,
+                )
+            )
+            errors.extend(
+                _validate_forbidden_env_entries(
+                    scope=f'cloud_run/{job}',
+                    forbidden=job_config.get('forbidden_env'),
+                    actual=actual_env,
+                )
+            )
+            errors.extend(
+                _validate_cloud_run_secret_entries(
+                    scope=f'cloud_run/{job}',
+                    expected=job_config.get('secrets', {}),
+                    actual=actual_env,
+                )
+            )
     return errors
 
 
@@ -820,6 +886,14 @@ def _validate_cloud_run_workflows(
                 actual=actual_env,
             )
         )
+        service_flags = _substitute_values(service_state.get('flags', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_forbidden_workflow_removals(
+                scope=f'cloud_run_workflow/{service}',
+                forbidden=service_config.get('forbidden_env'),
+                flags=service_flags,
+            )
+        )
         actual_secrets = _workflow_secret_entries_by_name(service_state.get('secrets', {}))
         errors.extend(
             _validate_cloud_run_secret_entries(
@@ -856,6 +930,14 @@ def _validate_cloud_run_workflows(
                 scope=f'cloud_run_workflow/{job}',
                 forbidden=job_config.get('forbidden_env'),
                 actual=actual_env,
+            )
+        )
+        job_flags = _substitute_values(job_state.get('flags', {}), variables=workflow_vars)
+        errors.extend(
+            _validate_forbidden_workflow_removals(
+                scope=f'cloud_run_workflow/{job}',
+                forbidden=job_config.get('forbidden_env'),
+                flags=job_flags,
             )
         )
         actual_secrets = _workflow_secret_entries_by_name(job_state.get('secrets', {}))
@@ -1174,6 +1256,24 @@ def _validate_forbidden_env_entries(
     return [
         ValidationError(scope, f'forbidden env {name} is present')
         for name in sorted(set(forbidden_names).intersection(actual))
+    ]
+
+
+def _validate_forbidden_workflow_removals(
+    *,
+    scope: str,
+    forbidden: object,
+    flags: StringMap,
+) -> list[ValidationError]:
+    if forbidden is None:
+        return []
+    forbidden_names = _as_config_list(forbidden)
+    if forbidden_names is None or any(not isinstance(name, str) or not name for name in forbidden_names):
+        return []
+    removed = {name.strip() for name in flags.get('--remove-env-vars', '').split(',') if name.strip()}
+    return [
+        ValidationError(scope, f'forbidden env {name} must be listed in --remove-env-vars')
+        for name in sorted(set(forbidden_names).difference(removed))
     ]
 
 
@@ -1670,6 +1770,7 @@ def _cloud_run_secret_ref(entry: EnvEntry) -> StringMap | None:
 
 def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
     services: ConfigDict = {}
+    jobs: ConfigDict = {}
     project = env_config['gcp_project']
     region = env_config['region']
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -1699,7 +1800,39 @@ def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
             'env': first_container.get('env', []),
             'flags': _cloud_run_network_flags_from_annotations(annotations),
         }
-    return {'services': services}
+    job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
+    for job in job_configs:
+        command = [
+            'gcloud',
+            'run',
+            'jobs',
+            'describe',
+            job,
+            f'--project={project}',
+            f'--region={region}',
+            '--format=json',
+        ]
+        result = subprocess.run(command, check=True, capture_output=True, text=True)
+        jobs[job] = {'env': _cloud_run_job_env(json.loads(result.stdout))}
+    return {'services': services, 'jobs': jobs}
+
+
+def _cloud_run_job_env(raw_job_state: object) -> list[Any]:
+    job_state = _as_config_dict(raw_job_state) or {}
+    env_paths = (
+        ('template', 'template', 'containers'),
+        ('template', 'containers'),
+        ('spec', 'template', 'spec', 'template', 'spec', 'containers'),
+    )
+    for path in env_paths:
+        cursor: object = job_state
+        for part in path:
+            cursor = (_as_config_dict(cursor) or {}).get(part)
+        containers = _as_config_list(cursor)
+        if containers:
+            first_container = _as_config_dict(containers[0]) or {}
+            return _as_config_list(first_container.get('env')) or []
+    return []
 
 
 def _cloud_run_network_flags_from_annotations(annotations: object) -> StringMap:

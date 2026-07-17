@@ -94,6 +94,7 @@ runs:
           SYNC_TASKS_HANDLER_URL=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
           SYNC_TASKS_OIDC_AUDIENCE=${{ steps.backfill-service.outputs.url }}/v2/sync-jobs/run
         SECRET_OVERLAY: ${{ inputs.backfill_secrets }}
+        REMOVE_ENV_VARS: HOSTED_PUSHER_API_URL
       run: |
         gcloud run services describe backend-sync \
           --region=${{ inputs.region }} \
@@ -127,6 +128,7 @@ runs:
           --min-instances=0
           --max-instances=4
           --concurrency=1
+          --remove-env-vars=HOSTED_PUSHER_API_URL
           ${{ inputs.cloud_run_flags }}
         env_vars: ${{ steps.backfill-runtime.outputs.env_vars }}
         secrets: ${{ steps.backfill-runtime.outputs.secrets }}

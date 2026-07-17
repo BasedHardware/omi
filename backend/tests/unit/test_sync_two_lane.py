@@ -119,6 +119,36 @@ def test_cloud_run_clone_preserves_live_contract_and_overlays_lane_settings():
     assert 'ENCRYPTION_SECRET=ENCRYPTION_SECRET:latest' in secrets
 
 
+def test_cloud_run_clone_removes_retired_source_env():
+    service = {
+        'spec': {
+            'template': {
+                'spec': {
+                    'containers': [
+                        {
+                            'env': [
+                                {'name': 'HOSTED_PUSHER_API_URL', 'value': 'http://retired-pusher.local'},
+                                {'name': 'REDIS_DB_HOST', 'value': '10.0.0.1'},
+                            ]
+                        }
+                    ]
+                }
+            }
+        }
+    }
+
+    env_vars, secrets = clone_environment(
+        service,
+        'HOSTED_PUSHER_API_URL=http://overlay-should-not-survive.local',
+        'HOSTED_PUSHER_API_URL=HOSTED_PUSHER_API_URL:latest',
+        remove_env_vars='HOSTED_PUSHER_API_URL',
+    )
+
+    assert 'HOSTED_PUSHER_API_URL' not in env_vars
+    assert 'HOSTED_PUSHER_API_URL' not in secrets
+    assert 'REDIS_DB_HOST=10.0.0.1' in env_vars
+
+
 def test_deploy_contract_routes_both_backfill_budget_alerts():
     action = (Path(__file__).resolve().parents[3] / '.github/actions/sync-backfill-lifecycle/action.yml').read_text()
     manual = (Path(__file__).resolve().parents[3] / '.github/workflows/gcp_backend.yml').read_text()
