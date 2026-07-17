@@ -18,7 +18,6 @@ jobs:
       diff_base: ${{ steps.changed.outputs.diff_base }}
       should_run: ${{ steps.changed.outputs.should_run }}
       should_release_compile: ${{ steps.changed.outputs.should_release_compile }}
-      changed_files: ${{ steps.changed_files.outputs.changed_files }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
@@ -73,16 +72,6 @@ jobs:
           echo "should_release_compile=$SHOULD_RELEASE_COMPILE" >> "$GITHUB_OUTPUT"
           echo "desktop_swift=$DESKTOP_SWIFT package_swift=$PACKAGE_SWIFT package_resolved=$PACKAGE_RESOLVED should_run=$SHOULD_RUN should_release_compile=$SHOULD_RELEASE_COMPILE"
 
-      - name: Export changed files for shallow macOS jobs
-        id: changed_files
-        run: |
-          DELIM="$(openssl rand -hex 16)"
-          {
-            echo "changed_files<<${DELIM}"
-            scripts/changed-files "${{ steps.changed.outputs.diff_base }}...HEAD"
-            echo "${DELIM}"
-          } >> "$GITHUB_OUTPUT"
-
   desktop-swift:
     name: Desktop Swift Build & Tests
     needs: changes
@@ -92,10 +81,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v7
         with:
-          fetch-depth: 1
-
-      - name: Fetch manifest check base
-        run: git fetch --no-tags --depth=1 origin "${{ needs.changes.outputs.diff_base }}"
+          fetch-depth: 0
 
       - name: Select and assert pinned Xcode 16.4
         run: desktop/macos/scripts/run-swift-ci.sh --select-toolchain
@@ -130,11 +116,8 @@ jobs:
         uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
 
       - name: Run macOS-scoped manifest checks
-        env:
-          CHANGED_FILES: ${{ needs.changes.outputs.changed_files }}
         run: |
-          printf '%s\n' "$CHANGED_FILES" > /tmp/desktop-changed-files.txt
-          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --changed-files /tmp/desktop-changed-files.txt --skip-pr-body-checks
+          python3 .github/scripts/run_checks.py --lane ci --platform macos --base "${{ needs.changes.outputs.diff_base }}" --skip-pr-body-checks
 
       # Debug build+test only on the PR critical path. Release compile is a
       # separate job (main push, or PRs that touch Package.swift) so we do not
