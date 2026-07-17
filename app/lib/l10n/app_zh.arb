@@ -3171,5 +3171,6 @@
     "deviceStorageUsedOfTotal": "{total} 中已使用 {used}",
     "deviceStorageFree": "剩余 {free}",
     "deviceStorageNearlyFull": "设备快满了 — 请同步以释放空间。",
-    "phoneMicOfflineFallbackMessage": "无网络连接 — 正在本地录制。恢复联网后将自动转写。"
+    "phoneMicOfflineFallbackMessage": "无网络连接 — 正在本地录制。恢复联网后将自动转写。",
+    "dataEncryptedBanner": "您的数据默认通过强加密保护，并且由您掌控其存储和使用方式。"
 }

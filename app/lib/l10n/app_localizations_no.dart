@@ -9597,4 +9597,8 @@ class AppLocalizationsNo extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ingen tilkobling – tar opp lokalt. Det blir transkribert når du er tilkoblet igjen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dataene dine er som standard sikret med sterk kryptering, og du bestemmer hvordan de lagres og brukes.';
 }

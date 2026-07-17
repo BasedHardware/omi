@@ -11322,5 +11322,9 @@
     "phoneMicOfflineFallbackMessage": "No connection — recording locally. It will be transcribed when you're back online.",
     "@phoneMicOfflineFallbackMessage": {
         "description": "Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline"
+    },
+    "dataEncryptedBanner": "Your data is secured by default with strong encryption, and you stay in control of how it's stored and used.",
+    "@dataEncryptedBanner": {
+        "description": "Data privacy page banner summarizing encryption and user control"
     }
 }

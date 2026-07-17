@@ -9541,4 +9541,7 @@ class AppLocalizationsAr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.';
+
+  @override
+  String get dataEncryptedBanner => 'بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها.';
 }

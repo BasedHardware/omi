@@ -9547,4 +9547,8 @@ class AppLocalizationsTh extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'ไม่มีการเชื่อมต่อ — กำลังบันทึกในเครื่อง จะถอดเสียงเมื่อคุณกลับมาออนไลน์';
+
+  @override
+  String get dataEncryptedBanner =>
+      'ข้อมูลของคุณได้รับการปกป้องด้วยการเข้ารหัสที่แข็งแกร่งตามค่าเริ่มต้น และคุณเป็นผู้ควบคุมว่าจะจัดเก็บและใช้งานอย่างไร';
 }

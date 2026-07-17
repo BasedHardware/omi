@@ -9575,4 +9575,8 @@ class AppLocalizationsHi extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'कोई कनेक्शन नहीं — स्थानीय रूप से रिकॉर्ड किया जा रहा है। ऑनलाइन वापस आने पर इसे ट्रांसक्राइब किया जाएगा।';
+
+  @override
+  String get dataEncryptedBanner =>
+      'आपका डेटा डिफ़ॉल्ट रूप से मजबूत एन्क्रिप्शन से सुरक्षित है, और यह कैसे संग्रहीत और उपयोग किया जाता है इस पर आपका नियंत्रण रहता है।';
 }

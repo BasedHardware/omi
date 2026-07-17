@@ -9638,4 +9638,8 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get phoneMicOfflineFallbackMessage => 'Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Az adataid alapértelmezés szerint erős titkosítással védettek, és te döntöd el, hogyan tárolják és használják őket.';
 }

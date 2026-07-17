@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} از {total} استفاده‌شده",
     "deviceStorageFree": "{free} آزاد",
     "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.",
-    "phoneMicOfflineFallbackMessage": "اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود."
+    "phoneMicOfflineFallbackMessage": "اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.",
+    "dataEncryptedBanner": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند."
 }

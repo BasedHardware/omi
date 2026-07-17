@@ -9604,4 +9604,8 @@ class AppLocalizationsBn extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'সংযোগ নেই — স্থানীয়ভাবে রেকর্ড করা হচ্ছে। আপনি আবার অনলাইনে এলে এটি ট্রান্সক্রাইব করা হবে।';
+
+  @override
+  String get dataEncryptedBanner =>
+      'আপনার ডেটা ডিফল্টরূপে শক্তিশালী এনক্রিপশন দিয়ে সুরক্ষিত, এবং এটি কীভাবে সংরক্ষণ ও ব্যবহার করা হয় তা আপনি নিয়ন্ত্রণ করেন।';
 }

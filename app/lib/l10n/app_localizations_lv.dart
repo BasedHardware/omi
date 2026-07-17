@@ -9620,4 +9620,8 @@ class AppLocalizationsLv extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Nav savienojuma — ieraksta lokāli. Tas tiks transkribēts, kad atkal būsiet tiešsaistē.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Jūsu dati pēc noklusējuma ir aizsargāti ar spēcīgu šifrēšanu, un jūs kontrolējat, kā tie tiek glabāti un izmantoti.';
 }

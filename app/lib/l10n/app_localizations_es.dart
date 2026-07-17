@@ -9620,4 +9620,8 @@ class AppLocalizationsEs extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Sin conexión: se está grabando localmente. Se transcribirá cuando vuelvas a estar en línea.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Tus datos están protegidos de forma predeterminada con un cifrado fuerte, y tú controlas cómo se almacenan y se usan.';
 }

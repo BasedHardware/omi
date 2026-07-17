@@ -3118,5 +3118,6 @@
     "deviceStorageUsedOfTotal": "{used} de {total} utilitzat",
     "deviceStorageFree": "{free} lliure",
     "deviceStorageNearlyFull": "El dispositiu és gairebé ple — sincronitza per alliberar espai.",
-    "phoneMicOfflineFallbackMessage": "Sense connexió: s'està gravant localment. Es transcriurà quan tornis a tenir connexió."
+    "phoneMicOfflineFallbackMessage": "Sense connexió: s'està gravant localment. Es transcriurà quan tornis a tenir connexió.",
+    "dataEncryptedBanner": "Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s'emmagatzemen i s'utilitzen."
 }

@@ -9629,4 +9629,8 @@ class AppLocalizationsBe extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.';
 }

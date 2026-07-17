@@ -3118,5 +3118,6 @@
     "deviceStorageUsedOfTotal": "{used} z {total} využito",
     "deviceStorageFree": "{free} volných",
     "deviceStorageNearlyFull": "Zařízení je téměř plné — synchronizujte pro uvolnění místa.",
-    "phoneMicOfflineFallbackMessage": "Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online."
+    "phoneMicOfflineFallbackMessage": "Bez připojení – nahrává se lokálně. Přepíše se, až budete znovu online.",
+    "dataEncryptedBanner": "Vaše data jsou ve výchozím nastavení zabezpečena silným šifrováním a vy máte kontrolu nad tím, jak jsou ukládána a používána."
 }

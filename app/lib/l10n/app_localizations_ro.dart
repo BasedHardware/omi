@@ -9645,4 +9645,8 @@ class AppLocalizationsRo extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Fără conexiune — se înregistrează local. Va fi transcris când revii online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate.';
 }

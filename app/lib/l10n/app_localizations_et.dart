@@ -9595,4 +9595,8 @@ class AppLocalizationsEt extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ühendus puudub – salvestatakse lokaalselt. See transkribeeritakse, kui oled taas võrgus.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Sinu andmed on vaikimisi kaitstud tugeva krüptimisega ja sina kontrollid, kuidas neid salvestatakse ja kasutatakse.';
 }

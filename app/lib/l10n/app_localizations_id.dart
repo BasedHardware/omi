@@ -9608,4 +9608,8 @@ class AppLocalizationsId extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Data Anda diamankan secara default dengan enkripsi kuat, dan Anda mengendalikan bagaimana data disimpan dan digunakan.';
 }

@@ -10727,5 +10727,6 @@
     "deviceStorageUsedOfTotal": "{used} מתוך {total} בשימוש",
     "deviceStorageFree": "{free} פנוי",
     "deviceStorageNearlyFull": "המכשיר כמעט מלא — סנכרן כדי לפנות מקום.",
-    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת."
+    "phoneMicOfflineFallbackMessage": "אין חיבור — מקליטים מקומית. התמלול יתבצע כשתחזור לרשת.",
+    "dataEncryptedBanner": "הנתונים שלך מאובטחים כברירת מחדל בהצפנה חזקה, ואתה שולט באופן שבו הם נשמרים ומשמשים."
 }

@@ -3191,5 +3191,6 @@
     "deviceStorageUsedOfTotal": "{used} dari {total} terpakai",
     "deviceStorageFree": "{free} tersisa",
     "deviceStorageNearlyFull": "Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang.",
-    "phoneMicOfflineFallbackMessage": "Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring."
+    "phoneMicOfflineFallbackMessage": "Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.",
+    "dataEncryptedBanner": "Data Anda diamankan secara default dengan enkripsi kuat, dan Anda mengendalikan bagaimana data disimpan dan digunakan."
 }

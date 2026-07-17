@@ -9604,4 +9604,8 @@ class AppLocalizationsSv extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Ingen anslutning – spelas in lokalt. Det transkriberas när du är online igen.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dina data skyddas som standard med stark kryptering, och du bestämmer hur de lagras och används.';
 }

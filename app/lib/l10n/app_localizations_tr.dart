@@ -9610,4 +9610,8 @@ class AppLocalizationsTr extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
 }

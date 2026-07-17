@@ -3184,5 +3184,6 @@
     "deviceStorageUsedOfTotal": "{used} sur {total} utilisés",
     "deviceStorageFree": "{free} libre",
     "deviceStorageNearlyFull": "Appareil presque plein — synchronisez pour libérer de l'espace.",
-    "phoneMicOfflineFallbackMessage": "Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne."
+    "phoneMicOfflineFallbackMessage": "Aucune connexion — enregistrement local. La transcription se fera dès votre retour en ligne.",
+    "dataEncryptedBanner": "Tes données sont protégées par défaut par un chiffrement fort, et tu gardes le contrôle sur leur stockage et leur utilisation."
 }

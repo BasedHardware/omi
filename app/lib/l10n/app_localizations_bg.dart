@@ -9635,4 +9635,8 @@ class AppLocalizationsBg extends AppLocalizations {
   @override
   String get phoneMicOfflineFallbackMessage =>
       'Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашите данни са защитени по подразбиране със силно криптиране и вие контролирате как се съхраняват и използват.';
 }

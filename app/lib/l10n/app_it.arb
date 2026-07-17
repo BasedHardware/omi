@@ -3149,5 +3149,6 @@
     "deviceStorageUsedOfTotal": "{used} di {total} utilizzati",
     "deviceStorageFree": "{free} liberi",
     "deviceStorageNearlyFull": "Dispositivo quasi pieno — sincronizza per liberare spazio.",
-    "phoneMicOfflineFallbackMessage": "Nessuna connessione: registrazione in locale. Verrà trascritto quando tornerai online."
+    "phoneMicOfflineFallbackMessage": "Nessuna connessione: registrazione in locale. Verrà trascritto quando tornerai online.",
+    "dataEncryptedBanner": "I tuoi dati sono protetti per impostazione predefinita con una crittografia avanzata, e sei tu a controllare come vengono archiviati e utilizzati."
 }
