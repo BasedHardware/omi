@@ -42,7 +42,7 @@
     "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1607,
     "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3501,
     "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1850,
-    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2949,
+    "desktop/macos/Desktop/Sources/Stores/TasksStore.swift": 2961,
     "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2155
   },
   "raise_justifications": {
