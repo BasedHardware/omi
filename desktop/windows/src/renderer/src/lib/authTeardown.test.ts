@@ -27,11 +27,13 @@ const LAST_UID_KEY = 'omi.lastSignedInUid'
 const wipeUserData = vi.fn(async () => {})
 const byokClearAll = vi.fn(async () => {})
 const mcpClearKey = vi.fn(async () => {})
+const gmailSessionDisconnect = vi.fn(async () => ({ connected: false }))
 
 beforeEach(() => {
   wipeUserData.mockClear()
   byokClearAll.mockClear()
   mcpClearKey.mockClear()
+  gmailSessionDisconnect.mockClear()
   h.invalidateConversationsCache.mockClear()
   h.clearPendingConversations.mockClear()
   h.clearUserScopedPreferences.mockClear()
@@ -40,6 +42,7 @@ beforeEach(() => {
     wipeUserData,
     byokClearAll,
     mcpClearKey,
+    gmailSessionDisconnect,
     byokGetAll: vi.fn(async () => ({}))
   }
   localStorage.setItem('omi-chat-infinite-id', 'chat-123')
@@ -57,6 +60,9 @@ describe('teardownUserData', () => {
     expect(byokClearAll).toHaveBeenCalledTimes(1)
     // Hosted MCP export key likewise — cleared on sign-out / account switch.
     expect(mcpClearKey).toHaveBeenCalledTimes(1)
+    // Gmail session partition cleared so a second account can't fetch the prior
+    // user's mail through the install-wide persist:omi-gmail cookie jar (leak fix).
+    expect(gmailSessionDisconnect).toHaveBeenCalledTimes(1)
     expect(h.invalidateConversationsCache).toHaveBeenCalledTimes(1)
     expect(h.clearPendingConversations).toHaveBeenCalledTimes(1)
     expect(h.clearMemoryCache).toHaveBeenCalledTimes(1)
@@ -111,8 +117,9 @@ describe('reconcileAccountForSignIn — account-switch guard', () => {
     await reconcileAccountForSignIn('userB')
 
     expect(wipeUserData).toHaveBeenCalledTimes(1)
-    // The prior account's BYOK keys are cleared before B's shell hydrates.
+    // The prior account's BYOK keys + Gmail session are cleared before B hydrates.
     expect(byokClearAll).toHaveBeenCalledTimes(1)
+    expect(gmailSessionDisconnect).toHaveBeenCalledTimes(1)
     expect(localStorage.getItem(LAST_UID_KEY)).toBe('userB')
     // The uid pointer must survive teardown (it's machine-scoped, not in the
     // user-scoped key list) so the NEXT switch is still detected.

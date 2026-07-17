@@ -190,6 +190,15 @@ const omi: OmiBridgeApi = {
   googleCalendarFetchNew: () => ipcRenderer.invoke('integrations:google:calendarFetchNew'),
   googleMarkProcessed: (source: GoogleSource, ids: string[]) =>
     ipcRenderer.invoke('integrations:google:markProcessed', source, ids),
+  // --- Gmail session connector (Option B): Omi-owned login window + own-session
+  // cookie replay. connect opens the login window and resolves once signed in. ---
+  gmailSessionConnect: (email?: string) =>
+    ipcRenderer.invoke('integrations:gmailSession:connect', email),
+  gmailSessionStatus: () => ipcRenderer.invoke('integrations:gmailSession:status'),
+  gmailSessionVerify: () => ipcRenderer.invoke('integrations:gmailSession:verify'),
+  gmailSessionFetch: (query?: string, maxResults?: number) =>
+    ipcRenderer.invoke('integrations:gmailSession:fetch', query, maxResults),
+  gmailSessionDisconnect: () => ipcRenderer.invoke('integrations:gmailSession:disconnect'),
   // --- X (Twitter) connector. Session ({apiBase, token}) is relayed per call; the
   // connect run lives in main and streams progress via onXProgress. ---
   xStatus: (session: XConnectorSession): Promise<XStatus> =>
