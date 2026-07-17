@@ -18,8 +18,11 @@ import 'package:omi/backend/http/api/users.dart';
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/env/env.dart';
 import 'package:omi/models/stt_provider.dart';
+import 'package:omi/pages/settings/conversation_display_settings.dart';
 import 'package:omi/pages/settings/conversation_timeout_dialog.dart';
+import 'package:omi/pages/settings/data_privacy_page.dart';
 import 'package:omi/pages/settings/import_history_page.dart';
+import 'package:omi/pages/payments/payments_page.dart';
 import 'package:omi/pages/settings/transcription_settings_page.dart';
 import 'package:omi/pages/settings/widgets/create_mcp_api_key_dialog.dart';
 import 'package:omi/pages/settings/widgets/developer_api_keys_section.dart';
@@ -74,6 +77,34 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
     return Container(
       decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(12)),
       child: Column(children: children),
+    );
+  }
+
+  Widget _buildNavItem({required FaIconData icon, required String title, required VoidCallback onTap}) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(color: const Color(0xFF1C1C1E), borderRadius: BorderRadius.circular(14)),
+        child: Row(
+          children: [
+            Container(
+              width: 40,
+              height: 40,
+              decoration: BoxDecoration(color: const Color(0xFF2A2A2E), borderRadius: BorderRadius.circular(10)),
+              child: Center(child: FaIcon(icon, color: Colors.grey.shade400, size: 16)),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Text(
+                title,
+                style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w500),
+              ),
+            ),
+            FaIcon(FontAwesomeIcons.chevronRight, color: Colors.grey.shade600, size: 14),
+          ],
+        ),
+      ),
     );
   }
 
@@ -469,6 +500,33 @@ class _DeveloperSettingsPageState extends State<_DeveloperSettingsPageView> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
+                  // Payment Methods
+                  _buildNavItem(
+                    icon: FontAwesomeIcons.solidCreditCard,
+                    title: context.l10n.paymentMethods,
+                    onTap: () =>
+                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const PaymentsPage())),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Conversation Display
+                  _buildNavItem(
+                    icon: FontAwesomeIcons.list,
+                    title: context.l10n.conversationDisplay,
+                    onTap: () => Navigator.of(context)
+                        .push(MaterialPageRoute(builder: (context) => const ConversationDisplaySettings())),
+                  ),
+                  const SizedBox(height: 12),
+
+                  // Data Privacy
+                  _buildNavItem(
+                    icon: FontAwesomeIcons.shield,
+                    title: context.l10n.dataPrivacy,
+                    onTap: () =>
+                        Navigator.of(context).push(MaterialPageRoute(builder: (context) => const DataPrivacyPage())),
+                  ),
+                  const SizedBox(height: 12),
+
                   // Transcription Section
                   GestureDetector(
                     onTap: () async {
