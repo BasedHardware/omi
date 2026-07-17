@@ -1,0 +1,13 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": 1607,
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": 3501,
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": 1850
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Rewind/Core/ActionItemStorage.swift": "Canonical task lifecycle projection prevents cancelled or superseded backend documents from being resurrected by a Dashboard visibility refresh.",
+    "desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift": "Strict concurrency cleanup unwraps actor-safe screenshot image boxes at UI boundary without changing rendering behavior."
+  },
+  "threshold": 1500
+}

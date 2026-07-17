@@ -1,0 +1,9 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2155
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "The strict VoiceTurnDomain target centralizes reducer ownership and moves the lifecycle state machine intact."
+  },
+  "threshold": 1500
+}
