@@ -280,7 +280,7 @@ def check_desktop_qualification_runner() -> list[str]:
         "--automatic",
         "--no-promote",
         "desktop_promote_beta.yml",
-        "actions/create-github-app-token@v1",
+        "actions/create-github-app-token@v3",
     ):
         if required_fragment not in text:
             errors.append(f"desktop qualification runner is missing required guard fragment: {required_fragment}")
