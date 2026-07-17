@@ -1296,7 +1296,7 @@ def get_user_subscription_endpoint(
     chat_allowed = chat_snapshot['allowed']
 
     # Grandfather is read from the true plan before the label is remapped for
-    # clients whose enum predates `plus`/`max` (see wire_plan_for_client).
+    # clients whose enum predates `plus`/`unlimited_v2` (see wire_plan_for_client).
     desktop_grandfather_until = neo_grandfather_until(subscription)
     subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
 

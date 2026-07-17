@@ -589,19 +589,19 @@ def should_show_new_plans(platform: Optional[str], app_version: Optional[str]) -
 
 # Minimum client build whose plan enum includes `plus`/`max`. Defaulted ahead of
 # any shipped build so every current client is remapped today (see
-# wire_plan_for_client); lower once a plus/max-aware client ships.
-PLUS_MAX_MIN_MOBILE_VERSION = os.getenv('PLUS_MAX_MIN_MOBILE_VERSION', '99.0.0')
-PLUS_MAX_MIN_DESKTOP_VERSION = os.getenv('PLUS_MAX_MIN_DESKTOP_VERSION', '99.0.0')
+# wire_plan_for_client); lower once a plus/unlimited_v2-aware client ships.
+PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION', '99.0.0')
+PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION = os.getenv('PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION', '99.0.0')
 
 
-def client_understands_plus_max(platform: Optional[str], app_version: Optional[str]) -> bool:
+def client_understands_plus_unlimited_v2(platform: Optional[str], app_version: Optional[str]) -> bool:
     if not platform or not app_version:
         return False
     platform_lower = platform.lower()
     if platform_lower in _MOBILE_PLATFORM_TOKENS:
-        floor = PLUS_MAX_MIN_MOBILE_VERSION
+        floor = PLUS_UNLIMITED_V2_MIN_MOBILE_VERSION
     elif platform_lower in DESKTOP_PLATFORMS:
-        floor = PLUS_MAX_MIN_DESKTOP_VERSION
+        floor = PLUS_UNLIMITED_V2_MIN_DESKTOP_VERSION
     else:
         return False
     try:
@@ -616,7 +616,7 @@ def wire_plan_for_client(plan: PlanType, platform: Optional[str], app_version: O
     Only the label is remapped — real entitlement/limits are computed from the
     true plan before this is called. Mirrors the `operator`→`unlimited` remap.
     """
-    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_max(platform, app_version):
+    if plan in MOBILE_PLAN_TYPES and not client_understands_plus_unlimited_v2(platform, app_version):
         return PlanType.unlimited
     return plan
 
