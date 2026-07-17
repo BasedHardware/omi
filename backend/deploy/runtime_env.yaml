@@ -915,6 +915,10 @@ environments:
             GOOGLE_CLIENT_ID:
               env_var: GOOGLE_CLIENT_ID
               category: oauth_metadata
+            STRIPE_PLUS_MONTHLY_PRICE_ID:
+              value: price_1TuH6z1F8wnoWYvw7Siv61SX
+            STRIPE_PLUS_ANNUAL_PRICE_ID:
+              value: price_1TuHCw1F8wnoWYvwZvKu86sI
             STT_PRERECORDED_MODEL:
               env_var: STT_PRERECORDED_MODEL
               category: stt_policy
