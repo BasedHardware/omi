@@ -14,9 +14,11 @@ class WebhookType(str, Enum):
 
 class PlanType(str, Enum):
     basic = 'basic'  # display "Free"
-    unlimited = 'unlimited'  # LEGACY — display "Unlimited (legacy)"; hidden from new users
-    architect = 'architect'  # display "Architect"
-    operator = 'operator'  # display "Operator"
+    unlimited = 'unlimited'  # LEGACY — display "Neo"; hidden from new users
+    architect = 'architect'  # display "Architect" (desktop)
+    operator = 'operator'  # display "Operator" (desktop)
+    plus = 'plus'  # display "Plus" — mobile, 1500 min/mo
+    max = 'max'  # display "Max" — mobile, unlimited transcription
 
     @classmethod
     def _missing_(cls, value: object):

@@ -92,6 +92,7 @@ from utils.subscription import (
     has_ever_purchased,
     should_show_new_plans,
     adapt_plans_for_legacy_client,
+    wire_plan_for_client,
     legacy_plan_features,
     clear_trial_paywall_cache,
     get_trial_metadata,
@@ -1294,6 +1295,13 @@ def get_user_subscription_endpoint(
         chat_percent = min(100.0, round(100.0 * chat_snapshot['used'] / chat_snapshot['limit'], 2))
     chat_allowed = chat_snapshot['allowed']
 
+    # Backward-compat: clients whose plan enum predates `plus`/`max` deserialize
+    # them as Free (mobile) or fail to decode (desktop). Serialize a known paid
+    # label so buyers read as paid. Limits/features/grandfather above were all
+    # computed from the true plan; only the serialized label changes.
+    desktop_grandfather_until = neo_grandfather_until(subscription)
+    subscription.plan = wire_plan_for_client(subscription.plan, x_app_platform, x_app_version)
+
     return UserSubscriptionResponse(
         subscription=subscription,
         transcription_seconds_used=transcription_seconds_used,
@@ -1310,7 +1318,7 @@ def get_user_subscription_endpoint(
         chat_quota_allowed=chat_allowed,
         chat_quota_reset_at=chat_snapshot['reset_at'],
         phone_call_quota=phone_call_quota,
-        desktop_grandfather_until=neo_grandfather_until(subscription),
+        desktop_grandfather_until=desktop_grandfather_until,
     )
 
 

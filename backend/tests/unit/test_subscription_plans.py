@@ -101,3 +101,46 @@ def test_bounded_transcription_plan_reads_monthly_usage_and_enforces_cap(monkeyp
 
     assert subscription_module.has_transcription_credits('uid') is False
     monthly_usage.assert_called_once_with('uid')
+
+
+def test_plus_price_ids_map_to_plus_and_max_plans(monkeypatch, subscription_module):
+    monkeypatch.setenv("STRIPE_PLUS_MONTHLY_PRICE_ID", "price_plus_monthly")
+    monkeypatch.setenv("STRIPE_PLUS_ANNUAL_PRICE_ID", "price_plus_annual")
+    monkeypatch.setenv("STRIPE_MAX_MONTHLY_PRICE_ID", "price_max_monthly")
+
+    resolve = subscription_module.get_plan_type_from_price_id
+    assert resolve("price_plus_monthly") == PlanType.plus
+    assert resolve("price_plus_annual") == PlanType.plus
+    assert resolve("price_max_monthly") == PlanType.max
+
+
+def test_plus_is_transcription_capped_max_is_unlimited(subscription_module):
+    plus = subscription_module.get_plan_limits(PlanType.plus)
+    max_ = subscription_module.get_plan_limits(PlanType.max)
+    assert plus.transcription_seconds == subscription_module.PLUS_TIER_MONTHLY_SECONDS_LIMIT
+    assert plus.transcription_seconds and plus.transcription_seconds > 0
+    assert max_.transcription_seconds is None
+    assert subscription_module.is_paid_plan(PlanType.plus) is True
+    assert subscription_module.is_paid_plan(PlanType.max) is True
+
+
+def test_wire_plan_remaps_plus_max_only_for_clients_without_the_enum(monkeypatch, subscription_module):
+    # The module fixture stubs compare_versions to a no-op; use a real semver
+    # comparator so the version floor actually gates the remap.
+    def _cmp(a, b):
+        pa = [int(x) for x in a.split('.')]
+        pb = [int(x) for x in b.split('.')]
+        return (pa > pb) - (pa < pb)
+
+    monkeypatch.setattr(subscription_module, 'compare_versions', _cmp)
+    wire = subscription_module.wire_plan_for_client
+    # Current clients (below the plus/max-aware floor) must see a known paid label.
+    assert wire(PlanType.plus, 'ios', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.max, 'android', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.plus, 'macos', '0.12.0') == PlanType.unlimited
+    # A plus/max-aware client (at/above the floor) receives the real plan.
+    assert wire(PlanType.plus, 'ios', '999.0.0') == PlanType.plus
+    assert wire(PlanType.max, 'ios', '999.0.0') == PlanType.max
+    # Non-mobile plans are never remapped.
+    assert wire(PlanType.unlimited, 'ios', '1.0.600') == PlanType.unlimited
+    assert wire(PlanType.operator, 'ios', '1.0.600') == PlanType.operator

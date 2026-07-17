@@ -139,8 +139,12 @@ def test_filter_plans_keeps_legacy_for_current_subscriber(load_subscription):
     assert 'architect' in plan_ids
 
 
-def test_filter_plans_hides_neo_on_mobile_for_new_user(load_subscription):
-    """New / never-paid mobile users don't see Neo (unlimited) in the catalog."""
+def test_filter_plans_mobile_new_user_sees_only_plus_max(load_subscription):
+    """New / never-paid mobile users see only the consumer tiers Plus + Max.
+
+    Neo (unlimited) is deprecated, and Operator + Architect are desktop-only, so
+    all three are hidden from the mobile purchase catalog.
+    """
     with load_subscription() as sub_mod:
         definitions = sub_mod.get_paid_plan_definitions()
         for platform in ('ios', 'android'):
@@ -148,9 +152,16 @@ def test_filter_plans_hides_neo_on_mobile_for_new_user(load_subscription):
                 definitions, PlanType.basic, platform=platform, ever_purchased=False
             )
             plan_ids = [d['plan_id'] for d in filtered]
-            assert 'unlimited' not in plan_ids, platform
-            assert 'operator' in plan_ids
-            assert 'architect' in plan_ids
+            assert plan_ids == ['plus', 'max'], (platform, plan_ids)
+
+
+def test_filter_plans_desktop_hides_mobile_tiers(load_subscription):
+    """Desktop sells Operator + Architect; Plus/Max/Neo are hidden there."""
+    with load_subscription() as sub_mod:
+        definitions = sub_mod.get_paid_plan_definitions()
+        filtered = sub_mod.filter_plans_for_user(definitions, PlanType.basic, platform='macos')
+        plan_ids = [d['plan_id'] for d in filtered]
+        assert plan_ids == ['operator', 'architect'], plan_ids
 
 
 def test_filter_plans_shows_neo_on_mobile_for_past_purchaser(load_subscription):
