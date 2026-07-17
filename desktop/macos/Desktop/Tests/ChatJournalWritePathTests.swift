@@ -32,7 +32,8 @@ final class ChatJournalWritePathTests: XCTestCase {
       coordinator.schedule(messageID: messageID, supersededByTerminalization: true) {},
       "A streaming write should be accepted before terminalization")
 
-    XCTAssertTrue(await coordinator.beginTerminalization(messageID: messageID))
+    let didBegin = await coordinator.beginTerminalization(messageID: messageID)
+    XCTAssertTrue(didBegin)
 
     XCTAssertFalse(
       coordinator.schedule(messageID: messageID, supersededByTerminalization: true) {},
@@ -43,7 +44,8 @@ final class ChatJournalWritePathTests: XCTestCase {
     let coordinator = ChatJournalWriteCoordinator()
     let messageID = "assistant-turn-2"
 
-    XCTAssertTrue(await coordinator.beginTerminalization(messageID: messageID))
+    let didBegin = await coordinator.beginTerminalization(messageID: messageID)
+    XCTAssertTrue(didBegin)
 
     let ran = expectation(description: "durable post-terminal operation executes")
     let accepted = coordinator.schedule(messageID: messageID, supersededByTerminalization: false) {
