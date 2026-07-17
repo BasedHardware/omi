@@ -1,6 +1,7 @@
 import type { ChatUsageQuota } from './omiApi.generated'
 import type { LiveStatus } from './liveConversation'
 import { isQuotaExhaustedMessage } from './transcriptionClient'
+import { isByokActiveCached } from './byokKeys'
 import { createSignal } from './signal'
 
 // Global usage-limit popup channel. Anywhere in the app can raise the modal via
@@ -89,6 +90,13 @@ export function maybeTriggerTranscriptionQuotaPopup(status: LiveStatus, error?: 
     return false
   }
   if (!error || !isQuotaExhaustedMessage(error)) return false
+  // BYOK users must never be paywalled — they pay the provider directly. The
+  // backend exempts them, but a heartbeat lag can briefly emit the exhaustion
+  // event locally after BYOK activation, so ignore it here (macOS
+  // AppState+ListenEvents `freemium_threshold_reached` parity). Read the same
+  // synchronous BYOK cache the request-header lanes use; don't touch the latch,
+  // so a later exhaustion after BYOK is cleared still shows.
+  if (isByokActiveCached()) return false
   if (transcriptionQuotaPopupShown) return false
   transcriptionQuotaPopupShown = true
   showUsageLimit('transcription')
