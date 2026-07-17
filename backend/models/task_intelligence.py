@@ -92,22 +92,29 @@ class TaskIntelligenceRolloutDecision(BaseModel):
 
 
 class TaskWorkflowControl(BaseModel):
-    """Per-user task-intelligence control plus its fail-closed API capability.
+    """Persisted workflow metadata plus the derived Chat-first capability.
 
-    ``chat_first_ui_enabled`` is the persisted, operator-owned rollout input.
-    ``chat_first_ui`` is a response-only derived capability: it is composed in
-    the candidates router from the explicit flag and the authoritative
-    canonical-memory/task-intelligence rollout decision.  Persistence must use
-    :meth:`persisted_payload` so the derived response value can never become a
-    local or stale source of truth.
+    ``workflow_mode`` remains readable for legacy records and operational
+    history. It is not an entitlement. ``chat_first_ui`` is derived only from
+    the canonical-memory selector; persistence excludes it so clients cannot
+    turn a sampled response into later authority.
     """
 
     model_config = ConfigDict(extra='forbid', frozen=True)
 
     workflow_mode: TaskWorkflowMode = TaskWorkflowMode.off
     account_generation: int = Field(default=0, ge=0)
-    chat_first_ui_enabled: bool = Field(default=False, exclude=True)
     chat_first_ui: bool = False
+
+    @model_validator(mode='before')
+    @classmethod
+    def strip_retired_chat_first_flag(cls, value):
+        """Accept historic control documents without retaining a dormant gate."""
+
+        if isinstance(value, dict):
+            value = dict(value)
+            value.pop('chat_first_ui_enabled', None)
+        return value
 
     def persisted_payload(self) -> dict[str, object]:
         """Return the exact Firestore control-record shape, excluding derived API state."""
@@ -115,7 +122,6 @@ class TaskWorkflowControl(BaseModel):
         return {
             'workflow_mode': self.workflow_mode.value,
             'account_generation': self.account_generation,
-            'chat_first_ui_enabled': self.chat_first_ui_enabled,
         }
 
 

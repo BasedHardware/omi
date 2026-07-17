@@ -154,7 +154,6 @@ def _control_for_case(fixture_case: ChatFirstE2EFixtureCase) -> TaskWorkflowCont
     return TaskWorkflowControl(
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,
-        chat_first_ui_enabled=fixture_case is not ChatFirstE2EFixtureCase.ui_flag_off,
     )
 
 

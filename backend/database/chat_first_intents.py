@@ -7,6 +7,7 @@ from typing import Any, Iterable
 
 from google.cloud import firestore
 
+from config.canonical_memory_cohort import is_canonical_memory_user
 from database._client import get_firestore_client
 from database.read_boundary import MalformedDocError, parse_snapshot_strict
 from models.chat_first import (
@@ -21,7 +22,7 @@ from models.chat_first import (
     QuestionCardSpec,
 )
 from models.proactive_budget import account_materialization, budget_allows, normalized_budget_state, reserve_budget
-from models.task_intelligence import TaskWorkflowControl, TaskWorkflowMode
+from models.task_intelligence import TaskWorkflowControl
 
 INTENTS_COLLECTION = 'chat_first_proactive_intents'
 DEFERRALS_COLLECTION = 'chat_first_deferrals'
@@ -93,18 +94,16 @@ def _stable_id(prefix: str, *parts: object) -> str:
     return f'{prefix}_{hashlib.sha256(raw).hexdigest()[:32]}'
 
 
-def _require_control(snapshot: Any, account_generation: int) -> None:
+def _require_control(snapshot: Any, *, uid: str, account_generation: int) -> None:
+    if not is_canonical_memory_user(uid):
+        raise ChatFirstIntentGenerationMismatch('chat-first capability changed')
     control = TaskWorkflowControl()
     if snapshot.exists:
         try:
             control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
         except MalformedDocError as error:
             raise ChatFirstIntentGenerationMismatch('chat-first capability state is malformed') from error
-    if (
-        control.workflow_mode != TaskWorkflowMode.read
-        or control.account_generation != account_generation
-        or not control.chat_first_ui_enabled
-    ):
+    if control.account_generation != account_generation:
         raise ChatFirstIntentGenerationMismatch('chat-first capability changed')
 
 
@@ -141,7 +140,11 @@ def _deferral_from_snapshot(snapshot: Any) -> ProactiveDeferral:
 def _require_current_control(uid: str, *, account_generation: int, firestore_client: Any) -> None:
     """Fence read-only entry points before they inspect feature-specific rows."""
 
-    _require_control(_control_ref(uid, firestore_client=firestore_client).get(), account_generation)
+    _require_control(
+        _control_ref(uid, firestore_client=firestore_client).get(),
+        uid=uid,
+        account_generation=account_generation,
+    )
 
 
 def _intent_payload(intent: ProactiveIntent) -> dict[str, Any]:
@@ -189,7 +192,7 @@ def admit_agent_judgment(
     @firestore.transactional
     def apply(write_transaction: Any) -> AgentJudgmentAdmission:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _intent_from_snapshot(existing_snapshot)
@@ -240,7 +243,7 @@ def release_agent_judgment_admission(
     @firestore.transactional
     def apply(write_transaction: Any) -> None:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         intent_snapshot = intent_ref.get(transaction=write_transaction)
         budget_snapshot = budget_ref.get(transaction=write_transaction)
         if intent_snapshot.exists:
@@ -287,7 +290,7 @@ def create_intent(
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
         budget_snapshot = (
             budget_ref.get(transaction=write_transaction)
@@ -361,7 +364,7 @@ def get_or_create_cold_start_intent(
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[ProactiveIntent, bool]:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         existing_snapshot = intent_ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _intent_from_snapshot(existing_snapshot)
@@ -431,7 +434,7 @@ def acknowledge_sparse_cold_start_sequence_terminal(
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         snapshot = intent_ref.get(transaction=write_transaction)
         if not snapshot.exists:
             raise ProactiveIntentNotReady('cold-start intent is not ready')
@@ -527,7 +530,7 @@ def acknowledge_materialization(
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not intent_snapshot.exists:
             raise ProactiveIntentNotReady('proactive intent is not ready')
@@ -589,7 +592,7 @@ def record_deferral(
     @firestore.transactional
     def apply(write_transaction: Any) -> tuple[DeferralReceipt, bool]:
         control_snapshot = _control_ref(uid, firestore_client=client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         existing_snapshot = ref.get(transaction=write_transaction)
         if existing_snapshot.exists:
             existing = _deferral_from_snapshot(existing_snapshot)
@@ -674,7 +677,7 @@ def _release_deferral_transaction(
     @firestore.transactional
     def apply(write_transaction: Any) -> ProactiveIntent | None:
         control_snapshot = _control_ref(uid, firestore_client=firestore_client).get(transaction=write_transaction)
-        _require_control(control_snapshot, account_generation)
+        _require_control(control_snapshot, uid=uid, account_generation=account_generation)
         deferral_snapshot = deferral_ref.get(transaction=write_transaction)
         intent_snapshot = intent_ref.get(transaction=write_transaction)
         if not deferral_snapshot.exists:

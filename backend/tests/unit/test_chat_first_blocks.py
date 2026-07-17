@@ -5,6 +5,7 @@ from fastapi.testclient import TestClient
 
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 def _client() -> TestClient:
@@ -15,6 +16,7 @@ def _client() -> TestClient:
 
 
 def _enable_chat_first(monkeypatch, *, generation: int = 7) -> None:
+    set_canonical_cohort(monkeypatch, 'user-1')
     monkeypatch.setattr(
         chat_first_router.task_control_db,
         'get_task_workflow_control',
@@ -91,7 +93,7 @@ def test_chat_first_validate_fails_closed_before_entity_resolution_outside_the_c
     monkeypatch.setattr(
         chat_first_router,
         'resolve_task_intelligence_for_user',
-        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
+        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=False),
     )
     monkeypatch.setattr(
         chat_first_router.action_items_db,

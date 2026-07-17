@@ -10,6 +10,7 @@ from google.api_core.exceptions import AlreadyExists
 from pydantic import ValidationError
 
 import database.task_recommendations as recommendation_db
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 from models.action_item import EvidenceKind, EvidenceRef, EvidenceScope
 from models.task_intelligence import (
     TaskIntelligenceFeedbackAction,
@@ -1379,7 +1380,8 @@ def test_database_module_has_attribution_join_and_no_raw_content_fields():
     )
 
 
-def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_chain(fake_firestore):
+def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_chain(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     intervention, created = recommendation_db.create_intervention(
         'u1',
@@ -1465,7 +1467,8 @@ def test_firestore_feedback_replay_heals_override_and_outcomes_require_known_cha
         )
 
 
-def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore):
+def test_firestore_generation_fences_reads_identities_snapshots_and_publication(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     control_path = (
         'users',
@@ -1580,24 +1583,28 @@ def test_firestore_generation_fences_reads_identities_snapshots_and_publication(
         workflow_mode=TaskWorkflowMode.off,
         account_generation=8,
     ).model_dump(mode='python')
-    with pytest.raises(recommendation_db.RecommendationGenerationMismatchError, match='mode changed'):
+    persisted_mode_projection = stale_projection.model_copy(
+        update={
+            'evaluation_id': 'generation-8-evaluation',
+            'output_version': 'generation-8-output',
+            'material_version': 'generation-8-material',
+        }
+    )
+    assert (
         recommendation_db.save_projection(
             'u1',
             device_scope='device-1',
-            projection=stale_projection.model_copy(
-                update={
-                    'evaluation_id': 'generation-8-evaluation',
-                    'output_version': 'generation-8-output',
-                    'material_version': 'generation-8-material',
-                }
-            ),
+            projection=persisted_mode_projection,
             decisions=[],
             account_generation=8,
             firestore_client=fake_db,
         )
+        == persisted_mode_projection
+    )
 
 
-def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_firestore):
+def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     first = NormalizedContextSnapshot(
         device_id='device-1',
@@ -1646,7 +1653,8 @@ def test_firestore_snapshot_replacement_expiry_and_cross_device_isolation(fake_f
     )
 
 
-def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_firestore):
+def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     fake_db = fake_firestore
     subject = fixture_subject('task-1', {'capture_confidence': 1, 'has_concrete_next_action': True})
     projection = WhatMattersNowProjection(
@@ -1750,7 +1758,8 @@ def test_firestore_projection_persists_stable_intervention_and_debug_trace(fake_
     assert len(decision_paths) == 2
 
 
-def test_firestore_same_material_publication_returns_one_winner(fake_firestore):
+def test_firestore_same_material_publication_returns_one_winner(fake_firestore, monkeypatch):
+    set_canonical_cohort(monkeypatch, 'u1')
     first = WhatMattersNowProjection(
         evaluation_id='evaluation-same',
         output_version='output-first',

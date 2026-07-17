@@ -29,7 +29,7 @@ from utils.memory.canonical_memory_adapter import (
 from utils.memory.required_promotion import required_processing_payload
 from utils.client_device import DeviceScopeRequest
 from utils.memory.canonical_activation import canonical_read_enabled, canonical_write_decision
-from utils.memory.memory_system import MemorySystem
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.default_read_rollout import guard_legacy_memory_write
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_api_payload, memory_write_payload
 from utils.retrieval.hybrid import rrf_rerank
@@ -67,6 +67,18 @@ def _canonical_external_write_enabled_or_fail_closed(uid: str, db_client: Any) -
     if decision.fail_closed:
         raise HTTPException(status_code=503, detail={"reason": decision.reason, "memory_system": "canonical"})
     return False
+
+
+def _read_backend_or_fail_closed(
+    uid: str, *, db_client: Any, legacy: "LegacyMemoryBackend", canonical: "CanonicalMemoryBackend"
+):
+    """Choose a read backend without ever reclassifying an enrolled user as legacy."""
+
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
+        return legacy
+    if canonical_read_enabled(uid, db_client=db_client):
+        return canonical
+    raise HTTPException(status_code=503, detail={"reason": "canonical_memory_not_ready", "memory_system": "canonical"})
 
 
 def resolve_external_memory_write_context(
@@ -120,7 +132,11 @@ def _legacy_memorydb(value: MemoryDB | Dict[str, Any]) -> MemoryDB:
 
 def fetch_memory_dict(uid: str, memory_id: str, *, db_client: Any) -> MemoryPayload:
     """Fetch one memory by id with canonical/legacy routing and locked-memory paywall."""
-    if canonical_read_enabled(uid, db_client=db_client):
+    if resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL:
+        if not canonical_read_enabled(uid, db_client=db_client):
+            raise HTTPException(
+                status_code=503, detail={"reason": "canonical_memory_not_ready", "memory_system": "canonical"}
+            )
         item = read_canonical_memory_item(uid, memory_id, db_client=db_client)
         if item is None:
             raise HTTPException(status_code=404, detail="Memory not found")
@@ -467,7 +483,12 @@ class MemoryService:
         device_scope_request: Optional[DeviceScopeRequest] = None,
         include_pending_processing: bool = False,
     ) -> List[MemoryDB]:
-        backend = self._canonical if canonical_read_enabled(uid, db_client=self._db_client) else self._legacy
+        backend = _read_backend_or_fail_closed(
+            uid,
+            db_client=self._db_client,
+            legacy=self._legacy,
+            canonical=self._canonical,
+        )
         return backend.read(
             uid,
             limit=limit,
@@ -484,7 +505,12 @@ class MemoryService:
         limit: int = 5,
         device_scope_request: Optional[DeviceScopeRequest] = None,
     ) -> List[MemorySearchMatch]:
-        backend = self._canonical if canonical_read_enabled(uid, db_client=self._db_client) else self._legacy
+        backend = _read_backend_or_fail_closed(
+            uid,
+            db_client=self._db_client,
+            legacy=self._legacy,
+            canonical=self._canonical,
+        )
         return backend.search(
             uid,
             query,
@@ -494,7 +520,13 @@ class MemoryService:
 
     def search_mcp(self, uid: str, query: str, *, limit: int = 5) -> List[McpSearchPayload]:
         """MCP-shaped search results (legacy parity filters + RRF, or canonical keyword)."""
-        if canonical_read_enabled(uid, db_client=self._db_client):
+        backend = _read_backend_or_fail_closed(
+            uid,
+            db_client=self._db_client,
+            legacy=self._legacy,
+            canonical=self._canonical,
+        )
+        if backend is self._canonical:
             return _canonical_search_memories_mcp(uid, query, limit=limit, db_client=self._db_client)
         return _legacy_search_memories_mcp(uid, query, limit=limit)
 

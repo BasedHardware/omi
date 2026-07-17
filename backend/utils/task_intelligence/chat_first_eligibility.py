@@ -36,7 +36,7 @@ def resolve_chat_first_eligibility(
             workflow_mode=control.workflow_mode,
             account_generation=control.account_generation,
         )
-        if not resolve_chat_first_ui(rollout, control.chat_first_ui_enabled):
+        if not resolve_chat_first_ui(rollout):
             return ChatFirstEligibility(enabled=False)
         return ChatFirstEligibility(enabled=True, account_generation=control.account_generation)
     except Exception:

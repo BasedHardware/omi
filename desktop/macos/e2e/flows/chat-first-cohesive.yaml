@@ -7,7 +7,7 @@ app: non-prod
 # PROVIDER_MODE=offline make dev-up
 # make seed-memory-scenario SCENARIO=happy_path
 # make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=enabled
-# make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-chat-first-e2e-enabled
+# make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
 # Run with --lane ui --bundle-id com.omi.omi-chat-first-e2e for AX steps.
 covers:
   - desktop/macos/Desktop/Sources/DesktopAutomationBridge.swift

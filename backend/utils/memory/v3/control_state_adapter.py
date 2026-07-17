@@ -8,7 +8,6 @@ from __future__ import annotations
 from typing import Any, cast
 
 from config.memory_rollout import (
-    MemoryRolloutConfig,
     MemoryRolloutMode,
     MemoryRolloutState,
     decide_memory_rollout_capabilities,
@@ -22,6 +21,7 @@ from utils.memory.default_read_rollout import (
     read_write_convergence_gate,
 )
 from utils.memory.memory_read_rollout_core import extract_consumer_grants
+from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.memory.v3.control_reader_contract import (
     V3ControlDecisionReason,
     V3ControlReadResult,
@@ -29,12 +29,6 @@ from utils.memory.v3.control_reader_contract import (
 )
 
 V3_DEFAULT_CONSUMER = 'omi_chat'
-_MODE_RANK = {
-    MemoryRolloutMode.off: 0,
-    MemoryRolloutMode.shadow: 1,
-    MemoryRolloutMode.write: 2,
-    MemoryRolloutMode.read: 3,
-}
 _READ_ERROR_REASON_MAP = {
     'malformed_rollout_state': V3ControlDecisionReason.MALFORMED_CONTROL_DOC,
     'rollout_read_failed': V3ControlDecisionReason.CONTROL_READ_FAILED,
@@ -43,18 +37,6 @@ _READ_ERROR_REASON_MAP = {
 
 def _mode(value: MemoryRolloutMode | str) -> MemoryRolloutMode:
     return value if isinstance(value, MemoryRolloutMode) else MemoryRolloutMode(value)
-
-
-def resolve_v3_effective_mode(
-    configured_mode: MemoryRolloutMode | str, persisted_mode: MemoryRolloutMode | str
-) -> MemoryRolloutMode:
-    """Return the lower-ranked mode; global config is a ceiling, not an elevator."""
-
-    configured = _mode(configured_mode)
-    persisted = _mode(persisted_mode)
-    if _MODE_RANK[configured] <= _MODE_RANK[persisted]:
-        return configured
-    return persisted
 
 
 def _read_error_reason(reason: str | None) -> V3ControlDecisionReason:
@@ -87,19 +69,17 @@ def _rollout_state_from_data(*, uid: str, data: dict[str, Any]) -> MemoryRollout
     )
 
 
-def read_v3_control(
-    *, uid: str, db_client: Any, rollout_config: MemoryRolloutConfig, consumer: str = V3_DEFAULT_CONSUMER
-) -> V3ControlReadResult:
+def read_v3_control(*, uid: str, db_client: Any, consumer: str = V3_DEFAULT_CONSUMER) -> V3ControlReadResult:
     """Read canonical memory rollout state and derive the `/v3` control contract.
 
-    Non-enrolled users are identified solely by rollout cohort membership and do
+    Non-enrolled users are identified solely by the canonical-memory selector and do
     not trigger a Firestore read. Enrolled users must have a persisted control doc;
     missing or unreadable state fails closed and is not reinterpreted as
     non-enrollment.
     """
 
     source_path = MemoryCollections(uid=uid).memory_control_state
-    if uid not in rollout_config.enabled_users:
+    if resolve_memory_system(uid, db_client=db_client) != MemorySystem.CANONICAL:
         return V3ControlReadResult(cohort_enrolled=False, source_path=source_path)
 
     source_path, data, read_error = read_rollout_state_doc(uid=uid, db_client=db_client)
@@ -137,10 +117,13 @@ def read_v3_control(
         )
 
     try:
-        configured_mode = _mode(getattr(rollout_config, 'mode', MemoryRolloutMode.off))
         persisted = _rollout_state_from_data(uid=uid, data=payload)
         persisted_mode = _mode(persisted.mode)
-        effective_mode = resolve_v3_effective_mode(configured_mode, persisted_mode)
+        # The persisted mode records rollout history. It cannot downgrade a
+        # code-enrolled account to the legacy system; readiness remains guarded
+        # by the persisted stage gates and projection state below.
+        configured_mode = MemoryRolloutMode.read
+        effective_mode = MemoryRolloutMode.read
         capabilities = decide_memory_rollout_capabilities(uid, effective_mode, persisted)
         default_memory_grant, archive_allowed = _consumer_grants(payload, consumer)
     except (TypeError, ValueError, AttributeError):

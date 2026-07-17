@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from models.chat_first import ChatFirstSubject, ProactiveIntent, QuestionCardSpec, QuestionOption
 from models.task_intelligence import TaskWorkflowControl
 import routers.chat_first as chat_first_router
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 
 
 def _client() -> TestClient:
@@ -31,6 +32,7 @@ def _request(*, generation: int = 7, owner_fence: str = 'user-1', receipts=None,
 
 
 def _enable_chat_first(monkeypatch, *, generation: int = 7) -> None:
+    set_canonical_cohort(monkeypatch, 'user-1')
     monkeypatch.setattr(
         chat_first_router.task_control_db,
         'get_task_workflow_control',
@@ -64,7 +66,7 @@ def test_materialize_capability_off_does_zero_feature_store_or_metric_work(monke
     monkeypatch.setattr(
         chat_first_router,
         'resolve_task_intelligence_for_user',
-        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
+        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=False),
     )
     for name in (
         'acknowledge_materialization',
@@ -196,7 +198,7 @@ def test_deferral_receiver_is_capability_gated_before_its_store(monkeypatch):
     monkeypatch.setattr(
         chat_first_router,
         'resolve_task_intelligence_for_user',
-        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=True),
+        lambda **kwargs: SimpleNamespace(intelligence_product_enabled=False),
     )
     monkeypatch.setattr(
         chat_first_router.chat_first_intents_db,

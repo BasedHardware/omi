@@ -42,8 +42,8 @@ def test_all_memory_scenarios_import_and_validate() -> None:
         "local_default_user",
         "alice",
         "bob",
-        "omi-chat-first-e2e-enabled",
-        "omi-chat-first-e2e-out-of-cohort",
+        "omi-local-emulator-chat-first-enabled-v1",
+        "omi-local-emulator-chat-first-disabled-v1",
     }
     assert happy.selected_user == "alice"
     assert happy.report_metadata.evidence_class == "LOCAL_EMULATOR_DEV"
@@ -110,7 +110,7 @@ def test_fixtures_cannot_choose_evidence_labels() -> None:
         assert scenario.local_flags["activation_eligible"] is False
 
 
-def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(
+def test_auth_live_seed_prefers_the_admin_api_for_deterministic_uids(
     monkeypatch: pytest.MonkeyPatch, tmp_path: Path
 ) -> None:
     env = _env(tmp_path)
@@ -119,11 +119,15 @@ def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(
 
     def fake_request(method: str, url: str, payload: dict[str, object] | None = None) -> tuple[int, str]:
         calls.append((method, url, dict(payload) if payload is not None else None))
-        if len(calls) == 1:
-            return 400, 'UNEXPECTED_PARAMETER : User ID'
         return 200, '{}'
 
     monkeypatch.setattr(memory_scenarios, '_request_json', fake_request)
+    admin_calls = []
+    monkeypatch.setattr(
+        memory_scenarios,
+        '_apply_auth_admin_sdk',
+        lambda received_cfg, op: admin_calls.append((received_cfg, op)) or True,
+    )
     op = memory_scenarios.SeedOperation(
         kind='auth',
         action='upsert',
@@ -133,9 +137,8 @@ def test_auth_live_seed_retries_without_local_id_on_emulator_sign_up(
 
     memory_scenarios._apply_operation(cfg, op)
 
-    assert len(calls) == 2
-    assert calls[0][2] and calls[0][2].get('localId') == 'alice'
-    assert calls[1][2] and 'localId' not in calls[1][2]
+    assert calls == []
+    assert admin_calls == [(cfg, op)]
 
 
 def test_happy_path_has_rich_default_memory_fixture_set() -> None:

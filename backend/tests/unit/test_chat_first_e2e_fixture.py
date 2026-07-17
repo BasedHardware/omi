@@ -12,7 +12,6 @@ from config.chat_first_e2e_fixture import (
     CHAT_FIRST_E2E_ENABLED_PRINCIPAL,
     CHAT_FIRST_E2E_OUT_OF_COHORT_PRINCIPAL,
     fixture_uid_for_principal,
-    is_chat_first_e2e_enabled_fixture,
     is_chat_first_e2e_fixture_uid,
     is_chat_first_e2e_harness_runtime,
 )
@@ -21,6 +20,7 @@ from models.chat_first import ChatFirstSubject, ProactiveDeferral
 from models.chat_first_e2e import ChatFirstE2EFixtureCase
 from models.task_intelligence import TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem
+from tests.unit.canonical_cohort_test_helpers import set_canonical_cohort
 import utils.task_intelligence.chat_first_e2e_fixture as fixture
 import utils.task_intelligence.rollout as rollout
 import routers.chat_first_e2e as fixture_router
@@ -116,6 +116,7 @@ class _Firestore:
 
 @pytest.fixture
 def firestore(monkeypatch, tmp_path):
+    set_canonical_cohort(monkeypatch, ENABLED_UID)
     monkeypatch.setenv('OMI_ENV_STAGE', 'local')
     manifest_dir = tmp_path / 'manifests'
     manifest_dir.mkdir()
@@ -154,11 +155,9 @@ def test_harness_runtime_and_fixture_identities_are_local_offline_only(monkeypat
     for stage in ('local', 'offline'):
         assert is_chat_first_e2e_harness_runtime(stage=stage)
         assert fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL) == ENABLED_UID
-        assert is_chat_first_e2e_enabled_fixture(ENABLED_UID, stage=stage)
         assert is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID, stage=stage)
     for stage in ('dev', 'prod', ''):
         assert not is_chat_first_e2e_harness_runtime(stage=stage)
-        assert not is_chat_first_e2e_enabled_fixture(ENABLED_UID, stage=stage)
         assert not is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID, stage=stage)
     monkeypatch.delenv('OMI_ENV_STAGE', raising=False)
     assert not is_chat_first_e2e_harness_runtime()
@@ -169,7 +168,6 @@ def test_fixture_identity_is_fail_closed_without_live_auth_uid_manifest(monkeypa
     monkeypatch.delenv('OMI_HARNESS_STATE_ROOT', raising=False)
 
     assert fixture_uid_for_principal(CHAT_FIRST_E2E_ENABLED_PRINCIPAL) is None
-    assert not is_chat_first_e2e_enabled_fixture(ENABLED_UID)
     assert not is_chat_first_e2e_fixture_uid(OUT_OF_COHORT_UID)
 
 
@@ -202,18 +200,18 @@ def test_prepare_resets_fixed_canonical_fixture_rows_atomically(firestore):
     )
     second = fixture.prepare_fixture(
         ENABLED_UID,
-        fixture_case=ChatFirstE2EFixtureCase.ui_flag_off,
+        fixture_case=ChatFirstE2EFixtureCase.unreachable_control,
     )
 
     assert first.expected_shell == 'chat_first'
     assert first.proactive_intent_count == 1
     assert second.fixture_revision == 2
     assert second.expected_shell == 'legacy'
-    assert second.proactive_intent_count == 0
-    assert second.ready_intent_count == 0
+    assert second.proactive_intent_count == 1
+    assert second.ready_intent_count == 1
     control = firestore.rows[('users', ENABLED_UID, 'task_intelligence_control', 'state')]
     assert control['workflow_mode'] == TaskWorkflowMode.read.value
-    assert control['chat_first_ui_enabled'] is False
+    assert 'chat_first_ui_enabled' not in control
     focused_goal = firestore.rows[('users', ENABLED_UID, 'goals', 'chat-first-e2e-goal-v1')]
     non_focused_goal = firestore.rows[('users', ENABLED_UID, 'goals', 'chat-first-e2e-secondary-goal-v1')]
     assert focused_goal['status'] == 'focused'
@@ -330,5 +328,5 @@ def test_fixture_identity_and_cohort_are_fail_closed(firestore, monkeypatch):
         workflow_mode=TaskWorkflowMode.read,
         account_generation=1,
     )
-    assert enabled.intelligence_product_enabled is True
+    assert enabled.intelligence_product_enabled is False
     assert out_of_cohort.intelligence_product_enabled is False

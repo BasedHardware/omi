@@ -160,7 +160,7 @@ options, or rollout state.
 PROVIDER_MODE=offline make dev-up
 make seed-memory-scenario SCENARIO=happy_path
 make chat-first-e2e-fixture CHAT_FIRST_E2E_ACTION=prepare CHAT_FIRST_E2E_CASE=enabled
-make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-chat-first-e2e-enabled
+make desktop-run-local DESKTOP_APP_NAME=omi-chat-first-e2e DESKTOP_USER=omi-local-emulator-chat-first-enabled-v1
 ```
 
 Use `CHAT_FIRST_E2E_CASE=question` for the question-deferral flow. It begins
@@ -172,9 +172,9 @@ checks the emulator-assigned UID against the harness manifest. Its read-back and
 clock advance responses contain bounded state and counts only; never add a
 desktop capability override or print fixture content from these flows.
 
-`chat-first-capability-isolation.yaml` is a three-launch matrix: run the same
-single-case flow once after preparing and launching each `ui_flag_off`,
-`out_of_cohort`, and `unreachable_control` case in its own `omi-*` bundle and
+`chat-first-capability-isolation.yaml` is a two-launch matrix: run the same
+single-case flow once after preparing and launching each `out_of_cohort` and
+`unreachable_control` case in its own `omi-*` bundle and
 automation port. The exact three command pairs live in the flow header. A
 harness run cannot switch named bundles midway through a flow, so do not treat
 one serial run as proof of all three accounts. Each run asserts the real
