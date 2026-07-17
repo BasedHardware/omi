@@ -22,6 +22,7 @@
     "build:audio-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-audio-helper.ps1",
     "build:automation-helper": "powershell -ExecutionPolicy Bypass -File scripts/build-automation-helper.ps1",
     "check:agent-deps": "node scripts/check-agent-deps.mjs",
+    "check:tool-instruction-coverage": "vitest run src/main/agentKernel/toolInstructionCoverage.test.ts",
     "gen:pimono-unpack": "node scripts/gen-pimono-unpack.mjs",
     "verify:pimono-unpack": "node scripts/verify-pimono-unpack.mjs",
     "verify:pimono-spawn": "node scripts/verify-pimono-packaged-spawn.mjs",
