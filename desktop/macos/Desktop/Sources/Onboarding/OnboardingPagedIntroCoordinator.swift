@@ -123,7 +123,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let initialName = givenName.isEmpty ? (displayName.isEmpty ? "there" : displayName) : givenName
 
     preferredName = initialName
-    draftName = initialName
+    draftName = OnboardingFlow.nameFieldPrefill(initialName)
 
     // Fresh installs start EMPTY so the user's first pick genuinely defines the
     // primary — pre-selecting the "en" fallback would make English primary for everyone.

@@ -341,6 +341,12 @@ final class OnboardingFlowTests: XCTestCase {
     }
   }
 
+  func testNameFieldNeverPrefillsTherePlaceholder() {
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("there"), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill(""), "")
+    XCTAssertEqual(OnboardingFlow.nameFieldPrefill("Skander"), "Skander")
+  }
+
   func testPermissionContinueAdvancesWhenGrantAlreadyApplies() {
     XCTAssertEqual(OnboardingFlow.permissionContinueAction(needsRelaunchToApply: false), .advance)
   }

@@ -217,4 +217,11 @@ enum OnboardingFlow {
   static func permissionContinueAction(needsRelaunchToApply: Bool) -> PermissionContinueAction {
     needsRelaunchToApply ? .offerReopen : .advance
   }
+
+  /// The editable Name field never shows the "there" greeting fallback — an
+  /// Apple login that shared no name gets a blank field (placeholder shows),
+  /// not literal text the user has to delete first.
+  static func nameFieldPrefill(_ preferredName: String) -> String {
+    preferredName == "there" ? "" : preferredName
+  }
 }

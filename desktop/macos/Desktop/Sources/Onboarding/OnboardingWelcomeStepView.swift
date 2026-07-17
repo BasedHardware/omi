@@ -68,7 +68,7 @@ struct OnboardingWelcomeStepView: View {
       .frame(maxWidth: .infinity, alignment: .center)
       .onAppear {
         coordinator.clearLastActionError()
-        coordinator.draftName = coordinator.preferredName
+        coordinator.draftName = OnboardingFlow.nameFieldPrefill(coordinator.preferredName)
       }
     }
   }
