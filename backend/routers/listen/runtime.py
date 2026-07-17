@@ -212,17 +212,9 @@ class ListenSessionRuntime:
             request.onboarding_mode,
             base.transcription_prefs.get('single_language_mode', False),
         )
-        # Free plans default to self-hosted Parakeet unless the user picked an engine
-        # (custom STT or an explicit Parakeet request). Read the plan only when Parakeet
-        # could actually apply; language support + fallback live in get_stt_service_for_language.
-        prefer_parakeet = False
-        if not self.use_custom_stt and requested_service != 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
-            subscription = await run_blocking(db_executor, user_db.get_user_valid_subscription, request.uid)
-            prefer_parakeet = subscription is None or subscription.plan == PlanType.basic
         self.stt_service, self.stt_language, self.stt_model = get_stt_service_for_language(
             self.language,
             multi_lang_enabled=not single_language_mode,
-            prefer_parakeet=prefer_parakeet,
         )
         if not self.stt_service or not self.stt_language:
             await request.websocket.close(code=1008, reason=f'The language is not supported, {self.language}')
