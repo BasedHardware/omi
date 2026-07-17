@@ -823,7 +823,7 @@ environments:
               name: prod-omi-backend-secrets
               key: SERVICE_ACCOUNT_JSON
           OMI_LLM_GATEWAY_FEATURE_MODE:
-            value: gateway
+            value: 'off'
             category: rollout
           OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
             value: 'true'
@@ -925,7 +925,7 @@ environments:
               value: http://172.16.160.108
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
@@ -1054,7 +1054,7 @@ environments:
               value: http://172.16.160.108
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
@@ -1151,7 +1151,7 @@ environments:
               value: http://172.16.160.108
               category: service_discovery
             OMI_LLM_GATEWAY_FEATURE_MODE:
-              value: gateway
+              value: 'off'
               category: rollout
             OMI_LLM_GATEWAY_ALLOW_PROD_FEATURE_MODE:
               value: 'true'
