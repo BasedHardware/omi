@@ -3,6 +3,7 @@ import { liveConversation } from '../../lib/liveConversation'
 import { createPendingConversation } from '../../lib/pendingConversations'
 import { refreshCloudConversations } from '../../lib/pageCache'
 import { buildLocalGraph } from '../../lib/kgSynthesis'
+import { maybeTriggerTranscriptionQuotaPopup } from '../../lib/usageLimit'
 
 // Mirrors the capture window's live-conversation store into THIS (main) window and
 // runs the UI side effects that used to live in liveMicSession. The always-on mic
@@ -38,6 +39,11 @@ export function LiveMirrorHost(): null {
     return window.omi?.onCaptureEvent?.((ev) => {
       if (ev.type !== 'live') return
       liveConversation.applyRemoteOp(ev.op)
+      // A quota-exhausted terminal error from the capture window can't raise the
+      // upgrade modal there (separate renderer); do it here where the popup lives.
+      if (ev.op.op === 'status') {
+        maybeTriggerTranscriptionQuotaPopup(ev.op.status, ev.op.error)
+      }
       if (ev.op.op === 'saved') {
         createPendingConversation(ev.op.segments)
         pollForNewConversation()

@@ -210,6 +210,11 @@ export function startLiveMicSession(): LiveMicController {
           if (!isRetryableDropError((e as Error).message)) {
             // Quota/entitlement/sign-in error — reconnecting can't help. Surface it
             // now (no rescue: a quota-blocked account can't create conversations).
+            // On a quota exhaustion this mirrored 'error' status drives the main
+            // window's LiveMirrorHost → maybeTriggerTranscriptionQuotaPopup, which
+            // raises the "Upgrade" modal. Do NOT call showUsageLimit here: this
+            // hidden capture window is a separate renderer, so its in-memory popup
+            // signal never reaches the popup host.
             captureLiveStore.setStatus('error', (e as Error).message)
             return
           }
