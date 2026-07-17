@@ -89,10 +89,12 @@ extension AgentRuntimeProcess {
     attemptID: String,
     capabilityRef: String,
     controlGeneration: Int,
-    blocks: [[String: Any]],
+    blocksJSON: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> KernelJournalTurn {
-    guard surface.surfaceKind == "main_chat",
+    guard let blocksData = blocksJSON.data(using: .utf8),
+      let blocks = try? JSONSerialization.jsonObject(with: blocksData) as? [[String: Any]],
+      surface.surfaceKind == "main_chat",
       controlGeneration >= 0,
       !blocks.isEmpty,
       blocks.count <= 8
@@ -185,10 +187,12 @@ extension AgentRuntimeProcess {
     ownerID: String,
     sessionID: String,
     controlGeneration: Int,
-    intents: [ChatFirstPromptIntent],
+    intentsJSON: String,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> ChatFirstIntentsMaterialization {
-    guard surface.surfaceKind == "main_chat",
+    guard let intentsData = intentsJSON.data(using: .utf8),
+      let intents = try? JSONDecoder().decode([ChatFirstPromptIntent].self, from: intentsData),
+      surface.surfaceKind == "main_chat",
       controlGeneration >= 0,
       !intents.isEmpty,
       intents.count <= 8,

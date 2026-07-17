@@ -2750,12 +2750,13 @@ class FloatingControlBarManager {
     )
   }
 
-  static func performOwnerBoundNotificationAdmission<Value: Sendable>(
+  @MainActor
+  static func performOwnerBoundNotificationAdmission<Value>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {
       RuntimeOwnerIdentity.currentOwnerId()
     },
-    record: () async -> Value?
+    record: @MainActor () async -> Value?
   ) async -> Value? {
     guard !ownerID.isEmpty, currentOwnerID() == ownerID else { return nil }
     guard let value = await record() else { return nil }

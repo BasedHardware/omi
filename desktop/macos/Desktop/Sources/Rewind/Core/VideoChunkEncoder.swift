@@ -404,9 +404,7 @@ actor VideoChunkEncoder {
 
     try await waitForWriterInputReady(input)
 
-    let pixelBuffer: CVPixelBuffer = try autoreleasepool {
-      try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
-    }
+    let pixelBuffer = try createPixelBuffer(from: image, size: outputSize, adaptor: adaptor)
 
     // frameOffsetInChunk is the index of the frame being written RIGHT NOW; it is
     // incremented in addFrame only AFTER this write succeeds (so a failed write does

@@ -3663,10 +3663,10 @@ actor AgentRuntimeProcess {
         materializationReceipts: Self.chatFirstMaterializationReceipts(
           from: message.payload["materializationReceipts"]
         ),
-        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0,
         coldStartSequenceTerminalReceipts: Self.chatFirstColdStartSequenceTerminalReceipts(
           from: message.payload["coldStartSequenceTerminalReceipts"]
-        )
+        ),
+        acknowledgedReceiptCount: message.payload["acknowledgedReceiptCount"] as? Int ?? 0
       ))
   }
 

@@ -3,7 +3,9 @@ import Foundation
 /// Wire-only adapter for the server-authoritative structured-block validator.
 /// The server receives snake_case Pydantic contracts; the local journal keeps
 /// the established camelCase `ChatContentBlockCodec` contract.
-struct ChatFirstBlockValidationRequest: Encodable {
+/// The block collection originates from a freshly validated JSON payload and
+/// is never retained or mutated after this request is constructed.
+struct ChatFirstBlockValidationRequest: Encodable, @unchecked Sendable {
   let sourceSurface = "main_chat"
   let controlGeneration: Int
   let ownerFence: String
@@ -21,7 +23,9 @@ struct ChatFirstBlockValidationRequest: Encodable {
   }
 }
 
-struct ChatFirstBlockValidationReceipt: Decodable {
+/// The receipt is immutable, decoded JSON that stays on the main actor until
+/// it is encoded again for the kernel-owned journal operation.
+struct ChatFirstBlockValidationReceipt: Decodable, @unchecked Sendable {
   let accepted: Bool
   let code: String
   let blocks: [OmiAnyCodable]
@@ -81,7 +85,9 @@ enum ChatFirstBlockWire {
       guard let goalID = block["goalId"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "goal_id": goalID, "summary": summary]
     case "captureLink":
-      guard let conversationID = block["conversationId"] as? String, let summary = block["summary"] as? String else { return nil }
+      guard let conversationID = block["conversationId"] as? String, let summary = block["summary"] as? String else {
+        return nil
+      }
       var result: [String: Any] = ["type": type, "conversation_id": conversationID, "summary": summary]
       if let timestamp = block["momentTimestampMs"] as? Int { result["moment_timestamp_ms"] = timestamp }
       return result
@@ -130,7 +136,9 @@ enum ChatFirstBlockWire {
       guard let goalID = block["goal_id"] as? String, let summary = block["summary"] as? String else { return nil }
       return ["type": type, "id": id, "goalId": goalID, "summary": summary]
     case "captureLink":
-      guard let conversationID = block["conversation_id"] as? String, let summary = block["summary"] as? String else { return nil }
+      guard let conversationID = block["conversation_id"] as? String, let summary = block["summary"] as? String else {
+        return nil
+      }
       var result: [String: Any] = ["type": type, "id": id, "conversationId": conversationID, "summary": summary]
       if let timestamp = block["moment_timestamp_ms"] as? Int { result["momentTimestampMs"] = timestamp }
       return result
