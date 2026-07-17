@@ -12,7 +12,7 @@ from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.runnables import Runnable
 import pytest
 
-from utils.llm import clients, gateway_shadow
+from utils.llm import clients, gateway_shadow, gateway_serving
 from utils.llm import providers
 from utils.llm.gateway_client import DEFAULT_LLM_GATEWAY_URL, GatewayContextChatOpenAI, get_llm_gateway_base_url
 from utils.llm.gateway_client import (
@@ -27,6 +27,13 @@ from utils.llm.gateway_client import (
 from utils.llm.clients import get_llm_gateway_chat_structured
 from utils.llm.usage_tracker import reset_usage_context, set_usage_context
 import httpx
+
+
+@pytest.fixture(autouse=True)
+def _reset_gateway_circuit_between_tests():
+    gateway_serving.gateway_circuit.reset()
+    yield
+    gateway_serving.gateway_circuit.reset()
 
 
 class FakeChatModel(BaseChatModel):

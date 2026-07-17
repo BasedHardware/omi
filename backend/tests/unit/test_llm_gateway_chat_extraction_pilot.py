@@ -185,7 +185,11 @@ def test_chat_structured_gateway_request_uses_auto_lane_and_service_auth(monkeyp
     assert captured['json']['messages'] == [{'role': 'user', 'content': 'classified prompt'}]
     assert captured['json']['response_format']['type'] == 'json_schema'
     assert captured['json']['response_format']['json_schema']['schema']['properties']['value']['type'] == 'boolean'
-    assert captured['client_kwargs'] == {'timeout': gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS}
+    timeout = captured['client_kwargs']['timeout']
+    assert timeout.connect == 3.0
+    assert timeout.pool == 3.0
+    assert timeout.read == gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS
+    assert timeout.write == gateway_client.CHAT_EXTRACTION_TIMEOUT_SECONDS
 
 
 def test_chat_structured_gateway_allows_background_timeout_override(monkeypatch):
@@ -205,7 +209,11 @@ def test_chat_structured_gateway_allows_background_timeout_override(monkeypatch)
     )
 
     assert result == chat.RequiresContext(value=True)
-    assert captured['client_kwargs'] == {'timeout': gateway_client.BACKGROUND_CHAT_EXTRACTION_TIMEOUT_SECONDS}
+    timeout = captured['client_kwargs']['timeout']
+    assert timeout.connect == 3.0
+    assert timeout.pool == 3.0
+    assert timeout.read == 15.0
+    assert timeout.write == 15.0
 
 
 def test_strict_schema_normalizes_action_item_extraction_for_openai():

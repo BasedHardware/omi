@@ -138,17 +138,21 @@ jobs:
       - name: Install Python deps for deploy scripts
         run: python3 -m pip install -q pyyaml
 
-      - name: Render backend runtime env
-        id: runtime-env
-        env:
-          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
-          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          OMI_LLM_GATEWAY_URL: ${{ vars.OMI_LLM_GATEWAY_URL }}
-          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
-          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+      - name: Get GKE credentials for gateway serving gate
+        uses: google-github-actions/get-gke-credentials@v3
+        with:
+          cluster_name: ${{ vars.GKE_CLUSTER }}
+          location: ${{ env.REGION }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+
+      - name: Verify LLM gateway control plane before promotion
+        id: gateway-serving
         run: |
-          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment=dev \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
 
       - name: Preflight Cloud Run deploy
         run: |
@@ -188,6 +192,30 @@ jobs:
         run: |
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:latest
           docker push gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}
+
+      - name: Probe LLM gateway from the Cloud Run VPC before promotion
+        run: |
+          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --gateway-url="${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network="${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet="${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress=private-ranges-only \
+            --name-suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+
+      - name: Render backend runtime env from the gated gateway endpoint
+        id: runtime-env
+        env:
+          CLOUD_RUN_VPC_NETWORK: ${{ vars.CLOUD_RUN_VPC_NETWORK }}
+          CLOUD_RUN_VPC_SUBNET: ${{ vars.CLOUD_RUN_VPC_SUBNET }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}
+          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE || 'legacy' }}
+        run: |
+          python3 backend/scripts/render_backend_runtime_env.py --env dev >> "$GITHUB_OUTPUT"
 
       - name: Migrate legacy public Cloud Run bindings
         run: >-
@@ -276,13 +304,6 @@ jobs:
           service: ${{ env.SERVICE }}
           provision_sync_ledger_ttl: 'true'
           provision_budget_alerts: 'false'
-
-      - name: Get GKE credentials
-        uses: google-github-actions/get-gke-credentials@v3
-        with:
-          cluster_name: ${{ vars.GKE_CLUSTER }}
-          location: ${{ env.REGION }}
-          project_id: ${{ vars.GCP_PROJECT_ID }}
 
       - name: Install Helm
         uses: azure/setup-helm@v5

@@ -27,6 +27,8 @@ Key env vars: `OPENAI_API_KEY` (LLM calls — not `OPENAI_ADMIN_KEY` which is bi
 
 Chat SSE deadlines: `AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS` (default `25`), `AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS` (default `20`), `AGENT_STREAM_MAX_DURATION_SECONDS` (default `150`), and `AGENT_STREAM_CANCEL_GRACE_SECONDS` (default `2`) bound silent setup/producer work and keep valid long tool calls observable. Values must be positive.
 
+LLM gateway resilience: `OMI_LLM_GATEWAY_CONNECT_TIMEOUT_SECONDS` (default `3`), `OMI_LLM_GATEWAY_FIRST_BYTE_TIMEOUT_SECONDS` (default `15`), `OMI_LLM_GATEWAY_CIRCUIT_FAILURE_THRESHOLD` (default `2`), and `OMI_LLM_GATEWAY_CIRCUIT_COOLDOWN_SECONDS` (default `30`) bound the optional gateway hop. Gateway-first callers use the shared process-local circuit and may fall back only before stream output. Never restore a production `OMI_LLM_GATEWAY_URL` static IP: the backend deployment derives it after `verify-llm-gateway-serving.py` validates the ready Kubernetes workload, ingress/ILB attachment, and Cloud Run VPC smoke route.
+
 ## Directory Structure
 
 ```
@@ -163,7 +165,7 @@ Helm charts: `backend/charts/{agent-proxy,agent-vm-reaper,backend-listen,backend
 - **agent-vm-reaper** (`backend/charts/agent-vm-reaper/`) — CronJob that deletes stale `omi-agent-*` GCE VMs left by desktop agent sandboxes.
 - **backend-secrets** (`backend/charts/backend-secrets/`) — ExternalSecret and SecretStore resources that sync backend runtime secrets into GKE namespaces.
 
-Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes.
+Backend runtime env contract: keep `backend/deploy/runtime_env.yaml` aligned with GKE Helm values and Cloud Run runtime env; run `backend/scripts/pre-deploy-check.sh` after backend runtime env or deploy workflow changes. The `llm_gateway` manifest section owns the release, ingress, and static-address identity; a reserved address alone is never an endpoint contract. Gateway-mode promotion requires the control-plane gate plus `probe-llm-gateway-from-cloud-run.sh` before Cloud Run revisions are created.
 
 Firestore index boundary: backend deploy workflows run `reconcile_firestore_indexes.py --check-only` against `RUNTIME_GCP_PROJECT_ID` in an isolated approved-source job using dedicated read-only credentials. Manual deploys must keep `firestore.indexes.json` identical to `main` and deploy the exact checked candidate SHA. A failed gate writes and locally revalidates a short-lived, redacted create-only proposal before upload; backend deployment must never mutate the serving schema.
 

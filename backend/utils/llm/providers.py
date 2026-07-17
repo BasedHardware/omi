@@ -18,6 +18,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
 from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_resilience import gateway_transport_timeout
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -94,6 +95,8 @@ def get_or_create_openai_compatible_llm(
     if key not in _llm_cache:
         kwargs: Dict[str, Any] = {
             'callbacks': [_usage_callback],
+            # The direct provider is the recovery path. Keep its established
+            # deadline/retry budget; only the optional gateway hop is short.
             'request_timeout': options.get('request_timeout', 120),
             'max_retries': options.get('max_retries', 1),
         }
@@ -127,6 +130,8 @@ def get_or_create_omi_gateway_llm(
 
     options = options or {}
     base_url = f'{get_llm_gateway_base_url()}/v1'
+    request_timeout = options.get('request_timeout', gateway_transport_timeout())
+    max_retries = options.get('max_retries', 0)
     service_token = get_llm_gateway_service_token()
     default_headers = {'X-Omi-Service-Caller': 'backend'}
     if service_token:
@@ -140,8 +145,8 @@ def get_or_create_omi_gateway_llm(
         {
             'base_url': base_url,
             'service_token': service_token_cache_key,
-            'request_timeout': options.get('request_timeout', 120),
-            'max_retries': options.get('max_retries', 1),
+            'request_timeout': repr(request_timeout),
+            'max_retries': max_retries,
             'feature': feature,
         },
     )
@@ -151,8 +156,8 @@ def get_or_create_omi_gateway_llm(
             'base_url': base_url,
             'callbacks': [_usage_callback],
             'default_headers': default_headers,
-            'request_timeout': options.get('request_timeout', 120),
-            'max_retries': options.get('max_retries', 1),
+            'request_timeout': request_timeout,
+            'max_retries': max_retries,
         }
         if streaming:
             kwargs['streaming'] = True

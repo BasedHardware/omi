@@ -142,6 +142,10 @@ def test_openai_compatible_provider_applies_base_url_headers_and_google_prefix(m
     assert call['api_key'] == 'sk-openrouter'
     assert call['base_url'] == 'https://openrouter.ai/api/v1'
     assert call['default_headers'] == {'X-Title': 'Omi Chat'}
+    # Direct providers are the gateway recovery path and retain their existing
+    # provider-sized timeout/retry budget.
+    assert call['request_timeout'] == 120
+    assert call['max_retries'] == 1
     assert call['temperature'] == 0.7
 
 

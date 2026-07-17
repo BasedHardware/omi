@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import json
 import os
+import time
 from collections.abc import Mapping
 from copy import deepcopy
 from typing import Any, TypeVar, cast
@@ -13,6 +14,7 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, PrivateAttr, ValidationError
 
 from utils.llm.gateway_observability import record_direct_exception_surface, record_gateway_request_result
+from utils.llm.gateway_resilience import gateway_circuit, gateway_transport_timeout, observe_gateway_first_byte
 from utils.llm.usage_tracker import get_current_context
 
 LLM_GATEWAY_SERVICE_TOKEN_ENV_VAR = 'OMI_LLM_GATEWAY_SERVICE_TOKEN'
@@ -152,8 +154,12 @@ def invoke_chat_structured_gateway(
     call does not stall the event loop. Do **not** call this from ``async def``
     code without first offloading via ``run_blocking(llm_executor, ...)``.
     """
+    if not gateway_circuit.allow_request():
+        record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='circuit_open')
+        return None
+    gateway_started_at = time.monotonic()
     try:
-        with httpx.Client(timeout=timeout_seconds) as client:
+        with httpx.Client(timeout=_gateway_timeout(timeout_seconds)) as client:
             response = client.post(
                 f'{get_llm_gateway_base_url()}/v1/chat/completions',
                 headers=_gateway_headers(feature=feature),
@@ -174,19 +180,27 @@ def invoke_chat_structured_gateway(
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='invalid_json_shape')
             return None
         result = _validate_output_model(output_model, cast(Mapping[str, object], decoded))
+        gateway_circuit.record_transport_success()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='success')
         record_chat_extraction_gateway_result(feature=feature, outcome='success', reason='ok')
         return result
     except httpx.HTTPStatusError as exc:
         reason = f'http_{exc.response.status_code}'
         if is_gateway_transport_status_code(exc.response.status_code):
+            gateway_circuit.record_transport_failure()
+            observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
             record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason=reason)
             return None
         record_chat_extraction_gateway_result(feature=feature, outcome='error', reason=reason)
         raise
     except httpx.TimeoutException:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='timeout')
         return None
     except httpx.RequestError:
+        gateway_circuit.record_transport_failure()
+        observe_gateway_first_byte(feature=feature, started_at=gateway_started_at, outcome='transport_failure')
         record_chat_extraction_gateway_result(feature=feature, outcome='fallback', reason='request_error')
         return None
     except (ValidationError, JsonSchemaValidationError):
@@ -347,6 +361,19 @@ def _validate_output_model(
 ) -> StructuredOutput:
     validate_json_schema(instance=decoded, schema=_strict_model_json_schema(output_model))
     return output_model.model_validate(decoded)
+
+
+def _gateway_timeout(timeout_seconds: float) -> httpx.Timeout:
+    """Keep feature-specific total budgets while bounding the gateway connect/read hop."""
+
+    shared = gateway_transport_timeout()
+    bounded = min(timeout_seconds, shared.read or timeout_seconds)
+    return httpx.Timeout(
+        connect=shared.connect,
+        read=bounded,
+        write=bounded,
+        pool=shared.pool,
+    )
 
 
 def generate_image_via_gateway(
