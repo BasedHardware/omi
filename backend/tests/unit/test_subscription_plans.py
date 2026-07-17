@@ -144,3 +144,17 @@ def test_wire_plan_remaps_mobile_tiers_only_for_clients_without_the_enum(monkeyp
     # Non-mobile plans are never remapped.
     assert wire(PlanType.unlimited, 'ios', '1.0.600') == PlanType.unlimited
     assert wire(PlanType.operator, 'ios', '1.0.600') == PlanType.operator
+
+
+def test_plus_and_unlimited_v2_features_state_transcription_limits(subscription_module):
+    """Mobile cards render get_plan_features; Plus/Unlimited must state their
+    transcription terms, not fall through to the Free-tier feature list."""
+    m = subscription_module
+    plus_mobile = m.get_plan_features(PlanType.plus, simplified=True)
+    unlim_mobile = m.get_plan_features(PlanType.unlimited_v2, simplified=True)
+
+    assert any("minutes of transcription" in f for f in plus_mobile), plus_mobile
+    assert any(f"{m.PLUS_TIER_MINUTES_LIMIT_PER_MONTH:,}" in f for f in plus_mobile), plus_mobile
+    assert any("Unlimited transcription" in f for f in unlim_mobile), unlim_mobile
+    # Must not leak the Free-tier "Unlimited listening time" fallback.
+    assert not any("listening" in f for f in plus_mobile), plus_mobile
