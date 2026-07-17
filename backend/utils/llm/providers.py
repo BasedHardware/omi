@@ -17,7 +17,7 @@ from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_openai import ChatOpenAI
 from pydantic import SecretStr
 
-from utils.llm.gateway_client import get_llm_gateway_base_url, get_llm_gateway_service_token
+from utils.llm.gateway_client import GatewayContextChatOpenAI, get_llm_gateway_base_url, get_llm_gateway_service_token
 from utils.llm.usage_tracker import get_usage_callback
 
 logger = logging.getLogger(__name__)
@@ -120,6 +120,8 @@ def get_or_create_omi_gateway_llm(
     lane_id: str,
     streaming: bool = False,
     options: Optional[Dict[str, Any]] = None,
+    *,
+    feature: str | None = None,
 ) -> ChatOpenAI:
     """Get or create a cached LangChain chat model backed by the Omi LLM gateway."""
 
@@ -140,6 +142,7 @@ def get_or_create_omi_gateway_llm(
             'service_token': service_token_cache_key,
             'request_timeout': options.get('request_timeout', 120),
             'max_retries': options.get('max_retries', 1),
+            'feature': feature,
         },
     )
     if key not in _llm_cache:
@@ -154,7 +157,7 @@ def get_or_create_omi_gateway_llm(
         if streaming:
             kwargs['streaming'] = True
             kwargs['stream_options'] = {"include_usage": True}
-        _llm_cache[key] = ChatOpenAI(model=lane_id, **kwargs)
+        _llm_cache[key] = GatewayContextChatOpenAI(model=lane_id, omi_gateway_feature=feature, **kwargs)
     return _llm_cache[key]
 
 

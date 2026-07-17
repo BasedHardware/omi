@@ -34,12 +34,21 @@ async def test_vertex_provider_uses_native_generate_content_and_normalizes_respo
             200,
             json={
                 'responseId': 'vertex-response-id',
+                'modelVersion': 'gemini-2.5-flash-001',
+                'trafficType': 'ON_DEMAND',
                 'candidates': [
                     {
                         'content': {'parts': [{'text': 'A concise title'}]},
                         'finishReason': 'MAX_TOKENS',
                     }
                 ],
+                'usageMetadata': {
+                    'promptTokenCount': 100,
+                    'cachedContentTokenCount': 25,
+                    'candidatesTokenCount': 20,
+                    'thoughtsTokenCount': 5,
+                    'totalTokenCount': 125,
+                },
             },
         )
 
@@ -100,6 +109,11 @@ async def test_vertex_provider_uses_native_generate_content_and_normalizes_respo
     assert response['model'] == 'gemini-2.5-flash-lite'
     assert response['choices'][0]['message']['content'] == 'A concise title'
     assert response['choices'][0]['finish_reason'] == 'length'
+    assert response['usage']['prompt_tokens_details']['cached_tokens'] == 25
+    assert response['usage']['completion_tokens_details']['reasoning_tokens'] == 5
+    assert response.accounting.actual_model_version == 'gemini-2.5-flash-001'
+    assert response.accounting.usage is not None
+    assert response.accounting.usage.cached_input_tokens == 25
 
 
 @pytest.mark.asyncio
@@ -112,7 +126,7 @@ async def test_vertex_provider_translates_native_sse_to_openai_sse(monkeypatch):
             200,
             content=(
                 b'data: {"responseId":"first","candidates":[{"content":{"parts":[{"text":"hello"}]}}]}\n\n'
-                b'data: {"responseId":"first","candidates":[{"finishReason":"STOP"}]}\n\n'
+                b'data: {"responseId":"first","candidates":[{"finishReason":"STOP"}],"usageMetadata":{"promptTokenCount":10,"cachedContentTokenCount":4,"candidatesTokenCount":2,"totalTokenCount":12}}\n\n'
             ),
             headers={'content-type': 'text/event-stream'},
         )
@@ -134,6 +148,7 @@ async def test_vertex_provider_translates_native_sse_to_openai_sse(monkeypatch):
     streamed = b''.join(chunks)
     assert b'"delta":{"content":"hello"}' in streamed
     assert b'"finish_reason":"stop"' in streamed
+    assert b'"usage":{"prompt_tokens":10' in streamed
     assert streamed.endswith(b'data: [DONE]\n\n')
 
 

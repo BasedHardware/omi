@@ -17,6 +17,7 @@ The gateway is intentionally narrow:
 - Validate request capabilities before execution.
 - Execute the primary provider/model and compatible fallbacks.
 - Return a normal provider-compatible response while recording bounded route/fallback terminal telemetry.
+- Write a durable, cache-aware usage ledger for each gateway provider attempt without retaining prompts or response bodies.
 
 Do not build a user-facing router product. Do not add sliders, per-user routing preferences, Firestore routing prefs, desktop route caches, or a public `/pick` endpoint for product clients.
 
@@ -207,9 +208,25 @@ Gateway env:
 | `GCP_LOCATION` | Vertex region (`us-central1`) |
 | `OPENROUTER_API_KEY` | existing `*-omi-backend-secrets` key `OPENROUTER_API_KEY` (required for openrouter-backed feature lanes) |
 | `METRICS_SECRET` | existing `*-omi-backend-secrets` key `METRICS_SECRET` |
+| `LLM_GATEWAY_ACCOUNTING_ENABLED` | `true` in deployed values; enables immutable Firestore usage-attempt events |
+| `LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS` | Bounded non-fatal Firestore-write timeout; `1` in deployed values |
 | `OMI_LLM_GATEWAY_OUTPUT_BUDGET_EXPERIMENTS` | Empty by default; enable a named, route-owned budget experiment only after its quality review |
 
 Gemini gateway lanes use native Vertex `generateContent` / `streamGenerateContent` with Application Default Credentials. The Kubernetes service account is annotated at deploy time from the environment-scoped GitHub variable `LLM_GATEWAY_GSA`; it must already be mapped through GKE Workload Identity to a dedicated Google service account with the required Vertex invocation permission (for example, `roles/aiplatform.user`) in the configured project. The exact dev/prod Google service-account identities and IAM bindings are an external platform prerequisite, not chart defaults or secrets.
+
+The same gateway Google service account must also have Firestore data access in the backend project (normally
+`roles/datastore.user`) before deployed accounting is enabled. The ledger collection is `llm_gateway_attempts`;
+each immutable event contains user/tier attribution, provider/model/route, normalized prompt/output/cache units, and
+an integer micro-USD estimate. It contains no prompts, completions, provider response bodies, headers, or API keys.
+Costs are estimates from versioned in-repo rate cards: cache hits and partial hits use the provider-reported cached
+input token count, while unpriced models and unreported/indeterminate usage remain explicitly non-zero-unknown rather
+than being treated as free. Cache storage charges and provider request/tool fees are intentionally out of scope for
+this first ledger. Image-generation cards are per generated image and explicitly exclude unreported prompt-input
+tokens. Firestore writes are detached from model responses and streaming tails; the configured accounting timeout
+bounds both each write and the graceful-shutdown drain. `LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES` bounds detached
+in-memory work (default `1000`); queue overflow is emitted as a `delivery=dropped` accounting metric, so this
+best-effort delivery path is observable rather than silently treated as free. Gateway calls without an authenticated
+user-usage context are recorded as unattributed rather than being assigned to a guessed user or subscription tier.
 
 ExternalSecrets expect a GCP Secret Manager secret named `OMI_LLM_GATEWAY_SERVICE_TOKEN` in both projects:
 

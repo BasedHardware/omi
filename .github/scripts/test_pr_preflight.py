@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+from contextlib import redirect_stderr
 import io
 import json
 import os
@@ -11,11 +12,12 @@ import sys
 import tempfile
 import time
 import unittest
+import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
-from pr_metadata import load_from_api
-from pr_preflight import changed_files, format_failure_class_suggest, select_checks
+from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
+from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -57,6 +59,103 @@ class MetadataTests(unittest.TestCase):
         self.assertEqual(captured["url"], "https://api.github.com/repos/BasedHardware/omi/pulls/9402")
         self.assertEqual(captured["authorization"], "Bearer test-token")
         self.assertEqual(captured["timeout"], 15)
+
+    def test_api_loader_retries_transient_failures_then_succeeds(self) -> None:
+        payload = json.dumps({"number": 9847, "body": "ok", "updated_at": "u", "labels": []}).encode()
+        outcomes: list[object] = [
+            urllib.error.HTTPError("url", 502, "bad gateway", None, None),  # type: ignore[arg-type]
+            TimeoutError("timed out"),
+            FakeResponse(payload),
+        ]
+        sleeps: list[float] = []
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            outcome = outcomes.pop(0)
+            if isinstance(outcome, BaseException):
+                raise outcome
+            return outcome  # type: ignore[return-value]
+
+        metadata = load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=sleeps.append)
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(sleeps, [2.0, 4.0])
+
+    def test_api_loader_does_not_retry_permanent_http_errors(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise urllib.error.HTTPError("url", 404, "not found", None, None)  # type: ignore[arg-type]
+
+        with self.assertRaisesRegex(RuntimeError, "HTTP 404") as raised:
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 1)
+        cause = raised.exception.__cause__
+        self.assertIsInstance(cause, urllib.error.HTTPError)
+        cause.close()  # type: ignore[union-attr]
+
+    def test_api_loader_raises_after_exhausting_transient_retries(self) -> None:
+        calls = {"count": 0}
+
+        def opener(request: object, timeout: int) -> FakeResponse:
+            calls["count"] += 1
+            raise TimeoutError("timed out")
+
+        with self.assertRaisesRegex(TransientPRMetadataError, "request failed"):
+            load_from_api("BasedHardware/omi", 9847, "test-token", opener=opener, sleeper=lambda _: None)
+        self.assertEqual(calls["count"], 3)
+
+    def test_event_payload_loader_uses_top_level_pr_number(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps(
+                    {
+                        "number": 9847,
+                        "pull_request": {
+                            "body": "INV-MEM-1",
+                            "updated_at": "2026-07-16T23:30:00Z",
+                            "labels": [{"name": "no-changelog-needed"}],
+                        },
+                    }
+                ),
+                encoding="utf-8",
+            )
+
+            metadata = load_from_event_file(event_path, 9847)
+
+        self.assertEqual(metadata.number, 9847)
+        self.assertEqual(metadata.body, "INV-MEM-1")
+        self.assertEqual(metadata.labels, ("no-changelog-needed",))
+
+    def test_event_payload_loader_rejects_missing_pull_request(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(json.dumps({"number": 9847}), encoding="utf-8")
+
+            with self.assertRaisesRegex(RuntimeError, "pull_request"):
+                load_from_event_file(event_path, 9847)
+
+    def test_pr_metadata_uses_event_payload_only_after_transient_api_failure(self) -> None:
+        with tempfile.TemporaryDirectory() as tmp:
+            event_path = Path(tmp) / "event.json"
+            event_path.write_text(
+                json.dumps({"number": 9847, "pull_request": {"body": "current", "labels": []}}),
+                encoding="utf-8",
+            )
+            warnings = io.StringIO()
+            with patch(
+                "pr_preflight.load_from_api", side_effect=TransientPRMetadataError("GitHub API unavailable")
+            ), redirect_stderr(warnings):
+                metadata = resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, event_path)
+
+        self.assertIsNotNone(metadata)
+        self.assertEqual(metadata.body, "current")
+        self.assertIn("using the PR snapshot", warnings.getvalue())
+
+    def test_pr_metadata_does_not_use_event_payload_after_permanent_api_failure(self) -> None:
+        with patch("pr_preflight.load_from_api", side_effect=RuntimeError("GitHub API returned HTTP 403")):
+            with self.assertRaisesRegex(RuntimeError, "HTTP 403"):
+                resolve_pr_metadata(REPO_ROOT, None, "BasedHardware/omi", 9847, Path("event.json"))
 
 
 class SelectionTests(unittest.TestCase):

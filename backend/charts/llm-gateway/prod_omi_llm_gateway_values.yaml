@@ -93,6 +93,12 @@ env:
     value: "prod"
   - name: DD_TRACE_ENABLED
     value: "true"
+  - name: LLM_GATEWAY_ACCOUNTING_ENABLED
+    value: "true"
+  - name: LLM_GATEWAY_ACCOUNTING_WRITE_TIMEOUT_SECONDS
+    value: "1"
+  - name: LLM_GATEWAY_ACCOUNTING_MAX_PENDING_TRACES
+    value: "1000"
 
 resources:
   requests:
