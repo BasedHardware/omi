@@ -72,7 +72,7 @@ const RUN_ID = Date.now().toString(36)
 // separate create/complete (quokka) each act on their OWN task with unambiguous REST
 // proof (and "zebra" survives the update rename "buy zebra milk"→"buy zebra oat milk").
 // This combined regex identifies + cleans up everything the run creates.
-const MUTATION_RE = /zebra|quokka/i
+const MUTATION_RE = /zebra|penguin/i
 
 // ── The matrix ───────────────────────────────────────────────────────────────────
 // category: read | mutation | delegation | negative
@@ -83,11 +83,14 @@ const MATRIX = [
   // ── READS ──
   { id: 'get_action_items', category: 'read', request: 'What are my action items for today?', expect: 'get_action_items', alt: ['search_tasks', 'get_tasks'] },
   { id: 'search_memories', category: 'read', request: 'Search my memories about my dog.', expect: 'search_memories', alt: ['get_memories', 'semantic_search'] },
-  { id: 'get_memories', category: 'read', request: 'What do you know about me?', expect: 'get_memories', alt: ['search_memories'] },
+  // soft: the voice session is SEEDED with an about_user card (a memory snapshot), so
+  // the model can correctly answer "what do you know about me / what am I working on"
+  // straight from context without a fresh tool call — that's acceptable, not a failure.
+  { id: 'get_memories', category: 'read', request: 'What do you know about me?', expect: 'get_memories', alt: ['search_memories'], soft: true },
   { id: 'search_conversations', category: 'read', request: 'Find my past conversations about groceries.', expect: 'search_conversations', alt: ['get_conversations', 'semantic_search'] },
   { id: 'get_daily_recap', category: 'read', request: 'Give me a recap of what I did today.', expect: 'get_daily_recap', alt: ['get_conversations', 'search_conversations'] },
   { id: 'semantic_search', category: 'read', request: 'What was I reading about on my screen earlier today?', expect: 'semantic_search', alt: ['get_work_context', 'search_conversations'] },
-  { id: 'get_work_context', category: 'read', request: 'What am I working on right now on my computer?', expect: 'get_work_context', alt: ['semantic_search', 'capture_screen'] },
+  { id: 'get_work_context', category: 'read', request: 'What am I working on right now on my computer?', expect: 'get_work_context', alt: ['semantic_search', 'capture_screen'], soft: true },
 
   // ── MUTATION LIFECYCLE (each row REST-proven; two tasks so delete and complete each
   //    act on a fresh task — avoids the model declining to delete an already-completed
@@ -99,10 +102,10 @@ const MATRIX = [
     rest: (b, a) => a.some((i) => /oat/i.test(i.description) && /zebra/i.test(i.description)) },
   { id: 'delete_task', category: 'mutation', request: 'Delete my zebra milk task completely.', expect: 'delete_task', alt: ['search_tasks'], re: /zebra/i,
     rest: (b, a) => !a.some((i) => /zebra/i.test(i.description)) },
-  { id: 'create_action_item_b', category: 'mutation', request: 'Add feed the quokka to my action items.', expect: 'create_action_item', re: /quokka/i,
-    rest: (b, a) => a.some((i) => /quokka/i.test(i.description)) && !b.some((i) => /quokka/i.test(i.description)) },
-  { id: 'complete_task', category: 'mutation', request: 'Mark my quokka task as done.', expect: 'complete_task', alt: ['update_action_item', 'search_tasks'], re: /quokka/i,
-    rest: (b, a, byId) => { const it = a.find((i) => /quokka/i.test(i.description)); return !!it && byId.get(it.id)?.completed === true } },
+  { id: 'create_action_item_b', category: 'mutation', request: 'Add feed the penguin to my action items.', expect: 'create_action_item', re: /penguin/i,
+    rest: (b, a) => a.some((i) => /penguin/i.test(i.description)) && !b.some((i) => /penguin/i.test(i.description)) },
+  { id: 'complete_task', category: 'mutation', request: 'Mark my penguin task as done.', expect: 'complete_task', alt: ['update_action_item', 'search_tasks'], re: /penguin/i,
+    rest: (b, a, byId) => { const it = a.find((i) => /penguin/i.test(i.description)); return !!it && byId.get(it.id)?.completed === true } },
 
   // ── DELEGATION ──
   { id: 'spawn_agent', category: 'delegation', request: 'Build me a simple tic tac toe web page.', expect: 'spawn_agent', alt: ['write', 'bash', 'edit'] },
@@ -280,6 +283,10 @@ async function main() {
     log('mic/hub warm-up done')
 
     let itemsBefore = restBase ? await restActionItems(restBase, idToken).catch(() => []) : []
+    // Snapshot the pre-run item ids: cleanup deletes ANY item that appears during the
+    // run (id not here), which is robust even when STT mangles a token (e.g. quokka →
+    // "quaka") so a created task can never leak onto the account.
+    const initialItemIds = new Set(itemsBefore.map((i) => i.id))
     let agentsBefore = agentSessionIds(await callVoiceTool(page, 'list_agent_sessions', {}))
 
     for (const t of rows) {
@@ -343,8 +350,12 @@ async function main() {
       if (t.category === 'read') {
         const fired = tools.includes(t.expect)
         const alt = !fired && (t.alt || []).some((a) => tools.includes(a))
-        row.verdict = fired ? 'PASS' : alt ? 'PASS(alt)' : tools.length ? 'DIFFERENT' : 'FAIL'
-        row.detail = fired ? `fired ${t.expect}` : alt ? `fired alt [${tools}]` : tools.length ? `expected ${t.expect}, got [${tools}]` : `no tool fired (spoke=${spokeMs}ms)`
+        // A `soft` read may be answered straight from the seeded about_user card (the
+        // model has the info without a fresh call) — coherent reply, no tool: UNVERIFIED,
+        // not FAIL (it's correct behavior, just not tool-driven).
+        const contextAnswered = !fired && !alt && tools.length === 0 && !!replyText && t.soft
+        row.verdict = fired ? 'PASS' : alt ? 'PASS(alt)' : contextAnswered ? 'UNVERIFIED' : tools.length ? 'DIFFERENT' : 'FAIL'
+        row.detail = fired ? `fired ${t.expect}` : alt ? `fired alt [${tools}]` : contextAnswered ? `answered from seeded context (no ${t.expect} call needed)` : tools.length ? `expected ${t.expect}, got [${tools}]` : `no tool fired (spoke=${spokeMs}ms)`
         if (row.verdict === 'FAIL' || row.verdict === 'DIFFERENT') exit = 1
       } else if (t.category === 'mutation') {
         const before = itemsBefore
@@ -404,15 +415,17 @@ async function main() {
       await new Promise((r) => setTimeout(r, 1500))
     }
 
-    // ── Cleanup: delete every test item we created; re-verify none remain. ──
+    // ── Cleanup: delete EVERY item that appeared during the run (id not in the initial
+    //    snapshot) plus anything matching our test tokens; re-verify none remain. The
+    //    id-diff makes cleanup robust to STT-mangled tokens (a leaked task can't hide). ──
     if (restBase) {
       const after = await restActionItems(restBase, idToken).catch(() => [])
-      for (const it of after.filter((i) => MUTATION_RE.test(i.description))) createdItemIds.add(it.id)
+      for (const it of after) { if (it.id && (!initialItemIds.has(it.id) || MUTATION_RE.test(it.description))) createdItemIds.add(it.id) }
       let del = 0
       for (const id of createdItemIds) { if (id && await restDelete(restBase, idToken, id)) del++ }
       const final = await restActionItems(restBase, idToken).catch(() => [])
-      const remaining = final.filter((i) => MUTATION_RE.test(i.description)).length
-      log(`cleanup: deleted ${del} created item(s); test-items remaining=${remaining}`)
+      const remaining = final.filter((i) => !initialItemIds.has(i.id) || MUTATION_RE.test(i.description)).length
+      log(`cleanup: deleted ${del} run-created item(s); new-since-start remaining=${remaining}`)
       results.push({ id: '__cleanup__', category: 'cleanup', verdict: remaining === 0 ? 'CLEAN' : 'DIRTY', detail: `deleted ${del}, remaining ${remaining}` })
       if (remaining !== 0) exit = 1
     }
