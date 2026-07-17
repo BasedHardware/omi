@@ -220,7 +220,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// engaged — PTT listening, thinking, or speaking a reply — on ANY display,
   /// so external monitors morph from the idle pill into the island too.
   private var barWantsActiveIsland: Bool {
-    state.isVoiceListening || state.isThinking || state.isVoiceResponseGlowActive
+    state.isVoicePresentationActive
   }
   private var notchModeEnabled: Bool {
     Self.shouldUseNotchIsland(
@@ -243,7 +243,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
         ? Self.notchCompactSideWidth
         : Self.notchActiveSideWidth
     }
-    if AgentPillsManager.shared.pills.isEmpty && !state.isVoiceListening {
+    if AgentPillsManager.shared.pills.isEmpty && !state.isVoicePresentationActive {
       return Self.notchCompactSideWidth
     }
     return Self.notchActiveSideWidth
@@ -1042,7 +1042,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
           // outset promptly when agents appear or all disappear
           // (same reasoning as the voice-response glow observer).
           guard !self.state.showingAIConversation,
-            !self.state.isVoiceListening,
+            !self.state.isVoicePresentationActive,
             !self.state.isHoveringBar,
             self.state.currentNotification == nil
           else { return }
@@ -1059,11 +1059,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
           )
           return
         }
-        // Voice listening/thinking/glow own their own frames (syncActiveIsland).
-        guard !self.state.isVoiceListening,
-          !self.state.isThinking,
-          !self.state.isVoiceResponseGlowActive,
-          self.state.pttHintText.isEmpty
+        // The complete voice presentation owns its own frame (syncActiveIsland), including
+        // response waiting and a status hint after recording has stopped.
+        guard !self.state.isVoicePresentationActive
         else { return }
         // Idle ↔ hover lifecycle: pills appearing or disappearing must
         // not resize the panel — the fixed frame already fits the
@@ -1806,7 +1804,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// drift).
   @discardableResult
   func resizeForHover(expanded: Bool) -> Bool {
-    guard !state.showingAIConversation, !state.isVoiceListening, !state.isVoiceResponseGlowActive,
+    guard !state.showingAIConversation, !state.isVoicePresentationActive,
       !state.isShowingNotification, !suppressHoverResize
     else { return false }
     // The pill agent list owns the window size while open; hover
@@ -1828,8 +1826,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
     let doResize: () -> Void = { [weak self] in
       guard let self = self else { return }
       guard !self.state.showingAIConversation,
-        !self.state.isVoiceListening,
-        !self.state.isVoiceResponseGlowActive,
+        !self.state.isVoicePresentationActive,
         !self.state.isShowingNotification,
         !self.suppressHoverResize
       else { return }
@@ -1900,7 +1897,7 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// outsets.
   func resizeForAgentSwitcher(visible: Bool) {
     guard !state.showingAIConversation,
-      !state.isVoiceListening,
+      !state.isVoicePresentationActive,
       !state.isShowingNotification,
       !suppressHoverResize
     else { return }
@@ -2146,7 +2143,9 @@ class FloatingControlBarWindow: NSPanel, NSWindowDelegate {
   /// Restore the compact pill size when we temporarily surface the bar outside
   /// of an active hover, notification, voice session, or AI conversation.
   func normalizeForTemporaryShow() {
-    guard !state.showingAIConversation, !state.isVoiceListening, state.currentNotification == nil else { return }
+    guard !state.showingAIConversation, !state.isVoicePresentationActive, state.currentNotification == nil else {
+      return
+    }
     resizeAnchored(
       to: notchModeEnabled ? notchFixedIdleSurfaceSize() : collapsedBarSize,
       makeResizable: false,
@@ -3500,9 +3499,8 @@ class FloatingControlBarManager {
     }
   }
 
-  /// Submit ordinary requests to the kernel-backed chat. Explicit provider
-  /// and agent handoffs enter the same kernel control plane through
-  /// `spawn_agent`; there is no surface-local semantic router.
+  /// Submit every request to the kernel-backed primary model. The model decides
+  /// whether to call `spawn_agent`; Swift never interprets provider wording.
   private func routeQuery(
     _ message: String,
     barWindow: FloatingControlBarWindow,
@@ -3531,11 +3529,7 @@ class FloatingControlBarManager {
         ?? true
     else { return }
     let turnOwner = chatTurnOwner(for: presentation)
-    let directive = AgentPillsManager.providerDirective(
-      from: message,
-      contextualPreviousRequest: recentVisibleUserRequest(in: barWindow)
-    )
-    if provider.isSending, directive == nil {
+    if provider.isSending {
       guard provider.canInterruptActiveTurn(owner: turnOwner) else {
         showSharedProviderBusy(in: barWindow, presentation: presentation)
         return
@@ -3552,37 +3546,12 @@ class FloatingControlBarManager {
       return
     }
 
-    // Show the thinking state immediately while the kernel accepts the
-    // turn or applies an explicit control-plane handoff.
+    // Show the thinking state immediately while the kernel accepts the turn.
     if case .visible(let fromVoice) = presentation {
       prepareVisibleQueryState(message, in: barWindow, fromVoice: fromVoice)
     }
 
     let routerTracer = QueryTracerContext.current
-    if let directive {
-      if provider.isSending {
-        guard provider.canInterruptActiveTurn(owner: turnOwner) else {
-          showSharedProviderBusy(in: barWindow, presentation: presentation)
-          return
-        }
-        pendingFollowUpQuery = nil
-        provider.stopAgent(owner: turnOwner, reason: .superseded)
-      }
-      routerTracer?.mark("kernel_route", metadata: ["effect": "spawn_agent", "provider": directive.provider.rawValue])
-      await resolveDelegationAndDispatch(
-        originalRequest: message,
-        proposedBrief: directive.rewrittenQuery,
-        proposedTitle: directive.title,
-        proposedAck: directive.ack,
-        directedProvider: directive.provider,
-        barWindow: barWindow,
-        provider: provider,
-        presentation: presentation,
-        voiceTurnID: voiceTurnID
-      )
-      return
-    }
-
     routerTracer?.mark("kernel_route", metadata: ["authority": "agent_kernel"])
     await dispatchChatQuery(
       message,
@@ -3591,183 +3560,6 @@ class FloatingControlBarManager {
       presentation: presentation,
       voiceTurnID: voiceTurnID
     )
-  }
-
-  private func recordDelegationExchange(
-    provider: ChatProvider,
-    userText: String,
-    assistantText: String,
-    origin: String,
-    continuityKey: String,
-    assistantContentBlocks: [ChatContentBlock] = []
-  ) async -> (user: ChatMessage?, assistant: ChatMessage?) {
-    await provider.recordJournalExchange(
-      continuityKey: continuityKey,
-      userText: userText,
-      assistantText: assistantText,
-      origin: origin,
-      contentBlocks: assistantContentBlocks
-    )
-  }
-
-  private func resolveDelegationAndDispatch(
-    originalRequest: String,
-    proposedBrief: String,
-    proposedTitle: String?,
-    proposedAck: String?,
-    directedProvider: AgentPillsManager.DirectedProvider?,
-    barWindow: FloatingControlBarWindow,
-    provider: ChatProvider,
-    presentation: QueryPresentation,
-    voiceTurnID: VoiceTurnID?
-  ) async {
-    guard
-      voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-        ?? true
-    else { return }
-    let exchangeId = UUID().uuidString
-    let brief = proposedBrief.trimmingCharacters(in: .whitespacesAndNewlines)
-    let resolvedProvider = directedProvider
-    let title = proposedTitle?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let titleSuffix = (title?.isEmpty == false) ? " titled \"\(title!)\"" : ""
-    let providerPrefix = resolvedProvider.map { "\($0.displayName) in " } ?? ""
-    let ack = proposedAck?.trimmingCharacters(in: .whitespacesAndNewlines)
-    let assistantText =
-      ack?.isEmpty == false
-      ? "\(ack!) I started \(providerPrefix)a background agent\(titleSuffix) for that."
-      : "I started \(providerPrefix)a background agent\(titleSuffix) for that."
-    let producingSurface = provider.mainChatSurfaceReference()
-    let pill: AgentPill?
-    do {
-      guard
-        voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-          ?? true
-      else { return }
-      pill = try await AgentDelegationExecutor.shared.spawnResolvedDelegation(
-        .init(
-          originalUserText: originalRequest,
-          brief: brief,
-          title: proposedTitle,
-          spokenAck: proposedAck,
-          directedProvider: resolvedProvider,
-          originSurface: .floatingBar
-        ),
-        model: selectedFloatingModel,
-        fromVoice: presentation.fromVoice,
-        producerJournalIntent: AgentPillProducerJournalIntent(
-          surface: producingSurface,
-          userText: originalRequest,
-          assistantText: assistantText
-        )
-      )
-      guard
-        voiceTurnID.map({ VoiceTurnCoordinator.shared.requireCurrentOwner(for: $0) != nil })
-          ?? true
-      else { return }
-    } catch {
-      logError("FloatingControlBarWindow: canonical background spawn failed", error: error)
-      let failureText = "I couldn't start that background agent."
-      let recordedTurn = await recordDelegationExchange(
-        provider: provider,
-        userText: originalRequest,
-        assistantText: failureText,
-        origin: "floating_spawn_failed",
-        continuityKey: "floating_spawn_failed:\(exchangeId)"
-      )
-      switch presentation {
-      case .visible:
-        if let assistantMessage = recordedTurn.assistant {
-          completeVisibleAgentResponse(
-            userText: originalRequest,
-            assistantMessage: assistantMessage,
-            barWindow: barWindow
-          )
-        } else {
-          presentJournalAdmissionFailure(in: barWindow)
-        }
-      case .voiceOnly:
-        if recordedTurn.assistant != nil {
-          FloatingBarVoicePlaybackService.shared.speakOneShot(failureText)
-        } else {
-          FloatingBarVoicePlaybackService.shared.speakOneShot("I couldn't save that response. Please try again.")
-        }
-      }
-      return
-    }
-
-    guard let pill else {
-      let assistantText = "What should the background agent do?"
-      let recordedTurn = await recordDelegationExchange(
-        provider: provider,
-        userText: originalRequest,
-        assistantText: assistantText,
-        origin: "floating_invalid_brief",
-        continuityKey: "floating_control:\(exchangeId):invalid-brief"
-      )
-      switch presentation {
-      case .visible:
-        if let assistantMessage = recordedTurn.assistant {
-          completeVisibleAgentResponse(
-            userText: originalRequest,
-            assistantMessage: assistantMessage,
-            barWindow: barWindow
-          )
-        } else {
-          presentJournalAdmissionFailure(in: barWindow)
-        }
-      case .voiceOnly:
-        if recordedTurn.assistant != nil {
-          FloatingBarVoicePlaybackService.shared.speakOneShot(assistantText)
-        } else {
-          FloatingBarVoicePlaybackService.shared.speakOneShot("I couldn't save that response. Please try again.")
-        }
-      }
-      return
-    }
-    guard let canonicalSessionID = pill.canonicalSessionId, !canonicalSessionID.isEmpty,
-      let canonicalRunID = pill.canonicalRunId, !canonicalRunID.isEmpty
-    else {
-      log("FloatingControlBarWindow: accepted spawn omitted canonical handles")
-      return
-    }
-    let continuityKey = "floating_spawn:\(pill.id.uuidString)"
-    // The accepted spawn RPC synchronously materializes this exact exchange
-    // in the kernel journal before returning. Refresh that authority instead
-    // of issuing a second writer RPC with a competing producer payload.
-    await provider.kernelTurnProjection.refresh(surface: producingSurface)
-    let recordedTurn = (
-      user: provider.messages.last(where: {
-        $0.clientTurnId == continuityKey && $0.sender == .user
-      }),
-      assistant: provider.messages.last(where: {
-        $0.clientTurnId == continuityKey && $0.sender == .ai
-      })
-    )
-    switch presentation {
-    case .visible:
-      if let assistantMessage = recordedTurn.assistant {
-        completeVisibleAgentHandoff(
-          originalRequest: originalRequest,
-          assistantMessage: assistantMessage,
-          barWindow: barWindow
-        )
-      } else {
-        presentJournalAdmissionFailure(in: barWindow)
-      }
-    case .voiceOnly:
-      break
-    }
-  }
-
-  private func recentVisibleUserRequest(in barWindow: FloatingControlBarWindow) -> String? {
-    let displayed = barWindow.state.displayedQuery.trimmingCharacters(in: .whitespacesAndNewlines)
-    if !displayed.isEmpty {
-      return displayed
-    }
-    let history = barWindow.state.derivedChatHistory(from: historyChatProvider)
-    return history.reversed().compactMap { exchange in
-      exchange.question?.trimmingCharacters(in: .whitespacesAndNewlines)
-    }.first { !$0.isEmpty }
   }
 
   private func dispatchChatQuery(

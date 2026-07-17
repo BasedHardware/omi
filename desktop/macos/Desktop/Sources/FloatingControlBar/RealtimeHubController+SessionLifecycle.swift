@@ -43,6 +43,15 @@ extension RealtimeHubController {
     }
     if session != nil { teardownSession() }
 
+    let contextRequirement = voiceSessionContext(for: ownerScope)
+    guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: contextRequirement.isResolved) else {
+      log("RealtimeHub: waiting for resolved voice context before warming session")
+      if voiceContextPrefetchTask == nil {
+        prefetchVoiceContextSnapshotIfNeeded()
+      }
+      return
+    }
+
     if let key = APIKeyService.byokKey(provider.byokProvider) {
       let fingerprint = APIKeyService.byokFingerprint(key)
       guard
@@ -356,6 +365,13 @@ extension RealtimeHubController {
       return
     }
     let topLevelContext = voiceSessionContext(for: ownerScope)
+    guard RealtimeWarmSessionStartPolicy.canStart(requirementIsResolved: topLevelContext.isResolved) else {
+      log("RealtimeHub: session start deferred until voice context resolves")
+      if voiceContextPrefetchTask == nil {
+        prefetchVoiceContextSnapshotIfNeeded()
+      }
+      return
+    }
     sessionVoiceContextFreshnessIdentity = topLevelContext.snapshotFreshnessIdentity
     let instructions = RealtimeHubTools.systemInstruction(
       kernelContext: topLevelContext.rendered,
@@ -438,6 +454,12 @@ extension RealtimeHubController {
     let refreshGeneration = voiceContextRefreshGeneration
     let ownerScope = currentOwnerScope
     voiceContextPrefetchTask = Task { [weak self] in
+      defer {
+        Task { @MainActor [weak self] in
+          guard let self, self.voiceContextRefreshGeneration == refreshGeneration else { return }
+          self.voiceContextPrefetchTask = nil
+        }
+      }
       await self?.importLegacyVoiceJournalIfNeeded()
       guard let self, self.isOwnerScopeCurrent(ownerScope) else { return }
       let resolvedSnapshot: KernelVoiceContextSnapshot
@@ -893,7 +915,13 @@ extension RealtimeHubController {
         // Re-warm after the durable journal acknowledgement so the usual next
         // PTT press is already fresh. A press that races this handoff owns a
         // bounded buffer instead of being failed or sent to generic warm wait.
-        self.requestSessionHandoff(reason: .persistedVoiceContext)
+        // Gemini already owns the same refresh through its completed-turn boundary;
+        // doing both here caused back-to-back session rotations on the next PTT.
+        if RealtimePersistedVoiceContextRefreshPolicy.shouldHandoffImmediately(
+          provider: self.sessionProvider)
+        {
+          self.requestSessionHandoff(reason: .persistedVoiceContext)
+        }
       } else {
         VoiceTurnCoordinator.shared.publish(
           .journalFailed(

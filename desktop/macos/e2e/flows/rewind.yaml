@@ -4,7 +4,9 @@ tier: manual
 description: Rewind (Screen Capture) flow — navigate to Rewind page, verify permission state, explore timeline controls
 app: com.omi.computer-macos
 covers:
+  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindPage.swift
+  - desktop/macos/Desktop/Sources/Rewind/UI/RewindCaptureState.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/RewindViewModel.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Sections/SettingsContentView+Rewind.swift
   - desktop/macos/Desktop/Sources/Rewind/UI/AppIconView.swift

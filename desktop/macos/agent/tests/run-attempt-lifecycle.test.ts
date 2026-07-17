@@ -1,4 +1,4 @@
-import { mkdtempSync, readFileSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, symlinkSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
@@ -337,6 +337,170 @@ describe("AgentRuntimeKernel run and attempt lifecycle", () => {
       discoveredFromRunDirectory: true,
     });
     store.close();
+  });
+
+  it("projects verified temporary deliverables reported by OpenClaw and Hermes terminal prose", async () => {
+    for (const provider of ["openclaw", "hermes"] as const) {
+      const artifactRoot = mkdtempTracked(`omi-${provider}-artifacts-`);
+      const externalDirectory = mkdtempTracked(`omi-${provider}-reported-`);
+      const desktopDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-desktop-`);
+      const nonTemporaryDirectory = mkdtempTrackedIn(process.cwd(), `omi-${provider}-non-temp-`);
+      const reportedPath = join(externalDirectory, "dog_facts.html");
+      const desktopPath = join(desktopDirectory, "cool_cat_facts.html");
+      const nonTemporaryPath = join(nonTemporaryDirectory, "not_a_deliverable.html");
+      const deniedPath = join(externalDirectory, ".claude");
+      const symlinkPath = join(externalDirectory, "symlinked_dog_facts.html");
+      const { store, adapter, kernel } = createKernelHarness(
+        newDatabasePath(),
+        provider,
+        4,
+        new OmiArtifactStorage({ rootDir: artifactRoot, reportedDesktopRoots: [desktopDirectory] })
+      );
+      Object.assign(adapter.capabilities, { supportsArtifactEmission: false });
+
+      writeFileSync(reportedPath, "<h1>Dog facts</h1>");
+      writeFileSync(desktopPath, "<h1>Cat facts</h1>");
+      writeFileSync(nonTemporaryPath, "<h1>Not a delivery</h1>");
+      writeFileSync(deniedPath, "{}");
+      symlinkSync(reportedPath, symlinkPath);
+      adapter.nextText = `I inspected the file at ${reportedPath} while preparing the answer.`;
+      const incidentalPathMention = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: incidentalPathMention.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${join(externalDirectory, "missing_dog_facts.html")}.`;
+      const missing = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-missing-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: missing.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${symlinkPath}.`;
+      const symlink = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-symlink-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: symlink.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${deniedPath}.`;
+      const denied = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-denied-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: denied.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${nonTemporaryPath}.`;
+      const nonTemporary = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-non-temp-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: nonTemporary.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${desktopPath}.`;
+      const genericDesktopPath = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-generic-desktop-artifact`,
+        cwd: artifactRoot,
+      });
+      expect(kernel.inspectArtifacts({ runId: genericDesktopPath.run.runId })).toEqual([]);
+
+      adapter.nextText = `The file lives at ${reportedPath} — it is ready to open.`;
+      const completed = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-reported-artifact`,
+        cwd: artifactRoot,
+      });
+      const artifacts = kernel.inspectArtifacts({ runId: completed.run.runId });
+
+      expect(artifacts).toEqual([
+        expect.objectContaining({
+          sessionId: completed.session.sessionId,
+          runId: completed.run.runId,
+          attemptId: completed.attempt.attemptId,
+          displayName: "dog_facts.html",
+          kind: "html",
+          role: "result",
+          mimeType: "text/html",
+        }),
+      ]);
+      expect(artifacts[0]?.uri).toContain(`/${completed.run.runId}/`);
+      expect(readFileSync(new URL(artifacts[0]!.uri), "utf8")).toBe("<h1>Dog facts</h1>");
+      expect(JSON.parse(artifacts[0]!.metadataJson)).toMatchObject({
+        discoveredFromTerminalReport: true,
+        omiManaged: true,
+        originalUri: `file://${reportedPath}`,
+      });
+
+      adapter.nextText = "Done! 🐱 I built and opened **`cool_cat_facts.html`** on your Desktop.";
+      const desktop = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-desktop-artifact`,
+        cwd: artifactRoot,
+      });
+      const desktopArtifacts = kernel.inspectArtifacts({ runId: desktop.run.runId });
+      expect(desktopArtifacts).toEqual([
+        expect.objectContaining({
+          sessionId: desktop.session.sessionId,
+          runId: desktop.run.runId,
+          attemptId: desktop.attempt.attemptId,
+          displayName: "cool_cat_facts.html",
+          kind: "html",
+          role: "result",
+          mimeType: "text/html",
+        }),
+      ]);
+      expect(readFileSync(new URL(desktopArtifacts[0]!.uri), "utf8")).toBe("<h1>Cat facts</h1>");
+      expect(JSON.parse(desktopArtifacts[0]!.metadataJson)).toMatchObject({
+        discoveredFromTerminalReport: true,
+        omiManaged: true,
+        originalUri: `file://${desktopPath}`,
+      });
+
+      adapter.nextText = "**`cool_cat_facts.html`** was built on the Desktop at /Users/tester/Desktop/cool_cat_facts.html.";
+      const passiveDesktop = await kernel.executeRun({
+        ...baseRunInput,
+        adapterId: provider,
+        defaultAdapterId: provider,
+        requestId: `${provider}-passive-desktop-artifact`,
+        cwd: artifactRoot,
+      });
+      const passiveDesktopArtifacts = kernel.inspectArtifacts({ runId: passiveDesktop.run.runId });
+      expect(passiveDesktopArtifacts).toEqual([
+        expect.objectContaining({
+          sessionId: passiveDesktop.session.sessionId,
+          runId: passiveDesktop.run.runId,
+          attemptId: passiveDesktop.attempt.attemptId,
+          displayName: "cool_cat_facts.html",
+          kind: "html",
+          role: "result",
+          mimeType: "text/html",
+        }),
+      ]);
+      expect(readFileSync(new URL(passiveDesktopArtifacts[0]!.uri), "utf8")).toBe("<h1>Cat facts</h1>");
+      store.close();
+    }
   });
 
   it("stales all active process-local bindings for an adapter across owners and surfaces", () => {
@@ -887,6 +1051,12 @@ function newDatabasePath(): string {
 
 function mkdtempTracked(prefix: string): string {
   const dir = mkdtempSync(join(tmpdir(), prefix));
+  createdDirs.push(dir);
+  return dir;
+}
+
+function mkdtempTrackedIn(parent: string, prefix: string): string {
+  const dir = mkdtempSync(join(parent, prefix));
   createdDirs.push(dir);
   return dir;
 }

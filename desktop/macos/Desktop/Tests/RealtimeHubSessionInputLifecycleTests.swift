@@ -265,6 +265,7 @@ final class RealtimeHubSessionInputLifecycleTests: XCTestCase {
         Task { @MainActor in wireEnqueued = result }
       })
 
+    _ = await session.inputLifecycleSnapshot()
     for _ in 0..<100 where wireEnqueued == nil || delegate.errors.isEmpty {
       await Task.yield()
     }

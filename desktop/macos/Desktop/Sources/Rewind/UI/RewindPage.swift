@@ -142,12 +142,12 @@ struct RewindPage: View {
     }
     .onReceive(NotificationCenter.default.publisher(for: .assistantMonitoringStateDidChange)) { _ in
       let pluginState = ProactiveAssistantsPlugin.shared.isMonitoring
-      isMonitoring = pluginState
-      // Keep persistent setting in sync when monitoring stops due to errors
-      if !pluginState && screenAnalysisEnabled {
-        screenAnalysisEnabled = false
-        AssistantSettings.shared.screenAnalysisEnabled = false
-      }
+      let state = RewindCaptureState.afterMonitoringChange(
+        captureEnabled: screenAnalysisEnabled,
+        monitoring: pluginState
+      )
+      isMonitoring = state.isMonitoring
+      screenAnalysisEnabled = state.captureEnabled
     }
     .onReceive(NotificationCenter.default.publisher(for: .expandRewindTranscript)) { _ in
       OmiMotion.withGated(.easeInOut(duration: 0.2)) {
