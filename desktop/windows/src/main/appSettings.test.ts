@@ -73,6 +73,19 @@ describe('appSettings', () => {
     expect(sanitizeAppSettings({} as never).chatScreenshotSharingEnabled).toBe(true)
   })
 
+  it('betaUpdatesEnabled defaults OFF (stable) and round-trips an explicit opt-in', () => {
+    expect(getAppSettings().betaUpdatesEnabled).toBe(false)
+    setAppSettings({ betaUpdatesEnabled: true })
+    _resetForTests()
+    expect(getAppSettings().betaUpdatesEnabled).toBe(true)
+    // Opt-IN (=== true): absent / junk stays OFF — only an explicit true enables it.
+    expect(sanitizeAppSettings(null).betaUpdatesEnabled).toBe(false)
+    expect(sanitizeAppSettings({} as never).betaUpdatesEnabled).toBe(false)
+    expect(sanitizeAppSettings({ betaUpdatesEnabled: 'yes' } as never).betaUpdatesEnabled).toBe(
+      false
+    )
+  })
+
   it('round-trips a rebound record hotkey', () => {
     setAppSettings({ recordHotkey: 'Ctrl+Shift+O' })
     _resetForTests()
@@ -114,6 +127,7 @@ describe('appSettings', () => {
       hudContentProtection: true,
       meeting: { mode: 'ask', endGraceMinutes: 2, perApp: {}, firstRunToastShown: false },
       lastShownChangelogVersion: null,
+      betaUpdatesEnabled: false,
       aiProfileEnabled: true,
       focusEnabled: true,
       focusNotificationsEnabled: true,

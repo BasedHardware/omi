@@ -36,6 +36,14 @@ export type AppSettings = {
   /** App version whose "what's new" changelog was last shown post-update. null =
    *  never shown (fresh install / pre-feature) → baseline silently, no toast. */
   lastShownChangelogVersion: string | null
+  /** "Receive beta updates" opt-in (Mac's `update_channel` = "beta"). Default OFF
+   *  (stable), matching Mac's default channel. When ON, the auto-updater's GitHub
+   *  provider is told `allowPrerelease = true`, so it serves builds published as
+   *  GitHub *prereleases* (our beta releases — see docs/release-pipeline.md) in
+   *  addition to the promoted stable ones, always picking the newest. When OFF it
+   *  uses GitHub's /releases/latest, which excludes prereleases (stable only).
+   *  Applied live by src/main/updater.ts on every write. */
+  betaUpdatesEnabled: boolean
   /** Track 3 (AI user profile): whether the once-daily synthesized "about the
    *  user" doc auto-generates in the background. Default ON: the Focus assistant
    *  is now the consumer — the profile grounds Focus's context block, so the
@@ -264,6 +272,10 @@ export function sanitizeAppSettings(raw: Partial<AppSettings> | null | undefined
     meeting: sanitizeMeeting(r.meeting),
     lastShownChangelogVersion:
       typeof r.lastShownChangelogVersion === 'string' ? r.lastShownChangelogVersion : null,
+    // Opt-IN (=== true): default OFF (stable channel), matching Mac's default
+    // `update_channel` = "stable". Absent/junk stays OFF — only an explicit true
+    // opts into pre-release (beta) builds.
+    betaUpdatesEnabled: r.betaUpdatesEnabled === true,
     // Opt-OUT (!== false): default ON now that Focus consumes the profile.
     aiProfileEnabled: r.aiProfileEnabled !== false,
     focusEnabled: r.focusEnabled !== false,

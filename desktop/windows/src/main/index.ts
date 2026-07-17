@@ -1258,6 +1258,15 @@ app.whenReady().then(async () => {
   ipcMain.handle('app:get-version', () => ({ name: app.getName(), version: app.getVersion() }))
   // Manual update check (About). Inert in unpackaged dev (returns `unsupported`).
   ipcMain.handle('update:check', () => checkForUpdatesNow())
+  // "Receive beta updates" opt-in (Mac's beta update channel). Persisted; the
+  // updater subscribes to app-settings writes and flips allowPrerelease + re-checks
+  // live (see updater.ts). Returns the written value so the UI reflects the truth.
+  ipcMain.handle('update:get-beta-optin', () => getAppSettings().betaUpdatesEnabled)
+  ipcMain.handle(
+    'update:set-beta-optin',
+    (_e, enabled: boolean) =>
+      setAppSettings({ betaUpdatesEnabled: enabled === true }).betaUpdatesEnabled
+  )
 
   // Suspend/resume global chords while the settings UI captures raw keys for a
   // rebind — otherwise pressing the CURRENT chord fires it instead of being

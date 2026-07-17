@@ -1140,6 +1140,11 @@ export type OmiBridgeApi = {
   /** Manually trigger an update check (Settings → About "Check for updates").
    *  Inert in unpackaged dev (returns `unsupported`). */
   checkForUpdates: () => Promise<UpdateCheckResult>
+  /** Whether "Receive beta updates" (the pre-release/beta channel) is on. */
+  getBetaUpdatesOptIn: () => Promise<boolean>
+  /** Opt in/out of beta (pre-release) updates. Persisted; the updater flips its
+   *  channel and re-checks live. Returns the written value. */
+  setBetaUpdatesOptIn: (enabled: boolean) => Promise<boolean>
   /** Release all global chords while a rebind UI captures raw keys (pressing the
    *  current chord must be captured, not fire the shortcut). Always pair with resume. */
   suspendShortcutCapture: () => void
