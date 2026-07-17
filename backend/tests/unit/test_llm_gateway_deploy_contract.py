@@ -148,6 +148,12 @@ def test_backend_deploy_requires_serving_and_cloud_run_vpc_gates_before_gateway_
     assert 'OMI_LLM_GATEWAY_URL: ${{ steps.gateway-serving.outputs.gateway_url }}' in auto_dev
 
 
+def test_gateway_vpc_probe_workflows_explicitly_use_bash():
+    for workflow_name in ('gcp_backend_auto_dev.yml', 'gcp_backend.yml', 'gcp_llm_gateway.yml'):
+        workflow = (BACKEND_ROOT.parent / '.github/workflows' / workflow_name).read_text(encoding='utf-8')
+        assert 'bash backend/scripts/probe-llm-gateway-from-cloud-run.sh' in workflow
+
+
 def test_monitoring_scrapes_llm_gateway_with_shared_metrics_secret_contract():
     for environment in ('dev', 'prod'):
         monitoring = _load_yaml(f'charts/monitoring/kube-prometheus-stack/{environment}_omi_monitoring_values.yaml')
