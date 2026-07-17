@@ -19,8 +19,8 @@ struct OnboardingExportsStepView: View {
       stepIndex: stepIndex,
       totalSteps: totalSteps,
       eyebrow: "",
-      title: "Put your memories where you work.",
-      description: "Connect the tools where you want Omi context to live.",
+      title: "Export Omi memories where you work.",
+      description: "Export Omi context to the tools where you want it to live.",
       rightPaneFooterText: summaryText,
       showsSkip: true,
       onSkip: onSkip,
@@ -98,7 +98,7 @@ struct OnboardingExportsStepView: View {
 
       Spacer(minLength: 12)
 
-      Button(activeDestination == destination ? "Close" : "Connect") {
+      Button(activeDestination == destination ? "Close" : "Export") {
         activeDestination = activeDestination == destination ? nil : destination
       }
       .buttonStyle(.plain)
@@ -141,7 +141,7 @@ struct OnboardingExportsStepView: View {
       return "Copy-ready page"
     }
     if destination.supportsAgentSetup {
-      return status.isConfigured ? "Agent prompt ready" : "Connect an agent"
+      return status.isConfigured ? "Agent prompt ready" : "Export to an agent"
     }
     return "Prompt + memory pack"
   }
