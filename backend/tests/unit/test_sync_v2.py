@@ -1703,6 +1703,12 @@ class TestAsyncCoordinatorBehavioral:
             pipeline.RUN_LOCK_HEARTBEAT_SECONDS = 0.001
             pipeline.RUN_LOCK_TTL_SECONDS = 0.006
             pipeline.RUN_LOCK_RENEWAL_SAFETY_SECONDS = 0.001
+            # Drive the lease deadline explicitly. A 6 ms wall-clock window can
+            # legitimately expire after one scheduler turn on a busy CI worker,
+            # even though the retry behavior under test is correct.
+            pipeline.time = types.SimpleNamespace(
+                monotonic=MagicMock(side_effect=[0.0, 0.0, 0.001, 0.001, 0.002, 0.006])
+            )
             pipeline.renew_job_run_lock = MagicMock(side_effect=ConnectionError('redis unavailable'))
             stop_event = asyncio.Event()
             lease_lost_event = asyncio.Event()
@@ -3065,6 +3071,13 @@ class TestV2EndpointExecution:
                 pass
 
             module._run_full_pipeline_background_async = _noop_pipeline
+            scheduled_tasks = []
+
+            def _capture_background_task(coro, *, name):
+                scheduled_tasks.append(name)
+                coro.close()
+
+            module.start_background_task = _capture_background_task
 
             async def _passthrough_run_blocking(_executor, fn, *args, **kwargs):
                 return fn(*args, **kwargs)
@@ -3092,6 +3105,7 @@ class TestV2EndpointExecution:
             assert body['status'] == 'queued'
             assert body['poll_after_ms'] == 3000
             mock_sync_jobs.create_sync_job.assert_called_once()
+            assert scheduled_tasks == [f"sync_pipeline:{body['job_id']}"]
         finally:
             self._cleanup_modules(saved)
 
