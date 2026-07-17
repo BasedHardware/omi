@@ -132,6 +132,9 @@ struct OnboardingStepScaffold<Content: View>: View {
               .foregroundColor(OmiColors.textTertiary)
               .padding(4)
               .background(Circle().fill(OmiColors.backgroundPrimary))
+              // Raised to sit at the vertical middle of the graph, which centers
+              // higher than the full pane (the footer summary sits below it).
+              .offset(y: -64)
           }
           .frame(width: 40)
 
