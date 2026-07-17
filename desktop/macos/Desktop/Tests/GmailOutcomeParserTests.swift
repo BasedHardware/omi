@@ -13,7 +13,7 @@ final class GmailOutcomeParserTests: XCTestCase {
       "attempts": [["browser": "Arc", "stage": "ok", "reason": "ok", "had_auth": true]],
     ]
 
-    guard case let .success(emails, browser, source) = GmailOutcomeParser.parse(json) else {
+    guard case .success(let emails, let browser, let source) = GmailOutcomeParser.parse(json) else {
       return XCTFail("expected success")
     }
 
@@ -36,7 +36,7 @@ final class GmailOutcomeParserTests: XCTestCase {
       ],
     ]
 
-    guard case let .failure(cls, _, attempts) = GmailOutcomeParser.parse(json) else {
+    guard case .failure(let cls, _, let attempts) = GmailOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
 
@@ -55,7 +55,7 @@ final class GmailOutcomeParserTests: XCTestCase {
       ],
     ]
 
-    guard case let .failure(cls, summary, _) = GmailOutcomeParser.parse(json) else {
+    guard case .failure(let cls, let summary, _) = GmailOutcomeParser.parse(json) else {
       return XCTFail("expected failure")
     }
 
@@ -65,7 +65,7 @@ final class GmailOutcomeParserTests: XCTestCase {
 
   func testNoBrowserAndUnknownFallbacks() {
     guard
-      case let .failure(noBrowserClass, _, noBrowserAttempts) = GmailOutcomeParser.parse([
+      case .failure(let noBrowserClass, _, let noBrowserAttempts) = GmailOutcomeParser.parse([
         "ok": false,
         "error_class": "no_browser",
         "summary": "No supported browser with a readable Gmail session was found.",
@@ -79,7 +79,7 @@ final class GmailOutcomeParserTests: XCTestCase {
     XCTAssertTrue(noBrowserAttempts.isEmpty)
 
     guard
-      case let .failure(unknownClass, summary, _) = GmailOutcomeParser.parse([
+      case .failure(let unknownClass, let summary, _) = GmailOutcomeParser.parse([
         "ok": false, "error_class": "new_shape", "attempts": [],
       ])
     else {

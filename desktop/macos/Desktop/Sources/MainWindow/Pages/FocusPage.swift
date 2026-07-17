@@ -1,767 +1,772 @@
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 // MARK: - Focus View Model
 
 @MainActor
 class FocusViewModel: ObservableObject {
-    @Published var searchText = ""
-    @Published var showHistorical = false
-    @Published var isLoading = false
+  @Published var searchText = ""
+  @Published var showHistorical = false
+  @Published var isLoading = false
 
-    private let storage = FocusStorage.shared
-    private let settings = FocusAssistantSettings.shared
+  private let storage = FocusStorage.shared
+  private let settings = FocusAssistantSettings.shared
 
-    var filteredSessions: [StoredFocusSession] {
-        let base = showHistorical ? storage.sessions : storage.todaySessions
+  var filteredSessions: [StoredFocusSession] {
+    let base = showHistorical ? storage.sessions : storage.todaySessions
 
-        guard !searchText.isEmpty else { return base }
+    guard !searchText.isEmpty else { return base }
 
-        return base.filter {
-            $0.appOrSite.localizedCaseInsensitiveContains(searchText) ||
-            $0.description.localizedCaseInsensitiveContains(searchText) ||
-            ($0.message?.localizedCaseInsensitiveContains(searchText) ?? false)
-        }
+    return base.filter {
+      $0.appOrSite.localizedCaseInsensitiveContains(searchText)
+        || $0.description.localizedCaseInsensitiveContains(searchText)
+        || ($0.message?.localizedCaseInsensitiveContains(searchText) ?? false)
     }
+  }
 
-    var currentStatus: FocusStatus? {
-        storage.currentStatus
-    }
+  var currentStatus: FocusStatus? {
+    storage.currentStatus
+  }
 
-    var currentApp: String? {
-        storage.currentApp
-    }
+  var currentApp: String? {
+    storage.currentApp
+  }
 
-    /// The detected app name (updated immediately on app switch, before analysis)
-    var detectedAppName: String? {
-        storage.detectedAppName
-    }
+  /// The detected app name (updated immediately on app switch, before analysis)
+  var detectedAppName: String? {
+    storage.detectedAppName
+  }
 
-    /// When the analysis delay period will end (nil if not in delay)
-    var delayEndTime: Date? {
-        storage.delayEndTime
-    }
+  /// When the analysis delay period will end (nil if not in delay)
+  var delayEndTime: Date? {
+    storage.delayEndTime
+  }
 
-    /// When the analysis cooldown period will end (nil if not in cooldown)
-    var cooldownEndTime: Date? {
-        storage.cooldownEndTime
-    }
+  /// When the analysis cooldown period will end (nil if not in cooldown)
+  var cooldownEndTime: Date? {
+    storage.cooldownEndTime
+  }
 
-    var stats: FocusDayStats {
-        storage.todayStats
-    }
+  var stats: FocusDayStats {
+    storage.todayStats
+  }
 
-    var isMonitoring: Bool {
-        settings.isEnabled
-    }
+  var isMonitoring: Bool {
+    settings.isEnabled
+  }
 
-    var todayCount: Int {
-        storage.todaySessions.count
-    }
+  var todayCount: Int {
+    storage.todaySessions.count
+  }
 
-    func deleteSession(_ id: String) {
-        storage.deleteSession(id)
-        objectWillChange.send()
-    }
+  func deleteSession(_ id: String) {
+    storage.deleteSession(id)
+    objectWillChange.send()
+  }
 
-    func clearAll() {
-        storage.clearAll()
-        objectWillChange.send()
-    }
+  func clearAll() {
+    storage.clearAll()
+    objectWillChange.send()
+  }
 
-    func refresh(force: Bool = false) async {
-        // Skip redundant reload if storage already has cached data
-        // FocusStorage.init() already loads from UserDefaults + SQLite
-        if !force && !storage.sessions.isEmpty {
-            NotificationCenter.default.post(name: .focusPageDidLoad, object: nil)
-            return
-        }
-        isLoading = true
-        await storage.refreshFromBackend()
-        await MainActor.run {
-            isLoading = false
-            objectWillChange.send()
-            NotificationCenter.default.post(name: .focusPageDidLoad, object: nil)
-        }
+  func refresh(force: Bool = false) async {
+    // Skip redundant reload if storage already has cached data
+    // FocusStorage.init() already loads from UserDefaults + SQLite
+    if !force && !storage.sessions.isEmpty {
+      NotificationCenter.default.post(name: .focusPageDidLoad, object: nil)
+      return
     }
+    isLoading = true
+    await storage.refreshFromBackend()
+    await MainActor.run {
+      isLoading = false
+      objectWillChange.send()
+      NotificationCenter.default.post(name: .focusPageDidLoad, object: nil)
+    }
+  }
 }
 
 // MARK: - Focus Page
 
 struct FocusPage: View {
-    @StateObject private var viewModel = FocusViewModel()
-    @ObservedObject private var storage = FocusStorage.shared
-    @State private var showClearConfirmation = false
-    @State private var currentTime = Date()
+  @StateObject private var viewModel = FocusViewModel()
+  @ObservedObject private var storage = FocusStorage.shared
+  @State private var showClearConfirmation = false
+  @State private var currentTime = Date()
 
-    // Timer to update countdown displays
-    private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
+  // Timer to update countdown displays
+  private let countdownTimer = Timer.publish(every: 1, on: .main, in: .common).autoconnect()
 
-    var body: some View {
-        if viewModel.isLoading && storage.sessions.isEmpty {
-            // Show loading when initially loading with no cached data
-            VStack {
-                Spacer()
-                ProgressView()
-                    .scaleEffect(1.2)
-                Text("Loading focus data...")
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .padding(.top, OmiSpacing.md)
-                Spacer()
-            }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        } else {
-            focusContent
-        }
+  var body: some View {
+    if viewModel.isLoading && storage.sessions.isEmpty {
+      // Show loading when initially loading with no cached data
+      VStack {
+        Spacer()
+        ProgressView()
+          .scaleEffect(1.2)
+        Text("Loading focus data...")
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textTertiary)
+          .padding(.top, OmiSpacing.md)
+        Spacer()
+      }
+      .frame(maxWidth: .infinity, maxHeight: .infinity)
+    } else {
+      focusContent
     }
+  }
 
-    private var focusContent: some View {
-        VStack(spacing: OmiSpacing.xl) {
-            // Header row with title and actions
-            HStack {
-                // Monitoring status indicator
-                HStack(spacing: OmiSpacing.sm) {
-                    Circle()
-                        .fill(viewModel.isMonitoring ? Color.green : OmiColors.textTertiary)
-                        .frame(width: 8, height: 8)
+  private var focusContent: some View {
+    VStack(spacing: OmiSpacing.xl) {
+      // Header row with title and actions
+      HStack {
+        // Monitoring status indicator
+        HStack(spacing: OmiSpacing.sm) {
+          Circle()
+            .fill(viewModel.isMonitoring ? Color.green : OmiColors.textTertiary)
+            .frame(width: 8, height: 8)
 
-                    Text(viewModel.isMonitoring ? "Monitoring" : "Not monitoring")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
+          Text(viewModel.isMonitoring ? "Monitoring" : "Not monitoring")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
 
-                    Text("•")
-                        .foregroundColor(OmiColors.textTertiary)
+          Text("•")
+            .foregroundColor(OmiColors.textTertiary)
 
-                    Text("\(viewModel.todayCount) sessions today")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
+          Text("\(viewModel.todayCount) sessions today")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
+        }
 
-                Spacer()
+        Spacer()
 
-                // Actions
-                HStack(spacing: OmiSpacing.md) {
-                    Toggle(isOn: $viewModel.showHistorical) {
-                        Text("Show all")
-                            .scaledFont(size: OmiType.body)
-                            .foregroundColor(OmiColors.textSecondary)
-                    }
-                    .toggleStyle(OmiToggleStyle())
-                    .controlSize(.small)
+        // Actions
+        HStack(spacing: OmiSpacing.md) {
+          Toggle(isOn: $viewModel.showHistorical) {
+            Text("Show all")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          .toggleStyle(OmiToggleStyle())
+          .controlSize(.small)
 
-                    Menu {
-                        Button {
-                            Task { await viewModel.refresh(force: true) }
-                        } label: {
-                            Label("Refresh", systemImage: "arrow.clockwise")
-                        }
-
-                        Divider()
-
-                        Button(role: .destructive) {
-                            showClearConfirmation = true
-                        } label: {
-                            Label("Clear All History", systemImage: "trash")
-                        }
-                        .disabled(storage.sessions.isEmpty)
-                    } label: {
-                        Image(systemName: "ellipsis.circle")
-                            .scaledFont(size: OmiType.heading)
-                            .foregroundColor(OmiColors.textSecondary)
-                    }
-                    .menuStyle(.borderlessButton)
-                }
+          Menu {
+            Button {
+              Task { await viewModel.refresh(force: true) }
+            } label: {
+              Label("Refresh", systemImage: "arrow.clockwise")
             }
 
-            // Current status banner (shows detected app, delay, cooldown, or analyzed status)
-            statusBanner
+            Divider()
 
-            // Today's summary stats
-            statsSection
+            Button(role: .destructive) {
+              showClearConfirmation = true
+            } label: {
+              Label("Clear All History", systemImage: "trash")
+            }
+            .disabled(storage.sessions.isEmpty)
+          } label: {
+            Image(systemName: "ellipsis.circle")
+              .scaledFont(size: OmiType.heading)
+              .foregroundColor(OmiColors.textSecondary)
+          }
+          .menuStyle(.borderlessButton)
+        }
+      }
 
-            // Top distractions (if any)
-            if !viewModel.stats.topDistractions.isEmpty {
-                topDistractionsSection
-            }
+      // Current status banner (shows detected app, delay, cooldown, or analyzed status)
+      statusBanner
 
-            // Session history
-            historySection
-        }
-        .confirmationDialog(
-            "Clear All History",
-            isPresented: $showClearConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Clear All", role: .destructive) {
-                viewModel.clearAll()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to clear all focus history? This cannot be undone.")
-        }
-        .task {
-            await viewModel.refresh()
-        }
-        .onReceive(countdownTimer) { time in
-            // Only update if there's an active countdown to avoid unnecessary re-renders
-            if storage.delayEndTime != nil || storage.cooldownEndTime != nil {
-                currentTime = time
-            }
-        }
+      // Today's summary stats
+      statsSection
+
+      // Top distractions (if any)
+      if !viewModel.stats.topDistractions.isEmpty {
+        topDistractionsSection
+      }
+
+      // Session history
+      historySection
     }
-
-    // MARK: - Countdown Helpers
-
-    /// Compute remaining seconds for delay countdown (reactive to currentTime)
-    private var delayRemainingSeconds: Int {
-        guard let endTime = storage.delayEndTime else { return 0 }
-        return max(0, Int(endTime.timeIntervalSince(currentTime)))
+    .confirmationDialog(
+      "Clear All History",
+      isPresented: $showClearConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Clear All", role: .destructive) {
+        viewModel.clearAll()
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Are you sure you want to clear all focus history? This cannot be undone.")
     }
-
-    /// Compute remaining seconds for cooldown countdown (reactive to currentTime)
-    private var cooldownRemainingSeconds: Int {
-        guard let endTime = storage.cooldownEndTime else { return 0 }
-        return max(0, Int(endTime.timeIntervalSince(currentTime)))
+    .task {
+      await viewModel.refresh()
     }
+    .onReceive(countdownTimer) { time in
+      // Only update if there's an active countdown to avoid unnecessary re-renders
+      if storage.delayEndTime != nil || storage.cooldownEndTime != nil {
+        currentTime = time
+      }
+    }
+  }
 
-    // MARK: - Status Banner
+  // MARK: - Countdown Helpers
 
-    @ViewBuilder
-    private var statusBanner: some View {
-        if storage.delayEndTime != nil && delayRemainingSeconds > 0 {
-            // In delay period - show countdown
-            delayStatusBanner
-        } else if storage.cooldownEndTime != nil && cooldownRemainingSeconds > 0 {
-            // In cooldown period - show cooldown countdown
-            cooldownStatusBanner
-        } else if let status = viewModel.currentStatus {
-            // Normal analyzed status
-            currentStatusBanner(status)
-        } else if let detectedApp = storage.detectedAppName {
-            // Have detected app but no status yet
-            pendingStatusBanner(appName: detectedApp)
+  /// Compute remaining seconds for delay countdown (reactive to currentTime)
+  private var delayRemainingSeconds: Int {
+    guard let endTime = storage.delayEndTime else { return 0 }
+    return max(0, Int(endTime.timeIntervalSince(currentTime)))
+  }
+
+  /// Compute remaining seconds for cooldown countdown (reactive to currentTime)
+  private var cooldownRemainingSeconds: Int {
+    guard let endTime = storage.cooldownEndTime else { return 0 }
+    return max(0, Int(endTime.timeIntervalSince(currentTime)))
+  }
+
+  // MARK: - Status Banner
+
+  @ViewBuilder
+  private var statusBanner: some View {
+    if storage.delayEndTime != nil && delayRemainingSeconds > 0 {
+      // In delay period - show countdown
+      delayStatusBanner
+    } else if storage.cooldownEndTime != nil && cooldownRemainingSeconds > 0 {
+      // In cooldown period - show cooldown countdown
+      cooldownStatusBanner
+    } else if let status = viewModel.currentStatus {
+      // Normal analyzed status
+      currentStatusBanner(status)
+    } else if let detectedApp = storage.detectedAppName {
+      // Have detected app but no status yet
+      pendingStatusBanner(appName: detectedApp)
+    }
+  }
+
+  // MARK: - Delay Status Banner
+
+  private var delayStatusBanner: some View {
+    let seconds = delayRemainingSeconds
+
+    return HStack(spacing: OmiSpacing.lg) {
+      // Status icon
+      ZStack {
+        Circle()
+          .fill(Color.blue.opacity(0.2))
+          .frame(width: 56, height: 56)
+
+        Image(systemName: "clock.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(Color.blue)
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Waiting to Analyze")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+
+        HStack(spacing: OmiSpacing.sm) {
+          if let app = storage.detectedAppName {
+            Text(app)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textSecondary)
+
+            Text("•")
+              .foregroundColor(OmiColors.textTertiary)
+          }
+
+          Text("Analyzing in \(seconds)s")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
         }
+      }
+
+      Spacer()
+
+      // Countdown indicator
+      Text("\(seconds)")
+        .scaledFont(size: 24, weight: .bold, design: .monospaced)
+        .foregroundColor(Color.blue)
     }
+    .padding(OmiSpacing.xl)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+        .fill(Color.blue.opacity(0.08))
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+            .stroke(Color.blue.opacity(0.2), lineWidth: 1)
+        )
+    )
+  }
 
-    // MARK: - Delay Status Banner
+  // MARK: - Cooldown Status Banner
 
-    private var delayStatusBanner: some View {
-        let seconds = delayRemainingSeconds
+  private var cooldownStatusBanner: some View {
+    let totalSeconds = cooldownRemainingSeconds
+    let minutes = totalSeconds / 60
+    let seconds = totalSeconds % 60
 
-        return HStack(spacing: OmiSpacing.lg) {
-            // Status icon
-            ZStack {
-                Circle()
-                    .fill(Color.blue.opacity(0.2))
-                    .frame(width: 56, height: 56)
+    return HStack(spacing: OmiSpacing.lg) {
+      // Status icon
+      ZStack {
+        Circle()
+          .fill(Color.orange.opacity(0.2))
+          .frame(width: 56, height: 56)
 
-                Image(systemName: "clock.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(Color.blue)
-            }
+        Image(systemName: "pause.circle.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(Color.orange)
+      }
 
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("Waiting to Analyze")
-                    .scaledFont(size: OmiType.heading, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Cooldown Active")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
 
-                HStack(spacing: OmiSpacing.sm) {
-                    if let app = storage.detectedAppName {
-                        Text(app)
-                            .scaledFont(size: OmiType.body)
-                            .foregroundColor(OmiColors.textSecondary)
+        HStack(spacing: OmiSpacing.sm) {
+          if let app = storage.detectedAppName ?? viewModel.currentApp {
+            Text(app)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textSecondary)
 
-                        Text("•")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
+            Text("•")
+              .foregroundColor(OmiColors.textTertiary)
+          }
 
-                    Text("Analyzing in \(seconds)s")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-            }
+          Text("Next check in \(minutes):\(String(format: "%02d", seconds))")
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textTertiary)
+        }
+      }
+
+      Spacer()
+
+      // Countdown indicator
+      VStack(spacing: OmiSpacing.hairline) {
+        Text("\(minutes):\(String(format: "%02d", seconds))")
+          .scaledFont(size: OmiType.heading, weight: .bold, design: .monospaced)
+          .foregroundColor(Color.orange)
+        Text("remaining")
+          .scaledFont(size: OmiType.micro)
+          .foregroundColor(OmiColors.textTertiary)
+      }
+    }
+    .padding(OmiSpacing.xl)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+        .fill(Color.orange.opacity(0.08))
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+            .stroke(Color.orange.opacity(0.2), lineWidth: 1)
+        )
+    )
+  }
+
+  // MARK: - Pending Status Banner
+
+  private func pendingStatusBanner(appName: String) -> some View {
+    HStack(spacing: OmiSpacing.lg) {
+      // Status icon
+      ZStack {
+        Circle()
+          .fill(Color.gray.opacity(0.2))
+          .frame(width: 56, height: 56)
+
+        Image(systemName: "eye.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(Color.gray)
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text("Analyzing...")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+
+        Text(appName)
+          .scaledFont(size: OmiType.body)
+          .foregroundColor(OmiColors.textSecondary)
+      }
+
+      Spacer()
+
+      // Spinner
+      ProgressView()
+        .scaleEffect(0.8)
+    }
+    .padding(OmiSpacing.xl)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+        .fill(Color.gray.opacity(0.08))
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+            .stroke(Color.gray.opacity(0.2), lineWidth: 1)
+        )
+    )
+  }
+
+  // MARK: - Current Status Banner (Analyzed)
+
+  private func currentStatusBanner(_ status: FocusStatus) -> some View {
+    // Use detected app as fallback if currentApp isn't set yet
+    let appName = viewModel.currentApp ?? storage.detectedAppName
+
+    return HStack(spacing: OmiSpacing.lg) {
+      // Status icon
+      ZStack {
+        Circle()
+          .fill(status == .focused ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
+          .frame(width: 56, height: 56)
+
+        Image(systemName: status == .focused ? "eye.fill" : "eye.slash.fill")
+          .scaledFont(size: 24)
+          .foregroundColor(status == .focused ? Color.green : Color.orange)
+      }
+
+      VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
+        Text(status == .focused ? "Focused" : "Distracted")
+          .scaledFont(size: OmiType.heading, weight: .semibold)
+          .foregroundColor(OmiColors.textPrimary)
+
+        if let app = appName {
+          Text(app)
+            .scaledFont(size: OmiType.body)
+            .foregroundColor(OmiColors.textSecondary)
+        }
+      }
+
+      Spacer()
+
+      // Subtle pulse animation for focused state
+      if status == .focused {
+        Circle()
+          .fill(Color.green)
+          .frame(width: 12, height: 12)
+          .opacity(0.8)
+      }
+    }
+    .padding(OmiSpacing.xl)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+        .fill(
+          status == .focused
+            ? Color.green.opacity(0.08)
+            : Color.orange.opacity(0.08)
+        )
+        .overlay(
+          RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
+            .stroke(
+              status == .focused
+                ? Color.green.opacity(0.2)
+                : Color.orange.opacity(0.2),
+              lineWidth: 1)
+        )
+    )
+  }
+
+  // MARK: - Stats Section
+
+  private var statsSection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text("Today's Summary")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(OmiColors.textSecondary)
+        .textCase(.uppercase)
+
+      LazyVGrid(
+        columns: [
+          GridItem(.flexible()),
+          GridItem(.flexible()),
+          GridItem(.flexible()),
+          GridItem(.flexible()),
+        ], spacing: OmiSpacing.md
+      ) {
+        FocusStatCard(
+          title: "Focus Time",
+          value: "\(viewModel.stats.focusedMinutes)",
+          unit: "min",
+          icon: "eye.fill",
+          color: Color.green
+        )
+
+        FocusStatCard(
+          title: "Distracted",
+          value: "\(viewModel.stats.distractedMinutes)",
+          unit: "min",
+          icon: "eye.slash.fill",
+          color: Color.orange
+        )
+
+        FocusStatCard(
+          title: "Focus Rate",
+          value: String(format: "%.0f", viewModel.stats.focusRate),
+          unit: "%",
+          icon: "chart.pie.fill",
+          color: OmiColors.accent
+        )
+
+        FocusStatCard(
+          title: "Sessions",
+          value: "\(viewModel.stats.sessionCount)",
+          unit: "",
+          icon: "clock.fill",
+          color: OmiColors.info
+        )
+      }
+    }
+  }
+
+  // MARK: - Top Distractions
+
+  private var topDistractionsSection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      Text("Top Distractions")
+        .scaledFont(size: OmiType.body, weight: .semibold)
+        .foregroundColor(OmiColors.textSecondary)
+        .textCase(.uppercase)
+
+      VStack(spacing: OmiSpacing.sm) {
+        ForEach(viewModel.stats.topDistractions.prefix(5), id: \.appOrSite) { entry in
+          HStack {
+            Image(systemName: "app.fill")
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(Color.orange)
+              .frame(width: 24)
+
+            Text(entry.appOrSite)
+              .scaledFont(size: OmiType.body)
+              .foregroundColor(OmiColors.textPrimary)
 
             Spacer()
 
-            // Countdown indicator
-            Text("\(seconds)")
-                .scaledFont(size: 24, weight: .bold, design: .monospaced)
-                .foregroundColor(Color.blue)
+            Text("\(entry.count)x")
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.textTertiary)
+
+            Text(formatDuration(entry.totalSeconds))
+              .scaledFont(size: OmiType.body, weight: .medium)
+              .foregroundColor(OmiColors.textSecondary)
+              .frame(width: 50, alignment: .trailing)
+          }
+          .padding(.horizontal, OmiSpacing.md)
+          .padding(.vertical, OmiSpacing.sm)
+          .background(
+            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+              .fill(OmiColors.backgroundTertiary.opacity(0.4))
+          )
         }
-        .padding(OmiSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                .fill(Color.blue.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                        .stroke(Color.blue.opacity(0.2), lineWidth: 1)
-                )
-        )
+      }
     }
+  }
 
-    // MARK: - Cooldown Status Banner
+  // MARK: - History Section
 
-    private var cooldownStatusBanner: some View {
-        let totalSeconds = cooldownRemainingSeconds
-        let minutes = totalSeconds / 60
-        let seconds = totalSeconds % 60
+  private var historySection: some View {
+    VStack(alignment: .leading, spacing: OmiSpacing.md) {
+      HStack {
+        Text(viewModel.showHistorical ? "All Sessions" : "Today's Sessions")
+          .scaledFont(size: OmiType.body, weight: .semibold)
+          .foregroundColor(OmiColors.textSecondary)
+          .textCase(.uppercase)
 
-        return HStack(spacing: OmiSpacing.lg) {
-            // Status icon
-            ZStack {
-                Circle()
-                    .fill(Color.orange.opacity(0.2))
-                    .frame(width: 56, height: 56)
+        Spacer()
 
-                Image(systemName: "pause.circle.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(Color.orange)
-            }
+        // Search field
+        HStack(spacing: OmiSpacing.sm) {
+          Image(systemName: "magnifyingglass")
+            .foregroundColor(OmiColors.textTertiary)
+            .scaledFont(size: OmiType.caption)
 
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("Cooldown Active")
-                    .scaledFont(size: OmiType.heading, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
+          TextField("Search...", text: $viewModel.searchText)
+            .textFieldStyle(.plain)
+            .foregroundColor(OmiColors.textPrimary)
+            .scaledFont(size: OmiType.body)
 
-                HStack(spacing: OmiSpacing.sm) {
-                    if let app = storage.detectedAppName ?? viewModel.currentApp {
-                        Text(app)
-                            .scaledFont(size: OmiType.body)
-                            .foregroundColor(OmiColors.textSecondary)
-
-                        Text("•")
-                            .foregroundColor(OmiColors.textTertiary)
-                    }
-
-                    Text("Next check in \(minutes):\(String(format: "%02d", seconds))")
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-            }
-
-            Spacer()
-
-            // Countdown indicator
-            VStack(spacing: OmiSpacing.hairline) {
-                Text("\(minutes):\(String(format: "%02d", seconds))")
-                    .scaledFont(size: OmiType.heading, weight: .bold, design: .monospaced)
-                    .foregroundColor(Color.orange)
-                Text("remaining")
-                    .scaledFont(size: OmiType.micro)
-                    .foregroundColor(OmiColors.textTertiary)
-            }
-        }
-        .padding(OmiSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                .fill(Color.orange.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                        .stroke(Color.orange.opacity(0.2), lineWidth: 1)
-                )
-        )
-    }
-
-    // MARK: - Pending Status Banner
-
-    private func pendingStatusBanner(appName: String) -> some View {
-        HStack(spacing: OmiSpacing.lg) {
-            // Status icon
-            ZStack {
-                Circle()
-                    .fill(Color.gray.opacity(0.2))
-                    .frame(width: 56, height: 56)
-
-                Image(systemName: "eye.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(Color.gray)
-            }
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text("Analyzing...")
-                    .scaledFont(size: OmiType.heading, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                Text(appName)
-                    .scaledFont(size: OmiType.body)
-                    .foregroundColor(OmiColors.textSecondary)
-            }
-
-            Spacer()
-
-            // Spinner
-            ProgressView()
-                .scaleEffect(0.8)
-        }
-        .padding(OmiSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                .fill(Color.gray.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                        .stroke(Color.gray.opacity(0.2), lineWidth: 1)
-                )
-        )
-    }
-
-    // MARK: - Current Status Banner (Analyzed)
-
-    private func currentStatusBanner(_ status: FocusStatus) -> some View {
-        // Use detected app as fallback if currentApp isn't set yet
-        let appName = viewModel.currentApp ?? storage.detectedAppName
-
-        return HStack(spacing: OmiSpacing.lg) {
-            // Status icon
-            ZStack {
-                Circle()
-                    .fill(status == .focused ? Color.green.opacity(0.2) : Color.orange.opacity(0.2))
-                    .frame(width: 56, height: 56)
-
-                Image(systemName: status == .focused ? "eye.fill" : "eye.slash.fill")
-                    .scaledFont(size: 24)
-                    .foregroundColor(status == .focused ? Color.green : Color.orange)
-            }
-
-            VStack(alignment: .leading, spacing: OmiSpacing.xxs) {
-                Text(status == .focused ? "Focused" : "Distracted")
-                    .scaledFont(size: OmiType.heading, weight: .semibold)
-                    .foregroundColor(OmiColors.textPrimary)
-
-                if let app = appName {
-                    Text(app)
-                        .scaledFont(size: OmiType.body)
-                        .foregroundColor(OmiColors.textSecondary)
-                }
-            }
-
-            Spacer()
-
-            // Subtle pulse animation for focused state
-            if status == .focused {
-                Circle()
-                    .fill(Color.green)
-                    .frame(width: 12, height: 12)
-                    .opacity(0.8)
-            }
-        }
-        .padding(OmiSpacing.xl)
-        .background(
-            RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                .fill(status == .focused
-                      ? Color.green.opacity(0.08)
-                      : Color.orange.opacity(0.08))
-                .overlay(
-                    RoundedRectangle(cornerRadius: OmiChrome.controlRadius)
-                        .stroke(status == .focused
-                                ? Color.green.opacity(0.2)
-                                : Color.orange.opacity(0.2),
-                                lineWidth: 1)
-                )
-        )
-    }
-
-    // MARK: - Stats Section
-
-    private var statsSection: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            Text("Today's Summary")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
-                .textCase(.uppercase)
-
-            LazyVGrid(columns: [
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible()),
-                GridItem(.flexible())
-            ], spacing: OmiSpacing.md) {
-                FocusStatCard(
-                    title: "Focus Time",
-                    value: "\(viewModel.stats.focusedMinutes)",
-                    unit: "min",
-                    icon: "eye.fill",
-                    color: Color.green
-                )
-
-                FocusStatCard(
-                    title: "Distracted",
-                    value: "\(viewModel.stats.distractedMinutes)",
-                    unit: "min",
-                    icon: "eye.slash.fill",
-                    color: Color.orange
-                )
-
-                FocusStatCard(
-                    title: "Focus Rate",
-                    value: String(format: "%.0f", viewModel.stats.focusRate),
-                    unit: "%",
-                    icon: "chart.pie.fill",
-                    color: OmiColors.accent
-                )
-
-                FocusStatCard(
-                    title: "Sessions",
-                    value: "\(viewModel.stats.sessionCount)",
-                    unit: "",
-                    icon: "clock.fill",
-                    color: OmiColors.info
-                )
-            }
-        }
-    }
-
-    // MARK: - Top Distractions
-
-    private var topDistractionsSection: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            Text("Top Distractions")
-                .scaledFont(size: OmiType.body, weight: .semibold)
-                .foregroundColor(OmiColors.textSecondary)
-                .textCase(.uppercase)
-
-            VStack(spacing: OmiSpacing.sm) {
-                ForEach(viewModel.stats.topDistractions.prefix(5), id: \.appOrSite) { entry in
-                    HStack {
-                        Image(systemName: "app.fill")
-                            .scaledFont(size: OmiType.body)
-                            .foregroundColor(Color.orange)
-                            .frame(width: 24)
-
-                        Text(entry.appOrSite)
-                            .scaledFont(size: OmiType.body)
-                            .foregroundColor(OmiColors.textPrimary)
-
-                        Spacer()
-
-                        Text("\(entry.count)x")
-                            .scaledFont(size: OmiType.caption)
-                            .foregroundColor(OmiColors.textTertiary)
-
-                        Text(formatDuration(entry.totalSeconds))
-                            .scaledFont(size: OmiType.body, weight: .medium)
-                            .foregroundColor(OmiColors.textSecondary)
-                            .frame(width: 50, alignment: .trailing)
-                    }
-                    .padding(.horizontal, OmiSpacing.md)
-                    .padding(.vertical, OmiSpacing.sm)
-                    .background(
-                        RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                            .fill(OmiColors.backgroundTertiary.opacity(0.4))
-                    )
-                }
-            }
-        }
-    }
-
-    // MARK: - History Section
-
-    private var historySection: some View {
-        VStack(alignment: .leading, spacing: OmiSpacing.md) {
-            HStack {
-                Text(viewModel.showHistorical ? "All Sessions" : "Today's Sessions")
-                    .scaledFont(size: OmiType.body, weight: .semibold)
-                    .foregroundColor(OmiColors.textSecondary)
-                    .textCase(.uppercase)
-
-                Spacer()
-
-                // Search field
-                HStack(spacing: OmiSpacing.sm) {
-                    Image(systemName: "magnifyingglass")
-                        .foregroundColor(OmiColors.textTertiary)
-                        .scaledFont(size: OmiType.caption)
-
-                    TextField("Search...", text: $viewModel.searchText)
-                        .textFieldStyle(.plain)
-                        .foregroundColor(OmiColors.textPrimary)
-                        .scaledFont(size: OmiType.body)
-
-                    if !viewModel.searchText.isEmpty {
-                        Button {
-                            viewModel.searchText = ""
-                        } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .foregroundColor(OmiColors.textTertiary)
-                                .scaledFont(size: OmiType.caption)
-                        }
-                        .buttonStyle(.plain)
-                    }
-                }
-                .padding(.horizontal, OmiSpacing.sm)
-                .padding(.vertical, OmiSpacing.xs)
-                .background(OmiColors.backgroundTertiary)
-                .cornerRadius(OmiChrome.badgeRadius)
-                .frame(width: 180)
-            }
-
-            if viewModel.filteredSessions.isEmpty {
-                emptyHistoryView
-            } else {
-                LazyVStack(spacing: OmiSpacing.sm) {
-                    ForEach(viewModel.filteredSessions) { session in
-                        FocusSessionRow(
-                            session: session,
-                            onDelete: { viewModel.deleteSession(session.id) }
-                        )
-                    }
-                }
-            }
-        }
-    }
-
-    private var emptyHistoryView: some View {
-        VStack(spacing: OmiSpacing.md) {
-            Image(systemName: "eye.fill")
-                .scaledFont(size: 36)
+          if !viewModel.searchText.isEmpty {
+            Button {
+              viewModel.searchText = ""
+            } label: {
+              Image(systemName: "xmark.circle.fill")
                 .foregroundColor(OmiColors.textTertiary)
-
-            Text("No Sessions Yet")
-                .scaledFont(size: OmiType.subheading, weight: .semibold)
-                .foregroundColor(OmiColors.textPrimary)
-
-            Text("Focus sessions will appear here as you work.\nMake sure Focus monitoring is enabled in Settings.")
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textTertiary)
-                .multilineTextAlignment(.center)
+                .scaledFont(size: OmiType.caption)
+            }
+            .buttonStyle(.plain)
+          }
         }
-        .frame(maxWidth: .infinity)
-        .padding(.vertical, OmiSpacing.page)
-    }
+        .padding(.horizontal, OmiSpacing.sm)
+        .padding(.vertical, OmiSpacing.xs)
+        .background(OmiColors.backgroundTertiary)
+        .cornerRadius(OmiChrome.badgeRadius)
+        .frame(width: 180)
+      }
 
-    // MARK: - Helpers
-
-    private func formatDuration(_ seconds: Int) -> String {
-        let minutes = seconds / 60
-        if minutes < 60 {
-            return "\(minutes)m"
+      if viewModel.filteredSessions.isEmpty {
+        emptyHistoryView
+      } else {
+        LazyVStack(spacing: OmiSpacing.sm) {
+          ForEach(viewModel.filteredSessions) { session in
+            FocusSessionRow(
+              session: session,
+              onDelete: { viewModel.deleteSession(session.id) }
+            )
+          }
         }
-        let hours = minutes / 60
-        let remainingMinutes = minutes % 60
-        return "\(hours)h \(remainingMinutes)m"
+      }
     }
+  }
+
+  private var emptyHistoryView: some View {
+    VStack(spacing: OmiSpacing.md) {
+      Image(systemName: "eye.fill")
+        .scaledFont(size: 36)
+        .foregroundColor(OmiColors.textTertiary)
+
+      Text("No Sessions Yet")
+        .scaledFont(size: OmiType.subheading, weight: .semibold)
+        .foregroundColor(OmiColors.textPrimary)
+
+      Text("Focus sessions will appear here as you work.\nMake sure Focus monitoring is enabled in Settings.")
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textTertiary)
+        .multilineTextAlignment(.center)
+    }
+    .frame(maxWidth: .infinity)
+    .padding(.vertical, OmiSpacing.page)
+  }
+
+  // MARK: - Helpers
+
+  private func formatDuration(_ seconds: Int) -> String {
+    let minutes = seconds / 60
+    if minutes < 60 {
+      return "\(minutes)m"
+    }
+    let hours = minutes / 60
+    let remainingMinutes = minutes % 60
+    return "\(hours)h \(remainingMinutes)m"
+  }
 }
 
 // MARK: - Focus Session Row
 
 struct FocusSessionRow: View {
-    let session: StoredFocusSession
-    let onDelete: () -> Void
+  let session: StoredFocusSession
+  let onDelete: () -> Void
 
-    @State private var isHovering = false
-    @State private var showDeleteConfirmation = false
+  @State private var isHovering = false
+  @State private var showDeleteConfirmation = false
 
-    var body: some View {
-        HStack(spacing: OmiSpacing.md) {
-            // Status indicator
-            Circle()
-                .fill(session.status == .focused ? Color.green : Color.orange)
-                .frame(width: 10, height: 10)
+  var body: some View {
+    HStack(spacing: OmiSpacing.md) {
+      // Status indicator
+      Circle()
+        .fill(session.status == .focused ? Color.green : Color.orange)
+        .frame(width: 10, height: 10)
 
-            // App/site
-            Text(session.appOrSite)
-                .scaledFont(size: OmiType.body, weight: .medium)
-                .foregroundColor(OmiColors.textPrimary)
-                .lineLimit(1)
-                .frame(width: 120, alignment: .leading)
+      // App/site
+      Text(session.appOrSite)
+        .scaledFont(size: OmiType.body, weight: .medium)
+        .foregroundColor(OmiColors.textPrimary)
+        .lineLimit(1)
+        .frame(width: 120, alignment: .leading)
 
-            // Description
-            Text(session.description)
-                .scaledFont(size: OmiType.body)
-                .foregroundColor(OmiColors.textSecondary)
-                .lineLimit(1)
+      // Description
+      Text(session.description)
+        .scaledFont(size: OmiType.body)
+        .foregroundColor(OmiColors.textSecondary)
+        .lineLimit(1)
 
-            Spacer()
+      Spacer()
 
-            // Message (if any)
-            if let message = session.message, !message.isEmpty {
-                Text(message)
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .lineLimit(1)
-                    .frame(maxWidth: 150, alignment: .trailing)
-            }
+      // Message (if any)
+      if let message = session.message, !message.isEmpty {
+        Text(message)
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.textTertiary)
+          .lineLimit(1)
+          .frame(maxWidth: 150, alignment: .trailing)
+      }
 
-            // Sync status
-            if !session.isSynced {
-                Image(systemName: "arrow.triangle.2.circlepath")
-                    .scaledFont(size: OmiType.caption)
-                    .foregroundColor(OmiColors.textTertiary)
-                    .help("Pending sync")
-            }
+      // Sync status
+      if !session.isSynced {
+        Image(systemName: "arrow.triangle.2.circlepath")
+          .scaledFont(size: OmiType.caption)
+          .foregroundColor(OmiColors.textTertiary)
+          .help("Pending sync")
+      }
 
-            // Time
-            Text(formatTime(session.createdAt))
-                .scaledFont(size: OmiType.caption)
-                .foregroundColor(OmiColors.textTertiary)
-                .frame(width: 60, alignment: .trailing)
+      // Time
+      Text(formatTime(session.createdAt))
+        .scaledFont(size: OmiType.caption)
+        .foregroundColor(OmiColors.textTertiary)
+        .frame(width: 60, alignment: .trailing)
 
-            // Delete button (on hover)
-            if isHovering {
-                Button {
-                    showDeleteConfirmation = true
-                } label: {
-                    Image(systemName: "trash")
-                        .scaledFont(size: OmiType.caption)
-                        .foregroundColor(OmiColors.textTertiary)
-                }
-                .buttonStyle(.plain)
-                .help("Delete")
-                .transition(.opacity)
-            }
+      // Delete button (on hover)
+      if isHovering {
+        Button {
+          showDeleteConfirmation = true
+        } label: {
+          Image(systemName: "trash")
+            .scaledFont(size: OmiType.caption)
+            .foregroundColor(OmiColors.textTertiary)
         }
-        .padding(.horizontal, OmiSpacing.md)
-        .padding(.vertical, OmiSpacing.sm)
-        .background(
-            RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
-                .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundTertiary.opacity(0.4))
-        )
-        .onHover { hovering in
-            isHovering = hovering
-            if hovering {
-                NSCursor.pointingHand.push()
-            } else {
-                NSCursor.pop()
-            }
-        }
-        .confirmationDialog(
-            "Delete Session",
-            isPresented: $showDeleteConfirmation,
-            titleVisibility: .visible
-        ) {
-            Button("Delete", role: .destructive) {
-                onDelete()
-            }
-            Button("Cancel", role: .cancel) {}
-        } message: {
-            Text("Are you sure you want to delete this session?")
-        }
+        .buttonStyle(.plain)
+        .help("Delete")
+        .transition(.opacity)
+      }
     }
-
-    private static let timeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "h:mm a"
-        return f
-    }()
-    private static let dateTimeFormatter: DateFormatter = {
-        let f = DateFormatter()
-        f.dateFormat = "M/d h:mm a"
-        return f
-    }()
-
-    private func formatTime(_ date: Date) -> String {
-        if Calendar.current.isDateInToday(date) {
-            return Self.timeFormatter.string(from: date)
-        } else {
-            return Self.dateTimeFormatter.string(from: date)
-        }
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
+    .background(
+      RoundedRectangle(cornerRadius: OmiChrome.elementRadius)
+        .fill(isHovering ? OmiColors.backgroundTertiary : OmiColors.backgroundTertiary.opacity(0.4))
+    )
+    .onHover { hovering in
+      isHovering = hovering
+      if hovering {
+        NSCursor.pointingHand.push()
+      } else {
+        NSCursor.pop()
+      }
     }
+    .confirmationDialog(
+      "Delete Session",
+      isPresented: $showDeleteConfirmation,
+      titleVisibility: .visible
+    ) {
+      Button("Delete", role: .destructive) {
+        onDelete()
+      }
+      Button("Cancel", role: .cancel) {}
+    } message: {
+      Text("Are you sure you want to delete this session?")
+    }
+  }
+
+  private static let timeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "h:mm a"
+    return f
+  }()
+  private static let dateTimeFormatter: DateFormatter = {
+    let f = DateFormatter()
+    f.dateFormat = "M/d h:mm a"
+    return f
+  }()
+
+  private func formatTime(_ date: Date) -> String {
+    if Calendar.current.isDateInToday(date) {
+      return Self.timeFormatter.string(from: date)
+    } else {
+      return Self.dateTimeFormatter.string(from: date)
+    }
+  }
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
+  #Preview {
     FocusPage()
-        .frame(width: 800, height: 600)
-        .background(OmiColors.backgroundPrimary)
-}
+      .frame(width: 800, height: 600)
+      .background(OmiColors.backgroundPrimary)
+  }
 #endif

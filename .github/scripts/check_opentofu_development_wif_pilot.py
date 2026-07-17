@@ -10,7 +10,6 @@ import sys
 from pathlib import Path
 from typing import Any, Sequence
 
-
 ROOT = Path(__file__).resolve().parents[2]
 PILOT_DIR = ROOT / "infrastructure" / "opentofu" / "pilots" / "development-wif-plan"
 PROBE_DIR = ROOT / "infrastructure" / "opentofu" / "probes" / "development-project-read"
@@ -31,11 +30,31 @@ EXPECTED_BOOTSTRAP_RESOURCES = frozenset(
         "google_project_iam_member.plan_project_browser",
     }
 )
+EXPECTED_PARTIAL_RECOVERY_RESOURCES = frozenset(
+    {
+        "google_service_account.plan",
+        "google_project_iam_member.plan_project_browser",
+    }
+)
+EXPECTED_PARTIAL_RECOVERY_CREATES = EXPECTED_BOOTSTRAP_RESOURCES - EXPECTED_PARTIAL_RECOVERY_RESOURCES
+EXPECTED_PARTIAL_RECOVERY_ACTIONS = {
+    **{address: ["no-op"] for address in EXPECTED_PARTIAL_RECOVERY_RESOURCES},
+    **{address: ["create"] for address in EXPECTED_PARTIAL_RECOVERY_CREATES},
+}
+EXPECTED_PARTIAL_RECOVERY_VALUES = {
+    "google_service_account.plan": {"account_id": "omi-tofu-plan-dev-9842"},
+    "google_project_iam_member.plan_project_browser": {
+        "project": "based-hardware-dev",
+        "role": "roles/browser",
+        "member": "serviceAccount:omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com",
+    },
+}
 RESOURCE = re.compile(r'^\s*resource\s+"(?P<type>[^"]+)"\s+"(?P<name>[^"]+)"', re.MULTILINE)
 DATA = re.compile(r'^\s*data\s+"(?P<type>[^"]+)"\s+"(?P<name>[^"]+)"', re.MULTILINE)
 MODULE = re.compile(r'^\s*module\s+"(?P<name>[^"]+)"', re.MULTILINE)
 PROVIDER = re.compile(r'^\s*provider\s+"(?P<name>[^"]+)"', re.MULTILINE)
 PROVISIONER = re.compile(r'^\s*provisioner\s+"(?P<name>[^"]+)"', re.MULTILINE)
+DISPLAY_NAME = re.compile(r'^\s*display_name\s*=\s*"(?P<value>[^"]*)"', re.MULTILINE)
 
 
 def read(path: Path) -> str:
@@ -73,6 +92,18 @@ def resource_body(text: str, address: str) -> str | None:
         re.MULTILINE | re.DOTALL,
     )
     return None if match is None else match.group("body")
+
+
+def check_display_name_limit(text: str, address: str) -> list[str]:
+    body = resource_body(text, address)
+    if body is None:
+        return []
+    match = DISPLAY_NAME.search(body)
+    if match is None:
+        return [f"bootstrap {address} must declare a display_name"]
+    if len(match.group("value")) > 32:
+        return [f"bootstrap {address} display_name must not exceed 32 characters"]
+    return []
 
 
 def check_bootstrap(text: str) -> list[str]:
@@ -150,6 +181,11 @@ def check_bootstrap(text: str) -> list[str]:
         for expected in required:
             if expected not in body:
                 errors.append(f"bootstrap {address} is missing required contract {expected!r}")
+    for address in (
+        "google_iam_workload_identity_pool.github",
+        "google_iam_workload_identity_pool_provider.github",
+    ):
+        errors.extend(check_display_name_limit(text, address))
     return errors
 
 
@@ -211,7 +247,11 @@ def check_plan(plan: dict[str, Any]) -> list[str]:
             continue
         address = change.get("address")
         action = change.get("change", {}).get("actions") if isinstance(change.get("change"), dict) else None
-        if not isinstance(address, str) or not isinstance(action, list) or not all(isinstance(item, str) for item in action):
+        if (
+            not isinstance(address, str)
+            or not isinstance(action, list)
+            or not all(isinstance(item, str) for item in action)
+        ):
             errors.append("bootstrap plan contains a malformed address or action")
             continue
         if address in actual:
@@ -226,6 +266,90 @@ def check_plan(plan: dict[str, Any]) -> list[str]:
     return errors
 
 
+def plan_root_resources(plan: dict[str, Any], section: str) -> tuple[dict[str, dict[str, Any]], list[str]]:
+    errors: list[str] = []
+    section_value = plan.get(section)
+    if not isinstance(section_value, dict):
+        return {}, [f"bootstrap recovery plan {section} must be an object"]
+    values = section_value.get("values")
+    if not isinstance(values, dict):
+        return {}, [f"bootstrap recovery plan {section}.values must be an object"]
+    root_module = values.get("root_module")
+    if not isinstance(root_module, dict):
+        return {}, [f"bootstrap recovery plan {section}.values.root_module must be an object"]
+    resources = root_module.get("resources")
+    if not isinstance(resources, list):
+        return {}, [f"bootstrap recovery plan {section}.values.root_module.resources must be a list"]
+    if root_module.get("child_modules"):
+        errors.append(f"bootstrap recovery plan {section} must not contain child modules")
+
+    actual: dict[str, dict[str, Any]] = {}
+    for resource in resources:
+        if not isinstance(resource, dict):
+            errors.append(f"bootstrap recovery plan {section} contains a malformed resource")
+            continue
+        address = resource.get("address")
+        if not isinstance(address, str):
+            errors.append(f"bootstrap recovery plan {section} contains a resource without an address")
+            continue
+        if address in actual:
+            errors.append(f"bootstrap recovery plan {section} contains duplicate resource {address}")
+        actual[address] = resource
+    return actual, errors
+
+
+def check_partial_recovery_plan(plan: dict[str, Any]) -> list[str]:
+    errors: list[str] = []
+    prior_resources, prior_errors = plan_root_resources(plan, "prior_state")
+    errors.extend(prior_errors)
+    if set(prior_resources) != EXPECTED_PARTIAL_RECOVERY_RESOURCES:
+        errors.append(
+            "bootstrap recovery prior state must contain exactly " f"{sorted(EXPECTED_PARTIAL_RECOVERY_RESOURCES)}"
+        )
+    for address, expected_values in EXPECTED_PARTIAL_RECOVERY_VALUES.items():
+        values = prior_resources.get(address, {}).get("values")
+        if not isinstance(values, dict):
+            errors.append(f"bootstrap recovery prior state {address} must contain resource values")
+            continue
+        for key, expected in expected_values.items():
+            if values.get(key) != expected:
+                errors.append(f"bootstrap recovery prior state {address} must retain {key}={expected!r}")
+
+    planned_resources, planned_errors = plan_root_resources(plan, "planned_values")
+    errors.extend(planned_errors)
+    if set(planned_resources) != EXPECTED_BOOTSTRAP_RESOURCES:
+        errors.append(
+            "bootstrap recovery planned values must contain exactly " f"{sorted(EXPECTED_BOOTSTRAP_RESOURCES)}"
+        )
+
+    changes = plan.get("resource_changes")
+    if not isinstance(changes, list):
+        return errors + ["bootstrap recovery plan resource_changes must be a list"]
+    actual_actions: dict[str, list[str]] = {}
+    for change in changes:
+        if not isinstance(change, dict):
+            errors.append("bootstrap recovery plan contains a malformed resource change")
+            continue
+        address = change.get("address")
+        actions = change.get("change", {}).get("actions") if isinstance(change.get("change"), dict) else None
+        if (
+            not isinstance(address, str)
+            or not isinstance(actions, list)
+            or not all(isinstance(item, str) for item in actions)
+        ):
+            errors.append("bootstrap recovery plan contains a malformed address or action")
+            continue
+        if address in actual_actions:
+            errors.append(f"bootstrap recovery plan contains duplicate change {address}")
+        actual_actions[address] = actions
+    if actual_actions != EXPECTED_PARTIAL_RECOVERY_ACTIONS:
+        errors.append(
+            "bootstrap recovery plan actions must be exactly "
+            f"{EXPECTED_PARTIAL_RECOVERY_ACTIONS}, found {actual_actions}"
+        )
+    return errors
+
+
 def check_workflow(text: str) -> list[str]:
     errors: list[str] = []
     for required in (
@@ -233,7 +357,7 @@ def check_workflow(text: str) -> list[str]:
         "environment: development",
         "contents: read",
         "id-token: write",
-        "google-github-actions/auth@v2",
+        "google-github-actions/auth@v3",
         "workload_identity_provider: projects/1031333818730/locations/global/workloadIdentityPools/omi-opentofu-9842-dev/providers/github",
         "service_account: omi-tofu-plan-dev-9842@based-hardware-dev.iam.gserviceaccount.com",
         "ref: main",
@@ -280,13 +404,17 @@ def check_validation_workflow(text: str) -> list[str]:
         "backend-config",
     ):
         if forbidden in text:
-            errors.append(f"pilot validation workflow contains forbidden credential or mutation reference {forbidden!r}")
+            errors.append(
+                f"pilot validation workflow contains forbidden credential or mutation reference {forbidden!r}"
+            )
     return errors
 
 
 def main(argv: Sequence[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--plan-json", type=Path)
+    plan_group = parser.add_mutually_exclusive_group()
+    plan_group.add_argument("--plan-json", type=Path)
+    plan_group.add_argument("--partial-recovery-plan-json", type=Path)
     args = parser.parse_args(argv)
 
     bootstrap = module_source(PILOT_DIR)
@@ -300,16 +428,21 @@ def main(argv: Sequence[str] | None = None) -> int:
         + check_workflow(read(WORKFLOW))
         + check_validation_workflow(read(VALIDATION_WORKFLOW))
     )
-    if args.plan_json is not None:
+    plan_path = args.plan_json or args.partial_recovery_plan_json
+    if plan_path is not None:
         try:
-            plan = json.loads(read(args.plan_json))
+            plan = json.loads(read(plan_path))
         except (OSError, json.JSONDecodeError) as exc:
-            errors.append(f"could not read bootstrap plan JSON {args.plan_json}: {exc}")
+            errors.append(f"could not read bootstrap plan JSON {plan_path}: {exc}")
         else:
             if not isinstance(plan, dict):
-                errors.append(f"bootstrap plan JSON {args.plan_json} must be an object")
+                errors.append(f"bootstrap plan JSON {plan_path} must be an object")
             else:
-                errors.extend(check_plan(plan))
+                errors.extend(
+                    check_partial_recovery_plan(plan)
+                    if args.partial_recovery_plan_json is not None
+                    else check_plan(plan)
+                )
 
     if errors:
         print("Development WIF pilot check failed:", file=sys.stderr)

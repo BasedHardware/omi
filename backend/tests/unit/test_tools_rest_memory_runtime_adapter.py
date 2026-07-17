@@ -1,41 +1,65 @@
-import importlib
-import sys
-import types
+from pathlib import Path
+from types import ModuleType
 
-from utils.memory.chat_memory_adapter import ChatMemorySearchResult
-from utils.memory.default_read_rollout import MemoryReadDecision
+import pytest
+
+from testing.import_isolation import load_module_fresh, stub_modules
+
+_BACKEND = Path(__file__).resolve().parents[2]
+_memory_services: ModuleType | None = None
 
 
 def _identity_parse_iso_date(value, _field_name):
     return value
 
 
-def _load_memory_services(monkeypatch):
-    sys.modules.pop('utils.retrieval.tool_services.memories', None)
+@pytest.fixture(scope='module', autouse=True)
+def memory_services_module():
+    """Load the REST memory adapter against isolated import-time dependencies."""
+    global _memory_services
 
-    memory_db_mod = types.ModuleType('database.memories')
-    setattr(memory_db_mod, 'get_memories', lambda *args, **kwargs: [])
-    setattr(memory_db_mod, 'get_memories_by_ids', lambda *args, **kwargs: [])
-    monkeypatch.setitem(sys.modules, 'database.memories', memory_db_mod)
+    memory_db_mod = ModuleType('database.memories')
+    memory_db_mod.get_memories = lambda *args, **kwargs: []
+    memory_db_mod.get_memories_by_ids = lambda *args, **kwargs: []
 
-    vector_db_mod = types.ModuleType('database.vector_db')
-    setattr(vector_db_mod, 'find_similar_memories', lambda *args, **kwargs: [])
-    setattr(vector_db_mod, 'query_memory_vector_candidates', lambda *args, **kwargs: [])
-    setattr(vector_db_mod, 'delete_memory_vector', lambda *args, **kwargs: None)
-    setattr(vector_db_mod, 'upsert_memory_vector', lambda *args, **kwargs: None)
-    setattr(vector_db_mod, 'upsert_memory_vectors_batch', lambda *args, **kwargs: None)
-    monkeypatch.setitem(sys.modules, 'database.vector_db', vector_db_mod)
+    vector_db_mod = ModuleType('database.vector_db')
+    vector_db_mod.find_similar_memories = lambda *args, **kwargs: []
+    vector_db_mod.query_memory_vector_candidates = lambda *args, **kwargs: []
+    vector_db_mod.delete_memory_vector = lambda *args, **kwargs: None
+    vector_db_mod.upsert_memory_vector = lambda *args, **kwargs: None
+    vector_db_mod.upsert_memory_vectors_batch = lambda *args, **kwargs: None
 
-    conversations_mod = types.ModuleType('utils.retrieval.tool_services.conversations')
-    setattr(conversations_mod, 'parse_iso_date', _identity_parse_iso_date)
-    monkeypatch.setitem(sys.modules, 'utils.retrieval.tool_services.conversations', conversations_mod)
+    conversations_mod = ModuleType('utils.retrieval.tool_services.conversations')
+    conversations_mod.parse_iso_date = _identity_parse_iso_date
 
-    client_mod = types.ModuleType('database._client')
-    setattr(client_mod, 'db', object())
-    setattr(client_mod, 'document_id_from_seed', lambda seed: seed)
-    monkeypatch.setitem(sys.modules, 'database._client', client_mod)
+    client_mod = ModuleType('database._client')
+    client_mod.db = object()
+    client_mod.document_id_from_seed = lambda seed: seed
 
-    return importlib.import_module('utils.retrieval.tool_services.memories')
+    with stub_modules(
+        {
+            'database.memories': memory_db_mod,
+            'database.vector_db': vector_db_mod,
+            'utils.retrieval.tool_services.conversations': conversations_mod,
+            'database._client': client_mod,
+        }
+    ):
+        _memory_services = load_module_fresh(
+            'utils.retrieval.tool_services.memories',
+            str(_BACKEND / 'utils' / 'retrieval' / 'tool_services' / 'memories.py'),
+        )
+        yield
+
+    _memory_services = None
+
+
+from utils.memory.chat_memory_adapter import ChatMemorySearchResult
+from utils.memory.default_read_rollout import MemoryReadDecision
+
+
+def _load_memory_services():
+    assert _memory_services is not None
+    return _memory_services
 
 
 class _UnexpectedLegacyMemoryDb:
@@ -52,7 +76,7 @@ class _UnexpectedLegacyVectorDb:
 
 
 def test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision(monkeypatch):
-    memory_services = _load_memory_services(monkeypatch)
+    memory_services = _load_memory_services()
     captured = []
     memory_text = (
         'User memory default memories (1 total):\n'
@@ -94,7 +118,7 @@ def test_tools_rest_get_memories_text_requests_legacy_safe_memory_decision(monke
 
 
 def test_tools_rest_get_memories_text_preserves_adapter_denied_or_empty_memory_states(monkeypatch):
-    memory_services = _load_memory_services(monkeypatch)
+    memory_services = _load_memory_services()
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
 
     monkeypatch.setattr(
@@ -121,7 +145,7 @@ def test_tools_rest_get_memories_text_preserves_adapter_denied_or_empty_memory_s
 
 
 def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_decision(monkeypatch):
-    memory_services = _load_memory_services(monkeypatch)
+    memory_services = _load_memory_services()
     captured = []
     memory_text = (
         "Found 1 memory vector memories matching 'coffee':\n"
@@ -166,7 +190,7 @@ def test_tools_rest_search_memories_text_requests_legacy_safe_memory_vector_deci
 
 
 def test_tools_rest_search_memories_text_preserves_adapter_denied_or_empty_memory_states(monkeypatch):
-    memory_services = _load_memory_services(monkeypatch)
+    memory_services = _load_memory_services()
     monkeypatch.setattr(memory_services, 'memory_db', _UnexpectedLegacyMemoryDb())
     monkeypatch.setattr(memory_services, 'vector_db', _UnexpectedLegacyVectorDb())
 

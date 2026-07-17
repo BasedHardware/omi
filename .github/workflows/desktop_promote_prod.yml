@@ -60,7 +60,7 @@ jobs:
         run: rm -rf /opt/hostedtoolcache
 
       - name: Checkout promotion controls
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -141,7 +141,7 @@ jobs:
 
       - name: Preflight Omi Bot token configuration
         id: app-token-preflight
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}
@@ -153,7 +153,7 @@ jobs:
         run: gh api "repos/${REPO}" --jq .full_name >/dev/null
 
       - name: Google Auth
-        uses: google-github-actions/auth@v2
+        uses: google-github-actions/auth@v3
         with:
           credentials_json: ${{ secrets.GCP_CREDENTIALS }}
 
@@ -287,7 +287,7 @@ jobs:
 
       - name: Checkout release source
         if: steps.current.outputs.deploy_needed == 'true'
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           ref: ${{ steps.plan.outputs.target_sha }}
           fetch-depth: 0
@@ -295,7 +295,7 @@ jobs:
 
       - name: Set up Docker Buildx
         if: steps.current.outputs.deploy_needed == 'true'
-        uses: docker/setup-buildx-action@v3
+        uses: docker/setup-buildx-action@v4
 
       - name: Google Service Account
         if: steps.current.outputs.deploy_needed == 'true'
@@ -333,7 +333,7 @@ jobs:
 
       - name: Build and Push Desktop Backend Image
         if: steps.current.outputs.deploy_needed == 'true'
-        uses: docker/build-push-action@v6
+        uses: docker/build-push-action@v7
         with:
           context: ./release-source/desktop/macos/Backend-Rust
           file: ./release-source/desktop/macos/Backend-Rust/Dockerfile
@@ -346,7 +346,7 @@ jobs:
 
       - name: Deploy Desktop Backend to Production
         if: steps.current.outputs.deploy_needed == 'true'
-        uses: google-github-actions/deploy-cloudrun@v2
+        uses: google-github-actions/deploy-cloudrun@v3
         with:
           service: ${{ env.SERVICE }}
           region: ${{ env.REGION }}
@@ -624,7 +624,7 @@ jobs:
 
       - name: Generate Omi Bot token for release mutations
         id: app-token
-        uses: actions/create-github-app-token@v1
+        uses: actions/create-github-app-token@v3
         with:
           app-id: ${{ secrets.OMI_BOT_APP_ID }}
           private-key: ${{ secrets.OMI_BOT_PRIVATE_KEY }}

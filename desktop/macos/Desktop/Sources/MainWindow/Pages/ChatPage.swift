@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 struct ChatPage: View {
   @ObservedObject var appProvider: AppProvider
@@ -1008,8 +1008,8 @@ struct HistorySessionRow: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())
-    .frame(width: 600, height: 700)
-}
+  #Preview {
+    ChatPage(appProvider: AppProvider(), chatProvider: ChatProvider())
+      .frame(width: 600, height: 700)
+  }
 #endif

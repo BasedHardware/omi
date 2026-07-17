@@ -9,6 +9,13 @@ The macOS push-to-talk and realtime paths have one logical lifecycle owner:
 Microphone, provider, tool, journal, and playback objects are physical drivers;
 SwiftUI and floating-bar state are projections.
 
+`VoiceTurnReducer`, `VoiceTurnEvent`, and the mutable `VoiceTurnModel` live inside
+the strict `VoiceTurnDomain` target. App code may publish only typed
+`VoiceTurnFact` values through the coordinator/domain facade and observe its
+read-only model snapshot. The compiler therefore prevents an app driver from
+constructing a lifecycle event or reducing state directly; behavior tests still
+verify that every required fact is published.
+
 ## MUST NOT
 
 - Reintroduce a parallel PTT/realtime lifecycle enum, current-turn boolean, or
@@ -101,6 +108,8 @@ SwiftUI and floating-bar state are projections.
   foreground/background tools before Swift performs an effect. Provider turn IDs
   are correlation, never bearer authority, and terminal voice state revokes the
   run capability.
+- App code must not import or construct `VoiceTurnEvent` or `VoiceTurnReducer`.
+  The target boundary, not a convention, owns that restriction.
 
 ## Guard surface
 
@@ -127,6 +136,7 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 ## Surfaces
 
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
+- `desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`
@@ -139,16 +149,18 @@ chat → PTT → typed follow-up and cross-surface agent continuity.
 
 ## Guard tests
 
-- `desktop/macos/Desktop/Tests/VoiceTurnReducerTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnReducerTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/VoiceTurnDomainBoundaryTests.swift`
 - `desktop/macos/Desktop/Tests/VoiceTurnOutputOwnershipTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeHubBargeInContinuityTests.swift`
 - `desktop/macos/Desktop/Tests/RealtimeScreenEvidenceTests.swift`
-- `desktop/macos/Desktop/Tests/CrossSurfaceContractSmokeTests.swift`
+- `desktop/macos/Desktop/Tests/VoiceTurnDomainTests/CrossSurfaceContractSmokeTests.swift`
 - `desktop/macos/agent/tests/convergence-authority-ratchet.test.ts`
 
 ## Path globs
 
 - `desktop/macos/Desktop/Sources/FloatingControlBar/VoiceTurn*.swift`
+- `desktop/macos/Desktop/Sources/VoiceTurnDomain/**`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/PushToTalkManager.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController.swift`
 - `desktop/macos/Desktop/Sources/FloatingControlBar/RealtimeHubController+ScreenEvidence.swift`

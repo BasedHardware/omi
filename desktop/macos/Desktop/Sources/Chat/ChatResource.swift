@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 enum ChatResourceOrigin: Equatable {
   case userAttachment
@@ -130,22 +130,24 @@ struct ChatResource: Identifiable, Equatable {
     guard !resources.isEmpty else { return nil }
     let encoded = resources.map(persistenceDictionary(for:))
     guard let data = try? JSONSerialization.data(withJSONObject: encoded),
-          let json = String(data: data, encoding: .utf8) else { return nil }
+      let json = String(data: data, encoding: .utf8)
+    else { return nil }
     return json
   }
 
   static func decodeResourcesFromPersistence(_ json: String) -> [ChatResource] {
     guard let data = json.data(using: .utf8),
-          let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]] else { return [] }
+      let array = try? JSONSerialization.jsonObject(with: data) as? [[String: Any]]
+    else { return [] }
     return decodeResources(fromJSONArray: array)
   }
 
   /// Decode resource cards from a chat message's persisted `metadata` JSON blob.
   static func decodeResourcesFromMessageMetadata(_ metadataJSON: String?) -> [ChatResource] {
     guard let metadataJSON,
-          let data = metadataJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
-          let array = root[messageMetadataResourcesKey] as? [[String: Any]]
+      let data = metadataJSON.data(using: .utf8),
+      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any],
+      let array = root[messageMetadataResourcesKey] as? [[String: Any]]
     else { return [] }
     return hydrateFileStates(decodeResources(fromJSONArray: array))
   }
@@ -159,7 +161,8 @@ struct ChatResource: Identifiable, Equatable {
     var root = parseMessageMetadataRoot(metadataJSON)
     root[messageMetadataResourcesKey] = resources.map(persistenceDictionary(for:))
     guard let data = try? JSONSerialization.data(withJSONObject: root),
-          let json = String(data: data, encoding: .utf8) else { return metadataJSON }
+      let json = String(data: data, encoding: .utf8)
+    else { return metadataJSON }
     return json
   }
 
@@ -209,8 +212,8 @@ struct ChatResource: Identifiable, Equatable {
 
   private static func parseMessageMetadataRoot(_ metadataJSON: String?) -> [String: Any] {
     guard let metadataJSON,
-          let data = metadataJSON.data(using: .utf8),
-          let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
+      let data = metadataJSON.data(using: .utf8),
+      let root = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
     else { return [:] }
     return root
   }
@@ -218,9 +221,10 @@ struct ChatResource: Identifiable, Equatable {
   private static func decodeResources(fromJSONArray array: [[String: Any]]) -> [ChatResource] {
     array.compactMap { dict in
       guard let id = dict["id"] as? String,
-            let title = dict["title"] as? String
+        let title = dict["title"] as? String
       else { return nil }
-      let origin = (dict["origin"] as? String) == "generatedArtifact"
+      let origin =
+        (dict["origin"] as? String) == "generatedArtifact"
         ? ChatResourceOrigin.generatedArtifact
         : ChatResourceOrigin.userAttachment
       return ChatResource(
@@ -303,8 +307,8 @@ extension ChatResource.State {
   }
 }
 
-private extension AgentArtifactProjection {
-  var subtitle: String? {
+extension AgentArtifactProjection {
+  fileprivate var subtitle: String? {
     var parts: [String] = []
     if let mimeType, !mimeType.isEmpty {
       parts.append(mimeType)
@@ -628,7 +632,9 @@ private struct ChatResourceCard: View {
     if resource.isImage { return "photo" }
     if resource.mimeType == "application/pdf" { return "doc.richtext" }
     if resource.mimeType?.contains("json") == true { return "curlybraces.square" }
-    if resource.mimeType == "text/html" || resource.mimeType == "text/markdown" { return "chevron.left.forwardslash.chevron.right" }
+    if resource.mimeType == "text/html" || resource.mimeType == "text/markdown" {
+      return "chevron.left.forwardslash.chevron.right"
+    }
     if resource.mimeType?.contains("spreadsheet") == true || resource.mimeType?.contains("csv") == true {
       return "tablecells"
     }

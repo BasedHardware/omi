@@ -1,6 +1,13 @@
 import Foundation
 import OmiSupport
 
+/// Sendable carrier for `[String: Any]` JSON payloads that must cross actor or
+/// isolation boundaries. The dictionary is parsed once and treated as immutable
+/// thereafter, so unchecked Sendable conformance is safe.
+struct RuntimeJSONPayloadBox: @unchecked Sendable {
+  let value: [String: Any]
+  init(_ value: [String: Any]) { self.value = value }
+}
 extension Notification.Name {
   /// Posted on MainActor after the runtime handshake makes direct control
   /// tools admissible. Carries no owner id or request content.
@@ -286,7 +293,8 @@ actor AgentRuntimeProcess {
     else {
       throw BridgeError.agentError("Agent runtime protocol is incompatible")
     }
-    let runtimeVersion = (message.payload["runtimeVersion"] as? String)?
+    let runtimeVersion =
+      (message.payload["runtimeVersion"] as? String)?
       .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
     guard !runtimeVersion.isEmpty else {
       throw BridgeError.agentError("Agent runtime did not identify its version")
@@ -309,7 +317,7 @@ actor AgentRuntimeProcess {
       || lower.contains("failed to reserve virtual memory")
   }
 
-  struct RuntimeMessage {
+  struct RuntimeMessage: @unchecked Sendable {
     struct RequestKey: Hashable, Equatable, Sendable {
       let clientId: String
       let requestId: String
@@ -486,7 +494,7 @@ actor AgentRuntimeProcess {
     let expectedKind: RuntimeMessage.Kind
     let authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot?
     let sentAtUptime: TimeInterval
-    let continuation: CheckedContinuation<[String: Any], Error>
+    let continuation: CheckedContinuation<RuntimeJSONPayloadBox, Error>
   }
 
   private struct TimedOutKernelContractRequest {
@@ -625,8 +633,9 @@ actor AgentRuntimeProcess {
     guard !isRestarting else {
       throw BridgeError.restarting
     }
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard
+      let authorizationSnapshot = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     else {
       throw BridgeError.authMissing
     }
@@ -745,8 +754,9 @@ actor AgentRuntimeProcess {
       _ = bridgeLifecycle.reduce(.restart)
       try Task.checkCancellation()
       try assertClientRegistration(clientId: clientId, registrationID: registrationID)
-      guard let authorizationSnapshot = authorizationSnapshot
-        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+      guard
+        let authorizationSnapshot = authorizationSnapshot
+          ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
       else {
         throw BridgeError.authMissing
       }
@@ -837,13 +847,14 @@ actor AgentRuntimeProcess {
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) {
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else { return }
-    sendJson(Self.warmupWireMessage(
-      clientId: clientId,
-      requestId: UUID().uuidString,
-      ownerId: authorizationSnapshot.ownerID,
-      sessionId: sessionId,
-      profileGeneration: profileGeneration
-    ))
+    sendJson(
+      Self.warmupWireMessage(
+        clientId: clientId,
+        requestId: UUID().uuidString,
+        ownerId: authorizationSnapshot.ownerID,
+        sessionId: sessionId,
+        profileGeneration: profileGeneration
+      ))
   }
 
   func configureDefaultExecutionProfile(
@@ -941,7 +952,7 @@ actor AgentRuntimeProcess {
     outcome: AgentContextSourceOutcome,
     capturedAtMs: Int,
     expiresAtMs: Int?,
-    payload: [String: Any],
+    payload: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot
   ) async throws -> AgentContextSourceUpdateReceipt {
     try assertAuthorization(authorizationSnapshot)
@@ -956,7 +967,7 @@ actor AgentRuntimeProcess {
       outcome: outcome,
       capturedAtMs: capturedAtMs,
       expiresAtMs: expiresAtMs,
-      payload: payload
+      payload: payload.value
     )
     let result = try await kernelContractRequest(
       payload: message,
@@ -1092,8 +1103,9 @@ actor AgentRuntimeProcess {
     prompt: String,
     mode: ExternalSurfaceRunMode
   ) async throws -> ExternalSurfaceRunBinding {
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: ownerID)
     else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
@@ -1170,8 +1182,9 @@ actor AgentRuntimeProcess {
     toolName: String,
     input: [String: Any]
   ) async throws -> String {
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: binding.ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: binding.ownerID)
     else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
@@ -1240,8 +1253,9 @@ actor AgentRuntimeProcess {
       }
       authorizationSnapshot = nil
     } else {
-      guard let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: binding.ownerID)
+      guard
+        let captured = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+          expectedOwnerID: binding.ownerID)
       else {
         throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
       }
@@ -1315,9 +1329,11 @@ actor AgentRuntimeProcess {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_changed")
     }
     if synchronizedRuntimeOwnerID == normalized { return }
-    guard refreshRuntimeOwner(
-      expectedOwnerId: normalized,
-      authorizationSnapshot: authorizationSnapshot) else {
+    guard
+      refreshRuntimeOwner(
+        expectedOwnerId: normalized,
+        authorizationSnapshot: authorizationSnapshot)
+    else {
       throw ExternalSurfaceAuthorityError(code: "external_surface_owner_handshake_failed")
     }
   }
@@ -1326,9 +1342,10 @@ actor AgentRuntimeProcess {
     _ capability: RuntimeOwnerTransitionCleanupCapability,
     previousOwnerID: String
   ) throws {
-    guard RuntimeOwnerIdentity.authorizesTransitionCleanup(
-      capability,
-      previousOwnerID: previousOwnerID)
+    guard
+      RuntimeOwnerIdentity.authorizesTransitionCleanup(
+        capability,
+        previousOwnerID: previousOwnerID)
     else {
       throw ExternalSurfaceAuthorityError(
         code: "external_surface_transition_cleanup_revoked")
@@ -1620,10 +1637,11 @@ actor AgentRuntimeProcess {
       throw BridgeError.agentError("Kernel contract request is missing tracing identity")
     }
     let operation = payload["type"] as? String ?? "unknown"
-    let deadlineNanoseconds = timeoutNanoseconds
+    let deadlineNanoseconds =
+      timeoutNanoseconds
       ?? AgentRuntimeKernelContractTimeoutPolicy.deadlineNanoseconds(for: operation)
     let requestKey = RuntimeMessage.RequestKey(clientId: clientId, requestId: requestId)
-    return try await withCheckedThrowingContinuation { continuation in
+    let box = try await withCheckedThrowingContinuation { continuation in
       activeKernelContractRequests[requestKey] = ActiveKernelContractRequest(
         clientId: clientId,
         requestId: requestId,
@@ -1658,6 +1676,7 @@ actor AgentRuntimeProcess {
         request.continuation.resume(throwing: BridgeError.timeout)
       }
     }
+    return box.value
   }
 
   private func trimTimedOutKernelContractRequests() {
@@ -1968,7 +1987,6 @@ actor AgentRuntimeProcess {
     return dictionary
   }
 
-
   private func markRuntimeOwnerAuthorityDirty() {
     cancelAuthorizedToolExecutionTasks()
     runtimeOwnerAuthorityEpoch &+= 1
@@ -2087,11 +2105,12 @@ actor AgentRuntimeProcess {
     clientId: String,
     harnessMode: String,
     name: String,
-    input: [String: Any],
+    input: RuntimeJSONPayloadBox,
     authorizationSnapshot: RuntimeOwnerAuthorizationSnapshot? = nil
   ) async throws -> String {
-    guard let authorizationSnapshot = authorizationSnapshot
-      ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
+    guard
+      let authorizationSnapshot = authorizationSnapshot
+        ?? RuntimeOwnerIdentity.captureAuthorizationSnapshot()
     else {
       throw BridgeError.authMissing
     }
@@ -2101,34 +2120,34 @@ actor AgentRuntimeProcess {
       clientId: clientId,
       harnessMode: harnessMode,
       name: name,
-      input: input,
+      input: input.value,
       ownerId: ownerId,
       authorizationSnapshot: authorizationSnapshot
     )
   }
 
-#if DEBUG
-  func debugAutomationControlTool(
-    clientId: String,
-    harnessMode: String,
-    name: String,
-    input: [String: Any],
-    ownerId: String
-  ) async throws -> String {
-    guard AppBuild.isNonProduction else {
-      throw BridgeError.agentError("Automation control is disabled on production bundles")
+  #if DEBUG
+    func debugAutomationControlTool(
+      clientId: String,
+      harnessMode: String,
+      name: String,
+      input: RuntimeJSONPayloadBox,
+      ownerId: String
+    ) async throws -> String {
+      guard AppBuild.isNonProduction else {
+        throw BridgeError.agentError("Automation control is disabled on production bundles")
+      }
+      return try await sendDirectControlTool(
+        clientId: clientId,
+        harnessMode: harnessMode,
+        name: name,
+        input: input.value,
+        ownerId: ownerId,
+        authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+          expectedOwnerID: ownerId)
+      )
     }
-    return try await sendDirectControlTool(
-      clientId: clientId,
-      harnessMode: harnessMode,
-      name: name,
-      input: input,
-      ownerId: ownerId,
-      authorizationSnapshot: RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-        expectedOwnerID: ownerId)
-    )
-  }
-#endif
+  #endif
 
   private func sendDirectControlTool(
     clientId: String,
@@ -2505,11 +2524,11 @@ actor AgentRuntimeProcess {
     env["HARNESS_MODE"] = preferredHarnessMode
     env["OMI_AGENT_STATE_DIR"] = Self.defaultStateDirectory()
     env["OMI_AGENT_ARTIFACTS_DIR"] = Self.defaultArtifactsDirectory()
-#if DEBUG
-    if AppBuild.isNonProduction {
-      env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
-    }
-#endif
+    #if DEBUG
+      if AppBuild.isNonProduction {
+        env["OMI_AGENT_ALLOW_CONTROL_ONLY"] = "1"
+      }
+    #endif
     env.removeValue(forKey: "ANTHROPIC_API_KEY")
     env.removeValue(forKey: "CLAUDE_CODE_USE_VERTEX")
     applyLocalAgentEnvironment(to: &env)
@@ -2667,13 +2686,9 @@ actor AgentRuntimeProcess {
     }
 
     let adapterPathDirs = Self.localAdapterSearchDirectories(home: home)
-    let trustedPathDirs = [
-      "/opt/homebrew/bin",
-      "/usr/local/bin",
-    ]
     let existingPath = env["PATH"] ?? "/usr/bin:/bin"
     var pathElements: [String] = []
-    for path in existingPath.split(separator: ":").map(String.init) + trustedPathDirs + adapterPathDirs {
+    for path in existingPath.split(separator: ":").map(String.init) + adapterPathDirs {
       if !pathElements.contains(path) {
         pathElements.append(path)
       }
@@ -2684,19 +2699,21 @@ actor AgentRuntimeProcess {
     // the Node registry. PTT receives only the registry projection later; it
     // never performs a competing executable lookup of its own.
     if env["OMI_HERMES_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      case let .available(command: hermes) = LocalAgentProviderDetector.availability(
+      case .available(command: let hermes) = LocalAgentProviderDetector.availability(
         for: .hermes,
         environment: env,
-        homeDirectory: home).status
+        homeDirectory: home
+      ).status
     {
       env["OMI_HERMES_ADAPTER_COMMAND"] = "\(Self.shellQuote(hermes)) acp"
     }
 
     if env["OMI_OPENCLAW_ADAPTER_COMMAND"]?.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ?? true,
-      case let .available(command: openClaw) = LocalAgentProviderDetector.availability(
+      case .available(command: let openClaw) = LocalAgentProviderDetector.availability(
         for: .openclaw,
         environment: env,
-        homeDirectory: home).status
+        homeDirectory: home
+      ).status
     {
       env["OMI_OPENCLAW_ADAPTER_COMMAND"] = Self.openClawAdapterCommand(openClawPath: openClaw)
     }
@@ -2751,6 +2768,12 @@ actor AgentRuntimeProcess {
     home: String,
     fileManager: FileManager = .default
   ) -> [String] {
+    let adapterPathDirs = [
+      "\(home)/.hermes/hermes-agent/venv/bin",
+      "\(home)/.hermes/node/bin",
+      "\(home)/.hermes/hermes-agent",
+      "\(home)/.local/bin",
+    ]
     let managedNodeRoots = [
       "\(home)/.nvm/versions/node",
       "\(home)/.fnm/node-versions",
@@ -2760,15 +2783,14 @@ actor AgentRuntimeProcess {
     ]
     // User-managed Node installations take precedence over machine-wide fallbacks.
     return Self.uniquePaths(
-      [
-        "\(home)/.hermes/hermes-agent/venv/bin",
-        "\(home)/.hermes/node/bin",
-        "\(home)/.hermes/hermes-agent",
-        "\(home)/.local/bin",
-      ] + managedNodeRoots.flatMap { Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager) } + [
-        "/opt/homebrew/bin",
-        "/usr/local/bin",
-      ])
+      adapterPathDirs
+        + managedNodeRoots.flatMap {
+          Self.nodeInstallBinDirectories(root: $0, fileManager: fileManager)
+        }
+        + [
+          "/opt/homebrew/bin",
+          "/usr/local/bin",
+        ])
   }
 
   private static func nodeInstallBinDirectories(root: String, fileManager: FileManager) -> [String] {
@@ -2826,8 +2848,8 @@ actor AgentRuntimeProcess {
     case .agentError:
       return .incompatibleHandshake
     case .nodeNotFound, .bridgeScriptNotFound, .notRunning, .encodingError,
-         .failedToStart, .stopped, .restarting, .requestAlreadyActive,
-         .agentRuntimeFailure, .quotaExceeded, .authMissing:
+      .failedToStart, .stopped, .restarting, .requestAlreadyActive,
+      .agentRuntimeFailure, .quotaExceeded, .authMissing:
       return .launchFailed
     }
   }
@@ -3011,8 +3033,9 @@ actor AgentRuntimeProcess {
 
   private func handleMessage(_ message: RuntimeMessage) {
     if let request = routedRequest(for: message), let surfaceRef = request.surfaceRef {
+      let authorizationSnapshot = request.authorizationSnapshot
       Task { @MainActor in
-        guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot) else {
+        guard RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot) else {
           return
         }
         AgentRuntimeStatusStore.shared.ingest(message: message, surface: surfaceRef)
@@ -3051,7 +3074,8 @@ actor AgentRuntimeProcess {
         request.onAuthRequired(methods, authUrl)
       } else if message.requestKey == nil {
         let eventOwnerID = message.payload["ownerId"] as? String
-        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+        for client in clients.values
+        where client.authAuthorizationSnapshot.map({ snapshot in
           RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
             && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
         }) == true {
@@ -3064,7 +3088,8 @@ actor AgentRuntimeProcess {
         request.onAuthSuccess()
       } else if message.requestKey == nil {
         let eventOwnerID = message.payload["ownerId"] as? String
-        for client in clients.values where client.authAuthorizationSnapshot.map({ snapshot in
+        for client in clients.values
+        where client.authAuthorizationSnapshot.map({ snapshot in
           RuntimeOwnerIdentity.isAuthorizationCurrent(snapshot)
             && (eventOwnerID == nil || snapshot.ownerID == eventOwnerID)
         }) == true {
@@ -3206,7 +3231,7 @@ actor AgentRuntimeProcess {
       request.continuation.resume(throwing: BridgeError.authMissing)
       return
     }
-    request.continuation.resume(returning: message.payload)
+    request.continuation.resume(returning: RuntimeJSONPayloadBox(message.payload))
   }
 
   private func handleAuthorizedToolExecution(_ message: RuntimeMessage) {
@@ -3231,8 +3256,9 @@ actor AgentRuntimeProcess {
       return
     }
 
-    guard let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
-      expectedOwnerID: command.ownerID)
+    guard
+      let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot(
+        expectedOwnerID: command.ownerID)
     else {
       completeAuthorizedToolExecution(
         command: command,
@@ -3347,9 +3373,10 @@ actor AgentRuntimeProcess {
     command: AuthorizedToolExecution,
     executionResult: AuthorizedRealtimeToolExecutionResult
   ) {
-    sendJson(Self.authorizedToolExecutionResultWireMessage(
-      command: command,
-      executionResult: executionResult))
+    sendJson(
+      Self.authorizedToolExecutionResultWireMessage(
+        command: command,
+        executionResult: executionResult))
   }
 
   static func authorizedToolExecutionResultWireMessage(
@@ -3434,11 +3461,11 @@ actor AgentRuntimeProcess {
     let activeOwnerEpoch = observeDirectControlOwner(activeOwnerId)
     guard RuntimeOwnerIdentity.isAuthorizationCurrent(request.authorizationSnapshot),
       Self.isDirectControlResultOwnerCurrent(
-      expectedOwnerId: request.expectedOwnerId,
-      expectedOwnerEpoch: request.expectedOwnerEpoch,
-      resultOwnerId: message.payload["ownerId"] as? String,
-      currentOwnerId: activeOwnerId,
-      currentOwnerEpoch: activeOwnerEpoch)
+        expectedOwnerId: request.expectedOwnerId,
+        expectedOwnerEpoch: request.expectedOwnerEpoch,
+        resultOwnerId: message.payload["ownerId"] as? String,
+        currentOwnerId: activeOwnerId,
+        currentOwnerEpoch: activeOwnerEpoch)
     else {
       log("AgentRuntimeProcess: rejecting stale direct control result for owner transition")
       request.continuation.resume(
@@ -3514,19 +3541,22 @@ actor AgentRuntimeProcess {
       )
     }
     let highWaterTurnSeq = message.payload["highWaterTurnSeq"] as? Int ?? 0
-    let generationBaseTurnSeq = message.payload["generationBaseTurnSeq"] as? Int
+    let generationBaseTurnSeq =
+      message.payload["generationBaseTurnSeq"] as? Int
       ?? turns.map(\.turnSeq).min().map { max(0, $0 - 1) }
       ?? (conversationGeneration > 1 ? highWaterTurnSeq : 0)
-    request.continuation.resume(returning: JournalOperationResult(
-      operation: message.payload["operation"] as? String ?? "",
-      conversationId: message.payload["conversationId"] as? String ?? turn?.conversationId ?? turns.first?.conversationId ?? "",
-      turn: turn,
-      turns: turns,
-      clearedCount: message.payload["clearedCount"] as? Int ?? 0,
-      highWaterTurnSeq: highWaterTurnSeq,
-      conversationGeneration: conversationGeneration,
-      generationBaseTurnSeq: generationBaseTurnSeq
-    ))
+    request.continuation.resume(
+      returning: JournalOperationResult(
+        operation: message.payload["operation"] as? String ?? "",
+        conversationId: message.payload["conversationId"] as? String ?? turn?.conversationId ?? turns.first?
+          .conversationId ?? "",
+        turn: turn,
+        turns: turns,
+        clearedCount: message.payload["clearedCount"] as? Int ?? 0,
+        highWaterTurnSeq: highWaterTurnSeq,
+        conversationGeneration: conversationGeneration,
+        generationBaseTurnSeq: generationBaseTurnSeq
+      ))
   }
 
   private func journalTurn(from message: RuntimeMessage) -> KernelJournalTurn? {
@@ -3800,7 +3830,8 @@ actor AgentRuntimeProcess {
         return
       }
       log("AgentRuntimeProcess: control tool error (raw): \(raw)")
-      controlRequest.continuation.resume(throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
+      controlRequest.continuation.resume(
+        throwing: failure.map(BridgeError.agentRuntimeFailure) ?? BridgeError.agentError(raw))
       return
     }
     if let requestKey = message.requestKey,
@@ -4012,9 +4043,11 @@ actor AgentRuntimeProcess {
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> String {
-    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+    let bundleComponent =
+      (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
       ?? "com.omi.desktop-dev"
-    return homeDirectory
+    return
+      homeDirectory
       .appendingPathComponent("Library")
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
@@ -4027,9 +4060,11 @@ actor AgentRuntimeProcess {
     bundleIdentifier: String? = Bundle.main.bundleIdentifier,
     homeDirectory: URL = FileManager.default.homeDirectoryForCurrentUser
   ) -> String {
-    let bundleComponent = (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
+    let bundleComponent =
+      (bundleIdentifier?.isEmpty == false ? bundleIdentifier : "com.omi.desktop-dev")
       ?? "com.omi.desktop-dev"
-    return homeDirectory
+    return
+      homeDirectory
       .appendingPathComponent("Library")
       .appendingPathComponent("Application Support")
       .appendingPathComponent("Omi")
@@ -4083,7 +4118,8 @@ actor AgentRuntimeProcess {
   }
 
   private func findNodeBinary() -> String? {
-    let bundleURLs = [Bundle.main.bundleURL]
+    let bundleURLs =
+      [Bundle.main.bundleURL]
       + Bundle.allBundles.map(\.bundleURL)
       + Bundle.allFrameworks.map(\.bundleURL)
     for bundledNode in Self.runtimeResourceExecutableCandidates(

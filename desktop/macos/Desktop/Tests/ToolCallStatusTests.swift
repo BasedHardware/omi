@@ -196,7 +196,8 @@ final class ToolCallStatusTests: XCTestCase {
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
-          case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1] else {
+      case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1]
+    else {
       return XCTFail("Expected text before the tool call")
     }
   }
@@ -212,7 +213,8 @@ final class ToolCallStatusTests: XCTestCase {
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .thinking(_, "Thinking.") = messages[0].contentBlocks[0],
-          case .text(_, "Answer.") = messages[0].contentBlocks[1] else {
+      case .text(_, "Answer.") = messages[0].contentBlocks[1]
+    else {
       return XCTFail("Expected thinking before answer text")
     }
   }
@@ -230,8 +232,9 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(messages[0].text, "AC")
     XCTAssertEqual(messages[0].contentBlocks.count, 3)
     guard case .text(_, "A") = messages[0].contentBlocks[0],
-          case .thinking(_, "B") = messages[0].contentBlocks[1],
-          case .text(_, "C") = messages[0].contentBlocks[2] else {
+      case .thinking(_, "B") = messages[0].contentBlocks[1],
+      case .text(_, "C") = messages[0].contentBlocks[2]
+    else {
       return XCTFail("Expected text, thinking, text block order")
     }
   }
@@ -259,9 +262,11 @@ final class ToolCallStatusTests: XCTestCase {
     let staleFlush = expectation(description: "scheduled flush should be cancelled by manual flush")
     staleFlush.isInverted = true
 
-    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {
-      staleFlush.fulfill()
-    })
+    buffer.appendText(
+      messageId: messageId, text: "Before tool.",
+      scheduleFlush: {
+        staleFlush.fulfill()
+      })
     buffer.flush(messages: &messages)
 
     wait(for: [staleFlush], timeout: 0.05)

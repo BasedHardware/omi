@@ -558,7 +558,7 @@ class ResourceMonitor {
 
     guard result == KERN_SUCCESS else { return 0 }
 
-    let pageSize = UInt64(vm_kernel_page_size)
+    let pageSize = UInt64(getpagesize())
     let totalRAM = ProcessInfo.processInfo.physicalMemory
 
     // Active + Wired + Compressed = memory in use

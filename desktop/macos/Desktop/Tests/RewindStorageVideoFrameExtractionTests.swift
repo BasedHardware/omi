@@ -1,5 +1,5 @@
-import AppKit
 import AVFoundation
+import AppKit
 import XCTest
 
 @testable import Omi_Computer
@@ -37,8 +37,9 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: fullPath.path), "precondition: MP4 chunk written")
 
-    let frame = try await RewindStorage.shared.loadVideoFrame(videoPath: relativePath, frameOffset: 1)
-    let center = try XCTUnwrap(centerPixel(in: frame))
+    let center = try await RewindStorage.shared.videoFrameCenterPixelForTesting(
+      videoPath: relativePath,
+      frameOffset: 1)
 
     XCTAssertGreaterThan(center.green, center.red)
     XCTAssertGreaterThan(center.green, center.blue)
@@ -46,12 +47,14 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
 
   func testLoadVideoFrameUsesSampleOrdinalForLowCadenceChunks() async throws {
     let relativePath = "2026-07-04/chunk_low_cadence_frame_selection.mp4"
-    let fullPath = try await createChunk(relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 1.0 / 3.0)
+    let fullPath = try await createChunk(
+      relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 1.0 / 3.0)
 
     XCTAssertTrue(FileManager.default.fileExists(atPath: fullPath.path), "precondition: MP4 chunk written")
 
-    let frame = try await RewindStorage.shared.loadVideoFrame(videoPath: relativePath, frameOffset: 1)
-    let center = try XCTUnwrap(centerPixel(in: frame))
+    let center = try await RewindStorage.shared.videoFrameCenterPixelForTesting(
+      videoPath: relativePath,
+      frameOffset: 1)
 
     XCTAssertGreaterThan(center.green, center.red)
     XCTAssertGreaterThan(center.green, center.blue)
@@ -99,7 +102,7 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     _ = try await createChunk(relativePath: relativePath, colors: [.red, .green, .blue], frameRate: 2.0)
 
     do {
-      _ = try await RewindStorage.shared.loadVideoFrame(videoPath: relativePath, frameOffset: 99)
+      try await RewindStorage.shared.verifyVideoFrameLoadForTesting(videoPath: relativePath, frameOffset: 99)
       XCTFail("Expected missing frame offset to be reported as screenshotNotFound")
     } catch RewindError.screenshotNotFound {
       // Expected: mirrors ffmpeg select=eq(n,offset) producing no frame.
@@ -188,15 +191,17 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     let writer = try AVAssetWriter(outputURL: outputURL, fileType: .mp4)
     writer.shouldOptimizeForNetworkUse = true
 
-    let input = AVAssetWriterInput(mediaType: .video, outputSettings: [
-      AVVideoCodecKey: AVVideoCodecType.hevc,
-      AVVideoWidthKey: width,
-      AVVideoHeightKey: height,
-      AVVideoCompressionPropertiesKey: [
-        AVVideoExpectedSourceFrameRateKey: expectedSourceFrameRate,
-        AVVideoAllowFrameReorderingKey: false,
-      ],
-    ])
+    let input = AVAssetWriterInput(
+      mediaType: .video,
+      outputSettings: [
+        AVVideoCodecKey: AVVideoCodecType.hevc,
+        AVVideoWidthKey: width,
+        AVVideoHeightKey: height,
+        AVVideoCompressionPropertiesKey: [
+          AVVideoExpectedSourceFrameRateKey: expectedSourceFrameRate,
+          AVVideoAllowFrameReorderingKey: false,
+        ],
+      ])
     input.expectsMediaDataInRealTime = true
 
     guard writer.canAdd(input) else {
@@ -232,7 +237,8 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
       )
       let time = CMTime(seconds: presentationTimes[index], preferredTimescale: 600)
       guard adaptor.append(pixelBuffer, withPresentationTime: time) else {
-        throw RewindError.storageError("Failed to append test frame: \(writer.error?.localizedDescription ?? "unknown")")
+        throw RewindError.storageError(
+          "Failed to append test frame: \(writer.error?.localizedDescription ?? "unknown")")
       }
     }
 
@@ -290,39 +296,63 @@ final class RewindStorageVideoFrameExtractionTests: XCTestCase {
     CVPixelBufferLockBaseAddress(buffer, [])
     defer { CVPixelBufferUnlockBaseAddress(buffer, []) }
 
-    let context = try XCTUnwrap(CGContext(
-      data: CVPixelBufferGetBaseAddress(buffer),
-      width: width,
-      height: height,
-      bitsPerComponent: 8,
-      bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
-      space: CGColorSpaceCreateDeviceRGB(),
-      bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
-    ))
+    let context = try XCTUnwrap(
+      CGContext(
+        data: CVPixelBufferGetBaseAddress(buffer),
+        width: width,
+        height: height,
+        bitsPerComponent: 8,
+        bytesPerRow: CVPixelBufferGetBytesPerRow(buffer),
+        space: CGColorSpaceCreateDeviceRGB(),
+        bitmapInfo: CGImageAlphaInfo.premultipliedFirst.rawValue | CGBitmapInfo.byteOrder32Little.rawValue
+      ))
 
     context.setFillColor(color.cgColor)
     context.fill(CGRect(x: 0, y: 0, width: width, height: height))
     return buffer
   }
 
-  private func centerPixel(in image: NSImage) -> (red: Int, green: Int, blue: Int)? {
-    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-      return nil
-    }
+}
 
-    let bitmap = NSBitmapImageRep(cgImage: cgImage)
-    let x = max(0, bitmap.pixelsWide / 2)
-    let y = max(0, bitmap.pixelsHigh / 2)
-    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
-      return nil
-    }
+private struct VideoFrameCenterPixel: Sendable {
+  let red: Int
+  let green: Int
+  let blue: Int
+}
 
-    return (
-      red: Int(color.redComponent * 255),
-      green: Int(color.greenComponent * 255),
-      blue: Int(color.blueComponent * 255)
-    )
+extension RewindStorage {
+  fileprivate func videoFrameCenterPixelForTesting(videoPath: String, frameOffset: Int) async throws
+    -> VideoFrameCenterPixel
+  {
+    let image = try await loadVideoFrame(videoPath: videoPath, frameOffset: frameOffset)
+    guard let center = centerPixel(in: image) else {
+      throw RewindError.invalidImage
+    }
+    return VideoFrameCenterPixel(red: center.red, green: center.green, blue: center.blue)
   }
+
+  fileprivate func verifyVideoFrameLoadForTesting(videoPath: String, frameOffset: Int) async throws {
+    _ = try await loadVideoFrame(videoPath: videoPath, frameOffset: frameOffset)
+  }
+}
+
+private func centerPixel(in image: NSImage) -> (red: Int, green: Int, blue: Int)? {
+  guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+    return nil
+  }
+
+  let bitmap = NSBitmapImageRep(cgImage: cgImage)
+  let x = max(0, bitmap.pixelsWide / 2)
+  let y = max(0, bitmap.pixelsHigh / 2)
+  guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+    return nil
+  }
+
+  return (
+    red: Int(color.redComponent * 255),
+    green: Int(color.greenComponent * 255),
+    blue: Int(color.blueComponent * 255)
+  )
 }
 
 private final class TestAssetWriterBox: @unchecked Sendable {

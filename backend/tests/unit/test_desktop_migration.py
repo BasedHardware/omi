@@ -100,6 +100,15 @@ for mod_name in [
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CHAT = "chat"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]

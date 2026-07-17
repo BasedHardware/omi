@@ -1,6 +1,6 @@
-import SwiftUI
 import AppKit
 import OmiTheme
+import SwiftUI
 
 struct ExcludedAppRow: View {
   let appName: String
@@ -36,8 +36,6 @@ struct ExcludedAppRow: View {
     }
   }
 }
-
-
 
 struct AppRuleEditorView: View {
   let title: String
@@ -248,11 +246,11 @@ struct RunningAppChip: View {
 }
 
 #if canImport(PreviewsMacros)
-#Preview {
-  SettingsPage(
-    appState: AppState(),
-    selectedSection: .constant(.advanced),
-    highlightedSettingId: .constant(nil)
-  )
-}
+  #Preview {
+    SettingsPage(
+      appState: AppState(),
+      selectedSection: .constant(.advanced),
+      highlightedSettingId: .constant(nil)
+    )
+  }
 #endif

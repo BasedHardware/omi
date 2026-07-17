@@ -6,6 +6,7 @@ SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 SCRIPT_PATH="$SCRIPT_DIR/$(basename "$0")"
 MACOS_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
 SKIP_RATCHET="$SCRIPT_DIR/swift-test-skip-ratchet.py"
+MAIN_ACTOR_XCTEST_HOOK_GUARD="$SCRIPT_DIR/check-main-actor-xctest-hooks.py"
 TESTS_ROOT="${OMI_SWIFT_TEST_DISCOVERY_ROOT:-$MACOS_DIR/Desktop/Tests}"
 PACKAGE_PATH="${OMI_SWIFT_TEST_PACKAGE_PATH:-Desktop}"
 # Each suite runs in an independent SwiftPM process because of process-global
@@ -66,6 +67,7 @@ fi
 if [ -z "${OMI_SWIFT_TEST_DISCOVERY_ROOT:-}" ]; then
   python3 "$SCRIPT_DIR/tests/test_check_desktop_test_quality.py"
   python3 "$SCRIPT_DIR/check_desktop_test_quality.py"
+  python3 "$MAIN_ACTOR_XCTEST_HOOK_GUARD"
 fi
 
 # Discover suites recursively so tests in subfolders of Desktop/Tests are not

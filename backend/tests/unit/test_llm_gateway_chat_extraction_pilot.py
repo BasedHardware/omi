@@ -50,6 +50,16 @@ class FakeGatewayResponse:
         return self.body
 
 
+class ErrorGatewayResponse:
+    def __init__(self, status_code):
+        self.status_code = status_code
+
+    def raise_for_status(self):
+        request = gateway_client.httpx.Request('POST', 'http://gateway.test/v1/chat/completions')
+        response = gateway_client.httpx.Response(self.status_code, request=request)
+        raise gateway_client.httpx.HTTPStatusError('gateway request failed', request=request, response=response)
+
+
 class FakeGatewayClient:
     """Fake ``httpx.Client`` for tests. Returns a canned response from post()."""
 
@@ -356,6 +366,43 @@ def test_chat_structured_gateway_records_fallback_reason_metric(monkeypatch):
             1,
         )
     ]
+
+
+def test_chat_structured_gateway_propagates_configuration_http_errors(monkeypatch):
+    counter = FakeCounter()
+    monkeypatch.setattr(gateway_observability, 'LLM_GATEWAY_CHAT_EXTRACTION_REQUESTS', counter)
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: ErrorGatewayResponse(503))
+
+    with pytest.raises(gateway_client.httpx.HTTPStatusError):
+        gateway_client.invoke_chat_structured_gateway(
+            'classified prompt',
+            chat.RequiresContext,
+            feature='chat_extraction.requires_context',
+        )
+
+    assert counter.calls == [
+        (
+            {
+                'feature': 'chat_extraction.requires_context',
+                'mode': 'error',
+                'outcome': 'error',
+                'reason': 'http_503',
+            },
+            1,
+        )
+    ]
+
+
+def test_chat_structured_gateway_falls_back_on_hard_proxy_http_errors(monkeypatch):
+    _mock_gateway_client(monkeypatch, lambda *args, **kwargs: ErrorGatewayResponse(502))
+
+    result = gateway_client.invoke_chat_structured_gateway(
+        'classified prompt',
+        chat.RequiresContext,
+        feature='chat_extraction.requires_context',
+    )
+
+    assert result is None
 
 
 def test_chat_structured_gateway_failure_does_not_log_raw_prompt_or_response(monkeypatch, caplog):
