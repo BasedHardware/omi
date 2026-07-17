@@ -5,6 +5,8 @@ on:
     branches: main
     paths:
       - 'backend/**'
+      - 'package.json'
+      - 'package-lock.json'
       - '.github/workflows/backend-hermetic-e2e.yml'
   workflow_dispatch:
 
@@ -47,3 +49,53 @@ jobs:
         env:
           E2E_PYTEST_TIMEOUT: 120s
         run: bash backend/testing/e2e/run.sh -q --tb=short
+
+  listen-pusher-stack-gauntlet:
+    name: Listen Pusher Stack Gauntlet
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version-file: backend/.python-version
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+        with:
+          enable-cache: true
+          cache-dependency-glob: backend/pylock*.toml
+
+      - name: Install backend dependencies in the gauntlet virtualenv
+        working-directory: backend
+        run: |
+          uv venv .venv
+          uv pip sync pylock.toml --python .venv/bin/python
+
+      - name: Set up Node.js for the Firestore emulator
+        uses: actions/setup-node@v7
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install pinned Firebase CLI dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Set up Java for the Firestore emulator
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      - name: Install Redis server
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes redis-server
+
+      - name: Run listen to pusher stack gauntlet
+        run: npm run test:listen-pusher-stack:emulator
