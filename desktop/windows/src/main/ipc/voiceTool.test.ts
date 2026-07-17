@@ -13,10 +13,13 @@ import { mkdtempSync, rmSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { DatabaseSync } from 'node:sqlite'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { AgentRuntimeKernel } from '../agentKernel/kernel'
 import { AdapterRegistry } from '../agentKernel/adapterRegistry'
 import { SqliteAgentStore, type DatabaseFactory } from '../agentKernel/store'
+import { executeHostTool } from '../agentKernel/toolRelayBridge'
+import { createUpdateActionItemExecutor } from '../agentKernel/productToolExecutors'
+import type { ActionItemRecord } from '../../shared/types'
 import {
   buildVoiceHubToolCatalog,
   executeVoiceHubTool,
@@ -173,5 +176,48 @@ describe('executeVoiceHubTool — in-process dispatch via executeHostTool', () =
       ready(kernel)
     )
     expect(JSON.parse(out).ok).toBe(true)
+  })
+})
+
+describe('advertised voice schema ↔ executor param contract (regression)', () => {
+  // A voice tool's schemaOverride is what the model fills, and executeHostTool passes
+  // those args to the executor with NO remap — so the advertised required param name
+  // MUST be the one the executor reads. Regression: update_action_item advertised its
+  // required id as `id` while the executor reads `action_item_id` (findByBackendId),
+  // so every voice-driven update bounced on "action_item_id is required". Drive the
+  // REAL executor through the REAL dispatch with the advertised required param.
+  it('a voice update_action_item using the advertised required param actually updates', async () => {
+    const decl = buildVoiceHubToolCatalog('coordinator').find(
+      (t) => t.name === 'update_action_item'
+    )
+    expect(decl).toBeDefined()
+    const required = (decl!.parameters as { required?: string[] }).required ?? []
+    // The advertised required id param must be the one the executor consumes.
+    expect(required).toEqual(['action_item_id'])
+
+    const updateTask = vi.fn(async () => {})
+    const task = { backendId: 'b1', description: 'old' } as unknown as ActionItemRecord
+    const executor = createUpdateActionItemExecutor({
+      findByBackendId: vi.fn(async (id: string) => (id === 'b1' ? task : null)),
+      toggleTask: vi.fn(async () => {}),
+      updateTask,
+      deleteTask: vi.fn(async () => {})
+    })
+
+    const out = await executeHostTool(
+      'update_action_item',
+      { [required[0]]: 'b1', description: 'new' },
+      {
+        kernel: newKernel(),
+        sessionId: 'sess-1',
+        adapterId: 'pi-mono',
+        productExecutors: new Map([['update_action_item', executor]])
+      }
+    )
+
+    // It must reach the executor and apply the change — not bounce on the arg-name guard.
+    expect(out).not.toMatch(/action_item_id is required/)
+    expect(out).toBe("OK: task 'old' updated")
+    expect(updateTask).toHaveBeenCalledWith('b1', { description: 'new' })
   })
 })

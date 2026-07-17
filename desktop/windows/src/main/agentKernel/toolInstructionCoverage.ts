@@ -201,6 +201,86 @@ export function analyzeSurfaceCoverage(input: SurfaceCoverageInput): SurfaceCove
   }
 }
 
+// ── Second surface of the SAME bug class: a tool's own advertised COPY ──────────
+// The instruction-prose reverse-check above catches a system prompt that names an
+// unadvertised tool. But a tool's DECLARATION also reaches the model: its
+// description and its parameter descriptions. If an advertised tool's own copy tells
+// the model to "prefer get_tasks" / "first call get_tasks" while get_tasks is not
+// advertised to this surface, the model is pointed at a tool it cannot call — the
+// exact bug that shipped in the voice manifest (update_action_item / get_action_items
+// naming get_tasks). This is the parallel reverse-check over each advertised tool's
+// model-facing copy. Same robustness rule: scan only KNOWN tool names, and treat a
+// self-reference or a reference to ANOTHER advertised tool as fine.
+
+/** One advertised tool's model-facing copy: its description plus every parameter
+ *  description the surface hands the model. Derived by the caller straight from the
+ *  advertised catalog declaration, so it never drifts from what the model sees. */
+export interface AdvertisedToolCopy {
+  name: string
+  description: string
+  parameterDescriptions: readonly string[]
+}
+
+export interface ToolCopyCoverageInput {
+  surface: string
+  /** Every tool advertised to this surface, with the copy the model reads for it. */
+  advertised: readonly AdvertisedToolCopy[]
+  /** The full manifest tool-name universe (the reverse-check needle set). */
+  knownToolNames: readonly string[]
+  /** `guard:allow` — known tool names an advertised tool's copy may reference though
+   *  they are unadvertised here, keyed to a required human reason. */
+  allow?: Readonly<Record<string, string>>
+}
+
+/** One offending advertised tool: the unadvertised known tools its copy names. */
+export interface ToolCopyOffender {
+  tool: string
+  references: string[]
+}
+
+export interface ToolCopyCoverageResult {
+  surface: string
+  advertisedCount: number
+  offenders: ToolCopyOffender[]
+  fails: boolean
+  message: string
+}
+
+/** Scan each advertised tool's own description + parameter descriptions for the name
+ *  of a KNOWN tool that is NOT advertised to this surface (and not allow-listed) —
+ *  a description that points the model at an uncallable tool. Pure. */
+export function analyzeAdvertisedToolCopy(input: ToolCopyCoverageInput): ToolCopyCoverageResult {
+  const advertisedNames = new Set(input.advertised.map((tool) => tool.name))
+  const allow = input.allow ?? {}
+  const known = [...new Set(input.knownToolNames)]
+  const offenders: ToolCopyOffender[] = []
+
+  for (const tool of input.advertised) {
+    const copy = [tool.description, ...tool.parameterDescriptions].join('\n')
+    const references = known.filter(
+      (name) =>
+        name !== tool.name && // a tool naming itself is fine
+        !advertisedNames.has(name) && // naming another advertised tool is fine
+        !(name in allow) &&
+        instructionMentions(copy, name)
+    )
+    if (references.length > 0) offenders.push({ tool: tool.name, references })
+  }
+
+  const fails = offenders.length > 0
+  return {
+    surface: input.surface,
+    advertisedCount: input.advertised.length,
+    offenders,
+    fails,
+    message: fails
+      ? `Advertised tools on "${input.surface}" whose copy names an unadvertised tool: ` +
+        `${offenders.map((o) => `${o.tool} → ${o.references.join(', ')}`).join('; ')}.`
+      : `No advertised tool on "${input.surface}" names an unadvertised tool in its copy ` +
+        `(${input.advertised.length} scanned).`
+  }
+}
+
 export interface CoverageReport {
   results: SurfaceCoverageResult[]
   /** Results that fail the guard (`violation` or `pending-stale`). */

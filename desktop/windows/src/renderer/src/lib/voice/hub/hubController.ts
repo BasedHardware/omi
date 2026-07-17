@@ -25,7 +25,7 @@
 //      seam only — no retry timers, strike counters, or failover policy here.
 //
 // This module is NOT wired into the live PTT path in PR-5 (PR-6 does that behind
-// the `pttHubEnabled` kill-switch, default OFF). Every collaborator — provider
+// the `pttHubEnabled` kill-switch, default ON). Every collaborator — provider
 // session, token mint, provider resolver, instruction builder, clock — is an
 // injected seam so the whole controller is exercised hermetically against fakes.
 //
