@@ -5740,7 +5740,8 @@
             "enum": [
               "task",
               "goal",
-              "capture"
+              "capture",
+              "cold_start"
             ],
             "title": "Kind",
             "type": "string"
@@ -6102,6 +6103,66 @@
           }
         },
         "title": "ClickUpTeamsResponse",
+        "type": "object"
+      },
+      "ColdStartSequence": {
+        "additionalProperties": false,
+        "description": "Explicit local-only identity for the fixed sparse cold-start script.",
+        "properties": {
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "step": {
+            "maximum": 3.0,
+            "minimum": 1.0,
+            "title": "Step",
+            "type": "integer"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "step"
+        ],
+        "title": "ColdStartSequence",
+        "type": "object"
+      },
+      "ColdStartSequenceTerminalReceipt": {
+        "additionalProperties": false,
+        "description": "A durable local-journal acknowledgement that sparse sequencing ended.",
+        "properties": {
+          "receipt_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Receipt Id",
+            "type": "string"
+          },
+          "sequence_id": {
+            "maxLength": 128,
+            "minLength": 1,
+            "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+            "title": "Sequence Id",
+            "type": "string"
+          },
+          "terminal_state": {
+            "enum": [
+              "completed",
+              "abandoned"
+            ],
+            "title": "Terminal State",
+            "type": "string"
+          }
+        },
+        "required": [
+          "sequence_id",
+          "receipt_id",
+          "terminal_state"
+        ],
+        "title": "ColdStartSequenceTerminalReceipt",
         "type": "object"
       },
       "ContextMatchSignal": {
@@ -12564,10 +12625,23 @@
       "MaterializePromptsRequest": {
         "additionalProperties": false,
         "properties": {
+          "cold_start_sequence_terminal_receipts": {
+            "items": {
+              "$ref": "#/components/schemas/ColdStartSequenceTerminalReceipt"
+            },
+            "maxItems": 16,
+            "title": "Cold Start Sequence Terminal Receipts",
+            "type": "array"
+          },
           "control_generation": {
             "minimum": 0.0,
             "title": "Control Generation",
             "type": "integer"
+          },
+          "initial_page_loaded": {
+            "default": false,
+            "title": "Initial Page Loaded",
+            "type": "boolean"
           },
           "owner_fence": {
             "maxLength": 128,
@@ -15661,7 +15735,7 @@
       },
       "ProactiveIntent": {
         "additionalProperties": false,
-        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains ready until that kernel has committed and acknowledged\nits stable ``intent_id``.",
+        "description": "A server-side instruction, not a Chat transcript row.\n\nThe local desktop kernel is the sole writer of the visible assistant turn.\nThis record remains deliverable until that kernel has committed and\nacknowledged its stable ``intent_id``; cold-start intents make that\nexplicit as ``pending_kernel_receipt``.",
         "properties": {
           "account_generation": {
             "minimum": 0.0,
@@ -15699,6 +15773,35 @@
             "title": "Blocks",
             "type": "array"
           },
+          "cold_start_sequence_terminal_receipt_id": {
+            "anyOf": [
+              {
+                "maxLength": 128,
+                "minLength": 1,
+                "pattern": "^[A-Za-z0-9][A-Za-z0-9._:-]*$",
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal Receipt Id"
+          },
+          "cold_start_sequence_terminal_state": {
+            "anyOf": [
+              {
+                "enum": [
+                  "completed",
+                  "abandoned"
+                ],
+                "type": "string"
+              },
+              {
+                "type": "null"
+              }
+            ],
+            "title": "Cold Start Sequence Terminal State"
+          },
           "continuity_key": {
             "maxLength": 128,
             "minLength": 1,
@@ -15727,6 +15830,7 @@
             "default": "ready",
             "enum": [
               "ready",
+              "pending_kernel_receipt",
               "delivered"
             ],
             "title": "Delivery State",
@@ -15758,7 +15862,9 @@
               "daily_opener",
               "capture_arrival",
               "deferral_reraise",
-              "agent_judgment"
+              "agent_judgment",
+              "cold_start_rich",
+              "cold_start_sparse"
             ],
             "title": "Source",
             "type": "string"
@@ -16011,6 +16117,16 @@
       "QuestionCardSpec": {
         "additionalProperties": false,
         "properties": {
+          "cold_start_sequence": {
+            "anyOf": [
+              {
+                "$ref": "#/components/schemas/ColdStartSequence"
+              },
+              {
+                "type": "null"
+              }
+            ]
+          },
           "options": {
             "items": {
               "$ref": "#/components/schemas/QuestionOption"
@@ -20115,7 +20231,7 @@
       },
       "TaskWorkflowControl": {
         "additionalProperties": false,
-        "description": "Per-user task-intelligence control plus its fail-closed API capability.\n\n``chat_first_ui_enabled`` is the persisted, operator-owned rollout input.\n``chat_first_ui`` is a response-only derived capability: it is composed in\nthe candidates router from the explicit flag and the authoritative\ncanonical-memory/task-intelligence rollout decision.  Persistence must use\n:meth:`persisted_payload` so the derived response value can never become a\nlocal or stale source of truth.",
+        "description": "Persisted workflow metadata plus the derived Chat-first capability.\n\n``workflow_mode`` remains readable for legacy records and operational\nhistory. It is not an entitlement. ``chat_first_ui`` is derived only from\nthe canonical-memory selector; persistence excludes it so clients cannot\nturn a sampled response into later authority.",
         "properties": {
           "account_generation": {
             "default": 0,
