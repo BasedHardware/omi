@@ -1019,6 +1019,15 @@ async def transcribe_voice_message_stream(
         await websocket.close(code=1008, reason='channels must be 1 or 2')
         return
 
+    # Deepgram was the only PTT provider that accepted stereo. Parakeet and
+    # Modulate (the retired-DG replacements) wire a mono PCM path: sending
+    # interleaved stereo here would be billed as two channels while being
+    # transcribed as mono, corrupting timing and quality. Reject channels > 1
+    # explicitly instead of silently downmixing or double-billing.
+    if channels != 1:
+        await websocket.close(code=1008, reason='Only mono (channels=1) is supported by this transcription provider')
+        return
+
     # Inline rate limiting for WebSocket (can't use Depends(with_rate_limit))
     try:
         max_requests, window = get_effective_limit('voice:transcribe_stream')

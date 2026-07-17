@@ -1353,53 +1353,21 @@ class TestTranscribeStreamWebSocket:
         finally:
             _cleanup_chat_client(saved)
 
-    def test_ws_stereo_flush_accounts_for_channels(self):
-        """Stereo (channels=2) flush threshold should be doubled vs mono."""
-        client, module, saved = _make_chat_client()
+    def test_ws_rejects_stereo_after_deepgram_retirement(self):
+        """channels=2 is rejected after the Deepgram serving retirement.
+
+        Deepgram was the only PTT provider that accepted stereo. Parakeet and
+        Modulate wire a mono PCM path, so stereo would silently be billed as two
+        channels while being transcribed as mono. The PTT endpoint must reject
+        channels != 1 explicitly.
+        """
+        client, _module, saved = _make_chat_client()
         try:
-            mock_dg_socket = MagicMock()
-            mock_dg_socket.is_connection_dead = False
-            mock_dg_socket.death_reason = None
-            sent_chunks = []
-
-            async def mock_process_audio_parakeet(stream_transcript, **kwargs):
-                def fake_send(data):
-                    sent_chunks.append(data)
-                    stream_transcript(
-                        [
-                            {
-                                'speaker': 'SPEAKER_00',
-                                'start': 0.0,
-                                'end': 1.0,
-                                'text': 'Stereo',
-                                'is_user': False,
-                                'person_id': None,
-                            }
-                        ]
-                    )
-                    return True
-
-                mock_dg_socket.send = MagicMock(side_effect=fake_send)
-                mock_dg_socket.finalize = MagicMock()
-                mock_dg_socket.finish = MagicMock()
-                return mock_dg_socket
-
-            with patch.object(module, 'check_budget', return_value=(True, 0, 7200000)):
-                with patch.object(
-                    module, 'get_stt_service_for_language', return_value=(module.STTService.parakeet, 'en', 'parakeet')
-                ):
-                    with patch.object(module, 'process_audio_parakeet', side_effect=mock_process_audio_parakeet):
-                        with client.websocket_connect(
-                            '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000&channels=2'
-                        ) as ws:
-                            # Stereo 30ms flush = 16000 * 2 * 2 * 0.03 = 1920 bytes
-                            # Send 960 bytes — should NOT flush (mono threshold, but stereo needs 1920)
-                            ws.send_bytes(b'\x00' * 960)
-                            # Send remaining to reach stereo threshold
-                            ws.send_bytes(b'\x00' * 960)
-                            data = ws.receive_json()
-                            assert isinstance(data, list)
-                            assert data[0]['text'] == 'Stereo'
+            with pytest.raises(Exception):
+                with client.websocket_connect(
+                    '/v2/voice-message/transcribe-stream?language=en&sample_rate=16000&channels=2'
+                ) as ws:
+                    ws.receive_json()
         finally:
             _cleanup_chat_client(saved)
 

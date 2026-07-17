@@ -362,7 +362,7 @@ def test_web_listen_streaming_stt_send_failure_emits_terminal_status_then_closes
             "status": "stt_failed",
             "status_text": "The transcription provider could not complete the request.",
             "outcome": "upstream_error",
-            "provider": "deepgram",
+            "provider": "parakeet",
             "retryable": True,
             "reason": "send_failed",
         }
