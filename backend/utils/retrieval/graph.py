@@ -24,11 +24,72 @@ from utils.llm.clients import get_llm
 from utils.llm.usage_tracker import Features, track_usage
 from utils.executors import run_blocking, llm_executor
 from utils.other.chat_file import FileChatTool
-from utils.retrieval.agentic import AsyncStreamingCallback, execute_agentic_chat_stream
+from utils.retrieval.agentic import (
+    AGENT_STREAM_FAILURE_MESSAGE,
+    AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS,
+    AGENT_STREAM_MAX_DURATION_SECONDS,
+    AGENT_STREAM_PROGRESS_HEARTBEAT,
+    AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS,
+    AGENT_STREAM_TIMEOUT_MESSAGE,
+    AsyncStreamingCallback,
+    cancel_stream_task,
+    execute_agentic_chat_stream,
+    next_stream_chunk,
+)
 from utils.observability.langsmith import get_chat_tracer_callbacks
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+async def _drain_chat_callback(
+    callback: AsyncStreamingCallback, task: asyncio.Task, *, route: str
+) -> AsyncGenerator[str | None, None]:
+    """Drain a callback queue without allowing its producer to strand an SSE response."""
+    started_at = asyncio.get_running_loop().time()
+    received_first_event = False
+    try:
+        while True:
+            remaining_seconds = AGENT_STREAM_MAX_DURATION_SECONDS - (asyncio.get_running_loop().time() - started_at)
+            if remaining_seconds <= 0:
+                raise asyncio.TimeoutError
+
+            wait_timeout = min(
+                (
+                    AGENT_STREAM_FIRST_EVENT_TIMEOUT_SECONDS
+                    if not received_first_event
+                    else AGENT_STREAM_PROGRESS_HEARTBEAT_SECONDS
+                ),
+                remaining_seconds,
+            )
+            try:
+                chunk = await next_stream_chunk(callback, task, wait_timeout)
+            except asyncio.TimeoutError:
+                if received_first_event and remaining_seconds > wait_timeout:
+                    yield f'think: {AGENT_STREAM_PROGRESS_HEARTBEAT}'
+                    continue
+                raise
+
+            if chunk is None:
+                await task
+                return
+
+            received_first_event = True
+            yield chunk
+    except asyncio.TimeoutError:
+        logger.warning('%s chat stream reached its bounded deadline', route)
+        await cancel_stream_task(task)
+        yield f'error: {AGENT_STREAM_TIMEOUT_MESSAGE}'
+    except asyncio.CancelledError:
+        await cancel_stream_task(task)
+        raise
+    except Exception as error:
+        logger.error('%s chat stream failed error_type=%s', route, type(error).__name__)
+        await cancel_stream_task(task)
+        yield f'error: {AGENT_STREAM_FAILURE_MESSAGE}'
+    finally:
+        if not task.done():
+            task.cancel()
 
 
 # ---------------------------------------------------------------------------
@@ -85,13 +146,14 @@ async def _execute_file_chat_stream(
 
         task = asyncio.create_task(_produce())
 
-        # Drain the queue concurrently while the producer runs
-        while True:
-            chunk = await callback.queue.get()
+        async for chunk in _drain_chat_callback(callback, task, route='file'):
+            if chunk and chunk.startswith('error: '):
+                if callback_data is not None:
+                    callback_data['error'] = 'stream_failure'
+                yield chunk
+                return
             if chunk:
                 yield chunk
-            else:
-                break
 
         answer = await task
 
@@ -174,17 +236,16 @@ async def execute_persona_chat_stream(
                 )
             )
 
-        while True:
-            try:
-                chunk = await callback.queue.get()
-                if chunk:
-                    token = chunk.replace("data: ", "")
-                    full_response.append(token)
-                    yield chunk
-                else:
-                    break
-            except asyncio.CancelledError:
-                break
+        async for chunk in _drain_chat_callback(callback, task, route='persona'):
+            if chunk and chunk.startswith('error: '):
+                if callback_data is not None:
+                    callback_data['error'] = 'stream_failure'
+                yield chunk
+                return
+            if chunk:
+                if chunk.startswith("data: "):
+                    full_response.append(chunk.removeprefix("data: "))
+                yield chunk
 
         await task
 
