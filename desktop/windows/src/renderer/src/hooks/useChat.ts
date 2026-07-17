@@ -1268,19 +1268,32 @@ export function useChat(): UseChat {
   ): void => {
     const user = userText.trim()
     const assistant = assistantText.trim()
-    if (!user || !assistant) return
+    // Record whenever AT LEAST one side has text (macOS records unconditionally at
+    // hubDidFinishTurn); only a both-empty turn is dropped. This is the fix for the
+    // "my message never sent" case where a quiet/short utterance yields no provider
+    // input transcription (or a spoken reply carries no text). Matches the kernel
+    // handler's own both-empty guard in main/ipc/voiceHub.ts.
+    if (!user && !assistant) return
     // Same generation guard the send/agent paths use: if the thread is reset while
     // this record's persist is in flight, drop the write so the turn can't be
     // misattributed to the new conversation (per-launch mode replaces, not merges).
     const myGen = genRef.current
     const isCurrent = (): boolean => genRef.current === myGen
-    const userMsg: ChatMsg = { id: crypto.randomUUID(), role: 'user', content: user }
-    const assistantMsg: ChatMsg = { id: crypto.randomUUID(), role: 'assistant', content: assistant }
+    // Build only the sides that carry text so a one-sided turn never renders as an
+    // empty bubble (ChatMessages shows an empty div for empty content). The kernel
+    // record + mobile echo below still receive whatever text exists.
+    const userMsg: ChatMsg | null = user
+      ? { id: crypto.randomUUID(), role: 'user', content: user }
+      : null
+    const assistantMsg: ChatMsg | null = assistant
+      ? { id: crypto.randomUUID(), role: 'assistant', content: assistant }
+      : null
+    const appended = [userMsg, assistantMsg].filter((m): m is ChatMsg => m !== null)
     const base = history
     // 1) The on-screen timeline + local SQLite (existing behavior — the UI renders
     //    from here, NOT from the kernel, so there is no double-bubble).
-    setHistory((h) => [...h, userMsg, assistantMsg])
-    void persistChat([...base, userMsg, assistantMsg], isCurrent)
+    setHistory((h) => [...h, ...appended])
+    void persistChat([...base, ...appended], isCurrent)
     // 2) The ONE kernel conversation (INV-CHAT-1): record straight to the kernel via
     //    the owner-gated main-side door, under the SAME main_chat/chat/<chatId> the
     //    typed tail reads, origin 'realtime_voice', keyed on the per-press turnId so
@@ -1296,24 +1309,28 @@ export function useChat(): UseChat {
       })
       .catch(() => {})
     // 3) The shared/mobile thread — the hub path (unlike the typed pi-mono path) did
-    //    NOT saveDesktopMessage, so voice turns were invisible on mobile. Echo both
-    //    messages (Mac's messageSource:'realtime_voice'). Best-effort.
-    void saveDesktopMessage({
-      text: user,
-      sender: 'human',
-      clientMessageId: userMsg.id,
-      messageSource: 'realtime_voice',
-      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
-      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
-    })
-    void saveDesktopMessage({
-      text: assistant,
-      sender: 'ai',
-      clientMessageId: assistantMsg.id,
-      messageSource: 'realtime_voice',
-      ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
-      ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
-    })
+    //    NOT saveDesktopMessage, so voice turns were invisible on mobile. Echo each
+    //    side that carries text (Mac's messageSource:'realtime_voice'). Best-effort.
+    if (userMsg) {
+      void saveDesktopMessage({
+        text: user,
+        sender: 'human',
+        clientMessageId: userMsg.id,
+        messageSource: 'realtime_voice',
+        ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
+        ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+      })
+    }
+    if (assistantMsg) {
+      void saveDesktopMessage({
+        text: assistant,
+        sender: 'ai',
+        clientMessageId: assistantMsg.id,
+        messageSource: 'realtime_voice',
+        ...(selectedAppIdRef.current ? { appId: selectedAppIdRef.current } : {}),
+        ...(sessionIdRef.current ? { sessionId: sessionIdRef.current } : {})
+      })
+    }
   }
 
   // Read the voice continuity seed for THIS thread (the same main_chat conversation
