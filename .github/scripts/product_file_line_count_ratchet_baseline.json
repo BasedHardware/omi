@@ -7,7 +7,7 @@
     "backend/routers/mcp_sse.py": 1857,
     "backend/routers/sync.py": 1981,
     "backend/routers/users.py": 2046,
-    "backend/scripts/validate-backend-runtime-env.py": 1732,
+    "backend/scripts/validate-backend-runtime-env.py": 1865,
     "backend/utils/apps.py": 1641,
     "backend/utils/memory/legacy_backfill.py": 1816,
     "backend/utils/memory_ingestion/pipeline.py": 1711,
