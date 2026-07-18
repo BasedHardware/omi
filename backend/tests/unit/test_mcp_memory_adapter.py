@@ -365,7 +365,7 @@ def test_mcp_default_memory_rollout_reader_fails_closed_for_missing_malformed_or
 
 
 def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout_enabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -392,7 +392,7 @@ def test_mcp_default_memory_memory_adapter_uses_product_search_when_read_rollout
 
 
 def test_mcp_default_memory_adapter_excludes_pending_admission_text():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     pending = _memory_item(
         'pending-explicit',
         now=now,
@@ -409,7 +409,7 @@ def test_mcp_default_memory_adapter_excludes_pending_admission_text():
 
 
 def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_grant_disabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     assert (
@@ -439,7 +439,7 @@ def test_mcp_default_memory_memory_adapter_returns_none_when_rollout_or_default_
 
 
 def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_without_archive_default():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
@@ -529,7 +529,7 @@ def test_mcp_vector_adapter_uses_hydrated_vector_service_and_preserves_ranking_w
 
 
 def test_mcp_vector_adapter_returns_explicit_denial_before_vector_or_memory_reads_when_rollout_or_grant_disabled():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{fresh_short_term.memory_id}': _stored_item(fresh_short_term)})
     vector_calls = []
@@ -592,7 +592,7 @@ def test_mcp_vector_adapter_preserves_only_explicit_legacy_safe_classification()
 
 
 def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_review_manual_fields():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
     rollout = read_default_read_rollout(
@@ -635,7 +635,7 @@ def test_mcp_memory_search_and_list_format_mark_compatibility_derived_category_r
 
 
 def test_mcp_memory_list_adapter_applies_category_review_manual_filters_to_explicit_compatibility_fields():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     long_term = _memory_item('long-term', tier=MemoryTier.long_term, now=now, content='coffee long term')
     db_client = _FirestoreFake({f'users/u1/memory_items/{long_term.memory_id}': _stored_item(long_term)})
     rollout = read_default_read_rollout(
@@ -695,7 +695,7 @@ def test_mcp_rest_and_sse_get_paths_pass_filters_into_memory_list_adapter_and_re
 
 
 def test_mcp_list_adapter_uses_same_rollout_decisions_as_search_and_preserves_default_visibility():
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc).replace(microsecond=0)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
