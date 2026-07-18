@@ -248,7 +248,95 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
         finally:
             RUNTIME_PREFLIGHT._gcloud_json = original
 
-        self.assertEqual(errors, ["fake: required Secret Manager version FAKE_RUNTIME_SECRET:latest is not enabled"])
+        self.assertEqual(
+            errors,
+            [
+                "fake-service: runtime binding FAKE_RUNTIME_SECRET requires enabled Secret Manager version "
+                "FAKE_RUNTIME_SECRET:latest"
+            ],
+        )
+
+    def test_runtime_preflight_reports_service_and_binding_for_an_unavailable_secret_version(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+
+        def missing_version(_args):
+            raise RUNTIME_PREFLIGHT.RuntimePreflightError("resource not found", category="not_found")
+
+        RUNTIME_PREFLIGHT._gcloud_json = missing_version
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_secret_versions(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(
+            errors,
+            [
+                "fake-service: runtime binding FAKE_RUNTIME_SECRET requires Secret Manager version "
+                "FAKE_RUNTIME_SECRET:latest, but it is unavailable (resource not found)"
+            ],
+        )
+
+    def test_runtime_preflight_accepts_an_enabled_secret_version(self) -> None:
+        original = RUNTIME_PREFLIGHT._gcloud_json
+        RUNTIME_PREFLIGHT._gcloud_json = lambda _args: {"state": "ENABLED"}
+        try:
+            errors = RUNTIME_PREFLIGHT.validate_secret_versions(target=self.target(), project_id="fake-project")
+        finally:
+            RUNTIME_PREFLIGHT._gcloud_json = original
+
+        self.assertEqual(errors, [])
+
+    def test_runtime_preflight_rejects_a_live_secret_binding_missing_from_the_deployment_contract(self) -> None:
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "STALE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"name": "stale-secret", "key": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(
+            RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service),
+            ["fake-service: secret binding STALE_RUNTIME_SECRET is missing from the deployment contract"],
+        )
+
+    def test_runtime_preflight_allows_a_live_secret_binding_rendered_for_removal(self) -> None:
+        contract = fixture_contract()
+        contract["targets"]["fake"]["deployment"]["remove_runtime_secrets"] = ["STALE_RUNTIME_SECRET"]
+        self.write_json("config/public-build-contract.json", contract)
+        service = {
+            "template": {
+                "containers": [
+                    {
+                        "env": [
+                            {
+                                "name": "STALE_RUNTIME_SECRET",
+                                "valueSource": {"secretKeyRef": {"name": "stale-secret", "key": "latest"}},
+                            }
+                        ]
+                    }
+                ]
+            }
+        }
+
+        self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
+
+    def test_personas_contract_retains_the_active_linkedin_host_binding(self) -> None:
+        # LINKEDIN_API_HOST is actively read by the personas social-profile route
+        # (web/personas-open-source/src/app/api/social-profile/route.ts) for the
+        # linkedin-profile provider. The binding must remain declared so deploys
+        # do not strip it and break LinkedIn profile creation.
+        contract = STATIC.load_contract(ROOT / "config" / "public-build-contract.json")
+        personas = contract.targets["personas"]
+
+        self.assertIn("LINKEDIN_API_HOST", personas.deployment.runtime_secrets)
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")
