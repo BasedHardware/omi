@@ -18,7 +18,7 @@ import database.users as users_db
 from database.redis_db import r as redis_client
 from models.fair_use import SoftCapTrigger
 from models.users import PlanType
-from utils.subscription import get_plan_limits, has_transcription_credits, is_paid_plan
+from utils.subscription import has_transcription_credits, is_paid_plan
 from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.llm.fair_use_classifier import classify_user_purpose
 from utils.notifications import send_notification
@@ -270,21 +270,22 @@ def get_rolling_backfill_speech_ms(uid: str) -> Dict[str, Any]:
 # ---------------------------------------------------------------------------
 
 
-def _is_unlimited_tier(plan: Optional[PlanType]) -> bool:
-    """True for paid unlimited-transcription plans (Unlimited/unlimited_v2, legacy Neo,
-    Operator, Architect) — the tiers whose monthly transcription allowance is unbounded.
+# Paid unlimited-transcription tiers get the raised fair-use triggers. Hardcoded (like
+# _platform_hidden_plans in utils.subscription) rather than derived from get_plan_limits so
+# utils.fair_use does not depend on utils.subscription.get_plan_limits at import time (that
+# import broke module-stubbing tests), and so a mis-set BASIC_TIER cap can never flip Free
+# into this set. Plus and Free carry a bounded monthly cap and stay on the default tier.
+_UNLIMITED_TRANSCRIPTION_PLANS = frozenset(
+    {PlanType.unlimited, PlanType.unlimited_v2, PlanType.operator, PlanType.architect}
+)
 
-    Keyed off plan limits rather than a hardcoded set so it stays self-consistent as the
-    catalog changes. Requires a *paid* plan AND ``transcription_seconds is None`` (paid
-    unlimited plans use None): this excludes Free — whose configured cap can be 0 ("no cap
-    configured") in some environments — and Plus, which carries a positive monthly cap.
-    """
-    if plan is None:
-        return False
-    try:
-        return is_paid_plan(plan) and get_plan_limits(plan).transcription_seconds is None
-    except Exception:
-        return False
+
+def _is_unlimited_tier(plan: Optional[PlanType]) -> bool:
+    """True for paid unlimited-transcription tiers (Unlimited/unlimited_v2, legacy Neo,
+    Operator, Architect) — the plans whose monthly transcription allowance is unbounded.
+    Free and Plus (bounded monthly cap) stay on the default tier. Robust to ``None`` and to
+    plans passed as raw strings (PlanType is a str enum)."""
+    return plan in _UNLIMITED_TRANSCRIPTION_PLANS
 
 
 def fair_use_caps_for_plan(plan: Optional[PlanType] = None) -> tuple[int, int, int]:

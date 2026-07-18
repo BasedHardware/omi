@@ -5,6 +5,7 @@ import importlib.util
 import re
 import sys
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 import yaml
@@ -1711,3 +1712,64 @@ def test_repo_ilb_endpoints_use_http_scheme(env_name):
             _check_service('gke', svc_name, svc_cfg)
 
     assert violations == [], f'ILB endpoints must use http:// (no TLS): {violations}'
+
+
+# --- live Cloud Run job describe: tolerate a declared-but-not-deployed job (#9964 deploy fix) ---
+
+_LIVE_SERVICE_JSON = '{"spec":{"template":{"metadata":{"annotations":{}},"spec":{"containers":[{"env":[]}]}}}}'
+
+
+def _live_env_config():
+    return {
+        'gcp_project': 'based-hardware',
+        'region': 'us-central1',
+        'cloud_run': {
+            'services': {'backend': {}},
+            'jobs': {'memory-maintenance-job': {}, 'notifications-job': {}},
+        },
+    }
+
+
+def _job_name(command):
+    return command[command.index('describe') + 1]
+
+
+def test_is_cloud_run_not_found_matches_gcloud_message():
+    validator = load_validator()
+    assert validator._is_cloud_run_not_found('ERROR: (gcloud.run.jobs.describe) Cannot find job [x].') is True
+    assert validator._is_cloud_run_not_found('ERROR: NOT_FOUND: resource missing') is True
+    assert validator._is_cloud_run_not_found('ERROR: PERMISSION_DENIED') is False
+    assert validator._is_cloud_run_not_found('') is False
+
+
+def test_fetch_live_cloud_run_state_skips_not_found_job(monkeypatch):
+    # memory-maintenance-job is declared in the runtime-env contract but not deployed to prod
+    # (MEMORY_MODE=off). A not-found live describe must not crash the deploy validation.
+    validator = load_validator()
+
+    def fake_run(command, **kwargs):
+        if 'services' in command:
+            return SimpleNamespace(returncode=0, stdout=_LIVE_SERVICE_JSON, stderr='')
+        if _job_name(command) == 'memory-maintenance-job':
+            return SimpleNamespace(returncode=1, stdout='', stderr='ERROR: Cannot find job [memory-maintenance-job].')
+        return SimpleNamespace(returncode=0, stdout='{}', stderr='')
+
+    monkeypatch.setattr(validator.subprocess, 'run', fake_run)
+    state = validator._fetch_live_cloud_run_state(_live_env_config())
+
+    assert 'memory-maintenance-job' not in state['jobs']  # skipped, not crashed
+    assert 'notifications-job' in state['jobs']  # a live job is still fetched + validated
+
+
+def test_fetch_live_cloud_run_state_raises_on_non_not_found_job_error(monkeypatch):
+    # A real gcloud failure (auth/transient/bad flag) must still surface, not be swallowed.
+    validator = load_validator()
+
+    def fake_run(command, **kwargs):
+        if 'services' in command:
+            return SimpleNamespace(returncode=0, stdout=_LIVE_SERVICE_JSON, stderr='')
+        return SimpleNamespace(returncode=1, stdout='', stderr='ERROR: PERMISSION_DENIED')
+
+    monkeypatch.setattr(validator.subprocess, 'run', fake_run)
+    with pytest.raises(RuntimeError):
+        validator._fetch_live_cloud_run_state(_live_env_config())
