@@ -43,6 +43,7 @@ import { rendererBaseUrl } from '../rendererServer'
 import { isQuitting } from '../lifecycle'
 import {
   computeBarBounds,
+  offscreenStageBounds,
   isCursorInPeekFootprint,
   isCursorOverPill,
   type DisplayLike,
@@ -388,13 +389,19 @@ function presentBar(win: BrowserWindow, mode: BarMode, reveal: BarReveal, bounds
   currentMode = mode
   applyClickThrough(win)
   win.setFocusable(mode === 'expanded')
-  // Size the (still-parked, invisible) window to the target so the renderer paints
-  // the revealed frame at the correct size; position stays parked until the ack.
+  // Size the (still-invisible) window to the target so the renderer paints the
+  // revealed frame at the correct size. It MUST be sized/painted while DPI-
+  // associated with the TARGET display: sizing it at the fixed far corner
+  // (PARKED_POS) — which can sit on a different-scaleFactor monitor — makes
+  // Windows convert the DIP size using that monitor's scale, so the bar reveals
+  // ~1.5× too large (off-center + blurry) on a lower-DPI main monitor. Staging
+  // just above the target's top edge keeps it on the target monitor; commitReveal
+  // then moves it on-screen within that same monitor (no cross-DPI resize).
   if (PARK_MODE === 'opacity') {
     win.setBounds(bounds)
     win.setOpacity(0)
   } else {
-    win.setBounds({ x: PARKED_POS.x, y: PARKED_POS.y, width: bounds.width, height: bounds.height })
+    win.setBounds(offscreenStageBounds(bounds))
   }
   const token = ++revealToken
   pendingReveal = { token, mode, reveal, bounds }

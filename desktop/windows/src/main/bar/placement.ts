@@ -75,6 +75,37 @@ export function computeBarBounds(display: DisplayLike): Rect {
   return { x, y: b.y, width, height }
 }
 
+/** Clearance (DIP) above the target's top edge for the off-screen staging rect
+ *  below — enough to lift the whole window off the monitor so it never flashes. */
+export const OFFSCREEN_STAGE_MARGIN = 100
+
+/**
+ * Off-screen staging rect for a reveal on the target display: the SAME horizontal
+ * center and size as the final bar, parked just ABOVE the display's top edge.
+ *
+ * Why not a single fixed far-off corner (the old `PARKED_POS`): on Windows,
+ * `BrowserWindow.setBounds` converts the requested DIP size to physical pixels
+ * using the scaleFactor of the monitor the window is CURRENTLY on. Sizing the
+ * window at a fixed corner that happens to sit on a different-scaleFactor monitor
+ * (e.g. a 1.5× display left of a 1.0× main monitor) inflates the window by that
+ * monitor's scale when it is then revealed on the main monitor — the bar comes
+ * out ~1.5× too large, so its top-center pill lands off-center and the frame
+ * (painted at the wrong device scale) shows blurry. Staging above the TARGET
+ * display keeps the window DPI-associated with that display while it is sized and
+ * painted, so both size and paint scale are correct before it is revealed; the
+ * final on-screen move (`computeBarBounds`) is then within one monitor, never
+ * across a DPI boundary. In horizontal multi-monitor layouts the space directly
+ * above the target is empty, so the target stays the nearest monitor.
+ */
+export function offscreenStageBounds(finalBounds: Rect): Rect {
+  return {
+    x: finalBounds.x,
+    y: finalBounds.y - finalBounds.height - OFFSCREEN_STAGE_MARGIN,
+    width: finalBounds.width,
+    height: finalBounds.height
+  }
+}
+
 /** The display whose bounds contain the point, else the nearest by center
  *  distance (mirrors screen.getDisplayNearestPoint for unit tests). */
 export function displayForPoint(

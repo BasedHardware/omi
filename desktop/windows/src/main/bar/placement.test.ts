@@ -1,6 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import {
   computeBarBounds,
+  offscreenStageBounds,
+  OFFSCREEN_STAGE_MARGIN,
   displayForPoint,
   isCursorInPeekFootprint,
   isCursorOverPill,
@@ -95,6 +97,40 @@ describe('computeBarBounds', () => {
     const b = computeBarBounds(tiny)
     expect(b.width).toBe(500)
     expect(b.height).toBe(Math.round(360 * 0.7))
+  })
+})
+
+describe('offscreenStageBounds (multi-monitor DPI regression)', () => {
+  // Live bug: sizing the bar window at a fixed far corner that sits on a
+  // higher-scaleFactor monitor made Windows convert the DIP size using THAT
+  // monitor's scale, so the bar revealed ~1.5× oversized (off-center + blurry)
+  // on a lower-DPI main monitor. The staging rect must keep the window on the
+  // SAME display as the final reveal so its size/paint scale are correct, and it
+  // must be fully off-screen (above the top edge) so it never flashes.
+  it('keeps the final size and horizontal center (no cross-DPI resize)', () => {
+    const final = computeBarBounds(primary)
+    const stage = offscreenStageBounds(final)
+    expect(stage.width).toBe(final.width)
+    expect(stage.height).toBe(final.height)
+    expect(stage.x).toBe(final.x) // same center → within the target display's column
+  })
+
+  it('sits fully above the final top edge (off-screen, never visible)', () => {
+    const final = computeBarBounds(primary)
+    const stage = offscreenStageBounds(final)
+    expect(stage.y + stage.height).toBeLessThan(final.y)
+    expect(final.y - (stage.y + stage.height)).toBe(OFFSCREEN_STAGE_MARGIN)
+  })
+
+  it('follows a secondary display origin so staging stays on that display', () => {
+    // The staging rect for a reveal on the negative-origin secondary must be
+    // above THAT display (its own x-column), not the primary — otherwise it
+    // would be sized under the primary's DPI again.
+    const final = computeBarBounds(secondary)
+    const stage = offscreenStageBounds(final)
+    expect(stage.x).toBeGreaterThanOrEqual(secondary.bounds.x)
+    expect(stage.x + stage.width).toBeLessThanOrEqual(secondary.bounds.x + secondary.bounds.width)
+    expect(stage.y + stage.height).toBeLessThan(final.y)
   })
 })
 
