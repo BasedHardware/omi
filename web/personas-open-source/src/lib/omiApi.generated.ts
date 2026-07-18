@@ -1056,6 +1056,15 @@ export interface ConversationCreateResponse {
   status: string;
 }
 
+export interface ConversationFinalizationStatusResponse {
+  attempt_count: number;
+  job_id: string;
+  retryable: boolean;
+  status: string;
+  task_retry_count: number;
+  terminal: boolean;
+}
+
 export interface ConversationMutationResponse {
   conversation: Conversation;
   status: string;
@@ -3823,6 +3832,7 @@ export interface OmiApiSchemas {
   "ConversationAudioSpanInfo": ConversationAudioSpanInfo;
   "ConversationAudioUrlInfo": ConversationAudioUrlInfo;
   "ConversationCreateResponse": ConversationCreateResponse;
+  "ConversationFinalizationStatusResponse": ConversationFinalizationStatusResponse;
   "ConversationMutationResponse": ConversationMutationResponse;
   "ConversationPhoto": ConversationPhoto;
   "ConversationRecordingResponse": ConversationRecordingResponse;
@@ -5255,6 +5265,17 @@ export interface OmiApiPaths {
       operationId: "set_conversation_events_state_v1_conversations__conversation_id__events_patch";
       responses: {
         "200": ConversationStatusResponse;
+        "401": void;
+        "404": void;
+        "422": HTTPValidationError;
+      };
+    };
+  };
+  "/v1/conversations/{conversation_id}/finalization": {
+    get: {
+      operationId: "get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get";
+      responses: {
+        "200": ConversationFinalizationStatusResponse;
         "401": void;
         "404": void;
         "422": HTTPValidationError;
@@ -10149,6 +10170,25 @@ export async function set_conversation_events_state_v1_conversations__conversati
       ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
     },
     body: body ? JSON.stringify(body) : undefined,
+  });
+  if (!_res.ok) throw new OmiApiError(_res.status, _res);
+  return _res.status === 204 ? (undefined as any) : await _res.json();
+}
+
+export async function get_conversation_finalization_status_v1_conversations__conversation_id__finalization_get(path: { conversation_id: string }, header: { authorization?: string, X_App_Platform?: string, X_Device_Id_Hash?: string, X_App_Version?: string }, init?: OmiApiClientInit): Promise<ConversationFinalizationStatusResponse> {
+  const _base = init?.baseURL ?? "";
+  const _path = `/v1/conversations/${path.conversation_id}/finalization`;
+  const _search = "";
+  const _res = await fetch(`${_base}${_path}${_search}`, {
+    method: "GET",
+    headers: {
+      ...(init?.token ? { Authorization: `Bearer ${init.token}` } : {}),
+      ...init?.headers,
+      ...(header.authorization !== undefined ? { "authorization": String(header.authorization) } : {}),
+      ...(header.X_App_Platform !== undefined ? { "X-App-Platform": String(header.X_App_Platform) } : {}),
+      ...(header.X_Device_Id_Hash !== undefined ? { "X-Device-Id-Hash": String(header.X_Device_Id_Hash) } : {}),
+      ...(header.X_App_Version !== undefined ? { "X-App-Version": String(header.X_App_Version) } : {}),
+    },
   });
   if (!_res.ok) throw new OmiApiError(_res.status, _res);
   return _res.status === 204 ? (undefined as any) : await _res.json();
@@ -15499,4 +15539,4 @@ export async function get_speech_profile_v4_speech_profile_get(header: { authori
   return _res.status === 204 ? (undefined as any) : await _res.json();
 }
 
-// Total: 380 client methods generated.
+// Total: 381 client methods generated.
