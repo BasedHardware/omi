@@ -72,6 +72,7 @@ from utils.fair_use import (
     get_enforcement_stage,
     get_hard_restriction_status,
     get_rolling_speech_ms,
+    is_daily_audio_ceiling_exceeded,
     is_dg_budget_exhausted,
     record_dg_usage_ms,
     record_speech_ms,
@@ -572,6 +573,22 @@ async def sync_local_files(
             base_headers=_V1_DEPRECATION_HEADERS,
         )
 
+    # Hard anti-abuse daily-audio ceiling (all plans): reject fresh sync once the user is
+    # already over the rolling-24h total. Set high enough that no legitimate user hits it;
+    # it exists to stop bulk-sync dumps. Backfill has its own separate pacing.
+    if lane_decision.lane == SyncLane.FRESH and is_daily_audio_ceiling_exceeded(uid):
+        logger.info(f'sync: daily audio ceiling reached uid={uid}')
+        return await _fair_use_restriction_response(
+            uid=uid,
+            retry_after=_retry_after_until_next_utc_day(),
+            client_platform=client_device_context.platform,
+            device_hash=client_device_context.device_hash,
+            app_version=client_device_context.app_version,
+            request_id=request.headers.get('x-request-id'),
+            cloud_trace_context=request.headers.get('x-cloud-trace-context'),
+            base_headers=_V1_DEPRECATION_HEADERS,
+        )
+
     # Check credits: if exhausted, still process but lock the conversation so user can pay to unlock
     should_lock = not has_transcription_credits(uid)
 
@@ -659,8 +676,10 @@ async def sync_local_files(
             meter_source = 'sync_backfill' if lane_decision.lane == SyncLane.BACKFILL else 'sync_fresh'
             record_speech_ms(uid, total_speech_ms, source=meter_source)
             if lane_decision.lane == SyncLane.FRESH:
+                fair_use_sub = await run_blocking(db_executor, users_db.get_existing_user_subscription, uid)
+                fair_use_plan = fair_use_sub.plan if fair_use_sub else None
                 speech_totals = get_rolling_speech_ms(uid)
-                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals)
+                triggered_caps = check_soft_caps(uid, speech_totals=speech_totals, plan=fair_use_plan)
                 if triggered_caps:
                     logger.info(f'sync: soft caps triggered for {uid}: {triggered_caps}')
                     asyncio.create_task(trigger_classifier_if_needed(uid, triggered_caps))

@@ -1240,9 +1240,12 @@ actor ActionItemStorage {
               FROM action_items
               WHERE completed = 0 AND deleted = 0 AND relevanceScore IS NOT NULL
           """)
+      // GRDB decodes INTEGER (incl. MIN/MAX aggregates) as Int64, and
+      // `Int64 as? Int` is always nil — a bare `as? Int` would pin both bounds to
+      // 0. Match the typed-decode idiom used elsewhere in this file.
       return (
-        min: row?["minScore"] as? Int ?? 0,
-        max: row?["maxScore"] as? Int ?? 0
+        min: (row?["minScore"] as? Int64).map(Int.init) ?? 0,
+        max: (row?["maxScore"] as? Int64).map(Int.init) ?? 0
       )
     }
   }

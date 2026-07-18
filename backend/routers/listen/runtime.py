@@ -34,6 +34,7 @@ from utils.fair_use import (
     check_soft_caps,
     get_enforcement_stage,
     get_rolling_speech_ms,
+    is_daily_audio_ceiling_exceeded,
     is_dg_budget_exhausted,
     record_dg_usage_ms,
     record_speech_ms,
@@ -46,6 +47,7 @@ from utils.notifications import send_credit_limit_notification, send_silent_user
 from utils.onboarding import OnboardingHandler
 from utils.pusher import PusherCircuitBreakerOpen
 from utils.stt.streaming import STTService, get_stt_service_for_language
+from config.stt_provider_policy import PARAKEET_PROVIDER, STTServingSurface, provider_is_enabled
 from utils.subscription import get_remaining_transcription_seconds, is_trial_paywalled
 from utils.transcribe_decisions import (
     effective_conversation_timeout,
@@ -219,7 +221,11 @@ class ListenSessionRuntime:
         if not self.stt_service or not self.stt_language:
             await request.websocket.close(code=1008, reason=f'The language is not supported, {self.language}')
             return False
-        if requested_service == 'parakeet' and os.getenv('HOSTED_PARAKEET_API_URL'):
+        if (
+            requested_service == 'parakeet'
+            and provider_is_enabled(PARAKEET_PROVIDER, STTServingSurface.STREAMING)
+            and os.getenv('HOSTED_PARAKEET_API_URL')
+        ):
             self.stt_service = STTService.parakeet
         context = finalize_listen_connect_context(
             base, language=self.language, onboarding_mode=request.onboarding_mode, stt_language=self.stt_language
@@ -306,8 +312,13 @@ class ListenSessionRuntime:
             if FAIR_USE_ENABLED and now - self.state.fair_use_last_check_ts >= FAIR_USE_CHECK_INTERVAL_SECONDS:
                 self.state.fair_use_last_check_ts = now
                 try:
+                    if self.state.fair_use_plan is None:
+                        sub = await self.persistence.call(user_db.get_user_valid_subscription, self.request.uid)
+                        self.state.fair_use_plan = sub.plan if sub else None
                     totals = await self.persistence.call(get_rolling_speech_ms, self.request.uid)
-                    caps = await self.persistence.call(check_soft_caps, self.request.uid, speech_totals=totals)
+                    caps = await self.persistence.call(
+                        check_soft_caps, self.request.uid, speech_totals=totals, plan=self.state.fair_use_plan
+                    )
                     if caps:
                         start_background_task(
                             trigger_classifier_if_needed(self.request.uid, caps, self.session_id),
@@ -330,6 +341,13 @@ class ListenSessionRuntime:
                     else:
                         self.state.fair_use_track_dg_usage = False
                         self.state.fair_use_dg_budget_exhausted = False
+                    # Hard anti-abuse daily audio ceiling (all plans): once over the ceiling,
+                    # stop forwarding audio to STT for the rest of the day. Reuses the same
+                    # gate the restrict stage uses, so no socket close / reconnect loop.
+                    if is_daily_audio_ceiling_exceeded(self.request.uid, speech_totals=totals):
+                        if not self.state.fair_use_dg_budget_exhausted:
+                            logger.info('Fair-use daily audio ceiling reached uid=%s', self.request.uid)
+                        self.state.fair_use_dg_budget_exhausted = True
                 except Exception as error:
                     logger.error('Fair-use listen check failed type=%s', type(error).__name__)
             await self._refresh_credits(transcription_seconds=transcription_seconds)

@@ -180,8 +180,8 @@ jobs:
           MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
           RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
           REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: ${{ vars.STT_PRERECORDED_MODEL }}
-          STT_SERVICE_MODELS: ${{ vars.STT_SERVICE_MODELS }}
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS: parakeet,modulate-velma-2
           SYNC_TASKS_HANDLER_URL: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_handler_url }}
           SYNC_TASKS_INVOKER_SA: ${{ steps.pusher-runtime-targets.outputs.sync_tasks_invoker_sa }}
           TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
@@ -202,12 +202,14 @@ jobs:
       - name: Deploy Pusher to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
         run: |
           if [[ "${{ env.SERVICE }}" == "llm-gateway" ]]; then
+            test -n "$LLM_GATEWAY_GSA"
             python3 -m pip install -q pyyaml
             python3 backend/scripts/validate-llm-gateway-env.py \
               backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
@@ -239,6 +241,29 @@ jobs:
             fi
             python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service pusher
           fi
+
+      - name: Verify LLM Gateway serving data plane
+        if: env.SERVICE == 'llm-gateway'
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe LLM Gateway from the Cloud Run VPC
+        if: env.SERVICE == 'llm-gateway'
+        run: |
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Smoke LLM Gateway
         if: env.SERVICE == 'llm-gateway'

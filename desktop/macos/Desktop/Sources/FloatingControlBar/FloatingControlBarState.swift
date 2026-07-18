@@ -501,9 +501,16 @@ class FloatingControlBarState: NSObject, ObservableObject {
       if let questionId = pair.questionMessageId { ids.insert(questionId) }
       if let answerId = pair.answerMessageId { ids.insert(answerId) }
     }
+    // A terminal-only agent completion can be folded into the producing row by
+    // the shared display projection. Resolve the viewport anchors through that
+    // projection before collecting resources so the notch follows the same row
+    // and artifact cards as the main transcript.
+    let viewportMessages = ids.compactMap {
+      AgentLifecycleDisplayProjection.projectedMessage(id: $0, in: provider.messages)
+    }
     return ChatContinuityInvariants.resourcesBelongingToMessages(
-      messages: provider.messages,
-      messageIds: ids
+      messages: viewportMessages,
+      messageIds: Set(viewportMessages.map(\.id))
     )
   }
 

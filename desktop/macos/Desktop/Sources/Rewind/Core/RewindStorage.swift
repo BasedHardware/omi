@@ -2,6 +2,7 @@
 @preconcurrency import AppKit
 import CoreImage
 import Foundation
+import ImageIO
 import OmiSupport
 import Sentry
 
@@ -449,6 +450,36 @@ actor RewindStorage {
       throw RewindError.invalidImage
     }
     return image
+  }
+
+  /// Thumbnail loader for list rows: decodes only a downsampled image via
+  /// ImageIO instead of the full-resolution screenshot, so a long search list
+  /// doesn't retain full-size NSImages behind a small (e.g. 120×80) view.
+  @MainActor
+  func loadScreenshotThumbnail(for screenshot: Screenshot, maxPixelSize: Int) async throws -> NSImage {
+    let data = try await loadScreenshotData(for: screenshot)
+    guard let thumbnail = Self.downsampledImage(from: data, maxPixelSize: maxPixelSize) else {
+      throw RewindError.invalidImage
+    }
+    return thumbnail
+  }
+
+  /// Downsample encoded image data to a thumbnail no larger than `maxPixelSize`
+  /// on its longest edge, decoding only the reduced image. `nonisolated` + pure
+  /// so it is unit-testable and does not touch actor state.
+  nonisolated static func downsampledImage(from data: Data, maxPixelSize: Int) -> NSImage? {
+    guard maxPixelSize > 0,
+      let source = CGImageSourceCreateWithData(data as CFData, nil)
+    else { return nil }
+    let options: [CFString: Any] = [
+      kCGImageSourceCreateThumbnailFromImageAlways: true,
+      kCGImageSourceCreateThumbnailWithTransform: true,
+      kCGImageSourceThumbnailMaxPixelSize: maxPixelSize,
+    ]
+    guard let cgImage = CGImageSourceCreateThumbnailAtIndex(source, 0, options as CFDictionary) else {
+      return nil
+    }
+    return NSImage(cgImage: cgImage, size: NSSize(width: cgImage.width, height: cgImage.height))
   }
 
   /// Get raw image data for a screenshot (for OCR processing)

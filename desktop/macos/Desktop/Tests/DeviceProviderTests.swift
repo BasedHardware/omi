@@ -99,7 +99,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertNil(provider.errorMessage)
   }
 
-  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async {
+  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async throws {
     var connection: FakeDeviceConnection?
     let provider = DeviceProvider(
       bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
@@ -117,7 +117,7 @@ final class DeviceProviderTests: XCTestCase {
     await provider.connect(to: testDevice)
     XCTAssertTrue(provider.isConnected)
 
-    let activeConnection = try! XCTUnwrap(connection)
+    let activeConnection = try XCTUnwrap(connection)
     activeConnection.delegate?.deviceConnection(
       activeConnection,
       didDisconnectUnexpectedly: testDevice
@@ -129,6 +129,62 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(provider.batteryLevel, -1)
     XCTAssertFalse(provider.isDeviceStorageSupported)
     XCTAssertEqual(provider.pairedDevice, testDevice)
+  }
+
+  func testUnexpectedDisconnectArmsReconnectNotification() async throws {
+    var connection: FakeDeviceConnection?
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: makeDefaults(),
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device, generation in
+        let created = FakeDeviceConnection(device: device, sessionGeneration: generation)
+        connection = created
+        return created
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+    let activeConnection = try XCTUnwrap(connection)
+    activeConnection.delegate?.deviceConnection(
+      activeConnection, didDisconnectUnexpectedly: testDevice)
+
+    XCTAssertTrue(
+      provider.hasScheduledDisconnectNotification,
+      "An unexpected disconnect should arm the reconnect prompt")
+  }
+
+  func testUnpairCancelsAndDoesNotArmReconnectNotification() async throws {
+    var connection: FakeDeviceConnection?
+    let provider = DeviceProvider(
+      bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
+      userDefaults: makeDefaults(),
+      notificationCenter: NotificationCenter(),
+      connectionFactory: { device, generation in
+        let created = FakeDeviceConnection(device: device, sessionGeneration: generation)
+        connection = created
+        return created
+      },
+      storageDataChecker: { nil },
+      autoReconnectEnabled: false
+    )
+
+    await provider.connect(to: testDevice)
+    // Simulate a drop that arms the "please reconnect" prompt...
+    let activeConnection = try XCTUnwrap(connection)
+    activeConnection.delegate?.deviceConnection(
+      activeConnection, didDisconnectUnexpectedly: testDevice)
+    XCTAssertTrue(provider.hasScheduledDisconnectNotification)
+
+    // ...then an intentional unpair must cancel it and not schedule a new one.
+    await provider.unpair()
+
+    XCTAssertFalse(
+      provider.hasScheduledDisconnectNotification,
+      "Intentional unpair must not tell the user to reconnect a device they removed")
+    XCTAssertNil(provider.pairedDevice)
   }
 
   func testLateDisconnectFromSupersededSessionDoesNotClearReplacement() async {

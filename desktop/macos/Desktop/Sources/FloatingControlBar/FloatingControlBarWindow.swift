@@ -4077,14 +4077,14 @@ class FloatingControlBarManager {
       )
     else { return false }
     observeAgentCompletionContext(pillID: pillID, runId: runId)
-    if !resources.isEmpty,
-      let projected = provider.messages.first(where: { $0.id == updated.turnId })
-    {
-      deliverAgentArtifactCompletionToFloatingSurface(projected)
+    if !resources.isEmpty {
+      // Project the canonical journal revision synchronously so main and notch agree before the floating
+      // viewport update.
+      provider.projectJournalTurn(updated)
+      deliverAgentArtifactCompletionToFloatingSurface(updated.chatMessage())
     }
     return true
   }
-
   static func performOwnerBoundPillTerminalAdmission<Value: Sendable>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {

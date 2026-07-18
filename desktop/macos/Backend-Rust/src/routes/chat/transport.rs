@@ -119,7 +119,7 @@ async fn receive_anthropic_response(
         tracing::warn!(
             "chat_completions: Anthropic continuation returned {}: {}",
             status,
-            &body[..body.len().min(500)]
+            super::truncate_for_log(&body, 500)
         );
         return Err(StatusCode::BAD_GATEWAY);
     }

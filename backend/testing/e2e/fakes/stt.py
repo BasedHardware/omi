@@ -67,24 +67,34 @@ class FakeStreamingSTTSocket:
 
 
 def install_streaming_stt_fake(monkeypatch, *, die_on_first_send=False):
-    """Patch the listen receiver provider boundary and return fake sockets."""
+    """Patch the listen receiver provider boundary and return fake sockets.
+
+    Deepgram is retired from serving, so the fake now patches the enabled
+    provider entry points (Parakeet/Modulate) and returns an enabled service.
+    """
     from routers.listen import receiver as listen_receiver
     from routers.listen import runtime as listen_runtime
 
     sockets = []
 
-    async def fake_process_audio_dg(
-        callback, language, sample_rate, channels, model="nova-3", keywords=None, is_active=None
-    ):
+    async def fake_process_audio_parakeet(callback, *args, **kwargs):
         socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
         sockets.append(socket)
         return socket
 
-    monkeypatch.setattr(listen_receiver, "process_audio_dg", fake_process_audio_dg)
+    async def fake_process_audio_modulate(callback, *args, **kwargs):
+        socket = FakeStreamingSTTSocket(callback, die_on_first_send=die_on_first_send)
+        sockets.append(socket)
+        return socket
+
+    # The receiver dispatches on stt_service; patch both enabled providers so
+    # the fake is reached regardless of which one the runtime selects.
+    monkeypatch.setattr(listen_receiver, "process_audio_parakeet", fake_process_audio_parakeet)
+    monkeypatch.setattr(listen_receiver, "process_audio_modulate", fake_process_audio_modulate)
     monkeypatch.setattr(
         listen_runtime,
         "get_stt_service_for_language",
-        lambda *_args, **_kwargs: (listen_runtime.STTService.deepgram, "en", "nova-3"),
+        lambda *_args, **_kwargs: (listen_runtime.STTService.parakeet, "en", "parakeet"),
     )
     monkeypatch.setattr(listen_receiver, "is_gate_enabled", lambda: False)
     monkeypatch.setattr(listen_runtime, "record_usage", lambda *args, **kwargs: None)

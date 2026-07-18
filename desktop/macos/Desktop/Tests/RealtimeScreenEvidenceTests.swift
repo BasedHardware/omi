@@ -43,6 +43,26 @@ final class RealtimeScreenEvidenceTests: XCTestCase {
     )
   }
 
+  func testScreenRecordingDenialContinuesThroughTheNormalVoiceProvider() {
+    let denied = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .screenRecordingPermissionRequired)
+    let unavailable = evidence(
+      bytes: 0,
+      target: .unavailable,
+      captureFailure: .captureUnavailable)
+
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureDisposition(for: denied),
+      .providerContinuation
+    )
+    XCTAssertEqual(
+      RealtimeScreenGroundingPolicy.failureDisposition(for: unavailable),
+      .authoritativeLocalResult
+    )
+  }
+
   private func request(
     descriptor: RealtimeScreenEvidenceDescriptor? = nil,
     callID: String = "screenshot-1",

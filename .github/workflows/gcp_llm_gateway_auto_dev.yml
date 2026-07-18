@@ -9,6 +9,8 @@ on:
       - 'backend/charts/backend-secrets/**'
       - 'backend/scripts/deploy-backend-secrets.sh'
       - 'backend/scripts/deploy-llm-gateway.sh'
+      - 'backend/scripts/probe-llm-gateway-from-cloud-run.sh'
+      - 'backend/scripts/verify-llm-gateway-serving.py'
       - 'backend/scripts/smoke-llm-gateway.py'
       - 'backend/scripts/validate-llm-gateway-env.py'
       - 'backend/Dockerfile'
@@ -63,6 +65,11 @@ jobs:
             backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
             backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
 
+      - name: Require LLM Gateway Workload Identity binding
+        env:
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
+        run: test -n "$LLM_GATEWAY_GSA"
+
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
@@ -81,12 +88,34 @@ jobs:
       - name: Deploy LLM Gateway to GKE cluster using Helm
         env:
           BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
           ENVIRONMENT: ${{ vars.ENV }}
           GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
           GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
           REGION: ${{ env.REGION }}
         run: |
           IMAGE_TAG="${GITHUB_SHA::7}" backend/scripts/deploy-llm-gateway.sh
+
+      - name: Verify LLM Gateway serving data plane
+        id: gateway-serving
+        run: |
+          python3 backend/scripts/verify-llm-gateway-serving.py \
+            --environment="${{ vars.ENV }}" \
+            --project="${{ vars.GCP_PROJECT_ID }}" \
+            --region="${{ env.REGION }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Probe LLM Gateway from the Cloud Run VPC
+        run: |
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Smoke LLM Gateway
         run: |

@@ -465,7 +465,7 @@ pub(super) async fn handle_streaming(
             "chat_completions: Anthropic stream returned {} for user {}: {}",
             status,
             user.uid,
-            &body[..body.len().min(500)]
+            super::truncate_for_log(&body, 500)
         );
         return Ok(response_or_500(
             Response::builder()

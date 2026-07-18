@@ -665,6 +665,14 @@ struct MessageHoverOverlay<Content: View>: View {
           }
           .buttonStyle(.plain)
           .help("Not helpful")
+          // Sync the dedupe shadow to the live rating. The overlay is keyed
+          // `.id(message.id)` so it re-mounts with lastSubmittedRating == nil,
+          // while a restored/history message already carries a rating — without
+          // this, clicking to clear it computes newRating == nil ==
+          // lastSubmittedRating and the guard swallows the tap (rating stuck).
+          .onChange(of: message.rating, initial: true) { _, newValue in
+            lastSubmittedRating = newValue
+          }
 
           // Copy — captures `messageText` explicitly so we always copy the
           // message this button was drawn for, even if SwiftUI reuses the

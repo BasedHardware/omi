@@ -15,9 +15,12 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Pages/Settings/Components/SettingsContentView+BillingHelpers.swift
   - desktop/macos/Desktop/Sources/MainWindow/RewindOnlyView.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusAssistant.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/Focus/FocusStorage.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/MemoryExtraction/MemoryAssistant.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ScreenCaptureTargetPolicy.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Core/ProactiveAssistantOrchestrationPolicy.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin+ScreenCaptureHealth.swift
   - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/SettingsSyncManager.swift
 preconditions:
   - auth_ready
@@ -33,7 +36,7 @@ steps:
 
   - id: S2
     name: Verify screen recording permission state
-    do: "Check the Rewind page for the screen recording permission state. If permission is NOT granted, verify the lock icon, 'Screen Recording Permission Required' title, description text, and 'Grant Permission' button are visible. If permission IS granted, verify the Rewind toggle (identifier: rewindToggle) and timeline controls are visible."
+    do: "Check the Rewind page for the screen recording permission state. If permission is NOT granted, verify the lock icon, 'Screen Recording Permission Required' title, description text, and 'Grant Permission' button are visible. If permission IS granted, verify the Rewind toggle (identifier: rewindToggle), timeline controls, and any Capture paused or Recovering status make the current capture health explicit."
     expect:
       interactive_count: { min: 1 }
 

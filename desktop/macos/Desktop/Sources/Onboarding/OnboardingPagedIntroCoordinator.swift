@@ -581,6 +581,19 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
+  /// The onboarding file scan is a best-effort profile builder. The user must be
+  /// able to advance once it reaches ANY terminal state — `.complete` (even with
+  /// zero indexed files) or `.failed` — not only when a non-empty `scanSnapshot`
+  /// exists. Gating the Continue button on `scanSnapshot != nil` traps a user
+  /// whose scan failed or indexed nothing (e.g. they skipped Full Disk Access)
+  /// on a perpetual "Scanning…" screen with no way forward but Skip.
+  static func fileScanReachedTerminalState(_ state: ScanState) -> Bool {
+    switch state {
+    case .complete, .failed: return true
+    case .idle, .scanning: return false
+    }
+  }
+
   func startFileScanIfNeeded(appState: AppState) async {
     guard case .idle = scanState else { return }
     lastActionError = nil
@@ -597,6 +610,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     if result.lowercased().hasPrefix("error") {
       scanState = .failed(result)
       lastActionError = result
+      scanStatusText = "We couldn't finish scanning your workspace."
       return
     }
 

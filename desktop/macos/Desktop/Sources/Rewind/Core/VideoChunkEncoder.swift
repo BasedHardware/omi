@@ -34,7 +34,9 @@ actor VideoChunkEncoder {
   /// Calculated from chunk duration + frame rate + padding so the normal
   /// duration-based finalization always fires before this safety limit.
   private var maxBufferFrames: Int {
-    Int(chunkDuration * frameRate) + 20
+    // Use the chunk's frozen rate while a chunk is active so a mid-chunk rate
+    // change can't shrink the cap and trip a spurious buffer-overflow reset.
+    Int(chunkDuration * (currentChunkFrameRate ?? frameRate)) + 20
   }
 
   /// Maximum consecutive encoder failures before emergency reset
@@ -60,6 +62,14 @@ actor VideoChunkEncoder {
   private var pendingAspectRatioSize: CGSize?
   private var pendingAspectRatioSince: Date?
   private var currentChunkStartTime: Date?
+  /// Capture frame rate frozen at chunk start. Presentation timestamps and the
+  /// buffer cap must use one rate for a chunk's whole lifetime: `frameRate` is a
+  /// live property of the battery state, and a mid-chunk change (AC power plugged
+  /// in shrinks the capture interval 3x → higher rate) would make a later frame's
+  /// PTS (`frameOffset / rate`) fall below an already-appended sample's PTS,
+  /// which AVAssetWriter rejects as non-monotonic — dropping frames and, past the
+  /// failure threshold, discarding the entire in-progress chunk.
+  private var currentChunkFrameRate: Double?
   private(set) var currentChunkPath: String?
   private var frameOffsetInChunk: Int = 0
 
@@ -177,6 +187,7 @@ actor VideoChunkEncoder {
     // Start new chunk if needed
     if currentChunkStartTime == nil {
       currentChunkStartTime = timestamp
+      currentChunkFrameRate = frameRate  // freeze for this chunk's whole lifetime
       currentChunkPath = generateChunkPath(for: timestamp)
       frameOffsetInChunk = 0
       currentChunkInputSize = newFrameSize
@@ -204,6 +215,7 @@ actor VideoChunkEncoder {
         // ~5 frames (2.5s of Rewind footage) and emitting misleading write-failure
         // errors until the emergency-reset threshold finally clears the state.
         currentChunkStartTime = nil
+        currentChunkFrameRate = nil
         currentChunkPath = nil
         currentChunkInputSize = nil
         currentOutputSize = nil
@@ -385,6 +397,16 @@ actor VideoChunkEncoder {
     Double(max(0, frameOffset)) / frameRate
   }
 
+  /// The frame rate a chunk's presentation timestamps are computed against: the
+  /// rate frozen when the chunk started, falling back to the live rate only
+  /// before the first frame. Using a single rate for the whole chunk keeps
+  /// `framePresentationSeconds(frameOffset:)` strictly increasing even when the
+  /// live capture rate changes mid-chunk (e.g. AC power connected). `nonisolated
+  /// static` so it is synchronously unit-testable.
+  nonisolated static func chunkPresentationFrameRate(frozen: Double?, live: Double) -> Double {
+    frozen ?? live
+  }
+
   private func writeFrame(image: CGImage) async throws {
     guard let input = writerInput,
       let adaptor = pixelBufferAdaptor,
@@ -417,7 +439,10 @@ actor VideoChunkEncoder {
     // strictly increasing timestamps — so every chunk's second frame is rejected,
     // failures cascade to an emergency reset, and no video chunk is ever persisted.
     let presentationTime = CMTime(
-      seconds: Self.framePresentationSeconds(frameOffset: frameOffsetInChunk, frameRate: frameRate),
+      seconds: Self.framePresentationSeconds(
+        frameOffset: frameOffsetInChunk,
+        frameRate: Self.chunkPresentationFrameRate(frozen: currentChunkFrameRate, live: frameRate)
+      ),
       preferredTimescale: 600
     )
     guard adaptor.append(pixelBuffer, withPresentationTime: presentationTime) else {
@@ -455,6 +480,7 @@ actor VideoChunkEncoder {
     // Reset state (timestamps only - no CGImages retained)
     frameTimestamps.removeAll()
     currentChunkStartTime = nil
+    currentChunkFrameRate = nil
     currentChunkPath = nil
     frameOffsetInChunk = 0
     currentOutputSize = nil
@@ -684,6 +710,7 @@ actor VideoChunkEncoder {
 
     frameTimestamps.removeAll()
     currentChunkStartTime = nil
+    currentChunkFrameRate = nil
     currentChunkPath = nil
     frameOffsetInChunk = 0
     currentOutputSize = nil

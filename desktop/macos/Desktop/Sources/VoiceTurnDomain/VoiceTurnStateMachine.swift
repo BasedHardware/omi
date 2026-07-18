@@ -525,6 +525,13 @@ enum VoiceTurnEvent: Equatable, Sendable {
     screenshotCallID: VoiceToolCallID,
     reportIdentity: VoiceEffectIdentity,
     reportCallID: VoiceToolCallID)
+  /// A screenshot tool returned a recoverable unavailable result (such as
+  /// missing Screen Recording permission). Clear only the local provenance
+  /// protocol so the provider can continue in its normal voice lane.
+  case screenEvidenceUnavailableScoped(
+    turnID: VoiceTurnID,
+    screenshotIdentity: VoiceEffectIdentity,
+    screenshotCallID: VoiceToolCallID)
   case screenEvidenceProtocolStartedScoped(
     turnID: VoiceTurnID,
     token: VoiceScreenEvidenceProtocolToken,
@@ -586,6 +593,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
       .toolStartedScoped(let turnID, _, _),
       .authoritativeLocalResultAcceptedScoped(let turnID, _, _, _),
       .screenEvidenceReportVerifiedScoped(let turnID, _, _, _, _),
+      .screenEvidenceUnavailableScoped(let turnID, _, _),
       .screenEvidenceProtocolStartedScoped(let turnID, _, _),
       .toolFinishedScoped(let turnID, _, _),
       .playbackStartedScoped(let turnID, _), .transcriptChanged(let turnID, _),
@@ -641,6 +649,7 @@ enum VoiceTurnEvent: Equatable, Sendable {
     case .toolStartedScoped: return "tool_started_scoped"
     case .authoritativeLocalResultAcceptedScoped: return "authoritative_local_result_accepted_scoped"
     case .screenEvidenceReportVerifiedScoped: return "screen_evidence_report_verified_scoped"
+    case .screenEvidenceUnavailableScoped: return "screen_evidence_unavailable_scoped"
     case .screenEvidenceProtocolStartedScoped: return "screen_evidence_protocol_started_scoped"
     case .toolFinishedScoped: return "tool_finished_scoped"
     case .playbackStartedScoped: return "playback_started_scoped"
@@ -884,6 +893,18 @@ package struct VoiceTurnFact: Sendable {
         screenshotCallID: screenshotCallID,
         reportIdentity: reportIdentity,
         reportCallID: reportCallID))
+  }
+
+  package static func screenEvidenceUnavailableScoped(
+    turnID: VoiceTurnID,
+    screenshotIdentity: VoiceEffectIdentity,
+    screenshotCallID: VoiceToolCallID
+  ) -> Self {
+    Self(
+      .screenEvidenceUnavailableScoped(
+        turnID: turnID,
+        screenshotIdentity: screenshotIdentity,
+        screenshotCallID: screenshotCallID))
   }
 
   package static func screenEvidenceProtocolStartedScoped(
@@ -1629,6 +1650,21 @@ struct VoiceTurnReducer {
       // Verification proves the attached JPEG was current for this tool pair;
       // it is not the answer. Keep the normal post-tool continuation fence so
       // native realtime audio answers the user's original question.
+      model.turn?.screenEvidenceProtocol = nil
+      cancel(.screenEvidenceProtocol, in: &model, effects: &effects)
+
+    case .screenEvidenceUnavailableScoped(_, let screenshotIdentity, let screenshotCallID):
+      guard let token = turn.screenEvidenceProtocol,
+        token.screenshotCallID == screenshotCallID,
+        token.screenshotIdentity == screenshotIdentity,
+        acceptsProviderOutput(turn.phase)
+      else {
+        stale(&model, event: event, effects: &effects)
+        return VoiceTurnReduction(model: model, effects: effects)
+      }
+      // A recoverable screenshot-tool error is not a user-visible local
+      // answer. The provider receives the error payload and keeps its normal
+      // post-tool continuation and native voice lane.
       model.turn?.screenEvidenceProtocol = nil
       cancel(.screenEvidenceProtocol, in: &model, effects: &effects)
 

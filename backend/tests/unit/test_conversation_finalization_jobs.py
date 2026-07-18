@@ -128,6 +128,39 @@ def test_intent_persists_outbox_before_any_live_handoff_and_omits_byok_material(
     assert transaction.updates[0][1]['finalization_job_id'] == intent['job_id']
 
 
+def test_rest_intent_persists_its_force_mode_and_calendar_context_atomically():
+    transaction = _Transaction()
+    conversation_ref = _conversation()
+    collection = _Collection({})
+
+    intent = jobs._create_or_get_finalization_intent_txn(
+        transaction,
+        conversation_ref,
+        collection,
+        'uid-1',
+        'conversation-1',
+        False,
+        _admit_finalization,
+        _now(),
+        force_process=True,
+        extra_updates={'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}}},
+    )
+
+    assert transaction.sets[0][1]['force_process'] is True
+    assert transaction.updates == [
+        (
+            conversation_ref,
+            {
+                'external_data': {'calendar_meeting_context': {'event_id': 'event-1'}},
+                'status': 'processing',
+                'finalization_job_id': intent['job_id'],
+                'finalization_revision': 1,
+                'finalization_status': 'queued',
+            },
+        )
+    ]
+
+
 def test_photo_only_conversation_with_durable_content_marker_is_admitted():
     transaction = _Transaction()
     conversation_ref = _conversation({'transcript_segments': [], 'has_content': True})
@@ -570,6 +603,65 @@ def test_final_attempt_sets_visible_dead_letter_instead_of_completed():
     assert update['status'] == 'dead_letter'
     assert update['task_retry_count'] == 5
     assert 'completed_at' not in update
+
+
+def test_final_attempt_atomically_closes_its_bound_processing_conversation():
+    transaction = _Transaction()
+    job_ref = _Ref(
+        'job-1',
+        {
+            'status': 'leased',
+            'uid': 'uid-1',
+            'conversation_id': 'conversation-1',
+            'finalization_revision': 3,
+            'dispatch_generation': 3,
+            'lease_epoch': 1,
+        },
+    )
+    conversation_ref = _conversation(
+        {
+            'status': 'processing',
+            'discarded': False,
+            'finalization_job_id': 'job-1',
+            'finalization_revision': 3,
+        }
+    )
+
+    assert (
+        jobs._mark_finalization_dead_letter_txn(
+            transaction,
+            job_ref,
+            3,
+            1,
+            5,
+            _now(),
+            lambda uid, conversation_id: conversation_ref,
+        )
+        is True
+    )
+
+    assert transaction.updates == [
+        (
+            job_ref,
+            {
+                'status': 'dead_letter',
+                'updated_at': _now(),
+                'terminal_at': _now(),
+                'lease_expires_at': _now(),
+                'reconcile_after_at': jobs.firestore.DELETE_FIELD,
+                'task_retry_count': 5,
+                'last_failure_code': 'final_attempt_failed',
+            },
+        ),
+        (
+            conversation_ref,
+            {
+                'status': 'failed',
+                'discarded': True,
+                'finalization_status': 'dead_letter',
+            },
+        ),
+    ]
 
 
 class _BoundedReplayCollection:

@@ -6,7 +6,6 @@ import json
 import os
 import subprocess
 import sys
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, cast
 
@@ -18,9 +17,15 @@ if str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))
 
 from config.prerecorded_stt import required_env_for_model_config  # noqa: E402
+from config.stt_provider_policy import STTServingSurface, canonical_model_config  # noqa: E402
 from scripts.firestore_workflow_policy import (  # noqa: E402
     has_direct_firestore_mutation,
     reconciliation_invocations,
+)
+from scripts.runtime_env_durable_dispatch_contracts import (  # noqa: E402
+    ValidationError,
+    validate_account_deletion_dispatch_contract as _validate_account_deletion_dispatch_contract,
+    validate_listen_finalization_dispatch_contract as _validate_listen_finalization_dispatch_contract,
 )
 
 DEFAULT_MANIFEST = ROOT / 'backend/deploy/runtime_env.yaml'
@@ -46,16 +51,6 @@ _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_ENV = frozenset(
 _NOTIFICATIONS_JOB_FORBIDDEN_MEMORY_SECRETS = frozenset({'TYPESENSE_HOST', 'TYPESENSE_API_KEY'})
 _SYNC_LEDGER_FENCE_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill')
 _SYNC_LEDGER_FENCE_MODES = frozenset({'legacy', 'standby', 'active'})
-_ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES = ('backend', 'backend-sync', 'backend-sync-backfill', 'backend-integration')
-_ACCOUNT_DELETION_LITERAL_ENV = {
-    'ACCOUNT_DELETION_DISPATCH_MODE': 'cloud_tasks',
-    'ACCOUNT_DELETION_TASKS_QUEUE': 'account-deletion',
-    'SYNC_TASKS_PROJECT': 'based-hardware',
-    'SYNC_TASKS_LOCATION': 'us-central1',
-}
-_ACCOUNT_DELETION_DYNAMIC_ENV = frozenset(
-    {'ACCOUNT_DELETION_HANDLER_URL', 'SYNC_TASKS_INVOKER_SA', 'SYNC_TASKS_HANDLER_URL'}
-)
 _MEMORY_MAINTENANCE_DEV_REQUIRED_FLAGS = {
     '--task-timeout': '3600s',
     '--cpu': '2',
@@ -69,12 +64,6 @@ def _as_config_dict(value: object) -> ConfigDict | None:
 
 def _as_config_list(value: object) -> list[Any] | None:
     return cast(list[Any], value) if isinstance(value, list) else None
-
-
-@dataclass(frozen=True)
-class ValidationError:
-    scope: str
-    message: str
 
 
 def main() -> int:
@@ -144,9 +133,11 @@ def validate_runtime_env(
         return errors
 
     errors.extend(_validate_gke(env_config, strict_provisional=strict_provisional))
+    errors.extend(_validate_stt_serving_model_policy(env, env_config))
     errors.extend(_validate_prerecorded_stt_contract(env, env_config))
     errors.extend(_validate_memory_maintenance_job_contract(env, env_config))
     errors.extend(_validate_account_deletion_dispatch_contract(env, env_config))
+    errors.extend(_validate_listen_finalization_dispatch_contract(env, env_config))
     if check_workflows:
         errors.extend(
             _validate_cloud_run_workflows(
@@ -380,6 +371,45 @@ def _manifest_env_binding_is_configured(env_map: ConfigDict, secrets_map: Config
             return True
     secret_entry = _as_config_dict(secrets_map.get(key))
     return secret_entry is not None and bool(str(secret_entry.get('secret', '')).strip())
+
+
+def _validate_stt_serving_model_policy(env: str, env_config: ConfigDict) -> list[ValidationError]:
+    """Require deployable model values to match the code-owned serving policy."""
+    errors: list[ValidationError] = []
+    model_policy = {
+        'STT_PRERECORDED_MODEL': canonical_model_config(STTServingSurface.PRERECORDED),
+        'STT_SERVICE_MODELS': canonical_model_config(STTServingSurface.STREAMING),
+    }
+    surfaces: list[tuple[str, ConfigDict]] = []
+
+    gke = _as_config_dict(env_config.get('gke')) or {}
+    for service, raw_service in gke.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/gke/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
+    cloud_run_services = _as_config_dict(cloud_run.get('services')) or {}
+    for service, raw_service in cloud_run_services.items():
+        service_config = _as_config_dict(raw_service) or {}
+        surfaces.append((f'{env}/cloud_run/{service}', _as_config_dict(service_config.get('env')) or {}))
+
+    for scope, env_map in surfaces:
+        for env_name, expected_value in model_policy.items():
+            if env_name not in env_map:
+                continue
+            actual_value = _manifest_literal_env_value(env_map, env_name)
+            if actual_value is None:
+                errors.append(
+                    ValidationError(scope, f'{env_name} must be a literal value owned by stt_provider_policy')
+                )
+            elif actual_value != expected_value:
+                errors.append(
+                    ValidationError(
+                        scope,
+                        f'{env_name} must match stt_provider_policy: expected {expected_value!r}, got {actual_value!r}',
+                    )
+                )
+    return errors
 
 
 def _validate_prerecorded_stt_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
@@ -657,70 +687,6 @@ def _validate_memory_maintenance_job_contract(env: str, env_config: ConfigDict) 
                 )
             )
     return errors
-
-
-def _validate_account_deletion_dispatch_contract(env: str, env_config: ConfigDict) -> list[ValidationError]:
-    """Keep every production API host out of the inline deletion execution path."""
-    if env != 'prod':
-        return []
-
-    errors: list[ValidationError] = []
-    gke = _as_config_dict(env_config.get('gke')) or {}
-    backend_listen = _as_config_dict(gke.get('backend-listen')) or {}
-    _validate_account_deletion_env_entries(
-        errors,
-        scope='prod/gke/backend-listen',
-        env_entries=_as_config_dict(backend_listen.get('env')) or {},
-        dynamic_binding='config_map',
-    )
-
-    cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
-    services = _as_config_dict(cloud_run.get('services')) or {}
-    for service in _ACCOUNT_DELETION_PROD_CLOUD_RUN_SERVICES:
-        service_config = _as_config_dict(services.get(service)) or {}
-        _validate_account_deletion_env_entries(
-            errors,
-            scope=f'prod/cloud_run/{service}',
-            env_entries=_as_config_dict(service_config.get('env')) or {},
-            dynamic_binding='env_var',
-        )
-    return errors
-
-
-def _validate_account_deletion_env_entries(
-    errors: list[ValidationError],
-    *,
-    scope: str,
-    env_entries: ConfigDict,
-    dynamic_binding: str,
-) -> None:
-    for name, expected_value in _ACCOUNT_DELETION_LITERAL_ENV.items():
-        entry = _as_config_dict(env_entries.get(name))
-        if entry is None:
-            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
-        elif entry.get('value') != expected_value:
-            errors.append(
-                ValidationError(
-                    scope,
-                    f'account-deletion env {name} must be literal {expected_value!r}',
-                )
-            )
-
-    for name in _ACCOUNT_DELETION_DYNAMIC_ENV:
-        entry = _as_config_dict(env_entries.get(name))
-        if entry is None:
-            errors.append(ValidationError(scope, f'missing required account-deletion env {name}'))
-        elif dynamic_binding == 'env_var' and entry.get('env_var') != name:
-            errors.append(ValidationError(scope, f'account-deletion env {name} must bind ${name}'))
-        elif dynamic_binding == 'config_map':
-            config_map = _as_config_dict(entry.get('config_map')) or {}
-            if config_map.get('name') != 'prod-omi-backend-config' or config_map.get('key') != name:
-                errors.append(
-                    ValidationError(
-                        scope,
-                        f'account-deletion env {name} must bind prod-omi-backend-config/{name}',
-                    )
-                )
 
 
 def _validate_gke(env_config: ConfigDict, *, strict_provisional: bool) -> list[ValidationError]:
@@ -1769,8 +1735,13 @@ def _cloud_run_secret_ref(entry: EnvEntry) -> StringMap | None:
 
 
 def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
+    # This deploy pipeline (gcp_backend.yml) deploys Cloud Run *services* only — the declared
+    # Cloud Run jobs (memory-maintenance-job, notifications-job) ship via their own workflows,
+    # so their live state is owned elsewhere. Fetch and live-validate services only; validating
+    # a job this pipeline does not deploy produced false failures (a not-found job crashed the
+    # whole deploy, and notifications-job's separately-managed env legitimately differs). The
+    # job contract is still validated statically against the rendered state.
     services: ConfigDict = {}
-    jobs: ConfigDict = {}
     project = env_config['gcp_project']
     region = env_config['region']
     cloud_run = _as_config_dict(env_config.get('cloud_run')) or {}
@@ -1800,39 +1771,7 @@ def _fetch_live_cloud_run_state(env_config: ConfigDict) -> ConfigDict:
             'env': first_container.get('env', []),
             'flags': _cloud_run_network_flags_from_annotations(annotations),
         }
-    job_configs = _as_config_dict(cloud_run.get('jobs')) or {}
-    for job in job_configs:
-        command = [
-            'gcloud',
-            'run',
-            'jobs',
-            'describe',
-            job,
-            f'--project={project}',
-            f'--region={region}',
-            '--format=json',
-        ]
-        result = subprocess.run(command, check=True, capture_output=True, text=True)
-        jobs[job] = {'env': _cloud_run_job_env(json.loads(result.stdout))}
-    return {'services': services, 'jobs': jobs}
-
-
-def _cloud_run_job_env(raw_job_state: object) -> list[Any]:
-    job_state = _as_config_dict(raw_job_state) or {}
-    env_paths = (
-        ('template', 'template', 'containers'),
-        ('template', 'containers'),
-        ('spec', 'template', 'spec', 'template', 'spec', 'containers'),
-    )
-    for path in env_paths:
-        cursor: object = job_state
-        for part in path:
-            cursor = (_as_config_dict(cursor) or {}).get(part)
-        containers = _as_config_list(cursor)
-        if containers:
-            first_container = _as_config_dict(containers[0]) or {}
-            return _as_config_list(first_container.get('env')) or []
-    return []
+    return {'services': services}
 
 
 def _cloud_run_network_flags_from_annotations(annotations: object) -> StringMap:

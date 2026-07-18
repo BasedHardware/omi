@@ -55,15 +55,28 @@ struct OnboardingFileScanStepView: View {
         }
         .frame(maxWidth: 560, maxHeight: 280)
 
+        // Gate Continue on the scan reaching a terminal state, not on a non-empty
+        // snapshot — a failed scan or a scan that indexed zero files (e.g. Full
+        // Disk Access was skipped) leaves `scanSnapshot` nil while `scanState`
+        // becomes `.failed`/`.complete`, and gating on the snapshot would trap
+        // the user on a perpetual "Scanning…" screen with no way forward.
         HStack(spacing: OmiSpacing.md) {
           OnboardingBackButton()
 
-          if coordinator.scanSnapshot != nil {
-            Button("Continue") {
-              onContinue()
+          if OnboardingPagedIntroCoordinator.fileScanReachedTerminalState(coordinator.scanState) {
+            VStack(alignment: .leading, spacing: OmiSpacing.md) {
+              if let error = coordinator.lastActionError {
+                Text(error)
+                  .font(.system(size: 13))
+                  .foregroundColor(OmiColors.textTertiary)
+                  .fixedSize(horizontal: false, vertical: true)
+              }
+              Button("Continue") {
+                onContinue()
+              }
+              .buttonStyle(OmiButtonStyle(.primary))
+              .keyboardShortcut(.defaultAction)
             }
-            .buttonStyle(OmiButtonStyle(.primary))
-            .keyboardShortcut(.defaultAction)
           } else {
             Text("Scanning your workspace…")
               .font(.system(size: 13))

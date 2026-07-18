@@ -118,8 +118,8 @@ def pusher_env_entries(deployment: dict[str, Any]) -> dict[str, dict[str, Any]]:
     return entries
 
 
-def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
-    """Load dev direct binding names and migration guards from the runtime contract."""
+def dev_pusher_binding_contract() -> tuple[dict[str, Binding], dict[str, str], set[str]]:
+    """Load dev direct bindings, literals, and migration guards from the runtime contract."""
     with RUNTIME_ENV_MANIFEST.open(encoding="utf-8") as handle:
         manifest = yaml.safe_load(handle)
     try:
@@ -130,14 +130,27 @@ def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
         raise RuntimeError("dev pusher runtime env contract must be a mapping")
 
     bindings: dict[str, Binding] = {}
+    literals: dict[str, str] = {}
     clear_historical_secret: set[str] = set()
     for env_name, raw_entry in env.items():
         if not isinstance(env_name, str) or not isinstance(raw_entry, dict):
             raise RuntimeError("dev pusher runtime env contract entries must be named mappings")
         source_entries = [("configmap", raw_entry.get("config_map")), ("secret", raw_entry.get("secret"))]
         configured = [(kind, source) for kind, source in source_entries if source is not None]
+        value = raw_entry.get("value")
+        if value is not None:
+            if configured:
+                raise RuntimeError(f"dev pusher runtime env {env_name} cannot declare both a binding and literal value")
+            if not isinstance(value, str):
+                raise RuntimeError(f"dev pusher runtime env {env_name} literal value must be a string")
+            if raw_entry.get("clear_historical_secret"):
+                raise RuntimeError(f"dev pusher literal env {env_name} cannot clear a historical Secret source")
+            literals[env_name] = value
+            continue
         if len(configured) != 1:
-            raise RuntimeError(f"dev pusher runtime env {env_name} must declare exactly one binding source")
+            raise RuntimeError(
+                f"dev pusher runtime env {env_name} must declare exactly one binding source or literal value"
+            )
         kind, source = configured[0]
         if (
             not isinstance(source, dict)
@@ -150,7 +163,7 @@ def dev_pusher_binding_contract() -> tuple[dict[str, Binding], set[str]]:
             if kind != "configmap":
                 raise RuntimeError(f"dev pusher runtime env {env_name} can only clear a Secret when it uses ConfigMap")
             clear_historical_secret.add(env_name)
-    return bindings, clear_historical_secret
+    return bindings, literals, clear_historical_secret
 
 
 def direct_pusher_bindings(deployment: dict[str, Any]) -> dict[str, Binding]:
@@ -179,9 +192,22 @@ def direct_pusher_bindings(deployment: dict[str, Any]) -> dict[str, Binding]:
     return bindings
 
 
+def literal_pusher_values(deployment: dict[str, Any]) -> dict[str, str]:
+    """Return literal pusher environment values without treating them as secret/config bindings."""
+    values: dict[str, str] = {}
+    for env_name, entry in pusher_env_entries(deployment).items():
+        if "valueFrom" in entry or "value" not in entry:
+            continue
+        value = entry["value"]
+        if not isinstance(value, str):
+            raise RuntimeError(f"rendered pusher {env_name} has a non-string literal value")
+        values[env_name] = value
+    return values
+
+
 def validate_dev_pusher_binding_contract(deployment: dict[str, Any]) -> list[str]:
-    """Return dev source/Helm binding drift without contacting Kubernetes."""
-    expected, clear_historical_secret = dev_pusher_binding_contract()
+    """Return dev source/Helm binding or literal drift without contacting Kubernetes."""
+    expected, expected_literals, clear_historical_secret = dev_pusher_binding_contract()
     actual = direct_pusher_bindings(deployment)
     failures: list[str] = []
     for env_name in sorted(expected.keys() - actual.keys()):
@@ -195,6 +221,16 @@ def validate_dev_pusher_binding_contract(deployment: dict[str, Any]) -> list[str
             failures.append(
                 f"dev pusher binding contract mismatch for {env_name}: expected "
                 f"{expected_kind}/{expected_name}#{expected_key}, got {actual_kind}/{actual_name}#{actual_key}"
+            )
+    literal_values = literal_pusher_values(deployment)
+    for env_name in sorted(expected_literals.keys() - literal_values.keys()):
+        failures.append(f"dev pusher literal contract missing rendered value for {env_name}")
+    for env_name in sorted(expected_literals.keys() & literal_values.keys()):
+        expected_value = expected_literals[env_name]
+        actual_value = literal_values[env_name]
+        if actual_value != expected_value:
+            failures.append(
+                f"dev pusher literal contract mismatch for {env_name}: expected {expected_value!r}, got {actual_value!r}"
             )
     entries = pusher_env_entries(deployment)
     for env_name in sorted(clear_historical_secret):

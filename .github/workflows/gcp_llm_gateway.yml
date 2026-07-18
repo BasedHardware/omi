@@ -76,6 +76,11 @@ jobs:
             backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
             backend/charts/llm-gateway/${{ vars.ENV }}_omi_llm_gateway_values.yaml
 
+      - name: Require LLM Gateway Workload Identity binding
+        env:
+          LLM_GATEWAY_GSA: ${{ vars.LLM_GATEWAY_GSA }}
+        run: test -n "$LLM_GATEWAY_GSA"
+
       - name: Build and Push Docker image
         run: |
           docker build -t gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7} -f backend/Dockerfile .
@@ -113,15 +118,15 @@ jobs:
 
       - name: Probe LLM Gateway from the Cloud Run VPC
         run: |
-          backend/scripts/probe-llm-gateway-from-cloud-run.sh \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --region="${{ env.REGION }}" \
-            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
-            --gateway-url="${{ steps.gateway-serving.outputs.gateway_url }}" \
-            --network="${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
-            --subnet="${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
-            --vpc-egress=private-ranges-only \
-            --name-suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${GITHUB_SHA::7}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       - name: Smoke LLM Gateway
         run: |

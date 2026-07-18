@@ -742,6 +742,15 @@ export async function uploadChatFiles(
 /**
  * Transcribe voice message to text
  */
+function getAudioFileExtension(mimeType: string): string {
+  const normalizedMimeType = mimeType.split(';', 1)[0].toLowerCase();
+  if (normalizedMimeType === 'audio/webm' || normalizedMimeType === 'video/webm')
+    return 'webm';
+  if (normalizedMimeType === 'audio/mp4' || normalizedMimeType === 'video/mp4')
+    return 'mp4';
+  return 'wav';
+}
+
 export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   let token: string | null = null;
 
@@ -759,14 +768,20 @@ export async function transcribeVoiceMessage(audioBlob: Blob): Promise<string> {
   const url = `${API_BASE_URL}/v2/voice-message/transcribe`;
 
   const formData = new FormData();
-  // API expects field name 'files' (matching mobile app)
-  formData.append('files', audioBlob, 'audio.wav');
+  // The backend uses the filename extension when it uploads audio for STT.
+  formData.append('files', audioBlob, `audio.${getAudioFileExtension(audioBlob.type)}`);
+  const deviceIdHash = await getWebDeviceIdHash();
+  const headers: HeadersInit = {
+    Authorization: `Bearer ${token}`,
+    'X-App-Platform': 'web',
+  };
+  if (deviceIdHash) {
+    headers['X-Device-Id-Hash'] = deviceIdHash;
+  }
 
   const response = await fetch(url, {
     method: 'POST',
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
+    headers,
     body: formData,
   });
 

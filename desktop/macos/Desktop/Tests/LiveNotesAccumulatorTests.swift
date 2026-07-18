@@ -130,7 +130,9 @@ final class LiveNotesAccumulatorTests: XCTestCase {
       ], isGenerating: false)
 
     XCTAssertEqual(accumulator.wordBuffer, ["four", "five", "six", "seven", "eight"])
-    XCTAssertEqual(request?.recentText, "six seven eight")
+    // All five unsummarized (still-buffered) words are summarized — the window
+    // is no longer a fixed suffix(wordThreshold) that would drop "four five".
+    XCTAssertEqual(request?.recentText, "four five six seven eight")
   }
 
   func testGenerationInFlightSuppressesRequestButKeepsAccumulatingWords() {
@@ -149,7 +151,32 @@ final class LiveNotesAccumulatorTests: XCTestCase {
         segment(text: "four", start: 1, end: 2),
       ], isGenerating: false)
 
-    XCTAssertEqual(request?.recentText, "two three four")
+    // All four words accumulated while generation was suppressed are summarized
+    // (none had been summarized yet), instead of dropping "one".
+    XCTAssertEqual(request?.recentText, "one two three four")
+  }
+
+  func testSingleBurstLargerThanThresholdSummarizesEveryWord() {
+    var accumulator = LiveNotesAccumulator(wordThreshold: 3, maxWordBufferSize: 50, maxExistingNotesContext: 3)
+
+    // One update delivers 7 words at once (> threshold). The middle span must
+    // not be dropped: every unsummarized word is included exactly once.
+    let request = accumulator.handleSegmentsUpdate(
+      [
+        segment(text: "a b c d e f g", start: 0, end: 1)
+      ], isGenerating: false)
+
+    XCTAssertEqual(request?.recentText, "a b c d e f g")
+
+    // After success the counter is fully drained; a fresh 3-word burst produces
+    // exactly those 3 words with no re-summarized tail.
+    accumulator.markGenerationSucceeded(noteText: "note")
+    let next = accumulator.handleSegmentsUpdate(
+      [
+        segment(text: "a b c d e f g", start: 0, end: 1),
+        segment(text: "h i j", start: 1, end: 2),
+      ], isGenerating: false)
+    XCTAssertEqual(next?.recentText, "h i j")
   }
 
   private func segment(id: String? = nil, text: String, start: Double, end: Double) -> SpeakerSegment {
