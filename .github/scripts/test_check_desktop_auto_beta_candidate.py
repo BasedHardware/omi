@@ -6,10 +6,12 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import re
 import tempfile
 from pathlib import Path
 
 SCRIPT = Path(__file__).with_name("check-desktop-auto-beta-candidate.py")
+SIGNED_SMOKE = Path(__file__).parents[2] / "desktop/macos/scripts/smoke-signed-desktop-artifact.sh"
 SPEC = importlib.util.spec_from_file_location("check_desktop_auto_beta_candidate", SCRIPT)
 assert SPEC and SPEC.loader
 MODULE = importlib.util.module_from_spec(SPEC)
@@ -75,6 +77,11 @@ def expect_failure(args: argparse.Namespace, fragment: str) -> None:
 
 
 def main() -> int:
+    # omi-test-quality: source-inspection -- static contract: qualification labels must match signed-smoke output.
+    smoke_labels = set(re.findall(r'^\s*pass "([^"]+)"\s*$', SIGNED_SMOKE.read_text(encoding="utf-8"), re.MULTILINE))
+    missing_labels = sorted(REQUIRED_SMOKE_CHECKS - smoke_labels)
+    assert not missing_labels, f"qualification requires labels not emitted by signed smoke: {missing_labels}"
+
     with tempfile.TemporaryDirectory() as temp_dir:
         args = fixtures(Path(temp_dir))
         result = validate(args)
