@@ -3,6 +3,66 @@ import AppKit
 import CoreGraphics
 import Foundation
 import Sentry
+import os
+
+/// Identifies one writer's ownership of a video chunk. The generation remains
+/// necessary even though new paths include a unique suffix: older stored paths
+/// and test seams can still use second-granular names.
+struct RewindVideoChunkReservation: Equatable, Sendable {
+  let generation: UInt64
+  let relativePath: String
+}
+
+private enum RewindVideoChunkLifecyclePhase: Equatable, Sendable {
+  case writing
+  case finalizing
+}
+
+/// Actor-local ownership for the currently installed video writer.
+///
+/// A finalizer captures the reservation before awaiting AVFoundation. Its later
+/// cleanup may only clear that exact reservation, never a replacement writer.
+struct RewindVideoChunkLifecycle: Equatable, Sendable {
+  private(set) var activeReservation: RewindVideoChunkReservation?
+  private var phase: RewindVideoChunkLifecyclePhase?
+
+  mutating func install(_ reservation: RewindVideoChunkReservation) {
+    activeReservation = reservation
+    phase = .writing
+  }
+
+  /// Atomically transitions the current writer to finalization. A writer may
+  /// only be finalized once; concurrent callers must leave the owner alone.
+  @discardableResult
+  mutating func beginFinalization(of reservation: RewindVideoChunkReservation) -> Bool {
+    guard activeReservation == reservation, phase == .writing else {
+      return false
+    }
+    phase = .finalizing
+    return true
+  }
+
+  /// Clears the active reservation when it is still owned by `expected`.
+  /// `nil` is an unconditional lifecycle reset used by explicit cancellation.
+  @discardableResult
+  mutating func reset(onlyIfCurrent expected: RewindVideoChunkReservation? = nil) -> RewindVideoChunkReservation? {
+    if let expected, activeReservation != expected {
+      return nil
+    }
+    let releasedReservation = activeReservation
+    activeReservation = nil
+    phase = nil
+    return releasedReservation
+  }
+
+  func owns(_ reservation: RewindVideoChunkReservation) -> Bool {
+    activeReservation == reservation
+  }
+
+  func isWriting(_ reservation: RewindVideoChunkReservation) -> Bool {
+    activeReservation == reservation && phase == .writing
+  }
+}
 
 /// Encodes screenshot frames into H.265 video chunks using VideoToolbox for efficient storage.
 actor VideoChunkEncoder {
@@ -71,6 +131,7 @@ actor VideoChunkEncoder {
   /// failure threshold, discarding the entire in-progress chunk.
   private var currentChunkFrameRate: Double?
   private(set) var currentChunkPath: String?
+  private var chunkLifecycle = RewindVideoChunkLifecycle()
   private var frameOffsetInChunk: Int = 0
 
   // Native HEVC writer state
@@ -169,7 +230,12 @@ actor VideoChunkEncoder {
         )
         pendingAspectRatioSize = nil
         pendingAspectRatioSince = nil
-        try await finalizeCurrentChunk()
+        // Finalization can suspend while AVFoundation finishes the old writer.
+        // A cancellation/restart that wins during that suspension owns the
+        // encoder now, so this stale frame must not continue into the new chunk.
+        guard try await finalizeCurrentChunk() else {
+          return nil
+        }
       } else {
         // Not yet stable — record/refresh the pending candidate and drop this frame
         if !pendingMatches {
@@ -188,17 +254,19 @@ actor VideoChunkEncoder {
     if currentChunkStartTime == nil {
       currentChunkStartTime = timestamp
       currentChunkFrameRate = frameRate  // freeze for this chunk's whole lifetime
-      currentChunkPath = generateChunkPath(for: timestamp)
+      let chunkPath = Self.generateChunkPath(for: timestamp)
+      currentChunkPath = chunkPath
       frameOffsetInChunk = 0
       currentChunkInputSize = newFrameSize
 
       // Start native HEVC writer for this chunk
       do {
-        try startVideoWriter(
-          for: currentChunkPath!,
-          videosDir: videosDir,
-          imageSize: newFrameSize
-        )
+        chunkLifecycle.install(
+          try startVideoWriter(
+            for: chunkPath,
+            videosDir: videosDir,
+            imageSize: newFrameSize
+          ))
         consecutiveWriteFailures = 0  // Reset on successful start
         writerNotReadyCount = 0
         encoderRestartCount += 1
@@ -217,6 +285,7 @@ actor VideoChunkEncoder {
         currentChunkStartTime = nil
         currentChunkFrameRate = nil
         currentChunkPath = nil
+        _ = chunkLifecycle.reset()
         currentChunkInputSize = nil
         currentOutputSize = nil
         frameOffsetInChunk = 0
@@ -229,6 +298,10 @@ actor VideoChunkEncoder {
       }
     }
 
+    guard let reservation = chunkLifecycle.activeReservation else {
+      return nil
+    }
+
     // Write frame to the encoder FIRST (CGImage not stored after this). Only a
     // successful write may consume a frame index: if the write throws, the
     // caller skips the DB insert for this frame, so advancing frameOffsetInChunk
@@ -236,10 +309,21 @@ actor VideoChunkEncoder {
     // by one (DB frameOffset N pointing at real sample N-1, and the last record
     // pointing past the end of the video). Record the frame only after success.
     do {
-      try await writeFrame(image: image)
+      guard try await writeFrame(image: image, reservation: reservation) else {
+        return nil
+      }
+      guard chunkLifecycle.isWriting(reservation) else {
+        return nil
+      }
       consecutiveWriteFailures = 0  // Reset on successful write
       resetStalenessTimer()
     } catch {
+      // `waitForWriterInputReady` can suspend. If a cancel/restart replaced
+      // this writer while it was waiting, the old call must not increment or
+      // emergency-reset the replacement writer.
+      guard chunkLifecycle.isWriting(reservation) else {
+        return nil
+      }
       consecutiveWriteFailures += 1
       logError(
         "VideoChunkEncoder: Failed to write frame (\(consecutiveWriteFailures)/\(maxConsecutiveFailures))", error: error
@@ -272,7 +356,9 @@ actor VideoChunkEncoder {
       timestamp.timeIntervalSince(startTime) >= effectiveDuration
     {
       // Finalize current chunk
-      try await finalizeCurrentChunk()
+      guard try await finalizeCurrentChunk() else {
+        return nil
+      }
       hasFinalizedAnyChunk = true
       return frameInfo
     }
@@ -295,15 +381,21 @@ actor VideoChunkEncoder {
       )
     }
 
-    try await finalizeCurrentChunk()
+    guard try await finalizeCurrentChunk() else {
+      return nil
+    }
 
     return ChunkFlushResult(videoChunkPath: chunkPath, frames: frames)
   }
 
   // MARK: - Video Writer Management
 
-  private func startVideoWriter(for relativePath: String, videosDir: URL, imageSize: CGSize) throws {
-    try RewindVideoDirectoryMutation.lock.withLock {
+  private func startVideoWriter(
+    for relativePath: String,
+    videosDir: URL,
+    imageSize: CGSize
+  ) throws -> RewindVideoChunkReservation {
+    try RewindVideoDirectoryMutation.startActiveChunk(at: relativePath) {
       try startVideoWriterLocked(for: relativePath, videosDir: videosDir, imageSize: imageSize)
     }
   }
@@ -416,7 +508,14 @@ actor VideoChunkEncoder {
     frozen ?? live
   }
 
-  private func writeFrame(image: CGImage) async throws {
+  /// Appends a frame only while `reservation` still owns a writing-phase
+  /// chunk. `false` means a cancel, restart, or finalization won while this
+  /// method was suspended and the caller must not touch replacement state.
+  private func writeFrame(image: CGImage, reservation: RewindVideoChunkReservation) async throws -> Bool {
+    guard chunkLifecycle.isWriting(reservation) else {
+      return false
+    }
+
     guard let input = writerInput,
       let adaptor = pixelBufferAdaptor,
       let outputSize = currentOutputSize
@@ -433,7 +532,12 @@ actor VideoChunkEncoder {
       throw RewindError.storageError("Video writer not ready")
     }
 
-    try await waitForWriterInputReady(input)
+    guard try await waitForWriterInputReady(input, reservation: reservation) else {
+      return false
+    }
+    guard chunkLifecycle.isWriting(reservation) else {
+      return false
+    }
 
     // Keep this actor-isolated: autoreleasepool's closure is treated as a sending
     // boundary by Swift 6, which cannot safely retain the AVFoundation adaptor.
@@ -461,31 +565,64 @@ actor VideoChunkEncoder {
       throw RewindError.storageError("Failed to append frame to HEVC writer: unknown error")
     }
     writerNotReadyCount = 0
+    return true
   }
 
-  private func finalizeCurrentChunk() async throws {
+  /// Finalize the writer that owned the encoder at entry.
+  ///
+  /// `finishWriting` suspends this actor. A cancellation can therefore install a
+  /// newer writer before this continuation resumes. Returning `false` tells the
+  /// caller that its captured writer lost ownership, so it must not mutate the
+  /// newer chunk after the await.
+  private func finalizeCurrentChunk() async throws -> Bool {
     stalenessCheckTask?.cancel()
     stalenessCheckTask = nil
-    defer {
-      resetCurrentChunkState()
+
+    guard let reservation = chunkLifecycle.activeReservation,
+      chunkLifecycle.beginFinalization(of: reservation)
+    else {
+      return false
     }
 
-    if let input = writerInput, let writer = assetWriter {
-      let frameCount = frameTimestamps.count
-      input.markAsFinished()
-      do {
-        try await finishWriting(writer)
-      } catch {
-        writer.cancelWriting()
-        throw error
-      }
-      log(
-        "VideoChunkEncoder: Finalized chunk with \(frameCount) frames (restartCount=\(encoderRestartCount), emergencyResets=\(emergencyResetCount))"
-      )
+    guard let input = writerInput, let writer = assetWriter else {
+      return resetCurrentChunkState(onlyIfCurrent: reservation)
     }
+
+    let frameCount = frameTimestamps.count
+    input.markAsFinished()
+    do {
+      try await finishWriting(writer)
+    } catch {
+      writer.cancelWriting()
+      // A cancellation/restart may have replaced this writer while its finish
+      // callback was pending. That stale completion is an expected no-op for
+      // the caller rather than an error from the newer generation.
+      guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
+        return false
+      }
+      throw error
+    }
+
+    guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
+      return false
+    }
+
+    log(
+      "VideoChunkEncoder: Finalized chunk with \(frameCount) frames (restartCount=\(encoderRestartCount), emergencyResets=\(emergencyResetCount))"
+    )
+    return true
   }
 
-  private func resetCurrentChunkState() {
+  /// Clears encoder state only if the expected reservation still owns it.
+  /// This guard must run before changing any field: a stale finalizer is not
+  /// allowed to touch a newer writer after an actor reentrancy point.
+  @discardableResult
+  private func resetCurrentChunkState(onlyIfCurrent expectedReservation: RewindVideoChunkReservation? = nil) -> Bool {
+    if let expectedReservation, !chunkLifecycle.owns(expectedReservation) {
+      return false
+    }
+    let activeChunkReservation = chunkLifecycle.reset()
+
     // Reset state (timestamps only - no CGImages retained)
     frameTimestamps.removeAll()
     currentChunkStartTime = nil
@@ -500,6 +637,9 @@ actor VideoChunkEncoder {
     consecutiveWriteFailures = 0
     pendingAspectRatioSize = nil
     pendingAspectRatioSince = nil
+
+    RewindVideoDirectoryMutation.finishActiveChunk(activeChunkReservation)
+    return true
   }
 
   // MARK: - Staleness Detection
@@ -509,16 +649,23 @@ actor VideoChunkEncoder {
   /// to release the H.265 hardware encoder context.
   private func resetStalenessTimer() {
     stalenessCheckTask?.cancel()
+    guard let reservation = chunkLifecycle.activeReservation,
+      chunkLifecycle.isWriting(reservation)
+    else {
+      stalenessCheckTask = nil
+      return
+    }
     let timeout = chunkDuration + 10.0
-    stalenessCheckTask = Task { [weak self] in
+    stalenessCheckTask = Task { [weak self, reservation] in
       try? await Task.sleep(nanoseconds: UInt64(timeout * 1_000_000_000))
       guard !Task.isCancelled else { return }
-      await self?.finalizeStaleChunkIfNeeded()
+      await self?.finalizeStaleChunkIfNeeded(onlyIfCurrent: reservation)
     }
   }
 
   /// Finalize a chunk that has gone stale (no new frames for longer than chunk duration).
-  private func finalizeStaleChunkIfNeeded() async {
+  private func finalizeStaleChunkIfNeeded(onlyIfCurrent reservation: RewindVideoChunkReservation) async {
+    guard chunkLifecycle.isWriting(reservation) else { return }
     guard let startTime = currentChunkStartTime else { return }
 
     let age = Date().timeIntervalSince(startTime)
@@ -538,7 +685,7 @@ actor VideoChunkEncoder {
     SentrySDK.addBreadcrumb(breadcrumb)
 
     do {
-      try await finalizeCurrentChunk()
+      _ = try await finalizeCurrentChunk()
     } catch {
       logError("VideoChunkEncoder: Failed to finalize stale video chunk", error: error)
     }
@@ -546,16 +693,24 @@ actor VideoChunkEncoder {
 
   // MARK: - Helpers
 
-  private func generateChunkPath(for timestamp: Date) -> String {
+  /// Builds a collision-proof chunk path while keeping absolute capture time
+  /// in the filename for recovery. The UUID prevents a cancel/restart within
+  /// one millisecond from overwriting a prior durable chunk.
+  nonisolated static func generateChunkPath(for timestamp: Date, uniqueID: UUID = UUID()) -> String {
     let dateFormatter = DateFormatter()
+    dateFormatter.locale = Locale(identifier: "en_US_POSIX")
+    dateFormatter.timeZone = .current
     dateFormatter.dateFormat = "yyyy-MM-dd"
     let dayString = dateFormatter.string(from: timestamp)
 
     let timeFormatter = DateFormatter()
+    timeFormatter.locale = Locale(identifier: "en_US_POSIX")
+    timeFormatter.timeZone = .current
     timeFormatter.dateFormat = "HHmmss"
     let timeString = timeFormatter.string(from: timestamp)
+    let epochMilliseconds = Int64((timestamp.timeIntervalSince1970 * 1_000).rounded(.down))
 
-    return "\(dayString)/chunk_\(timeString).mp4"
+    return "\(dayString)/chunk_\(timeString)_\(epochMilliseconds)_\(uniqueID.uuidString.lowercased()).mp4"
   }
 
   /// Check if aspect ratio changed significantly between two sizes
@@ -683,14 +838,26 @@ actor VideoChunkEncoder {
     }
   }
 
-  private func waitForWriterInputReady(_ input: AVAssetWriterInput) async throws {
+  /// Waits for readiness without letting a stale caller resume into a newer
+  /// generation. The ownership check runs both before and after each suspend.
+  private func waitForWriterInputReady(
+    _ input: AVAssetWriterInput,
+    reservation: RewindVideoChunkReservation
+  ) async throws -> Bool {
     let deadline = Date().addingTimeInterval(2.0)
     while !input.isReadyForMoreMediaData {
+      guard chunkLifecycle.isWriting(reservation) else {
+        return false
+      }
       if Date() >= deadline {
         throw RewindError.storageError("Video writer input backpressured")
       }
       try await Task.sleep(nanoseconds: 10_000_000)
+      guard chunkLifecycle.isWriting(reservation) else {
+        return false
+      }
     }
+    return chunkLifecycle.isWriting(reservation)
   }
 
   private nonisolated static func writerStatusDescription(_ status: AVAssetWriter.Status) -> String {
@@ -713,18 +880,7 @@ actor VideoChunkEncoder {
 
     writerInput?.markAsFinished()
     assetWriter?.cancelWriting()
-    assetWriter = nil
-    writerInput = nil
-    pixelBufferAdaptor = nil
-
-    frameTimestamps.removeAll()
-    currentChunkStartTime = nil
-    currentChunkFrameRate = nil
-    currentChunkPath = nil
-    frameOffsetInChunk = 0
-    currentOutputSize = nil
-    currentChunkInputSize = nil
-    consecutiveWriteFailures = 0
+    _ = resetCurrentChunkState()
     writerNotReadyCount = 0
   }
 
@@ -808,9 +964,66 @@ private final class AssetWriterBox: @unchecked Sendable {
   }
 }
 
-/// Coordinates the two actors that mutate the Rewind Videos directory. This
-/// lock is held only around synchronous filesystem/writer startup operations;
-/// no actor hop or asynchronous work occurs while it is held.
+/// State owned exclusively by `RewindVideoDirectoryMutation`'s lock.
+///
+/// The generation disambiguates writers even for legacy or test paths that
+/// retain a second-granular name.
+private struct RewindVideoDirectoryMutationState: Sendable {
+  var activeReservation: RewindVideoChunkReservation?
+  var nextGeneration: UInt64 = 0
+}
+
+/// Coordinates video-directory mutation and the active writer reservation.
+/// No actor hop or asynchronous work occurs while its lock is held. The
+/// `withLockUnchecked` calls below are confined to this synchronous critical
+/// section, so actor-isolated startup and cleanup closures cannot escape or
+/// suspend while they hold the lock.
 enum RewindVideoDirectoryMutation {
-  static let lock = NSLock()
+  private static let lock = OSAllocatedUnfairLock<RewindVideoDirectoryMutationState>(
+    initialState: RewindVideoDirectoryMutationState()
+  )
+
+  /// Claims the active chunk before its writer creates the day directory. The
+  /// reservation remains after a successful startup and is released by
+  /// `finishActiveChunk(_:)` once that exact writer has finalized or been
+  /// cancelled.
+  static func startActiveChunk(
+    at relativePath: String,
+    _ startup: () throws -> Void
+  ) rethrows -> RewindVideoChunkReservation {
+    try lock.withLockUnchecked { state in
+      state.nextGeneration &+= 1
+      let reservation = RewindVideoChunkReservation(
+        generation: state.nextGeneration,
+        relativePath: relativePath
+      )
+      state.activeReservation = reservation
+      do {
+        try startup()
+        return reservation
+      } catch {
+        if state.activeReservation == reservation {
+          state.activeReservation = nil
+        }
+        throw error
+      }
+    }
+  }
+
+  /// Reads the active reservation while holding the same lock that protects
+  /// writer startup, so cleanup cannot observe a stale nil before a new day
+  /// directory is created.
+  static func withActiveChunk<T>(_ body: (RewindVideoChunkReservation?) throws -> T) rethrows -> T {
+    try lock.withLockUnchecked { state in
+      try body(state.activeReservation)
+    }
+  }
+
+  static func finishActiveChunk(_ reservation: RewindVideoChunkReservation?) {
+    guard let reservation else { return }
+    lock.withLockUnchecked { state in
+      guard state.activeReservation == reservation else { return }
+      state.activeReservation = nil
+    }
+  }
 }

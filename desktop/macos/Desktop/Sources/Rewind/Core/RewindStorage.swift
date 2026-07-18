@@ -6,6 +6,15 @@ import ImageIO
 import OmiSupport
 import Sentry
 
+/// A Sendable inspection sample for a decoded video frame. This lets callers
+/// verify video readback without moving AppKit's non-Sendable `NSImage` outside
+/// `RewindStorage`'s actor.
+struct RewindVideoFrameCenterPixel: Equatable, Sendable {
+  let red: Int
+  let green: Int
+  let blue: Int
+}
+
 /// File storage manager for Rewind screenshots
 actor RewindStorage {
   static let shared = RewindStorage()
@@ -146,8 +155,11 @@ actor RewindStorage {
 
   // MARK: - Video Frame Loading
 
-  /// Load a frame from a video chunk.
-  func loadVideoFrame(videoPath: String, frameOffset: Int) async throws -> NSImage {
+  /// Load a frame from a video chunk. AppKit images stay actor-local; callers
+  /// outside this actor use a Sendable representation such as
+  /// `videoFrameCenterPixel(videoPath:frameOffset:)` or the main-actor image
+  /// loading API below.
+  private func loadVideoFrame(videoPath: String, frameOffset: Int) async throws -> NSImage {
     guard let videosDirectory = videosDirectory else {
       throw RewindError.storageError("Videos directory not initialized")
     }
@@ -226,6 +238,29 @@ actor RewindStorage {
         throw error
       }
     }
+  }
+
+  /// Read the decoded frame's center pixel without sending an AppKit image
+  /// across the storage actor boundary. This is useful for deterministic local
+  /// diagnostics and gauntlets that only need to inspect the decoded output.
+  func videoFrameCenterPixel(videoPath: String, frameOffset: Int) async throws -> RewindVideoFrameCenterPixel {
+    let image = try await loadVideoFrame(videoPath: videoPath, frameOffset: frameOffset)
+    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
+      throw RewindError.invalidImage
+    }
+
+    let bitmap = NSBitmapImageRep(cgImage: cgImage)
+    let x = max(0, bitmap.pixelsWide / 2)
+    let y = max(0, bitmap.pixelsHigh / 2)
+    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
+      throw RewindError.invalidImage
+    }
+
+    return RewindVideoFrameCenterPixel(
+      red: Int(color.redComponent * 255),
+      green: Int(color.greenComponent * 255),
+      blue: Int(color.blueComponent * 255)
+    )
   }
 
   /// Extract a frame from finalized AVAssetWriter MP4 chunks using the system decoder.
@@ -627,21 +662,21 @@ actor RewindStorage {
 
   // MARK: - Cleanup
 
-  /// Delete empty day directories in both Screenshots and Videos folders
-  func cleanupEmptyDirectories() async throws {
-    // `VideoChunkEncoder` claims `currentChunkPath` before AVAssetWriter creates
-    // its output file. Retention cleanup runs concurrently with first-frame
-    // ingestion, so an otherwise empty active day directory must survive this
-    // sweep until the writer makes that file visible. The shared directory lock
-    // also closes the nil-snapshot → writer-start window.
-    let activeVideoChunkPath = await VideoChunkEncoder.shared.currentChunkPath
-    try cleanupEmptyDirectories(protectingActiveVideoChunkPath: activeVideoChunkPath)
+  /// Delete empty day directories in both Screenshots and Videos folders.
+  ///
+  /// The active video path is claimed before `VideoChunkEncoder` creates its
+  /// day directory, then read under that same directory-mutation lock below.
+  /// This keeps cleanup from observing a stale nil and deleting the empty day
+  /// directory during the first-frame writer startup interval.
+  func cleanupEmptyDirectories() throws {
+    try cleanupEmptyDirectories(beforeVideoCleanupLock: nil)
   }
 
-  /// Delete empty day directories while preserving the parent of an active video
-  /// chunk path. The encoder snapshot is kept as an argument so the filesystem
-  /// mutation stays deterministic after the cross-actor read above.
-  func cleanupEmptyDirectories(protectingActiveVideoChunkPath activeVideoChunkPath: String?) throws {
+  /// Performs the cleanup sweep, optionally notifying a synchronous diagnostic
+  /// seam immediately before it acquires the video-directory lock. The seam
+  /// keeps the writer/cleanup interleaving test deterministic without changing
+  /// the production lock scope.
+  func cleanupEmptyDirectories(beforeVideoCleanupLock: (@Sendable () -> Void)?) throws {
     // Clean up Screenshots directory
     if let screenshotsDirectory = screenshotsDirectory {
       try cleanupEmptySubdirectories(in: screenshotsDirectory)
@@ -649,17 +684,16 @@ actor RewindStorage {
 
     // Clean up Videos directory
     if let videosDirectory = videosDirectory {
-      let protectedDirectory = Self.activeVideoDayDirectory(
-        for: activeVideoChunkPath,
-        in: videosDirectory
+      try cleanupEmptyVideoSubdirectories(
+        in: videosDirectory,
+        beforeVideoCleanupLock: beforeVideoCleanupLock
       )
-      try cleanupEmptyVideoSubdirectories(in: videosDirectory, preserving: protectedDirectory)
     }
   }
 
   /// Resolves the one-level day directory containing an active encoder chunk.
   /// Invalid or nested paths deliberately get no protection: encoder-generated
-  /// paths are exactly `<day>/chunk_<time>.mp4`, and cleanup only owns immediate
+  /// paths are exactly `<day>/chunk_<time>_<epochMillis>_<unique>.mp4`, and cleanup only owns immediate
   /// day directories beneath the Videos root.
   private static func activeVideoDayDirectory(for relativePath: String?, in videosDirectory: URL) -> URL? {
     guard let relativePath, !relativePath.isEmpty else { return nil }
@@ -709,12 +743,18 @@ actor RewindStorage {
     }
   }
 
-  /// Serializes directory removal with `VideoChunkEncoder.startVideoWriter`.
-  /// Without this, cleanup could read a nil active-path snapshot, then delete a
-  /// day directory created by a just-starting writer before its output file is
-  /// materialized.
-  private func cleanupEmptyVideoSubdirectories(in directory: URL, preserving protectedDirectory: URL?) throws {
-    try RewindVideoDirectoryMutation.lock.withLock {
+  /// Serializes directory removal with writer startup and derives the active
+  /// day-directory protection from the reservation inside that same lock.
+  private func cleanupEmptyVideoSubdirectories(
+    in directory: URL,
+    beforeVideoCleanupLock: (@Sendable () -> Void)?
+  ) throws {
+    beforeVideoCleanupLock?()
+    try RewindVideoDirectoryMutation.withActiveChunk { activeVideoChunkReservation in
+      let protectedDirectory = Self.activeVideoDayDirectory(
+        for: activeVideoChunkReservation?.relativePath,
+        in: directory
+      )
       try cleanupEmptySubdirectories(in: directory, preserving: protectedDirectory)
     }
   }

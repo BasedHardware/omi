@@ -108,11 +108,11 @@ enum RewindArtifactGauntlet {
         guard let frameOffset = row.frameOffset else {
           throw RewindError.storageError("Rewind artifact gauntlet persisted a row without a frame offset")
         }
-        let image = try await RewindStorage.shared.loadVideoFrame(
+        let centerPixel = try await RewindStorage.shared.videoFrameCenterPixel(
           videoPath: storedChunkPath,
           frameOffset: frameOffset
         )
-        readbackColors.append(try dominantColor(in: image))
+        readbackColors.append(dominantColor(in: centerPixel))
       }
       guard readbackColors == ["red", "green"] else {
         throw RewindError.storageError("Rewind artifact gauntlet video readback did not preserve frame order")
@@ -218,19 +218,10 @@ enum RewindArtifactGauntlet {
     return image
   }
 
-  private static func dominantColor(in image: NSImage) throws -> String {
-    guard let cgImage = image.cgImage(forProposedRect: nil, context: nil, hints: nil) else {
-      throw RewindError.invalidImage
-    }
-    let bitmap = NSBitmapImageRep(cgImage: cgImage)
-    let x = max(0, bitmap.pixelsWide / 2)
-    let y = max(0, bitmap.pixelsHigh / 2)
-    guard let color = bitmap.colorAt(x: x, y: y)?.usingColorSpace(.deviceRGB) else {
-      throw RewindError.invalidImage
-    }
-    let red = color.redComponent
-    let green = color.greenComponent
-    let blue = color.blueComponent
+  private static func dominantColor(in centerPixel: RewindVideoFrameCenterPixel) -> String {
+    let red = Double(centerPixel.red)
+    let green = Double(centerPixel.green)
+    let blue = Double(centerPixel.blue)
     if red > green * 1.5, red > blue * 1.5 { return "red" }
     if green > red * 1.5, green > blue * 1.5 { return "green" }
     return "other"
