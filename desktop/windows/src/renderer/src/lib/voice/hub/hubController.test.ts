@@ -759,6 +759,110 @@ describe('HubController — A7c reconnect policy (C: idle-teardown survival)', (
   })
 })
 
+describe('HubController — circuit recovery (cooldown re-warm)', () => {
+  const CIRCUIT_COOLDOWN_MS = 60_000
+
+  /** Drive the controller to strike exhaustion so the re-warm circuit trips OPEN.
+   *  Returns the mint count at the moment it tripped. */
+  async function tripCircuit(h: Harness): Promise<number> {
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick()
+    // 5 fast re-warms are allowed, then the 6th fast death trips the circuit.
+    for (let i = 0; i < 6; i++) {
+      await failBeforeConnect(h, 1006) // never connected → aliveForMs 0 → a strike
+      if (h.pendingReconnect()) {
+        h.fireReconnect()
+        await tick()
+      }
+    }
+    return h.mintToken.mock.calls.length
+  }
+
+  it('opens the circuit when the strike budget is spent, then blocks warms during the cooldown', async () => {
+    const h = harness()
+    const mintsAtTrip = await tripCircuit(h)
+
+    // Tripped: the one shared exhausted event fired and nothing is re-warming.
+    expect(h.pendingReconnect()).toBe(false)
+    expect(trackEvent).toHaveBeenCalledWith('fallback_triggered', {
+      component: 'ptt_cascade',
+      from: 'hub',
+      to: 'none',
+      reason: 'circuit_open',
+      outcome: 'exhausted'
+    })
+
+    // During the cooldown a warm trigger is a no-op — the dead endpoint is NOT rebuilt
+    // (the press falls to the cascade), so no new mint fires.
+    await expect(h.controller.ensureWarm()).rejects.toThrow(/circuit/i)
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip)
+    expect(h.controller.isAvailable()).toBe(false)
+  })
+
+  it('after the cooldown elapses, the next trigger attempts exactly ONE re-warm; a good probe closes the circuit', async () => {
+    const h = harness()
+    const mintsAtTrip = await tripCircuit(h)
+
+    // Cooldown elapses → the next warm is allowed through as a single half-open probe.
+    h.now.value += CIRCUIT_COOLDOWN_MS
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick()
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip + 1) // exactly one re-warm
+
+    // The probe connects and completes a turn → strikes reset, circuit closed.
+    h.getSession().connect()
+    await p
+    h.getSession().events.onTurnDone?.(null)
+    expect(h.controller.isWarm()).toBe(true)
+
+    // A subsequent warm is a normal reuse now (circuit closed, no re-mint).
+    const sid = await h.controller.ensureWarm()
+    expect(sid).toBe(SID)
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip + 1)
+  })
+
+  it('a failed probe re-arms the cooldown for another cycle (no hot-loop)', async () => {
+    const h = harness()
+    const mintsAtTrip = await tripCircuit(h)
+
+    // First probe after the cooldown…
+    h.now.value += CIRCUIT_COOLDOWN_MS
+    const p = h.controller.ensureWarm()
+    p.catch(() => {})
+    await tick()
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip + 1)
+
+    // …dies fast before connecting → strikes still maxed → circuit re-opens WITHOUT
+    // arming an auto-reconnect (no hot-loop), and a warm within the new cooldown is blocked.
+    await failBeforeConnect(h, 1006)
+    expect(h.pendingReconnect()).toBe(false)
+    await expect(h.controller.ensureWarm()).rejects.toThrow(/circuit/i)
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip + 1)
+
+    // The new cooldown elapses → exactly one more probe is allowed.
+    h.now.value += CIRCUIT_COOLDOWN_MS
+    const q = h.controller.ensureWarm()
+    q.catch(() => {})
+    await tick()
+    expect(h.mintToken).toHaveBeenCalledTimes(mintsAtTrip + 2)
+  })
+
+  it('an explicit teardownSession clears the open circuit so a later warm is unblocked', async () => {
+    const h = harness()
+    await tripCircuit(h)
+
+    // Sign-out / kill-switch off then back on: the circuit must not linger.
+    h.controller.teardownSession()
+    const before = h.mintToken.mock.calls.length
+    const p = h.controller.ensureWarm() // no cooldown wait — the circuit was reset
+    p.catch(() => {})
+    await tick()
+    expect(h.mintToken).toHaveBeenCalledTimes(before + 1)
+  })
+})
+
 describe('HubController — A7c cross-provider failover (D: mint-based)', () => {
   /** A mint that rejects for `openai` (provider-scoped) but succeeds for `gemini`. */
   const openaiDownMint = (): ((p: VoiceProvider) => Promise<string>) =>

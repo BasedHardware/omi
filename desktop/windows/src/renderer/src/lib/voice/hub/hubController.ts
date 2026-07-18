@@ -163,6 +163,17 @@ class HubWarmAbortedError extends Error {
   }
 }
 
+/** Thrown by `ensureWarm` when the reconnect circuit is OPEN and still cooling down:
+ *  the strike budget was spent, so we do NOT rebuild a dead endpoint until the cooldown
+ *  elapses (the press falls to the cascade meanwhile). Swallowed by callers exactly like
+ *  the A7c reconnect / teardown-abort rejects — it is not a surfaced error. */
+class HubCircuitOpenError extends Error {
+  constructor() {
+    super('hub warm suppressed: reconnect circuit open')
+    this.name = 'HubCircuitOpenError'
+  }
+}
+
 export class HubController {
   private readonly events: HubControllerEvents
   private readonly resolveProvider: () => VoiceProvider
@@ -196,9 +207,20 @@ export class HubController {
   private static readonly MAX_RECONNECT_STRIKES = 5
   /** Backoff before a scheduled re-warm (Mac's 1.5 s `asyncAfter`). */
   private static readonly RECONNECT_BACKOFF_MS = 1500
+  /** After the strike budget is spent the re-warm circuit OPENS for this cooldown
+   *  instead of hammering a dead endpoint forever. Once it elapses, the next warm
+   *  trigger (PTT press / lifecycle) is allowed exactly ONE half-open re-warm probe:
+   *  a probe that proves good (aliveFor>60 / a completed turn) resets the strikes and
+   *  closes the circuit; a probe that fails re-arms the cooldown. Without this the hub
+   *  died permanently for the app's lifetime and every press silently cascaded. */
+  private static readonly CIRCUIT_COOLDOWN_MS = 60_000
   private reconnectStrikes = 0
   private reconnectPending = false
   private reconnectHandle: unknown = null
+  /** Wall-clock deadline (via `now()`) before which the open circuit rejects warms;
+   *  null when the circuit is not tripped. Only consulted while the strike budget is
+   *  spent (`reconnectStrikes >= MAX_RECONNECT_STRIKES`). */
+  private circuitOpenUntil: number | null = null
 
   // A7c cross-provider failover (item D — ported from macOS RealtimeHubController) ---
   /** Failover chain: when the effective (primary) provider's ephemeral-token mint
@@ -301,6 +323,21 @@ export class HubController {
       this.sessionID
     ) {
       return Promise.resolve(this.sessionID)
+    }
+    // Circuit breaker (recovery). While the strike budget is spent the circuit is OPEN:
+    // during the cooldown a warm trigger is a no-op (rejected) so we don't rebuild a dead
+    // endpoint — every press falls to the cascade. When the cooldown elapses the FIRST
+    // trigger is allowed through as a single half-open probe, and the cooldown re-arms so
+    // a probe that fails (at the mint OR a fast socket death) waits a full cooldown before
+    // the next attempt — never a hot-loop. A probe that proves good resets the strikes
+    // (aliveFor>60 / a completed turn), which closes the circuit. This gate is inert in
+    // the healthy path (strikes reset to 0 by every completed turn), so warming is
+    // unchanged until the endpoint has actually died 5x in a row.
+    if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) {
+      if (this.circuitOpenUntil !== null && this.now() < this.circuitOpenUntil) {
+        return Promise.reject(new HubCircuitOpenError())
+      }
+      this.circuitOpenUntil = this.now() + HubController.CIRCUIT_COOLDOWN_MS
     }
     this.warming = this.createAndWarm(provider)
     return this.warming
@@ -467,6 +504,7 @@ export class HubController {
     // clean reset — cancel any pending backoff and clear the strike budget.
     this.cancelReconnect()
     this.reconnectStrikes = 0
+    this.circuitOpenUntil = null
     // An explicit drop also cancels any wake refresh that was deferred behind a turn —
     // re-warming a hub that was just told to close (kill-switch off / sign-out) is wrong.
     this.pendingRefreshReason = null
@@ -705,8 +743,10 @@ export class HubController {
       onSpeakingEnd: () => this.events.onSpeakingEnd?.(),
       onToolRequest: (call, identity) => this.events.onToolRequest?.(call, identity),
       onTurnDone: (identity) => {
-        // A completed turn proves the hub works — reset the strike budget (Mac :3328).
+        // A completed turn proves the hub works — reset the strike budget (Mac :3328)
+        // and close any open circuit.
         this.reconnectStrikes = 0
+        this.circuitOpenUntil = null
         this.events.onTurnDone?.(identity)
       }
     }
@@ -789,6 +829,7 @@ export class HubController {
   private scheduleReconnectForClose(category: HubCloseCategory, aliveForMs: number): void {
     if (aliveForMs > HUB_IDLE_TEARDOWN_THRESHOLD_MS) {
       this.reconnectStrikes = 0
+      this.circuitOpenUntil = null
       // A socket that survived past the idle window proved the endpoint works — return
       // to the Auto/primary provider on the next warm and clear any pending failover
       // (Mac RealtimeHubController :3583-3586). Only this proven-good signal resets the
@@ -799,14 +840,16 @@ export class HubController {
     }
     if (consumesStrike(category)) {
       if (this.reconnectStrikes >= HubController.MAX_RECONNECT_STRIKES) {
-        // Budget spent: the re-warm circuit is now OPEN and we stop rebuilding a dead
-        // endpoint. This is the silent post-commit death — the warm socket is gone for
-        // good (until an explicit summon `warm()` or sign-out+in resets the budget), so
-        // every subsequent PTT press falls to the batch cascade, which still returns a
-        // valid reply and is therefore INDISTINGUISHABLE from a hub turn. Surfacing it is
+        // Budget spent: the re-warm circuit is now OPEN. We stop hammering a dead endpoint
+        // for a cooldown; `ensureWarm` rejects warms until it elapses, then lets ONE
+        // half-open probe through (a probe that proves good resets the budget and closes
+        // the circuit, a failed probe re-arms the cooldown — see `ensureWarm`). During the
+        // cooldown every PTT press falls to the batch cascade, which still returns a valid
+        // reply and is therefore INDISTINGUISHABLE from a hub turn. Surfacing it is
         // mandatory (AGENTS.md: silent UX healing is fine, silent ops is not). One shared
         // fallback event, closed enums, no new counter — emitted once as the circuit trips
-        // (re-warm has stopped, so no new close can re-emit until the next summon episode).
+        // (re-warm has stopped, so no new close can re-emit until a probe episode).
+        this.circuitOpenUntil = this.now() + HubController.CIRCUIT_COOLDOWN_MS
         trackEvent('fallback_triggered', {
           component: 'ptt_cascade',
           from: 'hub',
