@@ -237,6 +237,79 @@ def validate_serving_release_vector(name: str, text: str) -> list[str]:
     return errors
 
 
+def validate_phase_aware_backend_promotion(name: str, text: str) -> list[str]:
+    """Keep the Cloud Run candidate boundary ahead of GKE and traffic mutations."""
+
+    block = job_block(text, "deploy")
+    if block is None:
+        return [f"{name}: missing deploy job"]
+    steps = deploy_job_steps(block)
+
+    def step_index(marker: str) -> int:
+        return next((index for index, step in enumerate(steps) if marker in "\n".join(step)), -1)
+
+    errors: list[str] = []
+    candidate_index = step_index("Accept no-traffic Cloud Run candidate")
+    snapshot_index = step_index("Capture Cloud Run pre-promotion traffic snapshot")
+    promotion_index = step_index("Shift Cloud Run traffic to validated revisions")
+    serving_vector_index = step_index("Verify serving backend release vector")
+    restore_index = step_index("Restore Cloud Run traffic snapshot after failed promotion")
+    required_steps = {
+        "candidate acceptance": candidate_index,
+        "pre-promotion traffic snapshot": snapshot_index,
+        "traffic promotion": promotion_index,
+        "serving release-vector verification": serving_vector_index,
+        "traffic snapshot restoration": restore_index,
+    }
+    errors.extend(f"{name}: missing {description}" for description, index in required_steps.items() if index < 0)
+
+    candidate_step = steps[candidate_index] if candidate_index >= 0 else []
+    candidate_text = "\n".join(candidate_step)
+    for marker in ("backend/scripts/verify_backend_release_vector.py", "--candidate", "--cloud-run-only"):
+        if marker not in candidate_text:
+            errors.append(f"{name}: candidate acceptance must include {marker!r}")
+
+    for marker in (
+        "Apply non-secret backend runtime config",
+        "Deploy backend-secrets",
+        "Deploy ${{ env.SERVICE }}-listen to GKE",
+    ):
+        mutation_index = step_index(marker)
+        if mutation_index < 0:
+            errors.append(f"{name}: missing deferred GKE mutation {marker!r}")
+        elif candidate_index >= mutation_index:
+            errors.append(f"{name}: candidate acceptance must precede {marker!r}")
+
+    if snapshot_index >= promotion_index:
+        errors.append(f"{name}: pre-promotion traffic snapshot must precede traffic promotion")
+    if serving_vector_index <= promotion_index:
+        errors.append(f"{name}: serving release-vector verification must follow traffic promotion")
+    if restore_index <= serving_vector_index:
+        errors.append(f"{name}: traffic snapshot restoration must follow serving release-vector verification")
+
+    snapshot_step = "\n".join(steps[snapshot_index]) if snapshot_index >= 0 else ""
+    if "backend/scripts/cloud_run_traffic_snapshot.py capture" not in snapshot_step:
+        errors.append(f"{name}: pre-promotion snapshot must use the canonical Cloud Run snapshot helper")
+    for service in ("backend", "backend-sync", "backend-sync-backfill", "backend-integration"):
+        if f"--service {service}" not in snapshot_step:
+            errors.append(f"{name}: pre-promotion snapshot must include {service}")
+
+    restore_step = "\n".join(steps[restore_index]) if restore_index >= 0 else ""
+    restore_condition = (
+        "if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' "
+        "&& (steps.shift-cloud-run-traffic.outcome == 'failure' "
+        "|| steps.verify-serving-release-vector.outcome == 'failure') }}"
+    )
+    if restore_condition not in restore_step:
+        errors.append(f"{name}: traffic restoration must run after a failed promotion when its snapshot exists")
+    if "backend/scripts/cloud_run_traffic_snapshot.py restore" not in restore_step:
+        errors.append(f"{name}: traffic restoration must use the canonical Cloud Run snapshot helper")
+    for artifact in ("cloud-run-pre-promotion-traffic-snapshot.json", "cloud-run-traffic-restore.json"):
+        if artifact not in text:
+            errors.append(f"{name}: must retain {artifact!r} as deployment evidence")
+    return errors
+
+
 def deploy_job_steps(block: list[str]) -> list[list[str]]:
     """Return deploy-job step blocks in workflow order."""
 
@@ -468,12 +541,11 @@ def check_repository() -> list[str]:
     errors.extend(validate_auto_deploy_acceptance(auto_deploy))
     for name in ("gcp_backend.yml", "gcp_backend_auto_dev.yml"):
         errors.extend(validate_serving_release_vector(name, workflow_text.get(name, "")))
+        errors.extend(validate_phase_aware_backend_promotion(name, workflow_text.get(name, "")))
     for name, text in workflow_text.items():
         errors.extend(validate_pusher_config_preflight(name, text))
     release_vector_workflows = sorted(
-        name
-        for name, text in workflow_text.items()
-        if "backend/scripts/verify_backend_release_vector.py" in text
+        name for name, text in workflow_text.items() if "backend/scripts/verify_backend_release_vector.py" in text
     )
     allowed_release_vector_workflows = {"gcp_backend.yml", "gcp_backend_auto_dev.yml"}
     for name in release_vector_workflows:
@@ -647,6 +719,44 @@ jobs:
 """
     if validate_serving_release_vector("gcp_backend_auto_dev.yml", serving_vector):
         raise PolicyError("valid post-promotion release-vector verification was rejected")
+
+    phase_aware_promotion = """name: fixture
+jobs:
+  deploy:
+    steps:
+      - name: Accept no-traffic Cloud Run candidate
+        run: python3 backend/scripts/verify_backend_release_vector.py --candidate --cloud-run-only
+      - name: Apply non-secret backend runtime config
+      - name: Deploy backend-secrets to GKE
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+      - name: Capture Cloud Run pre-promotion traffic snapshot
+        run: |-
+          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \\
+            --service backend \\
+            --service backend-sync \\
+            --service backend-sync-backfill \\
+            --service backend-integration \\
+            --output cloud-run-pre-promotion-traffic-snapshot.json
+      - name: Shift Cloud Run traffic to validated revisions
+        id: shift-cloud-run-traffic
+      - name: Verify serving backend release vector
+        id: verify-serving-release-vector
+      - name: Restore Cloud Run traffic snapshot after failed promotion
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        run: |-
+          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \\
+            --evidence-path cloud-run-traffic-restore.json
+"""
+    if validate_phase_aware_backend_promotion("fixture.yml", phase_aware_promotion):
+        raise PolicyError("valid phase-aware backend promotion was rejected")
+    without_restore = phase_aware_promotion.replace(
+        "Restore Cloud Run traffic snapshot after failed promotion", "Report"
+    )
+    if not any(
+        "traffic snapshot restoration" in error
+        for error in validate_phase_aware_backend_promotion("fixture.yml", without_restore)
+    ):
+        raise PolicyError("missing traffic restoration satisfied the phase-aware deploy contract")
 
     pusher_deploy = """name: fixture
 jobs:
