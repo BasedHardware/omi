@@ -1475,7 +1475,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get payYourSttProvider => 'Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
 
   @override
-  String get freeMinutesMonth => '600 libreng minuto/buwan kasama. Unlimited sa ';
+  String get freeMinutesMonth => '300 libreng minuto/buwan kasama. Unlimited sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4749,7 +4749,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Walang specific data access na na-configure.';
 
   @override
-  String get basicPlanDescription => '600 premium mins + unlimited on-device';
+  String get basicPlanDescription => '300 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -6051,7 +6051,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6134,7 +6134,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>

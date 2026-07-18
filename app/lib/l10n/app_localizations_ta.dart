@@ -1476,7 +1476,7 @@ class AppLocalizationsTa extends AppLocalizations {
       'Omi ஐ சுதந்திரமாகப் பயன்படுத்தவும். நீங்கள் உங்கள் STT வழங்குநரிடம் நேரடியாக பணம் செலுத்துங்கள்.';
 
   @override
-  String get freeMinutesMonth => 'மாதத்திற்கு 600 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
+  String get freeMinutesMonth => 'மாதத்திற்கு 300 இலவச நிமிடங்கள் அடங்கியுள்ளது. ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4741,7 +4741,7 @@ class AppLocalizationsTa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'குறிப்பிட்ட தரவு அணுக கட்டமைக்கப்படவில்லை.';
 
   @override
-  String get basicPlanDescription => '600 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
+  String get basicPlanDescription => '300 பிரீமியம் நிமிषங்கள் + சாதனத்தில் வரம்பிலாவை';
 
   @override
   String get minutes => 'நிமிషங்கள்';
@@ -6041,7 +6041,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট্যাब সীमाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get viewUsage => 'பயன்பாட்டைக் கவனிக்கவும்';
@@ -6123,7 +6123,7 @@ class AppLocalizationsTa extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      'மாத மாதம் 600 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
+      'மாத மாதம் 300 பிரீமியம் நிமிடங்கள்.온-சாதன ট்যாब சீமाहीन இலவச உபாய கேட்டுபேரல் வழங்குகிறது।';
 
   @override
   String get audioProcessedLocally =>
