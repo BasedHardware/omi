@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[2]
 WORKFLOW_PATH = Path(".github/workflows/release-eligibility.yml")
 ACTION_PATH = Path(".github/actions/release-eligibility/action.yml")
+UV_SETUP_ACTION = "astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84"
 
 
 def require_fragment(errors: list[str], text: str, fragment: str, message: str) -> None:
@@ -68,6 +69,27 @@ def validate_required_step(errors: list[str], text: str, name: str, indent: int,
         errors.append(f"release eligibility {label} step must enable strict shell failure handling")
     if re.search(r"\|\|\s*(?:true\b|:|exit\s+0\b)|\bset\s+\+(?:e|o\s+(?:errexit|pipefail))\b", step):
         errors.append(f"release eligibility {label} step must not contain a shell fail-open path")
+    return step
+
+
+def validate_required_uses_step(
+    errors: list[str], text: str, name: str, indent: int, label: str, action: str
+) -> str:
+    """Require an action step to remain unconditional and pinned."""
+
+    step = named_step_block(text, name, indent)
+    if step is None:
+        errors.append(f"release eligibility is missing its {label} step")
+        return ""
+    field_indent = " " * (indent + 2)
+    if re.search(rf"(?m)^{re.escape(field_indent)}[\"']?(?:if|continue-on-error)[\"']?:", step):
+        errors.append(f"release eligibility {label} step must not be conditionally skipped or tolerated")
+    require_fragment(
+        errors,
+        step,
+        f"uses: {action}",
+        f"release eligibility {label} step must use the pinned setup action",
+    )
     return step
 
 
@@ -173,6 +195,18 @@ def validate_action(text: str) -> list[str]:
         4,
         "canonical preflight",
     )
+    uv_step = validate_required_uses_step(
+        errors,
+        text,
+        "Set up uv for canonical checks",
+        4,
+        "uv setup",
+        UV_SETUP_ACTION,
+    )
+    uv_marker = "    - name: Set up uv for canonical checks"
+    preflight_marker = "    - name: Run canonical deterministic CI preflight"
+    if uv_marker in text and preflight_marker in text and text.index(uv_marker) > text.index(preflight_marker):
+        errors.append("release eligibility must set up uv before the canonical preflight")
     for fragment, message in (
         ("RELEASE_CHECKOUT_SHA=\"$(git rev-parse --verify HEAD)\"", "release eligibility must resolve checkout SHA"),
         (".github/scripts/verify_release_eligibility.py", "release eligibility must validate immutable release identity"),
@@ -194,6 +228,12 @@ def validate_action(text: str) -> list[str]:
     for step, fragment, message in (
         (identity_step, ".github/scripts/verify_release_eligibility.py", "identity validation step must run the immutable identity verifier"),
         (identity_step, "git merge-base --is-ancestor", "identity validation step must enforce main ancestry"),
+        (uv_step, "enable-cache: true", "release eligibility uv setup must enable the deterministic dependency cache"),
+        (
+            uv_step,
+            "cache-dependency-glob: backend/openapi-requirements.txt",
+            "release eligibility uv setup must key the OpenAPI dependency cache",
+        ),
         (preflight_step, ".github/scripts/run_checks.py", "canonical preflight step must run the deterministic check runner"),
     ):
         require_fragment(errors, step, fragment, message)
