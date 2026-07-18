@@ -54,6 +54,42 @@ async function pushSession(user: User, seq: number): Promise<void> {
   }
 }
 
+/** Respond to a main-process token PULL. Main asks for a fresh token when its
+ *  cached (push-relayed) one has gone stale — which happens when THIS hidden
+ *  window's background refresh is throttled and stops re-pushing. `getIdToken(true)`
+ *  forces a real refresh even while hidden, so the pull hands main a live token.
+ *  A signed-out (or failed) state replies null: main treats null as "no token
+ *  available", never as a sign-out (real sign-out flows through clearSession). */
+async function respondTokenPull(requestId: number): Promise<void> {
+  try {
+    const user = auth.currentUser
+    if (!user) {
+      window.omi.respondSessionToken(requestId, null)
+      return
+    }
+    const token = await user.getIdToken(true)
+    // A sign-out could have landed during the refresh await — don't hand main a
+    // departed user's token.
+    if (auth.currentUser !== user) {
+      window.omi.respondSessionToken(requestId, null)
+      return
+    }
+    window.omi.respondSessionToken(requestId, {
+      apiBase: import.meta.env.VITE_OMI_API_BASE as string,
+      desktopApiBase: import.meta.env.VITE_OMI_DESKTOP_API_BASE as string,
+      token
+    })
+  } catch (e) {
+    console.warn('[ai-profile-host] token pull failed', e)
+    // Settle main's pull promptly (it keeps its cached session on a null reply).
+    try {
+      window.omi.respondSessionToken(requestId, null)
+    } catch {
+      /* window torn down mid-pull */
+    }
+  }
+}
+
 /** Clear main's cached session on sign-out, so a background timer tick can't
  *  keep hitting the backend with the previous user's token. */
 async function clearSession(): Promise<void> {
@@ -81,5 +117,11 @@ export function startAiProfileHost(): void {
     // Fire-and-forget: an auth listener must not return a rejected promise.
     if (user) void pushSession(user, seq)
     else void clearSession()
+  })
+  // PULL counterpart to the push relay: answer main's on-demand token requests so
+  // its backend calls survive a throttled push refresh. The subscription lives for
+  // the whole app session (never torn down), same as the id-token listener above.
+  window.omi.onSessionTokenRequest((requestId) => {
+    void respondTokenPull(requestId)
   })
 }

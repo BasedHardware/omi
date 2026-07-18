@@ -801,6 +801,17 @@ export type OmiBridgeApi = {
   aiProfileEdit: (id: number, text: string) => Promise<void>
   aiProfileDelete: (id: number) => Promise<void>
   aiProfileDeleteAll: () => Promise<void>
+  // --- Main-process token PULL (session freshness) ---
+  // The push relay above can stall when this hidden window's background timers are
+  // throttled, leaving main's cached token expired. So main can PULL a fresh token
+  // on demand: it sends `session:tokenRequest`, the renderer answers with a freshly
+  // minted (getIdToken) session, replied via `respondSessionToken`. `null` reply =
+  // "no token available right now" (never treated as a sign-out).
+  onSessionTokenRequest: (cb: (requestId: number) => void) => () => void
+  respondSessionToken: (
+    requestId: number,
+    session: { apiBase: string; desktopApiBase: string; token: string } | null
+  ) => void
   // --- Track 3 (task sync engine) ---
   // Local-first tasks: every read/write goes through main (which owns local SQLite
   // + backend REST). Reads return the LOCAL rows instantly and kick a background
