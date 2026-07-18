@@ -465,8 +465,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
     }
 
     return Column(
-      children:
-          filtered.map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap)).toList(),
+      children: filtered
+          .map((item) => _buildSettingsItem(title: item.title, icon: item.icon, onTap: item.onTap))
+          .toList(),
     );
   }
 
@@ -511,7 +512,7 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                 Consumer<UsageProvider>(
                   builder: (context, usageProvider, child) {
                     final sp = usageProvider.subscription?.subscription.plan;
-                    final isUnlimited = sp == PlanType.unlimited || sp == PlanType.operator || sp == PlanType.architect;
+                    final isUnlimited = sp?.isPaid ?? false;
                     return _buildSettingsItem(
                       title: context.l10n.planAndUsage,
                       icon: FaIcon(FontAwesomeIcons.chartLine, color: Color(0xFF8E8E93), size: 20),
@@ -551,8 +552,9 @@ class _SettingsDrawerState extends State<SettingsDrawer> {
                   title: context.l10n.offlineSync,
                   icon: FaIcon(FontAwesomeIcons.solidCloud, color: Color(0xFF8E8E93), size: 20),
                   onTap: () {
-                    final page =
-                        SharedPreferencesUtil().deviceSupportsMultiFileSync ? const AutoSyncPage() : const SyncPage();
+                    final page = SharedPreferencesUtil().deviceSupportsMultiFileSync
+                        ? const AutoSyncPage()
+                        : const SyncPage();
                     Navigator.of(context).push(MaterialPageRoute(builder: (context) => page));
                   },
                 ),

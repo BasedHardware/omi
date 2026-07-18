@@ -11,7 +11,7 @@ import argparse
 import json
 import re
 import sys
-from pathlib import Path
+from pathlib import Path, PurePath
 from typing import Any
 
 ROOT_DIR = Path(__file__).resolve().parents[2]
@@ -29,6 +29,14 @@ IDENTIFIER_RE = re.compile(r'[^A-Za-z0-9_$]')
 
 def stable_json(value: Any) -> str:
     return json.dumps(value, ensure_ascii=False, indent=2, sort_keys=True) + '\n'
+
+
+def source_label_for_path(spec_path: PurePath, root_dir: PurePath = ROOT_DIR) -> str:
+    """Return a stable slash-separated label for generated-file headers."""
+    try:
+        return spec_path.relative_to(root_dir).as_posix()
+    except ValueError:
+        return spec_path.as_posix()
 
 
 def ts_identifier(name: str) -> str:
@@ -431,31 +439,24 @@ def parse_args() -> argparse.Namespace:
 def main() -> int:
     args = parse_args()
     spec_path = args.spec if args.spec.is_absolute() else (Path.cwd() / args.spec)
-    spec = json.loads(spec_path.read_text())
-    try:
-        source_label = str(spec_path.relative_to(ROOT_DIR))
-    except ValueError:
-        source_label = str(spec_path)
-    rendered = generate(spec, source_label)
+    spec = json.loads(spec_path.read_text(encoding='utf-8'))
+    rendered = generate(spec, source_label_for_path(spec_path))
 
     outputs = args.output or DEFAULT_OUTPUTS
     stale: list[Path] = []
     for output in outputs:
         path = output if output.is_absolute() else (Path.cwd() / output)
         if args.check:
-            if not path.exists() or path.read_text() != rendered:
+            if not path.exists() or path.read_text(encoding='utf-8') != rendered:
                 stale.append(path)
         else:
             path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(rendered)
-            print(f'wrote {path.relative_to(ROOT_DIR)}')
+            path.write_text(rendered, encoding='utf-8', newline='\n')
+            print(f'wrote {source_label_for_path(path)}')
 
     if stale:
         for path in stale:
-            try:
-                label = path.relative_to(ROOT_DIR)
-            except ValueError:
-                label = path
+            label = source_label_for_path(path)
             print(f'{label} is stale; run backend/scripts/generate_ts_openapi_types.py', file=sys.stderr)
         return 1
     return 0

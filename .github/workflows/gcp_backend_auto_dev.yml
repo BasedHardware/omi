@@ -305,59 +305,6 @@ jobs:
           provision_sync_ledger_ttl: 'true'
           provision_budget_alerts: 'false'
 
-      - name: Install Helm
-        uses: azure/setup-helm@v5
-
-      - name: Apply non-secret backend runtime config
-        env:
-          ENVIRONMENT: ${{ vars.ENV }}
-          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
-          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
-          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
-          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
-          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
-          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
-          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
-          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
-          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
-          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
-          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
-          STT_SERVICE_MODELS: parakeet,modulate-velma-2
-          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
-          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
-          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
-          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
-          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
-          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
-        run: backend/scripts/deploy-backend-config.sh
-
-      - name: Deploy backend-secrets to GKE
-        env:
-          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
-          ENVIRONMENT: ${{ vars.ENV }}
-          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
-          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
-          REGION: ${{ env.REGION }}
-        run: backend/scripts/deploy-backend-secrets.sh
-
-      - name: Deploy ${{ env.SERVICE }}-listen to GKE
-        run: |
-          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
-            ${{ vars.ENV }}-omi-backend-listen \
-            ./backend/charts/backend-listen \
-            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
-            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
-            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
-            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
-            --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
-          # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
-          # stalled rollout still fails on progressDeadlineSeconds.
-          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
-            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
-            exit 1
-          fi
-          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
-
       - name: Deploy ${{ env.SERVICE }}-integration to Cloud Run
         id: deploy-backend-integration
         uses: google-github-actions/deploy-cloudrun@v3
@@ -446,21 +393,6 @@ jobs:
         run: |
           python3 backend/scripts/validate-backend-runtime-env.py --env dev --check-workflows --check-live-cloud-run
 
-      # This stays in the deploy job: the workflow-level concurrency lock
-      # remains held until composition and exact candidate smoke both pass.
-      - name: Verify exact candidate composition
-        run: |
-          python3 backend/scripts/verify_backend_release_vector.py \
-            --candidate \
-            --commit-sha "${{ github.sha }}" \
-            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
-            --deploy-run-id "${{ github.run_id }}" \
-            --deploy-run-attempt "${{ github.run_attempt }}" \
-            --project "${{ vars.GCP_PROJECT_ID }}" \
-            --region "${{ env.REGION }}" \
-            --environment dev \
-            --evidence-path artifacts/dev-backend-deployment-composition.json
-
       - name: Gate candidate revisions with the acceptance manifest
         env:
           PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
@@ -480,6 +412,102 @@ jobs:
             --audience backend-integration=${{ steps.candidate-urls.outputs.backend_integration_audience }} \
             --evidence-path artifacts/dev-backend-candidate-acceptance.json
 
+      # This is the Cloud Run-only acceptance boundary. The development
+      # candidate manifest must pass before shared GKE runtime state can change.
+      - name: Accept no-traffic Cloud Run candidate
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --cloud-run-only \
+            --commit-sha "${{ github.sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-cloud-run-candidate-release-vector.json
+
+      - name: Install Helm
+        uses: azure/setup-helm@v5
+
+      - name: Apply non-secret backend runtime config
+        env:
+          ENVIRONMENT: ${{ vars.ENV }}
+          CONVERSATION_SUMMARIZED_APP_IDS: ${{ vars.CONVERSATION_SUMMARIZED_APP_IDS }}
+          GOOGLE_CLIENT_ID: ${{ vars.GOOGLE_CLIENT_ID }}
+          MCP_AUTHORIZATION_SERVER_URL: ${{ vars.MCP_AUTHORIZATION_SERVER_URL }}
+          MCP_OAUTH_CHATGPT_CLIENT_ID: ${{ vars.MCP_OAUTH_CHATGPT_CLIENT_ID }}
+          MCP_OAUTH_CHATGPT_REDIRECT_URIS: ${{ vars.MCP_OAUTH_CHATGPT_REDIRECT_URIS }}
+          MCP_OAUTH_PUBLIC_CLIENT_ID: ${{ vars.MCP_OAUTH_PUBLIC_CLIENT_ID }}
+          MCP_OAUTH_PUBLIC_REDIRECT_URIS: ${{ vars.MCP_OAUTH_PUBLIC_REDIRECT_URIS }}
+          MCP_RESOURCE_URL: ${{ vars.MCP_RESOURCE_URL }}
+          RAPID_API_HOST: ${{ vars.RAPID_API_HOST }}
+          REDIS_DB_HOST: ${{ vars.REDIS_DB_HOST }}
+          STT_PRERECORDED_MODEL: parakeet,modulate-velma-2
+          STT_SERVICE_MODELS: parakeet,modulate-velma-2
+          TYPESENSE_HOST: ${{ vars.TYPESENSE_HOST }}
+          TWILIO_ACCOUNT_SID: ${{ vars.TWILIO_ACCOUNT_SID }}
+          TWILIO_API_KEY_SID: ${{ vars.TWILIO_API_KEY_SID }}
+          TWILIO_TWIML_APP_SID: ${{ vars.TWILIO_TWIML_APP_SID }}
+          X_OAUTH_CLIENT_ID: ${{ vars.X_OAUTH_CLIENT_ID }}
+          X_OAUTH_REDIRECT_URI: ${{ vars.X_OAUTH_REDIRECT_URI }}
+        run: backend/scripts/deploy-backend-config.sh
+
+      - name: Deploy backend-secrets to GKE
+        env:
+          BACKEND_SECRETS_GSA: ${{ vars.BACKEND_SECRETS_GSA }}
+          ENVIRONMENT: ${{ vars.ENV }}
+          GCP_PROJECT_ID: ${{ vars.GCP_PROJECT_ID }}
+          GKE_CLUSTER: ${{ vars.GKE_CLUSTER }}
+          REGION: ${{ env.REGION }}
+        run: backend/scripts/deploy-backend-secrets.sh
+
+      - name: Deploy ${{ env.SERVICE }}-listen to GKE
+        run: |
+          helm -n ${{ vars.ENV }}-omi-backend upgrade --install \
+            ${{ vars.ENV }}-omi-backend-listen \
+            ./backend/charts/backend-listen \
+            -f ./backend/charts/backend-listen/${{ vars.ENV }}_omi_backend_listen_values.yaml \
+            --set image.repository=gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }} \
+            --set gcpProjectId=${{ vars.GCP_PROJECT_ID }} \
+            --set runtimeGcpProjectId=${{ vars.RUNTIME_GCP_PROJECT_ID }} \
+            --set-string image.tag=${{ steps.image-tag.outputs.short_sha }}
+          # See gcp_backend.yml: 300s cannot cover a full backend-listen roll; a
+          # stalled rollout still fails on progressDeadlineSeconds.
+          if ! kubectl -n ${{ vars.ENV }}-omi-backend rollout status deploy/${{ vars.ENV }}-omi-backend-listen --timeout=1800s; then
+            python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen || true
+            exit 1
+          fi
+          python3 backend/scripts/deploy_status_report.py --env ${{ vars.ENV }} --include-gke --gke-service backend-listen
+
+      # The lock remains held until the accepted Cloud Run candidate and the
+      # newly rolled GKE listener form one exact candidate release vector.
+      - name: Verify exact candidate composition
+        run: |
+          python3 backend/scripts/verify_backend_release_vector.py \
+            --candidate \
+            --commit-sha "${{ github.sha }}" \
+            --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
+            --deploy-run-id "${{ github.run_id }}" \
+            --deploy-run-attempt "${{ github.run_attempt }}" \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --environment dev \
+            --evidence-path artifacts/dev-backend-deployment-composition.json
+
+      - name: Capture Cloud Run pre-promotion traffic snapshot
+        id: cloud-run-traffic-snapshot
+        run: |
+          python3 backend/scripts/cloud_run_traffic_snapshot.py capture \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --service backend \
+            --service backend-sync \
+            --service backend-sync-backfill \
+            --service backend-integration \
+            --output artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json
+
       - name: Verify validated revisions are still current
         run: |
           test "$(gcloud run services describe backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-revision.outputs.revision }}"
@@ -488,6 +516,7 @@ jobs:
           test "$(gcloud run services describe backend-integration --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --format='value(status.latestCreatedRevisionName)')" = "${{ steps.capture-backend-integration-revision.outputs.revision }}"
 
       - name: Shift Cloud Run traffic to validated revisions
+        id: shift-cloud-run-traffic
         run: |
           gcloud run services update-traffic backend --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-revision.outputs.revision }}=100 --quiet
           gcloud run services update-traffic backend-sync --project=${{ vars.GCP_PROJECT_ID }} --region=${{ env.REGION }} --to-revisions=${{ steps.capture-backend-sync-revision.outputs.revision }}=100 --quiet
@@ -498,6 +527,7 @@ jobs:
       # read verifies that every serving tier actually converged on the same
       # attempt-scoped release vector.
       - name: Verify serving backend release vector
+        id: verify-serving-release-vector
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --commit-sha "${{ github.sha }}" \
@@ -508,6 +538,13 @@ jobs:
             --region "${{ env.REGION }}" \
             --environment dev \
             --evidence-path artifacts/dev-backend-serving-release-vector.json
+
+      - name: Restore Cloud Run traffic snapshot after failed promotion
+        if: ${{ failure() && steps.cloud-run-traffic-snapshot.outcome == 'success' && (steps.shift-cloud-run-traffic.outcome == 'failure' || steps.verify-serving-release-vector.outcome == 'failure') }}
+        run: |
+          python3 backend/scripts/cloud_run_traffic_snapshot.py restore \
+            --snapshot artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json \
+            --evidence-path artifacts/dev-backend-cloud-run-traffic-restore.json
 
       - name: Cloud Run deploy status report
         if: always()
@@ -535,10 +572,13 @@ jobs:
         with:
           name: dev-backend-deployment-acceptance-${{ github.run_id }}
           path: |
+            artifacts/dev-backend-cloud-run-candidate-release-vector.json
             artifacts/dev-backend-deployment-composition.json
+            artifacts/dev-backend-cloud-run-pre-promotion-traffic-snapshot.json
             artifacts/dev-backend-serving-release-vector.json
             artifacts/dev-backend-candidate-acceptance.json
             artifacts/dev-backend-candidate-status.json
+            artifacts/dev-backend-cloud-run-traffic-restore.json
           if-no-files-found: warn
 
       - name: Show Output

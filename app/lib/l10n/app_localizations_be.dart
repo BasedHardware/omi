@@ -9013,7 +9013,9 @@ class AppLocalizationsBe extends AppLocalizations {
   String get billingYearly => 'Штогод';
 
   @override
-  String get savePercent => 'Зэканомце ~17%';
+  String savePercent(int percent) {
+    return 'Зэканомце ~$percent%';
+  }
 
   @override
   String get popular => 'Папулярны';
