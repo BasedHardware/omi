@@ -11,18 +11,17 @@ from pathlib import Path
 
 from desktop_release_metadata import fail, parse_metadata
 
-
 TAG_RE = re.compile(r"^v(?P<version>\d+\.\d+\.\d+)\+(?P<build>\d+)-macos$")
 EXPECTED_BUNDLE_ID = "com.omi.computer-macos"
 EXPECTED_TEAM_ID = "9536L8KLMP"
 REQUIRED_SMOKE_CHECKS = {
     "Launch + identity metadata is aligned",
     "Auth persistence prerequisites: signing identity and Keychain-compatible entitlements are sane",
-    "Backend routing config has no local/dev leakage",
+    "Backend routing config matches the declared external backend",
     "Sparkle/update metadata and authoritative ZIP artifacts are present",
     "Native helper/runtime bundle integrity passed",
     "Local storage/database package surface is present",
-    "Signed desktop artifact Keychain write/read/delete canary passed",
+    "Signed artifact Keychain write/read/delete canary passed",
     "Signed desktop artifact smoke completed",
 }
 

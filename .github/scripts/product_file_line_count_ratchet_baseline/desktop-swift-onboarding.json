@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": 2197,
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": 1690
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingChatView.swift": "Pinned swift-format normalizes line layout without changing this source's runtime behavior.",
+    "desktop/macos/Desktop/Sources/Onboarding/OnboardingPagedIntroCoordinator.swift": "Onboarding adopts the async-arriving auth name instead of freezing the 'there' placeholder."
+  },
+  "threshold": 1500
+}
