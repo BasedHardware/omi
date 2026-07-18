@@ -87,6 +87,10 @@ def validate_current_bindings(target: Target, service: Mapping[str, Any]) -> lis
             errors.append(
                 f"{target.name}: runtime binding {name} references {actual.reference}; expected {expected_reference}"
             )
+    declared_or_removed = set(target.deployment.runtime_secrets) | set(target.deployment.remove_runtime_secrets)
+    for name, actual in bindings.items():
+        if actual.kind == "secret" and name not in declared_or_removed:
+            errors.append(f"{target.service}: secret binding {name} is missing from the deployment contract")
     return errors
 
 
@@ -144,24 +148,35 @@ def load_current_service(*, target: Target, project_id: str) -> Mapping[str, Any
 
 def validate_secret_versions(*, target: Target, project_id: str) -> list[str]:
     errors: list[str] = []
-    for reference in sorted(set(target.deployment.runtime_secrets.values())):
+    results: dict[str, RuntimePreflightError | Mapping[str, Any]] = {}
+    for binding_name, reference in sorted(target.deployment.runtime_secrets.items()):
         secret, version = split_secret_reference(reference)
-        try:
-            document = _gcloud_json(
-                [
-                    "secrets",
-                    "versions",
-                    "describe",
-                    version,
-                    f"--secret={secret}",
-                    f"--project={project_id}",
-                ]
+        result = results.get(reference)
+        if result is None:
+            try:
+                result = _gcloud_json(
+                    [
+                        "secrets",
+                        "versions",
+                        "describe",
+                        version,
+                        f"--secret={secret}",
+                        f"--project={project_id}",
+                    ]
+                )
+            except RuntimePreflightError as exc:
+                result = exc
+            results[reference] = result
+        if isinstance(result, RuntimePreflightError):
+            errors.append(
+                f"{target.service}: runtime binding {binding_name} requires Secret Manager version {reference}, "
+                f"but it is unavailable ({result})"
             )
-        except RuntimePreflightError as exc:
-            errors.append(f"{target.name}: required Secret Manager version {reference} is unavailable: {exc}")
             continue
-        if document.get("state") != "ENABLED":
-            errors.append(f"{target.name}: required Secret Manager version {reference} is not enabled")
+        if result.get("state") != "ENABLED":
+            errors.append(
+                f"{target.service}: runtime binding {binding_name} requires enabled Secret Manager version {reference}"
+            )
     return errors
 
 
