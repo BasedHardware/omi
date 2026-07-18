@@ -46,7 +46,7 @@ describe('AmplitudeMapper acceptance table', () => {
 
   it('breath / hiss just above the room floor still rests (gate margin)', () => {
     const m = warmedMapper()
-    expect(run(m, lin(-45), 0.3)).toBe(0) // floor -50 + margin 8 → gate -42
+    expect(run(m, lin(-45), 0.3)).toBe(0) // floor -50 + margin 10 → -40, clamped to GATE_HI -44
   })
 
   it('quiet speech is clearly visible, well below max', () => {

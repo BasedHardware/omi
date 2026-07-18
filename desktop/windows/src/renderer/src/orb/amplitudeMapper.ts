@@ -40,8 +40,9 @@
 // coefficients derived per step), so the response is identical at 30 or 60fps —
 // the constant-rate rule.
 //
-// Typical mapping on a normal mic (floor ≈ -50 dBFS → gate -42, ceiling ≈ -13):
-//   room silence / breath  (< -42 dB) → 0        resting dots
+// Typical mapping on a normal mic (floor ≈ -50 dBFS → floor+margin -40, clamped
+// to the gate band's top: gate -44; ceiling ≈ -13):
+//   room silence / breath  (< -44 dB) → 0        resting dots
 //   quiet speech           (≈ -32 dB) → ~0.4     clearly visible, well below max
 //   normal speech syllables(-25..-13) → ~0.55–0.92  mid-to-high, live dynamics
 //   loud speech            (≥ ceiling) → 0.92    near max, never pinned at 1
@@ -69,11 +70,14 @@ export const FLOOR_RISE_TAU = 12
  *  still reads as rest. */
 export const GATE_MARGIN_DB = 10
 /** Hard gate band (dBFS). The STRUCTURAL guarantee lives here, not in the floor
- *  tracker: the PTT pipeline itself only accepts turns whose voiced frames RMS
- *  ≥ ~−41 dBFS (ptt/constants VOICED_RMS_THRESHOLD), so real speech peaks are
- *  always above GATE_HI (−44) — the gate can NEVER fully eat speech, no matter
- *  what the floor tracker learned (held speech, whisper marathons). And GATE_LO
- *  (−52) keeps mic hiss/digital silence from ever drawing bars. */
+ *  tracker: the CLAMP itself is what makes the gate unable to fully eat speech,
+ *  no matter what the floor tracker learned (held speech, whisper marathons).
+ *  GATE_HI (−44) is set below where speech peaks land on any workable mic —
+ *  plausibility cross-check: the PTT pipeline's own voiced heuristic expects
+ *  frame RMS ≥ ~−41 dBFS (ptt/constants VOICED_RMS_THRESHOLD; measured on the
+ *  processed stream, so an approximate reference for this AGC-free peak lane,
+ *  not a hard bound). And GATE_LO (−52) keeps mic hiss/digital silence from
+ *  ever drawing bars. */
 export const GATE_LO_DB = -52
 export const GATE_HI_DB = -44
 
