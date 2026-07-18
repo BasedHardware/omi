@@ -359,14 +359,14 @@ jobs:
         if: ${{ steps.gateway-intent.outputs.enabled == 'true' }}
         run: |
           bash backend/scripts/probe-llm-gateway-from-cloud-run.sh \
-            --project="${{ vars.GCP_PROJECT_ID }}" \
-            --region="${{ env.REGION }}" \
-            --image="gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
-            --gateway-url="${{ steps.gateway-serving.outputs.gateway_url }}" \
-            --network="${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
-            --subnet="${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
-            --vpc-egress=private-ranges-only \
-            --name-suffix="${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "${{ env.REGION }}" \
+            --image "gcr.io/${{ vars.GCP_PROJECT_ID }}/${{ env.SERVICE }}:${{ steps.image-tag.outputs.short_sha }}" \
+            --gateway-url "${{ steps.gateway-serving.outputs.gateway_url }}" \
+            --network "${{ vars.CLOUD_RUN_VPC_NETWORK }}" \
+            --subnet "${{ vars.CLOUD_RUN_VPC_SUBNET }}" \
+            --vpc-egress private-ranges-only \
+            --name-suffix "${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
 
       # The endpoint is rendered only after the deployment gate derived it
       # from the provisioned ingress address. Direct mode gets the inert
