@@ -1,5 +1,11 @@
 import { describe, it, expect, vi } from 'vitest'
-import { SummonGesture, HOLD_THRESHOLD_MS, REPEAT_GAP_MS, MAX_HOLD_MS } from './gesture'
+import {
+  SummonGesture,
+  HOLD_THRESHOLD_MS,
+  REPEAT_GAP_MS,
+  MAX_HOLD_MS,
+  RELEASE_CONFIRM_SAMPLES
+} from './gesture'
 
 /** Deterministic clock + timer world for the gesture machine. */
 function world({
@@ -97,12 +103,15 @@ describe('SummonGesture with key-state sampling', () => {
     let down = true
     const w = world({ keyDown: () => down })
     w.g.fire()
+    w.advance(60) // polls observe the key down (a real ~100ms tap)
     down = false
-    w.advance(60)
+    w.advance(90) // release confirmed (2 consecutive up samples)
+    expect(w.events).toEqual(['start', 'end:tap'])
     down = true
     w.g.fire()
-    down = false
     w.advance(60)
+    down = false
+    w.advance(90)
     expect(w.events).toEqual(['start', 'end:tap', 'start', 'end:tap'])
   })
 
@@ -143,28 +152,58 @@ describe('SummonGesture with key-state sampling', () => {
   })
 
   it('polling only runs during a gesture (zero idle cost)', () => {
-    const sample = vi.fn(() => false)
+    const sample = vi.fn(() => true)
+    let down = true
+    let live = 0 // timers currently scheduled (setTimer minus clearTimer/fired)
     let now = 0
     const timers: { at: number; fn: () => void; id: number }[] = []
+    let nextId = 1
     const g = new SummonGesture(
       { onStart: () => {}, onEnd: () => {} },
       {
-        sampleKeyDown: sample,
+        sampleKeyDown: () => {
+          sample()
+          return down
+        },
         now: () => now,
         setTimer: (fn, ms) => {
-          timers.push({ at: now + ms, fn, id: timers.length + 1 })
-          return timers.length
+          const id = nextId++
+          live++
+          timers.push({ at: now + ms, fn, id })
+          return id
         },
-        clearTimer: () => {}
+        clearTimer: (h) => {
+          const i = timers.findIndex((t) => t.id === h)
+          if (i >= 0) {
+            timers.splice(i, 1)
+            live--
+          }
+        }
       }
     )
-    expect(timers).toHaveLength(0) // nothing scheduled while idle
+    expect(live).toBe(0) // nothing scheduled while idle
+    expect(sample).not.toHaveBeenCalled()
     g.fire()
-    expect(timers.length).toBeGreaterThan(0)
-    now += 40
-    timers.shift()!.fn() // key already up → gesture ends
+    expect(live).toBeGreaterThan(0)
+    // Run a short tap to completion: down for one poll, then released.
+    const run = (ms: number): void => {
+      const target = now + ms
+      for (;;) {
+        timers.sort((a, b) => a.at - b.at)
+        const t = timers[0]
+        if (!t || t.at > target) break
+        timers.shift()
+        live--
+        now = t.at
+        t.fn()
+      }
+      now = target
+    }
+    run(40)
+    down = false
+    run(90) // release confirmed
     expect(g.isActive).toBe(false)
-    expect(timers).toHaveLength(0) // and nothing remains scheduled
+    expect(live).toBe(0) // and nothing remains scheduled
   })
 
   it('force-ends a hold the sampler never sees released (stuck-visualizer recovery)', () => {
@@ -213,6 +252,95 @@ describe('SummonGesture with key-state sampling', () => {
 
   it('MAX_HOLD_MS is 5 minutes (matches the renderer PCM buffer cap with margin)', () => {
     expect(MAX_HOLD_MS).toBe(5 * 60 * 1000)
+  })
+
+  it('HOLD_THRESHOLD_MS is 220ms (macOS PushToTalkManager.tapToLockMaxHoldDuration parity)', () => {
+    expect(HOLD_THRESHOLD_MS).toBe(220)
+  })
+})
+
+// The field bug (2026-07): GetAsyncKeyState reads a physically-held key as UP
+// (blind — e.g. an elevated/UIPI foreground window blocks key state for a
+// non-elevated caller) while RegisterHotKey keeps firing auto-repeats. The old
+// classifier ended the hold as 'tap' on the FIRST blind sample, and every
+// subsequent repeat fire opened a new tap gesture — logs showed bursts of
+// down/up `kind=tap` pairs and deliberate holds were silently discarded.
+describe('SummonGesture with a blind/unreliable key sampler (the discarded-hold field bug)', () => {
+  it('a real hold the sampler never sees is ONE gesture classified hold via the repeat fires', () => {
+    const w = world({ keyDown: () => false }) // sampler exists but is blind
+    w.g.fire()
+    // OS auto-repeat while physically held for ~1s.
+    for (let t = 0; t < 990; t += 30) {
+      w.advance(30)
+      w.g.fire()
+    }
+    // The blind UP samples must not have ended the gesture (the old bug ended
+    // it 30ms in and re-started one per repeat fire).
+    expect(w.events).toEqual(['start'])
+    expect(w.g.isActive).toBe(true)
+    // Key released → repeats stop → the gap classifies by last-fire time.
+    w.advance(REPEAT_GAP_MS + 10)
+    expect(w.events).toEqual(['start', 'end:hold'])
+    expect(w.g.isActive).toBe(false)
+  })
+
+  it('a blind single fire (true tap, or a stale queued fire) ends as tap after the gap', () => {
+    const w = world({ keyDown: () => false })
+    w.g.fire()
+    w.advance(REPEAT_GAP_MS + 10)
+    expect(w.events).toEqual(['start', 'end:tap'])
+  })
+
+  it('one stray blind UP sample mid-hold does not end a sighted hold (release debounce)', () => {
+    const reads: boolean[] = [true, true, true, true, true, false, true, true, true, true]
+    let i = 0
+    const w = world({ keyDown: () => (i < reads.length ? reads[i++] : true) })
+    w.g.fire()
+    w.advance(400) // crosses the threshold; includes the single stray UP at ~180ms
+    expect(w.events).toEqual(['start', 'holdStart'])
+    expect(w.g.isActive).toBe(true)
+  })
+
+  it(`a sighted release needs ${RELEASE_CONFIRM_SAMPLES} consecutive UP samples and measures duration at the first`, () => {
+    let down = true
+    const w = world({ keyDown: () => down })
+    w.g.fire()
+    w.advance(180) // sighted, still under the 220ms threshold
+    down = false
+    // First UP sample at 210ms starts the confirm run; the end fires one poll
+    // later but the duration is measured at the first UP sample → tap.
+    w.advance(90)
+    expect(w.events).toEqual(['start', 'end:tap'])
+  })
+
+  it('sight returning mid-gesture hands authority to the sampler (prompt release)', () => {
+    let blind = true
+    let down = true
+    const w = world({ keyDown: () => !blind && down })
+    w.g.fire()
+    for (let t = 0; t < 300; t += 30) {
+      w.advance(30)
+      w.g.fire() // repeats keep the blind gesture alive
+    }
+    blind = false // e.g. the elevated window lost focus
+    w.advance(90) // polls now read DOWN → sampler takes over, gap disarmed
+    expect(w.g.isActive).toBe(true)
+    down = false
+    w.advance(90) // release confirmed promptly — no 1.2s gap wait
+    expect(w.events).toEqual(['start', 'holdStart', 'end:hold'])
+  })
+
+  it('a blind gesture whose repeats never stop is capped at maxHoldMs', () => {
+    const w = world({ keyDown: () => false, maxHoldMs: 2000 })
+    w.g.fire()
+    for (let t = 0; t < 1980; t += 30) {
+      w.advance(30)
+      w.g.fire()
+    }
+    expect(w.events).toEqual(['start'])
+    w.advance(60) // the next poll crosses the cap
+    expect(w.events).toEqual(['start', 'cap', 'end:hold'])
+    expect(w.g.isActive).toBe(false)
   })
 })
 
