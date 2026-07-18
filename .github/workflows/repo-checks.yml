@@ -206,7 +206,9 @@ jobs:
       - name: Check Python formatting
         if: needs.changes.outputs.has_python == 'true'
         run: |
-          pip install -q black
+          # Pinned: an unpinned black drifts from local/pre-commit formatting on
+          # every black release, making this check fail on untouched files.
+          pip install -q black==26.5.1
           FILES=$(grep 'backend/.*\.py$' /tmp/changed-files.txt | while IFS= read -r f; do [ -f "$f" ] && echo "$f"; done || true)
           if [ -n "$FILES" ]; then
             echo "$FILES" | xargs black --check --line-length 120 --skip-string-normalization
