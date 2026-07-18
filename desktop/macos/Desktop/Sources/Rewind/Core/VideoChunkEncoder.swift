@@ -132,6 +132,10 @@ actor VideoChunkEncoder {
   private var currentChunkFrameRate: Double?
   private(set) var currentChunkPath: String?
   private var chunkLifecycle = RewindVideoChunkLifecycle()
+  /// Completion waiters for the reservation currently writing its MP4 trailer.
+  /// A flush is a durability barrier: callers that arrive during finalization
+  /// must wait for that same writer rather than treating it as an empty buffer.
+  private var inFlightFinalization: InFlightFinalization?
   private var frameOffsetInChunk: Int = 0
 
   // Native HEVC writer state
@@ -152,17 +156,28 @@ actor VideoChunkEncoder {
   /// of launch.
   private var hasFinalizedAnyChunk = false
 
+  // Test-only synchronization hooks. They are unset in production and let the
+  // behavioral regression test hold a real writer after the in-flight state is
+  // published, without relying on wall-clock scheduling.
+  private var beforeFinishWritingForTesting: (@Sendable () async -> Void)?
+  private var finalizationJoinedForTesting: (@Sendable () -> Void)?
+
   // MARK: - Types
 
-  struct EncodedFrame {
+  struct EncodedFrame: Sendable {
     let videoChunkPath: String  // Relative path to .mp4
     let frameOffset: Int  // Frame index within chunk
     let timestamp: Date
   }
 
-  struct ChunkFlushResult {
+  struct ChunkFlushResult: Sendable {
     let videoChunkPath: String
     let frames: [EncodedFrame]
+  }
+
+  private struct InFlightFinalization {
+    let reservation: RewindVideoChunkReservation
+    var waiters: [CheckedContinuation<Bool, Error>] = []
   }
 
   // MARK: - Initialization
@@ -183,6 +198,14 @@ actor VideoChunkEncoder {
 
   func videosDirectoryForTesting() -> URL? {
     videosDirectory
+  }
+
+  func setFinalizationHooksForTesting(
+    beforeFinishWriting: (@Sendable () async -> Void)?,
+    finalizationJoined: (@Sendable () -> Void)?
+  ) {
+    beforeFinishWritingForTesting = beforeFinishWriting
+    finalizationJoinedForTesting = finalizationJoined
   }
 
   func hasFinalizedChunkForDedupe() -> Bool {
@@ -368,11 +391,13 @@ actor VideoChunkEncoder {
 
   /// Force flush current buffer (app termination, etc.)
   func flushCurrentChunk() async throws -> ChunkFlushResult? {
-    guard currentChunkPath != nil, !frameTimestamps.isEmpty else {
+    guard let chunkPath = currentChunkPath,
+      !frameTimestamps.isEmpty,
+      let reservation = chunkLifecycle.activeReservation
+    else {
       return nil
     }
 
-    let chunkPath = currentChunkPath!
     let frames = frameTimestamps.enumerated().map { index, timestamp in
       EncodedFrame(
         videoChunkPath: chunkPath,
@@ -381,8 +406,18 @@ actor VideoChunkEncoder {
       )
     }
 
+    // A second flush can arrive while the owner is suspended in
+    // `finishWriting`. Joining that completion makes shutdown wait until the
+    // MP4 trailer is durable instead of incorrectly reporting an empty buffer.
+    if inFlightFinalization?.reservation == reservation {
+      guard try await joinInFlightFinalization(reservation) else {
+        throw RewindError.storageError("Video chunk finalization was cancelled before flush completed")
+      }
+      return ChunkFlushResult(videoChunkPath: chunkPath, frames: frames)
+    }
+
     guard try await finalizeCurrentChunk() else {
-      return nil
+      throw RewindError.storageError("Video chunk finalization was cancelled before flush completed")
     }
 
     return ChunkFlushResult(videoChunkPath: chunkPath, frames: frames)
@@ -590,6 +625,15 @@ actor VideoChunkEncoder {
 
     let frameCount = frameTimestamps.count
     input.markAsFinished()
+    inFlightFinalization = InFlightFinalization(reservation: reservation)
+    if let beforeFinishWritingForTesting {
+      await beforeFinishWritingForTesting()
+    }
+    guard chunkLifecycle.owns(reservation) else {
+      resolveInFlightFinalization(reservation, with: .success(false))
+      return false
+    }
+
     do {
       try await finishWriting(writer)
     } catch {
@@ -598,19 +642,58 @@ actor VideoChunkEncoder {
       // callback was pending. That stale completion is an expected no-op for
       // the caller rather than an error from the newer generation.
       guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
+        resolveInFlightFinalization(reservation, with: .success(false))
         return false
       }
+      resolveInFlightFinalization(reservation, with: .failure(error))
       throw error
     }
 
     guard resetCurrentChunkState(onlyIfCurrent: reservation) else {
+      resolveInFlightFinalization(reservation, with: .success(false))
       return false
     }
+    resolveInFlightFinalization(reservation, with: .success(true))
 
     log(
       "VideoChunkEncoder: Finalized chunk with \(frameCount) frames (restartCount=\(encoderRestartCount), emergencyResets=\(emergencyResetCount))"
     )
     return true
+  }
+
+  /// Joins the active writer's trailer write without cancelling it. A flush is
+  /// a durability boundary; explicit `cancel()` remains the only path that can
+  /// abandon a finalization and resolve its waiters with `false`.
+  private func joinInFlightFinalization(_ reservation: RewindVideoChunkReservation) async throws -> Bool {
+    guard inFlightFinalization?.reservation == reservation else {
+      return false
+    }
+
+    return try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Bool, Error>) in
+      guard var finalization = inFlightFinalization, finalization.reservation == reservation else {
+        continuation.resume(returning: false)
+        return
+      }
+
+      finalization.waiters.append(continuation)
+      inFlightFinalization = finalization
+      finalizationJoinedForTesting?()
+    }
+  }
+
+  /// Resolves every flush that joined this exact writer. Clearing the stored
+  /// continuations before resuming them prevents a resumed caller from joining
+  /// the completed generation again.
+  private func resolveInFlightFinalization(
+    _ reservation: RewindVideoChunkReservation,
+    with result: Result<Bool, Error>
+  ) {
+    guard let finalization = inFlightFinalization, finalization.reservation == reservation else {
+      return
+    }
+
+    inFlightFinalization = nil
+    finalization.waiters.forEach { $0.resume(with: result) }
   }
 
   /// Clears encoder state only if the expected reservation still owns it.
@@ -878,9 +961,13 @@ actor VideoChunkEncoder {
     stalenessCheckTask?.cancel()
     stalenessCheckTask = nil
 
+    let cancelledFinalization = inFlightFinalization?.reservation
     writerInput?.markAsFinished()
     assetWriter?.cancelWriting()
     _ = resetCurrentChunkState()
+    if let cancelledFinalization {
+      resolveInFlightFinalization(cancelledFinalization, with: .success(false))
+    }
     writerNotReadyCount = 0
   }
 
@@ -918,10 +1005,14 @@ actor VideoChunkEncoder {
     logError(
       "VideoChunkEncoder: Emergency reset (reason=\(reason)) - dropping \(droppedFrames) frames to prevent memory leak")
 
+    let cancelledFinalization = inFlightFinalization?.reservation
     writerInput?.markAsFinished()
     assetWriter?.cancelWriting()
 
     resetCurrentChunkState()
+    if let cancelledFinalization {
+      resolveInFlightFinalization(cancelledFinalization, with: .success(false))
+    }
     writerNotReadyCount = 0
 
     log("VideoChunkEncoder: Emergency reset complete, ready for new frames")
