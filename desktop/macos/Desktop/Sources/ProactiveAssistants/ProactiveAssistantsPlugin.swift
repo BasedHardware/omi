@@ -1,6 +1,22 @@
 import Cocoa
 @preconcurrency import UserNotifications
 
+/// Pure gating policy for scheduled screen-capture ticks. Extracted so the
+/// precondition is unit-testable: a scheduled capture may run only while
+/// monitoring and neither recovering nor background-polling. This is the
+/// contract stopMonitoring must restore — if it fails to clear the recovery /
+/// background-polling flags, every subsequent tick is gated off even though
+/// monitoring is nominally on.
+enum ProactiveCapturePolicy {
+  static func captureTickAllowed(
+    isMonitoring: Bool,
+    isInRecoveryMode: Bool,
+    isInBackgroundPolling: Bool
+  ) -> Bool {
+    isMonitoring && !isInRecoveryMode && !isInBackgroundPolling
+  }
+}
+
 /// Service that manages proactive assistants - screen monitoring, frame capture, and assistant coordination
 @MainActor
 public class ProactiveAssistantsPlugin: NSObject {
@@ -416,7 +432,12 @@ public class ProactiveAssistantsPlugin: NSObject {
   private func setupPowerAwareCaptureTimer() {
     PowerMonitor.shared.onPowerSourceChanged = { [weak self] isOnBattery in
       Task { @MainActor in
-        guard let self, self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+        guard let self,
+          ProactiveCapturePolicy.captureTickAllowed(
+            isMonitoring: self.isMonitoring,
+            isInRecoveryMode: self.isInRecoveryMode,
+            isInBackgroundPolling: self.isInBackgroundPolling)
+        else { return }
 
         self.captureTimer?.invalidate()
         self.captureTimer = nil
@@ -429,7 +450,12 @@ public class ProactiveAssistantsPlugin: NSObject {
           }
 
           await MainActor.run {
-            guard self.isMonitoring, !self.isInRecoveryMode, !self.isInBackgroundPolling else { return }
+            guard
+              ProactiveCapturePolicy.captureTickAllowed(
+                isMonitoring: self.isMonitoring,
+                isInRecoveryMode: self.isInRecoveryMode,
+                isInBackgroundPolling: self.isInBackgroundPolling)
+            else { return }
             self.restartCaptureTimer(reason: "power source changed to \(isOnBattery ? "battery" : "AC")")
           }
         }
@@ -458,6 +484,18 @@ public class ProactiveAssistantsPlugin: NSObject {
     analysisDelayTimer = nil
     distributionDebounceTimer?.invalidate()
     distributionDebounceTimer = nil
+    // Clear capture-recovery / background-polling state. Without this, a stop
+    // that happens while recovering or background-polling leaves
+    // isInRecoveryMode / isInBackgroundPolling stuck true (only their exit
+    // paths clear them) and orphans the 60s backgroundPollTimer. On the next
+    // start, the scheduled-capture guards (ProactiveCapturePolicy.captureTickAllowed)
+    // then silently skip every tick, so monitoring appears on but never captures.
+    backgroundPollTimer?.invalidate()
+    backgroundPollTimer = nil
+    isInRecoveryMode = false
+    isInBackgroundPolling = false
+    backgroundPollCount = 0
+    recoveryRetryCount = 0
     isInDelayPeriod = false
     screenshotCaptureGate.reset()
     videoCallThrottleGate.reset()
