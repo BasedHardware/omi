@@ -1,0 +1,3 @@
+{
+  "change": "Reduced memory use in Rewind search by loading downsampled thumbnails instead of full-resolution screenshots"
+}
