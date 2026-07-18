@@ -377,14 +377,10 @@ class _PlansSheetState extends State<PlansSheet> {
     final currentSub = provider.subscription?.subscription;
     // Only show "no charge until renewal" dialog for same-tier monthly→annual switch.
     // Cross-tier changes are immediate+prorated on the backend, not deferred.
-    final currentTierName = currentSub?.plan.name; // 'unlimited', 'operator', 'architect'
+    final currentTierName = currentSub?.plan.wireName; // backend plan_id, e.g. 'plus', 'unlimited_v2'
     final isSameTier = currentTierName == tierId;
-    final isUpgradingFromMonthlyToAnnual = isSameTier &&
-        (currentSub?.plan == PlanType.unlimited ||
-            currentSub?.plan == PlanType.operator ||
-            currentSub?.plan == PlanType.architect) &&
-        currentSub?.status == SubscriptionStatus.active &&
-        isYearly;
+    final isUpgradingFromMonthlyToAnnual =
+        isSameTier && (currentSub?.plan.isPaid ?? false) && currentSub?.status == SubscriptionStatus.active && isYearly;
 
     if (isUpgradingFromMonthlyToAnnual && currentSub?.cancelAtPeriodEnd != true) {
       // Show confirmation popup for monthly to annual upgrade
@@ -492,9 +488,7 @@ class _PlansSheetState extends State<PlansSheet> {
 
     final currentSub = provider.subscription!.subscription;
 
-    if (currentSub.plan == PlanType.unlimited ||
-        currentSub.plan == PlanType.operator ||
-        currentSub.plan == PlanType.architect) {
+    if (currentSub.plan.isPaid) {
       final confirmed = await showDialog<bool>(
         context: context,
         builder: (ctx) => ConfirmationDialog(
@@ -518,11 +512,7 @@ class _PlansSheetState extends State<PlansSheet> {
       Map<String, dynamic>? result;
 
       // If user already has a paid plan and it's not canceled
-      if ((currentSub.plan == PlanType.unlimited ||
-              currentSub.plan == PlanType.operator ||
-              currentSub.plan == PlanType.architect) &&
-          currentSub.status == SubscriptionStatus.active &&
-          !currentSub.cancelAtPeriodEnd) {
+      if (currentSub.plan.isPaid && currentSub.status == SubscriptionStatus.active && !currentSub.cancelAtPeriodEnd) {
         result = await provider.upgradeUserSubscription(
           priceId: priceId,
           promotionCode: promoCode.isNotEmpty ? promoCode : null,
@@ -612,8 +602,7 @@ class _PlansSheetState extends State<PlansSheet> {
         }
 
         final sub = provider.subscription?.subscription;
-        final isPaidPlan =
-            sub?.plan == PlanType.unlimited || sub?.plan == PlanType.operator || sub?.plan == PlanType.architect;
+        final isPaidPlan = sub?.plan.isPaid ?? false;
         final isUnlimited = isPaidPlan; // backward-compat alias for UI branching
         final isCancelled = sub?.cancelAtPeriodEnd ?? false;
 
@@ -1549,7 +1538,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     // Tier ordering
-    const tierOrder = ['unlimited', 'operator', 'architect'];
+    const tierOrder = ['plus', 'unlimited_v2', 'unlimited', 'operator', 'architect'];
     final sortedTierIds = grouped.keys.toList()
       ..sort((a, b) {
         final ai = tierOrder.indexOf(a);
@@ -2064,6 +2053,8 @@ class _PlansSheetState extends State<PlansSheet> {
       case 'architect':
         return true;
       case 'unlimited':
+      case 'plus':
+      case 'unlimited_v2':
         return false;
       default:
         return null;
