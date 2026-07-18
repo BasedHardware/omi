@@ -2936,7 +2936,7 @@
     "upgradePlan": "プランをアップグレード",
     "billingMonthly": "月額",
     "billingYearly": "年額",
-    "savePercent": "約17%お得",
+    "savePercent": "約{percent}%お得",
     "popular": "人気",
     "currentPlan": "現在",
     "neoSubtitle": "月{count}件の質問",

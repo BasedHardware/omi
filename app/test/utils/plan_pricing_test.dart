@@ -39,4 +39,44 @@ void main() {
       expect(annualSaveTag(_tier(monthly: 0, yearly: 16191)), isNull);
     });
   });
+
+  group('annualDiscountPercent', () {
+    test('Plus and Unlimited discount 25%, not the hardcoded 17%', () {
+      // Regression: the yearly-toggle badge was a hardcoded "Save ~17%" string
+      // in all 49 locales. 17% is the legacy Neo discount; 3 months free is 25%.
+      expect(annualDiscountPercent(_tier(monthly: 1799, yearly: 16191)), 25);
+      expect(annualDiscountPercent(_tier(monthly: 2999, yearly: 26991)), 25);
+    });
+
+    test('legacy Neo still discounts ~17%', () {
+      expect(annualDiscountPercent(_tier(monthly: 1999, yearly: 19999)), 17);
+    });
+
+    test('returns null when annual is not cheaper or prices are unusable', () {
+      expect(annualDiscountPercent(_tier(monthly: 1000, yearly: 12000)), isNull);
+      expect(annualDiscountPercent(_tier(monthly: 1000, yearly: 13000)), isNull);
+      expect(annualDiscountPercent(_tier(monthly: 1799)), isNull);
+      expect(annualDiscountPercent(const []), isNull);
+    });
+  });
+
+  group('bestAnnualDiscountPercent', () {
+    test('advertises the best discount across the shown tiers', () {
+      final neo = _tier(monthly: 1999, yearly: 19999); // 17%
+      final plus = _tier(monthly: 1799, yearly: 16191); // 25%
+      expect(bestAnnualDiscountPercent([neo, plus]), 25);
+      expect(bestAnnualDiscountPercent([neo]), 17);
+    });
+
+    test('ignores tiers with unusable prices', () {
+      final broken = _tier(monthly: 1799);
+      final plus = _tier(monthly: 1799, yearly: 16191);
+      expect(bestAnnualDiscountPercent([broken, plus]), 25);
+    });
+
+    test('returns null when no tier has a usable discount', () {
+      expect(bestAnnualDiscountPercent([_tier(monthly: 1799), const []]), isNull);
+      expect(bestAnnualDiscountPercent(const []), isNull);
+    });
+  });
 }

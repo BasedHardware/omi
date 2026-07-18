@@ -1554,6 +1554,7 @@ class _PlansSheetState extends State<PlansSheet> {
     }
 
     final isYearly = selectedPlan == 'yearly';
+    final savePercent = bestAnnualDiscountPercent(grouped.values);
 
     return Column(
       children: [
@@ -1584,20 +1585,23 @@ class _PlansSheetState extends State<PlansSheet> {
                           fontWeight: FontWeight.w600,
                         ),
                       ),
-                      const SizedBox(width: 8),
-                      Container(
-                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                        decoration: BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
-                        child: Text(
-                          context.l10n.savePercent,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontSize: 9,
-                            fontWeight: FontWeight.w600,
-                            letterSpacing: 0.3,
+                      if (savePercent != null) ...[
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                          decoration:
+                              BoxDecoration(color: Colors.green.shade800, borderRadius: BorderRadius.circular(8)),
+                          child: Text(
+                            context.l10n.savePercent(savePercent),
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 9,
+                              fontWeight: FontWeight.w600,
+                              letterSpacing: 0.3,
+                            ),
                           ),
                         ),
-                      ),
+                      ],
                     ],
                   ),
                 ),

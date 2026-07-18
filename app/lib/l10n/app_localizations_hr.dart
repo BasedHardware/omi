@@ -9018,7 +9018,9 @@ class AppLocalizationsHr extends AppLocalizations {
   String get billingYearly => 'Godišnje';
 
   @override
-  String get savePercent => 'Uštedite ~17%';
+  String savePercent(int percent) {
+    return 'Uštedite ~$percent%';
+  }
 
   @override
   String get popular => 'Popularno';
