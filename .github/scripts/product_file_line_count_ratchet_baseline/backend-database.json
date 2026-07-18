@@ -1,7 +1,9 @@
 {
   "files": {
-    "backend/database/users.py": 1943
+    "backend/database/users.py": 1950
   },
-  "raise_justifications": {},
+  "raise_justifications": {
+    "backend/database/users.py": "Breaking the utils.subscription import cycle moves one module-level import to its two call sites, with comments recording why it must stay deferred so it is not folded back to the top and silently re-broken."
+  },
   "threshold": 1500
 }

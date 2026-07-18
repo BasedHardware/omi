@@ -10,7 +10,6 @@ from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict
 from database.redis_db import try_acquire_client_device_write_lock, try_acquire_user_platform_write_lock
 from models.users import Subscription, PlanLimits, PlanType, SubscriptionStatus
 from models.other import Person
-from utils.subscription import get_default_basic_subscription
 import logging
 
 logger = logging.getLogger(__name__)
@@ -1430,6 +1429,10 @@ def get_user_subscription(uid: str) -> Subscription:
             return subscription
 
     # If subscription doesn't exist for the user, create and return a default free plan.
+    # Imported here, not at module scope: utils.subscription imports this module, so a
+    # module-level import makes utils.subscription unimportable on its own (see get_subscription).
+    from utils.subscription import get_default_basic_subscription
+
     default_subscription = get_default_basic_subscription()
     # Strip dynamic fields before storing
     sub_to_store = default_subscription.model_dump()
@@ -1507,7 +1510,11 @@ def get_user_valid_subscription(uid: str) -> Optional[Subscription]:
         if period_end_dt >= datetime.now(timezone.utc):
             return subscription
 
-    # Fallback to default basic subscription
+    # Fallback to default basic subscription. Imported here, not at module scope: utils.subscription
+    # imports this module, and a module-level import back into it forms a cycle that makes
+    # utils.subscription raise ImportError whenever it is the first of the pair to be imported.
+    from utils.subscription import get_default_basic_subscription
+
     return get_default_basic_subscription()
 
 
