@@ -93,7 +93,7 @@ def memory_item(
     quote_text: str,
     **overrides,
 ) -> MemoryItem:
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         "memory_id": memory_id,

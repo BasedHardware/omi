@@ -167,7 +167,7 @@ def _evidence(source_id='conv1'):
 
 
 def _memory_item(memory_id: str, *, tier=MemoryTier.short_term, now=None, captured_at=None, content=None, **overrides):
-    now = now or datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = now or datetime.now(timezone.utc)
     captured_at = captured_at or (now - timedelta(days=1))
     data = {
         'memory_id': memory_id,
@@ -581,7 +581,7 @@ def test_vector_search_endpoint_requires_persisted_rollout_before_vector_or_memo
 def test_vector_search_endpoint_uses_persisted_default_policy_and_excludes_stale_short_term_and_archive(monkeypatch):
     from models.memory_search_gateway import SearchMode, SearchVectorHit
 
-    now = datetime(2026, 6, 19, 12, 0, tzinfo=timezone.utc)
+    now = datetime.now(timezone.utc)
     fresh_short_term = _memory_item('fresh-short-term', now=now, content='coffee fresh short term')
     stale_short_term = _memory_item(
         'stale-short-term', now=now, captured_at=now - timedelta(days=45), content='coffee stale short term'
