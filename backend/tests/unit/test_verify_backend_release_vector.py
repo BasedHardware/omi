@@ -642,6 +642,58 @@ def test_retry_derives_a_new_vector_and_accepts_only_the_converged_attempt() -> 
     assert verifier.evaluate(retry, _documents(retry)) == []
 
 
+def test_main_passes_errors_into_evidence_so_a_successful_check_writes_evidence() -> None:
+    """Regression for the missing positional ``errors`` argument.
+
+    ``main()`` builds ``errors`` via ``evaluate()`` and then renders
+    ``evidence(...)``. When the --candidate / --cloud-run-only paths landed,
+    the call site forgot to forward ``errors``, so a successful candidate or
+    serving-vector check raised ``TypeError: evidence() missing 1 required
+    positional argument: 'errors'`` before writing any evidence. Both edited
+    deploy workflows hit this path.
+    """
+    import tempfile
+
+    expectation = _expectation()
+    documents = _documents(expectation)
+
+    monkeypatch_collect = pytest.MonkeyPatch()
+    monkeypatch_collect.setattr(verifier, 'collect_documents', lambda commands: documents)
+
+    with tempfile.NamedTemporaryFile('r+', suffix='.json', delete=False) as handle:
+        evidence_path = Path(handle.name)
+
+    argv = [
+        'verify_backend_release_vector.py',
+        '--commit-sha',
+        expectation.commit_sha,
+        '--short-sha',
+        expectation.commit_sha[:7],
+        '--deploy-run-id',
+        expectation.deploy_run_id,
+        '--deploy-run-attempt',
+        expectation.deploy_run_attempt,
+        '--project',
+        'based-hardware-dev',
+        '--region',
+        'us-central1',
+        '--environment',
+        'dev',
+        '--evidence-path',
+        str(evidence_path),
+    ]
+    monkeypatch_collect.setattr(sys, 'argv', argv)
+    try:
+        rc = verifier.main()
+    finally:
+        monkeypatch_collect.undo()
+
+    assert rc == 0, 'a fully-converged serving vector must return success'
+    report = json.loads(evidence_path.read_text(encoding='utf-8'))
+    assert report['result'] == 'pass'
+    assert report['errors'] == []
+
+
 def test_evidence_records_the_derived_release_vector() -> None:
     expectation = _expectation()
 

@@ -431,6 +431,7 @@ def main() -> int:
         evidence(
             expectation,
             documents,
+            errors,
             require_serving_traffic=not args.candidate,
             include_listener=not args.cloud_run_only,
         ),
