@@ -505,7 +505,7 @@ actor FocusAssistant: ProactiveAssistant {
         guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
 
         // Save to SQLite and sync to backend
-        await saveFocusSessionToSQLite(
+        let sqliteId = await saveFocusSessionToSQLite(
           analysis: analysis,
           screenshotId: frame.screenshotId,
           windowTitle: frame.windowTitle,
@@ -515,7 +515,7 @@ actor FocusAssistant: ProactiveAssistant {
         // Update FocusStorage UI state (sessions list, currentStatus, currentApp)
         Task { @MainActor [ownerID] in
           guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-          FocusStorage.shared.addSession(from: analysis)
+          FocusStorage.shared.addSession(from: analysis, sqliteId: sqliteId)
         }
 
         // Trigger red glow via callback (runs on MainActor in plugin)
@@ -583,7 +583,7 @@ actor FocusAssistant: ProactiveAssistant {
         lastNotifiedState = .focused
 
         // Save to SQLite and sync to backend
-        await saveFocusSessionToSQLite(
+        let sqliteId = await saveFocusSessionToSQLite(
           analysis: analysis,
           screenshotId: frame.screenshotId,
           windowTitle: frame.windowTitle,
@@ -593,7 +593,7 @@ actor FocusAssistant: ProactiveAssistant {
         // Update FocusStorage UI state (sessions list, currentStatus, currentApp)
         Task { @MainActor [ownerID] in
           guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
-          FocusStorage.shared.addSession(from: analysis)
+          FocusStorage.shared.addSession(from: analysis, sqliteId: sqliteId)
         }
 
         // Only trigger glow and notification when returning FROM distracted
@@ -768,14 +768,17 @@ actor FocusAssistant: ProactiveAssistant {
 
   // MARK: - Storage
 
-  /// Save focus session to SQLite (both tables) and sync to backend
+  /// Save focus session to SQLite (both tables) and sync to backend.
+  /// Returns the inserted `focus_sessions` rowid so the caller can reuse it as
+  /// the in-memory session id (see `FocusStorage.addSession(from:sqliteId:)`).
+  @discardableResult
   private func saveFocusSessionToSQLite(
     analysis: ScreenAnalysis,
     screenshotId: Int64?,
     windowTitle: String? = nil,
     ownerID: String
-  ) async {
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+  ) async -> Int64? {
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return nil }
     // Save to focus_sessions table (for detailed tracking)
     let focusRecord = FocusSessionRecord(
       screenshotId: screenshotId,
@@ -789,7 +792,7 @@ actor FocusAssistant: ProactiveAssistant {
     var focusSessionId: Int64?
     do {
       let inserted = try await ProactiveStorage.shared.insertFocusSession(focusRecord)
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return focusSessionId }
       focusSessionId = inserted.id
       log("Focus: Saved to focus_sessions (id: \(inserted.id ?? -1), status: \(analysis.status.rawValue))")
     } catch {
@@ -802,7 +805,7 @@ actor FocusAssistant: ProactiveAssistant {
       screenshotId: screenshotId,
       windowTitle: windowTitle,
       ownerID: ownerID)
-    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+    guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return focusSessionId }
 
     // Sync to backend once and update both tables with backendId
     if let backendMemory = await syncFocusSessionToBackend(
@@ -810,7 +813,7 @@ actor FocusAssistant: ProactiveAssistant {
       windowTitle: windowTitle,
       ownerID: ownerID)
     {
-      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+      guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return focusSessionId }
       // Update focus_sessions table
       if let recordId = focusSessionId {
         do {
@@ -819,7 +822,7 @@ actor FocusAssistant: ProactiveAssistant {
             backendId: backendMemory.id,
             synced: true
           )
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return focusSessionId }
         } catch {
           logError("Focus: Failed to update focus_sessions sync status", error: error)
         }
@@ -829,12 +832,13 @@ actor FocusAssistant: ProactiveAssistant {
       if let memId = memoryId {
         do {
           try await MemoryStorage.shared.markSynced(id: memId, serverMemory: backendMemory)
-          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return }
+          guard RuntimeOwnerIdentity.currentOwnerId() == ownerID else { return focusSessionId }
         } catch {
           logError("Focus: Failed to update memories sync status", error: error)
         }
       }
     }
+    return focusSessionId
   }
 
   /// Save focus event to unified memories table for search/filter
