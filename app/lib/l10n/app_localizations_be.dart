@@ -1469,7 +1469,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get payYourSttProvider => 'Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.';
 
   @override
-  String get freeMinutesMonth => '600 свабодных мінут/месяц уключана. Неабмежавана з ';
+  String get freeMinutesMonth => '300 свабодных мінут/месяц уключана. Неабмежавана з ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -6017,7 +6017,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
 
   @override
   String get viewUsage => 'Прагляд выкарыстання';
@@ -6099,7 +6099,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
 
   @override
   String get audioProcessedLocally =>

@@ -1472,7 +1472,7 @@ class AppLocalizationsMk extends AppLocalizations {
   String get payYourSttProvider => 'Слободно користете omi. Плаќате директно на вашиот STT добавувач.';
 
   @override
-  String get freeMinutesMonth => '600 слободни минути/месец вклучени. Неограничено со ';
+  String get freeMinutesMonth => '300 слободни минути/месец вклучени. Неограничено со ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
