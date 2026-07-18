@@ -263,7 +263,7 @@ env:
   - name: GOOGLE_CLOUD_PROJECT
     value: "based-hardware"
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
-    value: "600"
+    value: "300"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
     value: "0"
   - name: BASIC_TIER_INSIGHTS_GAINED_LIMIT_PER_MONTH
