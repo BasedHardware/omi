@@ -4037,10 +4037,12 @@ class FloatingControlBarManager {
       )
     else { return false }
     observeAgentCompletionContext(pillID: pillID, runId: runId)
-    if !resources.isEmpty,
-      let projected = provider.messages.first(where: { $0.id == updated.turnId })
-    {
-      deliverAgentArtifactCompletionToFloatingSurface(projected)
+    if !resources.isEmpty {
+      // `updated` is the canonical journal revision. Project it synchronously
+      // before updating the floating viewport so a Combine refresh cannot make
+      // the main transcript and notch disagree about this artifact card.
+      provider.projectJournalTurn(updated)
+      deliverAgentArtifactCompletionToFloatingSurface(updated.chatMessage())
     }
     return true
   }
