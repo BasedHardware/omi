@@ -36,6 +36,15 @@ runs:
         git cat-file -e "${RELEASE_SHA}^{commit}"
         git merge-base --is-ancestor "$RELEASE_BEFORE" "$RELEASE_SHA"
 
+    # The selected canonical checks can invoke backend/scripts/openapi_runner.sh,
+    # which deliberately requires uv. Keep the automatic post-merge proof
+    # self-contained instead of relying on a runner image default.
+    - name: Set up uv for canonical checks
+      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84
+      with:
+        enable-cache: true
+        cache-dependency-glob: backend/openapi-requirements.txt
+
     - name: Run canonical deterministic CI preflight
       shell: bash
       env:
