@@ -318,13 +318,22 @@ final class DeviceProvider: ObservableObject {
   /// Unpair the current device (disconnect and clear pairing)
   func unpair() async {
     await sessionCoordinator.unpair()
-    resetSessionPresentation()
+    // Unpair is an intentional teardown: do not arm (and cancel any pending)
+    // "device disconnected — please reconnect" notification, which would be
+    // misleading for a device the user deliberately removed.
+    resetSessionPresentation(scheduleReconnectNotification: false)
     savePairedDevice(nil)
 
     logger.info("Unpaired device")
   }
 
-  private func resetSessionPresentation() {
+  /// Test seam: whether a "please reconnect" disconnect notification is armed.
+  var hasScheduledDisconnectNotification: Bool { disconnectNotificationTimer != nil }
+
+  /// - Parameter scheduleReconnectNotification: arm the reconnect prompt (true
+  ///   for an unexpected disconnect) or cancel any pending one (false for an
+  ///   intentional unpair).
+  private func resetSessionPresentation(scheduleReconnectNotification: Bool = true) {
     // Cancel battery monitoring
     batterySubscription?.cancel()
     batterySubscription = nil
@@ -337,8 +346,12 @@ final class DeviceProvider: ObservableObject {
     // TODO: Track analytics when AnalyticsManager supports device events
     // AnalyticsManager.shared.deviceDisconnected()
 
-    // Schedule disconnect notification
-    scheduleDisconnectNotification()
+    if scheduleReconnectNotification {
+      scheduleDisconnectNotification()
+    } else {
+      disconnectNotificationTimer?.invalidate()
+      disconnectNotificationTimer = nil
+    }
   }
 
   // MARK: - Auto-Reconnection
