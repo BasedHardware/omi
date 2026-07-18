@@ -16,8 +16,12 @@ import urllib.error
 from pathlib import Path
 from unittest.mock import patch
 
+import signal
+from types import SimpleNamespace
+
 from pr_metadata import TransientPRMetadataError, load_from_api, load_from_event_file
 from pr_preflight import changed_files, format_failure_class_suggest, resolve_pr_metadata, select_checks
+import preflight_runner
 
 SCRIPT_DIR = Path(__file__).resolve().parent
 RUNNER = SCRIPT_DIR / "preflight_runner.py"
@@ -395,6 +399,22 @@ class SelectionTests(unittest.TestCase):
             text = path.read_text(encoding="utf-8")
             for reference in deprecated_references:
                 self.assertNotIn(reference, text, f"{path}: update {reference} to a non-Node-20 action")
+
+
+class SignalPortabilityTests(unittest.TestCase):
+    def test_forwardable_signals_are_all_present_on_this_host(self) -> None:
+        selected = preflight_runner.forwardable_signals()
+        self.assertIn(signal.SIGINT, selected)
+        self.assertIn(signal.SIGTERM, selected)
+        for signum in selected:
+            self.assertIsInstance(signum, int)
+
+    def test_forwardable_signals_skips_sighup_when_host_omits_it(self) -> None:
+        # Windows Python has no SIGHUP; selection must drop it instead of crashing.
+        windows_signal = SimpleNamespace(SIGINT=signal.SIGINT, SIGTERM=signal.SIGTERM)
+        with patch.object(preflight_runner, "signal", windows_signal):
+            selected = preflight_runner.forwardable_signals()
+        self.assertEqual(selected, (signal.SIGINT, signal.SIGTERM))
 
 
 class SingleFlightTests(unittest.TestCase):

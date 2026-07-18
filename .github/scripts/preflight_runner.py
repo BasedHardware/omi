@@ -18,6 +18,15 @@ POLL_SECONDS = 0.2
 STATUS_INTERVAL_SECONDS = 5.0
 
 
+def forwardable_signals() -> tuple[int, ...]:
+    """Interrupt signals the host exposes, so the handler map never assumes POSIX.
+
+    Windows Python omits ``SIGHUP``; building the map unconditionally raised
+    ``AttributeError`` before any pre-push check could run.
+    """
+    return tuple(getattr(signal, name) for name in ("SIGINT", "SIGTERM", "SIGHUP") if hasattr(signal, name))
+
+
 def atomic_json(path: Path, value: dict) -> None:
     temporary = path.with_suffix(path.suffix + f".{os.getpid()}.tmp")
     temporary.write_text(json.dumps(value, indent=2, sort_keys=True) + "\n", encoding="utf-8")
@@ -175,13 +184,14 @@ def run_owned(
     def forward_signal(signum: int, _frame: object) -> None:
         if child is not None and child.poll() is None:
             try:
-                os.killpg(child.pid, signum)
-            except ProcessLookupError:
+                if hasattr(os, "killpg"):
+                    os.killpg(child.pid, signum)
+                else:
+                    child.send_signal(signum)
+            except (ProcessLookupError, OSError):
                 pass
 
-    previous_handlers = {
-        signum: signal.signal(signum, forward_signal) for signum in (signal.SIGINT, signal.SIGTERM, signal.SIGHUP)
-    }
+    previous_handlers = {signum: signal.signal(signum, forward_signal) for signum in forwardable_signals()}
     exit_code = 1
     try:
         print(f"Pre-push single-flight log: {log_path}")
