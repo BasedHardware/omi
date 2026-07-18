@@ -847,8 +847,10 @@ export class HubController {
         // cooldown every PTT press falls to the batch cascade, which still returns a valid
         // reply and is therefore INDISTINGUISHABLE from a hub turn. Surfacing it is
         // mandatory (AGENTS.md: silent UX healing is fine, silent ops is not). One shared
-        // fallback event, closed enums, no new counter — emitted once as the circuit trips
-        // (re-warm has stopped, so no new close can re-emit until a probe episode).
+        // fallback event, closed enums, no new counter — emitted each time the circuit
+        // (re-)trips: once when the budget is first spent, and again if a post-cooldown
+        // half-open probe fails and re-opens it. Auto re-warm has stopped (no timer armed
+        // here), so it can't re-emit until an external warm trigger drives the next probe.
         this.circuitOpenUntil = this.now() + HubController.CIRCUIT_COOLDOWN_MS
         trackEvent('fallback_triggered', {
           component: 'ptt_cascade',

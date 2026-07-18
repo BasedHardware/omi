@@ -23,54 +23,7 @@ import {
 } from './hubSession'
 import { GEMINI_LIVE_MODEL } from '../tokenMint'
 import type { VoiceToolDeclaration } from '../../../../../shared/types'
-
-// JSON-Schema keywords that Gemini Live's function-declaration `parameters` (an
-// OpenAPI-3.0 `Schema`, NOT full JSON Schema) does not accept. Sending any of them —
-// most notably `additionalProperties`, which the host tool catalog stamps on every
-// tool — makes Gemini REJECT the whole BidiGenerateContent setup and close the socket
-// within seconds of connect (no `setupComplete`), so every warm silently cascades and
-// the reconnect budget bleeds out. Full JSON Schema is only allowed in Gemini's
-// separate `parameters_json_schema` field, which the raw Bidi setup frame does not use.
-// OpenAI's realtime lane REQUIRES `additionalProperties:false` for strict tools, so this
-// stripping is Gemini-only (see openaiHubSession, which passes the schema through).
-const GEMINI_UNSUPPORTED_SCHEMA_KEYS = new Set([
-  'additionalProperties',
-  'unevaluatedProperties',
-  '$schema',
-  '$id',
-  '$ref',
-  '$defs',
-  '$comment',
-  'definitions',
-  'oneOf',
-  'allOf',
-  'not',
-  'const',
-  'patternProperties',
-  'propertyNames',
-  'dependentSchemas',
-  'dependencies',
-  'if',
-  'then',
-  'else'
-])
-
-/** Recursively strip JSON-Schema-only keywords Gemini's `Schema` rejects, returning a
- *  clean OpenAPI-3.0-subset schema. Pure; leaves supported keys (type, properties,
- *  required, items, enum, anyOf, format, description, …) untouched. Exported for the
- *  regression test. */
-export function sanitizeGeminiToolSchema(schema: unknown): unknown {
-  if (Array.isArray(schema)) return schema.map(sanitizeGeminiToolSchema)
-  if (schema && typeof schema === 'object') {
-    const out: Record<string, unknown> = {}
-    for (const [key, value] of Object.entries(schema as Record<string, unknown>)) {
-      if (GEMINI_UNSUPPORTED_SCHEMA_KEYS.has(key)) continue
-      out[key] = sanitizeGeminiToolSchema(value)
-    }
-    return out
-  }
-  return schema
-}
+import { sanitizeGeminiToolSchema } from './geminiToolSchema'
 
 export class GeminiHubSession extends BaseHubSession {
   readonly provider: HubProvider = 'gemini'

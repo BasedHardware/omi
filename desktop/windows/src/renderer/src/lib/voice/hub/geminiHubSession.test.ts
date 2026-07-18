@@ -10,6 +10,7 @@ vi.mock('../pcmPlayer', () => ({
 }))
 
 import { GeminiHubSession } from './geminiHubSession'
+import { OpenAiHubSession } from './openaiHubSession'
 
 type Json = Record<string, unknown>
 
@@ -223,6 +224,64 @@ describe('GeminiHubSession — warm config', () => {
     expect(JSON.stringify(setup.tools)).not.toMatch(/additionalProperties|\$schema/)
     h.getSocket().spec.onMessage(JSON.stringify({ setupComplete: {} }))
     await warm
+  })
+
+  // NB: the REAL host catalog (buildVoiceHubToolCatalog) is exercised through the sanitizer
+  // in a MAIN-side test (voiceTool.geminiSchema.test.ts) — it can't be imported here without
+  // dragging the whole agent-kernel graph into the renderer suite.
+
+  it('does not mutate a catalog shared with the OpenAI lane — OpenAI keeps additionalProperties (strict mode)', async () => {
+    // One catalog object, both lanes. Gemini must strip additionalProperties; OpenAI's GA
+    // realtime REQUIRES it for strict function tools — so the sanitize must be a deep COPY,
+    // never an in-place mutation of the shared object. Pins cross-lane isolation forever.
+    const sharedCatalog = [
+      {
+        name: 'update_action_item',
+        description: 'edit a task',
+        parameters: {
+          type: 'object',
+          additionalProperties: false,
+          properties: { id: { type: 'string' } },
+          required: ['id']
+        }
+      }
+    ]
+
+    // Gemini warm first (the lane that sanitizes) — its emitted schema is stripped…
+    const g = harness({ tools: sharedCatalog })
+    g.session.ensureWarm().catch(() => {})
+    await tick()
+    g.getSocket().spec.onOpen()
+    const gSetup = g.getSocket().frames()[0].setup as Json
+    const gParams = ((gSetup.tools as Json[])[0].functionDeclarations as Json[])[0]
+      .parameters as Json
+    expect(gParams.additionalProperties).toBeUndefined()
+
+    // …the shared source object is UNTOUCHED (deep copy, no mutation)…
+    expect((sharedCatalog[0].parameters as Json).additionalProperties).toBe(false)
+
+    // …and the OpenAI lane, given the same object, still emits additionalProperties.
+    const events = makeEvents()
+    let openaiSocket: FakeSocket | undefined
+    const oSession = new OpenAiHubSession({
+      token: 'tok',
+      instructions: 'instr',
+      socketFactory: (spec) => {
+        openaiSocket = new FakeSocket(spec)
+        return openaiSocket
+      },
+      playerFactory: async () => makePlayer() as never,
+      clock: { setTimer: () => ({}), clearTimer: () => {} },
+      mintSessionID: () => 'sess-oai' as VoiceSessionID,
+      tools: sharedCatalog,
+      events
+    })
+    oSession.ensureWarm().catch(() => {})
+    await tick()
+    openaiSocket!.spec.onOpen()
+    const oFrame = openaiSocket!.frames().find((f) => f.type === 'session.update') as Json
+    const oParams = (((oFrame.session as Json).tools as Json[])[0] as Json).parameters as Json
+    expect(oParams.additionalProperties).toBe(false)
   })
 })
 
