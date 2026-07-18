@@ -152,7 +152,8 @@ jobs:
           git add desktop/macos/CHANGELOG.json desktop/macos/changelog
           git commit -m "chore: consolidate changelog for v${VERSION}" || echo "No changelog changes to commit"
 
-          # Tag the changelog commit first; Codemagic uses this tag to trigger builds.
+          # The planner checked the newest queued releasable desktop source SHA.
+          # Tag this commit so Codemagic receives the consolidated release notes too.
           # NOTE: commit message must NOT contain [skip ci].
           git tag "$RELEASE_TAG"
           git push origin "$RELEASE_TAG"
