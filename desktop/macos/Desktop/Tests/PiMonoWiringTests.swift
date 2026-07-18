@@ -98,12 +98,16 @@ final class PiMonoWiringTests: XCTestCase {
       homeDirectory: "/tmp/missing-home")
 
     XCTAssertFalse(availability.isAvailable)
-    XCTAssertEqual(
-      availability.setupPrompt,
-      "I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
-    XCTAssertEqual(
-      availability.toolError,
-      "Error: I don't see OpenClaw installed. Make sure OpenClaw is installed first, then try again.")
+    XCTAssertTrue(availability.setupPrompt.contains("npm i -g openclaw"))
+    XCTAssertTrue(availability.setupPrompt.contains("openclaw configure"))
+    XCTAssertTrue(availability.toolError.hasPrefix("Error: "))
+  }
+
+  func testDirectedProviderSetupCopyIncludesInstallAndLoginCommands() {
+    let codex = AgentPillsManager.DirectedProvider.codex.setupNeededStatus
+    XCTAssertTrue(codex.contains("npm i -g @openai/codex"))
+    XCTAssertTrue(codex.contains("codex login"))
+    XCTAssertTrue(codex.contains("Omi's own agent"))
   }
 
   // MARK: - ApiKeysResponse shape assertion
@@ -237,7 +241,7 @@ final class PiMonoWiringTests: XCTestCase {
   }
 
   func testAIProviderAllContainsSupportedProviders() {
-    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw"])
+    XCTAssertEqual(AIProvider.all.map(\.id), ["piMono", "claude", "hermes", "openclaw", "codex"])
   }
 
   func testAIProviderFromBridgeModeReturnsCorrectProvider() {

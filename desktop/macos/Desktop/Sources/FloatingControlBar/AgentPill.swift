@@ -109,7 +109,7 @@ final class AgentPill: ObservableObject, Identifiable {
   func applyCanonicalProviderIdentity(_ rawValue: String?) {
     guard let rawValue,
       let provider = AgentRuntimeRouting.harnessMode(from: rawValue),
-      provider == .hermes || provider == .openclaw,
+      provider == .hermes || provider == .openclaw || provider == .codex,
       providerIdentity != provider
     else { return }
     providerIdentity = provider
@@ -401,11 +401,13 @@ final class AgentPillsManager: ObservableObject {
   enum DirectedProvider: String, Equatable {
     case hermes
     case openclaw
+    case codex
 
     var displayName: String {
       switch self {
       case .hermes: return "Hermes"
       case .openclaw: return "OpenClaw"
+      case .codex: return "Codex"
       }
     }
 
@@ -413,6 +415,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return .hermes
       case .openclaw: return .openclaw
+      case .codex: return .codex
       }
     }
 
@@ -420,6 +423,7 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "hermes"
       case .openclaw: return "openclaw"
+      case .codex: return "codex"
       }
     }
 
@@ -427,11 +431,29 @@ final class AgentPillsManager: ObservableObject {
       switch self {
       case .hermes: return "OMI_HERMES_ADAPTER_COMMAND"
       case .openclaw: return "OMI_OPENCLAW_ADAPTER_COMMAND"
+      case .codex: return "OMI_CODEX_ADAPTER_COMMAND"
+      }
+    }
+
+    var installCommand: String {
+      switch self {
+      case .hermes: return "curl -fsSL https://hermes-agent.nousresearch.com/install.sh | bash -s -- --skip-setup"
+      case .openclaw: return "npm i -g openclaw"
+      case .codex: return "npm i -g @openai/codex"
+      }
+    }
+
+    var loginCommand: String {
+      switch self {
+      case .hermes: return "hermes setup"
+      case .openclaw: return "openclaw configure"
+      case .codex: return "codex login"
       }
     }
 
     var setupNeededStatus: String {
-      "\(displayName) needs setup"
+      "\(displayName) isn't set up. Install it with `\(installCommand)`, then run `\(loginCommand)`. "
+        + "Or ask me without naming \(displayName) and I'll use Omi's own agent."
     }
   }
 

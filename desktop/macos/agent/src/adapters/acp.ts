@@ -247,7 +247,7 @@ export class AcpRuntimeAdapter implements RuntimeAdapter {
     this.supportsSessionSetModel = options.supportsSessionSetModel ?? this.capabilities.supportsModelSwitching;
     this.noProgressTimeoutMs = options.noProgressTimeoutMs
       ?? parsePositiveInt(process.env.OMI_ACP_NO_PROGRESS_TIMEOUT_MS)
-      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
+      ?? (this.adapterId === "hermes" || this.adapterId === "openclaw" || this.adapterId === "codex" ? DEFAULT_EXTERNAL_NO_PROGRESS_TIMEOUT_MS : 0);
   }
 
   async start(): Promise<void> {

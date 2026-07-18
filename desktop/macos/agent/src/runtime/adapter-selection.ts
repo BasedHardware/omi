@@ -9,6 +9,7 @@ export const ADAPTER_ACTIVATION_ENV = {
   "pi-mono": "OMI_AUTH_TOKEN",
   hermes: "OMI_HERMES_ADAPTER_COMMAND",
   openclaw: "OMI_OPENCLAW_ADAPTER_COMMAND",
+  codex: "OMI_CODEX_ADAPTER_COMMAND",
 } as const;
 
 export type SelectableAdapterId = keyof typeof ADAPTER_ACTIVATION_ENV;
@@ -52,6 +53,13 @@ export const ADAPTER_PROFILES: Record<ProductionAdapterId, AdapterProfile> = {
     capabilities: adapterCapabilitiesFor("openclaw"),
     createAdapter: ({ log }) => new OpenClawRuntimeAdapter({ log }),
   },
+  codex: {
+    adapterId: "codex",
+    activationEnv: ADAPTER_ACTIVATION_ENV.codex,
+    maxWorkers: 1,
+    capabilities: adapterCapabilitiesFor("codex"),
+    createAdapter: ({ log }) => new AcpRuntimeAdapter({ adapterId: "codex", envCommandName: "OMI_CODEX_ADAPTER_COMMAND", log }),
+  },
 };
 
 export function adapterIdForHarnessMode(harnessMode: string | undefined): SelectableAdapterId {
@@ -65,6 +73,8 @@ export function adapterIdForHarnessMode(harnessMode: string | undefined): Select
     case "openclaw":
     case "openClaw":
       return "openclaw";
+    case "codex":
+      return "codex";
     case "acp":
       return "acp";
     default:
@@ -91,8 +101,9 @@ export function adapterProfile(adapterId: ProductionAdapterId): AdapterProfile {
 export function adapterActivationError(adapterId: ProductionAdapterId): string | undefined {
   const envName = adapterActivationEnv(adapterId);
   if (!envName) return undefined;
-  const label = adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : "Hermes";
-  if (adapterId === "hermes" || adapterId === "openclaw") {
+  const label =
+    adapterId === "pi-mono" ? "pi-mono" : adapterId === "openclaw" ? "OpenClaw" : adapterId === "codex" ? "Codex" : "Hermes";
+  if (adapterId === "hermes" || adapterId === "openclaw" || adapterId === "codex") {
     return `${label} is not available. Make sure ${label} is installed first, then try again.`;
   }
   return `${label} adapter is unavailable.`;

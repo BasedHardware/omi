@@ -208,6 +208,8 @@ function adapterFailureLabel(adapterId: ProductionAdapterId, provider?: string):
       return "OpenClaw";
     case "hermes":
       return "Hermes";
+    case "codex":
+      return "Codex";
     case "pi-mono":
       return "pi-mono";
     case "acp":

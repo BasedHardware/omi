@@ -44,6 +44,7 @@ enum AgentFailureTranscriptFormatter {
         switch harnessMode {
         case .openclaw: return AgentPillsManager.DirectedProvider.openclaw.setupNeededStatus
         case .hermes: return AgentPillsManager.DirectedProvider.hermes.setupNeededStatus
+        case .codex: return AgentPillsManager.DirectedProvider.codex.setupNeededStatus
         default: break
         }
       }
@@ -53,6 +54,9 @@ enum AgentFailureTranscriptFormatter {
       }
       if lower.contains("openclaw") || lower.contains("open claw") {
         return AgentPillsManager.DirectedProvider.openclaw.setupNeededStatus
+      }
+      if lower.contains("codex") {
+        return AgentPillsManager.DirectedProvider.codex.setupNeededStatus
       }
       return genericSpawnFailure
     }
@@ -91,14 +95,18 @@ enum AgentFailureTranscriptFormatter {
   private static func looksLikeSetupNeeded(_ text: String) -> Bool {
     let lower = text.lowercased()
     if lower.contains("needs setup") { return true }
-    if lower.contains("omi_openclaw_adapter") || lower.contains("omi_hermes_adapter") { return true }
+    if lower.contains("omi_openclaw_adapter") || lower.contains("omi_hermes_adapter")
+      || lower.contains("omi_codex_adapter")
+    {
+      return true
+    }
     if lower.contains("adapter")
       && (lower.contains("missing") || lower.contains("unavailable") || lower.contains("not found")
         || lower.contains("not configured") || lower.contains("no such file"))
     {
       return true
     }
-    if (lower.contains("openclaw") || lower.contains("hermes"))
+    if (lower.contains("openclaw") || lower.contains("hermes") || lower.contains("codex"))
       && (lower.contains("not found") || lower.contains("not installed")
         || lower.contains("not configured") || lower.contains("no such file"))
     {
