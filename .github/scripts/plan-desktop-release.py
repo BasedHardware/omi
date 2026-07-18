@@ -9,7 +9,6 @@ import subprocess
 import time
 from pathlib import Path
 
-
 CODEMAGIC_CHECK_NAME = "Release OMI Desktop (Swift)"
 DESKTOP_SWIFT_CHECK_NAME = "Desktop Swift Build & Tests"
 RECENT_TAG_WITHOUT_CHECK_SECONDS = 10 * 60
@@ -83,6 +82,19 @@ def latest_change_age_seconds(paths: list[str]) -> int | None:
         return int(time.time()) - int(raw)
     except (subprocess.CalledProcessError, ValueError):
         return None
+
+
+def latest_releasable_source_sha(ref: str | None, paths: list[str]) -> str | None:
+    """Return the newest queued desktop-content commit, not an unrelated HEAD commit."""
+    if not paths:
+        return None
+
+    revision = f"{ref}..HEAD" if ref else "HEAD"
+    try:
+        source_sha = git(["log", "-1", "--format=%H", revision, "--", *paths])
+    except subprocess.CalledProcessError:
+        return None
+    return source_sha or None
 
 
 def github_check_status(repository: str, sha: str, check_name: str) -> tuple[str | None, str | None, str | None]:
@@ -173,7 +185,7 @@ def main() -> int:
 
     latest_tag = latest_desktop_tag()
     changes = releasable_desktop_changes_since(latest_tag)
-    source_sha = git(["rev-parse", "HEAD"])
+    source_sha = latest_releasable_source_sha(latest_tag, changes) or git(["rev-parse", "HEAD"])
     set_output("latest_tag", latest_tag or "")
     set_output("source_sha", source_sha)
 
