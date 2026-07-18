@@ -37,6 +37,7 @@
 
 import { trackEvent as defaultTrackEvent } from '../../analytics'
 import { getPreferences } from '../../preferences'
+import { gateDecision, voicedStats } from '../../ptt/gate'
 import type { PttCapture, PttCaptureOptions } from '../../ptt/capture'
 import {
   muteSystemAudioForHubCapture as defaultMuteForCapture,
@@ -385,10 +386,31 @@ export class VoiceHubTurnDriver {
   // MARK: - Cascade transcription (omniSTT route + hub warm-wait fallback)
 
   private runCascadeTranscription(turnID: VoiceTurnID): void {
-    this.dispatch({ type: 'transcriptionStarted', turnID })
     const buffer = concatInt16(this.cascadeBuffer)
     this.cascadeBuffer = []
     this.cascadeBufferBytes = 0
+    // Release gate — macOS PushToTalkManager finalize parity: decide from the
+    // captured PCM alone, BEFORE any network work, whether this turn is worth
+    // transcribing. The local hook path has always gated here; the cascade lane
+    // didn't, so a first-press-after-idle whose mic spin-up outlasted the hold
+    // (zero captured samples) POSTed a zero-byte body → backend 400 "No audio
+    // data provided", read by the user as "I spoke and nothing happened".
+    //   too-short / dead-mic → terminal `tooShort` ("Hold longer to record",
+    //     the same hint Mac shows when release beats capture spin-up — never a
+    //     silent discard, and never an empty POST);
+    //   silent (a real hold, live room, no speech) → terminal `silentRejected`
+    //     (quiet reset — Mac discards silence without ceremony; STT models
+    //     hallucinate phrases from silence, so it must never be sent).
+    const decision = gateDecision(voicedStats(buffer))
+    if (decision === 'too-short' || decision === 'dead-mic') {
+      this.dispatch({ type: 'finish', turnID, reason: 'tooShort' })
+      return
+    }
+    if (decision === 'silent') {
+      this.dispatch({ type: 'finish', turnID, reason: 'silentRejected' })
+      return
+    }
+    this.dispatch({ type: 'transcriptionStarted', turnID })
     void this.deps
       .transcribe(buffer)
       .then((text) => {

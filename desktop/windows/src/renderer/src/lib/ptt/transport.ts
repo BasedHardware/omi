@@ -160,6 +160,12 @@ export function __resetPttLanguageMemoryForTests(): void {
  *  transcript ('' when the backend heard nothing). One transparent retry on 401
  *  with a force-refreshed token (covers a just-expired cached token). */
 export async function batchTranscribe(pcm: Int16Array, signal: AbortSignal): Promise<string> {
+  // Belt: never POST an empty body — the backend 400s it ("No audio data
+  // provided") and there is nothing to transcribe anyway. Callers gate on
+  // voicedStats/gateDecision BEFORE reaching here; this guards any future lane
+  // that forgets (the first-press-after-idle zero-capture field bug shipped
+  // exactly that way through the hub cascade).
+  if (pcm.length === 0) return ''
   // Best-effort vocabulary boosting (A2): consume the terms collected at
   // hold-start (see startPttKeywordCollection) and ship them as the `keywords`
   // hint. Never load-bearing — consumePttKeywords is bounded and swallows every

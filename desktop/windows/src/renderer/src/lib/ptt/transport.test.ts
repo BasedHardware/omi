@@ -142,6 +142,12 @@ describe('startPttStream', () => {
 })
 
 describe('batchTranscribe', () => {
+  it('never POSTs an empty buffer (backend 400s a zero-byte body) — returns "" without network', async () => {
+    const out = await batchTranscribe(new Int16Array(0), new AbortController().signal)
+    expect(out).toBe('')
+    expect(h.post).not.toHaveBeenCalled()
+  })
+
   it('POSTs the raw PCM with the exact contract params and returns the transcript', async () => {
     h.post.mockResolvedValueOnce({ data: { transcript: 'hello world' } })
     const pcm = new Int16Array([1, 2, 3, 4])
