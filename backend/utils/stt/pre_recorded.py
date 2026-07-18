@@ -11,6 +11,7 @@ import fal_client
 import httpx
 import numpy as np
 from deepgram import DeepgramClient, DeepgramClientOptions
+from pydub import AudioSegment  # pydub is untyped
 
 from config.prerecorded_stt import (
     PrerecordedSTTConfigurationError as _PrerecordedSTTConfigurationError,
@@ -769,6 +770,36 @@ class ModulatePrerecordedProvider(PrerecordedSTTProvider):
 _PARAKEET_TIMEOUT = httpx.Timeout(connect=10.0, read=120.0, write=30.0, pool=10.0)
 _PARAKEET_URL_DOWNLOAD_TIMEOUT = httpx.Timeout(connect=10.0, read=60.0, write=10.0, pool=10.0)
 _PARAKEET_MAX_DOWNLOAD_BYTES = 100 * 1024 * 1024  # 100 MB
+_PARAKEET_CONTAINER_MIME_FORMATS = {
+    'audio/webm': 'webm',
+    'video/webm': 'webm',
+    'audio/mp4': 'mp4',
+    'video/mp4': 'mp4',
+}
+
+
+class ParakeetAudioDecodeError(ValueError):
+    """A downloaded browser container cannot be made safe for Parakeet."""
+
+
+def _normalize_parakeet_download(audio_bytes: bytes, content_type: str | None) -> bytes:
+    """Convert browser containers to WAV before Parakeet's WAV-only batch path."""
+
+    media_type = (content_type or '').split(';', 1)[0].strip().lower()
+    container_format = _PARAKEET_CONTAINER_MIME_FORMATS.get(media_type)
+    if container_format is None:
+        return audio_bytes
+
+    try:
+        decoded_audio = AudioSegment.from_file(BytesIO(audio_bytes), format=container_format)
+        wav_buffer = BytesIO()
+        decoded_audio.export(wav_buffer, format='wav')
+        wav_bytes = wav_buffer.getvalue()
+        del decoded_audio
+        del wav_buffer
+        return wav_bytes
+    except Exception as error:
+        raise ParakeetAudioDecodeError('Browser audio container could not be decoded') from error
 
 
 @timeit
@@ -900,9 +931,12 @@ def parakeet_prerecorded(
                     chunks.append(chunk)
                 audio_bytes = b''.join(chunks)
                 del chunks
+                audio_bytes = _normalize_parakeet_download(audio_bytes, resp.headers.get('content-type'))
         return parakeet_prerecorded_from_bytes(
             audio_bytes, diarize=diarize, attempts=attempts, return_language=return_language, language=language
         )
+    except ParakeetAudioDecodeError:
+        raise
     except Exception as e:
         logger.error(
             'Parakeet prerecorded (url) error exception_type=%s attempt=%s',
