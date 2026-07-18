@@ -340,7 +340,24 @@ enum RealtimeScreenEvidenceToolExecutionPolicy {
 
 /// Pure policy for locally enforcing current-screen provenance. The model may propose a
 /// screen observation, but it cannot make one user-visible until this policy validates it.
+enum RealtimeScreenEvidenceFailureDisposition: Equatable {
+  /// The provider received a recoverable tool error and should answer in its
+  /// normal native voice lane (for example, by offering Screen Recording).
+  case providerContinuation
+  /// No provider continuation can safely explain the failure, so the local
+  /// deterministic result remains the terminal answer.
+  case authoritativeLocalResult
+}
+
 enum RealtimeScreenGroundingPolicy {
+  static func failureDisposition(
+    for evidence: RealtimeScreenEvidenceDescriptor?
+  ) -> RealtimeScreenEvidenceFailureDisposition {
+    evidence?.captureFailure == .screenRecordingPermissionRequired
+      ? .providerContinuation
+      : .authoritativeLocalResult
+  }
+
   static func failureText(for evidence: RealtimeScreenEvidenceDescriptor?) -> String {
     guard evidence?.captureFailure == .screenRecordingPermissionRequired else {
       return "I couldn't verify the current screen."
