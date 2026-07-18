@@ -116,6 +116,13 @@ PUSHER_CONFIGMAP_PREFLIGHT = (
 )
 PUSHER_REFERENCE_PREFLIGHT = "backend/scripts/verify_pusher_config_references.py"
 
+# The automatic backend deploy is triggered by a completed Release Eligibility
+# workflow, not by the source push itself. The source-admission contract
+# verifies this event SHA is a successful, same-repository main proof before
+# the deploy job can run; retain the exact expression here so the candidate
+# gate cannot silently switch back to the workflow_run's unrelated github.sha.
+AUTO_DEPLOY_ADMITTED_SHA = "${{ github.event.workflow_run.head_sha }}"
+
 
 class PolicyError(ValueError):
     pass
@@ -175,7 +182,7 @@ def validate_lock(name: str, text: str, contract: LockContract) -> list[str]:
 
 
 def validate_auto_deploy_acceptance(text: str) -> list[str]:
-    """Keep exact candidate acceptance in the locked deploy job before promotion."""
+    """Keep exact admitted-source acceptance in the locked deploy job before promotion."""
 
     block = job_block(text, "deploy")
     if block is None:
@@ -185,7 +192,7 @@ def validate_auto_deploy_acceptance(text: str) -> list[str]:
         "backend/scripts/verify_backend_release_vector.py",
         "backend/scripts/run_dev_candidate_acceptance.py",
         "--candidate",
-        '--commit-sha "${{ github.sha }}"',
+        f'--commit-sha "{AUTO_DEPLOY_ADMITTED_SHA}"',
         '--deploy-run-id "${{ github.run_id }}"',
         '--deploy-run-attempt "${{ github.run_attempt }}"',
         "--environment dev",
@@ -698,7 +705,7 @@ jobs:
       - run: >-
           python3 backend/scripts/verify_backend_release_vector.py
           --candidate
-          --commit-sha "${{ github.sha }}"
+          --commit-sha "${{ github.event.workflow_run.head_sha }}"
           --deploy-run-id "${{ github.run_id }}"
           --deploy-run-attempt "${{ github.run_attempt }}"
           --environment dev
@@ -708,6 +715,12 @@ jobs:
 """
     if validate_auto_deploy_acceptance(in_deploy_acceptance):
         raise PolicyError("valid in-deploy candidate acceptance was rejected")
+
+    wrong_source = in_deploy_acceptance.replace(
+        "${{ github.event.workflow_run.head_sha }}", "${{ github.sha }}"
+    )
+    if not any("commit-sha" in error for error in validate_auto_deploy_acceptance(wrong_source)):
+        raise PolicyError("workflow-run github.sha satisfied the admitted-source candidate contract")
 
     serving_vector = """name: fixture
 jobs:
