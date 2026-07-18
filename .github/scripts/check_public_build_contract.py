@@ -58,6 +58,7 @@ class Deployment:
     platforms: tuple[str, ...]
     flags: tuple[str, ...]
     runtime_secrets: dict[str, str]
+    remove_runtime_secrets: tuple[str, ...]
 
 
 @dataclass(frozen=True)
@@ -133,12 +134,25 @@ def _parse_deployment(raw_deployment: Any, *, target_name: str) -> Deployment:
         for name, reference in raw_runtime_secrets.items()
     ):
         raise ValueError(f"target {target_name} deployment runtime_secrets must map environment names to secret:version")
+    raw_remove_runtime_secrets = raw_deployment.get("remove_runtime_secrets", [])
+    if not isinstance(raw_remove_runtime_secrets, list) or not all(
+        isinstance(name, str) and NAME.fullmatch(name) for name in raw_remove_runtime_secrets
+    ):
+        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be environment names")
+    if len(set(raw_remove_runtime_secrets)) != len(raw_remove_runtime_secrets):
+        raise ValueError(f"target {target_name} deployment remove_runtime_secrets must be unique")
+    overlap = sorted(set(raw_runtime_secrets) & set(raw_remove_runtime_secrets))
+    if overlap:
+        raise ValueError(
+            f"target {target_name} deployment cannot set and remove the same runtime secret bindings: {', '.join(overlap)}"
+        )
     return Deployment(
         region=region,
         build_context=build_context,
         platforms=tuple(raw_platforms),
         flags=tuple(raw_flags),
         runtime_secrets=dict(raw_runtime_secrets),
+        remove_runtime_secrets=tuple(raw_remove_runtime_secrets),
     )
 
 
@@ -368,6 +382,7 @@ def validate_shared_actions(root: Path) -> list[str]:
         required_markers = (
             "config/public-build-contract.json",
             ".deployment.runtime_secrets",
+            ".deployment.remove_runtime_secrets",
             PREPARE_ACTION,
             "google-github-actions/auth@",
             "preflight_public_build_runtime.py",
@@ -376,6 +391,7 @@ def validate_shared_actions(root: Path) -> list[str]:
             "no_traffic: true",
             "--revision-suffix=",
             "--tag=",
+            "--remove-secrets=",
             PROMOTION_ACTION,
         )
         for marker in required_markers:
