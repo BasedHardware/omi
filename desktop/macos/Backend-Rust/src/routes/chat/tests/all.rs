@@ -8,6 +8,27 @@ use std::time::Duration;
 use crate::models::chat_completions::*;
 use crate::routes::rate_limit::RateDecision;
 
+/// Regression: the Anthropic error-body log path used to slice the body at a fixed BYTE index
+/// (`&body[..body.len().min(500)]`), which panics with "byte index N is not a char boundary"
+/// when byte 500 lands inside a multi-byte UTF-8 character. `truncate_for_log` is char-based and
+/// must never panic regardless of where the cut falls.
+#[test]
+fn truncate_for_log_never_slices_inside_a_utf8_char() {
+    // 398 ASCII bytes then a run of 4-byte emoji, so byte index 500 (398 + 102,
+    // not a multiple of 4) falls INSIDE a multi-byte character.
+    let body = format!("{}{}", "x".repeat(398), "😀".repeat(200));
+    assert!(body.len() > 500);
+    assert!(!body.is_char_boundary(500), "test premise: byte 500 must be mid-char");
+
+    let out = super::truncate_for_log(&body, 500); // must not panic
+    assert_eq!(out.chars().count(), 500);
+    assert!(out.starts_with(&"x".repeat(398)));
+
+    // Shorter-than-limit and empty inputs are returned intact.
+    assert_eq!(super::truncate_for_log("hi 😀", 500), "hi 😀");
+    assert_eq!(super::truncate_for_log("", 500), "");
+}
+
 /// Regression: a streaming turn whose upstream stalls or dies mid-flight used to end the SSE
 /// body with no terminal event at all (the read loop just broke), so the desktop client sat on
 /// a spinning assistant bubble until the platform request timeout killed the socket.
