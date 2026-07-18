@@ -6,7 +6,9 @@ OMI Desktop App for macOS (Swift)
 ## Logs & Debugging
 
 ### Local App Logs
-- **App log file**: `/private/tmp/omi.log` (production) or `/private/tmp/omi-dev.log` (dev builds)
+- **App log file**: `/private/tmp/omi.log` (production). Each non-production
+  launch writes to its own owner-only log; ask the running named bundle for its
+  exact path with `./scripts/omi-ctl log-path` rather than reading a shared dev log.
 
 ### Release Health (Sentry)
 Check errors in the latest (or specific) release using the **sentry-release skill**:
@@ -20,6 +22,24 @@ See `.claude/skills/sentry-release/SKILL.md` for full documentation.
 
 ### User Issue Investigation
 When debugging issues for a specific user, check Sentry dashboard for crashes and PostHog for events.
+
+### Product analytics integrity
+
+- A desktop chat query starts after local concurrency/quota preflight and must
+  emit exactly one terminal outcome: `completed`, `failed`, or `cancelled`.
+  Intentional Stop and supersession are cancellations, never errors.
+- Query latency ends when the final answer is visible. Persistence, title
+  generation, and other post-answer work have their own reliability signals and
+  must not inflate user-visible query duration.
+- Product authority is independent from telemetry. Revoked or timed-out turns
+  cannot apply late callbacks/results or persist a late response even if
+  analytics is disabled or refactored.
+- PostHog receives bounded dimensions and shape metadata only. Never send raw
+  prompts, responses, notification/window titles, filesystem paths, or exception
+  messages. Keep diagnostic detail in the private local log and Sentry.
+- Production `QueryTracer` output is shape-only and stored under a `0700`
+  directory in `0600` files. Full prompt/response/tool content is a deliberate
+  non-production debugging capability only.
 
 ### Fallback / resilience telemetry
 Provider/mode switches and fail-open paths must call `DesktopDiagnosticsManager.recordFallback(area:from:to:reason:outcome:)` (PostHog `desktop_health_event` / `fallback_triggered`) or Rust `fallback::record_fallback`. Same field contract as root `AGENTS.md` → Fallback / resilience telemetry. Do not invent new health-event enum cases or product “Recording Error” events for successful heals (`outcome=recovered`).
@@ -39,7 +59,7 @@ Merging `desktop/macos/**` changes queues them for the next daily or manually di
    - Creates DMG + Sparkle ZIP
    - Runs `scripts/smoke-signed-desktop-artifact.sh` on the signed app, Sparkle ZIP, and DMG before publishing, including a mandatory in-app synthetic Keychain write/read/delete canary
    - Publishes an immutable non-live GitHub candidate with smoke evidence
-3. **Automatic qualification** (`scripts/qualify-desktop-beta.sh --automatic`) — verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata
+3. **Trusted macOS qualification runner** (`desktop_qualify_beta.yml`) — dispatched by Codemagic after candidate publication and restricted to the `self-hosted`, `macos`, `omi-desktop-qualification` runner. It verifies published asset digests against signed-smoke evidence, runs the static release checks, rebuilds the exact tag, runs hermetic T2 plus the fault-injection suite, and writes canonical `qualifiedBeta*` evidence metadata. The runner must be an administrator-managed Mac with Docker Desktop; it must never execute pull-request or arbitrary-ref workflows.
 4. **Automatic beta promotion** (`desktop_promote_beta.yml`) — rejects stale automatic targets, honors `DESKTOP_AUTO_BETA_ENABLED=false` as an emergency pause, validates digest-matched evidence, registers the immutable manifest, and atomically advances the explicit beta pointer
 
 The shared Python backend must contain the manifest/pointer endpoints before the first beta promotion. Deploy it separately with `gcp_backend.yml`; merging desktop code does not deploy the prod backend. Static GCS/CDN feed ownership remains follow-up work and is not the channel source of truth.
@@ -90,7 +110,8 @@ library targets with enforced dependency edges:
 
 - `OmiTheme` — shared colors, typography, chrome (`Sources/Theme/`)
 - `OmiWAL` — write-ahead log model + coordinator (`Sources/OmiWAL/`)
-- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g. `DesktopLocalProfile`)
+- `OmiSupport` — shared desktop runtime helpers (`Sources/OmiSupport/`, e.g.
+  `DesktopLocalProfile` and `Dictionary(lastWriteWins:)`)
 
 `Rewind/Core/` remains in the executable target for now — it still references main-app
 types (`TaskActionItem`, `PowerMonitor`, etc.) and needs a shared-models carve-out first.
@@ -101,6 +122,72 @@ enforces this via `scripts/check-sources-root-layout.py`.
 
 When carving out additional leaf modules, prefer bottom-up order (models and
 storage before UI) and wire `import` + `public` on the extracted target's API.
+
+### Swift Formatting
+
+Swift formatting uses a pinned `swift-format` binary (release 602.0.0 at commit
+`62eaad2`), bootstrapped from source via `scripts/swift-format-wrapper.sh`. The
+config lives at `Desktop/.swift-format` (2-space indent, 120-column limit).
+Generated sources under `Desktop/Sources/Generated/` are excluded from the
+formatter scope. Bootstrap once: `./scripts/swift-format-wrapper.sh bootstrap`.
+Lint the full scope: `./scripts/swift-format-wrapper.sh lint -r $(./scripts/swift-format-wrapper.sh scope)`.
+
+### SwiftLint
+
+SwiftLint safety rules run as an explicit macOS manifest check (not a SwiftPM
+build-tool plugin) through `scripts/swiftlint-wrapper.sh`. The wrapper pins the
+upstream 0.65.0 universal macOS release artifact by SHA-256 and caches the
+verified binary under `~/.cache/omi-swiftlint`; use
+`./scripts/swiftlint-wrapper.sh lint` to run the full configured scope.
+Generated sources and test fixtures remain excluded and the committed baseline
+is down-only. SwiftLint baseline locations are absolute, so the wrapper
+materializes a temporary baseline rooted at the current checkout before linting;
+do not hand-edit those paths to match a specific machine.
+
+### Synchronous state-machine callbacks
+
+- A reducer transition is atomic through model assignment, effect delivery, UI
+  projection, and snapshot publication. A callback may request another event,
+  but it must not recursively reduce against a half-published transition.
+- Coordinators with synchronous effect/snapshot callbacks drain nested events
+  through a FIFO, non-reentrant queue. Do not fix recursion with one-off boolean
+  suppression or by dispatching after an arbitrary delay.
+- Tests for callback-driven machines must synchronously enqueue from both an
+  effect callback and an observer/snapshot callback, assert callback depth stays
+  one, and assert the resulting event order.
+
+### Collection safety
+
+- Never use `Dictionary(uniqueKeysWithValues:)` for API responses, decoded
+  persistence, runtime projections, or any other data whose key uniqueness is
+  not enforced by the Swift type system. A duplicate key traps and terminates
+  the process.
+- Use `Dictionary(lastWriteWins:)` from `OmiSupport` when the newest record in
+  input order is authoritative. Use another explicit non-trapping merge policy
+  when the domain requires different semantics.
+- A raw trapping initializer is allowed only for a statically proven uniqueness
+  contract, with a local reason:
+  `// omi-collection-safety: static-unique-keys -- <why the type guarantees uniqueness>`.
+  Runtime validation, backend expectations, and “should be unique” are not
+  static contracts.
+- Run `python3 scripts/check_desktop_test_quality.py` after changing Swift
+  collection construction.
+
+### Swift test quality
+
+- Behavior fixes require tests that call the production API and assert outcomes.
+  Reading a production `.swift` file and asserting that it contains a function
+  name or implementation string is not behavioral coverage.
+- Source inspection is reserved for narrow forbidden-pattern or static wiring
+  tripwires. New tripwires must carry a local reason:
+  `// omi-test-quality: source-inspection -- static contract: <what cannot be expressed behaviorally>`.
+  The tripwire supplements rather than replaces behavioral coverage.
+- Do not add wall-clock sleeps to unit tests. Inject a `Clock`/sleeper, drive a
+  callback/continuation, or await a deterministic state signal. An unavoidable
+  real-scheduler integration wait needs
+  `// omi-test-quality: wall-clock-wait -- <why injection cannot test this boundary>`.
+- `python3 scripts/check_desktop_test_quality.py` ratchets both legacy
+  source-inspection sites and wall-clock waits; its baselines may only decrease.
 
 ## Key Architecture Notes
 
@@ -155,6 +242,11 @@ See `.claude/settings.json` for connection details.
 - **No Xcode project** — this is a Swift Package Manager project
 - **Build command**: `xcrun swift build -c debug --package-path Desktop` (the `xcrun` prefix is required to match the SDK version)
 - **Full dev run**: `./run.sh` — builds Swift app, starts Rust backend, starts Cloudflare tunnel, launches app
+- **Fast default dev run**: after one successful full named-bundle launch, ordinary Swift-only `./run.sh` calls reuse the installed bundle. The fast lane runs incremental SwiftPM, atomically replaces the executable and current desktop API URL, re-signs the app, and relaunches without copying/re-signing static agent/framework assets or resetting LaunchServices/auth. Named local profiles are eligible: their current disposable `.env` is refreshed on each patch and is never cached in the bundle fingerprint. Package metadata, resources, agent/runtime inputs, entitlements, and persistent launch configuration automatically take the full path. Force that path with `./run.sh --full` or `OMI_FORCE_FULL_BUNDLE=1`. `OMI_SCAN_STALE_BUNDLES=1` is an explicit stale-LaunchServices recovery scan; do not enable it in the normal loop.
+- **Focused feedback loop**: `./scripts/dev-feedback.py --once|--watch swift '<XCTest filter>'` or `... rust '<cargo filter>'` runs exactly the regression you selected and reports each iteration time. It watches only the matching component inputs, keeps watching after a failure, and never replaces the full component suite. Pre-push deliberately adds only `xcrun swift build -c debug`; never promote it to the full pinned-Xcode suite or release compile, because that push-time budget belongs to CI.
+- **Swift suite throughput**: `scripts/swift-test-suites.sh` isolates suite processes but now defaults to four workers (matching CI). Set `OMI_SWIFT_TEST_SUITE_WORKERS=1` only when diagnosing an order/concurrency-sensitive failure.
+- **Local Rust backend**: direct `./run.sh` development uses Cargo debug output (`target/debug`) by default and reuses a healthy backend that this worktree owns when Rust source/config/profile have not changed. A compile failure leaves that healthy process alive. Use `OMI_DESKTOP_BACKEND_RELEASE=1` only for an explicit optimized local check; release/CI builds remain unchanged.
+- **Agent runtime preparation cache**: local `./run.sh` calls reuse validated agent packaging from the worktree-local `.harness/agent-runtime` cache when source, locks, preparation logic, pinned runtime, mode, OS/architecture, Node/npm versions, and every file copied from the prepared runtime are unchanged. Hits verify the complete agent `dist`, both packaged dependency trees, their symlinks, and staged Node; working `agent/node_modules` is not hashed. The script logs `Cache HIT`, `MISS`, or `BYPASS`; hits preserve output mtimes but spend roughly a second on a warm local filesystem hashing the packaged outputs for integrity (hardware/filesystem dependent). CI and `--skip-npm` always bypass the stamp. Set `OMI_AGENT_RUNTIME_FORCE_REBUILD=1` for an explicit local rebuild. Do not copy this cache between worktrees or treat it as a release artifact. The checksum-verified universal Node archives are separately shared at `~/Library/Caches/OmiDesktop/node-archives` (override with `OMI_AGENT_RUNTIME_ARCHIVE_CACHE_DIR`), so fresh linked worktrees reuse the download but still validate it before staging.
 - **Release builds**: Handled entirely by Codemagic CI (no local release script needed)
 - **DO NOT** use bare `swift build` — it will fail with SDK version mismatch
 - **DO NOT** use `xcodebuild` — there is no `.xcodeproj`
@@ -181,15 +273,79 @@ This creates `/Applications/omi-fix-rewind.app` with bundle ID `com.omi.omi-fix-
 - NEVER use the default `./run.sh` (which overwrites "Omi Dev") when testing a specific feature — always set `OMI_APP_NAME`
 - **ALWAYS prefix the name with `omi-`** (e.g., `omi-fix-rewind`, `omi-6512-polling`, `omi-vision-test`) so named bundles are visually grouped in `/Applications/` alongside "Omi Dev" and "Omi Beta"
 - Keep the name short and descriptive (it becomes both the app name and bundle ID suffix)
-- The named bundle gets its own permissions and database. `./run.sh` auto-seeds auth/onboarding from "Omi Dev" unless `OMI_SKIP_AUTH_SEED=1` is set.
+- The named bundle gets its own permissions and writable database. `./run.sh` auto-seeds auth/onboarding, curated settings, and a one-time consistent Rewind snapshot from "Omi Dev"; set `OMI_SKIP_REWIND_SEED=1` to start with an empty Rewind profile.
 - To connect agent-swift: `agent-swift connect --bundle-id com.omi.omi-fix-rewind`
 - **Skip the web login:** sign into "Omi Dev" once; named bundles launched by `./run.sh` clone that session before launch.
 - **Jump to a screen without clicking:** the automation bridge auto-enables on non-prod bundles — `./scripts/omi-ctl navigate <screen>` (e.g. `rewind`, `memories`, `settings rewind`). See "Fast-Path for Local Iteration" in `e2e/SKILL.md`.
+- Named/dev bundles default to the development Python and Rust backends unless
+  an explicit launch URL overrides them. Before QA, run
+  `./scripts/omi-ctl health`; its unauthenticated identity payload reports the
+  resolved backend environment/URLs plus the agent-runtime handshake state,
+  negotiated protocol version, packaged runtime version, and expected protocol.
+  A protocol-compatible runtime that omits a required capability is rejected at
+  startup; health never reports the expected protocol as if it were negotiated.
+- Run `./scripts/agent-logic-harness.sh --cross-surface-smoke` before building a
+  QA bundle. This is the compact Swift/Node/Rust contract gate; reserve full
+  component suites and the live continuity gauntlet for PR readiness.
+
+### Run Variants & Parallel Worktrees
+- `./run.sh --yolo` — quick start against the dev backend, no local services. `OMI_SKIP_BACKEND=1` — app only, remote backend via `OMI_DESKTOP_API_URL`. `OMI_SKIP_TUNNEL=1` — no Cloudflare tunnel.
+- **Parallel worktrees auto-isolate.** `scripts/dev-instance.sh` derives a unique instance from each linked git worktree, so `run.sh` (and `backend/scripts/dev-serve.sh`) pick per-worktree ports (Rust 10201+, Python 8080+, automation 47777+) and bundle name (`omi-<worktree>`). Kills are pidfile-scoped (never the global `omi-desktop-backend` name), and a taken port fails loud instead of clobbering. The primary checkout is unchanged (`Omi Dev`, 10201/8080/47777). Override any of `OMI_INSTANCE` / `PORT` / `PYTHON_PORT` / `OMI_AUTOMATION_PORT` / `OMI_APP_NAME` to opt out.
+- `Omi Dev` is the canonical shared development profile (reusable permissions, auth seed source). Do not pass `OMI_APP_NAME="Omi Dev"` from a linked worktree; that creates a named bundle displayed as Omi Dev with a different bundle id and breaks permission reuse.
+- Local Python backend (per-worktree port): `cd backend && ./scripts/dev-serve.sh`.
+
+### Self-Testing the App (agents)
+
+**Hard rule: you may not ask the user to verify a feature you have not actually exercised yourself.** Compiling, "looks correct from the code", or "scroll down to see it" are not verification. If the obvious path is blocked (permission, focus, missing tool), try a long sequence of alternatives before involving the user — extend the bridge with a new action, add a temporary in-process hook, search the web for a workaround, grant the missing permission yourself if you can, write a tiny standalone harness. Roughly: spend ten serious attempts across different approaches before you escalate. Asking the user is the last move, not the first.
+
+Fast path (skips web login and sidebar click-through):
+
+1. **Build + launch a named bundle** (see Testing with Named Bundles above). `./run.sh` auto-clones Omi Dev auth/onboarding plus common shortcuts/settings **before launch**. Manual seeding:
+   ```bash
+   ./scripts/omi-auth-dump.sh                                  # capture the Omi Dev session
+   ./scripts/omi-auth-seed.sh com.omi.omi-<feature> \
+     tmp/desktop-auth.json "/Applications/omi-<feature>.app"   # clears stale Keychain; UD→KC migrate
+   ./scripts/omi-settings-seed.sh com.omi.omi-<feature>        # replay shortcuts/settings
+   ```
+2. **Prefer the local bridge — it never touches the cursor.** It calls the app's real code in-process (no synthetic mouse events). Use it before reaching for `agent-swift click`/`cliclick`/computer-use. Auto-enables on non-prod bundles; run several at once via distinct `OMI_AUTOMATION_PORT` (default 47777).
+   - `./scripts/omi-ctl state` — app-state snapshot (selected tab, auth, onboarding).
+   - `./scripts/omi-ctl navigate <screen> [settings-section]` — jump straight to a screen in ~150ms (`omi-ctl screens` lists targets).
+   - `./scripts/omi-ctl actions` then `./scripts/omi-ctl action <name> [k=v …]` — semantic actions (e.g. `refresh_all_data`). Add new ones in `DesktopAutomationActionRegistry`. See `e2e/SKILL.md` §2b.
+   - `agent-swift` only for UI the bridge can't reach yet (`click` moves the cursor).
+3. **Read logs to confirm behavior:** app + chat bridge in the exact path from
+   `./scripts/omi-ctl log-path` (named dev bundles) or `/private/tmp/omi.log`
+   (production); `./run.sh` prints the isolated local Rust backend log path at
+   launch; per-user issues in Sentry/PostHog.
+4. **Verify the actual behavior**, not just that the app launched — exercise the feature and check the logs/UI reflect the change.
+
+### Default agent development loop
+
+1. **Edit or diagnose:** run the smallest relevant unit/static harness. For repeated saves, start `./scripts/dev-feedback.py --watch swift '<filter>'` or `... rust '<filter>'`; do not launch the app only to obtain compile evidence.
+2. **Swift/UI behavior:** reuse the existing named bundle with `OMI_APP_NAME=omi-<feature> ./run.sh --yolo --fast-only`; add `--no-wait` only with a harness/external backend, then use the local bridge (`omi-ctl action`, `state`, or a semantic snapshot) to assert the changed behavior.
+3. **Package boundary:** use `./run.sh --full` only for the first named launch, resource/entitlement/package/runtime input changes, or when `--fast-only` reports an expected fingerprint mismatch.
+4. **QA, commit, and PR readiness:** run `./scripts/omi-macos-dev doctor`, exercise the real user-facing path, then run the appropriate full component/PR contract.
+
+`omi-macos-dev` defaults to bounded JSON summaries so an agent can safely inspect a busy machine. Pass `--verbose` to the specific command for path-level records (for example, `clean plan --verbose`); cleanup always requires the exact current plan hash. The normal 14-day retention window can be deliberately bypassed with `--older-than 0` only when the operator has explicitly approved immediate cleanup.
+
+Never ask a user to test an unexercised path. A fast named-bundle launch plus a semantic bridge assertion is valid inner-loop evidence; a clean full bundle is release/QA evidence.
 
 ### After Implementing Changes
+
 - `xcrun swift build` is for **compile checks only** — it does NOT start the backend
-- To actually test, ALWAYS use `./run.sh` with `OMI_APP_NAME` — it starts Rust backend + Cloudflare tunnel + Swift app together
+- Voice-path verification means a natural authenticated PTT turn on a named bundle — signed-out, forced-transcript, or reducer-only runs do not count; provider mint or payload changes must also show the deploy-inline provider probe.
 - **When the user says "test it"**, use the `test-local` skill to build, run, and verify via macOS automation
+
+### macOS Version Compatibility
+- The deployment floor is `.macOS("14.0")` in `Desktop/Package.swift`. Every change must work on every supported macOS version from that floor up.
+- Never call an API newer than the floor unguarded: wrap it in `if #available(macOS XX, *)` **and give the `else` branch a working fallback** (degrade the feature, don't blank it). Example: System Audio capture gates on `#available(macOS 14.4, *)` and hides cleanly below it.
+- Version-dependent system facts (renamed apps, moved paths, changed defaults) get an explicit mapping with the old value still handled — stored user data may predate the change (example: `AppIconCache.renamedApps` maps "System Preferences" → "System Settings").
+- Raising the deployment floor or dropping a fallback is a product decision — never do it as a side effect of another change.
+
+### Open-Source Merge Hygiene
+- Before starting and before committing, `git fetch origin && git rebase origin/main` (or merge) — other contributors land changes continuously; never review your diff against a stale base.
+- Keep diffs surgical: touch only lines your change needs. No drive-by reformatting, renames, or import reshuffles in files others may have in-flight PRs against.
+- After rebasing onto new upstream work, re-run the test suites for every file you touched **and** every file the rebase brought in that overlaps your change; a clean build alone is not revision.
+- If your change modifies shared surfaces (Theme tokens, `SettingsSection`, bridge actions, INV-* contract files), grep for all usages — including tests and e2e flows — and update them in the same commit so concurrent contributors inherit a consistent tree.
 
 ### Agent Logic Harness
 When touching desktop agent runtime, floating agent pills, realtime hub, PTT, or `pi-mono-extension`, run the focused harness before broader checks:
@@ -202,7 +358,8 @@ It is self-driving for agents: it runs the risky Swift lifecycle/state tests, fo
 
 Invariant: Main Chat, Home chat, and floating/notch chat are one timeline over one
 `ChatProvider` (`historyChatProvider`). Kernel `main_chat` turns are the durable
-source of truth; UI may optimistic-render, then must not double-apply the same turn.
+source of truth; journal acceptance publishes the immediate pending projection,
+and UI must never append a pre-journal turn.
 
 Rules (fail the PR if any break):
 1. **Single provider + floating viewport** — floating presentation is chrome + a
@@ -214,26 +371,24 @@ Rules (fail the PR if any break):
    turn handler (one replaceable slot). Speculative warm and other surfaces must
    reuse `mainInstance`; never construct a second `ChatProvider()` that calls
    `attachClient` / `setTurnRecordedHandler` on the shared runtime.
-3. **One idempotency key per logical turn** — every optimistic
-   `stageOptimisticTurn` / kernel write MUST share the SAME key with
-   `recordSurfaceTurn` / `projectCrossSurfaceTurn`. Stage first for sync UI,
-   then let `KernelTurnProjection.apply` `promoteOptimisticTurn` (in-place,
-   no append) when `turn_recorded` arrives. Keys are opaque strings; never
-   dedupe by assistant/user text.
-4. **Kernel apply is idempotent** — `KernelTurnProjection.apply` promotes
-   pending optimistic turns or appends via `recordCompletedTurn`; already-seen
-   continuity keys are ignored. Empty keys do not suppress.
+3. **One idempotency key per logical turn** — call `recordJournalExchange` (or
+   the corresponding kernel control RPC) with one opaque continuity key and
+   await acceptance before binding a visible row. Direct-control spawn receipts
+   already materialize their exchange; refresh that journal instead of issuing a
+   second write. Never dedupe by assistant/user text.
+4. **Kernel apply is idempotent** — `KernelTurnProjection` upserts only by the
+   canonical turn ID published by ordered journal replay. Rejection must leave no
+   visible row, and replay/acknowledgement must replace rather than append.
 5. **Cross-surface agent identity is structured** — `agentSpawn` / `agentCompletion`
    content blocks (plus tool-block `spawnedAgentID` / sessionId / runId lines) are
-   authoritative. Persist structured blocks through `saveMessage` metadata key
-   `content_blocks` (via `ChatContentBlockCodec`) so they survive reload; kernel
-   apply still materializes `agentCompletion` from bracket text when a turn
-   arrives without an optimistic stage. Legacy `[Background agent id=…]` bracket
+   authoritative. Persist structured blocks through the kernel journal/outbox so
+   they survive reload; kernel apply still materializes `agentCompletion` from
+   bracket text for legacy rows. Legacy `[Background agent id=…]` bracket
    text remains dual-read only. Do not invent new free-text formats; extend the
    schema + tests together.
-   Proactive notifications stage under continuity key `notification:<uuid>`
-   (origin `proactive_notification`) — same stage/promote path as other surface
-   turns; do not reintroduce `appendAssistantMessage` for timeline writes.
+   Proactive notifications use continuity key `notification:<uuid>` (origin
+   `proactive_notification`) and enter the notification-to-chat cache only after
+   journal acceptance; do not reintroduce local timeline append paths.
 6. **Pill cache is derived** — open-by-id hydrates from kernel (`listFloatingAgentPills`
    / `listAgentSessions` / `inspectAgentRun`) when the in-memory pill is missing;
    refresh-on-miss is a fast path only. Success = resolvable agent after hydrate.
@@ -298,9 +453,12 @@ timeline identity/open, or pill projection is incomplete until:
 
 - **CI:** `agent-continuity-gauntlet.sh --self-check` only (via desktop-core /
   agent-logic harness). Never require live LLM in PR CI.
-- **Continuity PRs / RC:** `--suite continuity` (typed + PTT + blind recall) on
-  a named `omi-*` bundle after auth seed; `--suite all` for RC. Evidence under
-  `.harness/agent-continuity-gauntlet/*/manifest.json` with matching git SHA.
+- **Prompt / gateway changes:** `--suite prompts` on a named `omi-*` bundle;
+  P4 requires a completed public-web lookup with a source URL and fails on
+  provider tool-choice incompatibilities. **Continuity PRs / RC:** `--suite
+  continuity` (typed + PTT + blind recall) after auth seed; `--suite all` for
+  RC. Evidence under `.harness/agent-continuity-gauntlet/*/manifest.json` with
+  matching git SHA.
 - **Anti-flake:** clear owner/kernel surface before probes; per-run nonces;
   hard-fail on blind-recall / structural snapshot only; zero automatic retries
   on model wrongness.

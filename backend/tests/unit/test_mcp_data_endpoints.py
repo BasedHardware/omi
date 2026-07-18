@@ -11,7 +11,7 @@ import json
 from unittest.mock import patch, MagicMock
 import os
 import sys
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 
 import pytest
 
@@ -168,6 +168,32 @@ NOW = datetime(2026, 6, 11, tzinfo=timezone.utc)
 UID = "user-1"
 
 
+def test_memory_list_has_one_auth_dependency_and_uses_its_authorized_uid():
+    route = next(
+        route
+        for route in rest.router.routes
+        if getattr(route, "path", None) == "/v1/mcp/memories" and "GET" in getattr(route, "methods", set())
+    )
+    dependency_calls = [dependency.call for dependency in route.dependant.dependencies]
+    assert dependency_calls == [rest.get_mcp_memory_default_memory_read_context]
+    assert rest.get_uid_from_mcp_api_key not in dependency_calls
+
+    auth_context = SimpleNamespace(uid="auth-user")
+    authorization = SimpleNamespace(allowed=True)
+    memory_service = MagicMock()
+    memory_service.read.return_value = []
+    with (
+        patch.object(rest, "authorize_memory_external_default_memory_read", return_value=authorization) as authorize,
+        patch.object(rest, "pin_memory_system", return_value=rest.MemorySystem.CANONICAL) as pin,
+        patch.object(rest, "MemoryService", return_value=memory_service),
+    ):
+        assert rest.get_memories(auth_context=auth_context) == []
+
+    pin.assert_called_once_with("auth-user", db_client=rest.db)
+    authorize.assert_called_once_with(auth_context, db_client=rest.db)
+    memory_service.read.assert_called_once_with("auth-user", limit=100, offset=0)
+
+
 async def _run_blocking_inline(_executor, func, *args, **kwargs):
     return func(*args, **kwargs)
 
@@ -232,8 +258,9 @@ async def test_sse_post_tools_list_accepts_missing_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
     ):
         response = await sse.mcp_streamable_http(request, authorization='Bearer token', accept=None)
 
@@ -248,8 +275,9 @@ async def test_sse_post_tools_list_ignores_stale_session_id():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({'jsonrpc': '2.0', 'id': 1, 'method': 'tools/list'})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
     ):
         response = await sse.mcp_streamable_http(
             request,
@@ -269,9 +297,11 @@ async def test_sse_get_keepalive_uses_transport_rate_limit():
     auth_context = sse.MCPAuthContext(uid=UID, auth_type='oauth', scopes=['memories.read'])
     request = _JsonRequest({})
 
-    with patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline), patch.object(
-        sse, 'authenticate_mcp_request', return_value=auth_context
-    ), patch.object(sse, 'check_rate_limit_inline') as check_rate_limit:
+    with (
+        patch.object(sse, 'run_blocking', side_effect=_run_blocking_inline),
+        patch.object(sse, 'authenticate_mcp_request', return_value=auth_context),
+        patch.object(sse, 'check_rate_limit_inline') as check_rate_limit,
+    ):
         response = await sse.mcp_sse_get(request, authorization='Bearer token')
 
     assert response.status_code == 200
@@ -561,9 +591,13 @@ class TestToolRegistry:
     def test_every_tool_has_a_dispatch_branch(self):
         # Each declared read-only data tool must dispatch (not fall through to "Unknown tool").
         for name in ['get_action_items', 'get_goals', 'get_chat_messages', 'get_people', 'get_daily_summaries']:
-            with patch.object(sse, 'action_items_db'), patch.object(sse, 'goals_db'), patch.object(
-                sse, 'chat_db'
-            ), patch.object(sse, 'users_db'), patch.object(sse, 'daily_summaries_db'):
+            with (
+                patch.object(sse, 'action_items_db'),
+                patch.object(sse, 'goals_db'),
+                patch.object(sse, 'chat_db'),
+                patch.object(sse, 'users_db'),
+                patch.object(sse, 'daily_summaries_db'),
+            ):
                 try:
                     sse.execute_tool(UID, name, {})
                 except sse.ToolExecutionError as e:

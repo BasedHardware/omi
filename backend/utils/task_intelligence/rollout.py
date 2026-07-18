@@ -5,6 +5,9 @@ separate axes. The pure composer accepts both for hermetic tests; the production
 resolver obtains cohort membership from the canonical memory owner.
 """
 
+# LIFECYCLE: permanent
+
+from config.what_matters_now_smoke_fixture import is_development_smoke_fixture
 from models.task_intelligence import TaskIntelligenceRolloutDecision, TaskWorkflowMode
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 
@@ -63,7 +66,9 @@ def resolve_task_intelligence_for_user(
 ) -> TaskIntelligenceRolloutDecision:
     """Compose workflow mode with the authoritative canonical-memory selector."""
 
-    memory_cohort_eligible = resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    memory_cohort_eligible = is_development_smoke_fixture(uid) or (
+        resolve_memory_system(uid, db_client=db_client) == MemorySystem.CANONICAL
+    )
     return resolve_task_intelligence_rollout(
         uid=uid,
         workflow_mode=workflow_mode,

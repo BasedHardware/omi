@@ -1,0 +1,11 @@
+{
+  "files": {
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": 1736,
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": 1645
+  },
+  "raise_justifications": {
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/Assistants/TaskExtraction/TaskAssistant.swift": "Staged tasks now render as id-less 'already captured' evidence via a pure, unit-tested contextEvidencePrompt helper, so they can no longer be echoed back as duplicate_of:0 to update a non-existent backend task.",
+    "desktop/macos/Desktop/Sources/ProactiveAssistants/ProactiveAssistantsPlugin.swift": "stopMonitoring now clears capture-recovery/background-polling state and timers, plus a pure ProactiveCapturePolicy gate, so a stop mid-recovery cannot silently disable capture on the next start."
+  },
+  "threshold": 1500
+}

@@ -1475,7 +1475,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get payYourSttProvider => 'Gamitin ang omi nang libre. Direkta lang sa iyong STT provider ang babayaran mo.';
 
   @override
-  String get freeMinutesMonth => '600 libreng minuto/buwan kasama. Unlimited sa ';
+  String get freeMinutesMonth => '300 libreng minuto/buwan kasama. Unlimited sa ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4749,7 +4749,7 @@ class AppLocalizationsTl extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Walang specific data access na na-configure.';
 
   @override
-  String get basicPlanDescription => '600 premium mins + unlimited on-device';
+  String get basicPlanDescription => '300 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -6051,7 +6051,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription.';
 
   @override
   String get viewUsage => 'Tingnan ang paggamit';
@@ -6134,7 +6134,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
+      '300 premium na minuto/buwan. Ang On-Device tab ay nag-aalok ng unlimited na libreng transcription. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9428,7 +9428,7 @@ class AppLocalizationsTl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Gumagana muna sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
+      'Gumagana sa mikropono ng telepono at sa mga Omi at Limitless device. Mananatili ang audio sa iyong telepono hangga\'t hindi mo ito ina-upload.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9663,4 +9663,33 @@ class AppLocalizationsTl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error sa pagkonekta sa Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Storage ng device';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% puno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used sa $total ang nagamit';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free ang libre';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Halos puno na ang device — mag-sync para magbakante ng espasyo.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Walang koneksyon — nagre-record nang lokal. Ita-transcribe ito kapag online ka na ulit.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Ang iyong data ay protektado bilang default gamit ang malakas na encryption, at ikaw ang kumokontrol kung paano ito iniimbak at ginagamit.';
 }

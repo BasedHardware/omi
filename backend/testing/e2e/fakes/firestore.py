@@ -12,11 +12,13 @@ from datetime import datetime, timezone
 from typing import Optional
 
 from fake_firestore import MockFirestore
+from fake_firestore import _transformations as fake_firestore_transformations
 from fake_firestore.document import FakeDocumentReference, NotFound, apply_transformations, get_by_path
 
 # Module-level singleton — set by conftest.py before backend imports.
 _mock_store: Optional[MockFirestore] = None
 _original_document_set = None
+_delete_field_noop_patched = False
 
 
 def _patch_document_merge_preserves_subcollections():
@@ -56,6 +58,28 @@ def _patch_document_merge_preserves_subcollections():
     FakeDocumentReference.set = _set
 
 
+def _patch_delete_field_missing_key_noop():
+    """Match real Firestore: DELETE_FIELD on an absent key is a no-op.
+
+    fake-firestore raises KeyError instead, which turns first-time sync ledger
+    claims (and other sparse merges) into hermetic E2E 500s.
+    """
+    global _delete_field_noop_patched
+    if _delete_field_noop_patched:
+        return
+
+    def _apply_deletes(document: dict, data: list) -> None:
+        for key in data:
+            path = key.split(".")
+            try:
+                fake_firestore_transformations.delete_by_path(document, path)
+            except KeyError:
+                continue
+
+    fake_firestore_transformations._apply_deletes = _apply_deletes
+    _delete_field_noop_patched = True
+
+
 def get_mock_firestore() -> MockFirestore:
     """Return the shared MockFirestore instance. Raises if not initialized."""
     if _mock_store is None:
@@ -67,6 +91,7 @@ def setup_fake_firestore() -> MockFirestore:
     """Create and register the global MockFirestore singleton."""
     global _mock_store
     _patch_document_merge_preserves_subcollections()
+    _patch_delete_field_missing_key_noop()
     _mock_store = MockFirestore()
     return _mock_store
 

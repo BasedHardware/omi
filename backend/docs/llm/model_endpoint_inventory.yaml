@@ -68,8 +68,8 @@ model_config_features:
       - web_search
     pinned:
       - fair_use
-  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, gemini, openrouter, perplexity, and anthropic.
-  migration_status: get_llm can centrally switch Omi-managed feature traffic to the generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; BYOK remains direct user-key routing outside the gateway flip and fails closed during the gateway flip unless explicitly acknowledged; direct exception surfaces fail closed during the gateway flip unless explicitly acknowledged.
+  gateway_capability_needed: OpenAI-compatible chat-completions lane with provider refs for openai, native Vertex Gemini, openrouter, perplexity, and anthropic.
+  migration_status: get_llm centrally switches Omi-managed feature traffic to generated gateway lanes with OMI_LLM_GATEWAY_FEATURE_MODE=gateway; gateway Gemini uses native Vertex generateContent authenticated by GKE Workload Identity; Gemini BYOK remains unsupported and fails closed; temporary direct exceptions retain the native Vertex legacy client until those callers migrate.
   test_guardrail_coverage:
     - backend/tests/unit/test_llm_gateway_coverage_guardrails.py::test_every_model_config_feature_has_inventory_and_gateway_lane
     - backend/tests/unit/test_llm_gateway_client_config.py::test_get_llm_feature_gateway_mode_uses_generated_auto_lane
@@ -82,12 +82,12 @@ surfaces:
     migration_status: gateway_capable_central_flip
     test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
   - surface: anthropic_agentic_chat
-    code_path: backend/utils/retrieval/agentic.py:_run_anthropic_agent_stream
+    code_path: backend/utils/llm/gateway_anthropic.py:_GatewayAnthropicStreamWithFallback
     current_provider_model: anthropic/chat_agent
     request_shape: streaming, native tool calling, server-side web search
-    gateway_lane_capability_needed: anthropic provider adapter with tools enabled on omi:auto:chat-agent
-    migration_status: inventoried_explicit_direct_anthropic_stream_exception; blocked during OMI_LLM_GATEWAY_FEATURE_MODE=gateway unless explicitly acknowledged
-    test_guardrail_coverage: backend/tests/unit/test_llm_gateway_coverage_guardrails.py
+    gateway_lane_capability_needed: native anthropic.messages surface with streaming and tools on omi:auto:chat-agent
+    migration_status: gateway_routed_with_direct_anthropic_transport_fallback; fallback reports recovered only after terminal legacy success and exhausted on legacy failure
+    test_guardrail_coverage: backend/tests/unit/test_gateway_anthropic_client.py
   - surface: perplexity_web_search_tool
     code_path: backend/utils/retrieval/tools/perplexity_tools.py:perplexity_web_search_tool
     current_provider_model: perplexity/web_search

@@ -7,6 +7,7 @@ covers:
   - desktop/macos/Desktop/Sources/AppState/AppState+Transcription.swift
   - desktop/macos/Desktop/Sources/AppState/AppState+ListenEvents.swift
   - desktop/macos/Desktop/Sources/AppState/STTSessionState.swift
+  - desktop/macos/Desktop/Sources/LocalTranscriptionService.swift
   - desktop/macos/Desktop/Sources/TranscriptionService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/Services/OmiHTTPTransport.swift
@@ -16,8 +17,14 @@ covers:
   - desktop/macos/Desktop/Sources/MainWindow/Conversations/ConversationRepository.swift
   - desktop/macos/Desktop/Sources/MainWindow/Pages/ConversationDetailView.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/RewindDatabase.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
+  - desktop/macos/Desktop/Sources/ResourceMonitor.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionModels.swift
   - desktop/macos/Desktop/Sources/Rewind/Core/TranscriptionStorage.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveStorage.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/NoteStorage.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphStorage.swift
+  - desktop/macos/Desktop/Sources/ProactiveAssistants/Services/AIUserProfileService.swift
   - desktop/macos/Desktop/Sources/APIClient.swift
   - desktop/macos/Desktop/Sources/OmiWAL/WALModel.swift
   - desktop/macos/Desktop/Sources/WAL/StorageSyncService.swift
@@ -32,6 +39,30 @@ covers:
   - desktop/macos/Desktop/Sources/ViewModelContainer.swift
   - desktop/macos/Desktop/Sources/Audio/BleAudioProcessor.swift
   - desktop/macos/Desktop/Sources/Audio/BleAudioService.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/RewindStorage.swift
+  - desktop/macos/Desktop/Sources/Services/QueryTracer.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/VideoChunkEncoder.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/RewindIndexer.swift
+  - desktop/macos/Desktop/Sources/MeetingDetector.swift
+  - desktop/macos/Desktop/Sources/Rewind/Services/PowerMonitor.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/BtDevice.swift
+  - desktop/macos/Desktop/Sources/Bluetooth/DeviceUUIDs.swift
+  - desktop/macos/Desktop/Sources/ConcurrencySendable.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/StreamingPCMPlayer.swift
+  - desktop/macos/Desktop/Sources/FloatingControlBar/SystemAudioMuteController.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/IndexedFileRecord.swift
+  - desktop/macos/Desktop/Sources/FileIndexing/KnowledgeGraphRecord.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/LiveNoteModels.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/LiveNotesAccumulator.swift
+  - desktop/macos/Desktop/Sources/LiveNotes/LiveNotesMonitor.swift
+  - desktop/macos/Desktop/Sources/MemoryBankConnector.swift
+  - desktop/macos/Desktop/Sources/MemoryExportConnectionDetector.swift
+  - desktop/macos/Desktop/Sources/NotificationRegistrationRepair.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/MemoryModels.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ObservationRecord.swift
+  - desktop/macos/Desktop/Sources/Rewind/Core/ProactiveModels.swift
+  - desktop/macos/Desktop/Sources/ScreenActivitySyncService.swift
+  - desktop/macos/Desktop/Sources/SingleInstanceGuard.swift
 preconditions:
   - automation_bridge_ready
 

@@ -5,9 +5,9 @@ import XCTest
 final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
   // Protocol-layer files that decode wire session ids from the bundled agent runtime.
   private let protocolLayerFiles: Set<String> = [
-    "Desktop/Sources/Chat/AgentBridge.swift", // query result wire decode
-    "Desktop/Sources/Chat/AgentRuntimeProcess.swift", // JSONL transport decode
-    "Desktop/Sources/Chat/AgentClient.swift", // facade over AgentBridge.QueryResult
+    "Desktop/Sources/Chat/AgentBridge.swift",  // query result wire decode
+    "Desktop/Sources/Chat/AgentRuntimeProcess.swift",  // JSONL transport decode
+    "Desktop/Sources/Chat/AgentClient.swift",  // facade over AgentBridge.QueryResult
   ]
 
   private let forbiddenIdentifiers = [
@@ -39,7 +39,18 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
         if trimmed.hasPrefix("//") { continue }
         let lower = line.lowercased()
         for identifier in forbiddenIdentifiers {
-          if lower.contains(identifier) {
+          let containsForbiddenIdentifier: Bool
+          if identifier == "resume:" {
+            containsForbiddenIdentifier =
+              lower.contains("resume")
+              && lower.range(
+                of: #"(?<![a-z0-9_])resume\s*:"#,
+                options: .regularExpression
+              ) != nil
+          } else {
+            containsForbiddenIdentifier = lower.contains(identifier)
+          }
+          if containsForbiddenIdentifier {
             violations.append("\(relativePath): contains forbidden identifier `\(identifier)` — \(trimmed)")
           }
         }
@@ -58,7 +69,7 @@ final class SessionIdentityForbiddenIdentifiersTests: XCTestCase {
     let sourcesRoot = desktopRoot.appendingPathComponent("Sources")
 
     let allowedConstructors: Set<String> = [
-      "Desktop/Sources/Chat/AgentClient.swift",
+      "Desktop/Sources/Chat/AgentClient.swift"
     ]
 
     let swiftFiles = try FileManager.default.subpathsOfDirectory(atPath: sourcesRoot.path)

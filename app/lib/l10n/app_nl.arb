@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Je gebruikt je eigen transcriptieprovider. Door deze opnames te synchroniseren worden ze op de servers van Omi getranscribeerd en tellen ze mee voor de transcriptielimiet van je abonnement.",
     "transcribeLaterTitle": "Later transcriberen",
     "transcribeLaterDescription": "Neem nu audio op en transcribeer die later wanneer je wilt, in plaats van live. Opnames worden op je telefoon bewaard, daarna upload je ze om gesprekken te maken.",
-    "transcribeLaterNote": "Werkt voorlopig met Omi- en Limitless-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.",
+    "transcribeLaterNote": "Werkt met de telefoonmicrofoon en met Omi- en Limitless-apparaten. Je audio blijft op je telefoon totdat je hem zelf uploadt.",
     "transcribeLaterStorageFull": "Je telefoon heeft weinig opslagruimte, dus de opname is gepauzeerd. Maak ruimte vrij of upload je opnames, dan gaat het automatisch verder.",
     "unmute": "Dempen opheffen",
     "newRecording": "Nieuwe opname",
@@ -3143,5 +3143,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Apparaatopslag",
+    "deviceStoragePercentFull": "{percent}% vol",
+    "deviceStorageUsedOfTotal": "{used} van {total} gebruikt",
+    "deviceStorageFree": "{free} vrij",
+    "deviceStorageNearlyFull": "Apparaat bijna vol — synchroniseer om ruimte vrij te maken.",
+    "phoneMicOfflineFallbackMessage": "Geen verbinding — er wordt lokaal opgenomen. Het wordt getranscribeerd zodra je weer online bent.",
+    "dataEncryptedBanner": "Je gegevens zijn standaard beveiligd met sterke versleuteling, en jij bepaalt hoe ze worden opgeslagen en gebruikt."
 }

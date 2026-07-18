@@ -1,5 +1,5 @@
-import XCTest
 import GRDB
+import XCTest
 
 @testable import Omi_Computer
 
@@ -18,7 +18,8 @@ final class ActionItemsFTSRepairTests: XCTestCase {
 
     let appSupport = FileManager.default
       .urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
-    userDir = appSupport
+    userDir =
+      appSupport
       .appendingPathComponent("Omi", isDirectory: true)
       .appendingPathComponent("users", isDirectory: true)
       .appendingPathComponent(testUserId, isDirectory: true)
@@ -34,7 +35,9 @@ final class ActionItemsFTSRepairTests: XCTestCase {
 
   func testLocalInsertRepairsMissingActionItemsFTSWithoutDroppingDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "preserve existing durable row", source: "test"))
+      ActionItemRecord(description: "preserve existing durable row", source: "test"),
+      // This isolated repair fixture deliberately has no runtime owner.
+      authorization: .unrestricted)
     XCTAssertNotNil(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
@@ -46,7 +49,8 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     }
 
     let repaired = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "insert after fts repair", source: "test"))
+      ActionItemRecord(description: "insert after fts repair", source: "test"),
+      authorization: .unrestricted)
     XCTAssertNotNil(repaired.id)
 
     let durableDescriptions = try await dbQueue.read { db in
@@ -54,10 +58,12 @@ final class ActionItemsFTSRepairTests: XCTestCase {
         db,
         sql: "SELECT description FROM action_items ORDER BY id")
     }
-    XCTAssertEqual(durableDescriptions, [
-      "preserve existing durable row",
-      "insert after fts repair"
-    ])
+    XCTAssertEqual(
+      durableDescriptions,
+      [
+        "preserve existing durable row",
+        "insert after fts repair",
+      ])
 
     let ftsDescriptions = try await dbQueue.read { db in
       try String.fetchAll(
@@ -73,9 +79,11 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     XCTAssertEqual(ftsDescriptions, durableDescriptions)
   }
 
-  func testRepairToleratesMissingActionItemsFTSShadowTable() async throws {
+  func testRepairRebuildsDroppedActionItemsFTSFromDurableRows() async throws {
     let existing = try await ActionItemStorage.shared.insertLocalActionItem(
-      ActionItemRecord(description: "shadow table durable row", source: "test"))
+      ActionItemRecord(description: "direct repair durable row", source: "test"),
+      // This isolated repair fixture deliberately has no runtime owner.
+      authorization: .unrestricted)
     XCTAssertNotNil(existing.id)
 
     guard let dbQueue = await RewindDatabase.shared.getDatabaseQueue() else {
@@ -83,14 +91,10 @@ final class ActionItemsFTSRepairTests: XCTestCase {
     }
 
     try await dbQueue.write { db in
-      try db.execute(sql: "PRAGMA writable_schema = ON")
-      let schemaVersion = (try Int.fetchOne(db, sql: "PRAGMA schema_version")) ?? 0
-      defer { try? db.execute(sql: "PRAGMA writable_schema = OFF") }
-      try db.execute(sql: "DELETE FROM sqlite_master WHERE type = 'table' AND name = 'action_items_fts_data'")
-      try db.execute(sql: "PRAGMA schema_version = \(schemaVersion + 1)")
+      try db.execute(sql: "DROP TABLE action_items_fts")
     }
 
-    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "missing shadow table test")
+    try await RewindDatabase.shared.repairActionItemsFTS(in: dbQueue, reason: "direct repair test")
 
     let matches = try await dbQueue.read { db in
       try String.fetchAll(
@@ -99,10 +103,10 @@ final class ActionItemsFTSRepairTests: XCTestCase {
           SELECT action_items.description
           FROM action_items_fts
           JOIN action_items ON action_items_fts.rowid = action_items.id
-          WHERE action_items_fts MATCH 'shadow'
+          WHERE action_items_fts MATCH 'direct'
           ORDER BY action_items.id
           """)
     }
-    XCTAssertEqual(matches, ["shadow table durable row"])
+    XCTAssertEqual(matches, ["direct repair durable row"])
   }
 }

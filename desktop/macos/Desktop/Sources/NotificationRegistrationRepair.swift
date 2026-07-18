@@ -1,12 +1,12 @@
 import Cocoa
-import UserNotifications
+@preconcurrency import UserNotifications
 
 enum NotificationRegistrationRepair {
   static let repairedVersionKey = "notificationRegistrationRepairedAppVersion"
   static let startupRepairAttemptedVersionKey = "notificationStartupRepairAttemptedAppVersion"
 
-  private static var isRepairing = false
-  private static var pendingCompletions: [(Bool) -> Void] = []
+  private nonisolated(unsafe) static var isRepairing = false
+  private nonisolated(unsafe) static var pendingCompletions: [(Bool) -> Void] = []
 
   static func currentVersionIdentifier(bundle: Bundle = .main) -> String {
     let version =
@@ -63,7 +63,7 @@ enum NotificationRegistrationRepair {
   static func requestAuthorizationRepairingLaunchServices(
     reason: String,
     previousStatus: String,
-    completion: ((Bool) -> Void)? = nil
+    completion: (@Sendable (Bool) -> Void)? = nil
   ) {
     NSApp.activate()
     UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {
@@ -134,8 +134,9 @@ enum NotificationRegistrationRepair {
 
       Thread.sleep(forTimeInterval: 1.5)
 
+      let capturedSuccess = success
       DispatchQueue.main.async {
-        var finalSuccess = success
+        var finalSuccess = capturedSuccess
         if let cfURL = bundleURL as CFURL? {
           let registerStatus = LSRegisterURL(cfURL, true)
           let registerSucceeded = registerStatus == noErr
@@ -160,7 +161,7 @@ enum NotificationRegistrationRepair {
     callbacks.forEach { $0(success) }
   }
 
-  private static func retryAuthorizationAfterRepair(completion: ((Bool) -> Void)?) {
+  private static func retryAuthorizationAfterRepair(completion: (@Sendable (Bool) -> Void)?) {
     DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) {
       NSApp.activate()
       UNUserNotificationCenter.current().requestAuthorization(options: [.alert, .sound, .badge]) {

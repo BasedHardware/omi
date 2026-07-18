@@ -35,6 +35,8 @@ def _ws_c_import_isolation():
         _fetch_active_legacy_memories,
         backfill_user_bucketed,
         backfill_user,
+        apply_legacy_backfill_remediation_archives,
+        build_legacy_backfill_remediation_plan,
         classify_legacy_backfill_bucket,
         is_active_legacy_row,
         legacy_backfill_memory_id,
@@ -45,6 +47,8 @@ def _ws_c_import_isolation():
     module_globals["_fetch_active_legacy_memories"] = _fetch_active_legacy_memories
     module_globals["backfill_user"] = backfill_user
     module_globals["backfill_user_bucketed"] = backfill_user_bucketed
+    module_globals["apply_legacy_backfill_remediation_archives"] = apply_legacy_backfill_remediation_archives
+    module_globals["build_legacy_backfill_remediation_plan"] = build_legacy_backfill_remediation_plan
     module_globals["classify_legacy_backfill_bucket"] = classify_legacy_backfill_bucket
     module_globals["is_active_legacy_row"] = is_active_legacy_row
     module_globals["legacy_backfill_memory_id"] = legacy_backfill_memory_id
@@ -71,6 +75,7 @@ from utils.memory.canonical_kg_promotion import CanonicalKgPromotionResult
 from utils.memory.legacy_backfill import (
     BackfillCohortGateError,
     LegacyBackfillBucket,
+    LegacyBackfillRemediationAction,
     assert_canonical_cohort_for_backfill,
     both_store_canonical_duplicate_exists,
     live_extraction_memory_id_for_legacy_row,
@@ -488,6 +493,12 @@ def test_bucket_classifier_holds_noise_and_sensitive_rows():
     reviewed["user_review"] = True
     profile = _legacy_row(legacy_id="leg-profile", content="The user wants concise launch checklists")
     unmatched = _legacy_row(legacy_id="leg-unmatched", content="Coffee near the office was mentioned")
+    email = _legacy_row(legacy_id="leg-email", content="Email from Alex: please read this full message body")
+    distracted = _legacy_row(legacy_id="leg-distracted", content="Distracted on x.com while reading posts")
+    files = _legacy_row(legacy_id="leg-files", content="The user has 4,107 local files indexed across their machine")
+    project = _legacy_row(legacy_id="leg-project", content="The user works on a local project named app")
+    marker = _legacy_row(legacy_id="leg-marker", content="GAUNTLET Recall Page A4 marker GAUNTLET-123")
+    gauntlet_product = _legacy_row(legacy_id="leg-gauntlet-product", content="David is building a Gauntlet product")
 
     assert classify_legacy_backfill_bucket(sensitive) == LegacyBackfillBucket.hold_sensitive
     assert classify_legacy_backfill_bucket(downloads) == LegacyBackfillBucket.hold_noise
@@ -496,6 +507,244 @@ def test_bucket_classifier_holds_noise_and_sensitive_rows():
     assert classify_legacy_backfill_bucket(reviewed) == LegacyBackfillBucket.reviewed_long_term
     assert classify_legacy_backfill_bucket(profile) == LegacyBackfillBucket.profile_required_promotion
     assert classify_legacy_backfill_bucket(unmatched) == LegacyBackfillBucket.archive_review
+    for row in (email, distracted, files, project, marker):
+        assert classify_legacy_backfill_bucket(row) == LegacyBackfillBucket.hold_noise
+    assert classify_legacy_backfill_bucket(gauntlet_product) == LegacyBackfillBucket.profile_required_promotion
+
+
+def test_stage_all_skips_obvious_noise_before_canonical_staging(_trusted_account):
+    rows = [
+        _legacy_row(legacy_id="leg-profile", content="The user wants concise launch checklists"),
+        _legacy_row(legacy_id="leg-email", content="Email from Alex: this should not become a memory blob"),
+        _legacy_row(legacy_id="leg-files", content="The user has 4,107 local files indexed across their machine"),
+    ]
+    get_non_filtered_fn, _ = _make_non_filtered_store(rows)
+    db = _canonical_db_with_control(LEGACY_UID)
+    _seed_legacy_evidence(db, rows)
+
+    report = backfill_user(LEGACY_UID, db_client=db, get_non_filtered_memories_fn=get_non_filtered_fn)
+
+    assert report.source_count == 3
+    assert report.admissible_count == 1
+    assert report.skipped_non_admissible == 2
+    assert report.written_count == 1
+    profile_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id="leg-profile")
+    assert f"users/{LEGACY_UID}/memory_items/{profile_id}" in db.docs
+    for legacy_id in ("leg-email", "leg-files"):
+        memory_id = legacy_backfill_memory_id(uid=LEGACY_UID, legacy_memory_id=legacy_id)
+        assert f"users/{LEGACY_UID}/memory_items/{memory_id}" not in db.docs
+
+
+def test_remediation_plan_preserves_asserted_rows_and_archives_known_noise(_trusted_account):
+    db = _canonical_db_with_control(LEGACY_UID)
+
+    def seed(
+        memory_id: str,
+        content: str,
+        *,
+        bucket: str,
+        user_asserted: bool = False,
+        sensitivity_labels: list[str] | None = None,
+        tier: MemoryTier = MemoryTier.long_term,
+        source_surface: str = "legacy_backfill",
+    ) -> None:
+        item = MemoryItem(
+            memory_id=memory_id,
+            uid=LEGACY_UID,
+            version=1,
+            tier=tier,
+            status=MemoryItemStatus.active,
+            processing_state=ProcessingState.processed,
+            content=content,
+            evidence=[
+                MemoryEvidence(
+                    evidence_id=f"ev_{memory_id}",
+                    source_type="legacy_memory",
+                    source_id=memory_id,
+                    source_version="v1",
+                    artifact_preservation=ArtifactPreservationState.preserved,
+                )
+            ],
+            source_state=SourceState.active,
+            sensitivity_labels=sensitivity_labels or [],
+            visibility="private",
+            user_asserted=user_asserted,
+            captured_at=NOW_TS,
+            updated_at=NOW_TS,
+            expires_at=NOW_TS + timedelta(days=30) if tier == MemoryTier.short_term else None,
+            ledger_commit_id=f"commit_{memory_id}",
+            ledger_sequence=1,
+            source_commit_id=f"commit_{memory_id}",
+            source_commit_sequence=1,
+            content_hash=f"hash_{memory_id}",
+            account_generation=1,
+            promotion={"source_surface": source_surface, "bucket": bucket},
+        )
+        db.docs[f"users/{LEGACY_UID}/memory_items/{memory_id}"] = _stored_item(item)
+
+    seed("mem_noise", "Email from Alex: imported email body", bucket="profile_required_promotion")
+    seed("mem_profile", "The user works on Omi memory architecture", bucket="profile_required_promotion")
+    seed("mem_manual", "The user prefers concise code reviews", bucket="manual_required_promotion", user_asserted=True)
+    seed("mem_reviewed", "The user uses Omi for dogfood", bucket="reviewed_long_term")
+    seed(
+        "mem_sensitive",
+        "The user password is not a durable profile fact",
+        bucket="manual_required_promotion",
+        user_asserted=True,
+        sensitivity_labels=["credential"],
+    )
+    seed(
+        "mem_staged",
+        "The user works on an imported project",
+        bucket="profile_required_promotion",
+        tier=MemoryTier.short_term,
+    )
+    seed(
+        "mem_unattributed",
+        "The user works on an older project",
+        bucket="profile_required_promotion",
+        source_surface="v3_api",
+    )
+
+    plan = build_legacy_backfill_remediation_plan(LEGACY_UID, db_client=db, sample_size=10)
+
+    assert plan.candidate_count == 5
+    assert plan.action_counts == {"archive": 1, "keep": 2, "review": 2}
+    entries = {entry.memory_id: entry for samples in plan.samples.values() for entry in samples}
+    assert entries["mem_noise"].action == LegacyBackfillRemediationAction.archive
+    assert entries["mem_noise"].reason == "raw_email"
+    assert entries["mem_profile"].action == LegacyBackfillRemediationAction.review
+    assert entries["mem_manual"].action == LegacyBackfillRemediationAction.keep
+    assert entries["mem_reviewed"].action == LegacyBackfillRemediationAction.keep
+    assert entries["mem_sensitive"].action == LegacyBackfillRemediationAction.review
+    assert entries["mem_sensitive"].reason == "sensitive_requires_review"
+    assert db.docs[f"users/{LEGACY_UID}/memory_items/mem_noise"]["status"] == MemoryItemStatus.active.value
+
+
+def test_remediation_archives_only_planned_noise_through_apply_and_repairs_projections(_trusted_account, monkeypatch):
+    db = _canonical_db_with_control(LEGACY_UID)
+    evidence = MemoryEvidence(
+        evidence_id="ev_remediation_noise",
+        source_type="legacy_memory",
+        source_id="legacy-noise",
+        source_version="v1",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    item = MemoryItem(
+        memory_id="mem_remediation_noise",
+        uid=LEGACY_UID,
+        version=1,
+        tier=MemoryTier.long_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content="Email from Alex: imported email body",
+        evidence=[evidence],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW_TS,
+        updated_at=NOW_TS,
+        ledger_commit_id="commit_before_remediation",
+        ledger_sequence=1,
+        source_commit_id="commit_before_remediation",
+        source_commit_sequence=1,
+        content_hash="hash_before_remediation",
+        account_generation=1,
+        promotion={"source_surface": "legacy_backfill", "bucket": "profile_required_promotion"},
+    )
+    db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"] = _stored_item(item)
+    db.docs[f"users/{LEGACY_UID}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
+    projection_calls: list[tuple[str, str]] = []
+    monkeypatch.setattr(
+        "utils.memory.legacy_backfill.sync_atom_keyword_index_for_item",
+        lambda archived, **_: projection_calls.append(("keyword", archived.tier.value)) or True,
+    )
+    monkeypatch.setattr(
+        "utils.memory.legacy_backfill.delete_canonical_memory_vector",
+        lambda uid, memory_id: projection_calls.append(("vector_delete", memory_id)) or True,
+    )
+    monkeypatch.setattr(
+        "utils.memory.legacy_backfill.sync_canonical_memory_vector",
+        lambda archived, **_: projection_calls.append(("vector", archived.tier.value)) or True,
+    )
+    monkeypatch.setattr(
+        "utils.memory.legacy_backfill.invalidate_kg_for_memory_retraction",
+        lambda uid, memory_ids, **_: projection_calls.append(("kg", memory_ids[0])),
+    )
+
+    report = apply_legacy_backfill_remediation_archives(
+        LEGACY_UID,
+        expected_archive_count=1,
+        dry_run=False,
+        db_client=db,
+    )
+
+    archived = MemoryItem.model_validate(db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"])
+    assert report.errors == []
+    assert report.archived_count == 1
+    assert archived.tier == MemoryTier.archive
+    assert archived.status == MemoryItemStatus.active
+    assert archived.item_revision == item.item_revision + 1
+    assert archived.promotion["remediation"]["action"] == "archive"
+    assert projection_calls == [
+        ("keyword", "archive"),
+        ("vector_delete", item.memory_id),
+        ("vector", "archive"),
+        ("kg", item.memory_id),
+    ]
+    assert any(
+        path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs
+    ), "remediation must use the canonical apply ledger"
+
+
+def test_remediation_count_lock_refuses_to_mutate_when_the_fresh_plan_changes(_trusted_account):
+    db = _canonical_db_with_control(LEGACY_UID)
+    evidence = MemoryEvidence(
+        evidence_id="ev_remediation_count_lock",
+        source_type="legacy_memory",
+        source_id="legacy-count-lock",
+        source_version="v1",
+        artifact_preservation=ArtifactPreservationState.preserved,
+    )
+    item = MemoryItem(
+        memory_id="mem_remediation_count_lock",
+        uid=LEGACY_UID,
+        version=1,
+        tier=MemoryTier.long_term,
+        status=MemoryItemStatus.active,
+        processing_state=ProcessingState.processed,
+        content="Local downloads include installer.dmg",
+        evidence=[evidence],
+        source_state=SourceState.active,
+        sensitivity_labels=[],
+        visibility="private",
+        user_asserted=False,
+        captured_at=NOW_TS,
+        updated_at=NOW_TS,
+        ledger_commit_id="commit_count_lock",
+        ledger_sequence=1,
+        source_commit_id="commit_count_lock",
+        source_commit_sequence=1,
+        content_hash="hash_count_lock",
+        account_generation=1,
+        promotion={"source_surface": "legacy_backfill", "bucket": "profile_required_promotion"},
+    )
+    db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"] = _stored_item(item)
+    db.docs[f"users/{LEGACY_UID}/memory_evidence/{evidence.evidence_id}"] = evidence.model_dump(mode="json")
+
+    report = apply_legacy_backfill_remediation_archives(
+        LEGACY_UID,
+        expected_archive_count=2,
+        dry_run=False,
+        db_client=db,
+    )
+
+    persisted = MemoryItem.model_validate(db.docs[f"users/{LEGACY_UID}/memory_items/{item.memory_id}"])
+    assert report.archived_count == 0
+    assert report.errors == ["expected_archive_count=2 does not match candidate_count=1"]
+    assert persisted.tier == MemoryTier.long_term
+    assert not any(path.startswith(f"users/{LEGACY_UID}/memory_commits/") for path in db.docs)
 
 
 def test_bucketed_inventory_dry_run_reports_counts_and_writes_nothing(_trusted_account):

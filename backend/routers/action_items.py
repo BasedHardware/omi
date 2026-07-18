@@ -12,6 +12,7 @@ from datetime import datetime, timezone
 import database.action_items as action_items_db
 import database.conversations as conversations_db
 import database.redis_db as redis_db
+from database.firestore_transaction_retry import FirestoreContentionExhausted
 from database.vector_db import (
     upsert_action_item_vector,
     upsert_action_item_vectors_batch,
@@ -293,6 +294,8 @@ def create_action_item(request: ActionItemCreateRequest, uid: str = Depends(auth
     idempotency_key = _content_idempotency_key(uid, request.description)
     try:
         action_item_id = action_items_db.create_action_item(uid, action_item_data, idempotency_key=idempotency_key)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     action_item = action_items_db.get_action_item(uid, action_item_id)
@@ -451,6 +454,8 @@ def update_action_item(
     # Update the action item
     try:
         success = action_items_db.update_action_item(uid, action_item_id, update_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
     if not success:
@@ -586,6 +591,30 @@ def get_conversation_action_items(conversation_id: str, uid: str = Depends(auth.
     return {"action_items": response_items, "conversation_id": conversation_id}
 
 
+class ConversationActionItemsCountResponse(BaseModel):
+    total: int
+    completed: int
+    incomplete: int
+
+
+@router.get(
+    "/v1/conversations/{conversation_id}/action-items/count",
+    response_model=ConversationActionItemsCountResponse,
+    tags=['action-items'],
+)
+def get_conversation_action_items_count(conversation_id: str, uid: str = Depends(auth.get_current_user_uid)):
+    """Return total / completed / incomplete action-item counts for one conversation.
+
+    A task-progress badge (e.g. 2 of 3 done) for a conversation without paging its items.
+    """
+    conversation = conversations_db.get_conversation(uid, conversation_id)
+    if not conversation:
+        raise HTTPException(status_code=404, detail="Conversation not found")
+    if conversation.get('is_locked', False):
+        raise HTTPException(status_code=402, detail="A paid plan is required to access this conversation.")
+    return action_items_db.get_action_items_count_by_conversation(uid, conversation_id)
+
+
 class ConversationActionItemsDeleteResponse(BaseModel):
     status: str
     deleted_count: int
@@ -629,6 +658,8 @@ def create_action_items_batch(
     # Create batch
     try:
         created_ids = action_items_db.create_action_items_batch(uid, action_items_data)
+    except FirestoreContentionExhausted as exc:
+        raise HTTPException(status_code=503, detail="Service temporarily unavailable") from exc
     except action_items_db.TaskRelationshipConflictError as exc:
         raise HTTPException(status_code=409, detail=str(exc)) from exc
 

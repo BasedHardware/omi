@@ -130,6 +130,35 @@ class TestTriggerClassifierIfNeeded:
         # Should not raise
         await fair_use_mod.trigger_classifier_if_needed('user1', triggered)
 
+    @pytest.mark.asyncio
+    async def test_routes_every_sync_classifier_boundary_to_db_executor(self):
+        calls = []
+
+        async def tracking_run_blocking(executor, func, *args, **kwargs):
+            calls.append((executor, func))
+            return func(*args, **kwargs)
+
+        classify = AsyncMock(return_value={'misuse_score': 0.2, 'usage_type': 'personal'})
+        stage = MagicMock(return_value='none')
+        exhausted = MagicMock(return_value=False)
+        escalate = MagicMock(return_value={'action': 'none', 'previous_stage': 'none', 'new_stage': 'none'})
+        _redis().set.return_value = True
+
+        with patch.object(fair_use_mod, 'run_blocking', tracking_run_blocking), patch.object(
+            fair_use_mod, 'get_enforcement_stage', stage
+        ), patch.object(fair_use_mod, 'is_free_credits_exhausted', exhausted), patch.object(
+            fair_use_mod, 'escalate_enforcement', escalate
+        ), patch.object(
+            fair_use_mod, '_get_classify_user_purpose', return_value=classify
+        ):
+            await fair_use_mod.trigger_classifier_if_needed(
+                'user1',
+                [{'trigger': SoftCapTrigger.DAILY, 'speech_ms': 8_000_000, 'threshold_ms': 7_200_000}],
+            )
+
+        assert [func for _, func in calls] == [stage, _redis().set, exhausted, escalate]
+        assert all(executor is fair_use_mod.db_executor for executor, _ in calls)
+
 
 class TestSendFairUseNotification:
     """Test notification dispatch for each enforcement stage."""

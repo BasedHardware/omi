@@ -1,6 +1,6 @@
 import AppKit
-import SwiftUI
 import OmiTheme
+import SwiftUI
 
 /// Detects scroll position changes by observing the underlying NSScrollView.
 struct ScrollPositionDetector: NSViewRepresentable {
@@ -20,7 +20,7 @@ struct ScrollPositionDetector: NSViewRepresentable {
     Coordinator(onScrollPositionChange: onScrollPositionChange)
   }
 
-  class Coordinator: NSObject {
+  final class Coordinator: NSObject, @unchecked Sendable {
     let onScrollPositionChange: (Bool) -> Void
     private var scrollView: NSScrollView?
     private var observation: NSObjectProtocol?
@@ -32,46 +32,50 @@ struct ScrollPositionDetector: NSViewRepresentable {
     }
 
     func setupScrollObserver(for view: NSView) {
-      var current: NSView? = view
-      while let v = current {
-        if let sv = v as? NSScrollView {
-          scrollView = sv
-          break
+      MainActor.assumeIsolated {
+        var current: NSView? = view
+        while let v = current {
+          if let sv = v as? NSScrollView {
+            scrollView = sv
+            break
+          }
+          current = v.superview
         }
-        current = v.superview
-      }
 
-      guard let scrollView else { return }
-      let clipView = scrollView.contentView
-      clipView.postsBoundsChangedNotifications = true
-      observation = NotificationCenter.default.addObserver(
-        forName: NSView.boundsDidChangeNotification,
-        object: clipView,
-        queue: .main
-      ) { [weak self] _ in
-        self?.checkScrollPosition()
-      }
+        guard let scrollView else { return }
+        let clipView = scrollView.contentView
+        clipView.postsBoundsChangedNotifications = true
+        observation = NotificationCenter.default.addObserver(
+          forName: NSView.boundsDidChangeNotification,
+          object: clipView,
+          queue: .main
+        ) { [weak self] _ in
+          self?.checkScrollPosition()
+        }
 
-      checkScrollPosition()
+        checkScrollPosition()
+      }
     }
 
     func checkScrollPosition() {
-      guard let scrollView, let documentView = scrollView.documentView else { return }
+      MainActor.assumeIsolated {
+        guard let scrollView, let documentView = scrollView.documentView else { return }
 
-      let clipBounds = scrollView.contentView.bounds
-      let documentHeight = documentView.frame.height
-      let visibleMaxY = clipBounds.origin.y + clipBounds.height
-      let threshold: CGFloat = 100
-      let isAtBottom = visibleMaxY >= documentHeight - threshold
-      guard isAtBottom != lastReportedValue else { return }
+        let clipBounds = scrollView.contentView.bounds
+        let documentHeight = documentView.frame.height
+        let visibleMaxY = clipBounds.origin.y + clipBounds.height
+        let threshold: CGFloat = 100
+        let isAtBottom = visibleMaxY >= documentHeight - threshold
+        guard isAtBottom != lastReportedValue else { return }
 
-      coalesceWorkItem?.cancel()
-      let workItem = DispatchWorkItem { [weak self] in
-        self?.lastReportedValue = isAtBottom
-        self?.onScrollPositionChange(isAtBottom)
+        coalesceWorkItem?.cancel()
+        let workItem = DispatchWorkItem { [weak self] in
+          self?.lastReportedValue = isAtBottom
+          self?.onScrollPositionChange(isAtBottom)
+        }
+        coalesceWorkItem = workItem
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
       }
-      coalesceWorkItem = workItem
-      DispatchQueue.main.asyncAfter(deadline: .now() + 0.06, execute: workItem)
     }
 
     deinit {
@@ -103,7 +107,7 @@ struct UserScrollDetector: NSViewRepresentable {
     Coordinator(onUserScroll: onUserScroll, onScrollSettledAtBottom: onScrollSettledAtBottom)
   }
 
-  class Coordinator: NSObject {
+  final class Coordinator: NSObject, @unchecked Sendable {
     let onUserScroll: () -> Void
     let onScrollSettledAtBottom: () -> Void
     private var monitor: Any?
@@ -123,46 +127,50 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     func install(for view: NSView) {
-      var scrollView: NSScrollView?
-      var current: NSView? = view
-      while let v = current {
-        if let sv = v as? NSScrollView {
-          scrollView = sv
-          break
+      MainActor.assumeIsolated {
+        var scrollView: NSScrollView?
+        var current: NSView? = view
+        while let v = current {
+          if let sv = v as? NSScrollView {
+            scrollView = sv
+            break
+          }
+          current = v.superview
         }
-        current = v.superview
-      }
-      let targetScrollView = scrollView
+        let targetScrollView = scrollView
 
-      monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown]) {
-        [weak self] event in
-        guard let self, let targetScrollView else { return event }
-        guard event.window == targetScrollView.window else { return event }
+        let handler: @MainActor (NSEvent) -> NSEvent? = { [weak self] event in
+          guard let self, let targetScrollView else { return event }
+          guard event.window == targetScrollView.window else { return event }
 
-        if event.type == .keyDown {
-          guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
-          guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
-          self.onUserScroll()
-        } else {
-          let locationInWindow = event.locationInWindow
-          let locationInScrollView = targetScrollView.convert(locationInWindow, from: nil)
-          guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
-          if event.type == .scrollWheel {
-            if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+          if event.type == .keyDown {
+            guard Self.scrollNavigationKeyCodes.contains(event.keyCode) else { return event }
+            guard Self.isScrollViewKeyboardTarget(in: event.window, scrollView: targetScrollView) else { return event }
+            self.onUserScroll()
+          } else {
+            let locationInScrollView = targetScrollView.convert(event.locationInWindow, from: nil)
+            guard targetScrollView.bounds.contains(locationInScrollView) else { return event }
+            if event.type == .scrollWheel {
+              if event.scrollingDeltaY != 0 || event.scrollingDeltaX != 0 {
+                self.onUserScroll()
+              }
+            } else {
               self.onUserScroll()
             }
-          } else {
-            self.onUserScroll()
           }
+          self.scheduleSettledBottomChecks(for: targetScrollView)
+          return event
         }
-        self.scheduleSettledBottomChecks(for: targetScrollView)
-        return event
+        monitor = NSEvent.addLocalMonitorForEvents(
+          matching: [.scrollWheel, .leftMouseDown, .leftMouseDragged, .keyDown], handler: handler)
       }
     }
 
     private static func isScrollViewKeyboardTarget(in window: NSWindow?, scrollView: NSScrollView) -> Bool {
-      guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
-      return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
+      MainActor.assumeIsolated {
+        guard let window, let firstResponderView = window.firstResponder as? NSView else { return false }
+        return firstResponderView === scrollView || firstResponderView.isDescendant(of: scrollView)
+      }
     }
 
     private func scheduleSettledBottomChecks(for scrollView: NSScrollView) {
@@ -175,12 +183,14 @@ struct UserScrollDetector: NSViewRepresentable {
     }
 
     private static func isAtBottom(_ scrollView: NSScrollView) -> Bool {
-      guard let documentView = scrollView.documentView else { return false }
-      let clipBounds = scrollView.contentView.bounds
-      let documentHeight = documentView.frame.height
-      let visibleMaxY = clipBounds.origin.y + clipBounds.height
-      let threshold: CGFloat = 100
-      return visibleMaxY >= documentHeight - threshold
+      MainActor.assumeIsolated {
+        guard let documentView = scrollView.documentView else { return false }
+        let clipBounds = scrollView.contentView.bounds
+        let documentHeight = documentView.frame.height
+        let visibleMaxY = clipBounds.origin.y + clipBounds.height
+        let threshold: CGFloat = 100
+        return visibleMaxY >= documentHeight - threshold
+      }
     }
 
     deinit {
@@ -219,7 +229,7 @@ struct ChatScrollContainer<Content: View>: View {
     ScrollViewReader { proxy in
       ZStack(alignment: .bottom) {
         ScrollView {
-          VStack(alignment: .leading, spacing: 16) {
+          VStack(alignment: .leading, spacing: OmiSpacing.lg) {
             content()
             Color.clear.frame(height: 1).id(bottomAnchorId)
           }
@@ -311,7 +321,7 @@ struct ChatScrollContainer<Content: View>: View {
       }
       .buttonStyle(.plain)
       .accessibilityLabel("Jump to latest message")
-      .padding(.bottom, 12)
+      .padding(.bottom, OmiSpacing.md)
       .transition(.scale.combined(with: .opacity))
     }
   }
@@ -365,7 +375,7 @@ struct ChatScrollContainer<Content: View>: View {
   private func scrollToBottom(proxy: ScrollViewProxy, animated: Bool) {
     guard scrollMode == .followingBottom, !userIsScrolling else { return }
     if animated {
-      withAnimation(.easeOut(duration: 0.15)) {
+      OmiMotion.withGated(.easeOut(duration: 0.15)) {
         proxy.scrollTo(bottomAnchorId, anchor: .bottom)
       }
     } else {

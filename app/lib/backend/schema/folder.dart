@@ -44,15 +44,15 @@ class Folder {
       id: generated.id,
       name: generated.name,
       description: generated.description,
-      color: generated.color ?? '#6B7280',
-      icon: generated.icon ?? 'folder',
+      color: generated.color,
+      icon: generated.icon,
       createdAt: generated.createdAt,
       updatedAt: generated.updatedAt,
-      order: generated.order ?? 0,
-      isDefault: generated.isDefault ?? false,
-      isSystem: generated.isSystem ?? false,
+      order: generated.order,
+      isDefault: generated.isDefault,
+      isSystem: generated.isSystem,
       categoryMapping: generated.categoryMapping,
-      conversationCount: generated.conversationCount ?? 0,
+      conversationCount: generated.conversationCount,
     );
   }
 

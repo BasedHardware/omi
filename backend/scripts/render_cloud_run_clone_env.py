@@ -23,15 +23,24 @@ def _pairs(value: str) -> dict[str, str]:
     return result
 
 
-def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay: str) -> tuple[str, str]:
+def _names(value: str) -> set[str]:
+    return {name for part in value.split(',') if (name := part.strip())}
+
+
+def clone_environment(
+    service: dict[str, Any], env_overlay: str, secret_overlay: str, remove_env_vars: str = ''
+) -> tuple[str, str]:
     literals: dict[str, str] = {}
     secrets: dict[str, str] = {}
+    remove_names = _names(remove_env_vars)
     containers = service.get('spec', {}).get('template', {}).get('spec', {}).get('containers', [])
     if not containers:
         raise ValueError('source Cloud Run service has no container')
     for entry in containers[0].get('env', []):
         name = entry.get('name')
         if not name:
+            continue
+        if name in remove_names:
             continue
         if 'value' in entry:
             literals[name] = str(entry['value'])
@@ -47,6 +56,9 @@ def clone_environment(service: dict[str, Any], env_overlay: str, secret_overlay:
     for name, value in _pairs(secret_overlay).items():
         secrets[name] = value
         literals.pop(name, None)
+    for name in remove_names:
+        literals.pop(name, None)
+        secrets.pop(name, None)
 
     return (
         '\n'.join(f'{name}={value}' for name, value in sorted(literals.items())),
@@ -70,6 +82,7 @@ def main() -> int:
         service,
         os.getenv('ENV_OVERLAY', ''),
         os.getenv('SECRET_OVERLAY', ''),
+        os.getenv('REMOVE_ENV_VARS', ''),
     )
     _emit('env_vars', env_vars)
     _emit('secrets', secrets)

@@ -30,6 +30,11 @@
           "reason": "Existing promotion apply contract; covered by short-term promotion contract tests until migrated."
         },
         {
+          "path": "backend/utils/memory/product_authorization.py",
+          "function": "_lookup_app_key_grant",
+          "reason": "Existing app-key grant lookup tuple; covered by memory authorization tests until the response contract is migrated."
+        },
+        {
           "path": "backend/utils/memory_ingestion/pipeline.py",
           "function": "_redact_input",
           "reason": "Existing pipeline stage contract; covered by memory ingestion contract tests until migrated."
@@ -179,6 +184,32 @@
       ]
     },
     {
+      "id": "firestore_schema_readiness",
+      "risk": "high",
+      "sources": [
+        "backend/database/firestore_index_registry.py",
+        "backend/scripts/firestore_workflow_policy.py",
+        "backend/scripts/reconcile_firestore_indexes.py",
+        "config/deployment-setting-classification.json",
+        "firestore.indexes.json",
+        ".github/workflows/gcp_backend.yml",
+        ".github/workflows/gcp_backend_auto_dev.yml",
+        ".github/workflows/gcp_firestore_indexes.yml"
+      ],
+      "tests": [
+        "tests/unit/test_reconcile_firestore_indexes.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_verify_backend_release_vector.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
+        "Firestore schema writes use only the manual main-scoped migration workflow and serialize with backend deployment readiness",
+        "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
+        "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
+      ]
+    },
+    {
       "id": "sync_cloud_tasks",
       "risk": "high",
       "sources": ["backend/routers/sync.py", "backend/utils/sync/pipeline.py", "backend/database/sync_jobs.py", "backend/utils/sync/*.py"],
@@ -193,6 +224,21 @@
         "task retries do not double-count usage or completed segments",
         "segment failures cannot be reported as completed work",
         "enqueued jobs retain staged blobs until handler completion"
+      ]
+    },
+    {
+      "id": "sync_ledger_fence_cutover",
+      "risk": "high",
+      "sources": [
+        "backend/scripts/sync_ledger_fence_cutover.py",
+        ".github/workflows/sync_ledger_fence_cutover.yml"
+      ],
+      "tests": ["tests/unit/test_sync_ledger_fence_cutover.py"],
+      "checks": [],
+      "invariants": [
+        "standby admission traffic reaches every sync surface before Cloud Tasks queues are paused",
+        "the exact immutable candidate digest is proven through the tagged full transcription route before active traffic promotion",
+        "failed stage or activation attempts preserve the first queue-origin artifact and leave queues paused"
       ]
     },
     {
@@ -216,16 +262,30 @@
     {
       "id": "account_deletion_wipe",
       "risk": "high",
-      "sources": ["backend/services/users/account_deletion.py", "backend/routers/users.py"],
+      "sources": [
+        "backend/database/users.py",
+        "backend/services/users/account_deletion.py",
+        "backend/routers/users.py",
+        "backend/utils/cloud_tasks.py",
+        "backend/main.py",
+        "backend/deploy/runtime_env.yaml",
+        "backend/scripts/validate-backend-runtime-env.py",
+        ".github/workflows/gcp_backend.yml"
+      ],
       "tests": [
         "tests/services/users/test_account_deletion.py",
+        "tests/routers/test_users.py",
+        "tests/unit/test_sync_cloud_tasks.py",
+        "tests/unit/test_backend_runtime_env_validator.py",
         "tests/unit/test_claim_deletion_wipe_txn.py",
         "tests/unit/test_delete_account_purge_storage.py"
       ],
       "checks": [],
       "invariants": [
         "irreversible auth deletion has a durable recovery marker",
-        "required derived-data purge failures cannot be marked completed"
+        "required derived-data purge failures cannot be marked completed",
+        "production deletion requests can only dispatch through a complete Cloud Tasks configuration",
+        "an account-deletion task identifies exactly one persisted wipe job and never exposes a user ID"
       ]
     },
     {
@@ -300,13 +360,16 @@
       "sources": [
         "backend/utils/listen_session_bootstrap.py",
         "backend/routers/transcribe.py",
+        "backend/utils/stt/live_failure.py",
         "backend/utils/transcribe_decisions.py"
       ],
       "tests": [
         "tests/unit/test_listen_session_bootstrap.py",
+        "tests/unit/test_live_stt_failure.py",
         "tests/unit/test_transcribe_decisions.py",
         "tests/unit/test_listen_pipeline.py",
-        "tests/unit/utils/test_listen_pusher_session.py"
+        "tests/unit/utils/test_listen_pusher_session.py",
+        "testing/e2e/test_listen_stt.py"
       ],
       "checks": [],
       "invariants": [
@@ -329,50 +392,204 @@
       ]
     },
     {
+      "id": "conversation_lifecycle",
+      "risk": "high",
+      "sources": [
+        "backend/database/conversations.py",
+        "backend/database/conversation_finalization_jobs.py",
+        "backend/database/recording_sessions.py",
+        "backend/services/conversation_finalization.py",
+        "backend/utils/conversations/finalization_decision.py",
+        "backend/utils/conversations/lifecycle.py",
+        "backend/utils/conversations/finalizer.py",
+        "backend/routers/transcribe.py",
+        "backend/routers/conversation_finalization.py",
+        "backend/routers/pusher.py",
+        "backend/routers/conversations.py",
+        "backend/routers/sync.py",
+        "backend/routers/developer.py",
+        "backend/utils/sync/pipeline.py",
+        "backend/utils/conversations/process_conversation.py",
+        "backend/utils/app_integrations.py",
+        "backend/utils/conversations/postprocess_conversation.py",
+        "backend/utils/conversations/merge_conversations.py",
+        "backend/utils/imports/limitless.py"
+      ],
+      "tests": [
+        "tests/unit/test_conversation_lifecycle_contract.py",
+        "tests/unit/test_finalization_decision.py",
+        "tests/unit/test_check_conversation_lifecycle_writes.py",
+        "tests/unit/test_conversation_finalization_jobs.py",
+        "tests/unit/test_recording_sessions.py",
+        "tests/unit/test_listen_finalization_cloud_tasks.py"
+      ],
+      "checks": ["conversation-lifecycle-write-guard"],
+      "invariants": [
+        "only one finalizer claim succeeds for an in-progress conversation",
+        "finalization outbox reconnects reuse one durable job and lease fences stale workers before any fanout",
+        "only utils.conversations.lifecycle may invoke lifecycle persistence primitives",
+        "a recording session binds exactly one user-scoped conversation and emits only monotonic lifecycle envelopes",
+        "merge rejects sources that are still processing",
+        "discard and generic status-write escape hatches remain characterized until the lifecycle service replaces them"
+      ]
+    },
+    {
       "id": "listen_pusher_pipeline",
       "risk": "high",
       "sources": [
         "backend/routers/transcribe.py",
+        "backend/routers/listen/**",
+        "backend/routers/pusher.py",
         "backend/utils/listen_pusher_session.py",
         "backend/utils/pusher.py",
+        "backend/utils/stt/live_failure.py",
         "backend/utils/transcribe_decisions.py",
-        "backend/pusher/main.py"
+        "backend/pusher/main.py",
+        "backend/utils/conversations/finalizer.py",
+        "backend/utils/conversations/lifecycle.py",
+        "backend/testing/listen_pusher_stack/**",
+        ".github/workflows/backend-hermetic-e2e.yml",
+        "package.json",
+        "package-lock.json"
       ],
       "tests": [
         "tests/unit/test_listen_pipeline.py",
         "tests/unit/test_pusher_heartbeat.py",
         "tests/unit/test_pusher_conversation_retry.py",
+        "tests/unit/test_live_stt_failure.py",
         "tests/unit/test_transcribe_decisions.py",
         "tests/unit/utils/test_listen_pusher_session.py",
-        "tests/unit/test_transcribe_teardown_flush.py"
+        "tests/unit/test_transcribe_teardown_flush.py",
+        "tests/unit/test_listen_pusher_stack_ci_wiring.py",
+        "testing/e2e/test_listen_stt.py"
       ],
       "checks": [],
       "invariants": [
         "teardown flushes tail audio before pusher close",
         "pending conversation requests retry until ack or give-up limit",
-        "pusher heartbeat prevents idle connection drops"
+        "pusher heartbeat prevents idle connection drops",
+        "listen-to-pusher boundary changes run the credential-free local Firestore, Redis, and Parakeet-stub stack gauntlet in blocking PR CI"
+      ]
+    },
+    {
+      "id": "desktop_backend_realtime_provider_proof",
+      "risk": "high",
+      "sources": [
+        ".github/workflows/desktop_backend_auto_dev.yml",
+        "backend/scripts/firebase_release_probe_token.py",
+        "scripts/voice-provider-probe.sh"
+      ],
+      "tests": [
+        "tests/unit/test_firebase_release_probe_token.py",
+        "tests/unit/test_voice_provider_probe.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "every deployed development desktop backend proves the managed OpenAI and Gemini mint-to-response paths",
+        "the Firebase ID token audience and issuer match the deployed backend's explicit Firebase auth project",
+        "the bypass is explicit in the workflow log and is limited to an operator-declared upstream outage",
+        "probe credentials and provider responses never appear in workflow output"
       ]
     },
     {
       "id": "backend_cloud_run_deploy",
       "risk": "high",
       "sources": [
-        ".github/workflows/gcp_backend.yml",
+        ".github/actions/transcription-release-candidate-probe/**",
+        ".github/workflows/gcp_backend*.yml",
+        ".github/workflows/gcp_llm_gateway.yml",
+        ".github/workflows/gcp_llm_gateway_auto_dev.yml",
+        ".github/workflows/gcp_memory_maintenance_job.yml",
+        ".github/workflows/gcp_memory_maintenance_job_auto_dev.yml",
+        ".github/workflows/gcp_notifications_job.yml",
+        ".github/workflows/sync_ledger_fence_cutover.yml",
+        "backend/deploy/runtime_env.yaml",
         "backend/scripts/preflight-cloud-run-deploy.py",
+        "backend/scripts/resolve_cloud_run_tagged_url.py",
+        "backend/scripts/sync_ledger_fence_cutover.py",
+        "backend/scripts/verify_backend_release_vector.py",
+        "backend/scripts/verify_sync_ledger_fence_transition.py",
+        "backend/scripts/verify-llm-gateway-serving.py",
+        "backend/scripts/probe-llm-gateway-from-cloud-run.sh",
+        "backend/scripts/render_backend_runtime_env.py",
         "backend/scripts/repair_cloud_run_traffic.py",
-        "backend/scripts/pre-deploy-check.sh"
+        "backend/scripts/firebase_release_probe_token.py",
+        "backend/scripts/transcription_capability_probe.py",
+        "backend/scripts/pre-deploy-check.sh",
+        "backend/scripts/validate-backend-runtime-env.py"
       ],
       "tests": [
+        "tests/unit/test_render_backend_runtime_env.py",
         "tests/unit/test_preflight_cloud_run_deploy.py",
+        "tests/unit/test_verify_backend_release_vector.py",
+        "tests/unit/test_resolve_cloud_run_tagged_url.py",
         "tests/unit/test_repair_cloud_run_traffic.py",
         "tests/unit/test_deploy_status_report.py",
-        "tests/unit/test_backend_runtime_env_validator.py"
+        "tests/unit/test_backend_runtime_env_validator.py",
+        "tests/unit/test_verify_llm_gateway_serving.py",
+        "tests/unit/test_llm_gateway_deploy_contract.py",
+        "tests/unit/test_sync_two_lane.py",
+        "tests/unit/test_firebase_release_probe_token.py",
+        "tests/unit/test_transcription_capability_probe.py",
+        "tests/unit/test_verify_sync_ledger_fence_transition.py"
       ],
       "checks": [],
       "invariants": [
         "preflight fails before revision creation when Secret Manager bindings are missing",
         "traffic shifts only after candidate revisions are Ready=True",
-        "spec.traffic mismatches are repaired or block deploy with an explicit command"
+        "spec.traffic mismatches are repaired or block deploy with an explicit command",
+        "normal deploys cannot change the serving sync ledger fence mode",
+        "production backend traffic cannot shift until the exact tagged candidate proves the known-audio full route",
+        "gateway-first serving cannot be promoted until the ready workload, EndpointSlice, ingress/ILB attachment, and authenticated Cloud Run VPC route all pass"
+      ]
+    },
+    {
+      "id": "rendered_gke_deployment_identity",
+      "risk": "high",
+      "sources": [
+        "backend/charts/backend-listen/**",
+        "backend/charts/pusher/**",
+        "backend/charts/agent-proxy/**",
+        "backend/charts/llm-gateway/**",
+        "backend/charts/diarizer/**",
+        "backend/charts/parakeet/**",
+        "backend/charts/nllb-translation/**",
+        "backend/charts/vad/**",
+        "backend/scripts/validate_rendered_deployment_contract.py"
+      ],
+      "tests": ["tests/unit/test_rendered_deployment_contract.py"],
+      "checks": [],
+      "invariants": [
+        "every first-party GKE workload renders an explicit immutable image identity",
+        "rendered Deployments keep their environment-specific service account, secret references, port, and health probes",
+        "chart defaults cannot fall back to an application-version or latest image tag"
+      ]
+    },
+    {
+      "id": "ci_changed_path_selection",
+      "risk": "high",
+      "sources": [
+        ".gitignore",
+        ".github/actions/detect-changes/**",
+        ".github/workflows/backend-checks.yml",
+        ".github/workflows/backend-unit-tests.yml",
+        ".github/workflows/desktop-checks.yml",
+        ".github/workflows/desktop-swift-ci.yml",
+        ".github/workflows/repo-checks.yml",
+        "scripts/changed-files",
+        "scripts/install-git-hooks.sh",
+        "scripts/pre-push",
+        "scripts/pre-push-singleflight"
+      ],
+      "tests": [
+        "tests/unit/test_changed_files_script.py",
+        "tests/unit/test_workflow_contracts.py"
+      ],
+      "checks": [],
+      "invariants": [
+        "deletions and both sides of renames select the checks owned by the old and new paths",
+        "unmapped backend production paths cannot be hidden by adding one direct test",
+        "desktop-only pushes do not require a backend virtual environment"
       ]
     }
   ]

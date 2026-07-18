@@ -3097,7 +3097,7 @@
     "syncCustomSttWarningMessage": "Anda memakai penyedia transkripsi sendiri. Menyinkronkan rekaman ini akan mentranskripsikannya di server Omi dan dihitung dalam batas transkripsi paket Anda.",
     "transcribeLaterTitle": "Transkripsi Nanti",
     "transcribeLaterDescription": "Rekam audio sekarang dan transkripsikan saat dibutuhkan, bukan secara langsung. Rekaman disimpan di ponsel Anda, lalu Anda mengunggahnya untuk membuat percakapan.",
-    "transcribeLaterNote": "Untuk saat ini berfungsi dengan perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
+    "transcribeLaterNote": "Berfungsi dengan mikrofon ponsel serta perangkat Omi dan Limitless. Audio tetap berada di ponsel Anda sampai Anda memilih untuk mengunggahnya.",
     "transcribeLaterStorageFull": "Penyimpanan ponsel Anda hampir penuh, jadi perekaman dijeda. Kosongkan ruang atau unggah rekaman Anda, lalu perekaman akan dilanjutkan secara otomatis.",
     "unmute": "Bunyikan",
     "newRecording": "Rekaman baru",
@@ -3185,5 +3185,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Penyimpanan perangkat",
+    "deviceStoragePercentFull": "{percent}% penuh",
+    "deviceStorageUsedOfTotal": "{used} dari {total} terpakai",
+    "deviceStorageFree": "{free} tersisa",
+    "deviceStorageNearlyFull": "Perangkat hampir penuh — sinkronkan untuk mengosongkan ruang.",
+    "phoneMicOfflineFallbackMessage": "Tidak ada koneksi — merekam secara lokal. Akan ditranskripsikan saat Anda kembali daring.",
+    "dataEncryptedBanner": "Data Anda diamankan secara default dengan enkripsi kuat, dan Anda mengendalikan bagaimana data disimpan dan digunakan."
 }

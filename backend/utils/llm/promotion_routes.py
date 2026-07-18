@@ -1,4 +1,3 @@
-import json
 import logging
 import re
 from collections.abc import Callable, Sequence
@@ -10,6 +9,7 @@ from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field, ValidationError
 
 from models.memory_contracts import PromotionRoute
+from utils.memory_ingestion.ids import canonical_json
 
 GetLlm = Callable[[str], object]
 
@@ -105,11 +105,7 @@ def _content_from_response(response: object) -> str:
 content_from_response = _content_from_response
 
 
-def _canonical_json(value: Any) -> str:
-    return json.dumps(value, sort_keys=True, separators=(",", ":"), default=str)
-
-
-canonical_json = _canonical_json
+_canonical_json = canonical_json
 
 
 def _is_quote_wrapper(memory_text: Optional[str]) -> bool:

@@ -3024,7 +3024,7 @@
     "syncCustomSttWarningMessage": "Utilitzes el teu propi proveïdor de transcripció. Sincronitzar aquests enregistraments els transcriu als servidors d'Omi i compten per al límit de transcripció del teu pla.",
     "transcribeLaterTitle": "Transcriure més tard",
     "transcribeLaterDescription": "Grava l'àudio ara i transcriu-lo quan vulguis en comptes de fer-ho en directe. Les gravacions es desen al telèfon i, després, les puges per crear converses.",
-    "transcribeLaterNote": "De moment, funciona amb dispositius Omi i Limitless. L'àudio es queda al teu telèfon fins que decideixis pujar-lo.",
+    "transcribeLaterNote": "Funciona amb el micròfon del telèfon i amb dispositius Omi i Limitless. L'àudio es queda al teu telèfon fins que decideixis pujar-lo.",
     "transcribeLaterStorageFull": "El telèfon té poc espai d'emmagatzematge i la gravació s'ha posat en pausa. Allibera espai o puja les gravacions i es reprendrà automàticament.",
     "unmute": "Activar so",
     "newRecording": "Nou enregistrament",
@@ -3112,5 +3112,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Emmagatzematge del dispositiu",
+    "deviceStoragePercentFull": "{percent}% ple",
+    "deviceStorageUsedOfTotal": "{used} de {total} utilitzat",
+    "deviceStorageFree": "{free} lliure",
+    "deviceStorageNearlyFull": "El dispositiu és gairebé ple — sincronitza per alliberar espai.",
+    "phoneMicOfflineFallbackMessage": "Sense connexió: s'està gravant localment. Es transcriurà quan tornis a tenir connexió.",
+    "dataEncryptedBanner": "Les teves dades estan protegides per defecte amb un xifratge fort, i tu controles com s'emmagatzemen i s'utilitzen."
 }

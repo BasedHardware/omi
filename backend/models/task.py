@@ -24,7 +24,10 @@ class Task(BaseModel):
     action: TaskAction
     status: TaskStatus
     created_at: datetime
-    executed_at: Optional[datetime] = datetime.now()
+    # Default to None (not yet executed). A bare datetime.now() default is evaluated once at class
+    # definition, so every Task built without an explicit executed_at would share the process-start
+    # timestamp and look already-executed. updated_at below already uses the correct None default.
+    executed_at: Optional[datetime] = None
     updated_at: Optional[datetime] = None
     request_id: Optional[str] = None
     memory_id: Optional[str] = None

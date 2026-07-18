@@ -81,6 +81,102 @@ final class ToolCallStatusTests: XCTestCase {
     )
   }
 
+  func testSystemStopsAndFailedPreconditionsMarkRemainingToolsFailed() {
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        watchdogFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        toolStallAbortFired: true
+      ),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.remainingToolStatusAfterPartialResponseError(
+        BridgeError.stopped,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
+  func testLateResultToolStatusPreservesTerminalTruth() {
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: false),
+      .completed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: true, toolStallAbortFired: false),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(watchdogFired: false, toolStallAbortFired: true),
+      .failed
+    )
+    XCTAssertEqual(
+      ChatProvider.lateResultToolStatus(
+        watchdogFired: false,
+        toolStallAbortFired: false,
+        stopReason: .browserExtensionMissing
+      ),
+      .failed
+    )
+  }
+
+  @MainActor
+  func testReleasedSendLockTerminalizesEveryOrphanedStreamingAssistantRow() {
+    var messages = [
+      ChatMessage(
+        id: "orphaned-assistant",
+        text: "",
+        sender: .ai,
+        isStreaming: true,
+        contentBlocks: [
+          .toolCall(
+            id: "web-search",
+            name: "web_search",
+            status: .running,
+            toolUseId: "tool-web-search",
+            input: nil,
+            output: nil
+          )
+        ]
+      ),
+      ChatMessage(id: "stable-user", text: "next", sender: .user),
+    ]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: false
+    )
+
+    XCTAssertEqual(terminalized, ["orphaned-assistant"])
+    XCTAssertFalse(messages[0].isStreaming)
+    guard case .toolCall(_, _, let status, _, _, _) = messages[0].contentBlocks[0] else {
+      return XCTFail("Expected tool call content block")
+    }
+    XCTAssertEqual(status, .failed)
+    XCTAssertFalse(messages[1].isStreaming)
+  }
+
+  @MainActor
+  func testActiveSendLockDoesNotTerminalizeCurrentStreamingAssistantRow() {
+    var messages = [ChatMessage(id: "current-assistant", text: "", sender: .ai, isStreaming: true)]
+
+    let terminalized = ChatProvider.terminalizeOrphanedStreamingMessages(
+      &messages,
+      hasActiveSendLock: true
+    )
+
+    XCTAssertTrue(terminalized.isEmpty)
+    XCTAssertTrue(messages[0].isStreaming)
+  }
+
   // MARK: - Tool-call content block lifecycle
 
   func testStreamingBufferPreservesTextBeforeToolOrder() {
@@ -100,7 +196,8 @@ final class ToolCallStatusTests: XCTestCase {
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .text(_, "Before tool.") = messages[0].contentBlocks[0],
-          case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1] else {
+      case .toolCall(_, "Bash", .running, "tool-1", _, _) = messages[0].contentBlocks[1]
+    else {
       return XCTFail("Expected text before the tool call")
     }
   }
@@ -116,7 +213,8 @@ final class ToolCallStatusTests: XCTestCase {
 
     XCTAssertEqual(messages[0].contentBlocks.count, 2)
     guard case .thinking(_, "Thinking.") = messages[0].contentBlocks[0],
-          case .text(_, "Answer.") = messages[0].contentBlocks[1] else {
+      case .text(_, "Answer.") = messages[0].contentBlocks[1]
+    else {
       return XCTFail("Expected thinking before answer text")
     }
   }
@@ -134,10 +232,27 @@ final class ToolCallStatusTests: XCTestCase {
     XCTAssertEqual(messages[0].text, "AC")
     XCTAssertEqual(messages[0].contentBlocks.count, 3)
     guard case .text(_, "A") = messages[0].contentBlocks[0],
-          case .thinking(_, "B") = messages[0].contentBlocks[1],
-          case .text(_, "C") = messages[0].contentBlocks[2] else {
+      case .thinking(_, "B") = messages[0].contentBlocks[1],
+      case .text(_, "C") = messages[0].contentBlocks[2]
+    else {
       return XCTFail("Expected text, thinking, text block order")
     }
+  }
+
+  func testDiscardingRevokedTurnPreservesNewerTurnSegments() {
+    var messages = [
+      ChatMessage(id: "revoked", text: "", sender: .ai, isStreaming: true),
+      ChatMessage(id: "current", text: "", sender: .ai, isStreaming: true),
+    ]
+    let buffer = ChatStreamingBuffer(flushInterval: 10)
+
+    buffer.appendText(messageId: "revoked", text: "late output", scheduleFlush: {})
+    buffer.appendText(messageId: "current", text: "current output", scheduleFlush: {})
+    buffer.discardPendingSegments(messageId: "revoked")
+    buffer.flush(messages: &messages)
+
+    XCTAssertEqual(messages[0].text, "")
+    XCTAssertEqual(messages[1].text, "current output")
   }
 
   func testManualFlushCancelsScheduledFlush() {
@@ -147,9 +262,11 @@ final class ToolCallStatusTests: XCTestCase {
     let staleFlush = expectation(description: "scheduled flush should be cancelled by manual flush")
     staleFlush.isInverted = true
 
-    buffer.appendText(messageId: messageId, text: "Before tool.", scheduleFlush: {
-      staleFlush.fulfill()
-    })
+    buffer.appendText(
+      messageId: messageId, text: "Before tool.",
+      scheduleFlush: {
+        staleFlush.fulfill()
+      })
     buffer.flush(messages: &messages)
 
     wait(for: [staleFlush], timeout: 0.05)

@@ -1,4 +1,5 @@
 import XCTest
+
 @testable import Omi_Computer
 
 @MainActor
@@ -227,7 +228,8 @@ final class ConversationRepositoryTests: XCTestCase {
     await suspendedTitles.resume("Renamed", with: .success(titleCanonical))
     try await titleTask.value
     XCTAssertEqual(repository.conversations[0].structured.title, "Renamed")
-    XCTAssertTrue(repository.conversations[0].starred, "The title acknowledgement must not erase the queued star intent")
+    XCTAssertTrue(
+      repository.conversations[0].starred, "The title acknowledgement must not erase the queued star intent")
 
     await suspendedStars.waitUntilRequested("true")
     await suspendedStars.resume("true", with: .success(starCanonical))
@@ -715,6 +717,34 @@ final class ConversationRepositoryTests: XCTestCase {
     }
   }
 
+  func testRuntimeOwnerChangeClearsThePreviousAccountsConversations() async {
+    // Regression: an in-place account switch posts only .runtimeOwnerDidChange
+    // (never .userDidSignOut). Without the repository's own owner fence, the
+    // previous account's conversations kept rendering for the next account and
+    // ConversationsPage.onAppear skipped its reload because the array was
+    // non-empty.
+    let previousOwners = makeConversation(title: "Previous account's conversation", revision: 1)
+    let remote = FakeConversationRemote(
+      listResult: .success([previousOwners]), countResult: .success(1))
+    let repository = ConversationRepository(
+      remote: remote,
+      local: FakeConversationLocal(listResult: [], count: 0)
+    )
+    var snapshots: [ConversationRepositorySnapshot] = []
+    repository.onSnapshot = { snapshots.append($0) }
+    await repository.load(query: .all)
+    XCTAssertFalse(repository.conversations.isEmpty, "precondition: previous account's rows are loaded")
+
+    NotificationCenter.default.post(name: .runtimeOwnerDidChange, object: nil)
+
+    XCTAssertTrue(
+      repository.conversations.isEmpty,
+      "an in-place account switch must clear the previous account's conversations")
+    XCTAssertEqual(
+      snapshots.last?.conversations.count, 0,
+      "the cleared state must be published so the UI empties and the page reloads")
+  }
+
   private func makeConversation(
     id: String = "conversation-1",
     title: String = "Title",
@@ -725,20 +755,21 @@ final class ConversationRepositoryTests: XCTestCase {
     transcript: String? = nil
   ) -> ServerConversation {
     let created = Date(timeIntervalSince1970: 100)
-    let segments = transcript.map {
-      [
-        TranscriptSegment(
-          id: "segment-1",
-          backendId: "segment-1",
-          text: $0,
-          speaker: "SPEAKER_00",
-          isUser: true,
-          personId: nil,
-          start: 0,
-          end: 1
-        )
-      ]
-    } ?? []
+    let segments =
+      transcript.map {
+        [
+          TranscriptSegment(
+            id: "segment-1",
+            backendId: "segment-1",
+            text: $0,
+            speaker: "SPEAKER_00",
+            isUser: true,
+            personId: nil,
+            start: 0,
+            end: 1
+          )
+        ]
+      } ?? []
     return ServerConversation(
       id: id,
       createdAt: created,
@@ -771,14 +802,15 @@ final class ConversationRepositoryTests: XCTestCase {
   }
 }
 
-private extension ConversationListQuery {
-  static let all = ConversationListQuery(starredOnly: false, date: nil, folderId: nil)
+extension ConversationListQuery {
+  fileprivate static let all = ConversationListQuery(starredOnly: false, date: nil, folderId: nil)
 }
 
 private enum TestFailure: Error {
   case offline
 }
 
+@MainActor
 private final class FakeConversationRemote: ConversationRemoteDataSource {
   var listResult: Result<[ServerConversation], Error>
   var countResult: Result<Int, Error>
@@ -849,6 +881,7 @@ private final class FakeConversationRemote: ConversationRemoteDataSource {
   }
 }
 
+@MainActor
 private final class FakeConversationLocal: ConversationLocalDataSource {
   var listResult: [ServerConversation]
   var countValue: Int

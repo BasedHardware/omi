@@ -20,7 +20,7 @@ jobs:
       has_desktop_rust: ${{ steps.changes.outputs.has_desktop_rust }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
@@ -35,13 +35,13 @@ jobs:
     if: needs.changes.outputs.has_desktop_rust == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Save changed files
         run: |
-          git diff --name-only --diff-filter=ACM "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
+          scripts/changed-files "${{ needs.changes.outputs.diff_base }}"...HEAD > /tmp/changed-files.txt
           cat /tmp/changed-files.txt
 
       - name: Set up desktop Rust toolchain
@@ -50,7 +50,7 @@ jobs:
           rustup show
 
       - name: Cache desktop Rust backend build
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cargo/registry
@@ -62,7 +62,11 @@ jobs:
 
       - name: Check desktop Rust backend
         run: |
-          FILES=$(grep -E '^desktop/macos/Backend-Rust/.*\.rs$' /tmp/changed-files.txt | sed 's#^desktop/macos/Backend-Rust/##' || true)
+          FILES=$(while IFS= read -r file; do
+            if [[ "$file" =~ ^desktop/macos/Backend-Rust/.*\.rs$ ]] && [ -f "$file" ]; then
+              echo "${file#desktop/macos/Backend-Rust/}"
+            fi
+          done < /tmp/changed-files.txt)
           if [ -n "$FILES" ]; then
             (
               cd desktop/macos/Backend-Rust
@@ -79,12 +83,12 @@ jobs:
     if: needs.changes.outputs.has_desktop_agent_runtime == 'true'
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
         with:
           fetch-depth: 0
 
       - name: Setup Node.js for desktop agent runtime
-        uses: actions/setup-node@v4
+        uses: actions/setup-node@v7
         with:
           node-version: '22'
           cache: 'npm'

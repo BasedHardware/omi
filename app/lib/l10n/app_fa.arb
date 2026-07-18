@@ -1483,7 +1483,7 @@
     "exportConfiguration": "صادر کردن پیکربندی",
     "bringYourOwn": "خود را بیاورید",
     "payYourSttProvider": "آزادانه از omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.",
-    "freeMinutesMonth": "600 دقیقه رایگان/ماه شامل است. نامحدود با ",
+    "freeMinutesMonth": "300 دقیقه رایگان/ماه شامل است. نامحدود با ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "میزبان ضروری است",
     "validPortRequired": "پورت معتبر ضروری است",
@@ -5506,7 +5506,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 دقیقه حرفه‌ای + نامحدود روی‌دستگاه",
+    "basicPlanDescription": "300 دقیقه حرفه‌ای + نامحدود روی‌دستگاه",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesInfo": "300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
+    "premiumMinutesMonth": "300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "شما از سرویس رونویسی خودتان استفاده می‌کنید. همگام‌سازی این ضبط‌ها آن‌ها را روی سرورهای Omi رونویسی می‌کند و در سقف رونویسی پلن شما محاسبه می‌شوند.",
     "transcribeLaterTitle": "رونویسی در زمان دلخواه",
     "transcribeLaterDescription": "صدا را همین حالا ضبط کنید و به‌جای رونویسی زنده، هر وقت خواستید آن را رونویسی کنید. ضبط‌ها روی گوشی شما ذخیره می‌شوند و سپس با بارگذاری آن‌ها گفت‌وگوها ساخته می‌شوند.",
-    "transcribeLaterNote": "فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
+    "transcribeLaterNote": "با میکروفون گوشی و دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.",
     "transcribeLaterStorageFull": "فضای ذخیره‌سازی گوشی شما کم است، بنابراین ضبط متوقف شده است. کمی فضا خالی کنید یا ضبط‌هایتان را بارگذاری کنید تا به‌طور خودکار از سر گرفته شود.",
     "unmute": "باصدا کردن",
     "newRecording": "ضبط جدید",
@@ -10721,5 +10721,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "فضای ذخیره‌سازی دستگاه",
+    "deviceStoragePercentFull": "{percent}٪ پر",
+    "deviceStorageUsedOfTotal": "{used} از {total} استفاده‌شده",
+    "deviceStorageFree": "{free} آزاد",
+    "deviceStorageNearlyFull": "دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.",
+    "phoneMicOfflineFallbackMessage": "اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.",
+    "dataEncryptedBanner": "داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند."
 }

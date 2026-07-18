@@ -143,9 +143,13 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
     if (success) {
       SharedPreferencesUtil().permissionStoreRecordingsEnabled = true;
       setState(() => _hasPermission = true);
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.authorizationSuccessful)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.authorizationSuccessful)));
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToAuthorize)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToAuthorize)));
+      }
     }
   }
 
@@ -154,28 +158,34 @@ class _RecordingsStoragePermissionState extends State<RecordingsStoragePermissio
     final success = await setRecordingPermission(false);
     changeLoadingState();
     if (success) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.authorizationRevoked)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.authorizationRevoked)));
+      }
       setState(() {
         _hasPermission = false;
       });
       SharedPreferencesUtil().permissionStoreRecordingsEnabled = false;
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () => Navigator.pop(context),
-          () {
-            deletePermissionAndRecordings();
-            ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.recordingsDeleted)));
-            Navigator.pop(context);
-          },
-          context.l10n.permissionRevokedTitle,
-          context.l10n.permissionRevokedMessage,
-          okButtonText: context.l10n.yes,
-        ),
-      );
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () => Navigator.pop(context),
+            () {
+              deletePermissionAndRecordings();
+              ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.recordingsDeleted)));
+              Navigator.pop(context);
+            },
+            context.l10n.permissionRevokedTitle,
+            context.l10n.permissionRevokedMessage,
+            okButtonText: context.l10n.yes,
+          ),
+        );
+      }
     } else {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToRevoke)));
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(context.l10n.failedToRevoke)));
+      }
     }
   }
 }

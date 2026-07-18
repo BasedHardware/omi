@@ -16,6 +16,7 @@ import { AdapterRegistry } from "../src/runtime/adapter-registry.js";
 import { OmiArtifactStorage } from "../src/runtime/artifact-storage.js";
 import { AgentRuntimeKernel, StaleAdapterBindingError } from "../src/runtime/kernel.js";
 import { SqliteAgentStore } from "../src/runtime/sqlite-store.js";
+import { readSessionExecutionProfile } from "../src/runtime/session-execution-profile.js";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
 
@@ -52,6 +53,7 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
   failNextExecutionAsStale = false;
   deferOnlyPromptIncludes: string | undefined;
   nextArtifacts: AdapterArtifactReference[] | undefined;
+  nextText: string | undefined;
   writeFileOnExecute: { name: string; contents: string } | undefined;
   /** When set, FakeRuntimeAdapter reports this as the adapter-effective MCP set. */
   effectiveMcpServersOverride: Record<string, unknown>[] | null = null;
@@ -143,8 +145,10 @@ export class FakeRuntimeAdapter implements RuntimeAdapter {
     }
     const artifacts = this.nextArtifacts;
     this.nextArtifacts = undefined;
+    const text = this.nextText ?? `done-${context.attemptId}`;
+    this.nextText = undefined;
     return {
-      text: `done-${context.attemptId}`,
+      text,
       adapterSessionId: context.binding.adapterNativeSessionId,
       terminalStatus: "succeeded",
       inputTokens: 1,
@@ -209,7 +213,19 @@ export function createKernelHarness(
   const adapter = new FakeRuntimeAdapter(adapterId);
   const registry = new AdapterRegistry();
   registry.register(adapterId, () => adapter, maxWorkers);
-  const kernel = new AgentRuntimeKernel({ store, registry, artifactStorage, recoverRunInput });
+  const kernel = new AgentRuntimeKernel({
+    store,
+    registry,
+    artifactStorage,
+    recoverRunInput,
+    toolCapabilityProfileForSession: (sessionId) => {
+      const profile = readSessionExecutionProfile(store, sessionId);
+      const adapterId = ["pi-mono", "acp", "hermes", "openclaw"].includes(profile.adapterId)
+        ? profile.adapterId
+        : "acp";
+      return { ...profile, adapterId };
+    },
+  });
   return { store, adapter, kernel };
 }
 

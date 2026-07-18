@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter_test/flutter_test.dart';
 import 'package:omi/backend/http/api/conversations.dart';
 import 'package:omi/backend/preferences.dart';
@@ -33,6 +35,41 @@ void main() {
     expect(statusCalls, 1);
     expect(limiter.hasPersistedFairUseState, isFalse);
     expect(limiter.isLimited, isFalse);
+    provider.dispose();
+  });
+
+  test('provider waits for persisted WAL readiness before attaching startup recovery', () async {
+    SharedPreferences.setMockInitialValues({});
+    await SharedPreferencesUtil.init();
+    final readiness = Completer<void>();
+    final limiter = SyncRateLimiter.instance..clear();
+    final gate = SyncUploadGate(
+      limiter: limiter,
+      fairUseStatusLoader: () async => {'stage': 'none'},
+      uploader: (files, {onUploadProgress, conversationId, syncLane = SyncUploadLane.fresh}) async =>
+          UploadFilesResult.queued('unused'),
+    );
+    var startupWakes = 0;
+    final provider = SyncProvider(
+      walService: WalService(),
+      uploadGate: gate,
+      waitForWalReady: (_) => readiness.future,
+      startRecovery: () async {
+        startupWakes++;
+      },
+    );
+    var initialized = false;
+    unawaited(provider.initialized.then((_) => initialized = true));
+
+    await Future<void>.delayed(Duration.zero);
+    expect(initialized, isFalse);
+    expect(startupWakes, 0);
+
+    readiness.complete();
+    await provider.initialized;
+
+    expect(initialized, isTrue);
+    expect(startupWakes, 1);
     provider.dispose();
   });
 }

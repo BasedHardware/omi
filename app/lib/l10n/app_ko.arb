@@ -451,7 +451,7 @@
     "exportConfiguration": "구성 내보내기",
     "bringYourOwn": "직접 가져오기",
     "payYourSttProvider": "Omi를 자유롭게 사용하세요. STT 제공업체에 직접 비용을 지불하기만 하면 됩니다.",
-    "freeMinutesMonth": "월 600분 무료 포함. ",
+    "freeMinutesMonth": "월 300분 무료 포함. ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "호스트가 필요합니다",
     "validPortRequired": "유효한 포트가 필요합니다",
@@ -1444,7 +1444,7 @@
     "accessesAndTriggeredBy": "{accessDescription} 및 {triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "특정 데이터 액세스가 구성되지 않았습니다.",
-    "basicPlanDescription": "600 프리미엄 분 + 무제한 온디바이스",
+    "basicPlanDescription": "300 프리미엄 분 + 무제한 온디바이스",
     "minutes": "분",
     "omiHas": "Omi:",
     "premiumMinutesUsed": "프리미엄 분 사용됨.",
@@ -1900,7 +1900,7 @@
     "deviceMayWarmUp": "장시간 사용 시 기기가 뜨거워질 수 있습니다.",
     "speedAccuracyLower": "속도와 정확도가 클라우드 모델보다 낮을 수 있습니다.",
     "cloudProvider": "클라우드 제공자",
-    "premiumMinutesMonth": "월 600 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
+    "premiumMinutesMonth": "월 300 프리미엄 분. 온디바이스 탭은 무제한 무료 전사를 제공합니다. ",
     "viewUsage": "사용량 보기",
     "audioProcessedLocally": "오디오가 로컬에서 처리됩니다. 오프라인 작동, 더 프라이빗하지만 배터리 사용량이 더 많습니다.",
     "languageLabel": "언어",
@@ -2404,7 +2404,7 @@
     "noReviewsFound": "리뷰를 찾을 수 없습니다",
     "onDeviceIntensive": "온디바이스 음성 인식은 많은 컴퓨팅 자원을 사용합니다.",
     "onDeviceSlower": "이 기기에서는 온디바이스 음성 인식이 느릴 수 있습니다.",
-    "premiumMinutesInfo": "월 600분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
+    "premiumMinutesInfo": "월 300분의 프리미엄 사용 시간. 온디바이스 탭에서 무제한 무료 음성 인식을 제공합니다.",
     "redownload": "다시 다운로드",
     "reply": "답글",
     "replySentSuccessfully": "답글이 성공적으로 전송되었습니다",
@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "직접 설정한 전사 제공자를 사용 중입니다. 이 녹음을 동기화하면 Omi 서버에서 전사되며 요금제의 전사 한도에 포함됩니다.",
     "transcribeLaterTitle": "나중에 변환하기",
     "transcribeLaterDescription": "실시간 변환 대신 지금 녹음하고 필요할 때 텍스트로 변환하세요. 녹음은 휴대폰에 저장되며, 업로드하면 대화로 만들어집니다.",
-    "transcribeLaterNote": "현재는 Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.",
+    "transcribeLaterNote": "휴대폰 마이크, Omi 및 Limitless 기기에서 사용할 수 있습니다. 직접 업로드하기 전까지 오디오는 휴대폰에만 보관됩니다.",
     "transcribeLaterStorageFull": "휴대폰 저장 공간이 부족해 녹음이 일시 중지되었습니다. 공간을 확보하거나 녹음을 업로드하면 자동으로 다시 시작됩니다.",
     "unmute": "음소거 해제",
     "newRecording": "새 녹음",
@@ -3143,5 +3143,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "기기 저장 공간",
+    "deviceStoragePercentFull": "{percent}% 사용 중",
+    "deviceStorageUsedOfTotal": "{total} 중 {used} 사용",
+    "deviceStorageFree": "{free} 남음",
+    "deviceStorageNearlyFull": "기기가 거의 가득 찼습니다 — 동기화하여 공간을 확보하세요.",
+    "phoneMicOfflineFallbackMessage": "연결 없음 — 로컬에 녹음 중입니다. 다시 온라인 상태가 되면 텍스트로 변환됩니다.",
+    "dataEncryptedBanner": "귀하의 데이터는 기본적으로 강력한 암호화로 보호되며, 저장 및 사용 방식은 귀하가 관리합니다."
 }

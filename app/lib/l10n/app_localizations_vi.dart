@@ -9341,7 +9341,7 @@ class AppLocalizationsVi extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Hiện hoạt động với các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
+      'Hoạt động với micrô của điện thoại cùng các thiết bị Omi và Limitless. Âm thanh được giữ trên điện thoại của bạn cho đến khi bạn chọn tải lên.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9571,4 +9571,33 @@ class AppLocalizationsVi extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Lỗi khi kết nối với Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Bộ nhớ thiết bị';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'Đã đầy $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return 'Đã dùng $used trong $total';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return 'Còn trống $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Thiết bị gần đầy — đồng bộ để giải phóng dung lượng.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Không có kết nối — đang ghi cục bộ. Bản ghi sẽ được chép lại khi bạn trực tuyến trở lại.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Dữ liệu của bạn được bảo mật mặc định bằng mã hóa mạnh, và bạn kiểm soát cách nó được lưu trữ và sử dụng.';
 }
