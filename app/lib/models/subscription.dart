@@ -91,8 +91,8 @@ class Subscription {
       stripeSubscriptionId: generated.stripeSubscriptionId,
       currentPriceId: generated.currentPriceId,
       features: generated.features,
-      cancelAtPeriodEnd: generated.cancelAtPeriodEnd ?? false,
-      deprecated: generated.deprecated ?? false,
+      cancelAtPeriodEnd: generated.cancelAtPeriodEnd,
+      deprecated: generated.deprecated,
       deprecationMessage: generated.deprecationMessage,
       limits: PlanLimits.fromGenerated(generated.limits),
     );

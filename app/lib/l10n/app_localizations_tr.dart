@@ -9354,7 +9354,7 @@ class AppLocalizationsTr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Şimdilik Omi ve Limitless cihazlarıyla çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
+      'Telefonun mikrofonu ile Omi ve Limitless cihazlarında çalışır. Yüklemeyi seçene kadar ses telefonunda kalır.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9585,4 +9585,33 @@ class AppLocalizationsTr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta\'ya bağlanırken hata: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Cihaz depolama';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '%$percent dolu';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total alanın $used kısmı kullanıldı';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free boş';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Cihaz neredeyse dolu — yer açmak için eşitleyin.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Bağlantı yok — yerel olarak kaydediliyor. Tekrar çevrimiçi olduğunuzda yazıya dökülecek.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Verileriniz varsayılan olarak güçlü şifreleme ile korunur ve nasıl saklanıp kullanılacağını siz kontrol edersiniz.';
 }

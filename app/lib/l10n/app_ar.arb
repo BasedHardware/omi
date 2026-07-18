@@ -451,7 +451,7 @@
     "exportConfiguration": "تصدير التكوين",
     "bringYourOwn": "احضر الخاص بك",
     "payYourSttProvider": "استخدم omi بحرية. أنت تدفع فقط لموفر STT الخاص بك مباشرة.",
-    "freeMinutesMonth": "600 دقيقة مجانية شهرياً متضمنة. غير محدود مع ",
+    "freeMinutesMonth": "300 دقيقة مجانية شهرياً متضمنة. غير محدود مع ",
     "omiUnlimited": "Omi غير محدود",
     "hostRequired": "المضيف مطلوب",
     "validPortRequired": "المنفذ الصحيح مطلوب",
@@ -1460,7 +1460,7 @@
     "accessesAndTriggeredBy": "{accessDescription} و{triggerDescription}.",
     "isTriggeredBy": "{triggerDescription}.",
     "noSpecificDataAccessConfigured": "لم يتم تكوين وصول محدد للبيانات.",
-    "basicPlanDescription": "600 دقيقة مميزة + غير محدود على الجهاز",
+    "basicPlanDescription": "300 دقيقة مميزة + غير محدود على الجهاز",
     "minutes": "دقائق",
     "omiHas": "لدى Omi:",
     "premiumMinutesUsed": "تم استخدام الدقائق المميزة.",
@@ -1863,7 +1863,7 @@
     "deviceMayWarmUp": "قد يسخن الجهاز أثناء الاستخدام المطول.",
     "speedAccuracyLower": "قد تكون السرعة والدقة أقل من النماذج السحابية.",
     "cloudProvider": "مزود سحابي",
-    "premiumMinutesInfo": "600 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود.",
+    "premiumMinutesInfo": "300 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود.",
     "viewUsage": "عرض الاستخدام",
     "localProcessingInfo": "تتم معالجة الصوت محلياً. يعمل دون اتصال، أكثر خصوصية، لكنه يستهلك بطارية أكثر.",
     "model": "النموذج",
@@ -1887,7 +1887,7 @@
     "transcriptionSlowerOnDevice": "قد يكون النسخ على الجهاز أبطأ على هذا الجهاز.",
     "computationallyIntensive": "النسخ على الجهاز يستهلك الكثير من الموارد الحسابية.",
     "batteryDrainSignificantly": "سيزداد استنزاف البطارية بشكل كبير.",
-    "premiumMinutesMonth": "600 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود. ",
+    "premiumMinutesMonth": "300 دقيقة مميزة/شهر. علامة التبويب على الجهاز توفر نسخاً مجانياً غير محدود. ",
     "audioProcessedLocally": "تتم معالجة الصوت محلياً. يعمل بدون اتصال، أكثر خصوصية، لكنه يستهلك المزيد من البطارية.",
     "languageLabel": "اللغة",
     "modelLabel": "النموذج",
@@ -3022,7 +3022,7 @@
     "syncCustomSttWarningMessage": "أنت تستخدم مزوّد النسخ الخاص بك. مزامنة هذه التسجيلات تنسخها على خوادم Omi بدلاً من ذلك، وتُحتسب ضمن حد النسخ في باقتك.",
     "transcribeLaterTitle": "التفريغ النصي لاحقًا",
     "transcribeLaterDescription": "سجّل الصوت الآن وفرّغه نصيًا عند الطلب بدلًا من التفريغ المباشر. تُحفظ التسجيلات على هاتفك، ثم ترفعها لإنشاء المحادثات.",
-    "transcribeLaterNote": "يعمل مع أجهزة Omi وLimitless في الوقت الحالي. يبقى الصوت على هاتفك إلى أن تختار رفعه.",
+    "transcribeLaterNote": "يعمل مع ميكروفون الهاتف وأجهزة Omi وLimitless. يبقى الصوت على هاتفك إلى أن تختار رفعه.",
     "transcribeLaterStorageFull": "مساحة التخزين في هاتفك منخفضة، لذا توقّف التسجيل مؤقتًا. أفرغ بعض المساحة أو ارفع تسجيلاتك، وسيُستأنف تلقائيًا.",
     "unmute": "إلغاء الكتم",
     "newRecording": "تسجيل جديد",
@@ -3110,5 +3110,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "مساحة تخزين الجهاز",
+    "deviceStoragePercentFull": "ممتلئ {percent}%",
+    "deviceStorageUsedOfTotal": "{used} من {total} مستخدمة",
+    "deviceStorageFree": "{free} متاحة",
+    "deviceStorageNearlyFull": "الجهاز ممتلئ تقريبًا — قم بالمزامنة لتحرير مساحة.",
+    "phoneMicOfflineFallbackMessage": "لا يوجد اتصال — يتم التسجيل محليًا. سيُفرَّغ نصيًا عند عودة الاتصال بالإنترنت.",
+    "dataEncryptedBanner": "بياناتك محمية افتراضيًا بتشفير قوي، وتظل أنت المتحكم في كيفية تخزينها واستخدامها."
 }

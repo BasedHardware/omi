@@ -9370,7 +9370,7 @@ class AppLocalizationsSl extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Zaenkrat deluje z napravami Omi in Limitless. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.';
+      'Deluje z mikrofonom telefona ter napravami Omi in Limitless. Zvok ostane v vašem telefonu, dokler ga ne naložite sami.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9601,4 +9601,33 @@ class AppLocalizationsSl extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Napaka pri povezovanju z Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Shramba naprave';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% zasedeno';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used od $total porabljeno';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free prosto';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Naprava je skoraj polna — sinhronizirajte za sprostitev prostora.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Ni povezave – snemanje poteka lokalno. Prepis bo opravljen, ko boste spet povezani.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Vaši podatki so privzeto zaščiteni z močnim šifriranjem, vi pa nadzorujete, kako so shranjeni in uporabljeni.';
 }

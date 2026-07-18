@@ -62,6 +62,8 @@ DEFAULT_ALLOWLIST = BACKEND_DIR / "tests" / ".import_time_side_effects_legacy"
 SIDE_EFFECT_CTORS: list[tuple[str, str]] = [
     ("openai", "OpenAI"),
     ("openai", "AsyncOpenAI"),
+    ("langchain_openai", "ChatOpenAI"),
+    ("langchain_openai", "OpenAIEmbeddings"),
     ("anthropic", "Anthropic"),
     ("anthropic", "AsyncAnthropic"),
     ("deepgram", "DeepgramClient"),

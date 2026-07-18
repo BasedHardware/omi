@@ -16,6 +16,7 @@ from routers.updates import (
     _get_sparkle_zip_download_url,
     _parse_changelog_to_changes,
     _parse_desktop_version,
+    _preview_download_landing_html,
     _xml_attr,
     router as updates_router,
 )
@@ -24,6 +25,29 @@ from database.desktop_update_policy import get_desktop_update_policy
 # Minimal test app mounting only the updates router
 _test_app = FastAPI()
 _test_app.include_router(updates_router)
+
+
+PREVIEW_SLUG = "new-onboarding"
+PREVIEW_SHA = "a" * 40
+
+
+def _preview_manifest(**overrides):
+    manifest = {
+        "slug": PREVIEW_SLUG,
+        "source_sha": PREVIEW_SHA,
+        "dmg_url": f"https://storage.googleapis.com/omi_macos_updates/previews/{PREVIEW_SLUG}/{PREVIEW_SHA}/Omi-Preview.dmg",
+        "dmg_sha256": "b" * 64,
+        "app_name": "Omi Preview – new-onboarding",
+        "bundle_id": "com.omi.preview.p04a26d265d",
+        "url_scheme": "omi-preview-p04a26d265d",
+        "built_at": "2026-07-15T12:00:00Z",
+        "signer": "Developer ID Application: Omi, Inc.",
+        "notarization": "stapled",
+        "notes": "Try the redesigned onboarding.",
+        "backend_url": "https://api.omi.me",
+    }
+    manifest.update(overrides)
+    return manifest
 
 
 # --- _parse_desktop_version ---
@@ -878,6 +902,27 @@ class TestDesktopUpdatePolicyEndpoint:
             resp = await client.get("/v2/desktop/update-policy?platform=ios")
         assert resp.status_code == 422
 
+    @pytest.mark.asyncio
+    async def test_firestore_failure_returns_inactive_policy_and_records_fallback(self):
+        with (
+            patch("routers.updates.get_desktop_update_policy", side_effect=RuntimeError("unavailable")),
+            patch("routers.updates.record_fallback") as fallback,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                resp = await client.get("/v2/desktop/update-policy?platform=macos&current_build=11400")
+
+        assert resp.status_code == 200
+        assert resp.json()["active"] is False
+        assert resp.json()["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+        fallback.assert_called_once_with(
+            component="other",
+            from_mode="desktop_update_policy",
+            to_mode="desktop_update_appcast",
+            reason="other",
+            outcome="recovered",
+            log=ANY,
+        )
+
 
 class TestDesktopUpdatePolicyDatabase:
     def _mock_doc(self, exists=True, data=None):
@@ -894,6 +939,22 @@ class TestDesktopUpdatePolicyDatabase:
 
         assert policy["active"] is False
         assert policy["severity"] == "none"
+        assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
+
+    def test_invalid_policy_download_url_uses_stable_manual_download_path(self):
+        doc = self._mock_doc(
+            data={
+                "active": True,
+                "severity": "required",
+                "download_url": "file:///Applications/Omi.app",
+            }
+        )
+        mock_db = MagicMock()
+        mock_db.collection.return_value.document.return_value.get.return_value = doc
+
+        policy = get_desktop_update_policy(current_build=11400, firestore_client=mock_db)
+
+        assert policy["active"] is True
         assert policy["download_url"].endswith("/v2/desktop/download/latest?channel=stable")
 
     def test_required_policy_applies_through_maximum_build(self):
@@ -942,3 +1003,91 @@ class TestDesktopUpdatePolicyDatabase:
         policy = get_desktop_update_policy(current_build=11400, platform="macos", firestore_client=mock_db)
 
         assert policy["active"] is False
+
+
+class TestDesktopPreviewEndpoints:
+    def test_landing_page_escapes_publisher_supplied_text(self):
+        html = _preview_download_landing_html(
+            _preview_manifest(
+                app_name='<img src=x onerror="alert(1)">',
+                notes='<script>alert("xss")</script>',
+            )
+        )
+
+        assert '<script>alert("xss")</script>' not in html
+        assert "&lt;script&gt;alert(&quot;xss&quot;)&lt;/script&gt;" in html
+        assert "onerror=&quot;alert(1)&quot;" in html
+
+    @pytest.mark.asyncio
+    async def test_current_preview_landing_uses_only_preview_registry(self):
+        preview = {"pointer": {"generation": 1}, "manifest": _preview_manifest()}
+        with patch("routers.updates.get_current_preview", return_value=preview) as get_current:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.get(f"/v2/desktop/previews/{PREVIEW_SLUG}")
+
+        assert response.status_code == 200
+        assert PREVIEW_SHA in response.text
+        assert "Omi-Preview.dmg" in response.text
+        assert response.headers["cache-control"] == "no-store"
+        get_current.assert_called_once_with(PREVIEW_SLUG)
+
+    @pytest.mark.asyncio
+    async def test_immutable_preview_landing_uses_slug_and_full_sha(self):
+        with patch("routers.updates.get_preview_manifest", return_value=_preview_manifest()) as get_manifest:
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                response = await client.get(f"/v2/desktop/previews/{PREVIEW_SLUG}/{PREVIEW_SHA}")
+
+        assert response.status_code == 200
+        assert PREVIEW_SHA in response.text
+        get_manifest.assert_called_once_with(PREVIEW_SLUG, PREVIEW_SHA)
+
+    @pytest.mark.asyncio
+    async def test_preview_publish_rejects_admin_key_and_accepts_preview_only_key(self):
+        payload = _preview_manifest(expected_generation=0)
+        published = {"manifest": _preview_manifest(), "pointer": {"generation": 1}}
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "admin-key", "DESKTOP_PREVIEW_PUBLISH_KEY": "preview-key"}),
+            patch("routers.updates.publish_preview", return_value=published) as publish,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                rejected = await client.post(
+                    "/v2/desktop/previews/publish",
+                    headers={"secret-key": "admin-key"},
+                    json=payload,
+                )
+                accepted = await client.post(
+                    "/v2/desktop/previews/publish",
+                    headers={"secret-key": "preview-key"},
+                    json=payload,
+                )
+
+        assert rejected.status_code == 403
+        assert accepted.status_code == 201
+        assert accepted.json()["pointer"]["generation"] == 1
+        publish.assert_called_once_with(_preview_manifest(), expected_generation=0)
+
+    @pytest.mark.asyncio
+    async def test_preview_delist_requires_preview_key_and_current_generation(self):
+        delisted = {"slug": PREVIEW_SLUG, "deleted": True, "generation": 2}
+        with (
+            patch.dict("os.environ", {"ADMIN_KEY": "admin-key", "DESKTOP_PREVIEW_PUBLISH_KEY": "preview-key"}),
+            patch("routers.updates.delist_preview", return_value=delisted) as delist,
+        ):
+            async with AsyncClient(transport=ASGITransport(app=_test_app), base_url="http://test") as client:
+                rejected = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "admin-key"},
+                    json={"expected_generation": 2},
+                )
+                accepted = await client.request(
+                    "DELETE",
+                    f"/v2/desktop/previews/{PREVIEW_SLUG}",
+                    headers={"secret-key": "preview-key"},
+                    json={"expected_generation": 2},
+                )
+
+        assert rejected.status_code == 403
+        assert accepted.status_code == 200
+        assert accepted.json() == {"success": True, **delisted}
+        delist.assert_called_once_with(PREVIEW_SLUG, expected_generation=2)

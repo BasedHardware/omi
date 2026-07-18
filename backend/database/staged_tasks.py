@@ -367,8 +367,10 @@ def migrate_ai_tasks(uid: str) -> dict:
     if len(ai_tasks) <= 3:
         return {'moved': 0, 'kept': len(ai_tasks)}
 
-    # Sort by relevance_score ascending (best first)
-    ai_tasks.sort(key=lambda x: x.get('relevance_score') or 999)
+    # Sort by relevance_score ascending (best first). relevance_score is an int in
+    # 0-1000 where 0 is the most relevant, so only a genuinely missing (None) score
+    # should sort last: `or 999` would also demote a valid best score of 0.
+    ai_tasks.sort(key=lambda x: 999 if x.get('relevance_score') is None else x.get('relevance_score'))
     keep = ai_tasks[:3]
     to_move = ai_tasks[3:]
 

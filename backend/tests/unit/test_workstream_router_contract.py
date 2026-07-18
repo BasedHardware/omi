@@ -8,12 +8,15 @@ from types import SimpleNamespace
 
 import pytest
 from fastapi import FastAPI, HTTPException
+from starlette.requests import Request
 
 import routers.goals as goals_router
 import routers.task_recommendations as task_recommendations_router
 import routers.workstreams as workstreams_router
 from models.goal import GoalCreate, GoalFocusRequest, GoalUpdate
+from models.task_recommendation import NormalizedContextSnapshot, OpenLoopSnapshot, SnapshotReceipt
 from models.workstream import TaskOriginWorkIntent, WorkIntentReceipt, WorkstreamUpdate
+from config.what_matters_now_smoke_fixture import WHAT_MATTERS_NOW_SMOKE_UID
 
 
 def test_openapi_exposes_intent_and_thread_resources_without_manual_workstream_create():
@@ -70,6 +73,173 @@ def test_task_intelligence_mutations_reject_stale_account_generation(monkeypatch
 
     assert error.value.status_code == 409
     assert error.value.detail == 'account generation mismatch'
+
+
+def _device_request(*, device_hash: str = 'abcdef12') -> Request:
+    return Request(
+        {
+            'type': 'http',
+            'method': 'GET',
+            'scheme': 'https',
+            'path': '/v1/what-matters-now',
+            'query_string': b'',
+            'headers': [(b'x-app-platform', b'macos'), (b'x-device-id-hash', device_hash.encode())],
+            'server': ('testserver', 443),
+            'client': ('testclient', 1234),
+        }
+    )
+
+
+@pytest.mark.parametrize('requested_device_id', ['abcdef12', 'macos_abcdef12'])
+def test_task_intelligence_device_scope_accepts_only_authenticated_legacy_aliases(requested_device_id):
+    assert (
+        task_recommendations_router._bound_device_id(_device_request(), requested_device_id, required=False)
+        == 'macos_abcdef12'
+    )
+
+
+def test_task_intelligence_device_scope_rejects_another_device():
+    with pytest.raises(HTTPException) as error:
+        task_recommendations_router._bound_device_id(_device_request(), 'macos_deadbeef', required=False)
+
+    assert error.value.status_code == 403
+    assert error.value.detail == 'Device scope mismatch'
+
+
+@pytest.mark.parametrize(
+    ('route_name', 'snapshot_factory'),
+    [
+        (
+            'replace_context_snapshot',
+            lambda now: NormalizedContextSnapshot(
+                device_id='abcdef12',
+                snapshot_id='snapshot-1',
+                generated_at=now,
+                expires_at=now.replace(hour=now.hour + 1),
+            ),
+        ),
+        (
+            'replace_open_loop_snapshot',
+            lambda now: OpenLoopSnapshot(
+                device_id='abcdef12',
+                owner='u1',
+                runtime_id='runtime-1',
+                workstream_id='workstream-1',
+                conversation_id='conversation-1',
+                context_packet_version='packet-1',
+                generated_at=now,
+                expires_at=now.replace(hour=now.hour + 1),
+            ),
+        ),
+    ],
+)
+def test_task_intelligence_snapshot_writes_canonicalize_accepted_legacy_device_id(
+    monkeypatch, route_name, snapshot_factory
+):
+    now = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    captured = {}
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda _uid: SimpleNamespace(intelligence_evaluation_enabled=True, account_generation=8),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'ingest_context_snapshot' if route_name == 'replace_context_snapshot' else 'ingest_open_loop_snapshot',
+        lambda _uid, snapshot, **_kwargs: captured.setdefault('device_id', snapshot.device_id)
+        or SnapshotReceipt(snapshot_id='snapshot-1', replaced=True, expires_at=now),
+    )
+
+    getattr(task_recommendations_router, route_name)(
+        request=snapshot_factory(now),
+        request_context=_device_request(),
+        idempotency_key='snapshot-1',
+        account_generation=8,
+        uid='u1',
+    )
+
+    assert captured['device_id'] == 'macos_abcdef12'
+
+
+@pytest.mark.parametrize('surface', ['get', 'evaluate', 'debug'])
+def test_task_intelligence_reads_fail_closed_when_generation_changes_during_projection_read(monkeypatch, surface):
+    generations = iter([3, 4])
+    projection_reads = []
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda _uid: SimpleNamespace(
+            intelligence_product_enabled=True,
+            account_generation=next(generations),
+        ),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *args, **kwargs: None)
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'evaluate',
+        lambda *args, **kwargs: projection_reads.append('evaluate') or object(),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations,
+        'get_debug_projection',
+        lambda *args, **kwargs: projection_reads.append('debug') or object(),
+    )
+
+    with pytest.raises(HTTPException) as error:
+        if surface == 'get':
+            task_recommendations_router.get_what_matters_now(
+                request_context=object(),
+                device_id=None,
+                uid='u1',
+            )
+        elif surface == 'evaluate':
+            task_recommendations_router.evaluate_what_matters_now(
+                request=task_recommendations_router.EvaluationRequest(),
+                request_context=object(),
+                uid='u1',
+            )
+        else:
+            task_recommendations_router.get_evaluation_debug_projection(
+                request_context=object(),
+                evaluation_id='evaluation-old-generation',
+                x_omi_debug=True,
+                device_id=None,
+                uid='u1',
+            )
+
+    assert error.value.status_code == 404
+    assert projection_reads == ['debug' if surface == 'debug' else 'evaluate']
+
+
+def test_what_matters_now_initializes_the_dev_smoke_fixture_before_rollout(monkeypatch):
+    calls = []
+    sentinel_projection = object()
+    monkeypatch.setattr(
+        task_recommendations_router,
+        'task_control_db',
+        SimpleNamespace(ensure_development_smoke_fixture=lambda uid: calls.append(('ensure', uid)) or True),
+    )
+    monkeypatch.setattr(
+        task_recommendations_router,
+        '_rollout',
+        lambda uid: calls.append(('rollout', uid))
+        or SimpleNamespace(intelligence_product_enabled=True, account_generation=0),
+    )
+    monkeypatch.setattr(task_recommendations_router, '_bound_device_id', lambda *_args, **_kwargs: None)
+    monkeypatch.setattr(
+        task_recommendations_router.recommendations, 'evaluate', lambda *_args, **_kwargs: sentinel_projection
+    )
+
+    result = task_recommendations_router.get_what_matters_now(
+        request_context=object(), device_id=None, uid=WHAT_MATTERS_NOW_SMOKE_UID
+    )
+
+    assert result is sentinel_projection
+    assert calls == [
+        ('ensure', WHAT_MATTERS_NOW_SMOKE_UID),
+        ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
+        ('rollout', WHAT_MATTERS_NOW_SMOKE_UID),
+    ]
 
 
 def test_qualitative_goal_create_forwards_canonical_shape_without_numeric_defaults(monkeypatch):

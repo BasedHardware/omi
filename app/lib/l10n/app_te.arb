@@ -1483,7 +1483,7 @@
     "exportConfiguration": "ఆకృతిని ఎగుమతి చేయండి",
     "bringYourOwn": "మీ స్వంతమైనవాటిని తీసుకువెళ్లండి",
     "payYourSttProvider": "Omi ను స్వేచ్ఛగా ఉపయోగించండి. మీరు మీ STT ప్రదాతకు నేరుగా చెల్లించండి.",
-    "freeMinutesMonth": "600 ఉచిత నిమిషాలు/నెల చేర్చబడ్డాయి. అসীమితమైన ",
+    "freeMinutesMonth": "300 ఉచిత నిమిషాలు/నెల చేర్చబడ్డాయి. అসীమితమైన ",
     "omiUnlimited": "Omi అసీమితం",
     "hostRequired": "హోస్ట్ అవసరం",
     "validPortRequired": "చెల్లుబాటు అయ్యే పోర్ట్ అవసరం",
@@ -5506,7 +5506,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 ప్రీమియం నిమిషాలు + ఆన్-డివైస్‌లో అన్‌లిమిటెడ్",
+    "basicPlanDescription": "300 ప్రీమియం నిమిషాలు + ఆన్-డివైస్‌లో అన్‌లిమిటెడ్",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7281,7 +7281,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "నెలకు 600 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
+    "premiumMinutesInfo": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7392,7 +7392,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "నెలకు 600 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
+    "premiumMinutesMonth": "నెలకు 300 ప్రిమియం నిమిషాలు. ఆన్-డివైస్ ట్యాబ్ అపరిమిత ఉచిత ట్రాన్‌స్క్రిప్షన్ అందిస్తుంది. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -10633,7 +10633,7 @@
     "syncCustomSttWarningMessage": "మీరు మీ సొంత ట్రాన్స్‌క్రిప్షన్ ప్రొవైడర్‌ను ఉపయోగిస్తున్నారు. ఈ రికార్డింగ్‌లను సింక్ చేస్తే అవి Omi సర్వర్‌లలో ట్రాన్స్‌క్రైబ్ చేయబడతాయి మరియు మీ ప్లాన్ ట్రాన్స్‌క్రిప్షన్ పరిమితిలో లెక్కించబడతాయి.",
     "transcribeLaterTitle": "తర్వాత ట్రాన్‌స్క్రైబ్ చేయండి",
     "transcribeLaterDescription": "లైవ్‌గా కాకుండా ఆడియోను ఇప్పుడు రికార్డ్ చేసి, మీకు కావలసినప్పుడు ట్రాన్‌స్క్రైబ్ చేయండి. రికార్డింగ్‌లు మీ ఫోన్‌లోనే సేవ్ చేయబడతాయి, తర్వాత వాటిని అప్‌లోడ్ చేయడం ద్వారా సంభాషణలను రూపొందించవచ్చు.",
-    "transcribeLaterNote": "ప్రస్తుతానికి Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
+    "transcribeLaterNote": "ఫోన్ మైక్రోఫోన్, Omi మరియు Limitless పరికరాలతో పనిచేస్తుంది. మీరు అప్‌లోడ్ చేయాలని ఎంచుకునే వరకు ఆడియో మీ ఫోన్‌లోనే ఉంటుంది.",
     "transcribeLaterStorageFull": "మీ ఫోన్‌లో నిల్వ స్థలం తక్కువగా ఉంది, అందుకే రికార్డింగ్ నిలిపివేయబడింది. స్థలాన్ని ఖాళీ చేయండి లేదా మీ రికార్డింగ్‌లను అప్‌లోడ్ చేయండి, ఆ తర్వాత అది దానంతటదే మళ్లీ ప్రారంభమవుతుంది.",
     "unmute": "అన్‌మ్యూట్ చేయి",
     "newRecording": "కొత్త రికార్డింగ్",
@@ -10721,5 +10721,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "పరికర నిల్వ",
+    "deviceStoragePercentFull": "{percent}% నిండింది",
+    "deviceStorageUsedOfTotal": "{total} లో {used} ఉపయోగించబడింది",
+    "deviceStorageFree": "{free} ఖాళీ",
+    "deviceStorageNearlyFull": "పరికరం దాదాపు నిండిపోయింది — స్థలాన్ని ఖాళీ చేయడానికి సింక్ చేయండి.",
+    "phoneMicOfflineFallbackMessage": "కనెక్షన్ లేదు — స్థానికంగా రికార్డ్ చేయబడుతోంది. మీరు మళ్లీ ఆన్‌లైన్‌కి వచ్చినప్పుడు దీన్ని ట్రాన్స్‌క్రైబ్ చేయబడుతుంది.",
+    "dataEncryptedBanner": "మీ డేటా డిఫాల్ట్‌గా బలమైన ఎన్‌క్రిప్షన్‌తో సురక్షితం చేయబడుతుంది, మరియు అది ఎలా నిల్వ చేయబడుతుందో మరియు ఉపయోగించబడుతుందో మీరు నియంత్రిస్తారు."
 }

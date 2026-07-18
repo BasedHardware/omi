@@ -7,9 +7,9 @@ from typing import Any, Optional, cast
 
 from google.cloud import firestore
 from google.cloud.firestore_v1 import FieldFilter
-
 import database.goals as goals_db
 from database._client import get_firestore_client
+from database.read_boundary import parse_snapshot_or_none, parse_snapshot_strict, parse_snapshots
 from models.action_item import ActionItemResponse, TaskOwner, TaskPriority, TaskStatus
 from models.candidate import CandidateRecord, CandidateResolutionReceipt, CandidateStatus, CandidateSubjectKind
 from models.goal import GoalResponse, GoalStatus
@@ -79,6 +79,12 @@ def _stable_id(prefix: str, *parts: object) -> str:
 def _snapshot_dict(snapshot: Any) -> dict[str, Any]:
     payload = snapshot.to_dict()
     return cast(dict[str, Any], payload) if isinstance(payload, dict) else {}
+
+
+def _task_responses_from_snapshots(snapshots: Any, *, context: str) -> list[ActionItemResponse]:
+    del context  # The shared boundary logs a structural summary and document path instead.
+    active_snapshots = (snapshot for snapshot in snapshots if not _snapshot_dict(snapshot).get('deleted'))
+    return parse_snapshots(ActionItemResponse, active_snapshots, document_id_field='id')
 
 
 def _user_ref(uid: str, *, firestore_client: Any = None):
@@ -182,7 +188,7 @@ def _finish_mutation(
 def _validate_control(snapshot: Any, *, account_generation: int) -> None:
     control = TaskWorkflowControl()
     if snapshot.exists:
-        control = TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+        control = parse_snapshot_strict(TaskWorkflowControl, snapshot)
     if control.account_generation != account_generation:
         raise WorkstreamGenerationMismatchError('account generation mismatch')
     if control.workflow_mode not in {TaskWorkflowMode.write, TaskWorkflowMode.read}:
@@ -195,10 +201,14 @@ def _assert_workstream_generation(snapshot: Any, *, account_generation: int) -> 
         raise WorkstreamGenerationMismatchError('workstream account generation mismatch')
 
 
-def _workstream_from_snapshot(snapshot: Any) -> Workstream:
+def _workstream_payload(snapshot: Any) -> dict[str, Any]:
     payload = _snapshot_dict(snapshot)
     payload.pop('account_generation', None)
-    return Workstream.model_validate(payload)
+    return payload
+
+
+def _workstream_from_snapshot(snapshot: Any) -> Workstream:
+    return parse_snapshot_strict(Workstream, snapshot, payload_from_snapshot=_workstream_payload)
 
 
 def _task_storage(
@@ -325,7 +335,7 @@ def get_workstream(
     payload = _snapshot_dict(snapshot)
     if account_generation is not None and payload.get('account_generation', 0) != account_generation:
         return None
-    return _workstream_from_snapshot(snapshot)
+    return parse_snapshot_or_none(Workstream, snapshot, payload_from_snapshot=_workstream_payload)
 
 
 def get_workstream_goal_id(uid: str, workstream_id: str, *, firestore_client: Any = None) -> Optional[str]:
@@ -339,7 +349,7 @@ def get_task_workflow_control(uid: str, *, firestore_client: Any = None) -> Task
     snapshot = _control_ref(uid, firestore_client=firestore_client).get()
     if not snapshot.exists:
         return TaskWorkflowControl()
-    return TaskWorkflowControl.model_validate(_snapshot_dict(snapshot))
+    return parse_snapshot_strict(TaskWorkflowControl, snapshot)
 
 
 def list_open_workstreams(
@@ -360,7 +370,7 @@ def list_open_workstreams(
     snapshots = list(query.stream())
     if account_generation == 0:
         snapshots = [snapshot for snapshot in snapshots if _snapshot_dict(snapshot).get('account_generation', 0) == 0]
-    records = [_workstream_from_snapshot(snapshot) for snapshot in snapshots]
+    records = parse_snapshots(Workstream, snapshots, payload_from_snapshot=_workstream_payload)
     records.sort(key=lambda record: record.updated_at, reverse=True)
     return records
 
@@ -379,7 +389,7 @@ def list_workstreams_for_goal(
         .where(filter=FieldFilter('goal_id', '==', goal_id))
         .limit(limit)
     )
-    records = [_workstream_from_snapshot(snapshot) for snapshot in query.stream()]
+    records = parse_snapshots(Workstream, query.stream(), payload_from_snapshot=_workstream_payload)
     if not include_archived:
         records = [record for record in records if record.status != WorkstreamStatus.archived]
     records.sort(key=lambda record: record.updated_at, reverse=True)
@@ -460,7 +470,7 @@ def append_workstream_event(
         _assert_workstream_generation(workstream_snapshot, account_generation=account_generation)
         existing = event_ref.get(transaction=write_transaction)
         if existing.exists:
-            stored = WorkstreamEvent.model_validate(_snapshot_dict(existing))
+            stored = parse_snapshot_strict(WorkstreamEvent, existing)
             stored_proposal = WorkstreamEventCreate(
                 kind=stored.kind,
                 summary=stored.summary,
@@ -509,7 +519,7 @@ def list_workstream_events(
         .order_by('sequence', direction=firestore.Query.ASCENDING)
         .limit(limit)
     )
-    return [WorkstreamEvent.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    return parse_snapshots(WorkstreamEvent, query.stream())
 
 
 def create_artifact_descriptor(
@@ -557,7 +567,7 @@ def create_artifact_descriptor(
             created_at=now,
         )
         if existing.exists:
-            stored = ArtifactDescriptor.model_validate(_snapshot_dict(existing))
+            stored = parse_snapshot_strict(ArtifactDescriptor, existing)
             proposal_fields = set(ArtifactDescriptorCreate.model_fields)
             if stored.model_dump(mode='python', include=proposal_fields) != proposal.model_dump(mode='python'):
                 raise WorkstreamConflictError('artifact version already exists with different content')
@@ -581,7 +591,7 @@ def create_artifact_descriptor(
             superseded_snapshot = superseded_ref.get(transaction=write_transaction)
             if not superseded_snapshot.exists:
                 raise WorkstreamConflictError('artifact head points to a missing descriptor')
-            superseded = ArtifactDescriptor.model_validate(_snapshot_dict(superseded_snapshot))
+            superseded = parse_snapshot_strict(ArtifactDescriptor, superseded_snapshot)
             if superseded.logical_key != proposal.logical_key or superseded.status == ArtifactStatus.superseded:
                 raise WorkstreamConflictError('artifact head is not a live version of this logical artifact')
         elif proposal.version != 1 or proposal.supersedes_artifact_id is not None:
@@ -679,7 +689,7 @@ def transition_artifact_status(
         artifact_snapshot = artifact_ref.get(transaction=write_transaction)
         if not artifact_snapshot.exists:
             raise WorkstreamNotFoundError(artifact_id)
-        artifact = ArtifactDescriptor.model_validate(_snapshot_dict(artifact_snapshot))
+        artifact = parse_snapshot_strict(ArtifactDescriptor, artifact_snapshot)
         if artifact.status == request.status:
             _finish_mutation(
                 write_transaction,
@@ -737,7 +747,7 @@ def list_artifact_descriptors(
         .order_by('created_at', direction=firestore.Query.DESCENDING)
         .limit(limit)
     )
-    return [ArtifactDescriptor.model_validate(_snapshot_dict(snapshot)) for snapshot in query.stream()]
+    return parse_snapshots(ArtifactDescriptor, query.stream())
 
 
 def upsert_continuation_checkpoint(
@@ -778,7 +788,7 @@ def upsert_continuation_checkpoint(
             raise WorkstreamConflictError('checkpoint cannot advance beyond the workstream journal')
         checkpoint_snapshot = checkpoint_ref.get(transaction=write_transaction)
         if checkpoint_snapshot.exists:
-            existing = ContinuationCheckpoint.model_validate(_snapshot_dict(checkpoint_snapshot))
+            existing = parse_snapshot_strict(ContinuationCheckpoint, checkpoint_snapshot)
             if checkpoint.last_event_sequence < existing.last_event_sequence:
                 raise WorkstreamConflictError('checkpoint sequence cannot move backwards')
             if checkpoint.last_event_sequence == existing.last_event_sequence:
@@ -827,7 +837,7 @@ def list_continuation_checkpoints(
         .collection(CHECKPOINTS_COLLECTION)
         .stream()
     )
-    return [ContinuationCheckpoint.model_validate(_snapshot_dict(snapshot)) for snapshot in snapshots]
+    return parse_snapshots(ContinuationCheckpoint, snapshots)
 
 
 def resolve_workstream_candidate(
@@ -855,7 +865,7 @@ def resolve_workstream_candidate(
         candidate_snapshot = candidate_ref.get(transaction=write_transaction)
         if not candidate_snapshot.exists:
             raise WorkstreamNotFoundError(candidate.candidate_id)
-        stored_candidate = CandidateRecord.from_storage(_snapshot_dict(candidate_snapshot))
+        stored_candidate = parse_snapshot_strict(CandidateRecord, candidate_snapshot)
         if stored_candidate.account_generation != account_generation:
             raise WorkstreamGenerationMismatchError('Candidate account generation mismatch')
         if stored_candidate.status == CandidateStatus.accepted:
@@ -1336,13 +1346,7 @@ def get_goal_detail(uid: str, goal_id: str, *, firestore_client: Any = None) -> 
     task_snapshots = (
         user_ref.collection(ACTION_ITEMS_COLLECTION).where(filter=FieldFilter('goal_id', '==', goal_id)).stream()
     )
-    tasks: list[ActionItemResponse] = []
-    for snapshot in task_snapshots:
-        payload = _snapshot_dict(snapshot)
-        if payload.get('deleted'):
-            continue
-        payload.setdefault('id', snapshot.id)
-        tasks.append(ActionItemResponse.model_validate(payload))
+    tasks = _task_responses_from_snapshots(task_snapshots, context='goal_detail')
     return GoalDetailProjection(
         goal=GoalResponse.model_validate(goals_db.ensure_released_goal_aliases(goal)),
         active_threads=list_workstreams_for_goal(uid, goal_id, firestore_client=client),
@@ -1367,13 +1371,7 @@ def get_workstream_detail(
         .where(filter=FieldFilter('workstream_id', '==', workstream_id))
         .stream()
     )
-    tasks: list[ActionItemResponse] = []
-    for snapshot in task_snapshots:
-        payload = _snapshot_dict(snapshot)
-        if payload.get('deleted'):
-            continue
-        payload.setdefault('id', snapshot.id)
-        tasks.append(ActionItemResponse.model_validate(payload))
+    tasks = _task_responses_from_snapshots(task_snapshots, context='workstream_detail')
     return WorkstreamDetailProjection(
         workstream=workstream,
         recent_events=list_workstream_events(uid, workstream_id, firestore_client=client),

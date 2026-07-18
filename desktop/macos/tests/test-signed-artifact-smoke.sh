@@ -30,6 +30,7 @@ for required in \
   "Signed Keychain canary" \
   "Backend routing" \
   "Sparkle/update metadata" \
+  "External-preview isolation" \
   "Native helper/runtime bundle integrity" \
   "Minimal chat path" \
   "Recording permission surface sanity" \
@@ -46,6 +47,12 @@ if "$SMOKE" --app --zip file.zip >/tmp/omi-smoke-missing-value.out 2>/tmp/omi-sm
   fail "missing option value should fail"
 fi
 grep -q -- "--app requires a value" /tmp/omi-smoke-missing-value.err || fail "missing value failure should be explicit"
+
+if "$SMOKE" --expected-bundle-id --preview >/tmp/omi-smoke-preview-missing-value.out 2>/tmp/omi-smoke-preview-missing-value.err; then
+  fail "missing external preview identity should fail"
+fi
+grep -q -- "--expected-bundle-id requires a value" /tmp/omi-smoke-preview-missing-value.err \
+  || fail "preview identity failure should be explicit"
 
 tmp_root="$(mktemp -d "${TMPDIR:-/tmp}/omi-smoke-test.XXXXXX")"
 TMP_ROOTS+=("$tmp_root")

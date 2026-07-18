@@ -3091,7 +3091,7 @@
     "syncCustomSttWarningMessage": "Você usa seu próprio provedor de transcrição. Sincronizar estas gravações as transcreve nos servidores da Omi e elas contam para o limite de transcrição do seu plano.",
     "transcribeLaterTitle": "Transcrever depois",
     "transcribeLaterDescription": "Grave o áudio agora e transcreva quando quiser, em vez de ao vivo. As gravações ficam salvas no seu telefone e você as envia para criar conversas.",
-    "transcribeLaterNote": "Por enquanto, funciona com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.",
+    "transcribeLaterNote": "Funciona com o microfone do telefone e com dispositivos Omi e Limitless. O áudio permanece no seu telefone até você decidir enviá-lo.",
     "transcribeLaterStorageFull": "Seu telefone está com pouco espaço de armazenamento, por isso a gravação foi pausada. Libere espaço ou envie suas gravações e ela será retomada automaticamente.",
     "unmute": "Reativar áudio",
     "newRecording": "Nova gravação",
@@ -3179,5 +3179,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Armazenamento do dispositivo",
+    "deviceStoragePercentFull": "{percent}% cheio",
+    "deviceStorageUsedOfTotal": "{used} de {total} usado",
+    "deviceStorageFree": "{free} livre",
+    "deviceStorageNearlyFull": "Dispositivo quase cheio — sincronize para liberar espaço.",
+    "phoneMicOfflineFallbackMessage": "Sem conexão — gravando localmente. Será transcrito quando você voltar a ficar online.",
+    "dataEncryptedBanner": "Seus dados são protegidos por padrão com criptografia forte, e você controla como são armazenados e usados."
 }

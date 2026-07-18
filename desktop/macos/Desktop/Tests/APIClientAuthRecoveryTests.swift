@@ -4,7 +4,10 @@ import XCTest
 
 final class APIClientAuthRecoveryTests: XCTestCase {
   func testAPIClientCentralizes401RefreshAndInvalidate() throws {
-    let source = try sourceFile("APIClient.swift")
+    let source = try [
+      sourceFile("APIClient.swift"),
+      sourceFile("APIClient+AuthPolicy.swift"),
+    ].joined(separator: "\n")
     XCTAssertTrue(source.contains("invalidateSessionAfterUnauthorized"))
     XCTAssertTrue(source.contains("authorizedRetryRequest"))
     XCTAssertTrue(source.contains("struct RequestAuthPolicy"))
@@ -15,12 +18,13 @@ final class APIClientAuthRecoveryTests: XCTestCase {
 
   func testDeleteUsesShared401RecoveryPath() throws {
     let source = try sourceFile("APIClient.swift")
-    let deleteRange = source.range(of: "func delete(")
-    XCTAssertNotNil(deleteRange)
-    let snippet = String(source[deleteRange!.lowerBound...]).prefix(500)
+    let deleteRange = try XCTUnwrap(source.range(of: "func delete("))
+    let requestExecutionRange = try XCTUnwrap(
+      source.range(
+        of: "// MARK: - Request Execution",
+        range: deleteRange.upperBound..<source.endIndex))
+    let snippet = String(source[deleteRange.lowerBound..<requestExecutionRange.lowerBound])
     XCTAssertTrue(snippet.contains("performVoidRequest"))
-    // Whitespace-agnostic check: the old pattern of throwing .unauthorized
-    // before the status-code guard should not reappear in the delete method.
     XCTAssertFalse(snippet.contains("throw APIError.unauthorized"))
   }
 

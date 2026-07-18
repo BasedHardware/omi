@@ -69,7 +69,13 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
         task,
         evidence_ref=evidence,
         source_surface='conversation',
-        signals=BackendCaptureSignals(direct_request=True),
+        signals=BackendCaptureSignals(
+            direct_request=True,
+            concrete_deliverable=True,
+            owner='user',
+            capture_confidence=0.9,
+            ownership_confidence=0.9,
+        ),
     )
     accepted = adapt_backend_capture(
         task,
@@ -113,6 +119,30 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
         source_surface='conversation',
         signals=BackendCaptureSignals(public_broadcast=True),
     )
+    weak_request = adapt_backend_capture(
+        task,
+        evidence_ref=evidence,
+        source_surface='conversation',
+        signals=BackendCaptureSignals(
+            direct_request=True,
+            concrete_deliverable=True,
+            owner='user',
+            capture_confidence=0.79,
+            ownership_confidence=1,
+        ),
+    )
+    strong_inference = adapt_backend_capture(
+        task,
+        evidence_ref=evidence,
+        source_surface='conversation',
+        signals=BackendCaptureSignals(
+            inferred_next_step=True,
+            concrete_deliverable=True,
+            owner='user',
+            capture_confidence=0.9,
+            ownership_confidence=0.9,
+        ),
+    )
 
     assert pending.policy.outcome == 'pending_candidate'
     assert pending.candidate is not None
@@ -121,10 +151,14 @@ def test_backend_adapter_maps_frozen_policy_outcomes_to_typed_candidates():
     assert accepted.candidate.capture_confidence == 0.95
     assert low_confidence.policy.outcome == 'pending_candidate'
     assert low_confidence.policy.interruption == 'none'
-    assert without_deliverable.policy.outcome == 'pending_candidate'
+    assert without_deliverable.policy.outcome == 'ignore'
     assert without_deliverable.policy.interruption == 'none'
     assert ignored.policy.outcome == 'ignore'
     assert ignored.candidate is None
+    assert weak_request.policy.outcome == 'ignore'
+    assert weak_request.candidate is None
+    assert strong_inference.policy.outcome == 'pending_candidate'
+    assert strong_inference.candidate is not None
 
 
 def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_explicit_true():
@@ -165,8 +199,41 @@ def test_conversation_adapter_defaults_concrete_deliverable_false_and_honors_exp
             _action('Send the budget', capture_kind='clear_commitment', capture_owner='user'),
             'conversation-1',
         ).policy.outcome
-        == 'pending_candidate'
+        == 'ignore'
     )
+
+
+@pytest.mark.parametrize(
+    ('capture_kind', 'capture_owner', 'concrete_deliverable', 'capture_confidence', 'expected'),
+    [
+        ('direct_request', 'user', True, 0.8, 'pending_candidate'),
+        ('direct_request', 'unknown', True, 0.95, 'ignore'),
+        ('direct_request', 'user', False, 0.95, 'ignore'),
+        ('direct_request', 'user', True, 0.79, 'ignore'),
+        ('inferred_next_step', 'user', True, 0.8, 'pending_candidate'),
+        ('inferred_next_step', 'unknown', True, 0.95, 'ignore'),
+    ],
+)
+def test_conversation_adapter_requires_owned_concrete_high_confidence_requests_and_inferences(
+    capture_kind,
+    capture_owner,
+    concrete_deliverable,
+    capture_confidence,
+    expected,
+):
+    decision = conversation_capture._capture_decision(
+        _action(
+            'Send the budget',
+            capture_kind=capture_kind,
+            capture_owner=capture_owner,
+            concrete_deliverable=concrete_deliverable,
+            capture_confidence=capture_confidence,
+        ),
+        'conversation-1',
+    )
+
+    assert decision.policy.outcome == expected
+    assert (decision.candidate is not None) is (expected != 'ignore')
 
 
 def test_conversation_adapter_uses_supplied_targets_for_update_and_completion():
@@ -179,7 +246,13 @@ def test_conversation_adapter_uses_supplied_targets_for_update_and_completion():
         'conversation-1',
     )
     invented_target = conversation_capture._capture_decision(
-        _action('Send the revised budget', candidate_action='update'),
+        _action(
+            'Send the revised budget',
+            capture_kind='direct_request',
+            capture_owner='user',
+            candidate_action='update',
+            concrete_deliverable=True,
+        ),
         'conversation-1',
     )
 
@@ -258,6 +331,8 @@ def test_canonical_prompt_and_parser_preserve_no_deadline_requests_and_completio
 
     assert 'do not require a deadline for a concrete explicit' in rendered
     assert 'emit candidate_action=complete' in rendered
+    assert 'A concrete request addressed directly to the primary user' in rendered
+    assert 'capture_owner=user' in rendered
     assert 'do not modify the existing one' not in rendered
     assert items[0].due_at is None
     assert items[0].capture_kind == 'direct_request'
@@ -323,7 +398,12 @@ def test_read_mode_creates_pending_and_silently_accepts_commitment_without_notif
                 capture_owner='user',
                 concrete_deliverable=True,
             ),
-            _action('Review the forecast', capture_kind='direct_request'),
+            _action(
+                'Review the forecast',
+                capture_kind='direct_request',
+                capture_owner='user',
+                concrete_deliverable=True,
+            ),
         ),
     )
 
@@ -380,7 +460,14 @@ def test_off_mode_is_behaviorally_legacy_and_write_mode_reconciles_sidecars(monk
         'reconcile_migrated_candidate',
         reconcile,
     )
-    conversation = _conversation(_action('Send the budget', capture_kind='direct_request'))
+    conversation = _conversation(
+        _action(
+            'Send the budget',
+            capture_kind='direct_request',
+            capture_owner='user',
+            concrete_deliverable=True,
+        )
+    )
 
     process_conversation._save_action_items('user-1', conversation)
     assert len(writes) == 1
@@ -543,9 +630,19 @@ def test_repeated_descriptions_use_semantic_occurrences_without_order_dependent_
         'get_task_workflow_control',
         lambda uid: TaskWorkflowControl(workflow_mode='read', account_generation=3),
     )
-    morning = _action('Email the update', capture_kind='direct_request')
+    morning = _action(
+        'Email the update',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+    )
     morning.due_at = datetime(2026, 7, 10, 9, tzinfo=timezone.utc)
-    evening = _action('Email the update', capture_kind='direct_request')
+    evening = _action(
+        'Email the update',
+        capture_kind='direct_request',
+        capture_owner='user',
+        concrete_deliverable=True,
+    )
     evening.due_at = datetime(2026, 7, 10, 17, tzinfo=timezone.utc)
     keys = []
 

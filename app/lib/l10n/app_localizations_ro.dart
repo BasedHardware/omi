@@ -9388,7 +9388,7 @@ class AppLocalizationsRo extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Deocamdată funcționează cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
+      'Funcționează cu microfonul telefonului și cu dispozitivele Omi și Limitless. Conținutul audio rămâne pe telefon până când alegi să îl încarci.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9620,4 +9620,33 @@ class AppLocalizationsRo extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Eroare la conectarea la Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Stocarea dispozitivului';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% plin';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used din $total utilizat';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free liber';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Dispozitivul este aproape plin — sincronizează pentru a elibera spațiu.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Fără conexiune — se înregistrează local. Va fi transcris când revii online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Datele tale sunt securizate în mod implicit cu criptare puternică, iar tu controlezi modul în care sunt stocate și utilizate.';
 }

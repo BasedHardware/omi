@@ -1478,7 +1478,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get payYourSttProvider => 'Szabadon használd az omi-t. Csak az STT szolgáltatódnak fizetsz közvetlenül.';
 
   @override
-  String get freeMinutesMonth => '600 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
+  String get freeMinutesMonth => '300 ingyenes perc/hónap tartalmazza. Korlátlan a következővel: ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4731,7 +4731,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'Nincs beállítva specifikus adathozzáférés.';
 
   @override
-  String get basicPlanDescription => '600 prémium perc + korlátlan eszközön';
+  String get basicPlanDescription => '300 prémium perc + korlátlan eszközön';
 
   @override
   String get minutes => 'perc';
@@ -6029,7 +6029,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get cloudProvider => 'Felhő szolgáltató';
 
   @override
-  String get premiumMinutesInfo => '600 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
+  String get premiumMinutesInfo => '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál.';
 
   @override
   String get viewUsage => 'Használat megtekintése';
@@ -6110,7 +6110,7 @@ class AppLocalizationsHu extends AppLocalizations {
   String get batteryDrainSignificantly => 'Az akkumulátor-lemerülés jelentősen növekedni fog.';
 
   @override
-  String get premiumMinutesMonth => '600 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
+  String get premiumMinutesMonth => '300 prémium perc/hónap. Az Eszközön fül korlátlan ingyenes átírást kínál. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9383,7 +9383,7 @@ class AppLocalizationsHu extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Egyelőre Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
+      'A telefon mikrofonjával, valamint Omi és Limitless eszközökkel működik. A hang a telefonodon marad, amíg el nem döntöd, hogy feltöltöd.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9614,4 +9614,32 @@ class AppLocalizationsHu extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Hiba a Ray-Ban Meta csatlakoztatásakor: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Eszköz tárhelye';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% megtelt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used / $total felhasználva';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free szabad';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Az eszköz majdnem tele van — szinkronizáljon a hely felszabadításához.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => 'Nincs kapcsolat – helyben rögzítjük. Átírjuk, amint újra online vagy.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Az adataid alapértelmezés szerint erős titkosítással védettek, és te döntöd el, hogyan tárolják és használják őket.';
 }

@@ -179,7 +179,10 @@ Release-candidate agent QA: launch a named bundle, then run
 `cd desktop/macos && ./scripts/agent-continuity-gauntlet.sh --suite resilience`
 for startup/bad-state bridge and subagent probes. Follow with
 `./scripts/agent-continuity-gauntlet.sh --suite all` for the full continuity,
-prompt, owner, and resilience pass. Evidence is written under
+prompt, owner, and resilience pass. The agents lane includes issue #9515's exact
+PTT request, proves one new owner-scoped child, inspects its durable tool ledger
+for a successful `get_memories`, then continues the same child session and
+requires a second successful memory-tool invocation. Evidence is written under
 `.harness/agent-continuity-gauntlet/`.
 
 See also `desktop/macos/e2e/SKILL.md`, `desktop/macos/e2e/feature-vector.md`, and `scripts/dev-harness/`.

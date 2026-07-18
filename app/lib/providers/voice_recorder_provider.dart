@@ -61,7 +61,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
   final VoiceMessageTranscriber _transcribeVoiceMessage;
 
   VoiceRecorderProvider({VoiceMessageTranscriber? transcriber})
-      : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
+    : _transcribeVoiceMessage = transcriber ?? transcribeVoiceMessage;
 
   VoiceRecorderState get state => _state;
   String get transcript => _transcript;
@@ -341,8 +341,7 @@ class VoiceRecorderProvider extends ChangeNotifier {
     // Write 44-byte WAV header
     sink.add(wavHeader);
 
-    // Stream PCM data in chunks (64KB) — never loads entire file into RAM
-    const chunkSize = 65536;
+    // Stream PCM data in chunks — never loads entire file into RAM
     final reader = pcmFile.openRead();
     await for (final chunk in reader) {
       sink.add(chunk);

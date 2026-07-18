@@ -10,7 +10,7 @@ For first-user dogfood, start with the **bucketed** inventory. The `stage-all-fo
 ## Safety contract
 
 - **Read-only on legacy** — uses `get_non_filtered_memories` only; never calls legacy mutators.
-- **Write-only on canonical** — applies via `apply_long_term_patch_firestore`.
+- **Write-only on canonical** — applies via `apply_long_term_patch_firestore`; obvious noise and sensitive rows never enter canonical staging.
 - **Cohort gate** — backfill runs only when `uid` is in `CANONICAL_MEMORY_USERS` (or `--allow-admin-override`).
 - **Idempotent** — backfill ids are `mem_` + hash(`uid`, `legacy_memory_id`); apply path honors `idempotency_key`.
 - **Both-store dedup** — if live extraction already wrote the same fact (`extraction_memory_id` from `conversation_id` + `content`), backfill skips that row.
@@ -55,7 +55,7 @@ Buckets:
 | `profile_required_promotion` | No | None in bucketed mode; `pending_admission` under stage-all | Unreviewed profile-like rows requiring a separate admission decision |
 | `reviewed_long_term` | Yes | pending `short_term` with `promotion.required=true` | Positively reviewed rows that must still be normalized before promotion |
 | `archive_review` | No | None | Non-obvious rows for later manual/archive policy review |
-| `hold_noise` | No | None | Downloads inventory, focused-app activity, imperative task fragments, empty/low-signal rows |
+| `hold_noise` | No | None | Downloads/file/project inventories, focused-app or attention telemetry, raw email bodies, test markers, imperative fragments, empty/low-signal rows |
 | `hold_sensitive` | No | None | Credential/token/password/secret-like rows |
 
 ### 2. Bucket dry run (no writes)
@@ -89,7 +89,18 @@ Monitor JSON output after each applied bucket:
 | `vector_sync_failures` | `0` |
 | `errors` | `[]` |
 
-Re-run is safe: already-present and both-store-duplicate rows are skipped.
+Re-run is safe: already-present and both-store-duplicate rows are skipped. Stage-all reports `admissible_count` and `skipped_non_admissible` so source inventory is not confused with rows allowed into canonical staging.
+
+## Historical remediation plan (read-only)
+
+Rows written by older backfill versions may already be active Long-term. Do **not** rerun backfill to clean them: deterministic ids make that a no-op and it can only repair side effects. Build a metadata-only plan first:
+
+```bash
+cd backend
+python scripts/plan_legacy_backfill_remediation.py --uid YOUR_UID
+```
+
+The planner scopes itself to active canonical rows with explicit `legacy_backfill` provenance. It returns `keep`, `review`, and `archive` recommendations without returning raw content or changing Firestore, vectors, keyword indexes, or the knowledge graph. It intentionally excludes unattributed historical Long-term rows until their ingress lineage has been audited.
 
 ### 4. Verification queries
 

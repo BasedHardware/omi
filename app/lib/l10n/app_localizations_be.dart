@@ -1469,7 +1469,7 @@ class AppLocalizationsBe extends AppLocalizations {
   String get payYourSttProvider => 'Свабодна выкарыстоўвайце omi. Вы плаціце толькі вашаму паставальніку STT прама.';
 
   @override
-  String get freeMinutesMonth => '600 свабодных мінут/месяц уключана. Неабмежавана з ';
+  String get freeMinutesMonth => '300 свабодных мінут/месяц уключана. Неабмежавана з ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -6017,7 +6017,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю.';
 
   @override
   String get viewUsage => 'Прагляд выкарыстання';
@@ -6099,7 +6099,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
+      '300 премыум хвілін/месяц. Вкладка На прыборы прапанавае неабмежаваную бясплатную транскрыпцыю. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9371,7 +9371,7 @@ class AppLocalizationsBe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Пакуль працуе з прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
+      'Працуе з мікрафонам тэлефона, прыладамі Omi і Limitless. Аўдыя застаецца на тэлефоне, пакуль вы самі не вырашыце яго загрузіць.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9604,4 +9604,33 @@ class AppLocalizationsBe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Памылка падключэння да Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Сховішча прылады';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return 'запоўнена $percent%';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used з $total выкарыстана';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free вольна';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Прылада амаль запоўнена — сінхранізуйце, каб вызваліць месца.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Няма злучэння — запіс вядзецца лакальна. Транскрыпцыя адбудзецца, калі вы зноў будзеце ў сетцы.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашы даныя па змаўчанні абаронены моцным шыфраваннем, і вы кантралюеце, як яны захоўваюцца і выкарыстоўваюцца.';
 }

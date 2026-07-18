@@ -105,8 +105,13 @@ class HumeJobModelPredictionResponseModel:
             return model
 
         for prediction in data["results"]["predictions"]:
-            for grouped_prediction in prediction['models'][prediction_model]['grouped_predictions']:
-                for grouped_prediction_prediction in grouped_prediction['predictions']:
+            # A failed or partial Hume job can omit the requested model, grouped_predictions, or the
+            # inner predictions list; guard the nested lookups so one malformed prediction yields no
+            # emotions instead of a KeyError that 500s the whole callback (mirrors the .get(...) style
+            # used elsewhere in this module).
+            grouped_predictions = prediction.get('models', {}).get(prediction_model, {}).get('grouped_predictions', [])
+            for grouped_prediction in grouped_predictions:
+                for grouped_prediction_prediction in grouped_prediction.get('predictions', []):
                     model.append(cls.from_dict(grouped_prediction_prediction))
 
         return model
@@ -143,7 +148,10 @@ class HumeJobResponseModel:
 
     @classmethod
     def from_dict(cls, data: Dict[str, Any]) -> "HumeJobResponseModel":
-        model = cls(data["job_id"])
+        # Read job_id defensively: this runs on the success (HTTP 200) path from resp.json(),
+        # and a response missing job_id must not raise KeyError out of the caller while every
+        # error status is already turned into an error dict. id is Optional[str].
+        model = cls(data.get("job_id"))
         return model
 
 

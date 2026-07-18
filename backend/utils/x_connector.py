@@ -35,11 +35,11 @@ from database._client import db
 from database.vector_db import upsert_memory_vectors_batch, upsert_x_post_vectors_batch
 from models.memories import MemoryDB
 from utils.llm.memories import extract_memories_from_text
-from utils.memory.canonical_activation import canonical_write_enabled
 from utils.memory.memory_api_contract import MemoryApiExposure, memory_write_payload
 from utils.memory.memory_service import MemoryService
 from utils.memory.memory_system import MemorySystem, resolve_memory_system
 from utils.executors import db_executor, run_blocking
+from utils.log_sanitizer import sanitize
 from utils import social
 from utils.integration_telemetry import (
     IntegrationTelemetryContext,
@@ -82,6 +82,7 @@ _SYNC_JOB_USER_SPACING_SEC = 1.5  # gap between users to stay gentle on X limits
 MAX_TWEET_PAGES = 4  # ~4 * 100 = up to 400 recent tweets per sync
 MAX_BOOKMARK_PAGES = 2
 MEMORY_BATCH_CHARS = 8000  # group post text into ~8k-char chunks for extraction
+MAX_PENDING_MEMORY_EXTRACTION_POSTS = 200  # bounded incremental replay of durable raw sources
 
 
 def is_oauth_configured() -> bool:
@@ -165,7 +166,7 @@ async def exchange_code(code: str, verifier: str) -> Dict:
     async with httpx.AsyncClient(timeout=httpx.Timeout(15.0, connect=3.0)) as client:
         resp = await client.post(TOKEN_URL, data=data, headers=_basic_auth_header())
         if resp.status_code >= 400:
-            logger.error(f'exchange_code: X returned {resp.status_code}: {resp.text[:500]}')
+            logger.error(f'exchange_code: X returned {resp.status_code}: {sanitize(resp.text[:500])}')
         resp.raise_for_status()
         return resp.json()
 
@@ -350,49 +351,51 @@ def _extract_and_index(uid: str, posts: List[Dict]) -> int:
     total = 0
     for chunk, post_ids in chunks:
         extracted = extract_memories_from_text(uid, chunk, 'twitter_tweets')
-        if not extracted:
-            continue
-        source_id = f"{INTEGRATION_KEY}:{hashlib.sha256('|'.join(post_ids).encode('utf-8')).hexdigest()[:24]}"
-        memory_dbs: List[MemoryDB] = []
-        for m in extracted:
-            mdb = MemoryDB.from_memory(
-                m,
-                uid,
-                None,
-                False,
-                source_id=source_id,
-                source_type="integration:x",
-                source_signal="integration",
-                artifact_ref={"kind": "integration_text", "text_source": "twitter_tweets", "post_ids": post_ids},
-                extractor_id="extract_memories_from_text",
-            )
-            mdb.manually_added = False
-            # Tag with the connector key so X-derived memories are identifiable
-            # (and cleanly removable on disconnect / re-import).
-            mdb.app_id = INTEGRATION_KEY
-            memory_dbs.append(mdb)
-        # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
-        if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL and canonical_write_enabled(
-            uid, db_client=db
-        ):
-            memory_service = MemoryService(db_client=db)
-            for mdb in memory_dbs:
-                memory_service.write(uid, mdb.model_dump())
-        else:
-            memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
-            upsert_memory_vectors_batch(
-                uid,
-                [
-                    {
-                        'memory_id': m.id,
-                        'content': m.content,
-                        'category': m.category.value,
-                        'subject_entity_id': m.subject_entity_id,
-                    }
-                    for m in memory_dbs
-                ],
-            )
-        total += len(memory_dbs)
+        if extracted:
+            source_id = f"{INTEGRATION_KEY}:{hashlib.sha256('|'.join(post_ids).encode('utf-8')).hexdigest()[:24]}"
+            memory_dbs: List[MemoryDB] = []
+            for m in extracted:
+                mdb = MemoryDB.from_memory(
+                    m,
+                    uid,
+                    None,
+                    False,
+                    source_id=source_id,
+                    source_type="integration:x",
+                    source_signal="integration",
+                    artifact_ref={"kind": "integration_text", "text_source": "twitter_tweets", "post_ids": post_ids},
+                    extractor_id="extract_memories_from_text",
+                )
+                mdb.manually_added = False
+                # Tag with the connector key so X-derived memories are identifiable
+                # (and cleanly removable on disconnect / re-import).
+                mdb.app_id = INTEGRATION_KEY
+                memory_dbs.append(mdb)
+            # Background writers use resolve_memory_system (no request pin); routers use pin_memory_system.
+            if resolve_memory_system(uid, db_client=db) == MemorySystem.CANONICAL:
+                memory_service = MemoryService(db_client=db)
+                for mdb in memory_dbs:
+                    memory_service.write(uid, mdb.model_dump())
+            else:
+                memories_db.save_memories(uid, [memory_write_payload(m, MemoryApiExposure.LEGACY) for m in memory_dbs])
+                upsert_memory_vectors_batch(
+                    uid,
+                    [
+                        {
+                            'memory_id': m.id,
+                            'content': m.content,
+                            'category': m.category.value,
+                            'subject_entity_id': m.subject_entity_id,
+                        }
+                        for m in memory_dbs
+                    ],
+                )
+            total += len(memory_dbs)
+
+        # Do not acknowledge this raw source until every write above succeeds.
+        # A failed canonical gate therefore remains visible to the next hourly
+        # sync instead of being swallowed by raw-post deduplication.
+        x_posts_db.mark_memory_extraction_completed(uid, post_ids)
     return total
 
 
@@ -484,21 +487,27 @@ async def sync_x_for_user(uid: str) -> Dict:
 
     try:
         written = await run_blocking(db_executor, x_posts_db.save_x_posts, uid, new_posts)
-        # Only mine memories from posts we hadn't seen before (the raw store dedupes,
-        # but extraction is the expensive part — restrict it to genuinely new text).
-        fresh = new_posts if written == len(new_posts) else new_posts[:written]
+        # Raw rows own extraction progress. This includes interrupted prior
+        # writes (and legacy rows without a state), so canonical gate failures
+        # replay incrementally rather than becoming invisible after raw dedupe.
+        pending_posts = await run_blocking(
+            db_executor,
+            x_posts_db.get_pending_memory_extraction_posts,
+            uid,
+            MAX_PENDING_MEMORY_EXTRACTION_POSTS,
+        )
         # Vector-index the raw posts so agents can semantically search the actual
         # tweets (not just the extracted memories) via the MCP search_x_posts tool.
         # Chunk to stay within Pinecone's per-upsert vector limit (~100).
         items_to_index = [
-            {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in fresh
+            {'post_id': p['id'], 'content': p.get('text', ''), 'kind': p.get('kind', 'tweet')} for p in pending_posts
         ]
         for i in range(0, len(items_to_index), 100):
             try:
                 await run_blocking(db_executor, upsert_x_post_vectors_batch, uid, items_to_index[i : i + 100])
             except Exception as e:
                 logger.warning(f'x_connector: failed to index x_posts chunk[{i}:{i+100}] for uid={uid}: {e}')
-        memories_created = await run_blocking(db_executor, _extract_and_index, uid, fresh)
+        memories_created = await run_blocking(db_executor, _extract_and_index, uid, pending_posts)
         post_count = await run_blocking(db_executor, x_posts_db.count_x_posts, uid)
 
         await run_blocking(

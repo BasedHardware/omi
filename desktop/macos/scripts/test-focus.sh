@@ -3,7 +3,7 @@
 # Finds context switches in the time range, analyzes departing frames through
 # the focus pipeline, and logs focused/distracted decisions.
 #
-# Results are logged to /private/tmp/omi-dev.log
+# Results are logged to the running named bundle's health-advertised log path.
 #
 # Usage:
 #   ./scripts/test-focus.sh              # Last 1 hour, max 20 context switches
@@ -12,7 +12,8 @@
 #   ./scripts/test-focus.sh --hours 12 --count 30
 #
 # Then tail the log:
-#   grep "FocusTestCLI" /private/tmp/omi-dev.log | tail -f
+#   OMI_LOG_PATH="$(./scripts/omi-ctl log-path)"
+#   grep "FocusTestCLI" "$OMI_LOG_PATH" | tail -f
 
 HOURS="1"
 COUNT="20"
@@ -26,7 +27,12 @@ while [[ $# -gt 0 ]]; do
 done
 
 echo "Triggering focus test: last ${HOURS}h, max ${COUNT} context switches"
-echo "Watching /private/tmp/omi-dev.log for results..."
+OMI_LOG_PATH="${OMI_LOG_PATH:-$(./scripts/omi-ctl log-path)}"
+if [[ ! -f "$OMI_LOG_PATH" ]]; then
+    echo "Named-bundle log path is not readable: $OMI_LOG_PATH" >&2
+    exit 1
+fi
+echo "Watching ${OMI_LOG_PATH} for results..."
 echo ""
 
 # Send the distributed notification to the running app
@@ -42,4 +48,4 @@ RunLoop.current.run(until: Date() + 0.5)
 "
 
 # Tail the log for results
-exec grep --line-buffered "FocusTestCLI" /private/tmp/omi-dev.log | tail -f
+exec grep --line-buffered "FocusTestCLI" "$OMI_LOG_PATH" | tail -f

@@ -9420,7 +9420,7 @@ class AppLocalizationsDe extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Funktioniert vorerst mit Omi- und Limitless-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.';
+      'Funktioniert mit dem Telefonmikrofon sowie Omi- und Limitless-Geräten. Das Audio bleibt auf deinem Smartphone, bis du es hochladen möchtest.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9654,4 +9654,33 @@ class AppLocalizationsDe extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Fehler beim Verbinden mit Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Gerätespeicher';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% belegt';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used von $total belegt';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free frei';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Gerät fast voll — synchronisieren, um Speicher freizugeben.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Keine Verbindung – Aufnahme erfolgt lokal. Sie wird transkribiert, sobald du wieder online bist.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Deine Daten sind standardmäßig durch starke Verschlüsselung geschützt, und du behältst die Kontrolle darüber, wie sie gespeichert und verwendet werden.';
 }
