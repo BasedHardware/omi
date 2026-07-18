@@ -171,6 +171,60 @@ class WorkflowContractTests(unittest.TestCase):
         )
         self.assertIn("release identity validator must receive the checkout SHA", CHECKER.validate(root))
 
+    def test_uv_setup_is_required_and_fail_closed_before_canonical_preflight(self) -> None:
+        cases = (
+            (
+                "missing setup",
+                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
+                "",
+                "release eligibility is missing its uv setup step",
+            ),
+            (
+                "unpinned-or-wrong setup",
+                "uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84",
+                "uses: astral-sh/setup-uv@v7",
+                "release eligibility uv setup step must use the pinned setup action",
+            ),
+            (
+                "conditional setup",
+                "    - name: Set up uv for canonical checks\n      uses:",
+                "    - name: Set up uv for canonical checks\n      if: github.ref == 'refs/heads/main'\n      uses:",
+                "release eligibility uv setup step must not be conditionally skipped or tolerated",
+            ),
+            (
+                "missing OpenAPI cache key",
+                "cache-dependency-glob: backend/openapi-requirements.txt",
+                "cache-dependency-glob: backend/pylock.toml",
+                "release eligibility uv setup must key the OpenAPI dependency cache",
+            ),
+            (
+                "setup after preflight",
+                "    - name: Set up uv for canonical checks\n      uses: astral-sh/setup-uv@ecd24dd710f2fb0dca1693a67af11fc4a5c5ec84\n      with:\n        enable-cache: true\n        cache-dependency-glob: backend/openapi-requirements.txt\n\n",
+                "",
+                "release eligibility must set up uv before the canonical preflight",
+            ),
+        )
+        for name, old, new, expected in cases:
+            with self.subTest(name=name):
+                root = self.fixture_root()
+                action = root / ".github/actions/release-eligibility/action.yml"
+                text = action.read_text(encoding="utf-8")
+                if name == "setup after preflight":
+                    self.assertIn(old, text)
+                    uv_start = text.index(old)
+                    preflight_start = text.index("    - name: Run canonical deterministic CI preflight")
+                    text = (
+                        text[:uv_start]
+                        + text[uv_start + len(old) : preflight_start]
+                        + text[preflight_start:]
+                        + old
+                    )
+                else:
+                    self.assertIn(old, text)
+                    text = text.replace(old, new, 1)
+                action.write_text(text, encoding="utf-8")
+                self.assertIn(expected, CHECKER.validate(root))
+
     def test_critical_action_steps_cannot_be_skipped_or_fail_open(self) -> None:
         cases = (
             (
