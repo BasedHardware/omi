@@ -84,7 +84,11 @@ def build_expectation(
     )
 
 
-def build_read_only_commands(expectation: DeploymentExpectation) -> dict[str, list[str]]:
+def build_read_only_commands(
+    expectation: DeploymentExpectation,
+    *,
+    include_listener: bool = True,
+) -> dict[str, list[str]]:
     commands = {
         f'cloud_run/{service}': [
             'gcloud',
@@ -98,41 +102,42 @@ def build_read_only_commands(expectation: DeploymentExpectation) -> dict[str, li
         ]
         for service in CLOUD_RUN_SERVICES
     }
-    commands.update(
-        {
-            'gke/deployment': [
-                'kubectl',
-                '-n',
-                expectation.namespace,
-                'get',
-                'deployment',
-                expectation.listener_deployment,
-                '-o',
-                'json',
-            ],
-            'gke/service': [
-                'kubectl',
-                '-n',
-                expectation.namespace,
-                'get',
-                'service',
-                expectation.listener_service,
-                '-o',
-                'json',
-            ],
-            'gke/endpointslices': [
-                'kubectl',
-                '-n',
-                expectation.namespace,
-                'get',
-                'endpointslice',
-                '-l',
-                f'kubernetes.io/service-name={expectation.listener_service}',
-                '-o',
-                'json',
-            ],
-        }
-    )
+    if include_listener:
+        commands.update(
+            {
+                'gke/deployment': [
+                    'kubectl',
+                    '-n',
+                    expectation.namespace,
+                    'get',
+                    'deployment',
+                    expectation.listener_deployment,
+                    '-o',
+                    'json',
+                ],
+                'gke/service': [
+                    'kubectl',
+                    '-n',
+                    expectation.namespace,
+                    'get',
+                    'service',
+                    expectation.listener_service,
+                    '-o',
+                    'json',
+                ],
+                'gke/endpointslices': [
+                    'kubectl',
+                    '-n',
+                    expectation.namespace,
+                    'get',
+                    'endpointslice',
+                    '-l',
+                    f'kubernetes.io/service-name={expectation.listener_service}',
+                    '-o',
+                    'json',
+                ],
+            }
+        )
     return commands
 
 
@@ -169,6 +174,7 @@ def evaluate(
     documents: Mapping[str, Mapping[str, Any]],
     *,
     require_serving_traffic: bool = True,
+    include_listener: bool = True,
 ) -> list[str]:
     errors: list[str] = []
     for service, expected_revision in expectation.revisions.items():
@@ -186,16 +192,17 @@ def evaluate(
                     require_serving_traffic=require_serving_traffic,
                 )
             )
-    for key, evaluator in (
-        ('gke/deployment', evaluate_listener_deployment),
-        ('gke/service', evaluate_listener_service),
-        ('gke/endpointslices', evaluate_listener_endpoints),
-    ):
-        document = documents.get(key)
-        if document is None:
-            errors.append(f'{key}: result missing')
-        else:
-            errors.extend(evaluator(expectation, document))
+    if include_listener:
+        for key, evaluator in (
+            ('gke/deployment', evaluate_listener_deployment),
+            ('gke/service', evaluate_listener_service),
+            ('gke/endpointslices', evaluate_listener_endpoints),
+        ):
+            document = documents.get(key)
+            if document is None:
+                errors.append(f'{key}: result missing')
+            else:
+                errors.extend(evaluator(expectation, document))
     return errors
 
 
@@ -292,6 +299,7 @@ def evidence(
     errors: Sequence[str],
     *,
     require_serving_traffic: bool = True,
+    include_listener: bool = True,
 ) -> dict[str, Any]:
     cloud_run: dict[str, dict[str, Any]] = {}
     for service in CLOUD_RUN_SERVICES:
@@ -310,12 +318,7 @@ def evidence(
                 for entry in _list(status.get('traffic'))
             ],
         }
-    deployment = documents.get('gke/deployment', {})
-    deployment_spec = _mapping(deployment.get('spec'))
-    deployment_status = _mapping(deployment.get('status'))
-    template_spec = _mapping(_mapping(deployment_spec.get('template')).get('spec'))
-    containers = _list(template_spec.get('containers'))
-    return {
+    report = {
         'scope': 'backend deploy (read-only)',
         'release_vector': {
             'schema_version': 1,
@@ -325,24 +328,33 @@ def evidence(
             'environment': expectation.environment,
             'immutable_image': expectation.image,
             'cloud_run_revisions': dict(expectation.revisions),
-            'backend_listen': {
-                'deployment': expectation.listener_deployment,
-                'image': expectation.image,
-            },
             'require_serving_traffic': require_serving_traffic,
         },
         'cloud_run': cloud_run,
-        'gke_listener': {
+        'result': 'pass' if not errors else 'fail',
+        'errors': list(errors),
+    }
+    if include_listener:
+        deployment = documents.get('gke/deployment', {})
+        deployment_spec = _mapping(deployment.get('spec'))
+        deployment_status = _mapping(deployment.get('status'))
+        template_spec = _mapping(_mapping(deployment_spec.get('template')).get('spec'))
+        containers = _list(template_spec.get('containers'))
+        report['release_vector']['backend_listen'] = {
+            'deployment': expectation.listener_deployment,
+            'image': expectation.image,
+        }
+        report['gke_listener'] = {
             'deployment': expectation.listener_deployment,
             'image': _mapping(containers[0]).get('image') if containers else None,
             'service_account': template_spec.get('serviceAccountName'),
             'desired_replicas': deployment_spec.get('replicas'),
             'available_replicas': deployment_status.get('availableReplicas'),
             'updated_replicas': deployment_status.get('updatedReplicas'),
-        },
-        'result': 'pass' if not errors else 'fail',
-        'errors': list(errors),
-    }
+        }
+    else:
+        report['release_vector']['backend_listen_required'] = False
+    return report
 
 
 def _mapping(value: Any) -> Mapping[str, Any]:
@@ -384,6 +396,11 @@ def main() -> int:
         action='store_true',
         help='verify a ready no-traffic candidate release vector before promotion',
     )
+    parser.add_argument(
+        '--cloud-run-only',
+        action='store_true',
+        help='verify only the no-traffic Cloud Run candidate before GKE serving mutations',
+    )
     parser.add_argument('--evidence-path', type=Path)
     args = parser.parse_args()
     try:
@@ -396,15 +413,27 @@ def main() -> int:
             region=args.region,
             environment=args.environment,
         )
-        commands = build_read_only_commands(expectation)
+        if args.cloud_run_only and not args.candidate:
+            raise ValueError('--cloud-run-only is valid only for a no-traffic candidate')
+        commands = build_read_only_commands(expectation, include_listener=not args.cloud_run_only)
         assert_commands_are_read_only(commands)
         documents = collect_documents(commands)
-        errors = evaluate(expectation, documents, require_serving_traffic=not args.candidate)
+        errors = evaluate(
+            expectation,
+            documents,
+            require_serving_traffic=not args.candidate,
+            include_listener=not args.cloud_run_only,
+        )
     except (RuntimeError, ValueError) as exc:
         print(f'ERROR: {exc}', file=sys.stderr)
         return 1
     rendered = json.dumps(
-        evidence(expectation, documents, errors, require_serving_traffic=not args.candidate),
+        evidence(
+            expectation,
+            documents,
+            require_serving_traffic=not args.candidate,
+            include_listener=not args.cloud_run_only,
+        ),
         indent=2,
         sort_keys=True,
     )
