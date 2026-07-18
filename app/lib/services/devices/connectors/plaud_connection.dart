@@ -1,7 +1,5 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart';
-
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
 import 'package:omi/services/devices.dart';
 import 'package:omi/services/devices/connectors/device_connection.dart';
@@ -288,8 +286,7 @@ class PlaudDeviceConnection extends DeviceConnection {
   @override
   Future<StreamSubscription?> performGetImageListener({
     required void Function(OrientedImage orientedImage) onImageReceived,
-  }) async =>
-      null;
+  }) async => null;
 
   @override
   Future<StreamSubscription<List<int>>?> performGetAccelListener({void Function(int)? onAccelChange}) async => null;
@@ -321,15 +318,15 @@ class PlaudDeviceConnection extends DeviceConnection {
   List<int> _toBytes32(int v) => [v & 0xFF, (v >> 8) & 0xFF, (v >> 16) & 0xFF, (v >> 24) & 0xFF];
 
   List<int> _toBytes64(int v) => [
-        v & 0xFF,
-        (v >> 8) & 0xFF,
-        (v >> 16) & 0xFF,
-        (v >> 24) & 0xFF,
-        (v >> 32) & 0xFF,
-        (v >> 40) & 0xFF,
-        (v >> 48) & 0xFF,
-        (v >> 56) & 0xFF,
-      ];
+    v & 0xFF,
+    (v >> 8) & 0xFF,
+    (v >> 16) & 0xFF,
+    (v >> 24) & 0xFF,
+    (v >> 32) & 0xFF,
+    (v >> 40) & 0xFF,
+    (v >> 48) & 0xFF,
+    (v >> 56) & 0xFF,
+  ];
 
   int _toInt32(List<int> b) => b[0] | (b[1] << 8) | (b[2] << 16) | (b[3] << 24);
 }

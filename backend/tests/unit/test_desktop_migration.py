@@ -100,10 +100,20 @@ for mod_name in [
 
 sys.modules["utils.chat"].initial_message_util = MagicMock()
 sys.modules["utils.llm.clients"].get_llm = MagicMock()
+usage_tracker_stub = _stub_module("utils.llm.usage_tracker")
+
+
+class _Features:
+    CHAT = "chat"
+
+
+usage_tracker_stub.Features = _Features
+usage_tracker_stub.track_usage = MagicMock()
 
 # Stub google.cloud.firestore sentinels
 firestore_stub = sys.modules["google.cloud.firestore"]
 firestore_stub.Increment = lambda x: f"__increment_{x}__"
+firestore_stub.ArrayRemove = lambda values: ("__array_remove__", tuple(values))
 firestore_stub.Query = MagicMock()
 firestore_stub.Query.ASCENDING = "ASCENDING"
 firestore_stub.Query.DESCENDING = "DESCENDING"
@@ -585,6 +595,135 @@ class TestSessionScopedQueries:
         assert 'chat_session_id' not in fields, f"chat_session_id should NOT be filtered in app-scoped mode: {fields}"
 
 
+class TestMessageReconcileKeyset:
+    class FakeDocument:
+        def __init__(self, document_id, payload, exists=True):
+            self.id = document_id
+            self._payload = payload
+            self.exists = exists
+
+        def to_dict(self):
+            return dict(self._payload)
+
+        def get(self):
+            return self
+
+    class FakeQuery:
+        def __init__(self, collection, after_id=None, requested_limit=None):
+            self.collection = collection
+            self.after_id = after_id
+            self.requested_limit = requested_limit
+
+        def where(self, **_kwargs):
+            return self
+
+        def order_by(self, *_args, **_kwargs):
+            return self
+
+        def start_after(self, document):
+            return self.__class__(self.collection, after_id=document.id)
+
+        def limit(self, value):
+            return self.__class__(self.collection, after_id=self.after_id, requested_limit=value)
+
+        def stream(self):
+            rows = self.collection.rows
+            start = 0
+            if self.after_id is not None:
+                start = next(index for index, row in enumerate(rows) if row.id == self.after_id) + 1
+            end = start + (self.requested_limit or len(rows))
+            return rows[start:end]
+
+    class FakeCollection:
+        def __init__(self, rows):
+            self.rows = rows
+
+        def where(self, **_kwargs):
+            return TestMessageReconcileKeyset.FakeQuery(self)
+
+        def document(self, document_id):
+            return next(
+                (row for row in self.rows if row.id == document_id),
+                TestMessageReconcileKeyset.FakeDocument(document_id, {}, exists=False),
+            )
+
+    @staticmethod
+    def message(document_id, created_at, *, reported=False, plugin_id=None):
+        return TestMessageReconcileKeyset.FakeDocument(
+            document_id,
+            {
+                'id': document_id,
+                'text': document_id,
+                'sender': 'human',
+                'type': 'text',
+                'created_at': created_at,
+                'plugin_id': plugin_id,
+                'app_id': plugin_id,
+                'reported': reported,
+            },
+        )
+
+    @staticmethod
+    def patched_db(collection):
+        patched_db = MagicMock()
+        patched_db.collection.return_value.document.return_value.collection.return_value = collection
+        return patch.object(chat_db, 'db', patched_db)
+
+    def test_insert_between_pages_does_not_skip_or_duplicate(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('remote-4', now),
+                self.message('remote-3', now),
+                self.message('remote-2', now),
+                self.message('remote-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            first, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            collection.rows.insert(0, self.message('remote-new', now))
+            second, next_cursor, _ = chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id=cursor)
+
+        assert [row['id'] for row in first] == ['remote-4', 'remote-3']
+        assert cursor == 'remote-3'
+        assert has_more is True
+        assert [row['id'] for row in second] == ['remote-2', 'remote-1']
+        assert next_cursor == 'remote-1'
+
+    def test_reported_rows_advance_cursor_without_consuming_page_capacity(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('visible-2', now),
+                self.message('reported', now, reported=True),
+                self.message('visible-1', now),
+            ]
+        )
+        with self.patched_db(collection):
+            rows, cursor, has_more = chat_db.get_messages_reconcile_page('uid', limit=2)
+            tail_rows, tail_cursor, tail_has_more = chat_db.get_messages_reconcile_page(
+                'uid', limit=2, cursor_message_id=cursor
+            )
+
+        assert [row['id'] for row in rows] == ['visible-2', 'visible-1']
+        assert cursor == 'visible-1'
+        assert has_more is True
+        assert tail_rows == []
+        assert tail_cursor is None
+        assert tail_has_more is False
+
+    def test_cursor_must_exist_in_authenticated_filter_scope(self):
+        now = datetime.now(timezone.utc)
+        collection = self.FakeCollection(
+            [
+                self.message('other-app', now, plugin_id='other'),
+            ]
+        )
+        with self.patched_db(collection):
+            with pytest.raises(chat_db.MessageReconcileCursorError):
+                chat_db.get_messages_reconcile_page('uid', limit=2, cursor_message_id='other-app', app_id='requested')
+
+
 class TestGetChatSessionsQuery:
     """Verify get_chat_sessions query construction."""
 
@@ -812,6 +951,334 @@ class TestDeleteChatSessionCascade:
 class TestSaveMessageSessionBehavior:
     """Verify save_message session acquisition and preview behavior."""
 
+    def test_client_message_id_retry_returns_same_row_without_second_write(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata='{"origin":"typed_chat"}',
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': '{"origin":"typed_chat"}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                metadata='{"origin":"typed_chat"}',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['created'] is False
+        message_ref.create.assert_not_called()
+        message_ref.set.assert_not_called()
+
+    def test_newer_journal_revision_atomically_enriches_delivered_message(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'Agent started.',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"content_blocks":[{"type":"agent_spawn"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 10,
+            'client_message_payload_hash': 'sha256:old',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+        enriched_metadata = (
+            '{"content_blocks":[{"type":"agent_spawn"},{"type":"agent_completion"}],'
+            '"resources":[{"id":"artifact-1","type":"file"}]}'
+        )
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='Agent started.',
+                sender='ai',
+                session_id='session-1',
+                metadata=enriched_metadata,
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['created'] is False
+        assert result['updated'] is True
+        assert result['journal_revision'] == 11
+        patched_db.transaction.return_value.update.assert_called_once()
+        update = patched_db.transaction.return_value.update.call_args.args[1]
+        assert update['metadata'] == enriched_metadata
+        assert update['journal_revision'] == 11
+
+    def test_equal_journal_revision_with_different_payload_fails_closed(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 7,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='collision',
+                    sender='ai',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                    journal_revision=7,
+                )
+
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_older_journal_revision_is_ignored_without_rollback(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'newest',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': '{"resources":[{"id":"new"}]}',
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 12,
+            'client_message_payload_hash': 'sha256:newest',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='stale',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"resources":[]}',
+                client_message_id='turn-1',
+                journal_revision=11,
+            )
+
+        assert result['updated'] is False
+        assert result['journal_revision'] == 12
+        patched_db.transaction.return_value.update.assert_not_called()
+
+    def test_lost_ack_then_newer_journal_revision_converges_without_remote_receipt(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'ai',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'session_id': 'session-1',
+            'journal_revision': 2,
+            'client_message_payload_hash': 'sha256:original',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='enriched after lost ack',
+                sender='ai',
+                session_id='session-1',
+                metadata='{"content_blocks":[{"type":"agent_completion"}]}',
+                client_message_id='turn-1',
+                journal_revision=3,
+            )
+
+        assert result['updated'] is True
+        assert result['journal_revision'] == 3
+        patched_db.transaction.return_value.update.assert_called_once()
+
+    def test_client_message_id_fingerprint_distinguishes_omitted_from_explicit_session(self):
+        payload_hash = chat_db._message_idempotency_payload_hash(
+            text='hello',
+            sender='human',
+            app_id=None,
+            session_id=None,
+            metadata=None,
+            message_source='desktop_chat',
+        )
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+            'client_message_payload_hash': payload_hash,
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_client_message_id_payload_collision_is_rejected(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'original',
+            'sender': 'human',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='different',
+                    sender='human',
+                    session_id='session-1',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_client_message_id_rejects_different_app_when_retry_omits_app(self):
+        existing = MagicMock()
+        existing.exists = True
+        existing.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': 'different-app',
+            'plugin_id': 'different-app',
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'session-1',
+        }
+        message_ref = MagicMock()
+        message_ref.get.return_value = existing
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            with pytest.raises(chat_db.ClientMessageIdPayloadConflict):
+                chat_db.save_message(
+                    'uid',
+                    text='hello',
+                    sender='human',
+                    client_message_id='turn-1',
+                )
+
+        message_ref.create.assert_not_called()
+
+    def test_legacy_race_validates_the_requested_session_not_the_locally_acquired_session(self):
+        missing = MagicMock()
+        missing.exists = False
+        winner = MagicMock()
+        winner.to_dict.return_value = {
+            'id': 'turn-1',
+            'text': 'hello',
+            'sender': 'human',
+            'app_id': None,
+            'plugin_id': None,
+            'metadata': None,
+            'message_source': 'desktop_chat',
+            'chat_session_id': 'winner-session',
+            'session_id': 'winner-session',
+        }
+        message_ref = MagicMock()
+        message_ref.get.side_effect = [missing, winner]
+        message_ref.create.side_effect = chat_db.AlreadyExists('concurrent writer won')
+
+        with patch.object(chat_db, 'acquire_chat_session', return_value='locally-acquired-session'), patch.object(
+            chat_db, 'db'
+        ) as patched_db:
+            patched_db.collection.return_value.document.return_value.collection.return_value.document.return_value = (
+                message_ref
+            )
+            result = chat_db.save_message(
+                'uid',
+                text='hello',
+                sender='human',
+                client_message_id='turn-1',
+            )
+
+        assert result['id'] == 'turn-1'
+        assert result['session_id'] == 'winner-session'
+        assert result['created'] is False
+        message_ref.create.assert_called_once()
+
     def test_explicit_session_id_skips_acquire(self):
         """save_message with explicit session_id doesn't call acquire_chat_session."""
         mock_doc_ref = MagicMock()
@@ -892,6 +1359,138 @@ class TestDeleteMessagesCount:
 
         assert result == 3
         mock_batch.commit.assert_called_once()
+
+    def test_delete_applies_inverse_session_metadata_in_same_preconditioned_batch(self):
+        """Source deletion and inverse count/ID/preview updates commit together."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        doc1 = MagicMock()
+        doc1.id = 'msg-1'
+        doc1.update_time = object()
+        doc1.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1', 'text': 'older'}
+        doc2 = MagicMock()
+        doc2.id = 'msg-2'
+        doc2.update_time = object()
+        doc2.to_dict.return_value = {'id': 'logical-2', 'chat_session_id': 'sess-1', 'text': 'latest'}
+        mock_delete_query.stream.side_effect = [[doc1, doc2], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {
+            'message_count': 5,
+            'message_ids': ['logical-1', 'logical-2', 'older-id'],
+            'preview': 'latest',
+        }
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.side_effect = lambda **kwargs: ('last_update', kwargs['last_update_time'])
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 2
+        mock_delete_query.limit.assert_called_with(chat_db.DELETE_MESSAGES_BATCH_LIMIT)
+        mock_batch.update.assert_called_once_with(
+            mock_session_ref,
+            {
+                'message_ids': firestore_stub.ArrayRemove(['logical-1', 'logical-2']),
+                'message_count': firestore_stub.Increment(-2),
+                'preview': None,
+            },
+            option=('last_update', mock_session_snapshot.update_time),
+        )
+        assert mock_batch.delete.call_count == 2
+        assert all(call.kwargs['option'][0] == 'last_update' for call in mock_batch.delete.call_args_list)
+
+    def test_overlapping_clear_requeries_after_precondition_conflict(self):
+        """A losing clear never applies a second decrement to already-deleted docs."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message], []]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('overlapping clear won')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            result = chat_db.delete_messages('uid', app_id=None)
+
+        assert result == 0
+        mock_batch.commit.assert_called_once()
+
+    def test_persistent_precondition_conflict_is_bounded(self):
+        """A hot session cannot hold a sync worker in an unbounded retry loop."""
+        mock_msg_col = MagicMock()
+        mock_delete_query = MagicMock()
+        mock_msg_col.where.return_value = mock_delete_query
+        mock_delete_query.limit.return_value = mock_delete_query
+
+        message = MagicMock()
+        message.id = 'msg-1'
+        message.update_time = object()
+        message.to_dict.return_value = {'id': 'logical-1', 'chat_session_id': 'sess-1'}
+        mock_delete_query.stream.side_effect = [[message] for _ in range(chat_db.DELETE_MESSAGES_CONFLICT_RETRIES)]
+
+        mock_session_snapshot = MagicMock()
+        mock_session_snapshot.exists = True
+        mock_session_snapshot.update_time = object()
+        mock_session_snapshot.to_dict.return_value = {'message_count': 1}
+        mock_session_ref = MagicMock()
+        mock_session_ref.get.return_value = mock_session_snapshot
+        mock_session_col = MagicMock()
+        mock_session_col.document.return_value = mock_session_ref
+
+        mock_user_ref = MagicMock()
+        mock_user_ref.collection.side_effect = lambda name: (
+            mock_session_col if name == 'chat_sessions' else mock_msg_col
+        )
+        mock_batch = MagicMock()
+        mock_batch.commit.side_effect = chat_db.FailedPrecondition('persistent conflict')
+
+        with patch.object(chat_db, 'db') as patched_db:
+            patched_db.collection.return_value.document.return_value = mock_user_ref
+            patched_db.batch.return_value = mock_batch
+            patched_db.write_option.return_value = object()
+            with pytest.raises(chat_db.FailedPrecondition, match='persistent conflict'):
+                chat_db.delete_messages('uid', app_id=None)
+
+        assert mock_batch.commit.call_count == chat_db.DELETE_MESSAGES_CONFLICT_RETRIES
 
 
 class TestLlmUsageBucketParam:

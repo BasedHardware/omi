@@ -95,111 +95,113 @@ class _AppOwnerReviewCardState extends State<AppOwnerReviewCard> {
                         child: CircularProgressIndicator(valueColor: AlwaysStoppedAnimation<Color>(Colors.white)),
                       )
                     : (!showReplyField
-                        ? null
-                        : SingleChildScrollView(
-                            physics: const NeverScrollableScrollPhysics(),
-                            child: Column(
-                              children: [
-                                SizedBox(
-                                  width: MediaQuery.sizeOf(context).width * 0.88,
-                                  child: TextFormField(
-                                    controller: replyController,
-                                    enabled: isLoading ? false : true,
-                                    keyboardType: TextInputType.multiline,
-                                    maxLength: 250,
-                                    onChanged: (value) {
-                                      if (value.isEmpty) {
-                                        if (value == widget.review.review) {
-                                          updateShowButton(false);
+                          ? null
+                          : SingleChildScrollView(
+                              physics: const NeverScrollableScrollPhysics(),
+                              child: Column(
+                                children: [
+                                  SizedBox(
+                                    width: MediaQuery.sizeOf(context).width * 0.88,
+                                    child: TextFormField(
+                                      controller: replyController,
+                                      enabled: isLoading ? false : true,
+                                      keyboardType: TextInputType.multiline,
+                                      maxLength: 250,
+                                      onChanged: (value) {
+                                        if (value.isEmpty) {
+                                          if (value == widget.review.review) {
+                                            updateShowButton(false);
+                                          } else {
+                                            updateShowButton(true);
+                                          }
                                         } else {
                                           updateShowButton(true);
                                         }
-                                      } else {
-                                        updateShowButton(true);
-                                      }
-                                    },
-                                    decoration: InputDecoration(
-                                      hintText: context.l10n.writeSomething,
-                                      hintStyle: const TextStyle(color: Colors.grey),
-                                      border: const OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                                        borderSide: BorderSide(color: Colors.grey),
+                                      },
+                                      decoration: InputDecoration(
+                                        hintText: context.l10n.writeSomething,
+                                        hintStyle: const TextStyle(color: Colors.grey),
+                                        border: const OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                                          borderSide: BorderSide(color: Colors.grey),
+                                        ),
+                                        enabledBorder: OutlineInputBorder(
+                                          borderRadius: const BorderRadius.all(Radius.circular(8)),
+                                          borderSide: BorderSide(color: Colors.grey[700]!),
+                                        ),
+                                        focusedBorder: const OutlineInputBorder(
+                                          borderRadius: BorderRadius.all(Radius.circular(8)),
+                                          borderSide: BorderSide(color: Colors.grey),
+                                        ),
                                       ),
-                                      enabledBorder: OutlineInputBorder(
-                                        borderRadius: const BorderRadius.all(Radius.circular(8)),
-                                        borderSide: BorderSide(color: Colors.grey[700]!),
-                                      ),
-                                      focusedBorder: const OutlineInputBorder(
-                                        borderRadius: BorderRadius.all(Radius.circular(8)),
-                                        borderSide: BorderSide(color: Colors.grey),
-                                      ),
+                                      style: const TextStyle(color: Colors.white),
+                                      maxLines: 3,
                                     ),
-                                    style: const TextStyle(color: Colors.white),
-                                    maxLines: 3,
                                   ),
-                                ),
-                                const SizedBox(height: 20),
-                                Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    SizedBox(
-                                      width: MediaQuery.sizeOf(context).width * 0.36,
-                                      child: OutlinedButton(
-                                        style: OutlinedButton.styleFrom(
-                                          side: const BorderSide(color: Colors.white),
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                        ),
-                                        onPressed: () {
-                                          updateShowReplyField(false);
-                                        },
-                                        child: Text(
-                                          context.l10n.cancel,
-                                          style: const TextStyle(color: Colors.white, fontSize: 16),
+                                  const SizedBox(height: 20),
+                                  Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      SizedBox(
+                                        width: MediaQuery.sizeOf(context).width * 0.36,
+                                        child: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(color: Colors.white),
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          ),
+                                          onPressed: () {
+                                            updateShowReplyField(false);
+                                          },
+                                          child: Text(
+                                            context.l10n.cancel,
+                                            style: const TextStyle(color: Colors.white, fontSize: 16),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                    const SizedBox(width: 30),
-                                    SizedBox(
-                                      width: MediaQuery.sizeOf(context).width * 0.36,
-                                      child: OutlinedButton(
-                                        style: OutlinedButton.styleFrom(
-                                          side: const BorderSide(color: Colors.white),
-                                          backgroundColor: Colors.white,
-                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
-                                        ),
-                                        onPressed: () async {
-                                          if (replyController.text.isNotEmpty) {
-                                            setState(() {
-                                              isLoading = true;
-                                            });
-                                            await replyToAppReview(
-                                              widget.appId,
-                                              replyController.text,
-                                              widget.review.uid,
-                                            );
-                                            context.read<AppProvider>().updateLocalAppReviewResponse(
+                                      const SizedBox(width: 30),
+                                      SizedBox(
+                                        width: MediaQuery.sizeOf(context).width * 0.36,
+                                        child: OutlinedButton(
+                                          style: OutlinedButton.styleFrom(
+                                            side: const BorderSide(color: Colors.white),
+                                            backgroundColor: Colors.white,
+                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+                                          ),
+                                          onPressed: () async {
+                                            if (replyController.text.isNotEmpty) {
+                                              setState(() {
+                                                isLoading = true;
+                                              });
+                                              await replyToAppReview(
+                                                widget.appId,
+                                                replyController.text,
+                                                widget.review.uid,
+                                              );
+                                              if (context.mounted) {
+                                                context.read<AppProvider>().updateLocalAppReviewResponse(
                                                   widget.appId,
                                                   replyController.text,
                                                   widget.review.uid,
                                                 );
-                                            setState(() {
-                                              widget.review.response = replyController.text;
-                                              isLoading = false;
-                                              showReplyField = false;
-                                            });
-                                          }
-                                        },
-                                        child: Text(
-                                          context.l10n.submitReply,
-                                          style: const TextStyle(color: Colors.black, fontSize: 16),
+                                              }
+                                              setState(() {
+                                                widget.review.response = replyController.text;
+                                                isLoading = false;
+                                                showReplyField = false;
+                                              });
+                                            }
+                                          },
+                                          child: Text(
+                                            context.l10n.submitReply,
+                                            style: const TextStyle(color: Colors.black, fontSize: 16),
+                                          ),
                                         ),
                                       ),
-                                    ),
-                                  ],
-                                ),
-                              ],
-                            ),
-                          )),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            )),
               ),
             ),
             !showReplyField && widget.review.response.isNotEmpty

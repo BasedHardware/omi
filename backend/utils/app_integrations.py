@@ -13,7 +13,7 @@ from utils.http_client import (
     latest_wins_start,
     latest_wins_check,
 )
-from utils.executors import db_executor, run_blocking
+from utils.executors import db_executor, postprocess_executor, run_blocking
 from utils.async_tasks import gather_safe
 import utils.dev_cache as dev_cache
 
@@ -48,8 +48,8 @@ from utils.conversations.factory import deserialize_conversations
 from utils.conversations.render import conversations_to_string
 from models.notification_message import NotificationMessage
 from utils.apps import get_available_apps
-from utils.notifications import send_notification
-from utils.llm.clients import generate_embedding
+from utils.notifications import send_notification, send_notification_async
+from utils.llm.clients import generate_embedding, get_llm
 from utils.llm.proactive_notification import (
     evaluate_relevance,
     generate_notification,
@@ -67,6 +67,10 @@ from utils.mentor_notifications import process_mentor_notification
 import logging
 
 logger = logging.getLogger(__name__)
+
+
+class ExternalIntegrationFanoutError(RuntimeError):
+    """At least one durable finalization webhook did not acknowledge delivery."""
 
 
 def _notify_app_owner(app_id: str, title: str, body: str):
@@ -161,8 +165,20 @@ def get_github_docs_content(repo="BasedHardware/omi", path="docs/doc"):
 # **************************************************
 
 
-async def trigger_external_integrations(uid: str, conversation: Conversation) -> list:
-    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1)."""
+async def trigger_external_integrations(
+    uid: str,
+    conversation: Conversation,
+    *,
+    idempotency_key: str | None = None,
+    require_delivery: bool = False,
+) -> list:
+    """ON CONVERSATION CREATED — uses asyncio.gather + httpx (Lane 1).
+
+    Finalization workers provide a durable key so a lease replay can safely
+    retry an interrupted external fanout without creating a second effect.
+    They also require a delivery acknowledgement, preserving the existing
+    best-effort behavior for non-finalization callers.
+    """
     if not conversation or conversation.discarded:
         return []
     if conversation.is_locked:
@@ -174,6 +190,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         return []
 
     results = {}
+    failed_deliveries: list[str] = []
 
     async def _single(app: App):
         if not app.external_integration.webhook_url:
@@ -197,6 +214,8 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
         cb = get_webhook_circuit_breaker(url)
         if not cb.allow_request():
             logger.info(f'trigger_external_integrations: circuit breaker open for {app.id}')
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
         try:
@@ -206,6 +225,7 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                 response = await client.post(
                     url,
                     json=payload,
+                    headers={'X-Omi-Idempotency-Key': idempotency_key} if idempotency_key else None,
                 )
             if response.status_code < 200 or response.status_code >= 300:
                 cb.record_failure()
@@ -217,6 +237,8 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
                 logger.info(
                     f'App integration failed {app.id} status: {response.status_code} result: {sanitize(response.text[:100])}'
                 )
+                if require_delivery:
+                    failed_deliveries.append(app.id)
                 return
 
             cb.record_success()
@@ -252,10 +274,15 @@ async def trigger_external_integrations(uid: str, conversation: Conversation) ->
             error_str = type(e).__name__
             action = await run_blocking(db_executor, record_app_webhook_failure, app.id, 0, error_str)
             await run_blocking(db_executor, _handle_webhook_health_action, app.id, action, error_str)
-            logger.error(f"Plugin integration error: {e}")
+            logger.error('Plugin integration request failed app=%s error=%s', app.id, type(e).__name__)
+            if require_delivery:
+                failed_deliveries.append(app.id)
             return
 
     await gather_safe(*[_single(app) for app in filtered_apps], label="trigger_integrations", max_concurrency=10)
+
+    if failed_deliveries:
+        raise ExternalIntegrationFanoutError(f'{len(failed_deliveries)} durable integration deliveries failed')
 
     messages = []
     for key, message in results.items():
@@ -588,9 +615,12 @@ def _process_proactive_notification(uid: str, app: App, data):
 
     chat_messages = []
     if 'user_chat' in filter_scopes:
-        chat_messages = list(reversed([Message(**msg) for msg in get_app_messages(uid, app.id, limit=10)]))
-
-    from utils.llm.clients import get_llm
+        # Skip any malformed/legacy stored message rather than letting one bad record raise a
+        # ValidationError that aborts the whole notification. The sole caller swallows exceptions
+        # from here, so an unguarded build silently dropped the proactive notification every run
+        # until the bad row aged out of the last-10 window. deserialize_many_safe (#8882) is the
+        # shared safe-deserialize path for exactly this class.
+        chat_messages = list(reversed(Message.deserialize_many_safe(get_app_messages(uid, app.id, limit=10))))
 
     # Build prompt with substitutions
     for param in filter_scopes:
@@ -606,7 +636,8 @@ def _process_proactive_notification(uid: str, app: App, data):
             )
     prompt = prompt.replace('    ', '').strip()
 
-    message = get_llm('app_integration').invoke(prompt).content
+    with track_usage(uid, Features.PROACTIVE_NOTIFICATION):
+        message = get_llm('app_integration').invoke(prompt).content
     if not message or len(message) < min_message_char_limit:
         logger.info(f"Plugins {app.id}, message too short {uid}")
         return None
@@ -621,7 +652,7 @@ def _process_proactive_notification(uid: str, app: App, data):
 
 
 async def _async_trigger_realtime_audio_bytes(uid: str, sample_rate: int, data: bytearray):
-    apps: List[App] = get_available_apps(uid)
+    apps: List[App] = await run_blocking(db_executor, get_available_apps, uid)
     filtered_apps = [app for app in apps if app.triggers_realtime_audio_bytes() and app.enabled]
     if not filtered_apps:
         return {}
@@ -692,7 +723,7 @@ async def _async_trigger_realtime_integrations(
     # Paywall: skip mentor + third-party proactive notifications when this
     # transcription session belongs to a paywalled desktop user.
     # Reactivates automatically when the user upgrades or activates BYOK.
-    if is_trial_paywalled(uid, source):
+    if await run_blocking(db_executor, is_trial_paywalled, uid, source):
         return {}
 
     # Process mentor notification first (built-in feature) — sync, runs in thread
@@ -700,7 +731,12 @@ async def _async_trigger_realtime_integrations(
     conversation_messages = await run_blocking(db_executor, process_mentor_notification, uid, segments)
     if conversation_messages:
         with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-            mentor_message = _process_mentor_proactive_notification(uid, conversation_messages)
+            mentor_message = await run_blocking(
+                postprocess_executor,
+                _process_mentor_proactive_notification,
+                uid,
+                conversation_messages,
+            )
         if mentor_message:
             mentor_results['mentor'] = mentor_message
             logger.info(f"Sent mentor notification to user {uid}")
@@ -773,14 +809,20 @@ async def _async_trigger_realtime_integrations(
                 # message
                 message = response_data.get('message', '')
                 if message and len(message) > 5:
-                    send_app_notification(uid, app.name, app.id, message)
+                    await send_app_notification_async(uid, app.name, app.id, message)
                     results[app.id] = message
 
                 # proactive_notification
                 noti = response_data.get('notification', None)
                 if app.has_capability("proactive_notification"):
                     with track_usage(uid, Features.REALTIME_INTEGRATIONS):
-                        message = _process_proactive_notification(uid, app, noti)
+                        message = await run_blocking(
+                            postprocess_executor,
+                            _process_proactive_notification,
+                            uid,
+                            app,
+                            noti,
+                        )
                     if message:
                         results[app.id] = message
             except Exception:
@@ -808,7 +850,9 @@ async def _async_trigger_realtime_integrations(
     return messages
 
 
-def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+def _build_app_notification_payload(
+    app_name: str, app_id: str, message: str, target: str
+) -> tuple[str, dict[str, object]]:
     navigate_to = '/chat/omi' if target == 'main' else f'/chat/{app_id}'
     ai_message = NotificationMessage(
         text=message,
@@ -818,5 +862,17 @@ def send_app_notification(user_id: str, app_name: str, app_id: str, message: str
         notification_type='plugin',
         navigate_to=navigate_to,
     )
+    return app_name + ' says', NotificationMessage.get_message_as_dict(ai_message)
 
-    send_notification(user_id, app_name + ' says', message, NotificationMessage.get_message_as_dict(ai_message))
+
+def send_app_notification(user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'):
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    send_notification(user_id, title, message, data)
+
+
+async def send_app_notification_async(
+    user_id: str, app_name: str, app_id: str, message: str, target: str = 'app'
+) -> None:
+    """Async notification boundary for realtime integration coordinators."""
+    title, data = _build_app_notification_payload(app_name, app_id, message, target)
+    await send_notification_async(user_id, title, message, data)

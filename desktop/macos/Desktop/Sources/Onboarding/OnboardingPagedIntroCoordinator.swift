@@ -1,7 +1,7 @@
 import AppKit
 import CoreServices
 import Foundation
-import GRDB
+@preconcurrency import GRDB
 import SwiftUI
 
 @MainActor
@@ -110,6 +110,10 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
   /// the views render from.
   static weak var current: OnboardingPagedIntroCoordinator?
 
+  // Assigned only on the main actor at init; the nonisolated deinit needs
+  // unchecked access to remove the observer.
+  nonisolated(unsafe) private var nameObserver: NSObjectProtocol?
+
   init() {
     let givenName = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
     let displayName = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -127,7 +131,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let defaults = UserDefaults.standard
     let currentUserID = Self.normalizedUserID(defaults.string(forKey: .authUserId))
     var ownerUserID = Self.normalizedUserID(defaults.string(forKey: .onboardingMemoryImportOwnerUserId))
-    let hasLegacyImport = defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
+    let hasLegacyImport =
+      defaults.object(forKey: chatGPTImportedMemoriesKey) != nil
       || defaults.object(forKey: chatGPTImportSummaryKey) != nil
       || defaults.object(forKey: claudeImportedMemoriesKey) != nil
       || defaults.object(forKey: claudeImportSummaryKey) != nil
@@ -136,32 +141,83 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
       ownerUserID = currentUserID
     }
     let canRestoreMemoryImports = ownerUserID == nil || ownerUserID == currentUserID
-    chatGPTImportedMemoriesCount = canRestoreMemoryImports
+    chatGPTImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: chatGPTImportedMemoriesKey) : 0
-    claudeImportedMemoriesCount = canRestoreMemoryImports
+    claudeImportedMemoriesCount =
+      canRestoreMemoryImports
       ? defaults.integer(forKey: claudeImportedMemoriesKey) : 0
-    chatGPTImportSummary = canRestoreMemoryImports
+    chatGPTImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: chatGPTImportSummaryKey) ?? "" : ""
-    claudeImportSummary = canRestoreMemoryImports
+    claudeImportSummary =
+      canRestoreMemoryImports
       ? defaults.string(forKey: claudeImportSummaryKey) ?? "" : ""
+
+    // The name can arrive asynchronously — Apple only sends it on first auth, and
+    // otherwise it's fetched from the backend after sign-in. `givenName` is plain
+    // UserDefaults (not observable), so `preferredName` was a frozen snapshot that
+    // stayed "there". Refresh it when AuthService signals the name is known.
+    nameObserver = NotificationCenter.default.addObserver(
+      forName: .authNameDidUpdate, object: nil, queue: .main
+    ) { [weak self] _ in
+      MainActor.assumeIsolated { self?.refreshNameFromAuthIfUnedited() }
+    }
   }
 
   deinit {
+    if let nameObserver {
+      NotificationCenter.default.removeObserver(nameObserver)
+    }
     gmailTask?.cancel()
     calendarTask?.cancel()
     appleNotesTask?.cancel()
     webResearchTask?.cancel()
   }
 
+  /// Adopt a name that landed after init — but only replace the "there"
+  /// placeholder, never a value the user has typed into the name field.
+  private func refreshNameFromAuthIfUnedited() {
+    let given = AuthService.shared.givenName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let display = AuthService.shared.displayName.trimmingCharacters(in: .whitespacesAndNewlines)
+    let resolved = given.isEmpty ? display : given
+    guard !resolved.isEmpty else { return }
+    if preferredName == "there" || preferredName.isEmpty {
+      preferredName = resolved
+    }
+    if draftName == "there" || draftName.isEmpty {
+      draftName = resolved
+    }
+  }
+
   func prepare(appState: AppState) {
     ChatToolExecutor.onboardingAppState = appState
     appState.checkAllPermissions()
+
+    // Pull the name from the backend if we don't have it locally yet; when it
+    // lands, `.authNameDidUpdate` refreshes `preferredName` (no more "there").
+    AuthService.shared.loadNameFromBackendIfNeeded()
 
     // Clear graph only on first onboarding start, not mid-onboarding restarts.
     let isResuming = OnboardingChatPersistence.isMidOnboarding
     OnboardingChatPersistence.saveMidOnboarding()
     if !isResuming {
-      Task { await KnowledgeGraphStorage.shared.clearAll() }
+      if let authorizationSnapshot = RuntimeOwnerIdentity.captureAuthorizationSnapshot() {
+        let authorization = LocalMutationAuthorization {
+          RuntimeOwnerIdentity.isAuthorizationCurrent(authorizationSnapshot)
+        }
+        Task {
+          do {
+            try await KnowledgeGraphStorage.shared.clearAll(authorization: authorization)
+          } catch LocalMutationAuthorizationError.revoked {
+            log("Onboarding: skipped stale-owner local knowledge graph reset")
+          } catch {
+            logError("Onboarding: failed to reset local knowledge graph", error: error)
+          }
+        }
+      } else {
+        log("Onboarding: skipped local knowledge graph reset without an authenticated owner")
+      }
     }
 
     if scanSnapshot == nil {
@@ -470,10 +526,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     let configuration = NSWorkspace.OpenConfiguration()
     configuration.activates = true
 
-    if let browserBundleId = LSCopyDefaultHandlerForURLScheme("https" as CFString)?
-      .takeRetainedValue() as String?,
-      let browserURL = NSWorkspace.shared.urlForApplication(withBundleIdentifier: browserBundleId)
-    {
+    if let browserURL = NSWorkspace.shared.urlForApplication(toOpen: url) {
       NSWorkspace.shared.open([url], withApplicationAt: browserURL, configuration: configuration) {
         _, error in
         if let error {
@@ -520,6 +573,19 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     }
   }
 
+  /// The onboarding file scan is a best-effort profile builder. The user must be
+  /// able to advance once it reaches ANY terminal state — `.complete` (even with
+  /// zero indexed files) or `.failed` — not only when a non-empty `scanSnapshot`
+  /// exists. Gating the Continue button on `scanSnapshot != nil` traps a user
+  /// whose scan failed or indexed nothing (e.g. they skipped Full Disk Access)
+  /// on a perpetual "Scanning…" screen with no way forward but Skip.
+  static func fileScanReachedTerminalState(_ state: ScanState) -> Bool {
+    switch state {
+    case .complete, .failed: return true
+    case .idle, .scanning: return false
+    }
+  }
+
   func startFileScanIfNeeded(appState: AppState) async {
     guard case .idle = scanState else { return }
     lastActionError = nil
@@ -536,6 +602,7 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
     if result.lowercased().hasPrefix("error") {
       scanState = .failed(result)
       lastActionError = result
+      scanStatusText = "We couldn't finish scanning your workspace."
       return
     }
 
@@ -1376,7 +1443,8 @@ final class OnboardingPagedIntroCoordinator: ObservableObject {
 
   private func executeTool(name: String, arguments: [String: Any]) async -> String {
     await ChatToolExecutor.execute(
-      ToolCall(name: name, arguments: arguments, thoughtSignature: nil)
+      ToolCall(name: name, arguments: arguments, thoughtSignature: nil),
+      isOnboardingSurface: true
     )
   }
 

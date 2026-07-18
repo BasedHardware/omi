@@ -6,8 +6,8 @@ time.sleep(480) on storage_executor, which parked ~70% of the pool's 128
 threads as idle timers (#7531).
 
 Behavioral tests exercise the real DeferredDeleter (the module has no heavy
-imports). Structural tests verify the four former sleep-sites now use the
-scheduler.
+imports). Structural tests verify the former sleep-sites keep a single cleanup
+owner for each generated URL.
 """
 
 import os
@@ -127,8 +127,20 @@ class TestSleepPatternRemoved:
         pipeline_src = _read_source('utils/sync/pipeline.py')
         assert 'schedule_syncing_temporal_file_deletion(path)' in pipeline_src
 
-    def test_chat_uses_scheduler_at_all_three_sites(self):
-        assert _read_source('utils/chat.py').count('schedule_syncing_temporal_file_deletion(path)') == 3
+    def test_chat_cleanup_has_two_explicit_owners(self):
+        source = _read_source('utils/chat.py')
+
+        # ``_prepare_voice_message_url`` is the single cleanup owner for every
+        # voice-message entry point. A direct caller-side schedule would
+        # double-schedule the same temporary object.
+        assert source.count('schedule_syncing_temporal_file_deletion(path)') == 1
+
+        helper_source = source.split('def _prepare_voice_message_url(', 1)[1].split('\ndef ', 1)[0]
+        assert helper_source.count('schedule_syncing_temporal_file_deletion(path)') == 1
+
+        processing_source = source.split('def process_voice_message_segment(', 1)[1].split('\nasync def ', 1)[0]
+        assert 'transcribe_voice_message_segment(path, uid, language)' in processing_source
+        assert 'schedule_syncing_temporal_file_deletion(path)' not in processing_source
 
     def test_storage_defines_scheduler_with_480_default(self):
         src = _read_source('utils/other/storage.py')

@@ -7,6 +7,9 @@ PRE_GCP_READY result means the branch is locally ready to move to a host with
 GCP access; it does not approve dev/prod evidence execution or any rollout.
 """
 
+# LIFECYCLE: one-time
+# DELETE-AFTER: INV-MEM-3
+
 from __future__ import annotations
 from typing import Any, Dict
 

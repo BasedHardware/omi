@@ -1468,7 +1468,7 @@ class AppLocalizationsMr extends AppLocalizations {
   String get payYourSttProvider => 'Omi मुक्तपणे वापरा. आपण केवळ आपल्या STT प्रदाता ला थेट भुगतान करा.';
 
   @override
-  String get freeMinutesMonth => '600 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
+  String get freeMinutesMonth => '300 मुक्त मिनिटे/महिना समाविष्ट. अमर्यादित ';
 
   @override
   String get omiUnlimited => 'Omi अमर्यादित';
@@ -6008,7 +6008,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते.';
 
   @override
   String get viewUsage => 'वापर पहा';
@@ -6090,7 +6090,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
+      '300 प्रीमियम मिनिटे/महिना. ऑन-डिव्हाइस टॅब अमर्यादित विनामूल्य ट्रान्सक्रिप्शन ऑफर करते. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9353,7 +9353,7 @@ class AppLocalizationsMr extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'सध्या Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
+      'फोनचा मायक्रोफोन, Omi आणि Limitless डिव्हाइससोबत चालते. तुम्ही अपलोड करण्याचे ठरवेपर्यंत ऑडिओ तुमच्या फोनवरच राहते.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9582,4 +9582,33 @@ class AppLocalizationsMr extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta शी कनेक्ट करताना त्रुटी: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'डिव्हाइस स्टोरेज';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% भरले';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total पैकी $used वापरले';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free रिकामे';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'डिव्हाइस जवळजवळ भरले आहे — जागा मोकळी करण्यासाठी सिंक करा.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'कनेक्शन नाही — स्थानिकरित्या रेकॉर्ड होत आहे. तुम्ही पुन्हा ऑनलाइन झाल्यावर याचे ट्रान्सक्रिप्शन केले जाईल.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'तुमचा डेटा डीफॉल्टनुसार मजबूत एन्क्रिप्शनने सुरक्षित आहे आणि तो कसा साठवला व वापरला जातो यावर तुमचे नियंत्रण असते.';
 }

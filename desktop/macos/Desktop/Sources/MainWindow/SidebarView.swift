@@ -1,5 +1,6 @@
-import SwiftUI
+@preconcurrency import AppKit
 import OmiTheme
+import SwiftUI
 
 // MARK: - Navigation Item Model
 enum SidebarNavItem: Int, CaseIterable {
@@ -103,7 +104,6 @@ struct SidebarView: View {
   // Drag state
   @State private var dragOffset: CGFloat = 0
   @GestureState private var isDragging = false
-  @State private var isProfileMenuPresented = false
   @State private var isProfileButtonHovered = false
 
   // Constants
@@ -139,8 +139,8 @@ struct SidebarView: View {
       VStack(alignment: .leading, spacing: 0) {
         // Header: Logo + Collapse button on same row
         headerSection
-          .padding(.top, 12)
-          .padding(.horizontal, isCollapsed ? 8 : 16)
+          .padding(.top, OmiSpacing.md)
+          .padding(.horizontal, isCollapsed ? OmiSpacing.sm : OmiSpacing.lg)
 
         Spacer().frame(height: isCollapsed ? 8 : 16)
 
@@ -259,32 +259,32 @@ struct SidebarView: View {
 
           // Update available widget
           if updaterViewModel.updateAvailable || updaterViewModel.updateSessionInProgress {
-            Spacer().frame(height: 12)
+            Spacer().frame(height: OmiSpacing.md)
             updateAvailableWidget
               .transition(.opacity)
           }
 
           if hasVisibleSidebarStatuses {
-            Spacer().frame(height: 16)
+            Spacer().frame(height: OmiSpacing.lg)
             permissionStatusSection
           }
 
-          Spacer().frame(height: 16)
+          Spacer().frame(height: OmiSpacing.lg)
           Rectangle()
             .fill(OmiColors.backgroundTertiary.opacity(0.5))
             .frame(height: 1)
 
-          Spacer().frame(height: 12)
+          Spacer().frame(height: OmiSpacing.md)
           profileMenuButton
 
-          Spacer().frame(height: 8)
+          Spacer().frame(height: OmiSpacing.sm)
         }
-        .padding(.horizontal, isCollapsed ? 8 : 16)
+        .padding(.horizontal, isCollapsed ? OmiSpacing.sm : OmiSpacing.lg)
         .frame(maxHeight: .infinity)
       }
       .frame(maxWidth: currentWidth + dragOffset, maxHeight: .infinity, alignment: .top)
       .background(Color.clear)
-      .animation(.easeInOut(duration: 0.2), value: isCollapsed)
+      .omiAnimation(.easeInOut(duration: 0.2), value: isCollapsed)
 
       // Drag handle
       Rectangle()
@@ -300,13 +300,13 @@ struct SidebarView: View {
               let newWidth = currentWidth + value.translation.width
               if newWidth < (collapsedWidth + expandedWidth) / 2 {
                 if !isCollapsed {
-                  withAnimation(.easeInOut(duration: 0.2)) {
+                  OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                     isCollapsed = true
                   }
                 }
               } else {
                 if isCollapsed {
-                  withAnimation(.easeInOut(duration: 0.2)) {
+                  OmiMotion.withGated(.easeInOut(duration: 0.2)) {
                     isCollapsed = false
                   }
                 }
@@ -380,8 +380,7 @@ struct SidebarView: View {
         }
       }
     }
-    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification))
-    { _ in
+    .onReceive(NotificationCenter.default.publisher(for: NSApplication.didBecomeActiveNotification)) { _ in
       // Refresh permissions when app becomes active (user may have changed them in System Settings)
       appState.checkAllPermissions()
     }
@@ -407,7 +406,7 @@ struct SidebarView: View {
 
   // MARK: - Header Section (Logo + Collapse Button on same row)
   private var headerSection: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       // Omi logo icon - using the herologo from Resources
       if let logoURL = Bundle.resourceBundle.url(forResource: "herologo", withExtension: "png"),
         let logoImage = NSImage(contentsOf: logoURL)
@@ -419,15 +418,15 @@ struct SidebarView: View {
       } else {
         // Fallback SF Symbol
         Image(systemName: "circle.fill")
-          .scaledFont(size: 17)
-          .foregroundColor(OmiColors.purplePrimary)
+          .scaledFont(size: OmiType.subheading)
+          .foregroundColor(OmiColors.accent)
           .frame(width: iconWidth)
       }
 
       if !isCollapsed {
         // Brand name
         Text(UpdateChannel.appDisplayName)
-          .scaledFont(size: 22, weight: .bold)
+          .scaledFont(size: OmiType.heading, weight: .bold)
           .foregroundColor(OmiColors.textPrimary)
           .tracking(-0.5)
 
@@ -435,12 +434,12 @@ struct SidebarView: View {
 
         // Collapse button
         Button(action: {
-          withAnimation(.easeInOut(duration: 0.2)) {
+          OmiMotion.withGated(.easeInOut(duration: 0.2)) {
             isCollapsed.toggle()
           }
         }) {
           Image(systemName: "sidebar.left")
-            .scaledFont(size: 17)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(OmiColors.textTertiary)
         }
         .buttonStyle(.plain)
@@ -450,75 +449,43 @@ struct SidebarView: View {
         Spacer()
       }
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 11)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
   }
 
   // Collapse button for collapsed state (shown separately)
   private var collapsedExpandButton: some View {
     Button(action: {
-      withAnimation(.easeInOut(duration: 0.2)) {
+      OmiMotion.withGated(.easeInOut(duration: 0.2)) {
         isCollapsed.toggle()
       }
     }) {
       Image(systemName: "sidebar.left")
-        .scaledFont(size: 17)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(OmiColors.textTertiary)
         .frame(width: iconWidth)
     }
     .buttonStyle(.plain)
-    .padding(.horizontal, 12)
-    .padding(.vertical, 8)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.sm)
     .help("Expand sidebar")
   }
 
   private var proBadge: some View {
     Text("Pro")
-      .scaledFont(size: 11, weight: .semibold)
-      .foregroundColor(OmiColors.purplePrimary)
-      .padding(.horizontal, 8)
-      .padding(.vertical, 3)
+      .scaledFont(size: OmiType.caption, weight: .semibold)
+      .foregroundColor(OmiColors.accent)
+      .padding(.horizontal, OmiSpacing.sm)
+      .padding(.vertical, OmiSpacing.hairline)
       .background(
-        RoundedRectangle(cornerRadius: 6)
-          .fill(OmiColors.purplePrimary.opacity(0.15))
+        RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+          .fill(OmiColors.accent.opacity(0.15))
           .overlay(
-            RoundedRectangle(cornerRadius: 6)
-              .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 1)
+            RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
+              .stroke(OmiColors.accent.opacity(0.3), lineWidth: 1)
           )
       )
   }
-
-  // MARK: - Upgrade to Pro
-  //    private var upgradeToPro: some View {
-  //        Button(action: {
-  //            if let url = URL(string: "https://omi.me/pricing") {
-  //                NSWorkspace.shared.open(url)
-  //            }
-  //        }) {
-  //            HStack(spacing: 12) {
-  //                Image(systemName: "bolt.fill")
-  //                    .scaledFont(size: 17)
-  //                    .foregroundColor(.white)
-  //                    .frame(width: iconWidth)
-  //
-  //                if !isCollapsed {
-  //                    Text("Upgrade to Pro")
-  //                        .scaledFont(size: 14, weight: .semibold)
-  //                        .foregroundColor(.white)
-  //
-  //                    Spacer()
-  //                }
-  //            }
-  //            .padding(.horizontal, 12)
-  //            .padding(.vertical, 11)
-  //            .background(
-  //                RoundedRectangle(cornerRadius: 10)
-  //                    .fill(OmiColors.purpleGradient)
-  //            )
-  //        }
-  //        .buttonStyle(.plain)
-  //        .help("Upgrade to Pro")
-  //    }
 
   // MARK: - Update Available Widget
   @State private var updateGlowAnimating = false
@@ -531,28 +498,29 @@ struct SidebarView: View {
         updaterViewModel.checkForUpdates()
       }
     }) {
-      HStack(spacing: 12) {
+      HStack(spacing: OmiSpacing.md) {
         if isDownloading {
           ProgressView()
             .controlSize(.small)
+            .tint(OmiColors.backgroundPrimary)
             .frame(width: iconWidth)
         } else {
           Image(systemName: "arrow.down.circle.fill")
-            .scaledFont(size: 17)
-            .foregroundColor(.white)
+            .scaledFont(size: OmiType.subheading)
+            .foregroundColor(OmiColors.backgroundPrimary)
             .frame(width: iconWidth)
         }
 
         if !isCollapsed {
-          VStack(alignment: .leading, spacing: 2) {
+          VStack(alignment: .leading, spacing: OmiSpacing.hairline) {
             Text(isDownloading ? "Downloading Update…" : "Update Available")
-              .scaledFont(size: 13, weight: .semibold)
-              .foregroundColor(.white)
+              .scaledFont(size: OmiType.body, weight: .semibold)
+              .foregroundColor(OmiColors.backgroundPrimary)
 
             if !isDownloading, !updaterViewModel.availableVersion.isEmpty {
               Text("v\(updaterViewModel.availableVersion)")
-                .scaledFont(size: 11)
-                .foregroundColor(.white.opacity(0.8))
+                .scaledFont(size: OmiType.caption)
+                .foregroundColor(OmiColors.backgroundPrimary.opacity(0.8))
             }
           }
 
@@ -560,18 +528,18 @@ struct SidebarView: View {
 
           if !isDownloading {
             Image(systemName: "chevron.right")
-              .scaledFont(size: 12)
-              .foregroundColor(.white.opacity(0.7))
+              .scaledFont(size: OmiType.caption)
+              .foregroundColor(OmiColors.backgroundPrimary.opacity(0.7))
           }
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 11)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.md)
       .background(
-        RoundedRectangle(cornerRadius: 10)
-          .fill(OmiColors.purplePrimary)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
+          .fill(OmiColors.accent)
       )
-      .shadow(color: OmiColors.purplePrimary.opacity(updateGlowAnimating ? 0.7 : 0.3), radius: 8)
+      .shadow(color: OmiColors.accent.opacity(updateGlowAnimating ? 0.7 : 0.3), radius: 8)
     }
     .buttonStyle(.plain)
     .help(
@@ -579,17 +547,13 @@ struct SidebarView: View {
         ? (isDownloading ? "Downloading update…" : "Update Available — click to install") : ""
     )
     .onAppear {
-      withAnimation(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
+      OmiMotion.withGated(.easeInOut(duration: 1.2).repeatForever(autoreverses: true)) {
         updateGlowAnimating = true
       }
     }
   }
 
   // MARK: - Profile Menu
-
-  private var shouldShowReferFriend: Bool {
-    currentTierLevel == 0 || currentTierLevel >= 4
-  }
 
   private var shouldShowScreenRecordingStatus: Bool {
     appState.hasScreenRecordingPermission || !appState.hasScreenRecordingPermission
@@ -639,39 +603,36 @@ struct SidebarView: View {
 
   private var profileMenuButton: some View {
     Button {
-      isProfileMenuPresented.toggle()
+      // Straight to Settings — no intermediate menu popover.
+      selectedIndex = SidebarNavItem.settings.rawValue
     } label: {
       HStack(spacing: isCollapsed ? 0 : 10) {
         ZStack {
-          RoundedRectangle(cornerRadius: 10, style: .continuous)
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
             .fill(OmiColors.backgroundTertiary.opacity(0.75))
             .frame(width: 34, height: 34)
 
           Image(systemName: "gearshape.fill")
-            .scaledFont(size: 15, weight: .semibold)
+            .scaledFont(size: OmiType.subheading, weight: .semibold)
             .foregroundColor(OmiColors.textSecondary)
         }
 
         if !isCollapsed {
           Text("Settings")
-            .scaledFont(size: 13, weight: .medium)
+            .scaledFont(size: OmiType.body, weight: .medium)
             .foregroundColor(OmiColors.textPrimary)
             .lineLimit(1)
 
           Spacer(minLength: 8)
-
-          Image(systemName: "ellipsis")
-            .scaledFont(size: 13, weight: .semibold)
-            .foregroundColor(OmiColors.textTertiary)
         }
       }
-      .padding(.horizontal, 12)
-      .padding(.vertical, 8)
+      .padding(.horizontal, OmiSpacing.md)
+      .padding(.vertical, OmiSpacing.sm)
       .frame(maxWidth: .infinity, alignment: isCollapsed ? .center : .leading)
       .background(
-        RoundedRectangle(cornerRadius: 12, style: .continuous)
+        RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius, style: .continuous)
           .fill(
-            isProfileMenuPresented || isProfileButtonHovered
+            selectedIndex == SidebarNavItem.settings.rawValue || isProfileButtonHovered
               ? OmiColors.backgroundTertiary.opacity(0.55) : Color.clear
           )
       )
@@ -681,51 +642,7 @@ struct SidebarView: View {
     .onHover { hovering in
       isProfileButtonHovered = hovering
     }
-    .popover(isPresented: $isProfileMenuPresented, arrowEdge: .bottom) {
-      profileMenuPopover
-    }
-    .help("Open settings menu")
-  }
-
-  private var profileMenuPopover: some View {
-    VStack(alignment: .leading, spacing: 4) {
-      VStack(spacing: 4) {
-        if shouldShowReferFriend {
-          ProfileMenuActionRow(icon: "gift.fill", label: "Refer a Friend") {
-            isProfileMenuPresented = false
-            openReferFriend()
-          }
-        }
-
-        ProfileMenuActionRow(icon: "message.fill", label: "Discord") {
-          isProfileMenuPresented = false
-          openDiscord()
-        }
-
-        ProfileMenuActionRow(
-          icon: "gearshape.fill",
-          label: "Settings",
-          isSelected: selectedIndex == SidebarNavItem.settings.rawValue
-        ) {
-          isProfileMenuPresented = false
-          selectedIndex = SidebarNavItem.settings.rawValue
-        }
-      }
-    }
-    .padding(10)
-    .frame(width: 220)
-    .background(OmiColors.backgroundPrimary)
-  }
-
-  private func openReferFriend() {
-    if let url = URL(string: "https://affiliate.omi.me") {
-      NSWorkspace.shared.open(url)
-    }
-  }
-
-  private func openDiscord() {
-    guard let url = URL(string: "https://discord.com/invite/8MP3b9ymvx") else { return }
-    NSWorkspace.shared.open(url)
+    .help("Open Settings")
   }
 
   // MARK: - Permission Warning Button
@@ -740,7 +657,7 @@ struct SidebarView: View {
 
   private func updatePermissionPulse(_ denied: Bool) {
     if denied {
-      withAnimation(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
+      OmiMotion.withGated(.easeInOut(duration: 0.8).repeatForever(autoreverses: true)) {
         permissionPulse = true
       }
     } else {
@@ -749,7 +666,7 @@ struct SidebarView: View {
   }
 
   private var permissionStatusSection: some View {
-    VStack(spacing: 6) {
+    VStack(spacing: OmiSpacing.xs) {
       if shouldShowScreenRecordingStatus {
         screenRecordingPermissionRow(isExpanded: !isCollapsed)
       }
@@ -779,19 +696,19 @@ struct SidebarView: View {
     let titleColor: Color =
       isToggleable ? OmiColors.textSecondary : color
 
-    let row = HStack(spacing: 8) {
+    let row = HStack(spacing: OmiSpacing.sm) {
       Image(
         systemName: (isDenied || isBroken || isStale)
           ? "rectangle.on.rectangle.slash" : "rectangle.on.rectangle"
       )
-      .scaledFont(size: 15)
+      .scaledFont(size: OmiType.subheading)
       .foregroundColor(color)
       .frame(width: iconWidth)
       .scaleEffect(permissionPulse && (isDenied || isBroken || isStale) ? 1.1 : 1.0)
 
       if isExpanded {
         Text("Screen Recording")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(titleColor)
           .lineLimit(1)
 
@@ -816,12 +733,12 @@ struct SidebarView: View {
             }
           }) {
             Text(isStale ? "Fix" : (needsReset ? "Reset" : "Grant"))
-              .scaledFont(size: 11, weight: .semibold)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(.white)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 4)
+              .padding(.horizontal, OmiSpacing.sm)
+              .padding(.vertical, OmiSpacing.xxs)
               .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                   .fill(color)
               )
           }
@@ -829,11 +746,11 @@ struct SidebarView: View {
         }
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 7)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.xs)
     .frame(minHeight: 40)
     .background(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .fill(
           isToggleable
             ? Color.clear
@@ -876,16 +793,16 @@ struct SidebarView: View {
     let titleColor: Color =
       isToggleable ? OmiColors.textSecondary : color
 
-    let row = HStack(spacing: 8) {
+    let row = HStack(spacing: OmiSpacing.sm) {
       Image(systemName: isDenied ? "mic.slash.fill" : "mic.fill")
-        .scaledFont(size: 15)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(color)
         .frame(width: iconWidth)
         .scaleEffect(permissionPulse && isDenied ? 1.1 : 1.0)
 
       if isExpanded {
         Text("Microphone")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(titleColor)
           .lineLimit(1)
 
@@ -904,12 +821,12 @@ struct SidebarView: View {
             }
           }) {
             Text(isDenied ? "Fix" : "Grant")
-              .scaledFont(size: 11, weight: .semibold)
+              .scaledFont(size: OmiType.caption, weight: .semibold)
               .foregroundColor(.white)
-              .padding(.horizontal, 10)
-              .padding(.vertical, 4)
+              .padding(.horizontal, OmiSpacing.sm)
+              .padding(.vertical, OmiSpacing.xxs)
               .background(
-                RoundedRectangle(cornerRadius: 6)
+                RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                   .fill(color)
               )
           }
@@ -917,11 +834,11 @@ struct SidebarView: View {
         }
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 7)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.xs)
     .frame(minHeight: 40)
     .background(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .fill(
           isToggleable
             ? Color.clear
@@ -954,16 +871,16 @@ struct SidebarView: View {
     let needsReset = isBroken  // Show reset when broken
     let color: Color = (isDenied || isBroken) ? .red : OmiColors.warning
 
-    return HStack(spacing: 8) {
+    return HStack(spacing: OmiSpacing.sm) {
       Image(systemName: (isDenied || isBroken) ? "hand.raised.slash.fill" : "hand.raised.fill")
-        .scaledFont(size: 15)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(color)
         .frame(width: iconWidth)
         .scaleEffect(permissionPulse && (isDenied || isBroken) ? 1.1 : 1.0)
 
       if isExpanded {
         Text("Accessibility")
-          .scaledFont(size: 13, weight: .medium)
+          .scaledFont(size: OmiType.body, weight: .medium)
           .foregroundColor(color)
           .lineLimit(1)
 
@@ -979,26 +896,26 @@ struct SidebarView: View {
           }
         }) {
           Text(needsReset ? "Reset" : (isDenied ? "Fix" : "Grant"))
-            .scaledFont(size: 11, weight: .semibold)
+            .scaledFont(size: OmiType.caption, weight: .semibold)
             .foregroundColor(.white)
-            .padding(.horizontal, 10)
-            .padding(.vertical, 4)
+            .padding(.horizontal, OmiSpacing.sm)
+            .padding(.vertical, OmiSpacing.xxs)
             .background(
-              RoundedRectangle(cornerRadius: 6)
+              RoundedRectangle(cornerRadius: OmiChrome.badgeRadius)
                 .fill(color)
             )
         }
         .buttonStyle(.plain)
       }
     }
-    .padding(.horizontal, 10)
-    .padding(.vertical, 7)
+    .padding(.horizontal, OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.xs)
     .frame(minHeight: 40)
     .background(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .fill(color.opacity(permissionPulse && (isDenied || isBroken) ? 0.25 : 0.15))
         .overlay(
-          RoundedRectangle(cornerRadius: 10)
+          RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
             .stroke(color.opacity(0.3), lineWidth: (isDenied || isBroken) ? 2 : 1)
         )
     )
@@ -1019,10 +936,10 @@ struct SidebarView: View {
       Circle()
         .fill(.white.opacity(isOn ? 0.98 : 0.92))
         .frame(width: 14, height: 14)
-        .padding(2)
+        .padding(OmiSpacing.hairline)
     }
-    .padding(.trailing, 2)
-    .animation(.easeInOut(duration: 0.16), value: isOn)
+    .padding(.trailing, OmiSpacing.hairline)
+    .omiAnimation(.easeInOut(duration: 0.16), value: isOn)
     .accessibilityHidden(true)
   }
 
@@ -1154,7 +1071,7 @@ struct NavItemView: View {
   private var lockedColor: Color { OmiColors.textQuaternary.opacity(0.45) }
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       ZStack(alignment: .topTrailing) {
         if isLoading && !isLocked {
           ProgressView()
@@ -1162,7 +1079,7 @@ struct NavItemView: View {
             .frame(width: iconWidth, height: 17)
         } else {
           Image(systemName: icon)
-            .scaledFont(size: 17)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(
               isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
             )
@@ -1173,15 +1090,15 @@ struct NavItemView: View {
         if badge > 0 && !isLocked {
           if isCollapsed {
             Circle()
-              .fill(OmiColors.purplePrimary)
+              .fill(OmiColors.accent)
               .frame(width: 8, height: 8)
               .offset(x: 4, y: -4)
           } else {
             Text("\(badge)")
               .font(.system(size: 9, weight: .bold))
-              .foregroundColor(.white)
+              .foregroundColor(OmiColors.backgroundPrimary)
               .frame(minWidth: 14, minHeight: 14)
-              .background(OmiColors.purplePrimary)
+              .background(OmiColors.accent)
               .clipShape(Circle())
               .offset(x: 6, y: -6)
           }
@@ -1204,7 +1121,7 @@ struct NavItemView: View {
 
       if !isCollapsed {
         Text(label)
-          .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
           .foregroundColor(
             isLocked ? lockedColor : (isSelected ? OmiColors.textPrimary : OmiColors.textSecondary))
 
@@ -1225,11 +1142,11 @@ struct NavItemView: View {
         }
       }
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 11)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .contentShape(Rectangle())
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(
           isLocked
             ? Color.clear
@@ -1246,7 +1163,7 @@ struct NavItemView: View {
     .onHover { hovering in
       isHovered = isLocked ? false : hovering
     }
-    .padding(.bottom, 2)
+    .padding(.bottom, OmiSpacing.hairline)
     .help(isCollapsed ? label : "")
     .accessibilityLabel(label)
     .accessibilityAddTraits(.isButton)
@@ -1258,11 +1175,11 @@ struct NavItemView: View {
   private func lockIcon(size: CGFloat) -> some View {
     Image(systemName: isLockHovered ? "lock.open.fill" : "lock.fill")
       .scaledFont(size: size)
-      .foregroundColor(isLockHovered ? OmiColors.purplePrimary : lockedColor)
-      .padding(4)
+      .foregroundColor(isLockHovered ? OmiColors.accent : lockedColor)
+      .padding(OmiSpacing.xxs)
       .contentShape(Rectangle())
       .onHover { hovering in
-        withAnimation(.easeInOut(duration: 0.15)) {
+        OmiMotion.withGated(.easeInOut(duration: 0.15)) {
           isLockHovered = hovering
         }
       }
@@ -1307,7 +1224,7 @@ struct NavItemWithStatusView: View {
   }
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       // Icon area - tappable to toggle
       ZStack(alignment: .topTrailing) {
         // Show loading spinner in place of icon when loading
@@ -1329,7 +1246,7 @@ struct NavItemWithStatusView: View {
             .frame(width: iconWidth)
         } else {
           Image(systemName: icon)
-            .scaledFont(size: 17)
+            .scaledFont(size: OmiType.subheading)
             .foregroundColor(iconColor)
             .frame(width: iconWidth)
         }
@@ -1351,7 +1268,7 @@ struct NavItemWithStatusView: View {
 
       if !isCollapsed {
         Text(label)
-          .scaledFont(size: 14, weight: isSelected ? .medium : .regular)
+          .scaledFont(size: OmiType.body, weight: isSelected ? .medium : .regular)
           .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
           .lineLimit(1)
           .fixedSize(horizontal: true, vertical: false)
@@ -1359,12 +1276,12 @@ struct NavItemWithStatusView: View {
         Spacer(minLength: 4)
       }
     }
-    .padding(.leading, 12)
-    .padding(.trailing, isCollapsed ? 12 : 8)
-    .padding(.vertical, 11)
+    .padding(.leading, OmiSpacing.md)
+    .padding(.trailing, isCollapsed ? OmiSpacing.md : OmiSpacing.sm)
+    .padding(.vertical, OmiSpacing.md)
     .contentShape(Rectangle())
     .background(
-      RoundedRectangle(cornerRadius: 14, style: .continuous)
+      RoundedRectangle(cornerRadius: OmiChrome.chipRadius, style: .continuous)
         .fill(
           isSelected
             ? OmiColors.backgroundSecondary
@@ -1380,7 +1297,7 @@ struct NavItemWithStatusView: View {
     .onHover { hovering in
       isHovered = hovering
     }
-    .padding(.bottom, 2)
+    .padding(.bottom, OmiSpacing.hairline)
     .help(
       isCollapsed
         ? "\(label) (\(isOn ? "On" : "Off")) - Click icon to toggle" : "Click icon to toggle"
@@ -1403,19 +1320,19 @@ struct SidebarToggle: View {
 
   var body: some View {
     ZStack(alignment: isOn ? .trailing : .leading) {
-      // Track - purple when on, red when off
+      // Track - accent (white) when on, red when off
       Capsule()
-        .fill(isOn ? OmiColors.purplePrimary : OmiColors.error)
+        .fill(isOn ? OmiColors.accent : OmiColors.error)
         .frame(width: width, height: height)
 
-      // Thumb
+      // Thumb - dark on the white track, white on the red track
       Circle()
-        .fill(Color.white)
+        .fill(isOn ? OmiColors.backgroundPrimary : Color.white)
         .frame(width: circleSize, height: circleSize)
         .padding(padding)
         .shadow(color: .black.opacity(0.15), radius: 1, x: 0, y: 1)
     }
-    .animation(.easeInOut(duration: 0.15), value: isOn)
+    .omiAnimation(.easeInOut(duration: 0.15), value: isOn)
     .onTapGesture {
       isOn.toggle()
     }
@@ -1438,7 +1355,7 @@ struct SidebarAudioLevelIcon: View {
   }
 
   var body: some View {
-    HStack(spacing: 2) {
+    HStack(spacing: OmiSpacing.hairline) {
       ForEach(0..<barCount, id: \.self) { index in
         SidebarAudioBar(
           level: combinedLevel,
@@ -1488,7 +1405,7 @@ private struct SidebarAudioBar: View {
 
     let boostedLevel = min(1.0, pow(CGFloat(level), 0.5) * 2.0)
     if boostedLevel > 0.5 {
-      return OmiColors.purplePrimary
+      return OmiColors.accent
     } else if boostedLevel > 0.15 {
       return OmiColors.textPrimary
     } else if boostedLevel > 0.02 {
@@ -1518,7 +1435,7 @@ struct SidebarRewindIcon: View {
       // Outer pulsing ring when active
       if isActive {
         Circle()
-          .stroke(OmiColors.purplePrimary.opacity(0.3), lineWidth: 2)
+          .stroke(OmiColors.accent.opacity(0.3), lineWidth: 2)
           .frame(width: iconSize, height: iconSize)
           .scaleEffect(isPulsing ? 1.4 : 1.0)
           .opacity(isPulsing ? 0 : 0.8)
@@ -1526,7 +1443,7 @@ struct SidebarRewindIcon: View {
 
       // Inner recording dot
       Circle()
-        .fill(isActive ? OmiColors.purplePrimary : OmiColors.error)
+        .fill(isActive ? OmiColors.accent : OmiColors.error)
         .frame(width: isActive ? 10 : 8, height: isActive ? 10 : 8)
     }
     .frame(width: iconSize, height: iconSize)
@@ -1545,7 +1462,7 @@ struct SidebarRewindIcon: View {
   }
 
   private func startPulsing() {
-    withAnimation(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
+    OmiMotion.withGated(.easeOut(duration: 1.0).repeatForever(autoreverses: false)) {
       isPulsing = true
     }
   }
@@ -1562,25 +1479,25 @@ struct BottomNavItemView: View {
   @State private var isHovered = false
 
   var body: some View {
-    HStack(spacing: 12) {
+    HStack(spacing: OmiSpacing.md) {
       Image(systemName: icon)
-        .scaledFont(size: 17)
+        .scaledFont(size: OmiType.subheading)
         .foregroundColor(OmiColors.textTertiary)
         .frame(width: iconWidth)
 
       if !isCollapsed {
         Text(label)
-          .scaledFont(size: 14, weight: .regular)
+          .scaledFont(size: OmiType.body, weight: .regular)
           .foregroundColor(OmiColors.textSecondary)
 
         Spacer()
       }
     }
-    .padding(.horizontal, 12)
-    .padding(.vertical, 11)
+    .padding(.horizontal, OmiSpacing.md)
+    .padding(.vertical, OmiSpacing.md)
     .contentShape(Rectangle())
     .background(
-      RoundedRectangle(cornerRadius: 10)
+      RoundedRectangle(cornerRadius: OmiChrome.smallControlRadius)
         .fill(isHovered ? OmiColors.backgroundTertiary.opacity(0.5) : Color.clear)
     )
     .onTapGesture {
@@ -1590,53 +1507,12 @@ struct BottomNavItemView: View {
     .onHover { hovering in
       isHovered = hovering
     }
-    .padding(.bottom, 2)
+    .padding(.bottom, OmiSpacing.hairline)
     .help(isCollapsed ? label : "")
     .accessibilityLabel(label)
     .accessibilityAddTraits(.isButton)
     .accessibilityIdentifier(
       "sidebar_\(label.lowercased().replacingOccurrences(of: " ", with: "_"))")
-  }
-}
-
-private struct ProfileMenuActionRow: View {
-  let icon: String
-  let label: String
-  var isSelected: Bool = false
-  let action: () -> Void
-
-  @State private var isHovered = false
-
-  var body: some View {
-    Button(action: action) {
-      HStack(spacing: 10) {
-        Image(systemName: icon)
-          .scaledFont(size: 14)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textTertiary)
-          .frame(width: 16)
-
-        Text(label)
-          .scaledFont(size: 13, weight: isSelected ? .medium : .regular)
-          .foregroundColor(isSelected ? OmiColors.textPrimary : OmiColors.textSecondary)
-
-        Spacer()
-      }
-      .padding(.horizontal, 10)
-      .padding(.vertical, 9)
-      .background(
-        RoundedRectangle(cornerRadius: 10, style: .continuous)
-          .fill(
-            isSelected
-              ? OmiColors.backgroundSecondary
-              : (isHovered ? OmiColors.backgroundTertiary.opacity(0.6) : Color.clear)
-          )
-      )
-      .contentShape(Rectangle())
-    }
-    .buttonStyle(.plain)
-    .onHover { hovering in
-      isHovered = hovering
-    }
   }
 }
 
@@ -1682,7 +1558,7 @@ private struct AudioLevelNavItem: View {
 /// Cache the Omi device WebP image so it's decoded once, not on every SwiftUI body evaluation.
 /// The original 1383x1383 WebP was being re-decoded by CoreAnimation every render frame.
 enum OmiDeviceImage {
-  static let shared: NSImage? = {
+  @MainActor static let shared: NSImage? = {
     guard
       let url = Bundle.resourceBundle.url(
         forResource: "omi-with-rope-no-padding", withExtension: "webp")

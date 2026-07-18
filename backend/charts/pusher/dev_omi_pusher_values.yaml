@@ -82,6 +82,10 @@ ingress:
   #    hosts:
   #      - chart-example.local
 
+envFrom:
+  - configMapRef:
+      name: dev-omi-backend-config
+
 env:
   - name: BUCKET_SPEECH_PROFILES
     value: "speech-profiles-dev"
@@ -111,13 +115,16 @@ env:
         key: PINECONE_API_KEY
   - name: PINECONE_INDEX_NAME
     value: "memories-backend-dev"
-  - name: REDIS_DB_HOST
-    valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
-        key: REDIS_DB_HOST
   - name: REDIS_DB_PORT
     value: "13151"
+  - name: REDIS_DB_HOST
+    valueFrom:
+      configMapKeyRef:
+        name: dev-omi-backend-config
+        key: REDIS_DB_HOST
+      # Preserve this explicit null through Helm's strategic merge patch so an
+      # older live Secret-backed REDIS_DB_HOST source is removed on upgrade.
+      secretKeyRef: null
   - name: REDIS_DB_PASSWORD
     valueFrom:
       secretKeyRef:
@@ -128,11 +135,11 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: ADMIN_KEY
-  - name: DEEPGRAM_API_KEY
+  - name: MODULATE_API_KEY
     valueFrom:
       secretKeyRef:
         name: dev-omi-backend-secrets
-        key: DEEPGRAM_API_KEY
+        key: MODULATE_API_KEY
   - name: GOOGLE_MAPS_API_KEY
     valueFrom:
       secretKeyRef:
@@ -140,9 +147,12 @@ env:
         key: GOOGLE_MAPS_API_KEY
   - name: GOOGLE_CLIENT_ID
     valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
+      configMapKeyRef:
+        name: dev-omi-backend-config
         key: GOOGLE_CLIENT_ID
+      # Clear the historical named Secret source when Helm strategically merges
+      # this item into an existing Deployment during an upgrade.
+      secretKeyRef: null
   - name: GOOGLE_CLIENT_SECRET
     valueFrom:
       secretKeyRef:
@@ -215,9 +225,12 @@ env:
         key: MARKETPLACE_APP_REVIEWERS
   - name: TYPESENSE_HOST
     valueFrom:
-      secretKeyRef:
-        name: dev-omi-backend-secrets
+      configMapKeyRef:
+        name: dev-omi-backend-config
         key: TYPESENSE_HOST
+      # TYPESENSE_HOST is public runtime configuration. Clear a historical
+      # Secret-backed binding when Helm strategically merges this named env.
+      secretKeyRef: null
   - name: TYPESENSE_HOST_PORT
     value: "443"
   - name: TYPESENSE_API_KEY
@@ -225,10 +238,12 @@ env:
       secretKeyRef:
         name: dev-omi-backend-secrets
         key: TYPESENSE_API_KEY
-  - name: DEEPGRAM_SELF_HOSTED_ENABLED
-    value: "false"
-  - name: DEEPGRAM_SELF_HOSTED_URL
-    value: "https://dg.omiapi.com"
+  - name: HOSTED_PARAKEET_API_URL
+    value: "http://parakeet.omiapi.com"
+  - name: STT_PRERECORDED_MODEL
+    value: "parakeet,modulate-velma-2"
+  - name: STT_SERVICE_MODELS
+    value: "parakeet,modulate-velma-2"
   - name: BASIC_TIER_MINUTES_LIMIT_PER_MONTH
     value: "1000000"
   - name: BASIC_TIER_WORDS_TRANSCRIBED_LIMIT_PER_MONTH
@@ -335,8 +350,8 @@ podDisruptionBudget:
 strategy:
   type: RollingUpdate
   rollingUpdate:
-    maxUnavailable: 1
-    maxSurge: 2
+    maxUnavailable: 0
+    maxSurge: 1
 
 terminationGracePeriodSeconds: 120
 lifecycle:

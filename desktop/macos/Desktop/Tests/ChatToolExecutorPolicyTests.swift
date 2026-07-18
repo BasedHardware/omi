@@ -3,25 +3,12 @@ import XCTest
 @testable import Omi_Computer
 
 final class ChatToolExecutorPolicyTests: XCTestCase {
-  func testStructuredTaskMutationToolsReachTheirExecutors() {
-    let taskMutationTools = [
-      "complete_task",
-      "delete_task",
-      "create_action_item",
-      "update_action_item",
-    ]
+  private var ownerFixture: RuntimeOwnerAuthorityTestFixture!
 
-    for toolName in taskMutationTools {
-      let decision = ChatToolExecutor.localPolicyDecision(
-        toolName: toolName,
-        arguments: [
-          "task_id": "backend-task-123",
-          "action_item_id": "backend-task-123",
-          "description": "Change a task",
-        ])
-
-      XCTAssertEqual(decision, .allow, "\(toolName) should not be blocked before its structured executor runs")
-    }
+  override func setUp() async throws {
+    try await super.setUp()
+    ownerFixture = await RuntimeOwnerAuthorityTestFixture()
+    await ownerFixture.establish(authOwnerID: "chat-tool-policy-owner")
   }
 
   @MainActor
@@ -33,22 +20,17 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
           arguments: ["task_id": "backend-task-123"],
           thoughtSignature: nil))
 
-      XCTAssertFalse(result.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(result)")
+      XCTAssertFalse(
+        result.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
+        "\(toolName) returned: \(result)")
       XCTAssertTrue(result.contains("task not found") || result.hasPrefix("Error:"), "\(toolName) returned: \(result)")
     }
   }
 
-  func testRawSensitiveSurfacesStillRequireApproval() {
-    for (toolName, arguments, capability) in [
-      ("execute_sql", ["query": "UPDATE action_items SET completed = 1 WHERE id = 42"], "desktop.context.local_write")
-    ] {
-      let decision = ChatToolExecutor.localPolicyDecision(toolName: toolName, arguments: arguments)
-      guard case .deny(let message) = decision else {
-        return XCTFail("\(toolName) should still require approval")
-      }
-      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(message)")
-      XCTAssertTrue(message.contains("\"capability\":\"\(capability)\""), "\(toolName) returned: \(message)")
-    }
+  func testSQLAuthorizationIsNotOwnedBySwiftPhysicalPreconditions() {
+    XCTAssertEqual(
+      ChatToolExecutor.physicalExecutionPrecondition(toolName: "execute_sql"),
+      .satisfied)
   }
 
   // MARK: - Chat screenshot sharing (regression: chat screen vision was hard-denied
@@ -56,16 +38,18 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
 
   private let screenshotKey = DefaultsKey.chatScreenshotSharingEnabled.rawValue
 
-  override func tearDown() {
+  override func tearDown() async throws {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
-    super.tearDown()
+    await ownerFixture.restore()
+    ownerFixture = nil
+    try await super.tearDown()
   }
 
   func testScreenshotToolsAllowedByDefault() {
     UserDefaults.standard.removeObject(forKey: screenshotKey)
     for toolName in ["capture_screen", "get_screenshot"] {
       XCTAssertEqual(
-        ChatToolExecutor.localPolicyDecision(toolName: toolName, arguments: [:]), .allow,
+        ChatToolExecutor.physicalExecutionPrecondition(toolName: toolName), .satisfied,
         "\(toolName) must be allowed when the setting is unset (default on)")
     }
   }
@@ -73,22 +57,29 @@ final class ChatToolExecutorPolicyTests: XCTestCase {
   func testScreenshotToolsAllowedWhenSettingEnabled() {
     UserDefaults.standard.set(true, forKey: screenshotKey)
     XCTAssertEqual(
-      ChatToolExecutor.localPolicyDecision(toolName: "capture_screen", arguments: [:]), .allow)
+      ChatToolExecutor.physicalExecutionPrecondition(toolName: "capture_screen"),
+      .satisfied)
   }
 
   func testScreenshotToolsDeniedWhenSettingDisabled() {
     UserDefaults.standard.set(false, forKey: screenshotKey)
     for toolName in ["capture_screen", "get_screenshot"] {
       guard
-        case .deny(let message) = ChatToolExecutor.localPolicyDecision(
-          toolName: toolName, arguments: [:])
+        case .failed(let message) = ChatToolExecutor.physicalExecutionPrecondition(
+          toolName: toolName)
       else {
         return XCTFail("\(toolName) should be denied when Screen Sharing in Chat is off")
       }
-      XCTAssertTrue(message.hasPrefix("POLICY_DENIED:"), "\(toolName) returned: \(message)")
       XCTAssertTrue(
-        message.contains("\"capability\":\"desktop.context.screenshot_image\""),
+        message.hasPrefix("EXECUTION_PRECONDITION_FAILED:"),
         "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"code\":\"execution_precondition_failed\""),
+        "\(toolName) returned: \(message)")
+      XCTAssertTrue(
+        message.contains("\"reason\":\"screenshot_sharing_disabled\""),
+        "\(toolName) returned: \(message)")
+      XCTAssertFalse(message.contains("capability"), "\(toolName) returned: \(message)")
       XCTAssertTrue(
         message.contains("Screen Sharing in Chat"),
         "deny message should point the user at the setting; returned: \(message)")

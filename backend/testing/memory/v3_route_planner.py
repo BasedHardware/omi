@@ -8,17 +8,17 @@ from __future__ import annotations
 from dataclasses import dataclass, field, replace
 from typing import Any, Mapping, Sequence
 
-from utils.memory.v3_compatibility import V3CompatibilityReadPath
-from utils.memory.v3_memory_read_service import (
+from utils.memory.v3.compatibility import V3CompatibilityReadPath
+from utils.memory.v3.memory_read_service import (
     V3MemoryReadRequest,
     V3MemoryReadServiceInput,
     V3MemoryReadServiceResult,
     plan_v3_memory_read,
 )
-from utils.memory.v3_request_adapter import V3AdaptedRequest, adapt_v3_request_parameters
-from utils.memory.v3_response_adapter import V3MemoryResponse, adapt_v3_memory_response
-from utils.memory.v3_projection_readiness import V3ProjectionReadinessContext
-from utils.memory.v3_write_convergence import (
+from utils.memory.v3.request_adapter import V3AdaptedRequest, adapt_v3_request_parameters
+from utils.memory.v3.response_adapter import V3MemoryResponse, adapt_v3_memory_response
+from utils.memory.v3.projection_readiness import V3ProjectionReadinessContext
+from utils.memory.v3.write_convergence import (
     V3WriteConvergenceContext,
     V3WriteConvergenceDecision,
     decide_v3_write_convergence,

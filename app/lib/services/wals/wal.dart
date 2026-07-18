@@ -95,7 +95,7 @@ class Wal {
   WalStorage storage;
 
   String? filePath;
-  List<List<int>> data = [];
+  List<List<int>> data;
   int storageOffset = 0;
   int storageTotalBytes = 0;
   int fileNum = 1;
@@ -168,7 +168,7 @@ class Wal {
     this.storageOffset = 0,
     this.storageTotalBytes = 0,
     this.fileNum = 1,
-    this.data = const [],
+    List<List<int>>? data,
     this.totalFrames = 0,
     this.syncedFrameOffset = 0,
     this.originalStorage,
@@ -177,7 +177,7 @@ class Wal {
     this.lastRetryAt = 0,
     this.jobId,
     this.uploadedAt = 0,
-  }) {
+  }) : data = data ?? [] {
     frameSize = codec.getFrameSize();
   }
 
@@ -198,8 +198,9 @@ class Wal {
       fileNum: json['file_num'] ?? 1,
       totalFrames: json['total_frames'] ?? 0,
       syncedFrameOffset: json['synced_frame_offset'] ?? 0,
-      originalStorage:
-          json['original_storage'] != null ? WalStorage.values.asNameMap()[json['original_storage']] : null,
+      originalStorage: json['original_storage'] != null
+          ? WalStorage.values.asNameMap()[json['original_storage']]
+          : null,
       conversationId: json['conversation_id'],
       retryCount: json['retry_count'] ?? 0,
       lastRetryAt: json['last_retry_at'] ?? 0,

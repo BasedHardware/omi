@@ -1468,7 +1468,7 @@ class AppLocalizationsFa extends AppLocalizations {
       'آزادانه از omi استفاده کنید. شما فقط مستقیماً ارائه‌دهنده STT خود را پرداخت می‌کنید.';
 
   @override
-  String get freeMinutesMonth => '600 دقیقه رایگان/ماه شامل است. نامحدود با ';
+  String get freeMinutesMonth => '300 دقیقه رایگان/ماه شامل است. نامحدود با ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4712,7 +4712,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'هیچ دسترسی داده خاصی تنظیم‌نشده است.';
 
   @override
-  String get basicPlanDescription => '600 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
+  String get basicPlanDescription => '300 دقیقه حرفه‌ای + نامحدود روی‌دستگاه';
 
   @override
   String get minutes => 'دقیقه';
@@ -6003,7 +6003,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get cloudProvider => 'ارائه دهنده ابری';
 
   @override
-  String get premiumMinutesInfo => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesInfo => '300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get viewUsage => 'مشاهده استفاده';
@@ -6083,7 +6083,7 @@ class AppLocalizationsFa extends AppLocalizations {
   String get batteryDrainSignificantly => 'تخلیه باتری به طور قابل توجهی افزایش خواهد یافت.';
 
   @override
-  String get premiumMinutesMonth => '600 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
+  String get premiumMinutesMonth => '300 دقیقه premium/ماه. برگه On-Device رونویسی رایگان نامحدود را ارائه می دهد.';
 
   @override
   String get audioProcessedLocally =>
@@ -9345,7 +9345,7 @@ class AppLocalizationsFa extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'فعلاً با دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
+      'با میکروفون گوشی و دستگاه‌های Omi و Limitless کار می‌کند. صدا تا زمانی که خودتان بارگذاری را انتخاب نکنید، روی گوشی شما باقی می‌ماند.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9575,4 +9575,33 @@ class AppLocalizationsFa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'خطا در اتصال به Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'فضای ذخیره‌سازی دستگاه';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent٪ پر';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used از $total استفاده‌شده';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free آزاد';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'دستگاه تقریباً پر است — برای آزادسازی فضا همگام‌سازی کنید.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'اتصالی نیست — به‌صورت محلی ضبط می‌شود. وقتی دوباره آنلاین شوید رونویسی می‌شود.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'داده‌های شما به‌طور پیش‌فرض با رمزگذاری قوی محافظت می‌شوند و شما کنترل می‌کنید که چگونه ذخیره و استفاده شوند.';
 }

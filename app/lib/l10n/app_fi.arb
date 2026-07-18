@@ -3055,7 +3055,7 @@
     "syncCustomSttWarningMessage": "Käytät omaa litterointipalveluasi. Näiden tallenteiden synkronointi litteroi ne Omin palvelimilla, ja ne lasketaan tilauksesi litterointirajaan.",
     "transcribeLaterTitle": "Litteroi myöhemmin",
     "transcribeLaterDescription": "Nauhoita ääni nyt ja litteroi se vasta tarvittaessa reaaliaikaisen sijaan. Nauhoitukset tallennetaan puhelimeesi, ja lataat ne myöhemmin luodaksesi keskusteluja.",
-    "transcribeLaterNote": "Toimii toistaiseksi Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
+    "transcribeLaterNote": "Toimii puhelimen mikrofonin sekä Omi- ja Limitless-laitteiden kanssa. Ääni säilyy puhelimessasi, kunnes päätät ladata sen.",
     "transcribeLaterStorageFull": "Puhelimesi tallennustila on vähissä, joten nauhoitus on keskeytetty. Vapauta tilaa tai lataa nauhoituksesi, niin se jatkuu automaattisesti.",
     "unmute": "Poista mykistys",
     "newRecording": "Uusi tallennus",
@@ -3143,5 +3143,12 @@
                 "type": "String"
             }
         }
-    }
+    },
+    "deviceStorageTitle": "Laitteen tallennustila",
+    "deviceStoragePercentFull": "{percent} % täynnä",
+    "deviceStorageUsedOfTotal": "{used} / {total} käytössä",
+    "deviceStorageFree": "{free} vapaana",
+    "deviceStorageNearlyFull": "Laite on lähes täynnä — synkronoi vapauttaaksesi tilaa.",
+    "phoneMicOfflineFallbackMessage": "Ei yhteyttä – tallennetaan paikallisesti. Litterointi tehdään, kun olet taas verkossa.",
+    "dataEncryptedBanner": "Tietosi on oletuksena suojattu vahvalla salauksella, ja sinä hallitset, miten niitä säilytetään ja käytetään."
 }

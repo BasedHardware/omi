@@ -1498,7 +1498,7 @@
     "exportConfiguration": "Export configuration",
     "bringYourOwn": "Bring your own",
     "payYourSttProvider": "Freely use omi. You only pay your STT provider directly.",
-    "freeMinutesMonth": "600 free minutes/month included. Unlimited with ",
+    "freeMinutesMonth": "300 free minutes/month included. Unlimited with ",
     "omiUnlimited": "Omi Unlimited",
     "hostRequired": "Host is required",
     "validPortRequired": "Valid port is required",
@@ -5519,7 +5519,7 @@
     "@noSpecificDataAccessConfigured": {
         "description": "Message shown when app has no specific data access"
     },
-    "basicPlanDescription": "600 premium mins + unlimited on-device",
+    "basicPlanDescription": "300 premium mins + unlimited on-device",
     "@basicPlanDescription": {
         "description": "Description of basic plan features in usage page"
     },
@@ -7294,7 +7294,7 @@
     "@cloudProvider": {
         "description": "Tab label for cloud provider option"
     },
-    "premiumMinutesInfo": "600 premium minutes/month. On-Device tab offers unlimited free transcription.",
+    "premiumMinutesInfo": "300 premium minutes/month. On-Device tab offers unlimited free transcription.",
     "@premiumMinutesInfo": {
         "description": "Info about premium minutes"
     },
@@ -7405,7 +7405,7 @@
     "@batteryDrainSignificantly": {
         "description": "Warning about battery drain"
     },
-    "premiumMinutesMonth": "600 premium minutes/month. On-Device tab offers unlimited free transcription. ",
+    "premiumMinutesMonth": "300 premium minutes/month. On-Device tab offers unlimited free transcription. ",
     "@premiumMinutesMonth": {
         "description": "Description of premium minutes quota"
     },
@@ -11043,7 +11043,7 @@
     "@transcribeLaterDescription": {
         "description": "Subtitle explaining the transcribe-later mode toggle"
     },
-    "transcribeLaterNote": "Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.",
+    "transcribeLaterNote": "Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.",
     "@transcribeLaterNote": {
         "description": "Caveat note shown in the Transcribe Later sheet"
     },
@@ -11280,5 +11280,51 @@
                 "type": "String"
             }
         }
+    },
+    "deviceStorageTitle": "Device Storage",
+    "@deviceStorageTitle": {
+        "description": "Title of the on-device storage usage card on the Auto Sync page"
+    },
+    "deviceStoragePercentFull": "{percent}% full",
+    "@deviceStoragePercentFull": {
+        "description": "Percentage of on-device storage used",
+        "placeholders": {
+            "percent": {
+                "type": "int"
+            }
+        }
+    },
+    "deviceStorageUsedOfTotal": "{used} of {total} used",
+    "@deviceStorageUsedOfTotal": {
+        "description": "Used vs total on-device storage, e.g. 338 MB of 469 MB used",
+        "placeholders": {
+            "used": {
+                "type": "String"
+            },
+            "total": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageFree": "{free} free",
+    "@deviceStorageFree": {
+        "description": "Amount of free on-device storage, e.g. 131 MB free",
+        "placeholders": {
+            "free": {
+                "type": "String"
+            }
+        }
+    },
+    "deviceStorageNearlyFull": "Device nearly full — sync to free space.",
+    "@deviceStorageNearlyFull": {
+        "description": "Warning shown when on-device storage is 95% or more full"
+    },
+    "phoneMicOfflineFallbackMessage": "No connection — recording locally. It will be transcribed when you're back online.",
+    "@phoneMicOfflineFallbackMessage": {
+        "description": "Snackbar shown when phone-mic recording auto-switches to local (batch) capture because the device is offline"
+    },
+    "dataEncryptedBanner": "Your data is secured by default with strong encryption, and you stay in control of how it's stored and used.",
+    "@dataEncryptedBanner": {
+        "description": "Data privacy page banner summarizing encryption and user control"
     }
 }

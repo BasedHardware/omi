@@ -6020,7 +6020,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesInfo =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция.';
 
   @override
   String get viewUsage => 'Преглед на използването';
@@ -6103,7 +6103,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get premiumMinutesMonth =>
-      '600 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
+      '300 премиум минути/месец. Разделът На устройството предлага неограничена безплатна транскрипция. ';
 
   @override
   String get audioProcessedLocally =>
@@ -9378,7 +9378,7 @@ class AppLocalizationsBg extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Засега работи с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
+      'Работи с микрофона на телефона и с устройства Omi и Limitless. Аудиото остава на телефона ви, докато не решите да го качите.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9610,4 +9610,33 @@ class AppLocalizationsBg extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Грешка при свързване с Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Памет на устройството';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% запълнена';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used от $total използвани';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free свободни';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Устройството е почти пълно — синхронизирайте, за да освободите място.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'Няма връзка — записва се локално. Ще бъде транскрибирано, когато отново сте онлайн.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Вашите данни са защитени по подразбиране със силно криптиране и вие контролирате как се съхраняват и използват.';
 }

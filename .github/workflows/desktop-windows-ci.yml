@@ -33,12 +33,12 @@ jobs:
     name: Typecheck · Lint · Test
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       # The app is pnpm-managed (pnpm-lock.yaml, lockfileVersion 9).
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
@@ -61,17 +61,17 @@ jobs:
     name: Windows build smoke
     runs-on: windows-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: pnpm/action-setup@v4
+      - uses: actions/checkout@v7
+      - uses: pnpm/action-setup@v6
         with:
           version: 10
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: pnpm
           cache-dependency-path: desktop/windows/pnpm-lock.yaml
       # OCR + UI-automation helpers are .NET projects built during install/build.
-      - uses: actions/setup-dotnet@v4
+      - uses: actions/setup-dotnet@v6
         with:
           dotnet-version: '8.0.x'
       - name: Provision .env (ships public Firebase/PostHog config)
@@ -84,7 +84,7 @@ jobs:
       - name: Build unpacked app
         run: pnpm run build:unpack
       - name: Upload unpacked build
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: omi-windows-unpacked
           path: desktop/windows/dist/win-unpacked

@@ -23,7 +23,7 @@ import Foundation
 enum SingleInstanceGuard {
   /// Held for the whole process lifetime once acquired; intentionally never closed.
   /// The OS drops the `flock` when the process exits.
-  private static var lockFileDescriptor: Int32 = -1
+  private nonisolated(unsafe) static var lockFileDescriptor: Int32 = -1
 
   /// If another instance for this `(bundle id, launch mode)` already holds the lock,
   /// foreground it and exit **without** running the normal termination path.

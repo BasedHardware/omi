@@ -1,0 +1,323 @@
+name: Sync ledger fence cutover
+
+# This is a deliberately manual, two-environment-gate transition.  Stage runs
+# only after an operator changes the protected mode to standby.  Before the
+# activation job is approved, the operator changes it to active.  Do not add a
+# push trigger or an automatic queue-resume cleanup path.
+on:
+  workflow_dispatch:
+    inputs:
+      environment:
+        description: Protected Cloud Run environment to cut over
+        required: true
+        default: development
+        type: choice
+        options:
+          - development
+          - prod
+      candidate_image:
+        description: Exact immutable backend image digest (gcr.io/...@sha256:<64 hex>)
+        required: true
+        type: string
+      confirm:
+        description: Type cutover-sync-ledger-fence
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+# Share the Cloud Run/queue mutation domain with normal backend deployments.
+concurrency:
+  group: deploy-backend-stack-${{ github.event.inputs.environment }}
+  cancel-in-progress: false
+
+env:
+  REGION: us-central1
+  STATE_FILENAME: sync-ledger-fence-state.json
+
+jobs:
+  stage:
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Checkout cutover controls
+        uses: actions/checkout@v7
+
+      - name: Validate deliberate immutable-digest request
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "cutover-sync-ledger-fence"
+          if ! [[ "$CANDIDATE_IMAGE" =~ ^.+@sha256:[0-9A-Fa-f]{64}$ ]]; then
+            echo "candidate_image must be an immutable @sha256 digest" >&2
+            exit 1
+          fi
+
+      # A re-run must reload the first artifact.  Otherwise a partial queue
+      # pause could be overwritten with a new, unsafe record of queue origins.
+      - name: Find prior standby state artifact
+        id: prior-stage-state
+        env:
+          ARTIFACT_NAME: sync-ledger-fence-stage-${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" --jq '.artifacts[] | select(.name == env.ARTIFACT_NAME and .expired == false) | .id' | head -n 1)"
+          if [ -n "$artifact_id" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download prior standby state artifact
+        if: steps.prior-stage-state.outputs.found == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: sync-ledger-fence-stage-${{ github.run_id }}
+          path: ${{ runner.temp }}/prior-stage-state
+
+      - name: Restore protected state artifact when retrying
+        id: stage-state
+        run: |
+          set -euo pipefail
+          state_path="$RUNNER_TEMP/$STATE_FILENAME"
+          prior="$RUNNER_TEMP/prior-stage-state/$STATE_FILENAME"
+          if [ -f "$prior" ]; then
+            cp "$prior" "$state_path"
+          fi
+          echo "path=$state_path" >> "$GITHUB_OUTPUT"
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Stage standby barrier and pause queues
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/sync_ledger_fence_cutover.py stage \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --candidate-image "$CANDIDATE_IMAGE" \
+            --state-path "${{ steps.stage-state.outputs.path }}" \
+            --revision-suffix "fence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-standby"
+
+      # The artifact is the recovery record.  On failure the script deliberately
+      # leaves queues paused; do not add an always() resume command here.
+      - name: Upload standby cutover state
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sync-ledger-fence-stage-${{ github.run_id }}
+          path: ${{ runner.temp }}/sync-ledger-fence-state.json
+          if-no-files-found: warn
+          overwrite: true
+
+  activate:
+    needs: stage
+    # This second protected environment gate gives the operator a pause to set
+    # SYNC_LEDGER_FENCE_MODE=active only after the standby barrier is complete.
+    environment: ${{ github.event.inputs.environment }}
+    permissions:
+      actions: read
+      contents: read
+      id-token: write
+    runs-on: ubuntu-latest-m
+    steps:
+      - name: Checkout cutover controls
+        uses: actions/checkout@v7
+
+      - name: Validate deliberate immutable-digest request
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          CONFIRM: ${{ github.event.inputs.confirm }}
+        run: |
+          set -euo pipefail
+          test "$CONFIRM" = "cutover-sync-ledger-fence"
+          if ! [[ "$CANDIDATE_IMAGE" =~ ^.+@sha256:[0-9A-Fa-f]{64}$ ]]; then
+            echo "candidate_image must be an immutable @sha256 digest" >&2
+            exit 1
+          fi
+
+      - name: Find prior activation state artifact
+        id: prior-activation-state
+        env:
+          ARTIFACT_NAME: sync-ledger-fence-activation-${{ github.run_id }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          artifact_id="$(gh api --paginate "/repos/${GITHUB_REPOSITORY}/actions/runs/${GITHUB_RUN_ID}/artifacts?per_page=100" --jq '.artifacts[] | select(.name == env.ARTIFACT_NAME and .expired == false) | .id' | head -n 1)"
+          if [ -n "$artifact_id" ]; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Download prior activation state artifact
+        if: steps.prior-activation-state.outputs.found == 'true'
+        uses: actions/download-artifact@v8
+        with:
+          name: sync-ledger-fence-activation-${{ github.run_id }}
+          path: ${{ runner.temp }}/prior-activation-state
+
+      - name: Download standby cutover state
+        uses: actions/download-artifact@v8
+        with:
+          name: sync-ledger-fence-stage-${{ github.run_id }}
+          path: ${{ runner.temp }}/standby-state
+
+      - name: Select protected activation recovery state
+        id: activation-state
+        run: |
+          set -euo pipefail
+          state_path="$RUNNER_TEMP/$STATE_FILENAME"
+          prior_active="$RUNNER_TEMP/prior-activation-state/$STATE_FILENAME"
+          standby="$RUNNER_TEMP/standby-state/$STATE_FILENAME"
+          if [ -f "$prior_active" ]; then
+            cp "$prior_active" "$state_path"
+          elif [ -f "$standby" ]; then
+            cp "$standby" "$state_path"
+          else
+            echo "No protected cutover state artifact is available" >&2
+            exit 1
+          fi
+          echo "path=$state_path" >> "$GITHUB_OUTPUT"
+
+      # Recovery is driven only by the persisted state-machine phase and tag,
+      # never by a newer run attempt.  That prevents a retry from creating a
+      # second candidate or repeating a proven/promoted mutation.
+      - name: Plan safe activation recovery from persisted phase
+        id: activation-plan
+        env:
+          STATE_PATH: ${{ steps.activation-state.outputs.path }}
+        run: |
+          set -euo pipefail
+          python3 - "$STATE_PATH" "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT" >> "$GITHUB_OUTPUT" <<'PY'
+          import json
+          import sys
+
+          state_path, run_id, run_attempt = sys.argv[1:]
+          with open(state_path, encoding="utf-8") as state_file:
+              state = json.load(state_file)
+          phase = state.get("phase")
+          if phase == "standby_complete":
+              probe_tag = f"fence-{run_id}-{run_attempt}"
+              prepare = probe = promote = "true"
+          elif phase == "active_ready_for_probe":
+              probe = state.get("probe") or {}
+              probe_tag = probe.get("tag")
+              prepare = probe = promote = "true"
+          elif phase == "active_probe_passed":
+              probe = state.get("probe") or {}
+              probe_tag = probe.get("tag")
+              prepare = probe = "false"
+              promote = "true"
+          elif phase == "active_complete":
+              probe = state.get("probe") or {}
+              probe_tag = probe.get("tag")
+              prepare = probe = promote = "false"
+          else:
+              raise SystemExit(f"unsafe activation recovery phase: {phase!r}")
+          if not isinstance(probe_tag, str) or not probe_tag:
+              raise SystemExit("persisted activation state has no probe tag")
+          print(f"probe_tag={probe_tag}")
+          print(f"prepare={prepare}")
+          print(f"probe={probe}")
+          print(f"promote={promote}")
+          PY
+
+      - name: Google Auth
+        uses: google-github-actions/auth@v3
+        with:
+          credentials_json: ${{ secrets.GCP_CREDENTIALS }}
+
+      - name: Set up gcloud
+        uses: google-github-actions/setup-gcloud@v3
+
+      - name: Deploy active candidate with a no-traffic probe tag
+        id: prepare
+        if: steps.activation-plan.outputs.prepare == 'true'
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/sync_ledger_fence_cutover.py activate-prepare \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --candidate-image "$CANDIDATE_IMAGE" \
+            --state-path "${{ steps.activation-state.outputs.path }}" \
+            --revision-suffix "fence-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}-active" \
+            --probe-tag "${{ steps.activation-plan.outputs.probe_tag }}" \
+            --github-output "$GITHUB_OUTPUT"
+
+      - name: Gate the tagged candidate through the full transcription route
+        if: steps.activation-plan.outputs.probe == 'true'
+        uses: ./.github/actions/transcription-release-candidate-probe
+        with:
+          candidate_api_url: ${{ steps.prepare.outputs.candidate_probe_url }}
+          project_id: ${{ vars.GCP_PROJECT_ID }}
+          firebase_auth_project_id: based-hardware
+          evidence_path: ${{ runner.temp }}/transcription-capability-probe.json
+
+      - name: Record protected full-route probe proof
+        if: steps.activation-plan.outputs.probe == 'true'
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/sync_ledger_fence_cutover.py record-probe-success \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --candidate-image "$CANDIDATE_IMAGE" \
+            --state-path "${{ steps.activation-state.outputs.path }}" \
+            --probe-evidence "$RUNNER_TEMP/transcription-capability-probe.json"
+
+      - name: Promote proved active candidates and resume original queues only
+        if: steps.activation-plan.outputs.promote == 'true'
+        env:
+          CANDIDATE_IMAGE: ${{ github.event.inputs.candidate_image }}
+          SYNC_LEDGER_FENCE_MODE: ${{ vars.SYNC_LEDGER_FENCE_MODE }}
+        run: |
+          set -euo pipefail
+          python3 backend/scripts/sync_ledger_fence_cutover.py activate-promote \
+            --project "${{ vars.GCP_PROJECT_ID }}" \
+            --region "$REGION" \
+            --candidate-image "$CANDIDATE_IMAGE" \
+            --state-path "${{ steps.activation-state.outputs.path }}" \
+            --probe-tag "${{ steps.activation-plan.outputs.probe_tag }}"
+
+      - name: Upload redacted candidate probe evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sync-ledger-fence-probe-${{ github.run_id }}
+          path: ${{ runner.temp }}/transcription-capability-probe.json
+          if-no-files-found: warn
+          overwrite: true
+
+      # On any failed activate attempt, this is the only recovery action.  The
+      # persisted state lets a re-run continue without reconstructing queue
+      # origins, while queues remain paused until activate-promote succeeds.
+      - name: Upload activation cutover state
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: sync-ledger-fence-activation-${{ github.run_id }}
+          path: ${{ runner.temp }}/sync-ledger-fence-state.json
+          if-no-files-found: warn
+          overwrite: true

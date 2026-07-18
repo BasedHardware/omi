@@ -108,9 +108,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (widget.conversation == null) return;
     final stamp = widget.conversation!.conversationAudio;
     if (stamp != null && stamp.spans.isNotEmpty) {
-      // Wall-clock timeline: the total the user sees spans the whole
-      // conversation, with the collapsed gaps shaded on the scrubber.
-      _totalDuration = Duration(milliseconds: (stamp.duration * 1000).toInt());
+      // Dense-artifact timeline: the total is the actual captured audio length
+      // (the MP3 has inter-part gaps and lead-in silence collapsed out), so the
+      // scrubber matches what the user can hear. Transcript-segment taps still
+      // map their wall timestamp to the MP3 position via the spans manifest.
+      _totalDuration = Duration(milliseconds: (stamp.capturedDuration * 1000).toInt());
       return;
     }
     double totalSeconds = 0;
@@ -124,8 +126,9 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
 
   Duration _getCombinedPosition(int? currentIndex, Duration trackPosition) {
     if (_singleArtifact) {
-      final wall = _timelineMapper!.artifactToWall(trackPosition.inMilliseconds / 1000.0);
-      return Duration(milliseconds: (wall * 1000).toInt());
+      // The dense MP3 plays linearly; position is the raw artifact time so it
+      // advances 1:1 with playback against the captured-duration total.
+      return trackPosition;
     }
     if (currentIndex == null || currentIndex >= _trackStartOffsets.length) {
       return trackPosition;
@@ -201,10 +204,11 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     }
     if (!mounted || _audioPlayer == null) return;
 
-    // Single-artifact mode seeks on the wall timeline; the spans manifest maps
-    // it to the exact MP3 position (including across collapsed gaps).
-    final filePosition =
-        _singleArtifact ? segmentStartSeconds : _calculateFilePositionForTimestamp(segmentStartSeconds);
+    // A transcript segment's timestamp is on the wall timeline; the spans
+    // manifest maps it to the exact position in the dense MP3 (artifact time).
+    final filePosition = _singleArtifact
+        ? _timelineMapper!.wallToArtifact(segmentStartSeconds)
+        : _calculateFilePositionForTimestamp(segmentStartSeconds);
 
     // Ensure position is not negative
     final targetPosition = Duration(milliseconds: (filePosition * 1000).clamp(0, double.infinity).toInt());
@@ -284,7 +288,7 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
         // offsets — position and seeks go through the spans mapper.
         _timelineMapper = AudioTimelineMapper(conversationAudio.spans);
         _singleArtifact = true;
-        _totalDuration = Duration(milliseconds: (_timelineMapper!.wallDuration * 1000).toInt());
+        _totalDuration = Duration(milliseconds: (_timelineMapper!.capturedDuration * 1000).toInt());
         await _audioPlayer!.setAudioSource(AudioSource.uri(Uri.parse(conversationAudio.signedUrl!)), preload: true);
         _isAudioInitialized = true;
         return;
@@ -772,31 +776,12 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
                         color: Colors.white.withValues(alpha: 0.3),
                         borderRadius: BorderRadius.circular(2),
                       ),
-                      child: Stack(
-                        children: [
-                          FractionallySizedBox(
-                            alignment: Alignment.centerLeft,
-                            widthFactor: progress,
-                            child: Container(
-                              decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
-                            ),
-                          ),
-                          // Shade the collapsed capture gaps on the wall timeline.
-                          if (_singleArtifact)
-                            ..._timelineMapper!.gapRangesWall.map((gap) {
-                              final wallTotal = _timelineMapper!.wallDuration;
-                              if (wallTotal <= 0) return const SizedBox.shrink();
-                              final left = (gap.$1 / wallTotal).clamp(0.0, 1.0) * progressBarWidth;
-                              final width = ((gap.$2 - gap.$1) / wallTotal).clamp(0.0, 1.0) * progressBarWidth;
-                              return Positioned(
-                                left: left,
-                                top: 0,
-                                bottom: 0,
-                                width: width,
-                                child: Container(color: Colors.black.withValues(alpha: 0.45)),
-                              );
-                            }),
-                        ],
+                      child: FractionallySizedBox(
+                        alignment: Alignment.centerLeft,
+                        widthFactor: progress,
+                        child: Container(
+                          decoration: BoxDecoration(color: Colors.white, borderRadius: BorderRadius.circular(2)),
+                        ),
                       ),
                     ),
                   ),
@@ -819,14 +804,13 @@ class _ConversationBottomBarState extends State<ConversationBottomBar> {
     if (_audioPlayer == null) return;
 
     if (_singleArtifact) {
-      // targetPosition is on the wall timeline; map to the dense MP3. A seek
-      // into a collapsed gap snaps to the next captured span.
-      final artifactSeconds = _timelineMapper!.wallToArtifact(targetPosition.inMilliseconds / 1000.0);
+      // targetPosition is already artifact time (the scrubber runs on the dense
+      // MP3; segment taps are mapped wall->artifact before they get here).
       PlatformManager.instance.analytics.audioPlaybackSeeked(
         conversationId: widget.conversation?.id ?? '',
         toPositionSeconds: targetPosition.inSeconds,
       );
-      await _audioPlayer!.seek(Duration(milliseconds: (artifactSeconds * 1000).toInt()));
+      await _audioPlayer!.seek(targetPosition);
       return;
     }
 

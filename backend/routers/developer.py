@@ -10,7 +10,6 @@ from pydantic import AliasChoices, BaseModel, ConfigDict, Field, ValidationError
 import database.folders as folders_db
 import database.memories as memories_db
 import database.conversations as conversations_db
-import database.dev_api_key as dev_api_key_db
 import database.action_items as action_items_db
 import database.goals as goals_db
 import database.users as users_db
@@ -36,12 +35,10 @@ from models.conversation_enums import (
 from models.geolocation import Geolocation
 from models.structured import Structured
 from utils.conversations.render import populate_speaker_names, populate_folder_names
-from utils.dev_cache import invalidate_developer_cache
 from models.transcript_segment import TranscriptSegment
 from dependencies import (
     ApiKeyAuth,
     check_conversation_transcript_read_limit,
-    get_current_user_id,
     get_auth_with_conversation_detail_read,
     get_auth_with_conversations_read,
     get_uid_with_conversations_read,
@@ -57,11 +54,10 @@ from dependencies import (
 from utils.apps import update_personas_async
 from utils.log_sanitizer import sanitize
 from utils.other.endpoints import with_rate_limit, get_current_user_uid
-from models.dev_api_key import DevApiKey, DevApiKeyCreate, DevApiKeyCreated
-from utils.scopes import AVAILABLE_SCOPES, validate_scopes
 from utils.notifications import send_action_item_data_message, sync_action_item_reminder
 from utils.conversations.process_conversation import process_conversation
-from utils.conversations.location import get_google_maps_location
+from utils.conversations import lifecycle as lifecycle_service
+from utils.conversations.location import resolve_geolocation
 from utils.executors import postprocess_executor
 from utils.request_validation import HistoryDays
 from utils.llm.memories import identify_category_for_memory
@@ -136,55 +132,6 @@ def _audit_developer_read(
         returned_count,
         sanitize(resource_id) if resource_id else None,
     )
-
-
-# ******************************************************
-# ****************** API KEY MANAGEMENT ****************
-# ******************************************************
-
-
-@router.get("/v1/dev/keys", response_model=List[DevApiKey], tags=["API Keys"], operation_id="listApiKeys")
-def get_keys(uid: str = Depends(get_current_user_id)):
-    return dev_api_key_db.get_dev_keys_for_user(uid)
-
-
-@router.post("/v1/dev/keys", response_model=DevApiKeyCreated, tags=["API Keys"], operation_id="createApiKey")
-def create_key(key_data: DevApiKeyCreate, uid: str = Depends(get_current_user_id)):
-    """
-    Create a new Developer API key with optional scopes.
-
-    - **name**: Descriptive name for the key
-    - **scopes**: Optional list of scopes. If not provided, defaults to read-only access.
-      Available scopes:
-      - conversations:read
-      - conversations:write
-      - memories:read
-      - memories:write
-      - action_items:read
-      - action_items:write
-      - goals:read
-      - goals:write
-    """
-    if not key_data.name or len(key_data.name.strip()) == 0:
-        raise HTTPException(status_code=422, detail="Key name cannot be empty")
-
-    # Validate scopes if provided
-    if key_data.scopes is not None:
-        if not validate_scopes(key_data.scopes):
-            raise HTTPException(status_code=400, detail=f"Invalid scopes. Available: {AVAILABLE_SCOPES}")
-
-    raw_key, api_key_data = dev_api_key_db.create_dev_key(uid, key_data.name.strip(), scopes=key_data.scopes)
-    # The proactive-notification cap exempts developers, so refresh that cache now
-    # that this user has a key, rather than waiting out its TTL.
-    invalidate_developer_cache(uid)
-    return DevApiKeyCreated(**api_key_data.model_dump(), key=raw_key)
-
-
-@router.delete("/v1/dev/keys/{key_id}", status_code=204, tags=["API Keys"], operation_id="revokeApiKey")
-def delete_key(key_id: str, uid: str = Depends(get_current_user_id)):
-    dev_api_key_db.delete_dev_key(uid, key_id)
-    invalidate_developer_cache(uid)
-    return
 
 
 # ******************************************************
@@ -1520,14 +1467,8 @@ def create_conversation(
     if finished_at < started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1706,14 +1647,8 @@ def _create_conversation_from_segments(
     if finished_at <= started_at:
         raise HTTPException(status_code=422, detail="finished_at must be after started_at")
 
-    # Process geolocation if provided
-    geolocation = request.geolocation
-    if geolocation and not geolocation.google_place_id:
-        try:
-            geolocation = get_google_maps_location(geolocation.latitude, geolocation.longitude)
-        except Exception as e:
-            logger.error(f"Error enriching geolocation: {e}")
-            # Continue with original geolocation if enrichment fails
+    # Process geolocation if provided (keeps the raw coordinates when the geocode lookup misses)
+    geolocation = resolve_geolocation(request.geolocation)
 
     # Language defaults
     language_code = request.language or 'en'
@@ -1769,7 +1704,9 @@ def _create_conversation_from_segments(
             },
             status=ConversationStatus.processing,
         )
-        if not conversations_db.create_conversation_if_absent(uid, create_conversation_obj.model_dump()):
+        if not lifecycle_service.create_processing_conversation(
+            uid, create_conversation_obj.model_dump(), idempotent=True
+        ):
             existing_conversation = conversations_db.get_conversation(uid, conversation_id)
             if existing_conversation:
                 logger.info(
@@ -1806,7 +1743,7 @@ def _create_conversation_from_segments(
             request.client_session_id,
             conversation.id,
         )
-        conversations_db.upsert_conversation(uid, conversation.model_dump())
+        lifecycle_service.persist_processed_conversation(uid, conversation.model_dump())
 
     return ConversationResponse(
         id=conversation.id,
@@ -1961,9 +1898,9 @@ def update_conversation_endpoint(
 
     if request.discarded is not None:
         if request.discarded:
-            conversations_db.set_conversation_as_discarded(uid, conversation_id)
+            lifecycle_service.discard(uid, conversation_id)
         else:
-            conversations_db.update_conversation(uid, conversation_id, {'discarded': False})
+            lifecycle_service.restore_discarded(uid, conversation_id)
 
     conversation = conversations_db.get_conversation(uid, conversation_id)
     if conversation:
@@ -2080,6 +2017,9 @@ def get_goals(
     - **limit**: Maximum number of goals to return
     - **include_inactive**: If True, includes inactive/completed goals
     """
+    # Clamp pagination so a negative value cannot reach Firestore (which raises -> HTTP 500) and an
+    # oversized limit cannot stream the whole collection. Mirrors the GET /v3/memories hardening.
+    limit = max(1, min(limit, 1000))
     if include_inactive:
         goals = goals_db.get_all_goals(uid, include_inactive=True)
     else:

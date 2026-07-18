@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import 'package:omi/backend/preferences.dart';
 import 'package:omi/backend/schema/bt_device/bt_device.dart';
+import 'package:omi/backend/schema/message_event.dart';
 import 'package:omi/l10n/app_localizations.dart';
 import 'package:omi/pages/conversations/widgets/processing_capture.dart';
 import 'package:omi/providers/capture_provider.dart';
@@ -86,6 +87,36 @@ void main() {
   }
 
   group('simplified status indicators (#6672)', () {
+    testWidgets('shows terminal live STT failure until the backend is ready again', (tester) async {
+      final captureProvider = CaptureProvider();
+      addTearDown(captureProvider.dispose);
+      captureProvider.updateRecordingState(RecordingState.record);
+
+      await pumpCaptureWidget(tester, captureProvider);
+
+      captureProvider.onMessageEventReceived(
+        MessageServiceStatusEvent(
+          status: 'stt_failed',
+          outcome: 'upstream_error',
+          provider: 'deepgram',
+          retryable: true,
+          reason: 'send_failed',
+        ),
+      );
+      await tester.pump();
+
+      expect(captureProvider.recordingState, RecordingState.record);
+      expect(captureProvider.terminalTranscriptionFailure?.status, 'stt_failed');
+      final context = tester.element(find.byType(ConversationCaptureWidget));
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsWidgets);
+
+      captureProvider.onMessageEventReceived(MessageServiceStatusEvent(status: 'ready'));
+      await tester.pump();
+
+      expect(find.text(AppLocalizations.of(context).transcriptionUnavailable), findsNothing);
+      expect(find.text(AppLocalizations.of(context).listening), findsWidgets);
+    });
+
     testWidgets('shows Listening during phone mic recording when transcription is down', (tester) async {
       final captureProvider = CaptureProvider();
       addTearDown(captureProvider.dispose);

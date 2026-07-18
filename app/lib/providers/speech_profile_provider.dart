@@ -169,16 +169,17 @@ class SpeechProfileProvider extends ChangeNotifier
   }
 
   Future<void> _initiateWebsocket({required BleAudioCodec codec, int? sampleRate, bool force = false}) async {
-    String language =
-        SharedPreferencesUtil().hasSetPrimaryLanguage ? SharedPreferencesUtil().userPrimaryLanguage : "multi";
+    String language = SharedPreferencesUtil().hasSetPrimaryLanguage
+        ? SharedPreferencesUtil().userPrimaryLanguage
+        : "multi";
     int rate = sampleRate ?? (codec.isOpusSupported() ? 16000 : 8000);
 
     _socket = await ServiceManager.instance().socket.speechProfile(
-          codec: codec,
-          sampleRate: rate,
-          language: language,
-          force: force,
-        );
+      codec: codec,
+      sampleRate: rate,
+      language: language,
+      force: force,
+    );
     if (_socket == null) {
       throw Exception("Can not create new speech profile socket");
     }
@@ -220,19 +221,6 @@ class SpeechProfileProvider extends ChangeNotifier
       Logger.debug('Stopping phone mic streaming');
       ServiceManager.instance().mic.stop();
     }
-  }
-
-  _handleCompletion() async {
-    if (uploadingProfile || profileCompleted) return;
-    // Only count words from user segments, not Omi questions
-    String userText = segments.where((e) => e.speakerId != omiSpeakerId).map((e) => e.text).join(' ').trim();
-    int wordsCount = userText.split(' ').length;
-    percentageCompleted = (wordsCount / targetWordsCount).clamp(0, 1);
-    notifyListeners();
-    if (percentageCompleted == 1) {
-      await finalize();
-    }
-    notifyListeners();
   }
 
   Future finalize() async {

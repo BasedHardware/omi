@@ -6,7 +6,7 @@ impl FirestoreService {
 
     /// Atomically increment LLM usage counters for a user on a given date.
     /// Uses Firestore REST commit with FieldTransforms (server-side atomic increments).
-    pub async fn record_llm_usage(
+    pub(crate) async fn record_llm_usage(
         &self,
         uid: &str,
         input: i64,
@@ -66,7 +66,7 @@ impl FirestoreService {
 
     /// Increment the total desktop question counter and, when provided, an
     /// account-specific quota counter for rollout-safe breakdown fallback.
-    pub async fn record_desktop_chat_quota_question_with_account(
+    pub(crate) async fn record_desktop_chat_quota_question_with_account(
         &self,
         uid: &str,
         account: Option<&str>,
@@ -108,55 +108,6 @@ impl FirestoreService {
         Ok(())
     }
 
-    /// Sum all daily desktop_chat.cost_usd values for a user across all llm_usage documents.
-    pub async fn get_total_llm_cost(
-        &self,
-        uid: &str,
-    ) -> Result<f64, Box<dyn std::error::Error + Send + Sync>> {
-        let parent = format!("{}/{}/{}", self.base_url(), USERS_COLLECTION, uid);
-        let query = json!({
-            "structuredQuery": {
-                "from": [{"collectionId": LLM_USAGE_SUBCOLLECTION}]
-            }
-        });
-
-        let response = self
-            .build_request(reqwest::Method::POST, &format!("{}:runQuery", parent))
-            .await?
-            .json(&query)
-            .send()
-            .await?;
-
-        if !response.status().is_success() {
-            let error_text = response.text().await?;
-            return Err(format!("Firestore query failed: {}", error_text).into());
-        }
-
-        let results: Vec<Value> = response.json().await?;
-        let total: f64 = results
-            .iter()
-            .filter_map(|entry| {
-                let cost = entry
-                    .get("document")?
-                    .get("fields")?
-                    .get("desktop_chat")?
-                    .get("mapValue")?
-                    .get("fields")?
-                    .get("cost_usd")?;
-                // Firestore stores doubles as doubleValue, but may also be integerValue
-                cost.get("doubleValue")
-                    .and_then(|v| v.as_f64())
-                    .or_else(|| {
-                        cost.get("integerValue")
-                            .and_then(|v| v.as_str())
-                            .and_then(|s| s.parse::<f64>().ok())
-                    })
-            })
-            .sum();
-
-        Ok(total)
-    }
-
     /// Record a minted realtime session for out-of-band billing reconciliation.
     ///
     /// The realtime WS is client↔provider direct, so the backend never sees the
@@ -166,7 +117,7 @@ impl FirestoreService {
     /// the user and write the cost into the llm_usage ledger via
     /// `record_llm_usage(.., "realtime")`. `status` starts "minted"; the reconciler
     /// flips it to "reconciled".
-    pub async fn record_realtime_session(
+    pub(crate) async fn record_realtime_session(
         &self,
         uid: &str,
         token: &str,

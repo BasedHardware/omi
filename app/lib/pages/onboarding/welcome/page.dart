@@ -110,22 +110,24 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
       });
       _expansionController.reset();
 
-      showDialog(
-        context: context,
-        builder: (c) => getDialog(
-          context,
-          () {
-            Navigator.of(context).pop();
-            openAppSettings();
-          },
-          () {},
-          context.l10n.permissionsRequired,
-          context.l10n.permissionsRequiredDesc,
-          okButtonText: context.l10n.openSettings,
-          singleButton: true,
-        ),
-        barrierDismissible: false,
-      );
+      if (mounted) {
+        showDialog(
+          context: context,
+          builder: (c) => getDialog(
+            context,
+            () {
+              Navigator.of(context).pop();
+              openAppSettings();
+            },
+            () {},
+            context.l10n.permissionsRequired,
+            context.l10n.permissionsRequiredDesc,
+            okButtonText: context.l10n.openSettings,
+            singleButton: true,
+          ),
+          barrierDismissible: false,
+        );
+      }
     }
   }
 
@@ -164,8 +166,8 @@ class _WelcomePageState extends State<WelcomePage> with TickerProviderStateMixin
                           image: DecorationImage(
                             image: ResizeImage(
                               AssetImage(Assets.images.onboardingBg51.path),
-                              width:
-                                  (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio).round(),
+                              width: (MediaQuery.of(context).size.width * MediaQuery.of(context).devicePixelRatio)
+                                  .round(),
                               height: (MediaQuery.of(context).size.height * MediaQuery.of(context).devicePixelRatio)
                                   .round(),
                             ),

@@ -1464,7 +1464,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get payYourSttProvider => 'Freely use omi. You only pay your STT provider directly.';
 
   @override
-  String get freeMinutesMonth => '600 free minutes/month included. Unlimited with ';
+  String get freeMinutesMonth => '300 free minutes/month included. Unlimited with ';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4711,7 +4711,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get noSpecificDataAccessConfigured => 'No specific data access configured.';
 
   @override
-  String get basicPlanDescription => '600 premium mins + unlimited on-device';
+  String get basicPlanDescription => '300 premium mins + unlimited on-device';
 
   @override
   String get minutes => 'minutes';
@@ -5998,7 +5998,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get cloudProvider => 'Cloud Provider';
 
   @override
-  String get premiumMinutesInfo => '600 premium minutes/month. On-Device tab offers unlimited free transcription.';
+  String get premiumMinutesInfo => '300 premium minutes/month. On-Device tab offers unlimited free transcription.';
 
   @override
   String get viewUsage => 'View usage';
@@ -6077,7 +6077,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get batteryDrainSignificantly => 'Battery drain will increase significantly.';
 
   @override
-  String get premiumMinutesMonth => '600 premium minutes/month. On-Device tab offers unlimited free transcription. ';
+  String get premiumMinutesMonth => '300 premium minutes/month. On-Device tab offers unlimited free transcription. ';
 
   @override
   String get audioProcessedLocally => 'Audio is processed locally. Works offline, more private, but uses more battery.';
@@ -9338,7 +9338,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get transcribeLaterNote =>
-      'Works with Omi and Limitless devices for now. Audio stays on your phone until you choose to upload it.';
+      'Works with the phone microphone, Omi, and Limitless devices. Audio stays on your phone until you choose to upload it.';
 
   @override
   String get transcribeLaterStorageFull =>
@@ -9568,4 +9568,33 @@ class AppLocalizationsEn extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Error connecting to Ray-Ban Meta: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'Device Storage';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% full';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$used of $total used';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '$free free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'Device nearly full — sync to free space.';
+
+  @override
+  String get phoneMicOfflineFallbackMessage =>
+      'No connection — recording locally. It will be transcribed when you\'re back online.';
+
+  @override
+  String get dataEncryptedBanner =>
+      'Your data is secured by default with strong encryption, and you stay in control of how it\'s stored and used.';
 }

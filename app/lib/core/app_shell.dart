@@ -77,7 +77,9 @@ class _AppShellState extends State<AppShell> {
           }
         } else {
           Logger.debug('App not found: ${uri.pathSegments[1]}');
-          AppSnackbar.showSnackbarError(context.l10n.appNotAvailable);
+          if (mounted) {
+            AppSnackbar.showSnackbarError(context.l10n.appNotAvailable);
+          }
         }
       }
     } else if (uri.pathSegments.first == 'wrapped') {

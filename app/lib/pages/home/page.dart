@@ -61,6 +61,7 @@ import 'package:omi/utils/device.dart';
 import 'package:omi/utils/platform/platform_service.dart';
 import 'package:omi/services/announcement_service.dart';
 import 'package:omi/services/notifications.dart';
+import 'package:omi/services/wals/recording_transfer_coordinator.dart';
 import 'package:omi/utils/other/temp.dart';
 import 'package:omi/utils/audio/foreground.dart';
 import 'package:omi/utils/l10n_extensions.dart';
@@ -73,7 +74,6 @@ import 'package:omi/widgets/upgrade_alert.dart';
 import 'package:omi/widgets/bottom_nav_bar.dart';
 import 'package:omi/pages/onboarding/interactive_device_onboarding/interactive_device_onboarding_wrapper.dart';
 import 'widgets/battery_info_widget.dart';
-import 'widgets/capture_mode_chip.dart';
 
 class HomePageWrapper extends StatefulWidget {
   final String? navigateToRoute;
@@ -522,7 +522,7 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
         }
         if (!syncProvider.isSyncing) {
           Logger.debug('HomePage: Auto-sync triggered ($fileCount files, $totalBytes bytes)');
-          syncProvider.syncWals();
+          syncProvider.syncWals(trigger: WakeTrigger.deviceConnected);
         }
       };
     });
@@ -855,8 +855,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurple.withValues(alpha: 0.2)
                               : hasPendingOnDevice
-                                  ? Colors.orange.withValues(alpha: 0.15)
-                                  : const Color(0xFF1F1F25),
+                              ? Colors.orange.withValues(alpha: 0.15)
+                              : const Color(0xFF1F1F25),
                           shape: BoxShape.circle,
                         ),
                         child: Icon(
@@ -865,8 +865,8 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                           color: isSyncing
                               ? Colors.deepPurpleAccent
                               : hasPendingOnDevice
-                                  ? Colors.orangeAccent
-                                  : Colors.white70,
+                              ? Colors.orangeAccent
+                              : Colors.white70,
                         ),
                       ),
                     );
@@ -1113,21 +1113,6 @@ class _HomePageState extends State<HomePage> with WidgetsBindingObserver, Ticker
                         ),
                       ),
                     ),
-                  );
-                },
-              ),
-              // Recording mode chip — home tab only, when a Transcribe-Later-capable device is connected
-              Consumer2<HomeProvider, DeviceProvider>(
-                builder: (context, homeProvider, deviceProvider, _) {
-                  final device = deviceProvider.connectedDevice;
-                  if (homeProvider.selectedIndex != 0 ||
-                      device == null ||
-                      !CaptureModeChip.supportsDevice(device.type)) {
-                    return const SizedBox.shrink();
-                  }
-                  return Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: CaptureModeChip(deviceType: device.type),
                   );
                 },
               ),

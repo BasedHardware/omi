@@ -1446,7 +1446,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get payYourSttProvider => 'omiを無料で使用。STTプロバイダーに直接支払います。';
 
   @override
-  String get freeMinutesMonth => '月600分無料。無制限は';
+  String get freeMinutesMonth => '月300分無料。無制限は';
 
   @override
   String get omiUnlimited => 'Omi Unlimited';
@@ -4623,7 +4623,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get noSpecificDataAccessConfigured => '特定のデータアクセスは設定されていません。';
 
   @override
-  String get basicPlanDescription => '600プレミアム分 + デバイス無制限';
+  String get basicPlanDescription => '300プレミアム分 + デバイス無制限';
 
   @override
   String get minutes => '分';
@@ -5893,7 +5893,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get cloudProvider => 'クラウドプロバイダー';
 
   @override
-  String get premiumMinutesInfo => '月間600分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
+  String get premiumMinutesInfo => '月間300分のプレミアム利用可能。オンデバイスタブでは無制限の無料文字起こしが可能です。';
 
   @override
   String get viewUsage => '使用状況を表示';
@@ -5971,7 +5971,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get batteryDrainSignificantly => 'バッテリー消費が大幅に増加します。';
 
   @override
-  String get premiumMinutesMonth => '月間600プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
+  String get premiumMinutesMonth => '月間300プレミアム分。オンデバイスタブでは無制限の無料文字起こしを提供。';
 
   @override
   String get audioProcessedLocally => '音声はローカルで処理されます。オフラインで動作し、よりプライベートですが、バッテリー消費が増えます。';
@@ -9190,7 +9190,7 @@ class AppLocalizationsJa extends AppLocalizations {
   String get transcribeLaterDescription => 'リアルタイムではなく、まず録音してから必要なときに文字起こしします。録音データはスマートフォンに保存され、アップロードすると会話が作成されます。';
 
   @override
-  String get transcribeLaterNote => '現在はOmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
+  String get transcribeLaterNote => 'スマートフォンのマイク、OmiおよびLimitlessデバイスでご利用いただけます。音声はアップロードするまでスマートフォンに保存されたままになります。';
 
   @override
   String get transcribeLaterStorageFull => 'スマートフォンの空き容量が不足しているため、録音を一時停止しました。空き容量を確保するか、録音をアップロードすると自動的に再開します。';
@@ -9416,4 +9416,31 @@ class AppLocalizationsJa extends AppLocalizations {
   String errorConnectingRayBanMeta(String error) {
     return 'Ray-Ban Meta への接続エラー: $error';
   }
+
+  @override
+  String get deviceStorageTitle => 'デバイスのストレージ';
+
+  @override
+  String deviceStoragePercentFull(int percent) {
+    return '$percent% 使用済み';
+  }
+
+  @override
+  String deviceStorageUsedOfTotal(String used, String total) {
+    return '$total 中 $used を使用';
+  }
+
+  @override
+  String deviceStorageFree(String free) {
+    return '空き $free';
+  }
+
+  @override
+  String get deviceStorageNearlyFull => 'デバイスの空き容量がわずかです — 同期して空き容量を確保してください。';
+
+  @override
+  String get phoneMicOfflineFallbackMessage => '接続がありません — ローカルに録音しています。オンラインに戻ると文字起こしされます。';
+
+  @override
+  String get dataEncryptedBanner => 'あなたのデータはデフォルトで強力な暗号化により保護されており、保存や利用の方法はあなたが管理できます。';
 }

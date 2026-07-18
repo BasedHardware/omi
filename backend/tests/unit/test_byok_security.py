@@ -22,7 +22,6 @@ os.environ.setdefault('DEEPGRAM_API_KEY', 'dg-test-fake-for-unit-tests')
 os.environ.setdefault('GOOGLE_API_KEY', 'goog-test-fake-for-unit-tests')
 os.environ.setdefault('ANTHROPIC_API_KEY', 'ant-test-fake-for-unit-tests')
 
-from langchain_openai import ChatOpenAI
 from testing.import_isolation import AutoMockModule, stub_modules
 
 warnings.filterwarnings('ignore', message='.*stream_options.*')
@@ -882,21 +881,42 @@ class TestBYOKActivationValidation:
 
 
 class TestCacheRouting:
-    def test_cached_openai_chat_no_raw_key_in_cache(self):
-        from utils.llm.clients import _cached_openai_chat, _openai_cache
+    @staticmethod
+    def _stub_openai_constructor(monkeypatch):
+        from utils.llm import clients
+
+        class _StubChatOpenAI:
+            def __init__(self, **kwargs):
+                self.model_name = kwargs['model']
+                self.openai_api_base = kwargs.get('base_url')
+
+        constructor = MagicMock(side_effect=_StubChatOpenAI)
+        clients._openai_cache.clear()
+        monkeypatch.setattr(clients, 'ChatOpenAI', constructor)
+        return clients, _StubChatOpenAI, constructor
+
+    def test_cached_openai_chat_no_raw_key_in_cache(self, monkeypatch):
+        from utils.llm import clients
 
         api_key = 'sk-secret-openai-key-for-cache-test'
-        _cached_openai_chat('gpt-4.1-mini', api_key, {})
-        for k in _openai_cache.keys():
+        monkeypatch.setattr(clients, 'ChatOpenAI', MagicMock())
+        clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+        for k in clients._openai_cache.keys():
             assert api_key not in k, f"Raw API key found in cache key: {k}"
 
-    def test_cached_openai_chat_returns_same_instance(self):
-        from utils.llm.clients import _cached_openai_chat
+    def test_cached_openai_chat_returns_same_instance(self, monkeypatch):
+        from utils.llm import clients
 
         api_key = 'sk-deterministic-test-key'
-        inst1 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
-        inst2 = _cached_openai_chat('gpt-4.1-mini', api_key, {})
+        fake_client = MagicMock()
+        constructor = MagicMock(return_value=fake_client)
+        monkeypatch.setattr(clients, 'ChatOpenAI', constructor)
+
+        inst1 = clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+        inst2 = clients._cached_openai_chat('gpt-4.1-mini', api_key, {})
+
         assert inst1 is inst2
+        constructor.assert_called_once_with(model='gpt-4.1-mini', api_key=api_key)
 
     def test_cached_anthropic_no_raw_key_in_cache(self):
         from utils.llm.clients import _anthropic_cache, _cached_anthropic
@@ -914,26 +934,30 @@ class TestCacheRouting:
         inst2 = _cached_anthropic(api_key)
         assert inst1 is inst2
 
-    def test_gemini_byok_routes_to_gemini_endpoint(self):
-        from utils.llm.clients import _create_byok_client, _GEMINI_OPENAI_BASE_URL
+    def test_gemini_byok_routes_to_gemini_endpoint(self, monkeypatch):
+        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
 
-        client = _create_byok_client('gemini-2.5-flash-lite', 'gemini', 'AIza-byok-key')
-        assert isinstance(client, ChatOpenAI)
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
+
+        client = clients._create_byok_client('gemini-2.5-flash-lite', 'gemini', 'AIza-byok-key')
+        assert isinstance(client, stub_client)
         assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
 
-    def test_openai_byok_creates_client(self):
-        from utils.llm.clients import _create_byok_client
+    def test_openai_byok_creates_client(self, monkeypatch):
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
 
-        client = _create_byok_client('gpt-4.1-mini', 'openai', 'sk-byok-test-key')
-        assert isinstance(client, ChatOpenAI)
+        client = clients._create_byok_client('gpt-4.1-mini', 'openai', 'sk-byok-test-key')
+        assert isinstance(client, stub_client)
         assert client.model_name == 'gpt-4.1-mini'
 
-    def test_openrouter_gemini_byok_routes_to_gemini_direct(self):
+    def test_openrouter_gemini_byok_routes_to_gemini_direct(self, monkeypatch):
         """OpenRouter BYOK for Gemini models reroutes to Gemini direct endpoint."""
-        from utils.llm.clients import _create_byok_client, _GEMINI_OPENAI_BASE_URL
+        from utils.llm.clients import _GEMINI_OPENAI_BASE_URL
 
-        client = _create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
-        assert isinstance(client, ChatOpenAI)
+        clients, stub_client, _constructor = self._stub_openai_constructor(monkeypatch)
+
+        client = clients._create_byok_client('gemini-3-flash-preview', 'openrouter', 'AIza-byok-key')
+        assert isinstance(client, stub_client)
         # Must use Gemini base URL, not OpenRouter
         assert client.openai_api_base == _GEMINI_OPENAI_BASE_URL
         # Must use the bare model name for Gemini direct API

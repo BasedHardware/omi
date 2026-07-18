@@ -13,11 +13,3 @@ export const Theme = {
     // backgroundAccent: '#FF2E00',
     warninig: '#FF2E00',
 };
-
-export const ThemeApp = {
-    button: {
-        text: Theme.textInverted,
-        bg: '#fff',
-        bgPressed: '#f0f0f0',
-    }
-}

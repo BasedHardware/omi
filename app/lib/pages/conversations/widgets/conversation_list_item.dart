@@ -132,7 +132,7 @@ class _ConversationListItemState extends State<ConversationListItem> {
               context,
               ConversationDetailPage(conversation: widget.conversation, isFromOnboarding: widget.isFromOnboarding),
             );
-            if (mounted) {
+            if (context.mounted) {
               // Don't upsert if the conversation was deleted while on the detail page
               if (result is Map && result['deleted'] == true) return;
               bool stillExists = provider.conversations.any((c) => c.id == widget.conversation.id);
@@ -171,14 +171,14 @@ class _ConversationListItemState extends State<ConversationListItem> {
                       color: isSelected
                           ? Colors.deepPurple.withValues(alpha: 0.3)
                           : (isSelectionMode && !isEligible)
-                              ? Colors.grey.shade800
-                              : const Color(0xFF1F1F25),
+                          ? Colors.grey.shade800
+                          : const Color(0xFF1F1F25),
                       borderRadius: BorderRadius.circular(24.0),
                       border: isSelected
                           ? Border.all(color: Colors.deepPurple, width: 2)
                           : (isSelectionMode && !isEligible)
-                              ? Border.all(color: Colors.grey.shade600, width: 1)
-                              : null,
+                          ? Border.all(color: Colors.grey.shade600, width: 1)
+                          : null,
                     ),
                     child: ClipRRect(
                       borderRadius: BorderRadius.circular(24.0),

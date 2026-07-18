@@ -65,3 +65,48 @@ def test_valid_callback_parsed():
     m = HumeJobCallbackModel.from_dict('prosody', {'job_id': 'j1', 'status': 'COMPLETED'})
     assert m.job_id == 'j1'
     assert m.status == 'COMPLETED'
+
+
+# --- from_multi_dict nested lookups: a failed/partial job must not KeyError -> 500 ---
+
+
+def test_from_multi_dict_missing_models_key_no_raise():
+    # prediction has no 'models' at all (partial job)
+    data = {"results": {"predictions": [{}]}}
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data) == []
+
+
+def test_from_multi_dict_missing_requested_model_no_raise():
+    # 'models' present but the requested model key (prosody) is absent
+    data = {"results": {"predictions": [{"models": {}}]}}
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data) == []
+
+
+def test_from_multi_dict_missing_grouped_predictions_no_raise():
+    data = {"results": {"predictions": [{"models": {"prosody": {}}}]}}
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data) == []
+
+
+def test_from_multi_dict_missing_inner_predictions_no_raise():
+    # a grouped prediction with no 'predictions' list
+    data = {"results": {"predictions": [{"models": {"prosody": {"grouped_predictions": [{}]}}}]}}
+    assert HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data) == []
+
+
+def test_from_multi_dict_parses_valid_payload():
+    data = {
+        "results": {
+            "predictions": [
+                {
+                    "models": {
+                        "prosody": {
+                            "grouped_predictions": [{"predictions": [{"emotions": [{"name": "joy", "score": 0.9}]}]}]
+                        }
+                    }
+                }
+            ]
+        }
+    }
+    result = HumeJobModelPredictionResponseModel.from_multi_dict("prosody", data)
+    assert len(result) == 1
+    assert [e.name for e in result[0].emotions] == ["joy"]

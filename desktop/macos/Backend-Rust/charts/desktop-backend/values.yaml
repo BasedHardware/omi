@@ -65,6 +65,9 @@ livenessProbe:
 
 readinessProbe:
   httpGet:
+    # Process admission stays independent of Redis so BYOK and other
+    # Redis-independent routes remain reachable during a dependency outage.
+    # Candidate/runtime probes use /ready for the semantic dependency signal.
     path: /health
     port: 8080
   failureThreshold: 3
