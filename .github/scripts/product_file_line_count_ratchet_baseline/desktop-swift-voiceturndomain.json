@@ -1,9 +1,9 @@
 {
   "files": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2155
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": 2191
   },
   "raise_justifications": {
-    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "The strict VoiceTurnDomain target centralizes reducer ownership and moves the lifecycle state machine intact."
+    "desktop/macos/Desktop/Sources/VoiceTurnDomain/VoiceTurnStateMachine.swift": "A recoverable screen-evidence transition must stay atomic with the reducer-owned lifecycle it modifies; extracting it would weaken that ownership boundary."
   },
   "threshold": 1500
 }
