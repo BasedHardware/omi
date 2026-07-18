@@ -1,3 +1,0 @@
-{
-  "change": "Fixed Rewind pausing silently when macOS cannot capture the current window"
-}
