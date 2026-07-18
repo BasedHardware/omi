@@ -1,20 +1,16 @@
 name: Deploy Backend to Cloud RUN
 
 on:
-#  push:
-#    branches: [ "main" ]
-#    paths:
-#      - 'backend/**'
   workflow_dispatch:
     inputs:
       environment:
         description: 'Select the environment to deploy to'
         required: true
         default: 'development'
-      branch:
-        description: 'Branch to deploy from'
-        required: true
-        default: 'main'
+      release_sha:
+        description: 'Exact main SHA with a successful Release Eligibility proof (deploy mode only)'
+        required: false
+        default: ''
       release_version:
         description: 'Release version (optional)'
         required: false
@@ -51,7 +47,9 @@ env:
 
 jobs:
   repair-traffic:
-    if: ${{ github.event.inputs.mode == 'repair-traffic-only' }}
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'repair-traffic-only'
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
@@ -68,7 +66,9 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.event.inputs.branch }}
+          # Traffic repair changes no source-derived runtime state. It stays a
+          # separate recovery path and does not consume a release proof.
+          ref: main
 
       - name: Google Auth
         id: auth
@@ -100,24 +100,26 @@ jobs:
             --cloud-run-service backend-integration || true
 
   firestore_readiness:
-    if: ${{ github.event.inputs.mode == 'deploy' }}
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'deploy'
     environment: ${{ github.event.inputs.environment }}
     permissions:
+      actions: 'read'
       contents: 'read'
     runs-on: ubuntu-latest-m
     outputs:
-      candidate_sha: ${{ steps.approved_source.outputs.candidate_sha }}
+      admitted_sha: ${{ steps.admitted_source.outputs.admitted_sha }}
     steps:
       - name: Validate Firestore readiness inputs
         env:
-          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
           DEPLOY_ENVIRONMENT: ${{ github.event.inputs.environment }}
         run: |
+          set -euo pipefail
           if [[ "$DEPLOY_ENVIRONMENT" != "development" && "$DEPLOY_ENVIRONMENT" != "prod" ]]; then
             echo "Invalid environment: $DEPLOY_ENVIRONMENT. Must be 'development' or 'prod'."
             exit 1
           fi
-          git check-ref-format "refs/heads/${DEPLOY_BRANCH}"
 
       - name: Require read-only Firestore credentials
         env:
@@ -128,26 +130,41 @@ jobs:
             exit 1
           fi
 
-      - name: Checkout approved Firestore control plane
+      - name: Checkout current main for source admission
         uses: actions/checkout@v7
         with:
           ref: main
+          fetch-depth: 0
 
-      - name: Bind candidate to approved Firestore source
-        id: approved_source
+      - name: Verify exact admitted main source
+        id: admitted_source
         env:
-          DEPLOY_BRANCH: ${{ github.event.inputs.branch }}
+          DEPLOY_SHA: ${{ github.event.inputs.release_sha }}
+          GH_TOKEN: ${{ github.token }}
         run: |
-          approved_sha="$(git rev-parse HEAD)"
-          git fetch --no-tags origin \
-            "refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate"
-          candidate_sha="$(git rev-parse refs/remotes/origin/firestore-candidate)"
-          if ! git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json; then
-            echo "ERROR: branch Firestore schema differs from main; merge and approve it before deployment."
+          set -euo pipefail
+          if [[ ! "$DEPLOY_SHA" =~ ^[0-9a-f]{40}$ || "$DEPLOY_SHA" == "0000000000000000000000000000000000000000" ]]; then
+            echo "ERROR: release_sha must be one non-zero, lowercase, full commit SHA."
             exit 1
           fi
-          printf 'approved_sha=%s\n' "$approved_sha" >> "$GITHUB_OUTPUT"
-          printf 'candidate_sha=%s\n' "$candidate_sha" >> "$GITHUB_OUTPUT"
+          git fetch --no-tags origin main
+          main_sha="$(git rev-parse --verify 'origin/main^{commit}')"
+          git cat-file -e "${DEPLOY_SHA}^{commit}"
+          git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"
+          proof_path="${RUNNER_TEMP}/release-eligibility-${DEPLOY_SHA}.json"
+          gh api -H "Accept: application/vnd.github+json" \
+            "repos/${GITHUB_REPOSITORY}/actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}&per_page=100" \
+            > "$proof_path"
+          python3 .github/scripts/verify_backend_release_admission.py \
+            --sha "$DEPLOY_SHA" \
+            --repository "$GITHUB_REPOSITORY" \
+            --workflow-runs "$proof_path"
+          printf 'admitted_sha=%s\n' "$DEPLOY_SHA" >> "$GITHUB_OUTPUT"
+
+      - name: Checkout admitted Firestore source
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ steps.admitted_source.outputs.admitted_sha }}
 
       - name: Google Auth for read-only Firestore inventory
         uses: 'google-github-actions/auth@v3'
@@ -161,7 +178,7 @@ jobs:
         id: firestore_readiness
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -175,7 +192,7 @@ jobs:
         if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ steps.approved_source.outputs.approved_sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ steps.admitted_source.outputs.admitted_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -196,7 +213,9 @@ jobs:
 
   deploy:
     needs: firestore_readiness
-    if: ${{ github.event.inputs.mode == 'deploy' }}
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.inputs.mode == 'deploy'
     environment: ${{ github.event.inputs.environment }}
     permissions:
       contents: 'read'
@@ -222,7 +241,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}
+          ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}
 
       - name: Google Auth
         id: auth
@@ -580,7 +599,7 @@ jobs:
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
             --cloud-run-only \
-            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -688,7 +707,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
-            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -732,7 +751,7 @@ jobs:
         if: ${{ github.event.inputs.deploy_targets == 'all' }}
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
-            --commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}" \
+            --commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \

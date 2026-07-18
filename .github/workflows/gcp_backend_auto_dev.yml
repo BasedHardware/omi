@@ -1,10 +1,10 @@
 name: Auto Deploy Backend to Development
 
 on:
-  push:
-    branches: [ "main" ]
-    paths:
-      - 'backend/**'
+  workflow_run:
+    workflows: ["Release Eligibility"]
+    branches: [main]
+    types: [completed]
 
 # Share the development backend mutation domain with manual deploys, traffic
 # repair, backend-listen, and LLM Gateway's shared backend-secrets updates.
@@ -21,6 +21,15 @@ env:
 
 jobs:
   firestore_readiness:
+    # A workflow_run can access deployment credentials, so never run source
+    # code until the completed proof identifies a successful push from this
+    # repository's main branch. Every later checkout and release vector uses
+    # this immutable event SHA rather than the default branch's current SHA.
+    if: >-
+      github.event.workflow_run.conclusion == 'success' &&
+      github.event.workflow_run.event == 'push' &&
+      github.event.workflow_run.head_branch == 'main' &&
+      github.event.workflow_run.head_repository.full_name == github.repository
     environment: development
     permissions:
       contents: 'read'
@@ -38,7 +47,7 @@ jobs:
       - name: Checkout approved Firestore source
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Google Auth for read-only Firestore inventory
         uses: 'google-github-actions/auth@v3'
@@ -52,7 +61,7 @@ jobs:
         id: firestore_readiness
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ github.sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -66,7 +75,7 @@ jobs:
         if: ${{ failure() && steps.firestore_readiness.outcome == 'failure' }}
         env:
           FIRESTORE_PROPOSAL_PATH: ${{ runner.temp }}/firestore-schema-proposal-${{ github.run_id }}-${{ github.run_attempt }}.json
-          FIRESTORE_SOURCE_COMMIT: ${{ github.sha }}
+          FIRESTORE_SOURCE_COMMIT: ${{ github.event.workflow_run.head_sha }}
         run: |
           python3 backend/scripts/reconcile_firestore_indexes.py \
             --project "${{ vars.RUNTIME_GCP_PROJECT_ID }}" \
@@ -101,7 +110,7 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v7
         with:
-          ref: ${{ github.sha }}
+          ref: ${{ github.event.workflow_run.head_sha }}
 
       - name: Google Auth
         id: auth
@@ -419,7 +428,7 @@ jobs:
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
             --cloud-run-only \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ github.event.workflow_run.head_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -487,7 +496,7 @@ jobs:
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
             --candidate \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ github.event.workflow_run.head_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \
@@ -530,7 +539,7 @@ jobs:
         id: verify-serving-release-vector
         run: |
           python3 backend/scripts/verify_backend_release_vector.py \
-            --commit-sha "${{ github.sha }}" \
+            --commit-sha "${{ github.event.workflow_run.head_sha }}" \
             --short-sha "${{ steps.image-tag.outputs.short_sha }}" \
             --deploy-run-id "${{ github.run_id }}" \
             --deploy-run-attempt "${{ github.run_attempt }}" \

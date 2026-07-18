@@ -404,13 +404,16 @@ def test_firestore_readiness_fails_before_checkout_when_read_only_credentials_ar
     for workflow in workflows:
         text = workflow.read_text(encoding='utf-8')
         readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
+        checkout_marker = (
+            'Checkout current main for source admission'
+            if workflow.name == 'gcp_backend.yml'
+            else 'Checkout approved Firestore source'
+        )
 
         assert 'Require read-only Firestore credentials' in readiness
         assert 'GCP_FIRESTORE_READONLY_CREDENTIALS: ${{ secrets.GCP_FIRESTORE_READONLY_CREDENTIALS }}' in readiness
         assert 'if [ -z "$GCP_FIRESTORE_READONLY_CREDENTIALS" ]; then' in readiness
-        assert readiness.index('Require read-only Firestore credentials') < readiness.index(
-            'Checkout approved Firestore'
-        )
+        assert readiness.index('Require read-only Firestore credentials') < readiness.index(checkout_marker)
         assert readiness.index('Require read-only Firestore credentials') < readiness.index(
             'Google Auth for read-only Firestore inventory'
         )
@@ -449,20 +452,28 @@ def test_static_firestore_index_migration_is_manual_and_main_scoped() -> None:
     assert '--timeout-seconds 3600' in apply
 
 
-def test_static_manual_branch_deploy_requires_the_approved_main_schema() -> None:
+def test_static_manual_deploy_requires_an_admitted_main_source() -> None:
     workflow = BACKEND_DIR.parent / '.github/workflows/gcp_backend.yml'
     text = workflow.read_text(encoding='utf-8')
     readiness = text.split('\n  firestore_readiness:\n', 1)[1].split('\n  deploy:\n', 1)[0]
     deploy = text.split('\n  deploy:\n', 1)[1]
 
-    schema_guard = 'git diff --quiet "$approved_sha" "$candidate_sha" -- firestore.indexes.json'
-    assert 'ref: main' in readiness
-    assert 'refs/heads/${DEPLOY_BRANCH}:refs/remotes/origin/firestore-candidate' in readiness
-    assert schema_guard in readiness
-    assert "printf 'candidate_sha=%s\\n' \"$candidate_sha\" >> \"$GITHUB_OUTPUT\"" in readiness
-    assert 'ref: ${{ needs.firestore_readiness.outputs.candidate_sha }}' in deploy
-    assert readiness.index(schema_guard) < readiness.index('Google Auth for read-only Firestore inventory')
-    assert readiness.index(schema_guard) < readiness.index('--check-only')
+    assert 'release_sha:' in text
+    assert 'github.event.inputs.branch' not in text
+    assert 'Checkout current main for source admission' in readiness
+    assert 'git merge-base --is-ancestor "$DEPLOY_SHA" "$main_sha"' in readiness
+    assert (
+        'actions/workflows/release-eligibility.yml/runs?event=push&branch=main&status=completed&head_sha=${DEPLOY_SHA}'
+        in readiness
+    )
+    assert '.github/scripts/verify_backend_release_admission.py' in readiness
+    assert "printf 'admitted_sha=%s\\n' \"$DEPLOY_SHA\" >> \"$GITHUB_OUTPUT\"" in readiness
+    assert 'ref: ${{ steps.admitted_source.outputs.admitted_sha }}' in readiness
+    assert 'ref: ${{ needs.firestore_readiness.outputs.admitted_sha }}' in deploy
+    assert readiness.index('Verify exact admitted main source') < readiness.index(
+        'Google Auth for read-only Firestore inventory'
+    )
+    assert readiness.index('Verify exact admitted main source') < readiness.index('--check-only')
     assert 'secrets.GCP_CREDENTIALS' not in readiness
 
 
@@ -744,8 +755,8 @@ def test_candidate_cloud_run_only_verification_does_not_require_listener_mutatio
 def test_full_backend_deploys_verify_the_serving_release_vector_after_promotion() -> None:
     root = BACKEND_DIR.parent
     workflows = {
-        'gcp_backend.yml': '--commit-sha "${{ needs.firestore_readiness.outputs.candidate_sha }}"',
-        'gcp_backend_auto_dev.yml': '--commit-sha "${{ github.sha }}"',
+        'gcp_backend.yml': '--commit-sha "${{ needs.firestore_readiness.outputs.admitted_sha }}"',
+        'gcp_backend_auto_dev.yml': '--commit-sha "${{ github.event.workflow_run.head_sha }}"',
     }
 
     for filename, commit_marker in workflows.items():

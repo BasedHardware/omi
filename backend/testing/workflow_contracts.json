@@ -192,9 +192,14 @@
         "backend/scripts/reconcile_firestore_indexes.py",
         "config/deployment-setting-classification.json",
         "firestore.indexes.json",
+        ".github/actions/release-eligibility/action.yml",
         ".github/workflows/gcp_backend.yml",
         ".github/workflows/gcp_backend_auto_dev.yml",
-        ".github/workflows/gcp_firestore_indexes.yml"
+        ".github/workflows/gcp_firestore_indexes.yml",
+        ".github/workflows/release-eligibility.yml",
+        ".github/scripts/verify_release_eligibility.py",
+        ".github/scripts/verify_backend_release_admission.py",
+        ".github/scripts/check_backend_deploy_source_admission.py"
       ],
       "tests": [
         "tests/unit/test_reconcile_firestore_indexes.py",
@@ -205,7 +210,8 @@
       "invariants": [
         "backend deploy workflows only perform read-only readiness checks against the serving Firestore project",
         "Firestore schema writes use only the manual main-scoped migration workflow and serialize with backend deployment readiness",
-        "manual branch deploys cannot change the Firestore manifest, execute branch-owned schema control code before the gate, or move after the checked SHA",
+        "automatic dev and manual backend deploys use only exact main SHAs with a successful Release Eligibility proof; traffic-only repair is source-independent",
+        "manual deploys cannot change the Firestore manifest, execute source-owned schema control code before admission, or move after the admitted SHA",
         "failed readiness gates upload only a locally revalidated create-only proposal bound to the source commit, target, manifest hash, and short TTL"
       ]
     },

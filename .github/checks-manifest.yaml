@@ -310,6 +310,16 @@ checks:
     triggers: [".github/workflows/release-eligibility.yml", ".github/actions/release-eligibility/**", ".github/scripts/verify_release_eligibility.py", ".github/scripts/check_release_eligibility.py", ".github/scripts/test_check_release_eligibility.py", ".github/checks-manifest.yaml"]
     lanes: ["local", "ci"]
     reason: "#9989 exercises non-main, ambiguous SHA, mismatched checkout, and workflow-contract rejection cases"
+  - id: backend-deploy-source-admission
+    command: ["python3", ".github/scripts/check_backend_deploy_source_admission.py"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9991 keeps backend deploy source selection bound to one successful main Release Eligibility proof"
+  - id: backend-deploy-source-admission-fixtures
+    command: ["python3", ".github/scripts/test_check_backend_deploy_source_admission.py"]
+    triggers: [".github/workflows/gcp_backend.yml", ".github/workflows/gcp_backend_auto_dev.yml", ".github/scripts/verify_backend_release_admission.py", ".github/scripts/check_backend_deploy_source_admission.py", ".github/scripts/test_check_backend_deploy_source_admission.py", ".github/checks-manifest.yaml"]
+    lanes: ["local", "ci"]
+    reason: "#9991 mutation-tests workflow-run event, result, branch, SHA, repository, and manual proof drift"
 
 exempt:
   - path: ".github/scripts/check-desktop-auto-beta-candidate.py"
