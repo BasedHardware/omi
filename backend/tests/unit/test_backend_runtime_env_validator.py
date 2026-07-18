@@ -187,6 +187,34 @@ def test_prod_account_deletion_dispatch_contract_rejects_missing_or_inline_profi
         dispatch_mode['value'] = original_mode
 
 
+def test_prod_listen_finalization_contract_requires_the_dedicated_worker_bindings():
+    validator = load_validator()
+    manifest = validator._load_yaml(validator.DEFAULT_MANIFEST)
+    prod = manifest['environments']['prod']
+
+    assert validator._validate_listen_finalization_dispatch_contract('prod', prod) == []
+
+    backend_env = prod['cloud_run']['services']['backend']['env']
+    queue = backend_env['LISTEN_FINALIZATION_TASKS_QUEUE']
+    queue['value'] = 'sync-jobs'
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            "listen-finalization env LISTEN_FINALIZATION_TASKS_QUEUE must be literal 'conversation-finalization'",
+        ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
+    finally:
+        queue['value'] = 'conversation-finalization'
+
+    missing_entry = backend_env.pop('LISTEN_FINALIZATION_TASKS_HANDLER_URL')
+    try:
+        assert validator.ValidationError(
+            'prod/cloud_run/backend',
+            'missing required listen-finalization env LISTEN_FINALIZATION_TASKS_HANDLER_URL',
+        ) in validator._validate_listen_finalization_dispatch_contract('prod', prod)
+    finally:
+        backend_env['LISTEN_FINALIZATION_TASKS_HANDLER_URL'] = missing_entry
+
+
 def test_gke_config_map_contract_rejects_missing_config_map(tmp_path):
     validator = load_validator()
     values_path = tmp_path / 'values.yaml'

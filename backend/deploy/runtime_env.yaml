@@ -887,6 +887,24 @@ environments:
       services:
         backend:
           env:
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
@@ -1010,6 +1028,24 @@ environments:
               version: latest
         backend-sync: &prod_backend_sync
           env:
+            LISTEN_FINALIZATION_DISPATCH_MODE:
+              value: cloud_tasks
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_QUEUE:
+              value: conversation-finalization
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_HANDLER_URL:
+              env_var: LISTEN_FINALIZATION_TASKS_HANDLER_URL
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_INVOKER_SA:
+              env_var: LISTEN_FINALIZATION_TASKS_INVOKER_SA
+              category: reliability
+            LISTEN_FINALIZATION_TASKS_MAX_ATTEMPTS:
+              value: '5'
+              category: reliability
+            HTTP_LISTEN_FINALIZATION_RUN_TIMEOUT:
+              value: '1500'
+              category: reliability
             ACCOUNT_DELETION_DISPATCH_MODE:
               value: cloud_tasks
               category: reliability
