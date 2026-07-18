@@ -130,9 +130,9 @@
           "RAPIDAPI_KEY": "NEXT_PUBLIC_RAPIDAPI_KEY:latest",
           "RAPIDAPI_HOST": "NEXT_PUBLIC_RAPIDAPI_HOST:latest",
           "LINKEDIN_API_KEY": "NEXT_PUBLIC_LINKEDIN_API_KEY:latest",
+          "LINKEDIN_API_HOST": "NEXT_PUBLIC_LINKEDIN_API_HOST:latest",
           "OPENROUTER_API_KEY": "OPENROUTER_API_KEY:latest"
-        },
-        "remove_runtime_secrets": ["LINKEDIN_API_HOST"]
+        }
       },
       "canary_component": "web/personas-open-source/src/components/public-build-canary.tsx",
       "inputs": [

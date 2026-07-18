@@ -328,12 +328,15 @@ RUN for name in $OMI_REQUIRED_PUBLIC_BUILD_INPUTS; do value="$(printenv "$name" 
 
         self.assertEqual(RUNTIME_PREFLIGHT.validate_current_bindings(self.target(), service), [])
 
-    def test_personas_contract_removes_the_stale_linkedin_host_binding(self) -> None:
+    def test_personas_contract_retains_the_active_linkedin_host_binding(self) -> None:
+        # LINKEDIN_API_HOST is actively read by the personas social-profile route
+        # (web/personas-open-source/src/app/api/social-profile/route.ts) for the
+        # linkedin-profile provider. The binding must remain declared so deploys
+        # do not strip it and break LinkedIn profile creation.
         contract = STATIC.load_contract(ROOT / "config" / "public-build-contract.json")
         personas = contract.targets["personas"]
 
-        self.assertNotIn("LINKEDIN_API_HOST", personas.deployment.runtime_secrets)
-        self.assertEqual(personas.deployment.remove_runtime_secrets, ("LINKEDIN_API_HOST",))
+        self.assertIn("LINKEDIN_API_HOST", personas.deployment.runtime_secrets)
 
     def test_rejects_a_required_value_missing_from_reviewed_source(self) -> None:
         contract = STATIC.load_contract(self.root / "config/public-build-contract.json")
