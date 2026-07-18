@@ -9,6 +9,8 @@ import { describe, it, expect } from 'vitest'
 import {
   BaseHubSession,
   defaultSocketFactory,
+  HUB_IDLE_RELEASE_MS,
+  HUB_WARM_TIMEOUT_MS,
   type HubBargeInStrategy,
   type HubProvider,
   type HubSocketFactory
@@ -113,9 +115,40 @@ function makeControllableSocket() {
       readyState = 1
       spec?.onOpen()
     },
+    /** Deliver a server→client frame (drives `handleProviderMessage`). */
+    message: (data: string) => spec?.onMessage(data),
     setReadyState: (n: number) => {
       readyState = n
     }
+  }
+}
+
+/** A fake clock that records each armed timer with its delay so a test can fire a
+ *  specific one (the ~10 s warm timeout vs the 180 s idle release). */
+function makeFakeClock() {
+  const timers: { id: number; ms: number; fire: () => void }[] = []
+  let seq = 0
+  const clock = {
+    setTimer: (ms: number, fire: () => void) => {
+      const id = ++seq
+      timers.push({ id, ms, fire })
+      return id
+    },
+    clearTimer: (h: unknown) => {
+      const i = timers.findIndex((t) => t.id === h)
+      if (i >= 0) timers.splice(i, 1)
+    }
+  }
+  return {
+    clock,
+    /** Fire (and consume) the single pending timer armed for `ms`. */
+    fire: (ms: number) => {
+      const i = timers.findIndex((t) => t.ms === ms)
+      if (i < 0) throw new Error(`no pending timer for ${ms}ms`)
+      const [t] = timers.splice(i, 1)
+      t.fire()
+    },
+    pending: (ms: number) => timers.some((t) => t.ms === ms)
   }
 }
 
@@ -202,5 +235,52 @@ describe('BaseHubSession.send — non-OPEN socket guard', () => {
     expect(() => session.cancelTurn()).not.toThrow()
     // Only the setup frame from open() — the CLOSING control frame was dropped.
     expect(sock.sent).toEqual([JSON.stringify({ type: 'session.setup' })])
+  })
+})
+
+describe('BaseHubSession.ensureWarm — connect/setup timeout', () => {
+  /** Build a warming session whose socket has opened but has NOT yet signaled
+   *  readiness (no `{type:'ready'}` frame), with an injected fake clock. */
+  async function connectingSession() {
+    const sock = makeControllableSocket()
+    const clk = makeFakeClock()
+    const errors: { message: string; retryable: boolean }[] = []
+    const session = new TestHubSession({
+      token: 'tok',
+      instructions: 'instr',
+      socketFactory: sock.factory,
+      playerFactory: async () => noopPlayer,
+      clock: clk.clock,
+      events: { onError: (message, retryable) => errors.push({ message, retryable }) }
+    })
+    const warm = session.ensureWarm()
+    warm.catch(() => {}) // the timeout rejects — swallow so it isn't an unhandled rejection
+    await Promise.resolve() // past the player factory
+    await Promise.resolve() // socket created
+    return { sock, clk, session, errors, warm }
+  }
+
+  it('fails fast when the socket opens but the provider never signals readiness', async () => {
+    const { sock, clk, session, errors, warm } = await connectingSession()
+    sock.open() // socket OPEN + setup frame sent, but no readiness frame ever arrives
+    expect(session.isWarm()).toBe(false)
+
+    // The ~10 s warm timeout fires (NOT the 180 s idle release) → a clean fast failure.
+    clk.fire(HUB_WARM_TIMEOUT_MS)
+    await expect(warm).rejects.toThrow('hub warm timeout')
+    expect(session.isWarm()).toBe(false)
+    // Surfaced through onError as retryable so the controller's strike accounting sees it.
+    expect(errors).toEqual([{ message: 'hub warm timeout', retryable: true }])
+  })
+
+  it('does NOT fire once the provider signals readiness — the healthy warm path is unchanged', async () => {
+    const { sock, clk, session, warm } = await connectingSession()
+    sock.open()
+    sock.message('{"type":"ready"}') // provider ready within the bound → markReady
+    await warm
+    expect(session.isWarm()).toBe(true)
+    // The warm timeout was cleared on markReady; only the 180 s idle release remains.
+    expect(clk.pending(HUB_WARM_TIMEOUT_MS)).toBe(false)
+    expect(clk.pending(HUB_IDLE_RELEASE_MS)).toBe(true)
   })
 })

@@ -182,6 +182,14 @@ export const defaultSocketFactory: HubSocketFactory = (spec) => {
 /** D4: release a warm socket after this much idle time. Named + tunable. */
 export const HUB_IDLE_RELEASE_MS = 180_000
 
+/** Bound on a single warm attempt: the socket may connect but the provider can then
+ *  never send its readiness signal (`setupComplete` / `session.created`), which would
+ *  otherwise hang the warm until the 180 s idle teardown eventually rejects. When this
+ *  elapses before `markReady`, the attempt fails fast (`handleError`) so the controller's
+ *  strike accounting sees it as a normal fast failure. ~10 s — well past a healthy
+ *  handshake, well short of the idle teardown. Named + tunable. */
+export const HUB_WARM_TIMEOUT_MS = 10_000
+
 export type HubSessionOptions = {
   /** Ephemeral token minted by the backend (managed users — Windows path). */
   token: string
@@ -196,6 +204,9 @@ export type HubSessionOptions = {
   clock?: HubClock
   mintSessionID?: () => VoiceSessionID
   idleReleaseMs?: number
+  /** Bound on a single warm attempt before it fails fast (default HUB_WARM_TIMEOUT_MS);
+   *  injectable so the timeout is testable with a fake clock. */
+  warmTimeoutMs?: number
   /** Provider-neutral tool declarations. Tool CATALOG assembly is a host concern
    *  (built main-side from the shared manifest with a host-derived role); each
    *  subclass projects these to its wire shape. Default none so a warm frame with no
@@ -232,6 +243,7 @@ export abstract class BaseHubSession implements HubSession {
   private readonly clock: HubClock
   private readonly mintSessionID: () => VoiceSessionID
   private readonly idleReleaseMs: number
+  private readonly warmTimeoutMs: number
   private readonly createPlayer: (opts: {
     onStarted: () => void
     onDrained: () => void
@@ -249,6 +261,7 @@ export abstract class BaseHubSession implements HubSession {
 
   private player: VoicePlayer | null = null
   private idleHandle: unknown = null
+  private warmTimeoutHandle: unknown = null
   private warmPromise: Promise<void> | null = null
   private warmResolve: (() => void) | null = null
   private warmReject: ((e: Error) => void) | null = null
@@ -263,6 +276,7 @@ export abstract class BaseHubSession implements HubSession {
     this.clock = opts.clock ?? defaultClock
     this.mintSessionID = opts.mintSessionID ?? (() => crypto.randomUUID() as VoiceSessionID)
     this.idleReleaseMs = opts.idleReleaseMs ?? HUB_IDLE_RELEASE_MS
+    this.warmTimeoutMs = opts.warmTimeoutMs ?? HUB_WARM_TIMEOUT_MS
     this.createPlayer =
       opts.playerFactory ??
       ((o) =>
@@ -286,8 +300,28 @@ export abstract class BaseHubSession implements HubSession {
       this.warmResolve = resolve
       this.warmReject = reject
     })
+    this.armWarmTimeout()
     void this.openConnection()
     return this.warmPromise
+  }
+
+  /** Bound the warm attempt: if the provider never signals readiness (the socket
+   *  opens but no `setupComplete` / `session.created` arrives, or it never opens at
+   *  all), fail fast instead of hanging until the 180 s idle teardown. Routed through
+   *  `handleError` so the controller's strike accounting sees a normal fast failure. */
+  private armWarmTimeout(): void {
+    this.clearWarmTimeout()
+    this.warmTimeoutHandle = this.clock.setTimer(this.warmTimeoutMs, () => {
+      this.warmTimeoutHandle = null
+      if (!this.isOpen) this.handleError('hub warm timeout', true)
+    })
+  }
+
+  private clearWarmTimeout(): void {
+    if (this.warmTimeoutHandle != null) {
+      this.clock.clearTimer(this.warmTimeoutHandle)
+      this.warmTimeoutHandle = null
+    }
   }
 
   isWarm(): boolean {
@@ -343,6 +377,7 @@ export abstract class BaseHubSession implements HubSession {
   protected markReady(): void {
     if (this.isOpen) return
     this.isOpen = true
+    this.clearWarmTimeout() // handshake completed within the bound
     this.onProviderReady() // subclass: Gemini opens a deferred activity window
     this.flushPendingAudio()
     if (this.pendingCommit && this.canAcceptInput()) {
@@ -360,6 +395,7 @@ export abstract class BaseHubSession implements HubSession {
   }
 
   teardown(): void {
+    this.clearWarmTimeout()
     if (this.idleHandle != null) {
       this.clock.clearTimer(this.idleHandle)
       this.idleHandle = null

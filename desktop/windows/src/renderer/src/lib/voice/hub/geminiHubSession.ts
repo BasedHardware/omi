@@ -22,6 +22,8 @@ import {
   type HubSessionOptions
 } from './hubSession'
 import { GEMINI_LIVE_MODEL } from '../tokenMint'
+import type { VoiceToolDeclaration } from '../../../../../shared/types'
+import { sanitizeGeminiToolSchema } from './geminiToolSchema'
 
 export class GeminiHubSession extends BaseHubSession {
   readonly provider: HubProvider = 'gemini'
@@ -65,7 +67,17 @@ export class GeminiHubSession extends BaseHubSession {
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Charon' } } }
         },
         systemInstruction: { parts: [{ text: this.instructions }] },
-        tools: [{ functionDeclarations: this.tools }],
+        // Gemini's `parameters` is an OpenAPI-3.0 Schema — sanitize each tool's schema
+        // to that subset or Gemini rejects the setup and fast-closes the socket.
+        tools: [
+          {
+            functionDeclarations: this.tools.map((t: VoiceToolDeclaration) => ({
+              name: t.name,
+              description: t.description,
+              parameters: sanitizeGeminiToolSchema(t.parameters)
+            }))
+          }
+        ],
         inputAudioTranscription: {},
         outputAudioTranscription: {},
         realtimeInputConfig: {
