@@ -99,7 +99,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertNil(provider.errorMessage)
   }
 
-  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async {
+  func testUnexpectedDisconnectFromActiveSessionClearsPresentationButKeepsPairing() async throws {
     var connection: FakeDeviceConnection?
     let provider = DeviceProvider(
       bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
@@ -117,7 +117,7 @@ final class DeviceProviderTests: XCTestCase {
     await provider.connect(to: testDevice)
     XCTAssertTrue(provider.isConnected)
 
-    let activeConnection = try! XCTUnwrap(connection)
+    let activeConnection = try XCTUnwrap(connection)
     activeConnection.delegate?.deviceConnection(
       activeConnection,
       didDisconnectUnexpectedly: testDevice
@@ -131,7 +131,7 @@ final class DeviceProviderTests: XCTestCase {
     XCTAssertEqual(provider.pairedDevice, testDevice)
   }
 
-  func testUnexpectedDisconnectArmsReconnectNotification() async {
+  func testUnexpectedDisconnectArmsReconnectNotification() async throws {
     var connection: FakeDeviceConnection?
     let provider = DeviceProvider(
       bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
@@ -147,7 +147,7 @@ final class DeviceProviderTests: XCTestCase {
     )
 
     await provider.connect(to: testDevice)
-    let activeConnection = try! XCTUnwrap(connection)
+    let activeConnection = try XCTUnwrap(connection)
     activeConnection.delegate?.deviceConnection(
       activeConnection, didDisconnectUnexpectedly: testDevice)
 
@@ -156,7 +156,7 @@ final class DeviceProviderTests: XCTestCase {
       "An unexpected disconnect should arm the reconnect prompt")
   }
 
-  func testUnpairCancelsAndDoesNotArmReconnectNotification() async {
+  func testUnpairCancelsAndDoesNotArmReconnectNotification() async throws {
     var connection: FakeDeviceConnection?
     let provider = DeviceProvider(
       bluetoothManager: FakeDeviceBluetoothManager(state: .poweredOn),
@@ -173,7 +173,7 @@ final class DeviceProviderTests: XCTestCase {
 
     await provider.connect(to: testDevice)
     // Simulate a drop that arms the "please reconnect" prompt...
-    let activeConnection = try! XCTUnwrap(connection)
+    let activeConnection = try XCTUnwrap(connection)
     activeConnection.delegate?.deviceConnection(
       activeConnection, didDisconnectUnexpectedly: testDevice)
     XCTAssertTrue(provider.hasScheduledDisconnectNotification)
