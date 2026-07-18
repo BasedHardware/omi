@@ -4038,15 +4038,13 @@ class FloatingControlBarManager {
     else { return false }
     observeAgentCompletionContext(pillID: pillID, runId: runId)
     if !resources.isEmpty {
-      // `updated` is the canonical journal revision. Project it synchronously
-      // before updating the floating viewport so a Combine refresh cannot make
-      // the main transcript and notch disagree about this artifact card.
+      // Project the canonical journal revision synchronously so main and notch agree before the floating
+      // viewport update.
       provider.projectJournalTurn(updated)
       deliverAgentArtifactCompletionToFloatingSurface(updated.chatMessage())
     }
     return true
   }
-
   static func performOwnerBoundPillTerminalAdmission<Value: Sendable>(
     ownerID: String,
     currentOwnerID: @escaping @MainActor () -> String? = {
